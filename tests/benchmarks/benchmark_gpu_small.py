@@ -22,6 +22,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.optimize import LinearConstraintProjection, ProximalProjection
 from desc.perturbations import perturb
@@ -124,7 +125,10 @@ def test_objective_compile_dshape_current(benchmark):
         jax.clear_caches()
         eq = desc.examples.get("DSHAPE_current")
         objective = LinearConstraintProjection(
-            get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+            get_equilibrium_objective(eq),
+            ObjectiveFunction(
+                maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+            ),
         )
         objective.build(eq)
         args = (
@@ -149,7 +153,10 @@ def test_objective_compile_atf(benchmark):
         jax.clear_caches()
         eq = desc.examples.get("ATF")
         objective = LinearConstraintProjection(
-            get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+            get_equilibrium_objective(eq),
+            ObjectiveFunction(
+                maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+            ),
         )
         objective.build(eq)
         args = (objective, eq)
@@ -169,7 +176,10 @@ def test_objective_compute_dshape_current(benchmark):
     jax.clear_caches()
     eq = desc.examples.get("DSHAPE_current")
     objective = LinearConstraintProjection(
-        get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -188,7 +198,10 @@ def test_objective_compute_atf(benchmark):
     jax.clear_caches()
     eq = desc.examples.get("ATF")
     objective = LinearConstraintProjection(
-        get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -207,7 +220,10 @@ def test_objective_jac_dshape_current(benchmark):
     jax.clear_caches()
     eq = desc.examples.get("DSHAPE_current")
     objective = LinearConstraintProjection(
-        get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -226,7 +242,10 @@ def test_objective_jac_atf(benchmark):
     jax.clear_caches()
     eq = desc.examples.get("ATF")
     objective = LinearConstraintProjection(
-        get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -336,7 +355,7 @@ def test_proximal_freeb_compute(benchmark):
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
     obj = LinearConstraintProjection(
-        prox, (FixCurrent(eq), FixPressure(eq), FixPsi(eq))
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
     obj.compile()
@@ -360,7 +379,7 @@ def test_proximal_freeb_jac(benchmark):
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
     obj = LinearConstraintProjection(
-        prox, (FixCurrent(eq), FixPressure(eq), FixPsi(eq))
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
     obj.compile()

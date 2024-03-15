@@ -22,6 +22,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.optimize import LinearConstraintProjection, ProximalProjection
 from desc.perturbations import perturb
@@ -125,7 +126,9 @@ def test_objective_compile_dshape_current(benchmark):
         eq = desc.examples.get("DSHAPE_current")
         objective = LinearConstraintProjection(
             get_equilibrium_objective(eq),
-            ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+            ObjectiveFunction(
+                maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+            ),
         )
         objective.build(eq)
         args = (
@@ -151,7 +154,9 @@ def test_objective_compile_atf(benchmark):
         eq = desc.examples.get("ATF")
         objective = LinearConstraintProjection(
             get_equilibrium_objective(eq),
-            ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+            ObjectiveFunction(
+                maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+            ),
         )
         objective.build(eq)
         args = (objective, eq)
@@ -172,7 +177,9 @@ def test_objective_compute_dshape_current(benchmark):
     eq = desc.examples.get("DSHAPE_current")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
-        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -192,7 +199,9 @@ def test_objective_compute_atf(benchmark):
     eq = desc.examples.get("ATF")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
-        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -212,7 +221,9 @@ def test_objective_jac_dshape_current(benchmark):
     eq = desc.examples.get("DSHAPE_current")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
-        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -232,7 +243,9 @@ def test_objective_jac_atf(benchmark):
     eq = desc.examples.get("ATF")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
-        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()

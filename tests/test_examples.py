@@ -900,7 +900,7 @@ def test_freeb_vacuum():
         FixPsi(eq=eq),
     )
     objective = ObjectiveFunction(
-        VacuumBoundaryError(eq=eq, ext_field=ext_field, field_fixed=True)
+        VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
     )
     eq, out = eq.optimize(
         objective,
@@ -958,7 +958,7 @@ def test_freeb_axisym():
         FixPsi(eq=eq),
     )
     objective = ObjectiveFunction(
-        BoundaryError(eq=eq, ext_field=ext_field, field_fixed=True)
+        BoundaryError(eq=eq, field=ext_field, field_fixed=True)
     )
 
     # we know this is a pretty simple shape so we'll only use |m| <= 2

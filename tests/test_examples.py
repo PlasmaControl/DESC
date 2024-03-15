@@ -1080,11 +1080,12 @@ def test_single_coil_optimization():
     )
 
     # torsion
-    # this test is not working very well... unsure of why
     coil.change_resolution(N=6)
-    target = 0.05
-    obj = ObjectiveFunction(CoilTorsion(coil, target=target, loss_function="mean"))
+    coil.Z_n = coil.Z_n.at[0:6].set(1)
+    print(coil.compute("torsion", grid=grid)["torsion"])
+    target = 3
+    obj = ObjectiveFunction(CoilTorsion(coil, target=target, loss_function="max"))
     opt.optimize([coil], obj, maxiter=300)
     np.testing.assert_allclose(
-        np.mean(coil.compute("torsion")["torsion"]), target, rtol=1e-3
+        np.max(coil.compute("torsion", grid=grid)["torsion"]), target, rtol=1e-3
     )

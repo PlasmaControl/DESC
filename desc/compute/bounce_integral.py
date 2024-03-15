@@ -204,7 +204,7 @@ def cubic_poly_roots(coef, k=jnp.array([0]), a_min=None, a_max=None, sort=False)
 
     """
     # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
-    # The common libraries use root-finding which isn't compatible with JAX.
+    # The common libraries use root-finding which isn't JIT compilable.
     clip = not (a_min is None and a_max is None)
     if a_min is None:
         a_min = -jnp.inf
@@ -274,7 +274,6 @@ def _compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     intersect = cubic_poly_roots(
         coef=poly_B, k=1 / pitch, a_min=knots[:-1], a_max=knots[1:], sort=True
     ).reshape(pitch.size, ML, N, NUM_ROOTS)
-    # Reshape to unsqueeze pitch axis.
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense the first and second axes to vmap over them.
@@ -345,7 +344,6 @@ def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
     roots = cubic_poly_roots(
         coef=poly_B, k=1 / pitch, a_min=a_min, a_max=a_max, sort=True
     ).reshape(pitch.size, ML, N, NUM_ROOTS)
-    # Reshape to unsqueeze pitch axis.
 
     # Include the knots of the splines along with the intersection points.
     # This preprocessing makes the ``direct`` algorithm in ``bounce_integral`` simpler.
@@ -596,9 +594,8 @@ def bounce_integral(
             # Periodic boundary to compute bounce integrals of particles
             # trapped outside this snapshot of the field lines.
             jnp.diff(primitive, axis=-1, append=primitive[..., 0, jnp.newaxis])
-            # We didn't enforce continuity of the piecewise primitives, so
-            # multiply by mask that is false at shared knots of piecewise spline
-            # to avoid adding difference between primitives of splines at knots.
+            # Didn't enforce continuity in the piecewise primitives when
+            # integrating, so mask the discontinuity to avoid summing it.
             * jnp.append(
                 jnp.arange(1, N * (NUM_ROOTS + 2)) % (NUM_ROOTS + 2) != 0, True
             ),

@@ -286,7 +286,7 @@ class CoilLength(_CoilObjective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name=None,
+        name="coil length",
     ):
         self._coils = coils
         if target is None and bounds is None:
@@ -411,7 +411,7 @@ class CoilCurvature(_CoilObjective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name=None,
+        name="coil curvature",
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -522,7 +522,7 @@ class CoilTorsion(_CoilObjective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name=None,
+        name="coil torsion",
     ):
         if target is None and bounds is None:
             target = 0

@@ -154,7 +154,9 @@ class GX(_Objective):
         ]
         self._field_line_keys = [
         "|B|", "|grad(psi)|^2", "grad(|B|)", "grad(alpha)", "grad(psi)",
-        "B", "grad(|B|)", "kappa", "B^theta", "B^zeta", "lambda_t", "lambda_z",'p_r'
+        "B", "grad(|B|)", "kappa", "B^theta", "B^zeta", "lambda_t", "lambda_z",'p_r',
+        "lambda_r", "lambda", "g^rr", "g^rt", "g^rz", "g^tz", "g^tt", "g^zz",
+        "e^rho", "e^theta", "e^zeta"
         ]
 
         self._args = get_params(
@@ -312,10 +314,32 @@ class GX(_Objective):
         #calculate grad_psi and grad_alpha
         grad_psi = data['grad(psi)']
         grad_psi_sq = data['|grad(psi)|^2']
-        grad_alpha = data['grad(alpha)']
+        lmbda = data['lambda']
+        lmbda_r = data['lambda_r']
+        lmbda_t = data['lambda_t']
+        lmbda_z = data['lambda_z'] 
+        grad_alpha_r = (lmbda_r - (zeta-zeta_center)*shear)
+        grad_alpha_t = (1 + lmbda_t)
+        grad_alpha_z = (-iota+lmbda_z)
+
+        #grad_alpha = np.sqrt(grad_alpha_r**2 * data['g^rr'] + grad_alpha_t**2 * data['g^tt'] + grad_alpha_z**2 * data['g^zz'] + 2*grad_alpha_r*grad_alpha_t*data['g^rt'] + 2*grad_alpha_r*grad_alpha_z*data['g^rz']
+         #                + 2*grad_alpha_t*grad_alpha_z*data['g^tz'])
+
+#        grad_alpha = data['grad(alpha)']
+#        grad_alpha = np.zeros(grad_psi.shape)
+#        grad_alpha[:,0] = grad_alpha_r
+#        grad_alpha[:,1] = grad_alpha_t
+#        grad_alpha[:,2] = grad_alpha_z
+        grad_alpha = (
+        grad_alpha_r * data["e^rho"].T
+        + grad_alpha_t * data["e^theta"].T
+        + grad_alpha_z * data["e^zeta"].T
+        ).T
+
         grho = np.sqrt(grad_psi_sq / (Lref**2 * Bref**2 * self.psi))
 
         gds2 = np.array(dot(grad_alpha,grad_alpha)) * Lref**2 * self.psi
+#        gds2 = grad_alpha**2 * Lref**2 *self.psi
         gds21 = -sign_iota * np.array(dot(grad_psi,grad_alpha)) * shat/Bref
         gds22 = grad_psi_sq / self.psi * (shat/(Lref * Bref))**2
 

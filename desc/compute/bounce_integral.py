@@ -1,6 +1,6 @@
 """Methods for computing bounce integrals."""
 
-from interpax import Akima1DInterpolator, CubicHermiteSpline
+from interpax import Akima1DInterpolator, CubicHermiteSpline, interp1d
 
 from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, vmap
 from desc.compute.utils import mask_diff, mask_take, safediv
@@ -15,19 +15,19 @@ v_mask_diff = vmap(mask_diff)
 v_mask_take = vmap(lambda a, mask: mask_take(a, mask, size=a.size, fill_value=jnp.nan))
 
 
-def _inner_product_quad(knots, pitch, w, X, f, B_sup_z, B, B_z_ra):
+def _inner_product_quad(pitch, w, X, knots, f, B_sup_z, B, B_z_ra):
     """Compute bounce integrals for every pitch along a particular field line.
 
     Parameters
     ----------
-    knots : ndarray, shape(knots.size, )
-        Field line-following ζ coordinates of spline knots.
     pitch : ndarray, shape(pitch.size, )
         λ values.
     w : ndarray, shape(w.size, )
         Quadrature weights.
     X : ndarray, shape(pitch.size, X.shape[1], w.size)
         Quadrature points.
+    knots : ndarray, shape(knots.size, )
+        Field line-following ζ coordinates of spline knots.
     f : ndarray, shape(knots.size, )
         Function to compute bounce integral of, evaluated at knots.
     B_sup_z : ndarray, shape(knots.size, )
@@ -45,17 +45,23 @@ def _inner_product_quad(knots, pitch, w, X, f, B_sup_z, B, B_z_ra):
     """
     assert pitch.ndim == 1
     assert X.shape == (pitch.size, X.shape[1], w.size)
-    # FIXME: https://github.com/f0uriest/interpax/issues/26
-    f = Akima1DInterpolator(knots, f, check=False)
-    B_sup_z = Akima1DInterpolator(knots, B_sup_z, check=False)
-    B = CubicHermiteSpline(knots, B, B_z_ra, check=False)
+    assert knots.shape == f.shape == B_sup_z.shape == B.shape == B_z_ra.shape
+    shape = X.shape
+    X = X.ravel()
+    f = interp1d(X, knots, f, method="akima").reshape(shape)
+    B_sup_z = interp1d(X, knots, B_sup_z, method="akima").reshape(shape)
+    # Specify derivative at knots with fx=B_z_ra for ≈ cubic hermite interpolation.
+    B = interp1d(X, knots, B, fx=B_z_ra, method="cubic").reshape(shape)
     pitch = pitch[:, jnp.newaxis, jnp.newaxis]
-    inner_product = jnp.dot(f(X) / (B_sup_z(X) * jnp.sqrt(1 - pitch * B(X))), w)
+    inner_product = jnp.dot(f / (B_sup_z * jnp.sqrt(1 - pitch * B)), w)
+    # p, N * NUM_ROOTS
     return inner_product
 
 
 """Compute bounce integrals for every pitch along every field line."""
-_compute_quad = vmap(_inner_product_quad, in_axes=(None, None, None, 1, 0, 0, 0, 0))
+_compute_quad = vmap(
+    _inner_product_quad, in_axes=(None, None, 1, None, 0, 0, 0, 0), out_axes=1
+)
 
 
 def tanh_sinh_quadrature(resolution):
@@ -536,7 +542,7 @@ def bounce_integral(
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
         f = eq.compute(name, grid=grid, data=data)[name].reshape(M * L, resolution)
         result = jnp.reshape(
-            _compute_quad(zeta, pitch, w, X, f, B_sup_z, B, B_z_ra)
+            _compute_quad(pitch, w, X, zeta, f, B_sup_z, B, B_z_ra)
             * jnp.pi
             / (bp2 - bp1),
             newshape=(pitch.size, M, L, N * NUM_ROOTS),
@@ -712,6 +718,7 @@ def bounce_average(
             along that field line padded by nan.
 
         """
+        # Should be fine to fit akima spline to constant function "1".
         return safediv(bi(name, pitch), bi("1", pitch))
 
     return _bounce_average

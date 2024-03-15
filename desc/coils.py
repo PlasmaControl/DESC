@@ -133,7 +133,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
     _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
 
     def __init__(self, current, *args, **kwargs):
-        self._current = float(current)
+        self._current = float(np.squeeze(current))
         super().__init__(*args, **kwargs)
 
     @optimizable_parameter
@@ -145,7 +145,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
     @current.setter
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        self._current = float(new)
+        self._current = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None

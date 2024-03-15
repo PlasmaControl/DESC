@@ -351,7 +351,7 @@ def _add_shaping(
         if "Zb_lmn" in deltas:
             deltas["Zb_lmn"] *= bdry_step
         if "Rp_lmn" in deltas or "Zp_lmn" in deltas or "Lp_lmn" in deltas:
-            print("WARNING: Poincare BC is not yet supported for continuation")
+            warnings.warn("Poincare BC is not yet supported for continuation")
         bdry_ratio += bdry_step
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)

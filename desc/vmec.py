@@ -20,7 +20,6 @@ from desc.objectives import (
     ObjectiveFunction,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
-    get_fixed_xsection_constraints,
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
@@ -176,12 +175,13 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
+        # Cross-section
+        eq.xsection = eq.get_poincare_xsection_at()
+
         # apply boundary conditions
-        constraints = (
-            get_fixed_axis_constraints(profiles=False, eq=eq)
-            + get_fixed_boundary_constraints(eq=eq)
-            + get_fixed_xsection_constraints(eq=eq)
-        )
+        constraints = get_fixed_axis_constraints(
+            profiles=False, eq=eq
+        ) + get_fixed_boundary_constraints(eq=eq)
         constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints)
         objective.build(verbose=0)

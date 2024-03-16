@@ -768,8 +768,8 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     coordinates="tz",
     data=["Phi_z", "|e_theta x e_zeta|"],
     parameterization=[
-        "desc.magnetic_fields.CurrentPotentialField",
-        "desc.magnetic_fields.FourierCurrentPotentialField",
+        "desc.magnetic_fields._current_potential.CurrentPotentialField",
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
     ],
 )
 def _K_sup_theta_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
@@ -791,8 +791,8 @@ def _K_sup_theta_CurrentPotentialField(params, transforms, profiles, data, **kwa
     coordinates="tz",
     data=["Phi_t", "|e_theta x e_zeta|"],
     parameterization=[
-        "desc.magnetic_fields.CurrentPotentialField",
-        "desc.magnetic_fields.FourierCurrentPotentialField",
+        "desc.magnetic_fields._current_potential.CurrentPotentialField",
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
     ],
 )
 def _K_sup_zeta_CurrentPotentialField(params, transforms, profiles, data, **kwargs):

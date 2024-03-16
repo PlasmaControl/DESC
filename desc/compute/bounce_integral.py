@@ -1,5 +1,4 @@
 """Methods for computing bounce integrals."""
-
 from interpax import Akima1DInterpolator, CubicHermiteSpline, interp1d
 
 from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, vmap
@@ -45,21 +44,27 @@ def _inner_product_quad(pitch, w, X, knots, f, B_sup_z, B, B_z_ra):
     """
     assert pitch.ndim == 1
     assert X.shape == (pitch.size, X.shape[1], w.size)
+    pitch = pitch[:, jnp.newaxis, jnp.newaxis]
+    # TODO: Simple to generalize pitch so that it can be specified per field line.
+    #       Just add one new axis here and multiple to d in cubic_poly_roots.
+    #       Useful since typically pitch is linearly spaced from min to max of
+    #       1/|B| along field field line, so specifying per field line would
+    #       reduce the sparsity of the X matrix. Not important right now; marking
+    #       for the future developer.
     assert knots.shape == f.shape == B_sup_z.shape == B.shape == B_z_ra.shape
     shape = X.shape
     X = X.ravel()
+    # Use akima to suppress oscillation.
     f = interp1d(X, knots, f, method="akima").reshape(shape)
     B_sup_z = interp1d(X, knots, B_sup_z, method="akima").reshape(shape)
     # Specify derivative at knots with fx=B_z_ra for ≈ cubic hermite interpolation.
     B = interp1d(X, knots, B, fx=B_z_ra, method="cubic").reshape(shape)
-    pitch = pitch[:, jnp.newaxis, jnp.newaxis]
     inner_product = jnp.dot(f / (B_sup_z * jnp.sqrt(1 - pitch * B)), w)
-    # p, N * NUM_ROOTS
     return inner_product
 
 
 """Compute bounce integrals for every pitch along every field line."""
-_compute_quad = vmap(
+inner_product_quad = vmap(
     _inner_product_quad, in_axes=(None, None, 1, None, 0, 0, 0, 0), out_axes=1
 )
 
@@ -152,11 +157,13 @@ def polyder(c):
 def polyval(x, c):
     """Evaluate the set of polynomials c at the points x.
 
+    Note that this function does not perform the same operation as
+    ``np.polynomial.polynomial.polyval(x, c)``.
+
     Parameters
     ----------
     x : ndarray
         Coordinates at which to evaluate the set of polynomials.
-        The first ``c.ndim`` axes should have shape ``c.shape[1:]``.
     c : ndarray
         First axis should store coefficients of a polynomial.
         For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0] - 1``,
@@ -164,22 +171,27 @@ def polyval(x, c):
 
     Returns
     -------
-    val : ndarray
-        ``val[j, k, ....]`` is the polynomial with coefficients ``c[:, j, k, ....]``
-        evaluated at the point ``x[j, k, ....]``.
+    val : ndarray, shape(*x.shape)
+        Polynomial with given coefficients evaluated at given points.
 
-    Notes
-    -----
-    This function does not perform the same operation as
-    ``np.polynomial.polynomial.polyval(x, c)``.
-    An example usage of this function is shown in
-    tests/test_bounce_integral.py::test_polyval.
+    Examples
+    --------
+    .. code-block:: python
+
+        val = polyval(x, c)
+        assert val.ndim == max(x.ndim, c.ndim - 1)
+        for index in np.ndindex(c.shape[1:]):
+            np.testing.assert_allclose(
+                actual=val[..., *index],
+                desired=np.poly1d(c[:, *index])(x[..., *index]),
+            )
 
     """
+    # Should be fine to do this instead of Horner's method
+    # because we expect to only integrate up to quartic polynomials.
     X = x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1)
-    alphabet = "abcdefghijklmnopqrstuvwxyz"
-    s = alphabet[: c.ndim]
-    val = jnp.einsum(f"{s},{s[1:]}...{s[0]}->{s[1:]}...", c, X)
+    val = jnp.einsum("...i,i...->...", X, c)
+    assert val.ndim == max(x.ndim, c.ndim - 1)
     return val
 
 
@@ -246,8 +258,9 @@ def cubic_poly_roots(coef, k=jnp.array([0]), a_min=None, a_max=None, sort=False)
     return roots
 
 
-# TODO: fix up some logic with the periodic boundary bounce integral thing
-def _compute_bounce_points(pitch, knots, poly_B, poly_B_z):
+# TODO: Consider the boundary to be periodic to compute bounce integrals of
+#       particles trapped outside this snapshot of the field lines.
+def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     """Compute the bounce points given |B| and pitch λ.
 
     Parameters
@@ -258,8 +271,14 @@ def _compute_bounce_points(pitch, knots, poly_B, poly_B_z):
         Field line-following ζ coordinates of spline knots.
     poly_B : ndarray
         Polynomial coefficients of the cubic spline of |B|.
+        First axis should iterate through coefficients of power series,
+        and the last axis should iterate through the piecewise
+        polynomials of a particular spline of |B| on along field line.
     poly_B_z : ndarray
         Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
+        First axis should iterate through coefficients of power series,
+        and the last axis should iterate through the piecewise
+        polynomials of a particular spline of |B| on along field line.
 
     Returns
     -------
@@ -283,11 +302,11 @@ def _compute_bounce_points(pitch, knots, poly_B, poly_B_z):
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense the first and second axes to vmap over them.
-    B_z = polyval(intersect, poly_B_z[:, jnp.newaxis]).reshape(
+    B_z = polyval(intersect, poly_B_z[..., jnp.newaxis]).reshape(
         pitch.size * ML, N * NUM_ROOTS
     )
     intersect = intersect.reshape(pitch.size * ML, N * NUM_ROOTS)
-    # Only consider intersect if it is within knots that bound that polynomial.
+    # Only consider intersect if it is within knots that bound that polynomial.pytes
     is_intersect = ~jnp.isnan(intersect)
 
     # Rearrange so that all intersects along a field line are contiguous.
@@ -300,12 +319,10 @@ def _compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     bp2 = B_z >= 0
     # B_z <= 0 at intersect i implies B_z >= 0 at intersect i+1 by continuity.
 
-    #   extend bp1 and bp2 by single element and then test
-    # # index of last intersect along a field line
+    # extend bp1 and bp2 by single element and then test
+    # index of last intersect along a field line
     # idx = jnp.squeeze(v_first_flatnonzero(~is_intersect)) - 1  # noqa: E800
     # assert idx.shape == (pitch.size * ML,)  # noqa: E800
-    # Consider the boundary to be periodic to compute bounce integrals of
-    # particles trapped outside this snapshot of the field lines.
     # Roll such that first intersect is moved to index of last intersect.
 
     # Get ζ values of bounce points from the masks.
@@ -314,10 +331,12 @@ def _compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     return bp1, bp2
 
 
+# TODO: Consider the boundary to be periodic to compute bounce integrals of
+#       particles trapped outside this snapshot of the field lines.
 def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
     """Compute the bounce points given |B| and pitch λ.
 
-    Like ``_compute_bounce_points`` but returns ingredients needed by the
+    Like ``compute_bounce_points`` but returns ingredients needed by the
     algorithm in the ``direct`` method in ``bounce_integral``.
 
     Parameters
@@ -328,8 +347,14 @@ def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
         Field line-following ζ coordinates of spline knots.
     poly_B : ndarray
         Polynomial coefficients of the cubic spline of |B|.
+        First axis should iterate through coefficients of power series,
+        and the last axis should iterate through the piecewise
+        polynomials of a particular spline of |B| on along field line.
     poly_B_z : ndarray
         Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
+        First axis should iterate through coefficients of power series,
+        and the last axis should iterate through the piecewise
+        polynomials of a particular spline of |B| on along field line.
 
     Returns
     -------
@@ -360,7 +385,7 @@ def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense the first and second axes to vmap over them.
-    B_z = polyval(intersect, poly_B_z[:, jnp.newaxis]).reshape(
+    B_z = polyval(intersect, poly_B_z[..., jnp.newaxis]).reshape(
         pitch.size * ML, N * (NUM_ROOTS + 2)
     )
     # Only consider intersect if it is within knots that bound that polynomial.
@@ -397,7 +422,7 @@ def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
 
 
 def _compute_bp_if_given_pitch(
-    pitch, knots, poly_B, poly_B_z, compute_bounce_points, *original, err=False
+    pitch, knots, poly_B, poly_B_z, compute_bp, *original, err=False
 ):
     """Return the ingredients needed by the ``bounce_integral`` function.
 
@@ -410,9 +435,15 @@ def _compute_bp_if_given_pitch(
         Field line-following ζ coordinates of spline knots.
     poly_B : ndarray
         Polynomial coefficients of the cubic spline of |B|.
+        First axis should iterate through coefficients of power series,
+        and the last axis should iterate through the piecewise
+        polynomials of a particular spline of |B| on along field line.
     poly_B_z : ndarray
         Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
-    compute_bounce_points : callable
+        First axis should iterate through coefficients of power series,
+        and the last axis should iterate through the piecewise
+        polynomials of a particular spline of |B| on along field line.
+    compute_bp : callable
         Method to compute bounce points.
     original : tuple
         Whatever this method returned earlier.
@@ -426,15 +457,15 @@ def _compute_bp_if_given_pitch(
         return original
     else:
         pitch = jnp.atleast_1d(pitch)
-        return pitch, *compute_bounce_points(pitch, knots, poly_B, poly_B_z)
+        return pitch, *compute_bp(pitch, knots, poly_B, poly_B_z)
 
 
 def bounce_integral(
     eq,
+    pitch=None,
     rho=None,
     alpha=None,
     zeta_max=10 * jnp.pi,
-    pitch=None,
     resolution=20,
     method="tanh_sinh",
 ):
@@ -458,14 +489,14 @@ def bounce_integral(
     ----------
     eq : Equilibrium
         Equilibrium on which the bounce integral is defined.
-    rho : ndarray
+    pitch : ndarray
+        λ values to evaluate the bounce integral at.
+    rho : ndarray or float
         Unique flux surface label coordinates.
-    alpha : ndarray
+    alpha : ndarray or float
         Unique field line label coordinates over a constant rho surface.
     zeta_max : float
         Max value for field line following coordinate.
-    pitch : ndarray
-        λ values to evaluate the bounce integral at.
     resolution : int
         Number of interpolation points (knots) used for splines in the quadrature.
         A maximum of three bounce points can be detected in between knots.
@@ -485,15 +516,21 @@ def bounce_integral(
     -------
     bi : callable
         This callable method computes the bounce integral F_ℓ(λ) for every
-        specified field line ℓ (constant rho and alpha), for every λ value in
-        ``pitch``.
+        specified field line ℓ (constant rho and alpha), for every λ value in ``pitch``.
+    grid : Grid
+        DESC coordinate grid for the given field line coordinates.
+    data : dict
+        Dictionary of ndarrays of stuff evaluated on ``grid``.
 
     Examples
     --------
     .. code-block:: python
 
-        bi = bounce_integral(eq)
-        result = bi(name, pitch)
+        bi, grid, data = bounce_integral(eq)
+        pitch = jnp.linspace(1 / data["B"].max(), 1 / data["B"].min(), 30)
+        name = "g_zz"
+        f = eq.compute(name, grid=grid, data=data)[name]
+        result = bi(f, pitch)
 
     """
     if rho is None:
@@ -518,13 +555,13 @@ def bounce_integral(
     assert poly_B.shape == (4, M * L, N)
     assert poly_B_z.shape == (3, M * L, N)
 
-    def quad(name, pitch=None):
+    def tanh_sinh(f, pitch=None):
         """Compute the bounce integral of the named quantity.
 
         Parameters
         ----------
-        name : ndarray
-            Name of quantity in ``data_index`` to compute the bounce integral of.
+        f : ndarray
+            Quantity to compute the bounce integral of.
         pitch : ndarray
             λ values to evaluate the bounce integral at.
             If None, uses the values given to the parent function.
@@ -537,25 +574,25 @@ def bounce_integral(
 
         """
         pitch, bp1, bp2 = _compute_bp_if_given_pitch(
-            pitch, zeta, poly_B, poly_B_z, _compute_bounce_points, *original, err=True
+            pitch, zeta, poly_B, poly_B_z, compute_bp, *original, err=True
         )
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
-        f = eq.compute(name, grid=grid, data=data)[name].reshape(M * L, resolution)
+        f = f.reshape(M * L, resolution)
         result = jnp.reshape(
-            _compute_quad(pitch, w, X, zeta, f, B_sup_z, B, B_z_ra)
+            inner_product_quad(pitch, w, X, zeta, f, B_sup_z, B, B_z_ra)
             * jnp.pi
             / (bp2 - bp1),
             newshape=(pitch.size, M, L, N * NUM_ROOTS),
         )
         return result
 
-    def direct(name, pitch=None):
+    def direct(f, pitch=None):
         """Compute the bounce integral of the named quantity.
 
         Parameters
         ----------
-        name : ndarray
-            Name of quantity in ``data_index`` to compute the bounce integral of.
+        f : ndarray
+            Quantity to compute the bounce integral of.
         pitch : ndarray
             λ values to evaluate the bounce integral at.
             If None, uses the values given to the parent function.
@@ -573,18 +610,11 @@ def bounce_integral(
             is_intersect,
             is_bp,
         ) = _compute_bp_if_given_pitch(
-            pitch,
-            zeta,
-            poly_B,
-            poly_B_z,
-            _compute_bounce_points_with_knots,
-            *original,
-            err=True,
+            pitch, zeta, poly_B, poly_B_z, compute_bp, *original, err=True
         )
 
         integrand = jnp.nan_to_num(
-            eq.compute(name, grid=grid, data=data)[name]
-            / (data["B^zeta"] * jnp.sqrt(1 - pitch[:, jnp.newaxis] * data["|B|"]))
+            f / (data["B^zeta"] * jnp.sqrt(1 - pitch[:, jnp.newaxis] * data["|B|"]))
         ).reshape(pitch.size * M * L, resolution)
         integrand = Akima1DInterpolator(zeta, integrand, axis=-1, check=False).c
         integrand = jnp.moveaxis(integrand, 1, -1)
@@ -593,9 +623,9 @@ def bounce_integral(
         # is preferable to any numerical quadrature. For example, even if the
         # intersection points were evenly spaced, a composite Simpson's quadrature
         # would require computing the spline on 1.8x more knots for the same accuracy.
-        primitive = polyval(intersect_nan_to_right_knot, polyint(integrand)).reshape(
-            pitch.size * M * L, N * (NUM_ROOTS + 2)
-        )
+        primitive = polyval(
+            intersect_nan_to_right_knot, polyint(integrand)[..., jnp.newaxis]
+        ).reshape(pitch.size * M * L, N * (NUM_ROOTS + 2))
         sums = jnp.cumsum(
             # Periodic boundary to compute bounce integrals of particles
             # trapped outside this snapshot of the field lines.
@@ -610,42 +640,43 @@ def bounce_integral(
         result = jnp.reshape(
             # Compute difference of ``sums`` between bounce points.
             v_mask_diff(v_mask_take(sums, is_intersect), is_bp)[..., : N * NUM_ROOTS],
-            # Guaranteed to have at most N * NUM_ROOTS entries where is_bp is true.
             newshape=(pitch.size, M, L, N * NUM_ROOTS),
         )
         return result
 
-    if method == "direct":
-        original = _compute_bp_if_given_pitch(
-            pitch, zeta, poly_B, poly_B_z, _compute_bounce_points_with_knots, err=False
-        )
-        return direct
-    else:
-        original = _compute_bp_if_given_pitch(
-            pitch, zeta, poly_B, poly_B_z, _compute_bounce_points, err=False
-        )
+    if method == "tanh_sinh":
         x, w = tanh_sinh_quadrature(resolution)
         x = jnp.arcsin(x) / jnp.pi - 0.5
-        return quad
+        compute_bp = compute_bounce_points
+        bi = tanh_sinh
+    elif method == "direct":
+        compute_bp = _compute_bounce_points_with_knots
+        bi = direct
+    else:
+        raise ValueError(f"Got unknown method: {method}.")
+    original = _compute_bp_if_given_pitch(
+        pitch, zeta, poly_B, poly_B_z, compute_bp, err=False
+    )
+    return bi, grid, data
 
 
 def bounce_average(
     eq,
+    pitch=None,
     rho=None,
     alpha=None,
     zeta_max=10 * jnp.pi,
-    pitch=None,
     resolution=20,
-    method="quad",
+    method="tanh_sinh",
 ):
     """Returns a method to compute the bounce average of any quantity.
 
     The bounce average is defined as
-    G_ℓ(λ) = (∫ g(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ), where
+    F_ℓ(λ) = (∫ f(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ), where
         dℓ parameterizes the distance along the field line,
         λ is a constant proportional to the magnetic moment over energy,
         |B| is the norm of the magnetic field,
-        g(ℓ) is the quantity to integrate along the field line,
+        f(ℓ) is the quantity to integrate along the field line,
         and the endpoints of the integration are at the bounce points.
     For a particle with fixed λ, bounce points are defined to be the location
     on the field line such that the particle's velocity parallel to the
@@ -659,15 +690,14 @@ def bounce_average(
     ----------
     eq : Equilibrium
         Equilibrium on which the bounce average is defined.
-    rho : ndarray
+    pitch : ndarray
+        λ values to evaluate the bounce average at.
+    rho : ndarray or float
         Unique flux surface label coordinates.
-    alpha : ndarray
+    alpha : ndarray or float
         Unique field line label coordinates over a constant rho surface.
     zeta_max : float
         Max value for field line following coordinate.
-    pitch : ndarray
-        λ values to evaluate the bounce average at.
-        Defaults to linearly spaced values between min and max of |B|.
     resolution : int
         Number of interpolation points (knots) used for splines in the quadrature.
         A maximum of three bounce points can be detected in between knots.
@@ -676,37 +706,45 @@ def bounce_average(
         So for well-behaved magnetic fields increasing resolution should increase
         the accuracy of the quadrature.
     method : str
-        The method to evaluate the integral.
-        The "spline" method exactly integrates a cubic spline of the integrand.
-        The "quad" method performs a Gauss quadrature and estimates the integrand
-        by using distinct cubic splines for components in the integrand so that
-        the singularity from the division by zero near the bounce points can be
-        captured more accurately than can be represented by a polynomial.
+        The quadrature scheme used to evaluate the integral.
+        The "direct" method exactly integrates a cubic spline of the integrand.
+        The "tanh_sinh" method performs a Tanh-sinh quadrature, where independent cubic
+        splines are used for components in the integrand so that the singularity near
+        the bounce points can be captured more accurately than can be represented by a
+        polynomial.
 
     Returns
     -------
     ba : callable
-        This callable method computes the bounce average G_ℓ(λ) for every
-        specified field line ℓ (constant rho and alpha), for every λ value in
-        ``lambdas``.
+        This callable method computes the bounce average F_ℓ(λ) for every
+        specified field line ℓ (constant rho and alpha), for every λ value in ``pitch``.
+    grid : Grid
+        DESC coordinate grid for the given field line coordinates.
+    data : dict
+        Dictionary of ndarrays of stuff evaluated on ``grid``.
 
     Examples
     --------
     .. code-block:: python
 
-        ba = bounce_average(eq)
-        result = ba(name, pitch)
+        ba, grid, data = bounce_integral(eq)
+        pitch = jnp.linspace(1 / data["B"].max(), 1 / data["B"].min(), 30)
+        name = "g_zz"
+        f = eq.compute(name, grid=grid, data=data)[name]
+        result = ba(f, pitch)
 
     """
-    bi = bounce_integral(eq, rho, alpha, zeta_max, pitch, resolution, method)
+    bi, grid, data = bounce_integral(
+        eq, pitch, rho, alpha, zeta_max, resolution, method
+    )
 
-    def _bounce_average(name, pitch=None):
+    def _bounce_average(f, pitch=None):
         """Compute the bounce average of the named quantity using the spline method.
 
         Parameters
         ----------
-        name : ndarray
-            Name of quantity in ``data_index`` to compute the bounce average of.
+        f : ndarray
+            Quantity to compute the bounce average of.
         pitch : ndarray
             λ values to evaluate the bounce average at.
             If None, uses the values given to the parent function.
@@ -718,10 +756,11 @@ def bounce_average(
             along that field line padded by nan.
 
         """
-        # Should be fine to fit akima spline to constant function "1".
-        return safediv(bi(name, pitch), bi("1", pitch))
+        # Should be fine to fit akima spline to constant function "1" since
+        # akima suppresses oscillation of the fit.
+        return safediv(bi(f, pitch), bi(jnp.ones_like(f), pitch))
 
-    return _bounce_average
+    return _bounce_average, grid, data
 
 
 def field_line_to_desc_coords(eq, rho, alpha, zeta):

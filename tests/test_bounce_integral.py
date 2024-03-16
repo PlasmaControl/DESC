@@ -1,12 +1,14 @@
-"""Tests bounce integral."""
+"""Test bounce integral methods."""
 
 import numpy as np
 import pytest
-from interpax import Akima1DInterpolator
+from interpax import Akima1DInterpolator, CubicHermiteSpline
 
 from desc.backend import fori_loop, put, root_scalar
 from desc.compute.bounce_integral import (
+    bounce_average,
     bounce_integral,
+    compute_bounce_points,
     cubic_poly_roots,
     field_line_to_desc_coords,
     polyder,
@@ -15,8 +17,8 @@ from desc.compute.bounce_integral import (
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
 from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
@@ -80,35 +82,62 @@ def test_polyder():
 def test_polyval():
     """Test vectorized computation of polynomial evaluation."""
     quintic = 6
-    poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
-    assert np.unique(poly.shape).size == poly.ndim
-    x = np.linspace(0, 20, poly.shape[1] * poly.shape[2]).reshape(
-        poly.shape[1], poly.shape[2]
-    )
-    x = np.stack([x, x * 2], axis=-1)
-    x = np.stack([x, x * 2, x * 3, x * 4], axis=-1)
+    c = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+    # make sure broadcasting won't hide error in implementation
+    assert np.unique(c.shape).size == c.ndim
+    x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
+    val = polyval(x, c)
+    for index in np.ndindex(c.shape[1:]):
+        np.testing.assert_allclose(
+            actual=val[..., *index],
+            desired=np.poly1d(c[:, *index])(x[..., *index]),
+            err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
+        )
+
+    x = np.stack([x, x * 2], axis=0)
+    x = np.stack([x, x * 2, x * 3, x * 4], axis=0)
+    # make sure broadcasting won't hide error in implementation
     assert np.unique(x.shape).size == x.ndim
-    assert poly.shape[1:] == x.shape[: poly.ndim - 1]
-    assert np.unique((poly.shape[0],) + x.shape[poly.ndim - 1 :]).size == x.ndim - 1
-    val = polyval(x, poly)
-    for j in range(poly.shape[1]):
-        for k in range(poly.shape[2]):
-            np.testing.assert_allclose(val[j, k], np.poly1d(poly[:, j, k])(x[j, k]))
+    assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
+    assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
+    val = polyval(x, c)
+    for index in np.ndindex(c.shape[1:]):
+        np.testing.assert_allclose(
+            actual=val[..., *index],
+            desired=np.poly1d(c[:, *index])(x[..., *index]),
+            err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
+        )
 
     # integrate piecewise polynomial and set constants to preserve continuity
-    y = np.arange(1, 6)
+    y = np.arange(2, 8)
     y = np.arange(y.prod()).reshape(*y)
     x = np.arange(y.shape[-1])
     a1d = Akima1DInterpolator(x, y, axis=-1)
     primitive = polyint(a1d.c)
     # choose evaluation points at d just to match choice made in a1d.antiderivative()
     d = np.diff(x)
-    d = d.reshape(d.size, *np.ones(primitive.ndim - 2, dtype=int))
+    # evaluate every spline at d
     k = polyval(d, primitive)
     # don't want to use jax.ndarray.at[].add() in case jax is not installed
     primitive = np.array(primitive)
     primitive[-1, 1:] += np.cumsum(k, axis=-1)[:-1]
     np.testing.assert_allclose(primitive, a1d.antiderivative().c)
+
+
+@pytest.mark.unit
+def test_temporary():
+    """Test that things are returned without errors."""
+    eq = get("HELIOTRON")
+    ba, grid, data = bounce_average(eq, method="tanh_sinh")
+    pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), 30)
+    name = "g_zz"
+    f = eq.compute(name, grid=grid, data=data)[name]
+    result = ba(f, pitch)
+    assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
+
+    ba, _, _ = bounce_average(eq, method="direct")
+    result = ba(f, pitch)
+    print(np.isfinite(result).any())
 
 
 @pytest.mark.unit
@@ -158,6 +187,7 @@ def test_elliptic_integral_limit():
     objective = ObjectiveFunction(
         (ObjectiveFromUser(fun=beta, eq=eq, target=low_beta),)
     )
+
     constraints = (*get_fixed_boundary_constraints(eq), get_equilibrium_objective(eq))
     opt = Optimizer("proximal-lsq-exact")
     eq, result = eq.optimize(
@@ -165,25 +195,33 @@ def test_elliptic_integral_limit():
     )
     print(result)
 
-    rho = 0.5
+    rho = np.array([0.5])
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 20)
-    zeta = np.linspace(0, 10 * np.pi, 20)
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    B = eq.compute(names="|B|", grid=grid)["|B|"]
-    pitch = np.linspace(1 / B.max(), 1 / B.min(), 10)
-    bi = bounce_integral(
-        eq, pitch=pitch, rho=rho, alpha=alpha, zeta_max=zeta[-1], resolution=zeta.size
+    zeta_max = 10 * np.pi
+    resolution = 30
+    bi, grid, data = bounce_integral(
+        eq,
+        rho=rho,
+        alpha=alpha,
+        zeta_max=zeta_max,
+        resolution=resolution,
+        method="tanh_sinh",
     )
+    pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), resolution)
     name = "g_zz"
-    result = bi(name)
-    print(result.shape)
-    print(result)
-    assert np.isfinite(result).any()
-    # todo: look into GitHub pull request #934 and see if zero B-field issue resolved
-    grid, data = field_line_to_desc_coords(eq, rho, alpha, zeta)
-    g_zz = eq.compute(name, grid=grid, data=data)[name].reshape(alpha.size, zeta.size)
-    print(g_zz)
-    # todo: get bounce points from _compute_bp and compute elliptic integral
+    f = eq.compute(name, grid=grid, data=data)[name]
+    result = bi(f, pitch)
+    assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
+
+    # routine copied from bounce_integrals functions
+    zeta = np.linspace(0, zeta_max, resolution)
+    B = data["|B|"].reshape(alpha.size * rho.size, resolution)
+    B_z_ra = data["|B|_z|r,a"].reshape(alpha.size * rho.size, resolution)
+    poly_B = CubicHermiteSpline(zeta, B, B_z_ra, axis=-1).c
+    poly_B = np.moveaxis(poly_B, 1, -1)
+    poly_B_z = polyder(poly_B)
+    bp1, bp2 = compute_bounce_points(pitch, zeta, poly_B, poly_B_z)
+    # TODO now compare result to elliptic integral
 
 
 # TODO: if deemed useful finish details using methods in desc.compute.bounce_integral

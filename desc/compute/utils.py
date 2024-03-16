@@ -864,7 +864,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     #       experimental in jax.
     # The ith row of masks is True only at the indices which correspond to the
     # ith surface. The integral over the ith surface is the dot product of the
-    # ith row vector and the vector of integrands of all surfaces.
+    # ith row vector and the integrand defined over all the surfaces.
     masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
     # Imagine a torus cross-section at zeta=π.
     # A grid with a duplicate zeta=π node has 2 of those cross-sections.
@@ -917,13 +917,10 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         """
         integrands = (spacing * jnp.nan_to_num(q).T).T
         # `integrands` may have shape (g.size, *f.shape), where
-        #     g is the grid function depending on the integration variables
-        #     f is a function which may be independent of the integration variables
-        # The intention is to integrate `integrands` which is a function-valued
-        #     function over the grid   (with domain size of g.size = grid.num_nodes)
-        # over each surface in the grid.
-        integrals = jnp.tensordot(masks, integrands, axes=([1], [0]))
-        # uses less memory than jnp.einsum("ug,g...->u...", masks, integrands)
+        #  g.size is grid.num_nodes and iterating along this axis varies the object,
+        #  e.g. some function f, held in the remaining axes over the nodes of the grid.
+        # Uses less memory than jnp.einsum("ug,g...->u...", masks, integrands).
+        integrals = jnp.tensordot(masks, integrands, axes=1)
         return grid.expand(integrals, surface_label) if expand_out else integrals
 
     return _surface_integrals

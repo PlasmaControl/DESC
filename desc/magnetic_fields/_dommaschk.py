@@ -80,6 +80,36 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
 
         super().__init__(dommaschk_potential, params)
 
+    @property
+    def ms(self):
+        """First indices of V_m_l terms (eq. 12 of reference)."""
+        return self._params["ms"]
+
+    @ms.setter
+    def ms(self, new):
+        if len(new) == self._params["ms"].size:
+            self._params["ms"] = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"ms should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._params['ms'].size} modes."
+            )
+
+    @property
+    def ls(self):
+        """Second indices of V_m_l terms (eq. 12 of reference)."""
+        return self._params["ls"]
+
+    @ls.setter
+    def ls(self, new):
+        if len(new) == self._params["ls"].size:
+            self._params["ls"] = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"ls should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._params['ls'].size} modes."
+            )
+
     @optimizable_parameter
     @property
     def a_arr(self):

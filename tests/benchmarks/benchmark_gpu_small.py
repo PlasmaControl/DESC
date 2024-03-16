@@ -33,6 +33,9 @@ from desc.transform import Transform
 def test_build_transform_fft_lowres(benchmark):
     """Test time to build a transform (after compilation) for low resolution."""
 
+    def setup():
+        jax.clear_caches()
+
     def build():
         L = 5
         M = 5
@@ -42,13 +45,16 @@ def test_build_transform_fft_lowres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_build_transform_fft_midres(benchmark):
     """Test time to build a transform (after compilation) for mid resolution."""
 
+    def setup():
+        jax.clear_caches()
+
     def build():
         L = 15
         M = 15
@@ -58,12 +64,15 @@ def test_build_transform_fft_midres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_build_transform_fft_highres(benchmark):
     """Test time to build a transform (after compilation) for high resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 25
@@ -74,12 +83,15 @@ def test_build_transform_fft_highres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_equilibrium_init_lowres(benchmark):
     """Test time to create an equilibrium for low resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 5
@@ -87,12 +99,15 @@ def test_equilibrium_init_lowres(benchmark):
         N = 5
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_equilibrium_init_medres(benchmark):
     """Test time to create an equilibrium for medium resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 15
@@ -100,12 +115,15 @@ def test_equilibrium_init_medres(benchmark):
         N = 15
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_equilibrium_init_highres(benchmark):
     """Test time to create an equilibrium for high resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 25
@@ -113,7 +131,7 @@ def test_equilibrium_init_highres(benchmark):
         N = 25
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.slow

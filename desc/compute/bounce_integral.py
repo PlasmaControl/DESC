@@ -490,13 +490,11 @@ def _compute_bp_if_given_pitch(
             raise ValueError("No pitch values were given.")
         return original
     else:
-        # ensure pitch has shape (batch.size, alpha.size, rho.size)
-        # can't use jnp.atleast_3d due to https://github.com/numpy/numpy/issues/25805
-        pitch = jnp.atleast_1d(pitch)
+        # ensure pitch has shape (batch size, alpha.size, rho.size)
+        pitch = jnp.atleast_2d(pitch)
         if pitch.ndim == 2:
+            # Can't use atleast_3d; see https://github.com/numpy/numpy/issues/25805.
             pitch = pitch[jnp.newaxis]
-        if pitch.ndim == 1:
-            pitch = pitch[jnp.newaxis, jnp.newaxis]
         err_msg = "Supplied invalid shape for pitch angles."
         assert pitch.ndim == 3, err_msg
         pitch = pitch.reshape(pitch.shape[0], -1)

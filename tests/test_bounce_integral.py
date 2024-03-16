@@ -38,19 +38,15 @@ def test_cubic_poly_roots():
     poly = poly * np.e * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
-    constant = np.arange(10)
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(poly.shape + constant.shape).size == poly.ndim + constant.ndim
+    constant = np.broadcast_to(np.arange(poly.shape[-1]), poly.shape[1:])
     roots = cubic_poly_roots(poly, constant, sort=True)
     for j in range(poly.shape[1]):
         for k in range(poly.shape[2]):
-            for s in range(constant.size):
-                a, b, c, d = poly[:, j, k]
-                d = d - constant[s]
-                np.testing.assert_allclose(
-                    actual=roots[s, j, k],
-                    desired=np.sort_complex(np.roots([a, b, c, d])),
-                )
+            a, b, c, d = poly[:, j, k]
+            np.testing.assert_allclose(
+                actual=roots[j, k],
+                desired=np.sort_complex(np.roots([a, b, c, d - constant[j, k]])),
+            )
 
 
 @pytest.mark.unit
@@ -60,14 +56,15 @@ def test_polyint():
     poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
-    constant = np.pi
+    constant = np.broadcast_to(np.arange(poly.shape[-1]), poly.shape[1:])
     primitive = polyint(poly, k=constant)
     for j in range(poly.shape[1]):
         for k in range(poly.shape[2]):
             np.testing.assert_allclose(
                 actual=primitive[:, j, k],
-                desired=np.polyint(poly[:, j, k], k=constant),
+                desired=np.polyint(poly[:, j, k], k=constant[j, k]),
             )
+    assert polyint(poly).shape == primitive.shape, "Failed broadcasting default k."
 
 
 @pytest.mark.unit
@@ -93,7 +90,7 @@ def test_polyval():
     # make sure broadcasting won't hide error in implementation
     assert np.unique(c.shape).size == c.ndim
     x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
-    val = polyval(x, c)
+    val = polyval(x=x, c=c)
     for index in np.ndindex(c.shape[1:]):
         idx = (..., *index)
         np.testing.assert_allclose(
@@ -108,7 +105,7 @@ def test_polyval():
     assert np.unique(x.shape).size == x.ndim
     assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
     assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
-    val = polyval(x, c)
+    val = polyval(x=x, c=c)
     for index in np.ndindex(c.shape[1:]):
         idx = (..., *index)
         np.testing.assert_allclose(
@@ -126,7 +123,7 @@ def test_polyval():
     # choose evaluation points at d just to match choice made in a1d.antiderivative()
     d = np.diff(x)
     # evaluate every spline at d
-    k = polyval(d, primitive)
+    k = polyval(x=d, c=primitive)
     # don't want to use jax.ndarray.at[].add() in case jax is not installed
     primitive = np.array(primitive)
     primitive[-1, 1:] += np.cumsum(k, axis=-1)[:-1]
@@ -134,22 +131,37 @@ def test_polyval():
 
 
 @pytest.mark.unit
-def test_temporary():
-    """Test that things are returned without errors."""
+def test_pitch_input():
+    """Test different ways of specifying pitch."""
     eq = get("HELIOTRON")
-    ba, grid, data = bounce_average(eq, method="tanh_sinh")
-    pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), 30)
+    rho = np.linspace(0, 1, 6)
+    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 2)
+    ba, grid, data = bounce_average(eq, rho=rho, alpha=alpha, method="tanh_sinh")
+    pitch_resolution = 30
     name = "g_zz"
     f = eq.compute(name, grid=grid, data=data)[name]
+    # same pitch for every field line, may lead to sparse result
+    pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), pitch_resolution)
+    pitch = pitch[:, np.newaxis, np.newaxis]
+    result = ba(f, pitch)
+    assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
+    # specify pitch per field line
+    B = data["B"].reshape(alpha.size * rho.size, -1)
+    eps = 1e-5  # FIXME: vanishing B-field bug.
+    pitch = np.linspace(
+        1 / (B.max(axis=-1) + eps),
+        1 / (B.min(axis=-1) + eps),
+        pitch_resolution,
+    ).reshape(pitch_resolution, alpha.size, rho.size)
     result = ba(f, pitch)
     assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
 
-    ba, _, _ = bounce_average(eq, method="direct")
+    ba, _, _ = bounce_average(eq, rho=rho, alpha=alpha, method="direct")
     result = ba(f, pitch)
     print(np.isfinite(result).any())
 
 
-@pytest.mark.unit
+# @pytest.mark.unit
 def test_elliptic_integral_limit():
     """Test bounce integral matches elliptic integrals.
 

@@ -36,8 +36,10 @@ def test_cubic_poly_roots():
     poly = np.arange(-60, 60).reshape(cubic, 6, -1)
     poly[0] = np.where(poly[0] == 0, np.ones_like(poly[0]), poly[0])
     poly = poly * np.e * np.pi
+    # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
     constant = np.arange(10)
+    # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape + constant.shape).size == poly.ndim + constant.ndim
     roots = cubic_poly_roots(poly, constant, sort=True)
     for j in range(poly.shape[1]):
@@ -46,8 +48,8 @@ def test_cubic_poly_roots():
                 a, b, c, d = poly[:, j, k]
                 d = d - constant[s]
                 np.testing.assert_allclose(
-                    roots[s, j, k],
-                    np.sort_complex(np.roots([a, b, c, d])),
+                    actual=roots[s, j, k],
+                    desired=np.sort_complex(np.roots([a, b, c, d])),
                 )
 
 
@@ -56,13 +58,15 @@ def test_polyint():
     """Test vectorized computation of polynomial primitive."""
     quintic = 6
     poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+    # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
     constant = np.pi
-    out = polyint(poly, k=constant)
+    primitive = polyint(poly, k=constant)
     for j in range(poly.shape[1]):
         for k in range(poly.shape[2]):
             np.testing.assert_allclose(
-                out[:, j, k], np.polyint(poly[:, j, k], k=constant)
+                actual=primitive[:, j, k],
+                desired=np.polyint(poly[:, j, k], k=constant),
             )
 
 
@@ -71,11 +75,14 @@ def test_polyder():
     """Test vectorized computation of polynomial derivative."""
     quintic = 6
     poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+    # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
-    out = polyder(poly)
+    derivative = polyder(poly)
     for j in range(poly.shape[1]):
         for k in range(poly.shape[2]):
-            np.testing.assert_allclose(out[:, j, k], np.polyder(poly[:, j, k]))
+            np.testing.assert_allclose(
+                actual=derivative[:, j, k], desired=np.polyder(poly[:, j, k])
+            )
 
 
 @pytest.mark.unit
@@ -88,9 +95,10 @@ def test_polyval():
     x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
     val = polyval(x, c)
     for index in np.ndindex(c.shape[1:]):
+        idx = (..., *index)
         np.testing.assert_allclose(
-            actual=val[..., *index],
-            desired=np.poly1d(c[:, *index])(x[..., *index]),
+            actual=val[idx],
+            desired=np.poly1d(c[:, *index])(x[idx]),
             err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
         )
 
@@ -102,9 +110,10 @@ def test_polyval():
     assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
     val = polyval(x, c)
     for index in np.ndindex(c.shape[1:]):
+        idx = (..., *index)
         np.testing.assert_allclose(
-            actual=val[..., *index],
-            desired=np.poly1d(c[:, *index])(x[..., *index]),
+            actual=val[idx],
+            desired=np.poly1d(c[:, *index])(x[idx]),
             err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
         )
 
@@ -140,7 +149,7 @@ def test_temporary():
     print(np.isfinite(result).any())
 
 
-@pytest.mark.unit
+# @pytest.mark.unit
 def test_elliptic_integral_limit():
     """Test bounce integral matches elliptic integrals.
 

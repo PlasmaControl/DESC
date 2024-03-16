@@ -1347,6 +1347,13 @@ class ScalarPotentialField(_MagneticField):
 
         if params is None:
             params = self._params
+        if hasattr(self, "ms"):
+            # if a dommaschk potential, add the ms and ls to the params
+            # as these are not optimizable params, but are needed
+            # to compute the potential.
+            params["ms"] = self.ms
+            params["ls"] = self.ls
+
         r, p, z = coords.T
         funR = lambda x: self._potential(x, p, z, **params)
         funP = lambda x: self._potential(r, x, z, **params)

@@ -80,7 +80,6 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
 
         super().__init__(dommaschk_potential, params)
 
-    @optimizable_parameter
     @property
     def ms(self):
         """First indices of V_m_l terms (eq. 12 of reference)."""
@@ -96,7 +95,6 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
                 + f"basis with {self._params['ms'].size} modes."
             )
 
-    @optimizable_parameter
     @property
     def ls(self):
         """Second indices of V_m_l terms (eq. 12 of reference)."""

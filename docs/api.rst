@@ -143,6 +143,7 @@ Magnetic Fields
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.CurrentPotentialField
     desc.magnetic_fields.FourierCurrentPotentialField
+    desc.magnetic_fields.DommaschkPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
 

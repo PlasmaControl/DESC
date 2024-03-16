@@ -347,7 +347,7 @@ class TestAxisLimits:
         eq = get("W7-X")
         eq.change_resolution(4, 4, 4, 8, 8, 8)
         test(eq)
-        eq = get("W7-X")
+        eq = get("NCSX")
         eq.change_resolution(4, 4, 4, 8, 8, 8)
         test(eq)
 

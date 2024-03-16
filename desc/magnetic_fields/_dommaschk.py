@@ -9,12 +9,12 @@ import numpy as np
 
 from desc.backend import cond, fori_loop, gammaln, jit, jnp
 from desc.derivatives import Derivative
-from desc.optimizable import optimizable_parameter
+from desc.optimizable import Optimizable, optimizable_parameter
 
 from ._core import ScalarPotentialField, _MagneticField
 
 
-class DommaschkPotentialField(ScalarPotentialField):
+class DommaschkPotentialField(ScalarPotentialField, Optimizable):
     """Magnetic field due to a Dommaschk scalar magnetic potential in rpz coordinates.
 
         From Dommaschk 1986 paper https://doi.org/10.1016/0010-4655(86)90109-8

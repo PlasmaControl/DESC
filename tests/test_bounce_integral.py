@@ -98,7 +98,7 @@ def test_polyval():
         idx = (..., *index)
         np.testing.assert_allclose(
             actual=val[idx],
-            desired=np.poly1d(c[:, *index])(x[idx]),
+            desired=np.poly1d(c[idx])(x[idx]),
             err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
         )
 
@@ -113,7 +113,7 @@ def test_polyval():
         idx = (..., *index)
         np.testing.assert_allclose(
             actual=val[idx],
-            desired=np.poly1d(c[:, *index])(x[idx]),
+            desired=np.poly1d(c[idx])(x[idx]),
             err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
         )
 
@@ -149,7 +149,7 @@ def test_temporary():
     print(np.isfinite(result).any())
 
 
-# @pytest.mark.unit
+@pytest.mark.unit
 def test_elliptic_integral_limit():
     """Test bounce integral matches elliptic integrals.
 

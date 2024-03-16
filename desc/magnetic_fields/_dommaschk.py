@@ -5,8 +5,11 @@ https://doi.org/10.1016/0010-4655(86)90109-8
 
 """
 
+import numpy as np
+
 from desc.backend import cond, fori_loop, gammaln, jit, jnp
 from desc.derivatives import Derivative
+from desc.optimizable import optimizable_parameter
 
 from ._core import ScalarPotentialField, _MagneticField
 
@@ -76,6 +79,81 @@ class DommaschkPotentialField(ScalarPotentialField):
         params["B0"] = B0
 
         super().__init__(dommaschk_potential, params)
+
+    @optimizable_parameter
+    @property
+    def a_arr(self):
+        """The a_m_l coefs of V_m_l terms, multiplying the cos(m*phi)*D_m_l terms."""
+        return self._params["a_arr"]
+
+    @a_arr.setter
+    def a_arr(self, new):
+        if len(new) == self._params["ms"].size:
+            self._params["a_arr"] = np.asarray(new)
+        else:
+            raise ValueError(
+                f"a_arr should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._params['ms'].size} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def b_arr(self):
+        """The b_m_l coefs of V_m_l terms, multiplying the sin(m*phi)*D_m_l terms."""
+        return self._params["b_arr"]
+
+    @b_arr.setter
+    def b_arr(self, new):
+        if len(new) == self._params["ms"].size:
+            self._params["b_arr"] = np.asarray(new)
+        else:
+            raise ValueError(
+                f"b_arr should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._params['ms'].size} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def c_arr(self):
+        """The c_m_l coefs of V_m_l terms, multiplying the cos(m*phi)*N_m_l-1 term."""
+        return self._params["c_arr"]
+
+    @c_arr.setter
+    def c_arr(self, new):
+
+        if len(new) == self._params["ms"].size:
+            self._params["c_arr"] = np.asarray(new)
+        else:
+            raise ValueError(
+                f"c_arr should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._params['ms'].size} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def d_arr(self):
+        """The d_m_l coefs of V_m_l terms, multiplying the sin(m*phi)*N_m_l-1 terms."""
+        return self._params["d_arr"]
+
+    @d_arr.setter
+    def d_arr(self, new):
+        if len(new) == self._params["ms"].size:
+            self._params["d_arr"] = np.asarray(new)
+        else:
+            raise ValueError(
+                f"d_arr should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._params['ms'].size} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def B0(self):
+        """Scale strength of the magnetic field's 1/R portion."""
+        return self._params["B0"]
+
+    @B0.setter
+    def B0(self, new):
+        self._params["B0"] = float(np.squeeze(new))
 
     @classmethod
     def fit_magnetic_field(  # noqa: C901 - FIXME - simplify

@@ -28,7 +28,7 @@ def find_permutations(primary, separator="_"):
 
 
 def assign_alias_data(
-    alias, primary, base_class, data_index, params, profiles, transforms, data, **kwargs
+    alias, primary, fun, params, profiles, transforms, data, **kwargs
 ):
     """Assigns primary data to alias.
 
@@ -45,9 +45,7 @@ def assign_alias_data(
         computed data dictionary (includes both alias and primary)
 
     """
-    data = data_index[base_class][primary]["fun"](
-        params, transforms, profiles, data, **kwargs
-    )
+    data = fun(params, transforms, profiles, data, **kwargs)
     data[alias] = data[primary].copy()
     return data
 
@@ -160,8 +158,7 @@ def register_compute_fun(
                             assign_alias_data,
                             alias=alias,
                             primary=name,
-                            base_class=base_class,
-                            data_index=data_index,
+                            fun=data_index[base_class][name]["fun"],
                         )
 
                     flag = True

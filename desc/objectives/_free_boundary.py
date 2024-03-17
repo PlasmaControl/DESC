@@ -757,6 +757,260 @@ class BoundaryError(_Objective):
             _print(fmt, fmax, fmin, fmean, norm, unit)
 
 
+class QuadraticFlux(_Objective):
+    """Target B*n = 0 on LCFS.
+
+    Uses virtual casing to find plasma component of B and penalizes
+    (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
+    field is unfixed.
+
+    Parameters
+    ----------
+    ext_field : MagneticField
+        External field produced by coils.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    s, q : integer
+        Hyperparameters for singular integration scheme, s is roughly equal to the size
+        of the local singular grid with respect to the global grid, q is the order of
+        integration on the local grid
+    src_grid : Grid, optional
+        Collocation grid containing the nodes for plasma source terms.
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes on the plasma surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
+    field_grid : Grid, optional
+        Grid used to discretize ext_field (e.g. grid for the magnetic field source from
+        coils).
+    vacuum : bool
+        If true, Bplasma is set to zero.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Boundary normal field Error: {:10.3e} "
+    _units = "(T)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        ext_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        s=None,
+        q=None,
+        src_grid=None,
+        eval_grid=None,
+        field_grid=None,
+        vacuum=False,
+        name="Quadratic flux",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._src_grid = src_grid
+        self._eval_grid = eval_grid
+        self._eq = eq
+        self._s = s
+        self._q = q
+        self._ext_field = ext_field
+        self._field_grid = field_grid
+        self._vacuum = vacuum
+        things = [ext_field]
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self._eq
+
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=int(eq.NFP),
+                sym=False,
+            )
+            self._eval_grid = eval_grid
+        else:
+            eval_grid = self._eval_grid
+
+        self._data_keys = [
+            "R",
+            "zeta",
+            "Z",
+            "n_rho",
+            "K_vc",
+            "phi",
+        ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._dim_f = eval_grid.num_nodes
+
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
+
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=eq.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
+
+        self._constants = {}
+
+        # pre-compute Bplasma because we are assuming eq is fixed
+        if self._vacuum:
+            Bplasma = np.zeros(np.shape(eval_grid.nodes))
+
+        else:
+            if self._src_grid is None:
+                src_grid = LinearGrid(
+                    rho=np.array([1.0]),
+                    M=3 * eq.M_grid,
+                    N=3 * eq.N_grid,
+                    NFP=int(eq.NFP),
+                    sym=False,
+                )
+                self._src_grid = src_grid
+            else:
+                src_grid = self._src_grid
+            if self._s is None:
+                k = min(src_grid.num_theta, src_grid.num_zeta)
+                self._s = k // 2 + int(np.sqrt(k))
+            if self._q is None:
+                k = min(src_grid.num_theta, src_grid.num_zeta)
+                self._q = k // 2 + int(np.sqrt(k))
+            try:
+                interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            except AssertionError as e:
+                warnings.warn(
+                    "Could not built fft interpolator, switching to dft method which is"
+                    " much slower. Reason: " + str(e)
+                )
+                interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+
+            self._constants.update(interpolator=interpolator)
+
+            src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
+            src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
+            src_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=eq.params_dict,
+                transforms=src_transforms,
+                profiles=src_profiles,
+            )
+
+            # don't need extra B/2 since we only care about normal component
+            Bplasma = virtual_casing_biot_savart(
+                eval_data,
+                src_data,
+                self._constants["interpolator"],
+            )
+
+        self._constants.update(
+            quad_weights=w,
+            eval_data=eval_data,
+            Bplasma=Bplasma,
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, field_params, constants=None):
+        """Compute boundary force error.
+
+        Parameters
+        ----------
+        field_params : dict
+            Dictionary of the external field's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Bnorm from Bext and Bplasma
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        # Now, calculate Bplasma and Bext
+        eval_data = constants["eval_data"]
+        Bplasma = constants["Bplasma"]
+
+        x = jnp.array(
+            [
+                eval_data["R"],
+                eval_data["zeta"],
+                eval_data["Z"],
+            ]
+        ).T
+
+        # Bext is not pre-computed because field is not fixed
+        Bext = self._ext_field.compute_magnetic_field(
+            x, source_grid=self._field_grid, basis="rpz", params=field_params
+        )
+
+        f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
+        return f
+
+
 class BoundaryErrorNESTOR(_Objective):
     """Pressure balance across LCFS.
 

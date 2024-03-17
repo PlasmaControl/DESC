@@ -40,6 +40,14 @@ There are also classes for representing a current potential on a winding surface
     desc.magnetic_fields.CurrentPotentialField
     desc.magnetic_fields.FourierCurrentPotentialField
 
+There is also a class for representing omnigenous magnetic fields:
+
+.. autosummary::
+    :toctree: _api/magnetic_fields
+    :recursive:
+    :template: class.rst
+
+    desc.magnetic_fields.OmnigenousField
 
 For analyzing the structure of magnetic fields, it is often useful to find the trajectories
 of magnetic field lines, which can be done via ``desc.magnetic_fields.field_line_integrate``.

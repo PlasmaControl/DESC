@@ -137,10 +137,10 @@ def test_pitch_input():
     rho = np.linspace(0, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 2)
     ba, grid, data = bounce_average(eq, rho=rho, alpha=alpha, method="tanh_sinh")
-    pitch_resolution = 30
+    pitch_resolution = 15
     name = "g_zz"
     f = eq.compute(name, grid=grid, data=data)[name]
-    # same pitch for every field line, may lead to sparse result
+    # Same pitch for every field line may give sparse result.
     pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), pitch_resolution)
     pitch = pitch[:, np.newaxis, np.newaxis]
     result = ba(f, pitch)
@@ -161,7 +161,7 @@ def test_pitch_input():
     print(np.isfinite(result).any())
 
 
-# @pytest.mark.unit
+@pytest.mark.unit
 def test_elliptic_integral_limit():
     """Test bounce integral matches elliptic integrals.
 
@@ -217,27 +217,21 @@ def test_elliptic_integral_limit():
     print(result)
 
     rho = np.array([0.5])
-    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 20)
-    zeta_max = 10 * np.pi
-    resolution = 30
+    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 10)
+    zeta = np.linspace(0, 10 * np.pi, 20)
     bi, grid, data = bounce_integral(
-        eq,
-        rho=rho,
-        alpha=alpha,
-        zeta_max=zeta_max,
-        resolution=resolution,
-        method="tanh_sinh",
+        eq, rho=rho, alpha=alpha, zeta=zeta, method="tanh_sinh"
     )
-    pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), resolution)
+    pitch_resolution = 15
+    pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), pitch_resolution)
     name = "g_zz"
     f = eq.compute(name, grid=grid, data=data)[name]
     result = bi(f, pitch)
     assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
 
     # routine copied from bounce_integrals functions
-    zeta = np.linspace(0, zeta_max, resolution)
-    B = data["|B|"].reshape(alpha.size * rho.size, resolution)
-    B_z_ra = data["|B|_z|r,a"].reshape(alpha.size * rho.size, resolution)
+    B = data["|B|"].reshape(alpha.size * rho.size, -1)
+    B_z_ra = data["|B|_z|r,a"].reshape(alpha.size * rho.size, -1)
     poly_B = CubicHermiteSpline(zeta, B, B_z_ra, axis=-1).c
     poly_B = np.moveaxis(poly_B, 1, -1)
     poly_B_z = polyder(poly_B)

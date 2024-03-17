@@ -23,9 +23,9 @@ def bounce_quadrature(pitch, X, w, knots, f, B_sup_z, B, B_z_ra):
 
     Parameters
     ----------
-    pitch : ndarray, shape(P, )
+    pitch : ndarray, shape(pitch.size, )
         λ values.
-    X : ndarray, shape(P, (knots.size - 1) * NUM_ROOTS, w.size)
+    X : ndarray, shape(pitch.size, (knots.size - 1) * NUM_ROOTS, w.size)
         Quadrature points.
     w : ndarray, shape(w.size, )
         Quadrature weights.
@@ -84,6 +84,7 @@ def tanh_sinh_quadrature(resolution):
 
     """
     # https://github.com/f0uriest/quadax/blob/main/quadax/utils.py#L166
+    # Compute boundary of quadrature.
     # x_max = 1 - eps with some buffer
     x_max = jnp.array(1.0) - 10 * jnp.finfo(jnp.array(1.0)).eps
     tanhinv = lambda x: 1 / 2 * jnp.log((1 + x) / (1 - x))
@@ -269,7 +270,7 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     pitch : ndarray, shape(P, A * R)
         λ values.
         Last two axes should specify the λ value for a particular field line
-        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[:, α, ρ]``
+        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
@@ -315,10 +316,8 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense remaining axes to vmap over them.
-    B_z = polyval(x=intersect, c=poly_B_z[..., jnp.newaxis]).reshape(
-        P * AR, N * NUM_ROOTS
-    )
-    intersect = intersect.reshape(P * AR, N * NUM_ROOTS)
+    B_z = polyval(x=intersect, c=poly_B_z[..., jnp.newaxis]).reshape(P * AR, -1)
+    intersect = intersect.reshape(P * AR, -1)
     # Only consider intersect if it is within knots that bound that polynomial.pytes
     is_intersect = ~jnp.isnan(intersect)
 
@@ -339,8 +338,8 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # Roll such that first intersect is moved to index of last intersect.
 
     # Get ζ values of bounce points from the masks.
-    bp1 = v_mask_take(intersect, bp1).reshape(P, AR, N * NUM_ROOTS)
-    bp2 = v_mask_take(intersect, bp2).reshape(P, AR, N * NUM_ROOTS)
+    bp1 = v_mask_take(intersect, bp1).reshape(P, AR, -1)
+    bp2 = v_mask_take(intersect, bp2).reshape(P, AR, -1)
     return bp1, bp2
 
 
@@ -357,7 +356,7 @@ def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
     pitch : ndarray, shape(P, A * R)
         λ values.
         Last two axes should specify the λ value for a particular field line
-        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[:, α, ρ]``
+        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
@@ -410,13 +409,11 @@ def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense remaining axes to vmap over them.
-    B_z = polyval(x=intersect, c=poly_B_z[..., jnp.newaxis]).reshape(
-        P * AR, N * (NUM_ROOTS + 2)
-    )
+    B_z = polyval(x=intersect, c=poly_B_z[..., jnp.newaxis]).reshape(P * AR, -1)
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = jnp.reshape(
         jnp.array([False, True, True, True, False], dtype=bool) & ~jnp.isnan(intersect),
-        newshape=(P * AR, N * (NUM_ROOTS + 2)),
+        newshape=(P * AR, -1),
     )
 
     # Rearrange so that all the intersects along field line are contiguous.
@@ -445,7 +442,7 @@ def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
             a_max,
         ),
         axis=-1,
-    ).reshape(P * AR, N, (NUM_ROOTS + 2))
+    ).reshape(P * AR, N, -1)
 
     return intersect_nan_to_right_knot, is_intersect, is_bp
 
@@ -459,9 +456,8 @@ def _compute_bp_if_given_pitch(
     ----------
     pitch : ndarray, shape(P, A, R)
         λ values.
-        If None, returns the given ``original`` tuple.
         Last two axes should specify the λ value for a particular field line
-        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[:, α, ρ]``
+        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
@@ -507,8 +503,8 @@ def bounce_integral(
     pitch=None,
     rho=None,
     alpha=None,
-    zeta_max=10 * jnp.pi,
-    resolution=20,
+    zeta=20,
+    resolution=11,
     method="tanh_sinh",
 ):
     """Returns a method to compute the bounce integral of any quantity.
@@ -535,7 +531,7 @@ def bounce_integral(
         λ values to evaluate the bounce integral at each field line.
         May be specified later.
         Last two axes should specify the λ value for a particular field line
-        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[:, α, ρ]``
+        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
@@ -543,22 +539,23 @@ def bounce_integral(
         Unique flux surface label coordinates.
     alpha : ndarray or float
         Unique field line label coordinates over a constant rho surface.
-    zeta_max : float
-        Max value for field line following coordinate.
+    zeta : ndarray or int
+        A cubic spline of the integrand is computed at these values of the field
+        line following coordinate, for every field line in the meshgrid formed from
+        rho and alpha specified above.
+        The number of knots specifies the grid resolution as increasing the
+        number of knots increases the accuracy of representing the integrand
+        and the accuracy of the locations of the bounce points.
+        If an integer is given, that many knots are linearly spaced from 0 to 10 pi.
     resolution : int
-        Number of interpolation points (knots) used for splines in the quadrature.
-        A maximum of three bounce points can be detected in between knots.
-        The accuracy of the quadrature will increase as some function of
-        the number of knots over the number of detected bounce points.
-        So for well-behaved magnetic fields increasing resolution should increase
-        the accuracy of the quadrature.
+        Number of quadrature points.
     method : str
         The quadrature scheme used to evaluate the integral.
         The "direct" method exactly integrates a cubic spline of the integrand.
-        The "tanh_sinh" method performs a Tanh-sinh quadrature, where independent cubic
-        splines are used for components in the integrand so that the singularity near
-        the bounce points can be captured more accurately than can be represented by a
-        polynomial.
+        The "tanh_sinh" method performs a tanh-sinh quadrature, where cubic
+        splines are used to represent each function in the integrand
+        so that the singularity near the bounce points can be captured more
+        accurately than can be represented by a polynomial.
 
     Returns
     -------
@@ -576,7 +573,7 @@ def bounce_integral(
 
         bi, grid, data = bounce_integral(eq)
         pitch = jnp.linspace(1 / data["B"].max(), 1 / data["B"].min(), 30)
-        # same pitch for every field line, may give sparse result
+        # Same pitch for every field line may give sparse result.
         # See tests/test_bounce_integral.py::test_pitch_input for an alternative.
         pitch = pitch[:, jnp.newaxis, jnp.newaxis]
         name = "g_zz"
@@ -587,23 +584,25 @@ def bounce_integral(
     if rho is None:
         rho = jnp.linspace(0, 1, 10)
     if alpha is None:
-        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 20)
+        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
     rho = jnp.atleast_1d(rho)
     alpha = jnp.atleast_1d(alpha)
-    zeta = jnp.linspace(0, zeta_max, resolution)
+    zeta = jnp.atleast_1d(zeta)
+    if zeta.size == 1:
+        zeta = jnp.linspace(0, 10 * jnp.pi, zeta.item())
     R = rho.size
     A = alpha.size
 
     grid, data = field_line_to_desc_coords(eq, rho, alpha, zeta)
     data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid, data=data)
-    B_sup_z = data["B^zeta"].reshape(A * R, resolution)
-    B = data["|B|"].reshape(A * R, resolution)
-    B_z_ra = data["|B|_z|r,a"].reshape(A * R, resolution)
+    B_sup_z = data["B^zeta"].reshape(A * R, -1)
+    B = data["|B|"].reshape(A * R, -1)
+    B_z_ra = data["|B|_z|r,a"].reshape(A * R, -1)
     poly_B = CubicHermiteSpline(zeta, B, B_z_ra, axis=-1, check=False).c
     poly_B = jnp.moveaxis(poly_B, 1, -1)
     poly_B_z = polyder(poly_B)
-    assert poly_B.shape == (4, A * R, resolution - 1)
-    assert poly_B_z.shape == (3, A * R, resolution - 1)
+    assert poly_B.shape == (4, A * R, zeta.size - 1)
+    assert poly_B_z.shape == (3, A * R, zeta.size - 1)
 
     def tanh_sinh(f, pitch=None):
         """Compute the bounce integral of the named quantity.
@@ -616,14 +615,14 @@ def bounce_integral(
             λ values to evaluate the bounce integral at each field line.
             If None, uses the values given to the parent function.
             Last two axes should specify the λ value for a particular field line
-            parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[:, α, ρ]``
+            parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
             where in the latter the labels are interpreted as indices that correspond
             to that field line.
             If an additional axis exists on the left, it is the batch axis as usual.
 
         Returns
         -------
-        result : ndarray, shape(P, alpha.size, rho.size, (resolution - 1) * 3)
+        result : ndarray, shape(P, alpha.size, rho.size, (zeta.size - 1) * 3)
             The last axis iterates through every bounce integral performed
             along that field line padded by nan.
 
@@ -634,12 +633,10 @@ def bounce_integral(
         P = pitch.shape[0]
         pitch = jnp.broadcast_to(pitch, shape=(P, A * R))
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
-        f = f.reshape(A * R, resolution)
+        f = f.reshape(A * R, -1)
         quad = bounce_quadrature(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra)
-        result = jnp.reshape(
-            quad / (bp2 - bp1) * jnp.pi,  # complete the change of variable
-            newshape=(P, A, R, (resolution - 1) * NUM_ROOTS),
-        )
+        # complete the change of variable
+        result = jnp.reshape(quad / (bp2 - bp1) * jnp.pi, newshape=(P, A, R, -1))
         return result
 
     def direct(f, pitch=None):
@@ -653,14 +650,14 @@ def bounce_integral(
             λ values to evaluate the bounce integral at each field line.
             If None, uses the values given to the parent function.
             Last two axes should specify the λ value for a particular field line
-            parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[:, α, ρ]``
+            parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
             where in the latter the labels are interpreted as indices that correspond
             to that field line.
             If an additional axis exists on the left, it is the batch axis as usual.
 
         Returns
         -------
-        result : ndarray, shape(P, alpha.size, rho.size, (resolution - 1) * 3)
+        result : ndarray, shape(P, alpha.size, rho.size, (zeta.size - 1) * 3)
             The last axis iterates through every bounce integral performed
             along that field line padded by nan.
 
@@ -676,12 +673,11 @@ def bounce_integral(
         P = pitch.shape[0]
 
         integrand = jnp.nan_to_num(
-            f.reshape(A * R, resolution)
-            / (B_sup_z * jnp.sqrt(1 - pitch[..., jnp.newaxis] * B))
-        ).reshape(P * A * R, resolution)
+            f.reshape(A * R, -1) / (B_sup_z * jnp.sqrt(1 - pitch[..., jnp.newaxis] * B))
+        ).reshape(P * A * R, -1)
         integrand = Akima1DInterpolator(zeta, integrand, axis=-1, check=False).c
         integrand = jnp.moveaxis(integrand, 1, -1)
-        assert integrand.shape == (4, P * A * R, resolution - 1)
+        assert integrand.shape == (4, P * A * R, zeta.size - 1)
 
         # For this algorithm, computing integrals via differences of primitives
         # is preferable to any numerical quadrature. For example, even if the
@@ -689,7 +685,7 @@ def bounce_integral(
         # would require computing the spline on 1.8x more knots for the same accuracy.
         primitive = polyval(
             x=intersect_nan_to_right_knot, c=polyint(integrand)[..., jnp.newaxis]
-        ).reshape(P * A * R, (resolution - 1) * (NUM_ROOTS + 2))
+        ).reshape(P * A * R, -1)
 
         sums = jnp.cumsum(
             # Periodic boundary to compute bounce integrals of particles
@@ -698,8 +694,7 @@ def bounce_integral(
             # Didn't enforce continuity in the piecewise primitives when
             # integrating, so mask the discontinuity to avoid summing it.
             * jnp.append(
-                jnp.arange(1, (resolution - 1) * (NUM_ROOTS + 2)) % (NUM_ROOTS + 2)
-                != 0,
+                jnp.arange(1, (zeta.size - 1) * (NUM_ROOTS + 2)) % (NUM_ROOTS + 2) != 0,
                 True,
             ),
             axis=-1,
@@ -707,9 +702,9 @@ def bounce_integral(
         result = jnp.reshape(
             # Compute difference of ``sums`` between bounce points.
             v_mask_diff(v_mask_take(sums, is_intersect), is_bp)[
-                ..., : (resolution - 1) * NUM_ROOTS
+                ..., : (zeta.size - 1) * NUM_ROOTS
             ],
-            newshape=(P, A, R, (resolution - 1) * NUM_ROOTS),
+            newshape=(P, A, R, -1),
         )
         return result
 
@@ -734,8 +729,8 @@ def bounce_average(
     pitch=None,
     rho=None,
     alpha=None,
-    zeta_max=10 * jnp.pi,
-    resolution=20,
+    zeta=20,
+    resolution=11,
     method="tanh_sinh",
 ):
     """Returns a method to compute the bounce average of any quantity.
@@ -764,29 +759,30 @@ def bounce_average(
         May be specified later.
         Last two axes should specify the λ value for a particular field line
         parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
-        where in the latter the labels are interpreted as indices into the returned
-        that correspond to that field line.
-        If additional axes exist, they are the batch axes as usual.
+        where in the latter the labels are interpreted as indices that correspond
+        to that field line.
+        If an additional axis exists on the left, it is the batch axis as usual.
     rho : ndarray or float
         Unique flux surface label coordinates.
     alpha : ndarray or float
         Unique field line label coordinates over a constant rho surface.
-    zeta_max : float
-        Max value for field line following coordinate.
+    zeta : ndarray or int
+        A cubic spline of the integrand is computed at these values of the field
+        line following coordinate, for every field line in the meshgrid formed from
+        rho and alpha specified above.
+        The number of knots specifies the grid resolution as increasing the
+        number of knots increases the accuracy of representing the integrand
+        and the accuracy of the locations of the bounce points.
+        If an integer is given, that many knots are linearly spaced from 0 to 10 pi.
     resolution : int
-        Number of interpolation points (knots) used for splines in the quadrature.
-        A maximum of three bounce points can be detected in between knots.
-        The accuracy of the quadrature will increase as some function of
-        the number of knots over the number of detected bounce points.
-        So for well-behaved magnetic fields increasing resolution should increase
-        the accuracy of the quadrature.
+        Number of quadrature points.
     method : str
         The quadrature scheme used to evaluate the integral.
         The "direct" method exactly integrates a cubic spline of the integrand.
-        The "tanh_sinh" method performs a Tanh-sinh quadrature, where independent cubic
-        splines are used for components in the integrand so that the singularity near
-        the bounce points can be captured more accurately than can be represented by a
-        polynomial.
+        The "tanh_sinh" method performs a tanh-sinh quadrature, where cubic
+        splines are used to represent each function in the integrand
+        so that the singularity near the bounce points can be captured more
+        accurately than can be represented by a polynomial.
 
     Returns
     -------
@@ -804,7 +800,7 @@ def bounce_average(
 
         ba, grid, data = bounce_integral(eq)
         pitch = jnp.linspace(1 / data["B"].max(), 1 / data["B"].min(), 30)
-        # same pitch for every field line, may give to sparse result
+        # Same pitch for every field line may give sparse result.
         # See tests/test_bounce_integral.py::test_pitch_input for an alternative.
         pitch = pitch[:, jnp.newaxis, jnp.newaxis]
         name = "g_zz"
@@ -812,9 +808,7 @@ def bounce_average(
         result = ba(f, pitch)
 
     """
-    bi, grid, data = bounce_integral(
-        eq, pitch, rho, alpha, zeta_max, resolution, method
-    )
+    bi, grid, data = bounce_integral(eq, pitch, rho, alpha, zeta, resolution, method)
 
     def _bounce_average(f, pitch=None):
         """Compute the bounce average of the named quantity.
@@ -827,14 +821,14 @@ def bounce_average(
             λ values to evaluate the bounce average at each field line.
             If None, uses the values given to the parent function.
             Last two axes should specify the λ value for a particular field line
-            parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[:, α, ρ]``
+            parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
             where in the latter the labels are interpreted as indices that correspond
             to that field line.
             If an additional axis exists on the left, it is the batch axis as usual.
 
         Returns
         -------
-        result : ndarray, shape(P, alpha.size, rho.size, (resolution - 1) * 3)
+        result : ndarray, shape(P, alpha.size, rho.size, (zeta.size - 1) * 3)
             The last axis iterates through every bounce average performed
             along that field line padded by nan.
 

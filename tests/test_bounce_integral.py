@@ -136,7 +136,7 @@ def test_pitch_input():
     eq = get("HELIOTRON")
     rho = np.linspace(0, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 2)
-    ba, grid, data = bounce_average(eq, rho=rho, alpha=alpha, method="tanh_sinh")
+    ba, grid, data = bounce_average(eq, rho=rho, alpha=alpha)
     pitch_resolution = 15
     name = "g_zz"
     f = eq.compute(name, grid=grid, data=data)[name]
@@ -219,9 +219,7 @@ def test_elliptic_integral_limit():
     rho = np.array([0.5])
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 10)
     zeta = np.linspace(0, 10 * np.pi, 20)
-    bi, grid, data = bounce_integral(
-        eq, rho=rho, alpha=alpha, zeta=zeta, method="tanh_sinh"
-    )
+    bi, grid, data = bounce_integral(eq, rho=rho, alpha=alpha, zeta=zeta)
     pitch_resolution = 15
     pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), pitch_resolution)
     name = "g_zz"

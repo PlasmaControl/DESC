@@ -505,7 +505,7 @@ def bounce_integral(
     alpha=None,
     zeta=20,
     resolution=11,
-    method="tanh_sinh",
+    method=tanh_sinh_quadrature,
 ):
     """Returns a method to compute the bounce integral of any quantity.
 
@@ -549,13 +549,15 @@ def bounce_integral(
         If an integer is given, that many knots are linearly spaced from 0 to 10 pi.
     resolution : int
         Number of quadrature points.
-    method : str
+    method : callable
         The quadrature scheme used to evaluate the integral.
+        Should return quadrature points within the domain [-1, 1]
+        and quadrature weights with the call ``method(resolution)``.
+        Defaults to a tanh-sinh quadrature.
+        Cubic splines are used to represent each function in the integrand so that
+        the singularity near the bounce points can be captured more accurately than
+        can be represented by a polynomial.
         The "direct" method exactly integrates a cubic spline of the integrand.
-        The "tanh_sinh" method performs a tanh-sinh quadrature, where cubic
-        splines are used to represent each function in the integrand
-        so that the singularity near the bounce points can be captured more
-        accurately than can be represented by a polynomial.
 
     Returns
     -------
@@ -604,7 +606,7 @@ def bounce_integral(
     assert poly_B.shape == (4, A * R, zeta.size - 1)
     assert poly_B_z.shape == (3, A * R, zeta.size - 1)
 
-    def tanh_sinh(f, pitch=None):
+    def quadrature(f, pitch=None):
         """Compute the bounce integral of the named quantity.
 
         Parameters
@@ -634,9 +636,9 @@ def bounce_integral(
         pitch = jnp.broadcast_to(pitch, shape=(P, A * R))
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
         f = f.reshape(A * R, -1)
-        quad = bounce_quadrature(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra)
+        result = bounce_quadrature(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra)
         # complete the change of variable
-        result = jnp.reshape(quad / (bp2 - bp1) * jnp.pi, newshape=(P, A, R, -1))
+        result = jnp.reshape(result / (bp2 - bp1) * jnp.pi, newshape=(P, A, R, -1))
         return result
 
     def direct(f, pitch=None):
@@ -687,7 +689,7 @@ def bounce_integral(
             x=intersect_nan_to_right_knot, c=polyint(integrand)[..., jnp.newaxis]
         ).reshape(P * A * R, -1)
 
-        sums = jnp.cumsum(
+        result = jnp.cumsum(
             # Periodic boundary to compute bounce integrals of particles
             # trapped outside this snapshot of the field lines.
             jnp.diff(primitive, axis=-1, append=primitive[..., 0, jnp.newaxis])
@@ -701,18 +703,18 @@ def bounce_integral(
         )
         result = jnp.reshape(
             # Compute difference of ``sums`` between bounce points.
-            v_mask_diff(v_mask_take(sums, is_intersect), is_bp)[
+            v_mask_diff(v_mask_take(result, is_intersect), is_bp)[
                 ..., : (zeta.size - 1) * NUM_ROOTS
             ],
             newshape=(P, A, R, -1),
         )
         return result
 
-    if method == "tanh_sinh":
-        x, w = tanh_sinh_quadrature(resolution)
+    if callable(method):
+        x, w = method(resolution)
         x = jnp.arcsin(x) / jnp.pi - 0.5
         compute_bp = compute_bounce_points
-        bi = tanh_sinh
+        bi = quadrature
     elif method == "direct":
         compute_bp = _compute_bounce_points_with_knots
         bi = direct
@@ -731,7 +733,7 @@ def bounce_average(
     alpha=None,
     zeta=20,
     resolution=11,
-    method="tanh_sinh",
+    method=tanh_sinh_quadrature,
 ):
     """Returns a method to compute the bounce average of any quantity.
 
@@ -776,13 +778,15 @@ def bounce_average(
         If an integer is given, that many knots are linearly spaced from 0 to 10 pi.
     resolution : int
         Number of quadrature points.
-    method : str
+    method : callable
         The quadrature scheme used to evaluate the integral.
+        Should return quadrature points within the domain [-1, 1]
+        and quadrature weights with the call ``method(resolution)``.
+        Defaults to a tanh-sinh quadrature.
+        Cubic splines are used to represent each function in the integrand so that
+        the singularity near the bounce points can be captured more accurately than
+        can be represented by a polynomial.
         The "direct" method exactly integrates a cubic spline of the integrand.
-        The "tanh_sinh" method performs a tanh-sinh quadrature, where cubic
-        splines are used to represent each function in the integrand
-        so that the singularity near the bounce points can be captured more
-        accurately than can be represented by a polynomial.
 
     Returns
     -------

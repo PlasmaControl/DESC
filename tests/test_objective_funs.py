@@ -1953,7 +1953,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         sym=True,
     )
     eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
-    eq, _ = eq.solve(objective="vacuum", verbose=3)
+    eq, _ = eq.solve(objective="force", verbose=3)
     field = OmnigenousField(
         L_B=0,
         M_B=2,

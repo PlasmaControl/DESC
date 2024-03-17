@@ -1005,7 +1005,7 @@ def test_omnigenity_proximal():
         sym=True,
     )
     eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
-    eq, _ = eq.solve(objective="vacuum", verbose=3)
+    eq, _ = eq.solve(objective="force", verbose=3)
     field = OmnigenousField(
         L_B=1,
         M_B=3,

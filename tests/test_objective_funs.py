@@ -2029,6 +2029,8 @@ def test_objective_no_nangrad():
     g = obj.grad(obj.x(eq))
     assert not np.any(np.isnan(g)), "vacuum boundary error"
 
+    # TODO: add Omnigenity objective (see GH issue #943)
+
     # these only need basic equilibrium
     eq = Equilibrium(L=2, M=2, N=2)
     objectives = [

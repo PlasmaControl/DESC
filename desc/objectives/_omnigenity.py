@@ -659,7 +659,7 @@ class Omnigenity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",  # FIXME: get it working with rev mode, set default to auto
+        deriv_mode="fwd",  # FIXME: get it working with rev mode (see GH issue #943)
         eq_grid=None,
         field_grid=None,
         M_booz=None,
@@ -681,7 +681,7 @@ class Omnigenity(_Objective):
         self.eta_weight = eta_weight
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
-        if not eq_fixed or field_fixed:
+        if not eq_fixed and not field_fixed:
             things = [eq, field]
         elif eq_fixed and not field_fixed:
             things = [field]
@@ -866,7 +866,7 @@ class Omnigenity(_Objective):
             eq_params = params_1
             field_params = params_2
 
-        # compute data
+        # compute eq data
         if self._eq_fixed:
             eq_data = constants["eq_data"]
         else:
@@ -877,11 +877,13 @@ class Omnigenity(_Objective):
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
+
+        # compute field data
         if self._field_fixed:
             field_data = constants["field_data"]
             # update theta_B and zeta_B with new iota from the equilibrium
             M, N = constants["helicity"]
-            iota = eq_data["iota"][0]
+            iota = jnp.mean(eq_data["iota"])
             matrix = jnp.where(
                 M == 0,
                 jnp.array([N, iota / N, 0, 1 / N]),  # OP
@@ -904,7 +906,7 @@ class Omnigenity(_Objective):
                 transforms=constants["field_transforms"],
                 profiles={},
                 helicity=constants["helicity"],
-                iota=eq_data["iota"][0],
+                iota=jnp.mean(eq_data["iota"]),
             )
 
         # additional computations that cannot be part of the regular compute API

@@ -134,13 +134,11 @@ def test_desc_output_to_input(tmpdir_factory):
     arr1 = arr1[arr1[:, 1].argsort()]
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]
-    pres1 = ir1.parse_inputs()[-1]["pressure"]
 
     desc_input_truth = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes"
     with pytest.warns(UserWarning):
         ir2 = InputReader(cl_args=[str(desc_input_truth)])
         arr2 = ir2.parse_inputs()[-1]["surface"]
-        pres2 = ir2.parse_inputs()[-1]["pressure"]
     arr2 = arr2[arr2[:, 1].argsort()]
     arr2mneg = arr2[arr2[:, 1] < 0]
     arr2mpos = arr2[arr2[:, 1] >= 0]
@@ -161,9 +159,6 @@ def test_desc_output_to_input(tmpdir_factory):
         0,
         atol=1e-8,
     )
-
-    if np.linalg.norm(pres1[:, 1]) > 0:
-        np.testing.assert_allclose(pres1(pres1[:, 1] > 0), pres2(pres2[:, 1] > 0))
 
     outfile_path = "./tests/inputs/iotest_HELIOTRON.h5"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
@@ -175,6 +170,8 @@ def test_desc_output_to_input(tmpdir_factory):
     ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
     ir1 = InputReader(cl_args=[str(tmp_path)])
     arr1 = ir1.parse_inputs()[-1]["surface"]
+    pres1 = ir1.parse_inputs()[-1]["pressure"]
+
     arr1 = arr1[arr1[:, 1].argsort()]
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]
@@ -182,6 +179,7 @@ def test_desc_output_to_input(tmpdir_factory):
     desc_input_truth = "./tests/inputs/iotest_HELIOTRON"
     ir2 = InputReader(cl_args=[str(desc_input_truth)])
     arr2 = ir2.parse_inputs()[-1]["surface"]
+    pres2 = ir2.parse_inputs()[-1]["pressure"]
     arr2 = arr2[arr2[:, 1].argsort()]
     arr2mneg = arr2[arr2[:, 1] < 0]
     arr2mpos = arr2[arr2[:, 1] >= 0]
@@ -204,8 +202,7 @@ def test_desc_output_to_input(tmpdir_factory):
         atol=1e-8,
     )
 
-    if np.linalg.norm(pres1[:, 1]) > 0:
-        np.testing.assert_allclose(pres1(pres1[:, 1] > 0), pres2(pres2[:, 1] > 0))
+    np.testing.assert_allclose(pres1[pres1[:, 1] > 0], pres2[pres2[:, 1] > 0])
 
 
 @pytest.mark.unit
@@ -315,9 +312,11 @@ class TestInputReader:
         # load an input file with vacuum obj but also an iota profile specified
         with pytest.warns(UserWarning):
             ir = InputReader(input_path)
-        # ensure that a current profile instead of an iota profile is used
+        # ensure that no profiles used
         assert "iota" not in ir.inputs[0].keys()
-        assert "current" in ir.inputs[0].keys()
+        assert "current" not in ir.inputs[0].keys()
+        assert "pressure" not in ir.inputs[0].keys()
+        assert ir.inputs[0]["objective"] == "force"
 
     @pytest.mark.unit
     def test_node_pattern_warning(self):

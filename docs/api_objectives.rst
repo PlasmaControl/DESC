@@ -2,9 +2,6 @@
 Objectives, Optimizers, and Grids
 =================================
 
-
-
-
 Objectives and Constraints
 **************************
 ``desc.objectives`` defines a number of different metrics for stellarator optimization

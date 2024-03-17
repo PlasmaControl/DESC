@@ -54,7 +54,7 @@ Below are some examples of common data items and where to find them within a sav
   - ``/_surface/_R_basis/_modes``
   - ``/_surface/_Z_basis/_modes``
 
-A saved hdf5 file can be loaded by with ``desc.io.load``, and it will return a
+A saved hdf5 file can be loaded with ``desc.io.load``, and it will return a
 reconstruction of the object(s) saved within. Some data may not be saved (fields not
 in ``_io_attrs_``), generally things that require large amounts of memory but are
 trivially recomputable (i.e., transform matrices).

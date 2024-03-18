@@ -11,7 +11,7 @@ from desc.backend import (
     tree_unflatten,
 )
 from desc.compute import get_transforms
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, _Grid
 from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
@@ -46,7 +46,7 @@ class _CoilObjective(_Objective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: Has no effect for this objective.
+        normalization. Affects all coils and not just a single coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -113,7 +113,7 @@ class _CoilObjective(_Objective):
                 [get_dim_f(x) for x in coilset]
             elif isinstance(coilset, CoilSet):
                 get_dim_f(coilset.coils)
-            elif isinstance(coilset, LinearGrid):
+            elif isinstance(coilset, _Grid):
                 self._dim_f += coilset.num_zeta
 
         def to_list(coilset):
@@ -151,7 +151,7 @@ class _CoilObjective(_Objective):
                 self.things[0],
                 is_leaf=lambda x: is_single_coil(x),
             )
-        elif isinstance(self._grid, LinearGrid):
+        elif isinstance(self._grid, _Grid):
             # map inputted single LinearGrid to structure of inputted coils
             self._grid = [self._grid] * len(coil_leaves)
             self._grid = tree_unflatten(coil_structure, self._grid)
@@ -159,7 +159,7 @@ class _CoilObjective(_Objective):
             # this case covers an inputted list of grids that matches the size
             # of the inputted coils. Can be a 1D list or nested list.
             flattened_grid = tree_flatten(
-                self._grid, is_leaf=lambda x: isinstance(x, LinearGrid)
+                self._grid, is_leaf=lambda x: isinstance(x, _Grid)
             )[0]
             self._grid = tree_unflatten(coil_structure, flattened_grid)
 
@@ -178,7 +178,7 @@ class _CoilObjective(_Objective):
         get_dim_f(self._grid)
         # get only needed grids (1 per CoilSet) and flatten that list
         self._grid = tree_leaves(
-            to_list(self._grid), is_leaf=lambda x: isinstance(x, LinearGrid)
+            to_list(self._grid), is_leaf=lambda x: isinstance(x, _Grid)
         )
         transforms = tree_leaves(
             to_list(transforms), is_leaf=lambda x: isinstance(x, dict)

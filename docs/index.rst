@@ -18,18 +18,9 @@
 
 .. toctree::
    :maxdepth: 1
-   :caption: Getting Started
-
-   installation
-   command_line
-   input
-   output
-
-.. toctree::
-   :maxdepth: 1
    :caption: Tutorials
 
-
+   installation
    notebooks/tutorials/basic_equilibrium.ipynb
    notebooks/tutorials/advanced_equilibrium_continuation.ipynb
    notebooks/tutorials/continuation_step_by_step.ipynb
@@ -43,6 +34,28 @@
 
 .. toctree::
    :maxdepth: 1
+   :caption: Public API
+
+   api_equilibrium
+   api_objectives
+   api_io
+   api_plotting
+   api_continuation
+   api_fields
+   api
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Command Line Interface and I/O
+
+   command_line
+   input
+   output
+
+
+.. toctree::
+   :maxdepth: 1
    :caption: Developer guides
 
    adding_compute_funs
@@ -50,11 +63,6 @@
    adding_optimizers
    notebooks/dev_guide/grid.ipynb
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Public API
-
-   api
 
 
 Indices and tables

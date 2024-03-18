@@ -859,6 +859,52 @@ class SplineXYZCurve(Curve):
         )
 
 
-class DiscontinuousCurve:
-    def __init__(self):
+class DiscontinuousCurve(Curve):
+    def __init__(
+        self,
+        X,
+        Y,
+        Z,
+        knots=None,
+        method="cubic",
+        name="",
+    ):
         pass
+
+    @optimizable_parameter
+    @property
+    def X(self):
+        """Coordinates for X."""
+        return self._X
+
+    @X.setter
+    def X(self, new):
+        if len(new) == len(self.knots):
+            self._X = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "X should have the same size as the knots, "
+                + f"got {len(new)} X values for {len(self.knots)} knots"
+            )
+
+    @optimizable_parameter
+    @property
+    def Y(self):
+        """Coordinates for Y."""
+        return self._Y
+
+    @Y.setter
+    def Y(self, new):
+        if len(new) == len(self.knots):
+            self._Y = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "Y should have the same size as the knots, "
+                + f"got {len(new)} Y values for {len(self.knots)} knots"
+            )
+
+    @optimizable_parameter
+    @property
+    def Z(self):
+        """Coordinates for Z."""
+        return self._Z

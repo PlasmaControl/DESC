@@ -112,7 +112,7 @@ class QuadraticFlux(_Objective):
         self._external_field_source_grid = external_field_source_grid
 
         super().__init__(
-            things=[field, eq] if not eq_fixed else [field],
+            things=[eq, field] if not eq_fixed else [field],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -134,8 +134,8 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
-        eq = self._eq if self._eq_fixed else self.things[1]
-        field = self.things[0]
+        eq = self._eq if self._eq_fixed else self.things[0]
+        field = self.things[0] if self._eq_fixed else self.things[1]
         # if field is different than self._field, update
         if field != self._field:
             self._field = field
@@ -216,7 +216,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, field_params=None, equil_params=None, constants=None):
+    def compute(self, params_one=None, params_two=None, constants=None):
         """Compute quadratic flux.
 
         Parameters
@@ -239,6 +239,11 @@ class QuadraticFlux(_Objective):
             by the optimizer.
 
         """
+        if self._eq_fixed:
+            field_params = params_one
+        else:
+            equil_params = params_one
+            field_params = params_two
         if constants is None:
             constants = self.constants
         if not self._eq_fixed:

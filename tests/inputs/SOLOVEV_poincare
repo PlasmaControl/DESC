@@ -22,8 +22,8 @@ pert_order=0
 optimizer         = lsq-exact
 objective         = force
 spectral_indexing = fringe
-node_pattern = jacobi
-bdry_mode = poincare
+node_pattern      = jacobi
+bdry_mode         = poincare
 
 
 # pressure and rotational transform profiles

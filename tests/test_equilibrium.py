@@ -8,10 +8,10 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset
 
-import desc.examples
 from desc.__main__ import main
 from desc.backend import sign
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
@@ -79,7 +79,7 @@ def test_compute_theta_coords(DSHAPE_current):
 @pytest.mark.unit
 def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
 
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_PEST", "zeta"]
@@ -107,7 +107,7 @@ def test_map_coordinates():
 @pytest.mark.unit
 def test_map_coordinates2():
     """Test root finding for (rho,theta,zeta) for common use cases."""
-    eq = desc.examples.get("W7-X")
+    eq = get("W7-X")
 
     n = 100
     # finding coordinates along a single field line
@@ -141,7 +141,7 @@ def test_map_coordinates2():
 @pytest.mark.unit
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
 
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_PEST", "zeta"]
@@ -325,6 +325,34 @@ def test_resolution():
 
 
 @pytest.mark.unit
+def test_symmetry():
+    """Test changing equilibrium symmetry."""
+    M = 6
+    N = 3
+    surface = get("W7-X").surface.change_resolution(M=M, N=N)
+    eq_sym1 = Equilibrium(M=M, N=N, surface=surface, sym=True)
+    eq_asym1 = Equilibrium(M=M, N=N, surface=surface, sym=False)
+
+    eq_sym2 = eq_asym1.copy()
+    eq_asym2 = eq_sym1.copy()
+
+    eq_sym2.change_resolution(sym=True)
+    eq_asym2.change_resolution(sym=False)
+
+    np.testing.assert_allclose(eq_sym1.R_lmn, eq_sym2.R_lmn)
+    np.testing.assert_allclose(eq_sym1.Z_lmn, eq_sym2.Z_lmn)
+    np.testing.assert_allclose(eq_sym1.L_lmn, eq_sym2.L_lmn)
+    np.testing.assert_allclose(eq_sym1.Rb_lmn, eq_sym2.Rb_lmn)
+    np.testing.assert_allclose(eq_sym1.Zb_lmn, eq_sym2.Zb_lmn)
+
+    np.testing.assert_allclose(eq_asym1.R_lmn, eq_asym2.R_lmn)
+    np.testing.assert_allclose(eq_asym1.Z_lmn, eq_asym2.Z_lmn)
+    np.testing.assert_allclose(eq_asym1.L_lmn, eq_asym2.L_lmn)
+    np.testing.assert_allclose(eq_asym1.Rb_lmn, eq_asym2.Rb_lmn)
+    np.testing.assert_allclose(eq_asym1.Zb_lmn, eq_asym2.Zb_lmn)
+
+
+@pytest.mark.unit
 def test_equilibrium_from_near_axis():
     """Test loading a solution from pyQSC/pyQIC."""
     qsc_path = "./tests/inputs/qsc_r2section5.5.pkl"
@@ -395,7 +423,7 @@ def test_change_NFP():
     """Test that changing the eq NFP correctly changes everything."""
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        eq = desc.examples.get("HELIOTRON")
+        eq = get("HELIOTRON")
         eq.change_resolution(NFP=4)
         obj = get_equilibrium_objective(eq=eq)
         obj.build()
@@ -404,7 +432,7 @@ def test_change_NFP():
 @pytest.mark.unit
 def test_error_when_ndarray_or_integer_passed():
     """Test that errors raise correctly when a non-Grid object is passed."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
     with pytest.raises(TypeError):
         eq.compute("R", grid=1)
     with pytest.raises(TypeError):

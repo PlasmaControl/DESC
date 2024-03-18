@@ -18,7 +18,7 @@ def bounce_quadrature(pitch, X, w, knots, f, B_sup_z, B, B_z_ra):
     ----------
     pitch : ndarray, shape(pitch.size, )
         λ values.
-    X : ndarray, shape(pitch.size, (knots.size - 1) * NUM_ROOTS, w.size)
+    X : ndarray, shape(pitch.size, (knots.size - 1) * 3, w.size)
         Quadrature points.
     w : ndarray, shape(w.size, )
         Quadrature weights.
@@ -35,7 +35,7 @@ def bounce_quadrature(pitch, X, w, knots, f, B_sup_z, B, B_z_ra):
 
     Returns
     -------
-    inner_product : ndarray, shape(P, (knots.size - 1) * NUM_ROOTS)
+    inner_product : ndarray, shape(P, (knots.size - 1) * 3)
         Bounce integrals for every pitch along a particular field line.
 
     """
@@ -389,8 +389,8 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     -------
     bp1, bp2 : ndarray, ndarray
         Field line-following ζ coordinates of bounce points for a given pitch
-        along a field line. Has shape (P, A * R, (knots.size - 1) * NUM_ROOTS).
-        If there were less than (knots.size - 1) * NUM_ROOTS bounce points along a
+        along a field line. Has shape (P, A * R, (knots.size - 1) * 3).
+        If there were less than (knots.size - 1) * 3 bounce points along a
         field line, then the last axis is padded with nan.
 
     """
@@ -436,15 +436,28 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # integral only if bp1[:, i] <= bp2[:, i].
     # Now, because B_z[:, i] <= 0 implies B_z[:, i + 1] >= 0 by continuity,
     # there can be at most one inversion, and if it exists, the inversion must be
-    # at the first pair. To correct the inversion, it suffices to roll forward bp1
-    # Then the pairs bp1[:, i + 1] and bp2[:, i] form integration boundaries.
+    # at the first pair. To correct the inversion, it suffices to roll forward bp1.
+    # Then the pairs bp1[:, i] and bp2[:, i] for i > 0 form integration boundaries.
     # Moreover, if the first intersect satisfies B_z >= 0, that particle may be
     # trapped in a well outside this snapshot of the field line.
-    # If the last intersect also satisfies B_z < 0, then we compute a bounce
-    # integral between these points. The above logic handles this assuming the
-    # field line is approximately periodic so that ζ = knots[-1] is ζ = 0.
-    last_one = jnp.squeeze(_first_element(intersect, ~is_intersect)) - 1
-    bp1 = _roll_and_replace(bp1, bp1[:, 0] > bp2[:, 0], last_one - knots[-1])
+    # If, in addition, the last intersect satisfies B_z < 0, then we have the
+    # required information to compute a bounce integral between these points.
+    # The below logic handles both tasks.
+    last_intersect = jnp.squeeze(_first_element(intersect, ~is_intersect)) - 1
+    bp1 = _roll_and_replace(bp1, bp1[:, 0] > bp2[:, 0], last_intersect - knots[-1])
+    # Notice that for the latter, an "approximation" is made that the field line is
+    # periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so that the
+    # distance between these bounce points is well-defined. This may worry the
+    # reader if they recall that it is not desirable to have field lines close
+    # on themselves. However, for any irrational value for the rotational
+    # transform, there exists an arbitrarily close rational value (I'm just saying
+    # the basic result that rational numbers are dense in the real numbers).
+    # After such a rational amount of transits, the points corresponding to this
+    # distance along the field line and the start of the field line will be
+    # physically close. By continuity, the value of |B| at ζ = 0 is then close
+    # to the value of |B| of at ζ = knots[-1]. In general, continuity implies
+    # |B|(knots[-1] < ζ < knots[-1] + knots[0]) will approximately equal
+    # |B|(0 < ζ < knots[0]) as long as ζ = knots[-1] is large enough.
     bp1 = bp1.reshape(P, AR, -1)
     bp2 = bp2.reshape(P, AR, -1)
     return bp1, bp2
@@ -514,9 +527,10 @@ def bounce_integral(
         |B| is the norm of the magnetic field,
         f(ℓ) is the quantity to integrate along the field line,
         and the endpoints of the integration are at the bounce points.
-    For a particle with fixed λ, bounce points are defined to be the location
-    on the field line such that the particle's velocity parallel to the
-    magnetic field is zero, i.e. λ |B| = 1.
+    Physically, the pitch angle λ is the magnetic moment over the energy
+    of particle. For a particle with fixed λ, bounce points are defined to be
+    the location on the field line such that the particle's velocity parallel
+    to the magnetic field is zero, i.e. λ |B| = 1.
 
     The bounce integral is defined up to a sign.
     We choose the sign that corresponds the particle's guiding center trajectory
@@ -600,7 +614,7 @@ def bounce_integral(
     assert poly_B_z.shape == (3, A * R, zeta.size - 1)
 
     x, w = quadrature(**kwargs)
-    # change of variable, x = sin[0.5 + π (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)]
+    # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
     x = jnp.arcsin(x) / jnp.pi - 0.5
     original = _compute_bp_if_given_pitch(pitch, zeta, poly_B, poly_B_z, err=False)
 
@@ -631,7 +645,7 @@ def bounce_integral(
             pitch, zeta, poly_B, poly_B_z, *original, err=True
         )
         P = pitch.shape[0]
-        pitch = jnp.broadcast_to(pitch, shape=(P, poly_B.shape[1]))
+        pitch = jnp.broadcast_to(pitch, shape=(P, A * R))
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
         f = f.reshape(A * R, -1)
         result = jnp.reshape(
@@ -663,9 +677,10 @@ def bounce_average(
         |B| is the norm of the magnetic field,
         f(ℓ) is the quantity to integrate along the field line,
         and the endpoints of the integration are at the bounce points.
-    For a particle with fixed λ, bounce points are defined to be the location
-    on the field line such that the particle's velocity parallel to the
-    magnetic field is zero, i.e. λ |B| = 1.
+    Physically, the pitch angle λ is the magnetic moment over the energy
+    of particle. For a particle with fixed λ, bounce points are defined to be
+    the location on the field line such that the particle's velocity parallel
+    to the magnetic field is zero, i.e. λ |B| = 1.
 
     The bounce integral is defined up to a sign.
     We choose the sign that corresponds the particle's guiding center trajectory

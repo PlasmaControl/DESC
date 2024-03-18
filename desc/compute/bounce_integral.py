@@ -494,7 +494,6 @@ def _compute_bp_if_given_pitch(pitch, knots, poly_B, poly_B_z, *original, err=Fa
         assert pitch.ndim == 3, err_msg
         pitch = pitch.reshape(pitch.shape[0], -1)
         assert pitch.shape[-1] == 1 or pitch.shape[-1] == poly_B.shape[1], err_msg
-        pitch = jnp.broadcast_to(pitch, shape=(pitch.shape[0], poly_B.shape[1]))
         return pitch, *compute_bounce_points(pitch, knots, poly_B, poly_B_z)
 
 
@@ -631,12 +630,16 @@ def bounce_integral(
         pitch, bp1, bp2 = _compute_bp_if_given_pitch(
             pitch, zeta, poly_B, poly_B_z, *original, err=True
         )
+        P = pitch.shape[0]
+        pitch = jnp.broadcast_to(pitch, shape=(P, poly_B.shape[1]))
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
         f = f.reshape(A * R, -1)
-        result = bounce_quadrature(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra)
-        # complete the change of variable
-        result = result / (bp2 - bp1) * jnp.pi
-        result = result.reshape(pitch.shape[0], A, R, -1)
+        result = jnp.reshape(
+            bounce_quadrature(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra)
+            # complete the change of variable
+            / (bp2 - bp1) * jnp.pi,
+            newshape=(P, A, R, -1),
+        )
         return result
 
     return _bounce_integral, grid, data

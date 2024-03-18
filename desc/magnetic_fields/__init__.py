@@ -1,6 +1,7 @@
 """Classes for Magnetic Fields."""
 
 from ._core import (
+    OmnigenousField,
     PoloidalMagneticField,
     ScalarPotentialField,
     ScaledMagneticField,

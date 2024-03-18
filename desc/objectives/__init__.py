@@ -22,13 +22,14 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
-from ._qs import (
+from ._omnigenity import (
     Isodynamicity,
+    Omnigenity,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
+from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,
@@ -59,6 +60,9 @@ from .linear_objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixOmniBmax,
+    FixOmniMap,
+    FixOmniWell,
     FixParameter,
     FixPressure,
     FixPsi,

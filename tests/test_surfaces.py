@@ -114,16 +114,16 @@ class TestFourierRZToroidalSurface:
     @pytest.mark.unit
     def test_from_near_axis(self):
         """Test constructing approximate QI surface from near axis parameters."""
-        surf = FourierRZToroidalSurface.from_near_axis(10, 4, 0.3, 0.2)
+        surf = FourierRZToroidalSurface.from_qp_model(1, 10, 4, 0.3, 0.2)
         np.testing.assert_allclose(
             surf.R_lmn,
-            np.array([0.075, 0, 1, 0.125, 0, 0.0150853, -0.2, 0.075]),
+            np.array([-0.075, 0, 1, -0.125, 0, 0.030707, -0.2, -0.075]),
             rtol=1e-4,
             atol=1e-6,
         )
         np.testing.assert_allclose(
             surf.Z_lmn,
-            np.array([0.2, -0.075, 0, 0, -0.125, -0.00377133, 0.075]),
+            np.array([0.2, 0.075, 0, 0, 0.125, -0.007677, -0.075]),
             rtol=1e-4,
             atol=1e-6,
         )

@@ -181,11 +181,12 @@ def diff_mask(a, mask, n=1, axis=-1, prepend=None):
 
 
 @vmap
-def _first_element(a, mask):
-    """Return first value of ``a`` where ``mask`` is nonzero."""
+def _last_element(a, mask):
+    """Return last element of ``a`` where ``mask`` is nonzero."""
     assert a.ndim == mask.ndim == 1
     assert a.shape == mask.shape
-    idx = flatnonzero(mask, size=1, fill_value=a.size)
+    assert mask.dtype == bool
+    idx = flatnonzero(~mask, size=1, fill_value=a.size) - 1
     return a[idx]
 
 
@@ -443,7 +444,7 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # If, in addition, the last intersect satisfies B_z < 0, then we have the
     # required information to compute a bounce integral between these points.
     # The below logic handles both tasks.
-    last_intersect = jnp.squeeze(_first_element(intersect, ~is_intersect)) - 1
+    last_intersect = jnp.squeeze(_last_element(intersect, is_intersect))
     bp1 = _roll_and_replace(bp1, bp1[:, 0] > bp2[:, 0], last_intersect - knots[-1])
     # Notice that for the latter, an "approximation" is made that the field line is
     # periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so that the

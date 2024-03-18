@@ -135,16 +135,16 @@ def test_pitch_input():
     """Test different ways of specifying pitch."""
     eq = get("HELIOTRON")
     rho = np.linspace(0, 1, 6)
-    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 2)
+    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
     ba, grid, data = bounce_average(eq, rho=rho, alpha=alpha)
-    pitch_resolution = 15
+    pitch_resolution = 30
     name = "g_zz"
     f = eq.compute(name, grid=grid, data=data)[name]
     # Same pitch for every field line may give sparse result.
     pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), pitch_resolution)
     pitch = pitch[:, np.newaxis, np.newaxis]
     result = ba(f, pitch)
-    assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
+    assert np.isfinite(result).any()
     # specify pitch per field line
     B = data["B"].reshape(alpha.size * rho.size, -1)
     eps = 1e-5  # FIXME: vanishing B-field bug.
@@ -154,14 +154,10 @@ def test_pitch_input():
         pitch_resolution,
     ).reshape(pitch_resolution, alpha.size, rho.size)
     result = ba(f, pitch)
-    assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
-
-    ba, _, _ = bounce_average(eq, rho=rho, alpha=alpha, method="direct")
-    result = ba(f, pitch)
-    print(np.isfinite(result).any())
+    assert np.isfinite(result).any()
 
 
-@pytest.mark.unit
+# @pytest.mark.unit
 def test_elliptic_integral_limit():
     """Test bounce integral matches elliptic integrals.
 

@@ -1,6 +1,6 @@
-=================
-API Documentation
-=================
+====================
+Alphabetical Listing
+====================
 
 Basis
 *****
@@ -123,7 +123,6 @@ IO
     :recursive:
     :template: class.rst
 
-    desc.io.InputReader
     desc.io.load
 
 Magnetic Fields
@@ -134,6 +133,8 @@ Magnetic Fields
     :recursive:
     :template: class.rst
 
+    desc.magnetic_fields.CurrentPotentialField
+    desc.magnetic_fields.FourierCurrentPotentialField
     desc.magnetic_fields.ScaledMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
@@ -141,6 +142,7 @@ Magnetic Fields
     desc.magnetic_fields.PoloidalMagneticField
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.ScalarPotentialField
+    desc.magnetic_fields.DommaschkPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
 
@@ -187,6 +189,7 @@ Objective Functions
     desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
+    desc.objectives.LinearObjectiveFromUser
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability

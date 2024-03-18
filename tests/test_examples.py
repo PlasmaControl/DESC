@@ -10,6 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
+from desc.coils import FourierRZCoil
 from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
@@ -19,6 +20,9 @@ from desc.magnetic_fields import SplineMagneticField
 from desc.objectives import (
     AspectRatio,
     BoundaryError,
+    CoilCurvature,
+    CoilLength,
+    CoilTorsion,
     CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
@@ -1050,3 +1054,42 @@ class TestGetExample:
                 -1.36284423e07,
             ],
         )
+
+
+@pytest.mark.unit
+def test_single_coil_optimization():
+    """Test that single coil (not coilset) optimization works."""
+    # testing that the objectives work and that the optimization framework
+    # works when a single coil is passed in.
+
+    opt = Optimizer("fmintr")
+    coil = FourierRZCoil()
+    coil.change_resolution(N=1)
+    target_R = 9
+    # length and curvature
+    target_length = 2 * np.pi * target_R
+    target_curvature = 1 / target_R
+    grid = LinearGrid(N=2)
+    obj = ObjectiveFunction(
+        (
+            CoilLength(coil, target=target_length),
+            CoilCurvature(coil, target=target_curvature, grid=grid),
+        ),
+    )
+    opt.optimize([coil], obj, maxiter=200)
+    np.testing.assert_allclose(
+        coil.compute("length")["length"], target_length, rtol=1e-4
+    )
+    np.testing.assert_allclose(
+        coil.compute("curvature", grid=grid)["curvature"], target_curvature, rtol=1e-4
+    )
+
+    # torsion
+    # initialize with some torsion
+    coil.Z_n = coil.Z_n.at[0].set(0.1)
+    target = 0
+    obj = ObjectiveFunction(CoilTorsion(coil, target=target))
+    opt.optimize([coil], obj, maxiter=200, ftol=0)
+    np.testing.assert_allclose(
+        coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
+    )

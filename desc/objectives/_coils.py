@@ -104,19 +104,21 @@ class _CoilObjective(_Objective):
         from desc.coils import CoilSet, MixedCoilSet, _Coil
 
         self._dim_f = 0
-        quad_weights = []
+        self._quad_weights = jnp.array([])
 
-        def get_dim_f(coilset):
-            """Get dim_f."""
+        def get_dim_f_and_weights(coilset):
+            """Get dim_f and quad_weights from grid."""
             if isinstance(coilset, list):
-                [get_dim_f(x) for x in coilset]
+                [get_dim_f_and_weights(x) for x in coilset]
             elif isinstance(coilset, MixedCoilSet):
-                [get_dim_f(x) for x in coilset]
+                [get_dim_f_and_weights(x) for x in coilset]
             elif isinstance(coilset, CoilSet):
-                get_dim_f(coilset.coils)
+                get_dim_f_and_weights(coilset.coils)
             elif isinstance(coilset, _Grid):
                 self._dim_f += coilset.num_zeta
-                quad_weights.append(coilset.spacing[:, 2])
+                self._quad_weights = jnp.concatenate(
+                    (self._quad_weights, coilset.spacing[:, 2])
+                )
 
         def to_list(coilset):
             """Turn a MixedCoilSet container into a list of what it's containing."""
@@ -177,16 +179,13 @@ class _CoilObjective(_Objective):
             is_leaf=lambda x: is_single_coil(x),
         )
 
-        get_dim_f(self._grid)
+        get_dim_f_and_weights(self._grid)
         # get only needed grids (1 per CoilSet) and flatten that list
         self._grid = tree_leaves(
             to_list(self._grid), is_leaf=lambda x: isinstance(x, _Grid)
         )
         transforms = tree_leaves(
             to_list(transforms), is_leaf=lambda x: isinstance(x, dict)
-        )
-        quad_weights = tree_leaves(
-            to_list(quad_weights), is_leaf=lambda x: isinstance(x, jnp.ndarray)
         )
 
         errorif(
@@ -199,11 +198,10 @@ class _CoilObjective(_Objective):
         if not isinstance(self.things[0], MixedCoilSet):
             self._grid = self._grid[0]
             transforms = transforms[0]
-            quad_weights = quad_weights[0]
 
         self._constants = {
             "transforms": transforms,
-            "quad_weights": jnp.array(quad_weights),
+            "quad_weights": self._quad_weights,
         }
 
         timer.stop("Precomputing transforms")

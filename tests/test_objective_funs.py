@@ -18,7 +18,11 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
-from desc.magnetic_fields import FourierCurrentPotentialField, SplineMagneticField
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    OmnigenousField,
+    SplineMagneticField,
+)
 from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
@@ -39,6 +43,7 @@ from desc.objectives import (
     MercierStability,
     ObjectiveFromUser,
     ObjectiveFunction,
+    Omnigenity,
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
@@ -678,7 +683,7 @@ def test_rejit():
 
 @pytest.mark.unit
 def test_generic_compute():
-    """Test for gh issue #388."""
+    """Test for GH issue #388."""
     eq = Equilibrium()
     obj = ObjectiveFunction(AspectRatio(target=2, weight=1, eq=eq))
     obj.build()
@@ -1934,6 +1939,41 @@ def test_compute_scalar_resolution():  # noqa: C901
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
+    # TODO: add test for PlasmaVesselDistance
+
+    # Omnigenity
+    # (needs an approximately QP equilibrium and field)
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=20,
+        elongation=6,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=1,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="force", verbose=3)
+    field = OmnigenousField(
+        L_B=0,
+        M_B=2,
+        L_x=0,
+        M_x=0,
+        N_x=0,
+        NFP=eq.NFP,
+        helicity=(0, eq.NFP),
+        B_lm=np.array([0.8, 1.2]),
+    )
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array + 0.5):  # omnigenity needs higher resolution
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+        obj = ObjectiveFunction(
+            Omnigenity(eq=eq, field=field, eq_grid=grid, field_grid=grid)
+        )
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq, field))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+
 
 @pytest.mark.unit
 def test_objective_no_nangrad():
@@ -1988,6 +2028,8 @@ def test_objective_no_nangrad():
         obj.build()
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g)), "vacuum boundary error"
+
+    # TODO: add Omnigenity objective (see GH issue #943)
 
     # these only need basic equilibrium
     eq = Equilibrium(L=2, M=2, N=2)

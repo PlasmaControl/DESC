@@ -222,6 +222,7 @@ _class_inheritance = {
         "desc.geometry.curve.SplineXYZCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.magnetic_fields._core.OmnigenousField": [],
 }
 
 data_index = {p: {} for p in _class_inheritance.keys()}

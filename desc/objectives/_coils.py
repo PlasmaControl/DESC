@@ -195,7 +195,7 @@ class _CoilObjective(_Objective):
             self._grid = self._grid[0]
             transforms = transforms[0]
 
-        self._constants = {"transforms": transforms}
+        self._constants = {"transforms": transforms, "quad_weights": None}
 
         timer.stop("Precomputing transforms")
         if verbose > 1:

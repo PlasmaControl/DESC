@@ -455,7 +455,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = BoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq))
+        f = obj.compute_scaled_error(*obj.xs())
         n = len(f) // 3
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -474,7 +474,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = BoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq))
+        f = obj.compute_scaled_error(*obj.xs())
         n = len(f) // 2
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -491,7 +491,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq))
+        f = obj.compute_scaled_error(*obj.xs())
         n = len(f) // 2
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -508,7 +508,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = BoundaryErrorNESTOR(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq))
+        f = obj.compute_scaled_error(*obj.xs())
         np.testing.assert_allclose(f, 0, atol=2e-3)
 
     @pytest.mark.unit
@@ -1114,7 +1114,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(*obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1189,7 +1189,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(*obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1266,7 +1266,7 @@ def test_boundary_error_print(capsys):
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(*obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -2020,13 +2020,13 @@ def test_objective_no_nangrad():
     eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
     obj = ObjectiveFunction(BoundaryError(eq, ext_field))
     obj.build()
-    g = obj.grad(obj.x(eq))
+    g = obj.grad(obj.x())
     assert not np.any(np.isnan(g)), "boundary error"
 
     obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field))
     with pytest.warns(UserWarning):
         obj.build()
-    g = obj.grad(obj.x(eq))
+    g = obj.grad(obj.x())
     assert not np.any(np.isnan(g)), "vacuum boundary error"
 
     # TODO: add Omnigenity objective (see GH issue #943)

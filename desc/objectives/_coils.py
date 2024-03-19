@@ -104,6 +104,7 @@ class _CoilObjective(_Objective):
         from desc.coils import CoilSet, MixedCoilSet, _Coil
 
         self._dim_f = 0
+        quad_weights = []
 
         def get_dim_f(coilset):
             """Get dim_f."""
@@ -115,6 +116,7 @@ class _CoilObjective(_Objective):
                 get_dim_f(coilset.coils)
             elif isinstance(coilset, _Grid):
                 self._dim_f += coilset.num_zeta
+                quad_weights.append(coilset.spacing[:, 2])
 
         def to_list(coilset):
             """Turn a MixedCoilSet container into a list of what it's containing."""
@@ -183,6 +185,9 @@ class _CoilObjective(_Objective):
         transforms = tree_leaves(
             to_list(transforms), is_leaf=lambda x: isinstance(x, dict)
         )
+        quad_weights = tree_leaves(
+            to_list(quad_weights), is_leaf=lambda x: isinstance(x, jnp.ndarray)
+        )
 
         errorif(
             np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]),
@@ -194,8 +199,12 @@ class _CoilObjective(_Objective):
         if not isinstance(self.things[0], MixedCoilSet):
             self._grid = self._grid[0]
             transforms = transforms[0]
+            quad_weights = quad_weights[0]
 
-        self._constants = {"transforms": transforms, "quad_weights": None}
+        self._constants = {
+            "transforms": transforms,
+            "quad_weights": jnp.array(quad_weights),
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -339,6 +348,7 @@ class CoilLength(_CoilObjective):
             else flattened_coils
         )
         self._dim_f = len(flattened_coils)
+        self._constants["quad_weights"] = 1
 
     def compute(self, params, constants=None):
         """Compute coil length.

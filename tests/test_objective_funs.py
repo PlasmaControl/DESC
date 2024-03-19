@@ -597,7 +597,6 @@ class TestObjectiveFunction:
             [LinearGrid(N=5), LinearGrid(N=5)],
             [LinearGrid(N=5), LinearGrid(N=5)],
         ]
-
         test(coil, grid=LinearGrid(N=5))
         test(coils)
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))

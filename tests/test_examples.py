@@ -1150,7 +1150,9 @@ def test_freeb_vacuum():
         FixPressure(eq=eq),
         FixPsi(eq=eq),
     )
-    objective = ObjectiveFunction(VacuumBoundaryError(eq=eq, ext_field=ext_field))
+    objective = ObjectiveFunction(
+        VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
+    )
     eq, out = eq.optimize(
         objective,
         constraints,
@@ -1206,7 +1208,9 @@ def test_freeb_axisym():
         FixPressure(eq=eq),
         FixPsi(eq=eq),
     )
-    objective = ObjectiveFunction(BoundaryError(eq=eq, ext_field=ext_field))
+    objective = ObjectiveFunction(
+        BoundaryError(eq=eq, field=ext_field, field_fixed=True)
+    )
 
     # we know this is a pretty simple shape so we'll only use |m| <= 2
     R_modes = (

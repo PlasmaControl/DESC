@@ -270,7 +270,7 @@ class CoilLength(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: Has no effect for this objective.
+        normalization. Affects all coils and not just a single coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -400,7 +400,7 @@ class CoilCurvature(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: Has no effect for this objective.
+        normalization. Affects all coils and not just a single coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -515,7 +515,7 @@ class CoilTorsion(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: Has no effect for this objective.
+        normalization. Affects all coils and not just a single coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output

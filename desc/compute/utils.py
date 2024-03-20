@@ -364,11 +364,14 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
         elif c == "B":  # used for Boozer transform
             transforms["B"] = Transform(
                 grid,
-                DoubleFourierSeries(
-                    M=kwargs.get("M_booz", 2 * obj.M),
-                    N=kwargs.get("N_booz", 2 * obj.N),
-                    NFP=obj.NFP,
-                    sym=obj.R_basis.sym,
+                kwargs.get(
+                    "B_basis",
+                    DoubleFourierSeries(
+                        M=kwargs.get("M_booz", 2 * obj.M),
+                        N=kwargs.get("N_booz", 2 * obj.N),
+                        NFP=obj.NFP,
+                        sym=kwargs.get("sym", obj.R_basis.sym),
+                    ),
                 ),
                 derivs=derivs["B"],
                 build=False,
@@ -382,7 +385,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
                     NFP=obj.NFP,
-                    sym=obj.Z_basis.sym,
+                    sym=kwargs.get("sym", obj.Z_basis.sym),
                 ),
                 derivs=derivs["w"],
                 build=False,

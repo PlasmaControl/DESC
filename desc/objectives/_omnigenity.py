@@ -142,7 +142,7 @@ class QuasisymmetryBoozer(_Objective):
             "resolution for surface averages",
         )
 
-        self._data_keys = ["|B|_mn"]
+        self._data_keys = ["|B|_mn_B"]
 
         timer = Timer()
         if verbose > 0:
@@ -208,7 +208,7 @@ class QuasisymmetryBoozer(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        B_mn = constants["matrix"] @ data["|B|_mn"]
+        B_mn = constants["matrix"] @ data["|B|_mn_B"]
         return B_mn[constants["idx"]]
 
     @property

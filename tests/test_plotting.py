@@ -37,6 +37,7 @@ from desc.plotting import (
     plot_grid,
     plot_logo,
     plot_qs_error,
+    plot_regcoil_outputs,
     plot_section,
     plot_surfaces,
 )
@@ -989,6 +990,103 @@ def test_plot_3d_surface():
 
 
 @pytest.mark.unit
+@pytest.mark.xfail
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Bn_scan_regcoil(regcoil_ellipse_and_axisym_surf):
+    """Test Bn scan plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_ellipse_and_axisym_surf
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_scan_Bn"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.xfail
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Phi_scan_regcoil(regcoil_ellipse_and_axisym_surf):
+    """Test Phi scan plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_ellipse_and_axisym_surf
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_scan_Phi"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.xfail
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_chi2B_alpha_scan_regcoil(regcoil_ellipse_and_axisym_surf):
+    """Test chi^2_B vs alpha plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_ellipse_and_axisym_surf
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_chi^2_B_vs_alpha"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_chi2B_chi2K_scan_regcoil(regcoil_ellipse_and_axisym_surf):
+    """Test chi^2_B vs chi^2_K plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_ellipse_and_axisym_surf
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_chi^2_B_vs_chi^2_K"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Bn_regcoil(regcoil_ellipse_helical_coils):
+    """Test Bn plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_ellipse_helical_coils
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_Bn"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Phi_regcoil(regcoil_ellipse_helical_coils):
+    """Test Phi plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_ellipse_helical_coils
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_Phi"]
+    return fig
+
+
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_omnigenous_field():
     """Test plot omnigenous magnetic field."""

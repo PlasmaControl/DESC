@@ -22,6 +22,7 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
     SplineMagneticField,
+    ToroidalMagneticField,
 )
 from desc.objectives import (
     AspectRatio,
@@ -47,6 +48,7 @@ from desc.objectives import (
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
+    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -2089,6 +2091,15 @@ def test_asymmetric_normalization():
 
 
 @pytest.mark.unit
+def test_quadratic_flux_finite_beta_warning():
+    """Tests QuadraticFlux warning for finite beta equilibrium."""
+    field = ToroidalMagneticField(1, 1)
+    eq = get("DSHAPE")
+    obj = QuadraticFlux(eq=eq, field=field)
+    with pytest.warns(UserWarning):
+        obj.build()
+
+
 def test_force_balance_axis_error():
     """Test that ForceBalance objective is not NaN if the grid contains axis."""
     eq = get("SOLOVEV")

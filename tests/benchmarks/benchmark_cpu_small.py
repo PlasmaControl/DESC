@@ -22,6 +22,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.optimize import LinearConstraintProjection, ProximalProjection
 from desc.perturbations import perturb
@@ -32,6 +33,9 @@ from desc.transform import Transform
 def test_build_transform_fft_lowres(benchmark):
     """Test time to build a transform (after compilation) for low resolution."""
 
+    def setup():
+        jax.clear_caches()
+
     def build():
         L = 5
         M = 5
@@ -41,13 +45,16 @@ def test_build_transform_fft_lowres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_build_transform_fft_midres(benchmark):
     """Test time to build a transform (after compilation) for mid resolution."""
 
+    def setup():
+        jax.clear_caches()
+
     def build():
         L = 15
         M = 15
@@ -57,12 +64,15 @@ def test_build_transform_fft_midres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_build_transform_fft_highres(benchmark):
     """Test time to build a transform (after compilation) for high resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 25
@@ -73,12 +83,15 @@ def test_build_transform_fft_highres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_equilibrium_init_lowres(benchmark):
     """Test time to create an equilibrium for low resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 5
@@ -86,12 +99,15 @@ def test_equilibrium_init_lowres(benchmark):
         N = 5
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_equilibrium_init_medres(benchmark):
     """Test time to create an equilibrium for medium resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 15
@@ -99,12 +115,15 @@ def test_equilibrium_init_medres(benchmark):
         N = 15
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
 def test_equilibrium_init_highres(benchmark):
     """Test time to create an equilibrium for high resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 25
@@ -112,7 +131,7 @@ def test_equilibrium_init_highres(benchmark):
         N = 25
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.slow
@@ -125,7 +144,9 @@ def test_objective_compile_dshape_current(benchmark):
         eq = desc.examples.get("DSHAPE_current")
         objective = LinearConstraintProjection(
             get_equilibrium_objective(eq),
-            ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+            ObjectiveFunction(
+                maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+            ),
         )
         objective.build(eq)
         args = (
@@ -151,7 +172,9 @@ def test_objective_compile_atf(benchmark):
         eq = desc.examples.get("ATF")
         objective = LinearConstraintProjection(
             get_equilibrium_objective(eq),
-            ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+            ObjectiveFunction(
+                maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+            ),
         )
         objective.build(eq)
         args = (objective, eq)
@@ -172,7 +195,9 @@ def test_objective_compute_dshape_current(benchmark):
     eq = desc.examples.get("DSHAPE_current")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
-        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -192,7 +217,9 @@ def test_objective_compute_atf(benchmark):
     eq = desc.examples.get("ATF")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
-        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -212,7 +239,9 @@ def test_objective_jac_dshape_current(benchmark):
     eq = desc.examples.get("DSHAPE_current")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
-        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -232,7 +261,9 @@ def test_objective_jac_atf(benchmark):
     eq = desc.examples.get("ATF")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
-        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
     )
     objective.build(eq)
     objective.compile()
@@ -338,7 +369,7 @@ def test_proximal_freeb_compute(benchmark):
     eq = desc.examples.get("ESTELL")
     eq.change_resolution(6, 6, 6, 12, 12, 12)
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
-    objective = ObjectiveFunction(BoundaryError(eq, ext_field=field))
+    objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
     obj = LinearConstraintProjection(
@@ -362,7 +393,7 @@ def test_proximal_freeb_jac(benchmark):
     eq = desc.examples.get("ESTELL")
     eq.change_resolution(6, 6, 6, 12, 12, 12)
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
-    objective = ObjectiveFunction(BoundaryError(eq, ext_field=field))
+    objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
     obj = LinearConstraintProjection(

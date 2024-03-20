@@ -430,6 +430,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         self._constants = {
             "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
         }
 
         timer.stop("Precomputing transforms")

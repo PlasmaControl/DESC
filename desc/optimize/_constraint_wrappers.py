@@ -257,6 +257,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         -------
         g : ndarray
             gradient vector.
+
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x, constants)
@@ -276,6 +277,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         -------
         H : ndarray
             Hessian matrix.
+
         """
         x = self.recover(x_reduced)
         df = self._objective.hess(x, constants)
@@ -295,6 +297,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         -------
         J : ndarray
             Jacobian matrix.
+
         """
         x = self.recover(x_reduced)
         if self._objective._deriv_mode == "blocked":
@@ -701,6 +704,7 @@ class ProximalProjection(ObjectiveFunction):
         -----
         After updating, if store=False, self._eq will revert back to the previous
         solution when store was True
+
         """
         # first check if its something we've seen before, if it is just return
         # cached value, no need to perturb + resolve
@@ -825,6 +829,7 @@ class ProximalProjection(ObjectiveFunction):
         -------
         g : ndarray
             gradient vector.
+
         """
         f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
         J = self.jac_scaled(x, constants)
@@ -862,6 +867,7 @@ class ProximalProjection(ObjectiveFunction):
         -------
         J : ndarray
             Jacobian matrix.
+
         """
         v = jnp.eye(x.shape[0])
         return self.jvp_scaled(v, x, constants).T
@@ -883,6 +889,7 @@ class ProximalProjection(ObjectiveFunction):
         -------
         H : ndarray
             Hessian matrix.
+
         """
         J = self.jac_scaled(x, constants)
         return J.T @ J

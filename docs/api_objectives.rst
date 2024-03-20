@@ -62,6 +62,7 @@ Omnigenity
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.QuasisymmetryBoozer
+    desc.objectives.Omnigenity
     desc.objectives.Isodynamicity
 
 

@@ -143,7 +143,7 @@ class FixParameter(_FixedObjective):
             errorif(
                 par not in thing.optimizable_params,
                 ValueError,
-                f"parameter {par} not found in optimizable_parameters: "
+                f"parameter {par} not in found in optimizable_parameters: "
                 + f"{thing.optimizable_params}",
             )
         self._params = params
@@ -237,7 +237,7 @@ class BoundaryRSelfConsistency(_Objective):
         self,
         eq,
         surface_label=None,
-        name="self_consistency R",
+        name="self_consistency boundary R",
     ):
         self._surface_label = surface_label
         super().__init__(
@@ -330,7 +330,7 @@ class BoundaryZSelfConsistency(_Objective):
         self,
         eq,
         surface_label=None,
-        name="self_consistency Z",
+        name="self_consistency boundary Z",
     ):
         self._surface_label = surface_label
         super().__init__(
@@ -743,7 +743,7 @@ class AxisRSelfConsistency(_Objective):
     def __init__(
         self,
         eq,
-        name="axis R self consistency",
+        name="self_consistency axis R",
     ):
         super().__init__(
             things=eq,
@@ -829,7 +829,7 @@ class AxisZSelfConsistency(_Objective):
     def __init__(
         self,
         eq,
-        name="axis Z self consistency",
+        name="self_consistency axis Z",
     ):
         super().__init__(
             things=eq,

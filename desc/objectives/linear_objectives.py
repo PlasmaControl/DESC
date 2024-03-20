@@ -143,7 +143,7 @@ class FixParameter(_FixedObjective):
             errorif(
                 par not in thing.optimizable_params,
                 ValueError,
-                f"parameter {par} not in found in optimizable_parameters: "
+                f"parameter {par} couldn't be found in optimizable_parameters: "
                 + f"{thing.optimizable_params}",
             )
         self._params = params

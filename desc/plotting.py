@@ -647,9 +647,9 @@ def plot_2d(
             " must be provided.",
         )
         field_grid = kwargs.pop("field_grid", None)
-        data, _ = field.compute_Bnormal(
-            eq.surface, eval_grid=grid, source_grid=field_grid
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data, _ = field.compute_Bnormal(eq, eval_grid=grid, source_grid=field_grid)
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         label = r"$|B_n| ~(\mathrm{T})$"
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
@@ -895,9 +895,9 @@ def plot_3d(
             " must be provided.",
         )
         field_grid = kwargs.pop("field_grid", None)
-        data, _ = field.compute_Bnormal(
-            eq.surface, eval_grid=grid, source_grid=field_grid
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data, _ = field.compute_Bnormal(eq, eval_grid=grid, source_grid=field_grid)
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         label = r"$|B_n| ~(\mathrm{T})$"
     errorif(

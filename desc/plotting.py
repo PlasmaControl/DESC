@@ -599,6 +599,10 @@ def plot_2d(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
+        * ``field``: MagneticField, a magnetic field with which to calculate Bn on
+          the surface, must be provided if Bn is entered as the variable to plot.
+        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
+          from which to calculate Bn, by default None.
 
     Returns
     -------
@@ -626,8 +630,28 @@ def plot_2d(
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
-
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    component = kwargs.pop("component", None)
+    if name != "Bn":
+        data, label = _compute(
+            eq,
+            name,
+            grid,
+            component=component,
+        )
+    else:
+        field = kwargs.pop("field", None)
+        errorif(
+            field is None,
+            ValueError,
+            "If Bn is entered as the variable to plot, a magnetic field"
+            " must be provided.",
+        )
+        field_grid = kwargs.pop("field_grid", None)
+        data, _ = field.compute_Bnormal(
+            eq.surface, eval_grid=grid, source_grid=field_grid
+        )
+        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+        label = r"$|B_n| ~(\mathrm{T})$"
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
@@ -812,6 +836,10 @@ def plot_3d(
         * ``cmap``: string denoting colormap to use.
         * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
+        * ``field``: MagneticField, a magnetic field with which to calculate Bn on
+          the surface, must be provided if Bn is entered as the variable to plot.
+        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
+          from which to calculate Bn, by default None.
 
     Returns
     -------
@@ -851,17 +879,31 @@ def plot_3d(
     levels = kwargs.pop("levels", None)
     component = kwargs.pop("component", None)
 
+    if name != "Bn":
+        data, label = _compute(
+            eq,
+            name,
+            grid,
+            component=component,
+        )
+    else:
+        field = kwargs.pop("field", None)
+        errorif(
+            field is None,
+            ValueError,
+            "If Bn is entered as the variable to plot, a magnetic field"
+            " must be provided.",
+        )
+        field_grid = kwargs.pop("field_grid", None)
+        data, _ = field.compute_Bnormal(
+            eq.surface, eval_grid=grid, source_grid=field_grid
+        )
+        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+        label = r"$|B_n| ~(\mathrm{T})$"
     errorif(
         len(kwargs) != 0,
         ValueError,
         f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
-    )
-
-    data, label = _compute(
-        eq,
-        name,
-        grid,
-        component=component,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

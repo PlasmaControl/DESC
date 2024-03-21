@@ -23,9 +23,11 @@ class DommaschkPotentialField(ScalarPotentialField):
     Parameters
     ----------
     ms : 1D array-like of int
-        first indices of V_m_l terms (eq. 12 of reference)
+        first indices of V_m_l terms (eq. 12 of reference),
+        corresponds to the toroidal periodicity of the mode.
     ls : 1D array-like of int
-        second indices of V_m_l terms (eq. 12 of reference)
+        second indices of V_m_l terms (eq. 12 of reference),
+        corresponds to the poloidal periodicity of the mode.
     a_arr : 1D array-like of float
         a_m_l coefficients of V_m_l terms, which multiply the cos(m*phi)*D_m_l terms
     b_arr : 1D array-like of float
@@ -79,7 +81,7 @@ class DommaschkPotentialField(ScalarPotentialField):
 
     @classmethod
     def fit_magnetic_field(  # noqa: C901 - FIXME - simplify
-        cls, field, coords, max_m, max_l, sym=False, verbose=1
+        cls, field, coords, max_m, max_l, sym=False, verbose=1, NFP=1
     ):
         """Fit a vacuum magnetic field with a Dommaschk Potential field.
 
@@ -96,6 +98,9 @@ class DommaschkPotentialField(ScalarPotentialField):
         sym (bool): if field is stellarator symmetric or not.
             if True, only stellarator-symmetric modes will
             be included in the fitting
+        NFP (int): if the field being fit has a discrete toroidal symmetry
+            with field period NFP. This will only allow Dommaschk m modes
+            that are integer multiples of NFP.
         verbose (int): verbosity level of fitting routine, > 0 prints residuals
         """
         # We seek c in  Ac = b
@@ -124,7 +129,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         #####################
         # b is made, now do A
         #####################
-        num_modes = 1 + (max_l + 1) * (max_m + 1) * 4
+        num_modes = 1 + (max_l) * (max_m // NFP + 1) * 4
         # TODO: if symmetric, technically only need half the modes
         # however, the field and functions are setup to accept equal
         # length arrays for a,b,c,d, so we will just zero out the
@@ -160,8 +165,8 @@ class DommaschkPotentialField(ScalarPotentialField):
         # if sym is True, when l is even then we need a=d=0
         # and if l is odd then b=c=0
 
-        for l in range(max_l + 1):
-            for m in range(max_m + 1):
+        for l in range(1, max_l + 1):
+            for m in range(0, max_m + 1, NFP):
                 if not sym:
                     pass  # no sym, use all coefs
                 elif l // 2 == 0:

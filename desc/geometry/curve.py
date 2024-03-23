@@ -6,7 +6,7 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.compute import rpz2xyz
+from desc.compute import rpz2xyz, xyz2rpz
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -232,6 +232,55 @@ class FourierRZCurve(Curve):
             inputs["sym"],
         )
         return curve
+
+    @classmethod
+    def from_values(cls, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+        """Fit coordinates to FourierRZCurve representation.
+
+        Parameters
+        ----------
+        coords: ndarray
+            coordinates to fit a FourierRZCurve object with.
+        N : int
+            Fourier resolution of the new R,Z representation.
+            default is 10
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "rpz"
+        Returns
+        -------
+        curve : FourierRZCurve
+            New representation of the curve parameterized by Fourier series for R,Z.
+
+        """
+        if basis == "rpz":
+            coords_rpz = coords
+            coords_xyz = rpz2xyz(coords)
+        else:
+            coords_rpz = xyz2rpz(coords)
+            coords_xyz = coords
+        R = coords_rpz[:, 0]
+        phi = coords_rpz[:, 1]
+
+        X = coords_xyz[:, 0]
+        Y = coords_xyz[:, 1]
+        Z = coords_rpz[:, 2]
+
+        # easiest to check closure in XYZ coordinates
+        X, Y, Z, _, _, _, input_curve_was_closed = _unclose_curve(X, Y, Z)
+        if input_curve_was_closed:
+            R = R[0:-1]
+            phi = phi[0:-1]
+            Z = Z[0:-1]
+
+        grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
+        basis = FourierSeries(N=N, NFP=NFP, sym=sym)
+        transform = Transform(grid, basis, build_pinv=True)
+        R_n = transform.fit(R)
+        Z_n = transform.fit(Z)
+        return FourierRZCurve(R_n=R_n, Z_n=Z_n, NFP=NFP, name=name, sym=sym)
 
 
 def _unclose_curve(X, Y, Z):

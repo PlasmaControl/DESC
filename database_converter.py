@@ -13,14 +13,6 @@ from desc.io import load
 from desc.io.hdf5_io import hdf5Reader
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 
-
-def get_config_hash(eq):  # or take in the data from a DESC eq?
-    """Take in a DESC equilibrium and return a unique hash for the configuration."""
-    # what to do? first 10 bdry modes and their strengths?
-    # name and a number?
-    return None
-
-
 # TODO: add threshold to truncate at what amplitude surface Fourier coefficient
 # that it is working
 
@@ -198,7 +190,6 @@ def desc_to_csv(  # noqa
     data_configurations["stell_sym"] = bool(eq.sym)
 
     data_configurations["deviceid"] = kwargs.get("deviceid", None)
-    data_configurations["hashkey"] = get_config_hash(eq)  # FIXME: what is this?
 
     # FIXME: Defaults for these?
     data_configurations["provenance"] = provenance

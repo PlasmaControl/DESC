@@ -22,6 +22,12 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
+    FixSectionLambda,
+    FixSectionR,
+    FixSectionZ,
+    SectionLambdaSelfConsistency,
+    SectionRSelfConsistency,
+    SectionZSelfConsistency,
 )
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
@@ -106,7 +112,11 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
     return constraints
 
 
-def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
+def get_fixed_boundary_constraints(
+    eq,
+    profiles=True,
+    normalize=True,
+):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -127,6 +137,44 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     constraints = (
         FixBoundaryR(eq=eq, normalize=normalize, normalize_target=normalize),
         FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
+    )
+    if profiles:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
+                constraints += (
+                    con(eq=eq, normalize=normalize, normalize_target=normalize),
+                )
+
+    return constraints
+
+
+def get_fixed_xsection_constraints(
+    eq,
+    profiles=True,
+    normalize=True,
+):
+    """Get the constraints necessary for a fixed cross-section equilibrium problem.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to constrain.
+    profiles : bool
+        If True, also include constraints to fix all profiles assigned to equilibrium.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-boundary problems.
+
+    """
+    constraints = (
+        FixSectionR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixSectionZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixSectionLambda(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
@@ -218,18 +266,34 @@ def maybe_add_self_consistency(thing, constraints):
         and hasattr(thing, "Za_n")
         and hasattr(thing, "Rb_lmn")
         and hasattr(thing, "Zb_lmn")
+        and hasattr(thing, "Rp_lmn")
+        and hasattr(thing, "Zp_lmn")
+        and hasattr(thing, "Lp_lmn")
         and hasattr(thing, "L_lmn")
     ):
+        # Section self-consistency constraints
+        if not _is_any_instance(constraints, SectionRSelfConsistency):
+            constraints += (SectionRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, SectionZSelfConsistency):
+            constraints += (SectionZSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, SectionLambdaSelfConsistency):
+            constraints += (SectionLambdaSelfConsistency(eq=thing),)
+
+        # Boundary self-consistency constraints
         if not _is_any_instance(constraints, BoundaryRSelfConsistency):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, BoundaryZSelfConsistency):
             constraints += (BoundaryZSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, FixLambdaGauge):
-            constraints += (FixLambdaGauge(eq=thing),)
+
+        # Axis self-consistency constraints
         if not _is_any_instance(constraints, AxisRSelfConsistency):
             constraints += (AxisRSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, AxisZSelfConsistency):
             constraints += (AxisZSelfConsistency(eq=thing),)
+
+        # Lambda gauge constraint for theta=0
+        if not _is_any_instance(constraints, FixLambdaGauge):
+            constraints += (FixLambdaGauge(eq=thing),)
 
     # Curve
     elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):

@@ -8,11 +8,13 @@ from desc.basis import (
     ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
+    FourierZernike_to_FourierZernike_no_N_modes,
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
     chebyshev,
     fourier,
+    get_basis_poincare,
     jacobi_poly_single,
     polyder_vec,
     polyval_vec,
@@ -21,7 +23,9 @@ from desc.basis import (
     zernike_radial_coeffs,
     zernike_radial_poly,
 )
+from desc.examples import get
 from desc.grid import LinearGrid
+from desc.transform import Transform
 
 
 class TestBasis:
@@ -430,3 +434,32 @@ class TestBasis:
 
         with pytest.raises(AssertionError):
             ZernikePolynomial(L=L, M=M)
+
+
+@pytest.mark.unit
+def test_get_basis_poincare():
+    """Test FourierZernike to ZernikePolynomial utility function."""
+    eq = get("HELIOTRON")
+    eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
+    L_lmn_2d, L_ZP_zeta0_basis = get_basis_poincare(eq.L_lmn, eq.L_basis)
+    grid = LinearGrid(L=50, M=50, zeta=0)
+    transf = Transform(grid=grid, basis=L_ZP_zeta0_basis, derivs=0)
+    L_2D = transf.transform(L_lmn_2d)
+    L_3D = eq.compute("lambda", grid=grid)["lambda"]
+    np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)
+
+
+@pytest.mark.unit
+def test_FourierZernike_to_FourierZernike_no_N_modes():
+    """Test FourierZernike to FourierZernike w/o N modes utility function."""
+    eq = get("HELIOTRON")
+
+    eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
+    L_lmn_no_N, L_basis = FourierZernike_to_FourierZernike_no_N_modes(
+        eq.L_lmn, eq.L_basis, zeta=0
+    )
+    grid = LinearGrid(L=50, M=50, zeta=0)
+    transf = Transform(grid=grid, basis=L_basis, derivs=0)
+    L_2D = transf.transform(L_lmn_no_N)
+    L_3D = eq.compute("lambda", grid=grid)["lambda"]
+    np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)

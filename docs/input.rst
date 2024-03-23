@@ -44,7 +44,6 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    optimizer         = lsq-exact
    spectral_indexing = ansi
    node_pattern      = jacobi
-   bdry_mode         = lcfs
 
    # pressure and rotational transform/current profiles
    l:   0   p =  1.80000000E+04   i =  1.0
@@ -164,16 +163,13 @@ Solver Methods
    optimizer         = lsq-exact
    spectral_indexing = fringe
    node_pattern      = jacobi
-   bdry_mode         = lcfs
 
 - ``objective`` (string): Form of equations to use for solving the equilibrium. Options are ``force`` (Default), ``forces``, ``energy``, or ``vacuum``.
 - ``optimizer`` (string): Type of optimizer to use. Default = ``lsq-exact``. For more details and options see :py:class:`desc.optimize.Optimizer`.
 - ``spectral_indexing`` (string): Zernike polynomial index ordering. Options are ``ANSI`` or ``Fringe`` (Default). For more information see `Basis functions and collocation nodes`_.
 - ``node_pattern`` (string): Pattern of collocation nodes. Options are ``jacobi`` (Default), ``cheb1``, ``cheb2`` or ``quad``. For more information see `Basis functions and collocation nodes`_.
-- ``bdry_mode`` (string): Format of boundary condition. Options are ``LCFS`` (Default) or ``Poincare``.
 
 The ``objective`` option ``force`` minimizes the equilibrium force balance errors in units of Newtons, while the ``energy`` option minimizes the total plasma energy in units of Joules.
-The ``bdry_mode`` option ``LCFS`` enforces the boundary condition on the shape of the last closed flux surface, while the ``Poincare`` option constraints the shapes of the flux surfaces in the Poincare section at :math:`\zeta=0`.
 
 Pressure & Iota/Current Profiles
 ********************************
@@ -248,7 +244,7 @@ An initial guess for the magnetic axis can be supplied in the form:
 The coefficients :math:`R^{0}_{n}` and :math:`Z^{0}_{n}` are specified by the input variables ``R0`` and ``Z0``, respectively.
 The Fourier mode number :math:`n` is given by ``n``, which must be on the same input line as the coefficients.
 
-The magnetic axis initial guess is optional and only used if ``bdry_mode = LCFS``.
+The magnetic axis initial guess is optional and only used if ``eq.surface.type = FourierRZToroidalSurface``.
 If no initial guess is provided for the magnetic axis, then the :math:`m = 0` modes of the fixed-boundary surface shape input are used.
 
 Fixed-Boundary Surface Shape
@@ -265,11 +261,11 @@ Fixed-Boundary Surface Shape
    m:  -1   n:   1  Z1 = -3.00000000E-01
 
 - ``m`` (int): Poloidal mode number.
-- ``n`` (int): Toroidal mode number. (Only used if ``bdry_mode = LCFS``.)
+- ``n`` (int): Toroidal mode number. (Only used if ``eq.surface.type = FourierRZToroidalSurface``.)
 - ``R1`` (float): Fourier coefficient of the R coordinate of the boundary surface. :math:`R^{1}_{mn}`
 - ``Z1`` (float): Fourier coefficient of the Z coordinate of the boundary surface. :math:`Z^{1}_{mn}`
 
-If ``bdry_mode = LCFS``, the shape of the last closed flux surface is given as a double Fourier series of the form:
+If ``eq.surface.type = FourierRZToroidalSurface``, the shape of the last closed flux surface is given as a double Fourier series of the form:
 
 .. math::
    \begin{aligned}
@@ -374,7 +370,6 @@ The DESC input file will be this, titled ``input.HELIOTRON_desc``:
    # solver methods
    optimizer = lsq-exact
    objective = force
-   bdry_mode = lcfs
    spectral_indexing = ansi
    node_pattern = jacobi
 

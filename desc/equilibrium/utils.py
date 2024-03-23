@@ -8,8 +8,8 @@ from desc.backend import jnp
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
+    PoincareSurface,
     Surface,
-    ZernikeRZToroidalSection,
 )
 from desc.profiles import PowerSeriesProfile, _Profile
 from desc.utils import isnonnegint
@@ -78,9 +78,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     -------
     surface : Surface
         Parsed surface object, either FourierRZToroidalSurface or
-        ZernikeRZToroidalSection.
-    bdry_mode : str
-        Either "lcfs" or "poincare"
+        PoincareSurface.
     """
     if isinstance(surface, Surface):
         surface = surface
@@ -97,28 +95,15 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
                 sym,
                 check_orientation=False,
             )
-        elif np.all(surface[:, 2] == 0):
-            surface = ZernikeRZToroidalSection(
-                surface[:, 3],
-                surface[:, 4],
-                surface[:, :2].astype(int),
-                surface[:, :2].astype(int),
-                spectral_indexing,
-                sym,
-            )
         else:
-            raise ValueError("boundary should either have l=0 or n=0")
+            raise ValueError("boundary should have l=0")
     else:
         raise TypeError("Got unknown surface type {}".format(surface))
 
-    if isinstance(surface, FourierRZToroidalSurface):
-        bdry_mode = "lcfs"
-    if isinstance(surface, ZernikeRZToroidalSection):
-        bdry_mode = "poincare"
-    return surface, bdry_mode
+    return surface
 
 
-def parse_axis(axis, NFP=1, sym=True, surface=None):
+def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
     """Parse axis input into Curve object.
 
     Parameters
@@ -129,6 +114,11 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
         Number of field periods of the Equilibrium.
     sym : bool
         Stellarator symmetry of the Equilibrium.
+    surface: FourierRZToroidalSurface
+        Last closed flux surface to get axis from
+    xsection: PoincareSurface
+        Poincare cross-section at given zeta toroidal angle
+        If supplied, axis will be axisymmetic
 
     Returns
     -------
@@ -160,19 +150,23 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
                 ],
                 NFP=NFP,
             )
-        elif isinstance(surface, ZernikeRZToroidalSection):
+        elif isinstance(xsection, PoincareSurface):
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(
-                R_n=surface.R_lmn[
+                R_n=xsection.R_lmn[
                     np.where(
-                        (surface.R_basis.modes[:, 0] == 0)
-                        & (surface.R_basis.modes[:, 1] == 0)
+                        np.logical_and(
+                            (xsection.R_basis.modes[:, 0] == 0),
+                            (xsection.R_basis.modes[:, 1] == 0),
+                        )
                     )
                 ].sum(),
-                Z_n=surface.Z_lmn[
+                Z_n=xsection.Z_lmn[
                     np.where(
-                        (surface.Z_basis.modes[:, 0] == 0)
-                        & (surface.Z_basis.modes[:, 1] == 0)
+                        np.logical_and(
+                            (xsection.Z_basis.modes[:, 0] == 0),
+                            (xsection.Z_basis.modes[:, 1] == 0),
+                        )
                     )
                 ].sum(),
                 modes_R=[0],
@@ -182,6 +176,34 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis
+
+
+def parse_section(xsection=None, sym=True):
+    """Parse section input into PoincareSurface object.
+
+    Parameters
+    ----------
+    xsection : PoincareSurface, None
+        Poincare surface object to parse.
+    NFP : int
+        Number of field periods of the Equilibrium.
+    sym : bool
+        Stellarator symmetry of the Equilibrium.
+
+    Returns
+    -------
+    xsection : PoincareSurface
+        Parsed Poincare surface object.
+    """
+    if isinstance(xsection, PoincareSurface):
+        _xsection = xsection
+    elif isinstance(xsection, (np.ndarray, jnp.ndarray)):
+        # This is temporary, until we have a proper PoincareSurface constructor
+        # from input file
+        raise NotImplementedError("PoincareSurface from input file not implemented")
+    else:
+        _xsection = PoincareSurface(sym=sym)
+    return _xsection
 
 
 def _assert_nonnegint(x, name=""):

@@ -875,11 +875,14 @@ class FourierRZWindingSurfaceCurve(Curve):
     theta_n, zeta_n: array-like
         Fourier coefficients for theta, zeta in terms of curve parameter s.
     secular_theta : float, optional
-        secular term in theta(t) series, defaults to 1.0
+        secular term in theta(s) series, defaults to 1
         if 0, curve will not close poloidally, only toroidally.
     secular_zeta : float, optional
-        secular term in zeta(t) series, defaults to 0.0
+        secular term in zeta(s) series, defaults to 0.0
         if 0, curve will not close toroidally, only poloidally
+        # FIXME: secular terms must be integers I think...
+        # change this and dont allow them to change during optimization
+        # and change how they are gotten in compute from params to transforms
     modes_theta : array-like, optional
         Mode numbers associated with theta_n. If not given defaults to [-n:n].
     modes_zeta : array-like, optional
@@ -1105,3 +1108,114 @@ class FourierRZWindingSurfaceCurve(Curve):
     @secular_zeta.setter
     def secular_zeta(self, new):
         self._secular_zeta = float(new)
+
+    # TODO: add symmetry? I think for modular coils to be not
+    # all at the same zeta angle, the zeta basis must
+    # have sin sym... maybe best to always have it be sym False?
+    @classmethod
+    def from_values(
+        cls,
+        theta,
+        zeta,
+        surface,
+        N=10,
+        s=None,
+        secular_theta=None,
+        secular_zeta=None,
+        name="",
+    ):
+        """Fit given angles on surface to a FourierRZWindingSurfaceCurve representation.
+
+            The given theta and zeta will be fit as a function of a curve parameter s.
+            If not provided, the secular terms in theta and zeta will also be
+            determined, these terms control the topology of the curve (i.e. whether it
+            links the plasma poloidally (secular_theta !=0), toroidally
+            (secular_zeta!=0) both, or neither (both = 0)).
+
+        Parameters
+        ----------
+        theta: ndarray
+            Poloidal angles (with the poloidal angle defined by the given surface)
+            to fit a FourierRZWindingSurfaceCurve object to.
+        zeta: ndarray
+            Toroidal angles to fit a FourierRZWindingSurfaceCurve object to.
+        secular_theta : int, optional
+            secular term in theta(s) series, defaults to 1.0
+            i.e. if 0, curve will not close poloidally, only toroidally.
+            If not given , will be calculated from the given theta values,.
+        secular_zeta : int, optional
+            secular term in zeta(s) series, defaults to 0.0
+            i.e. if 0, curve will not close toroidally, only poloidally
+            If not given, will be fit to the given curve.
+        surface: FourierRZToroidalSurface
+            Winding surface that the curve will lie on.
+        N : int
+            Fourier resolution (in curve parameter s) of the new curve representation.
+            Default is 10.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            theta and zeta. if None, defaults linearly spaced in [0,2pi).
+
+        #TODO: do we want to allow these to be fit? The user should know
+        # if the curve being passed in is modular or helical...
+
+
+        Returns
+        -------
+        curve : FourierRZWindingSurfaceCurve
+            New representation of the curve lying on the given surface,
+            parameterized by Fourier series (in s) for theta,zeta.
+
+        """
+        input_curve_was_closed = np.isclose(
+            theta[0] - theta[-1] % (2 * np.pi), 0, atol=1e-12
+        ) and np.isclose(zeta[0] - zeta[-1] % (2 * np.pi / surface.NFP), 0, atol=1e-12)
+        if input_curve_was_closed:
+            theta = theta[0:-1]
+            zeta = zeta[0:-1]
+        if s is None:
+            s = np.linspace(0, 2 * np.pi, theta.size, endpoint=False)
+        else:
+            s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
+            errorif(
+                not np.all(np.diff(s) > 0),
+                ValueError,
+                "supplied s must be monotonically increasing",
+            )
+            errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
+            errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
+
+        grid = LinearGrid(zeta=s, NFP=1, sym=False)
+        basis = FourierSeries(N=N, NFP=1, sym=False)
+        transform = Transform(grid, basis, build_pinv=True, method="direct1")
+        # need to form linear system
+        # A * [secular_theta,theta_n] = theta
+        # A * [secular_zeta,zeta_n] = zeta
+        A = transform.matrices["direct1"][0][0][0]
+        # the secular terms must be integers for the curves to close,
+        # so we round the answer of the division of the total angle
+        # traversed by the curve divided by 2pi
+        if secular_theta is None:
+            secular_theta = np.round((theta[-1] - theta[0]) / (2 * np.pi))
+        if secular_zeta is None:
+            secular_zeta = np.round((zeta[-1] - zeta[0]) / (2 * np.pi))
+
+        # Now we solve the system after subtracting out the secular parts
+        # A * theta_n = theta  - secular_theta * s
+        # A * zeta_n = zeta  - secular_zeta * s
+
+        # secular term is prescribed, so subtract that from the RHS
+        theta_n = np.linalg.lstsq(A, theta - s * secular_theta, rcond=None)[0]
+        # secular term is prescribed, so subtract that from the RHS
+        zeta_n = np.linalg.lstsq(A, zeta - s * secular_zeta, rcond=None)[0]
+
+        return FourierRZWindingSurfaceCurve(
+            surface,
+            theta_n,
+            zeta_n,
+            secular_theta=secular_theta,
+            secular_zeta=secular_zeta,
+            name=name,
+        )

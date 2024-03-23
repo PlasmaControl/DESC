@@ -163,6 +163,7 @@ def gershgorin_bounds(H):
     ----------
     [1] Conn, A. R., Gould, N. I., & Toint, P. L.
            Trust region methods. 2000. Siam. pp. 19.
+
     """
     H_diag = jnp.diag(H)
     H_diag_abs = jnp.abs(H_diag)
@@ -287,6 +288,7 @@ def evaluate_quadratic_form_hess(H, g, x, diag=None):
     -------
     values : float
         Value of the function.
+
     """
     q = x @ H @ x
     if diag is not None:
@@ -319,6 +321,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
     values : ndarray with shape (k,) or float
         Values of the function. If `s` was 2-D, then ndarray is
         returned, otherwise, float is returned.
+
     """
     if s.ndim == 1:
         Js = J.dot(s)
@@ -514,6 +517,7 @@ def f_where_x(x, xs, fs, dim=0):
     -------
     f : float or ndarray
         value of fs[i] where x==xs[i]
+
     """
     x, xs, fs = map(np.asarray, (x, xs, fs))
     assert len(xs) == len(fs)

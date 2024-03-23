@@ -397,6 +397,34 @@ class TestRZWindingSurfaceCurve:
         np.testing.assert_allclose(y, 0)
         np.testing.assert_allclose(z, 0)
 
+    @pytest.mark.unit
+    def test_curve_winding_surface_from_values(self):
+        """Test from_values method for FourierRZWindingSurfaceCurve."""
+        c = FourierRZWindingSurfaceCurve()
+        # modular curve (secular term in zeta is 0, in theta is 1)
+        theta = np.linspace(0, 2 * np.pi, endpoint=True)
+        zeta = np.zeros_like(theta)
+        curve = FourierRZWindingSurfaceCurve.from_values(theta, zeta, c.surface)
+        assert curve.secular_theta == 1
+        assert curve.secular_zeta == 0
+        np.testing.assert_allclose(curve.theta_n, 0)
+        np.testing.assert_allclose(curve.zeta_n, 0)
+        # helical curve (secular term in zeta is 1, in theta is 1)
+        zeta = theta
+        curve = FourierRZWindingSurfaceCurve.from_values(theta, zeta, c.surface)
+        assert curve.secular_theta == 1
+        assert curve.secular_zeta == 1
+        np.testing.assert_allclose(curve.theta_n, 0)
+        np.testing.assert_allclose(curve.zeta_n, 0)
+        # toroidal curve (secular term in zeta is 1, in theta is 0)
+        zeta = np.linspace(0, 2 * np.pi, endpoint=True)
+        theta = np.zeros_like(zeta)
+        curve = FourierRZWindingSurfaceCurve.from_values(theta, zeta, c.surface)
+        assert curve.secular_theta == 0
+        assert curve.secular_zeta == 1
+        np.testing.assert_allclose(curve.theta_n, 0)
+        np.testing.assert_allclose(curve.zeta_n, 0)
+
 
 class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""

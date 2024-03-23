@@ -7,7 +7,13 @@ import pytest
 from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierRZWindingSurfaceCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
 from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -15,12 +21,17 @@ from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierRZToroidalSurface,
+    FourierRZWindingSurfaceCurve,
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import load
-from desc.magnetic_fields import CurrentPotentialField, FourierCurrentPotentialField
+from desc.magnetic_fields import (
+    CurrentPotentialField,
+    FourierCurrentPotentialField,
+    OmnigenousField,
+)
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1235,21 +1246,49 @@ def test_compute_everything():
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
         ),
+        "desc.geometry.curve.FourierRZWindingSurfaceCurve": (
+            FourierRZWindingSurfaceCurve(
+                surface=(
+                    FourierRZToroidalSurface(**elliptic_cross_section_with_torsion)
+                ),
+                theta_n=[0.5, 0.5, 0.5],
+                zeta_n=[0.5, 0.5, 0.5],
+                secular_zeta=2,
+            )
+        ),
+        "desc.coils.FourierRZWindingSurfaceCoil": FourierRZWindingSurfaceCoil(
+            surface=FourierRZToroidalSurface(**elliptic_cross_section_with_torsion),
+            theta_n=[0.5, 0.5, 0.5],
+            zeta_n=[0.5, 0.5, 0.5],
+            secular_zeta=2,
+            current=5,
+        ),
         "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
             **elliptic_cross_section_with_torsion
         ),
         # magnetic fields
-        "desc.magnetic_fields.CurrentPotentialField": CurrentPotentialField(
+        "desc.magnetic_fields._current_potential.CurrentPotentialField": CurrentPotentialField(  # noqa:E501
             **elliptic_cross_section_with_torsion,
             potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
             potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
             potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
             params={"G": 1e7},
         ),
-        "desc.magnetic_fields.FourierCurrentPotentialField": (
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": (
             FourierCurrentPotentialField(
                 **elliptic_cross_section_with_torsion, I=0, G=1e7
             )
+        ),
+        "desc.magnetic_fields._core.OmnigenousField": OmnigenousField(
+            L_B=0,
+            M_B=4,
+            L_x=0,
+            M_x=1,
+            N_x=1,
+            NFP=2,
+            helicity=(0, 2),
+            B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
+            x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
         ),
         # coils
         "desc.coils.FourierRZCoil": FourierRZCoil(
@@ -1270,26 +1309,35 @@ def test_compute_everything():
         ),
     }
     assert things.keys() == data_index.keys(), (
-        f"Missing the parameterizations {data_index.keys() - things.keys()}"
+        f"Missing the parameterization {data_index.keys() - things.keys()}"
         f" to test against master."
     )
     # use this low resolution grid for equilibria to reduce file size
     eqgrid = LinearGrid(
-        # include magnetic axis
-        rho=np.linspace(0, 1, 10),
+        L=9,
         M=5,
         N=5,
         NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
         sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
+        axis=True,
     )
     curvegrid1 = LinearGrid(N=10)
     curvegrid2 = LinearGrid(N=10, NFP=2)
+    fieldgrid = LinearGrid(
+        L=2,
+        M=4,
+        N=5,
+        NFP=things["desc.magnetic_fields._core.OmnigenousField"].NFP,
+        sym=False,
+        axis=True,
+    )
     grid = {
         "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
         "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
         "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
+        "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:

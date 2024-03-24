@@ -273,8 +273,14 @@ class FourierRZCurve(Curve):
         if input_curve_was_closed:
             R = R[0:-1]
             phi = phi[0:-1]
-            Z = Z[0:-1]
+            Z = coords_rpz[0:-1, 2]
 
+        errorif(
+            not np.all(np.diff(phi) > 0),
+            ValueError,
+            "phi must be monotonically increasing",
+        )
+        # FIXME: this above assertion seems to not be working?
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)
         transform = Transform(grid, basis, build_pinv=True)

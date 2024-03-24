@@ -918,8 +918,8 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
 
         """
         # q may have shape (g.size, *f.shape), where
-        #  g.size is grid.num_nodes and iterating along this axis varies the object,
-        #  e.g. some function f, held in the remaining axes over the nodes of the grid.
+        # g.size is grid.num_nodes and iterating along this axis varies the object,
+        # e.g. some function f, held in the remaining axes over the nodes of the grid.
         integrands = (spacing * jnp.nan_to_num(q).T).T
         integrals = jnp.tensordot(mask, integrands, axes=1)
         return grid.expand(integrals, surface_label) if expand_out else integrals
@@ -948,11 +948,13 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
             Surface integral of the input over each surface in the grid.
 
         """
-        column_idx = {"rho": 0, "theta": 1, "zeta": 2}[surface_label]
-        nodes = jnp.asarray(grid.nodes[:, column_idx])
+        nodes = grid.nodes[:, {"rho": 0, "theta": 1, "zeta": 2}[surface_label]]
         integrands = (spacing * jnp.nan_to_num(q).T).T
         integrals = jnp.tensordot(
-            jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol, integrands, axes=1
+            # don't store this mask in parent function since it is a large matrix
+            jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol,
+            integrands,
+            axes=1,
         )
         return integrals
 
@@ -989,11 +991,6 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         )
         return integrate
     else:
-        assert expand_out, (
-            "Grid lacks information to return unique values."
-            " (This information cannot be automatically determined when the grid"
-            " is constructed with the parameter jitable is specified as True)."
-        )
         return integrate_unknown_unique_size
 
 
@@ -1081,7 +1078,8 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
         ``function(q, sqrt_g)``.
 
     """
-    integrate = surface_integrals_map(grid, surface_label, False, tol)
+    expand_out = expand_out and hasattr(grid, f"num_{surface_label}")
+    integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
 
     def _surface_averages(q, sqrt_g=jnp.array([1.0]), denominator=None):
         """Compute a surface average for each surface in the grid.
@@ -1208,7 +1206,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # transform into the computational domain, so the second dimension that
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
-    assert hasattr(grid, f"inverse_{surface_label}_idx")
+    assert hasattr(grid, f"num_{surface_label}")
     return surface_integrals_map(grid, surface_label, expand_out=False)
 
 
@@ -1305,9 +1303,13 @@ def surface_variance(
     q = jnp.atleast_1d(q)
     # compute variance in two passes to avoid catastrophic round off error
     mean = (integrate((weights * q.T).T).T / v1).T
-    mean = grid.expand(mean, surface_label)
+    if hasattr(grid, f"num_{surface_label}"):
+        mean = grid.expand(mean, surface_label)
     variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T
-    return grid.expand(variance, surface_label) if expand_out else variance
+    if hasattr(grid, f"num_{surface_label}") and expand_out:
+        return grid.expand(variance, surface_label)
+    else:
+        return variance
 
 
 def surface_max(grid, x, surface_label="rho"):

@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from interpax import Akima1DInterpolator, CubicHermiteSpline
+from interpax import Akima1DInterpolator
 
 from desc.backend import fori_loop, put, root_scalar
 from desc.compute.bounce_integral import (
@@ -136,23 +136,25 @@ def test_pitch_input():
     eq = get("HELIOTRON")
     rho = np.linspace(0, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
-    ba, grid, data = bounce_average(eq, rho=rho, alpha=alpha)
-    pitch_resolution = 30
+    ba, items = bounce_average(eq, rho=rho, alpha=alpha, return_items=True)
     name = "g_zz"
-    f = eq.compute(name, grid=grid, data=data)[name]
+    f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
+
     # Same pitch for every field line may give sparse result.
-    pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), pitch_resolution)
-    pitch = pitch[:, np.newaxis, np.newaxis]
+    pitch_res = 30
+    B = items["data"]["B"]
+    pitch = np.linspace(1 / B.max(), 1 / B.min(), pitch_res)[:, np.newaxis, np.newaxis]
     result = ba(f, pitch)
     assert np.isfinite(result).any()
+
     # specify pitch per field line
-    B = data["B"].reshape(alpha.size * rho.size, -1)
+    B = B.reshape(alpha.size * rho.size, -1)
     eps = 1e-5  # FIXME: vanishing B-field bug.
     pitch = np.linspace(
         1 / (B.max(axis=-1) + eps),
         1 / (B.min(axis=-1) + eps),
-        pitch_resolution,
-    ).reshape(pitch_resolution, alpha.size, rho.size)
+        pitch_res,
+    ).reshape(pitch_res, alpha.size, rho.size)
     result = ba(f, pitch)
     assert np.isfinite(result).any()
 
@@ -170,7 +172,8 @@ def test_elliptic_integral_limit():
         Are we saying that in this limit, we expect that |B| ~ sin(t)^2, with m as the
         pitch angle? I assume that we want to add g_zz to the integrand in the
         definition of the function in the scipy documentation above,
-        and after a change of variables the bounce points will be the integration.
+        and after a change of variables the bounce points will be the endpoints of
+        the integration.
         So this test will test whether the quadrature is accurate
         (and not whether the bounce points were accurate).
 
@@ -215,22 +218,17 @@ def test_elliptic_integral_limit():
     rho = np.array([0.5])
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 10)
     zeta = np.linspace(0, 10 * np.pi, 20)
-    bi, grid, data = bounce_integral(eq, rho=rho, alpha=alpha, zeta=zeta)
-    pitch_resolution = 15
-    pitch = np.linspace(1 / data["B"].max(), 1 / data["B"].min(), pitch_resolution)
+    bi, items = bounce_integral(eq, rho=rho, alpha=alpha, zeta=zeta, return_items=True)
+    B = items["data"]["B"]
+    pitch_res = 15
+    pitch = np.linspace(1 / B.max(), 1 / B.min(), pitch_res)
     name = "g_zz"
-    f = eq.compute(name, grid=grid, data=data)[name]
+    f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
     result = bi(f, pitch)
     assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
 
-    # routine copied from bounce_integrals functions
-    B = data["|B|"].reshape(alpha.size * rho.size, -1)
-    B_z_ra = data["|B|_z|r,a"].reshape(alpha.size * rho.size, -1)
-    poly_B = CubicHermiteSpline(zeta, B, B_z_ra, axis=-1).c
-    poly_B = np.moveaxis(poly_B, 1, -1)
-    poly_B_z = polyder(poly_B)
-    bp1, bp2 = compute_bounce_points(pitch, zeta, poly_B, poly_B_z)
     # TODO now compare result to elliptic integral
+    bp1, bp2 = compute_bounce_points(pitch, zeta, items["poly_B"], items["poly_B_z"])
 
 
 # TODO: if deemed useful finish details using methods in desc.compute.bounce_integral

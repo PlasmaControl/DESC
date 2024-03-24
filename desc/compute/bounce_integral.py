@@ -295,7 +295,7 @@ def polyval(x, c):
     return val
 
 
-def cubic_poly_roots(coef, k=None, a_min=None, a_max=None, sort=False):
+def cubic_poly_roots(coef, k=0, a_min=None, a_max=None, sort=False):
     """Roots of cubic polynomial with given coefficients.
 
     Parameters
@@ -305,7 +305,7 @@ def cubic_poly_roots(coef, k=None, a_min=None, a_max=None, sort=False):
         given by c₁ x³ + c₂ x² + c₃ x + c₄, ``coef[i]`` should store cᵢ.
         It is assumed that c₁ is nonzero.
     k : ndarray
-        Specify to instead find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``k``.
+        Specify to find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``k``.
         Should broadcast with arrays of shape(*coef.shape[1:]).
     a_min, a_max : ndarray
         Minimum and maximum value to return roots between.
@@ -331,8 +331,7 @@ def cubic_poly_roots(coef, k=None, a_min=None, a_max=None, sort=False):
         a_max = jnp.inf
 
     a, b, c, d = coef
-    if k is not None:
-        d = d - k
+    d = d - k
     t_0 = b**2 - 3 * a * c
     t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
     C = ((t_1 + complex_sqrt(t_1**2 - 4 * t_0**3)) / 2) ** (1 / 3)
@@ -565,29 +564,45 @@ def bounce_integral(
         The quadrature scheme used to evaluate the integral.
         Should return quadrature points and weights when called.
         The returned points should be within the domain [-1, 1].
-        Can specify arguments to this callable with kwargs if convenient.
+    kwargs : dict
+        Can specify arguments to the quadrature function with kwargs if convenient.
+        Can also specify whether to return items with ``return_items=True``.
 
     Returns
     -------
     bi : callable
         This callable method computes the bounce integral F_ℓ(λ) for every
         specified field line ℓ (constant rho and alpha), for every λ value in ``pitch``.
-    grid : Grid
-        DESC coordinate grid for the given field line coordinates.
-    data : dict
-        Dictionary of ndarrays of stuff evaluated on ``grid``.
+    items : dict
+        Dictionary of useful intermediate quantities.
+            grid : Grid
+                DESC coordinate grid for the given field line coordinates.
+            data : dict
+                Dictionary of ndarrays of stuff evaluated on ``grid``.
+            poly_B : ndarray, shape(4, A * R, zeta.size - 1)
+                Polynomial coefficients of the cubic spline of |B|.
+                First axis should iterate through coefficients of power series,
+                and the last axis should iterate through the piecewise
+                polynomials of a particular spline of |B| along field line.
+            poly_B_z : ndarray, shape(3, A * R, zeta.size - 1)
+                Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
+                First axis should iterate through coefficients of power series,
+                and the last axis should iterate through the piecewise
+                polynomials of a particular spline of |B| along field line.
 
     Examples
     --------
     .. code-block:: python
 
-        bi, grid, data = bounce_integral(eq)
-        pitch = jnp.linspace(1 / data["B"].max(), 1 / data["B"].min(), 30)
+        bi, items = bounce_integral(eq, return_items=True)
+        name = "g_zz"
+        f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
         # Same pitch for every field line may give sparse result.
         # See tests/test_bounce_integral.py::test_pitch_input for an alternative.
+        pitch_res = 30
+        B = items["data"]["B"]
+        pitch = jnp.linspace(1 / B.max(), 1 / B.min(), pitch_res)
         pitch = pitch[:, jnp.newaxis, jnp.newaxis]
-        name = "g_zz"
-        f = eq.compute(name, grid=grid, data=data)[name]
         result = bi(f, pitch)
 
     """
@@ -614,6 +629,7 @@ def bounce_integral(
     assert poly_B.shape == (4, A * R, zeta.size - 1)
     assert poly_B_z.shape == (3, A * R, zeta.size - 1)
 
+    return_items = kwargs.pop("return_items", False)
     x, w = quadrature(**kwargs)
     # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
     x = jnp.arcsin(x) / jnp.pi - 0.5
@@ -657,7 +673,11 @@ def bounce_integral(
         )
         return result
 
-    return _bounce_integral, grid, data
+    if return_items:
+        items = {"grid": grid, "data": data, "poly_B": poly_B, "poly_B_z": poly_B_z}
+        return _bounce_integral, items
+    else:
+        return _bounce_integral
 
 
 def bounce_average(
@@ -716,32 +736,48 @@ def bounce_average(
         Should return quadrature points and weights when called.
         The returned points should be within the domain [-1, 1].
         Can specify arguments to this callable with kwargs if convenient.
+    kwargs : dict
+        Can specify arguments to the quadrature function with kwargs if convenient.
+        Can also specify whether to return items with ``return_items=True``.
 
     Returns
     -------
     ba : callable
         This callable method computes the bounce average F_ℓ(λ) for every
         specified field line ℓ (constant rho and alpha), for every λ value in ``pitch``.
-    grid : Grid
-        DESC coordinate grid for the given field line coordinates.
-    data : dict
-        Dictionary of ndarrays of stuff evaluated on ``grid``.
+    items : dict
+        Dictionary of useful intermediate quantities.
+            grid : Grid
+                DESC coordinate grid for the given field line coordinates.
+            data : dict
+                Dictionary of ndarrays of stuff evaluated on ``grid``.
+            poly_B : ndarray, shape(4, A * R, zeta.size - 1)
+                Polynomial coefficients of the cubic spline of |B|.
+                First axis should iterate through coefficients of power series,
+                and the last axis should iterate through the piecewise
+                polynomials of a particular spline of |B| along field line.
+            poly_B_z : ndarray, shape(3, A * R, zeta.size - 1)
+                Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
+                First axis should iterate through coefficients of power series,
+                and the last axis should iterate through the piecewise
+                polynomials of a particular spline of |B| along field line.
 
     Examples
     --------
     .. code-block:: python
 
-        ba, grid, data = bounce_integral(eq)
-        pitch = jnp.linspace(1 / data["B"].max(), 1 / data["B"].min(), 30)
+        ba, items = bounce_average(eq, return_items=True)
+        name = "g_zz"
+        f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
         # Same pitch for every field line may give sparse result.
         # See tests/test_bounce_integral.py::test_pitch_input for an alternative.
+        pitch_res = 30
+        B = items["data"]["B"]
+        pitch = jnp.linspace(1 / B.max(), 1 / B.min(), pitch_res)
         pitch = pitch[:, jnp.newaxis, jnp.newaxis]
-        name = "g_zz"
-        f = eq.compute(name, grid=grid, data=data)[name]
         result = ba(f, pitch)
 
     """
-    bi, grid, data = bounce_integral(eq, pitch, rho, alpha, zeta, quadrature, **kwargs)
 
     def _bounce_average(f, pitch=None):
         """Compute the bounce average of ``f``.
@@ -770,7 +806,12 @@ def bounce_average(
         # akima suppresses oscillation of the spline.
         return bi(f, pitch) / bi(jnp.ones_like(f), pitch)
 
-    return _bounce_average, grid, data
+    bi = bounce_integral(eq, pitch, rho, alpha, zeta, quadrature, **kwargs)
+    if kwargs.get("return_items"):
+        bi, items = bi
+        return _bounce_average, items
+    else:
+        return _bounce_average
 
 
 def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):

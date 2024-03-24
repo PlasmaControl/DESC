@@ -127,11 +127,3 @@ def zip_and_upload(
         # Clean up resources
         driver.quit()
         os.remove(zip_filename)
-
-
-# Example usage:
-configid = "precise_QA"
-user = "yge"
-zip_and_upload(
-    "precise_QA_poincare_N3", configid, initialization_method="poincare", user=user
-)

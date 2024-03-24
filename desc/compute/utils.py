@@ -8,7 +8,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from .data_index import data_index
 
@@ -66,7 +66,15 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     for name in names:
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
-    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis", "method"}
+    allowed_kwargs = {
+        "basis",
+        "gamma",
+        "helicity",
+        "iota",
+        "M_booz",
+        "N_booz",
+        "method",
+    }
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -353,7 +361,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     method=method,
                 )
             transforms[c] = c_transform
-        elif c == "B":  # for fitting Boozer harmonics
+        elif c == "B":  # used for Boozer transform
             transforms["B"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -367,7 +375,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "w":  # for fitting Boozer toroidal stream function
+        elif c == "w":  # used for Boozer transfrom
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -379,6 +387,19 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 derivs=derivs["w"],
                 build=False,
                 build_pinv=True,
+                method=method,
+            )
+        elif c == "h":  # used for omnigenity
+            rho = grid.nodes[:, 0]
+            eta = (grid.nodes[:, 1] - np.pi) / 2
+            alpha = grid.nodes[:, 2] * grid.NFP
+            nodes = jnp.array([rho, eta, alpha]).T
+            transforms["h"] = Transform(
+                Grid(nodes, jitable=jitable),
+                obj.x_basis,
+                derivs=derivs["h"],
+                build=True,
+                build_pinv=False,
                 method=method,
             )
         elif c not in transforms:  # possible other stuff lumped in with transforms

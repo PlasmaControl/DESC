@@ -135,14 +135,15 @@ Magnetic Fields
 
     desc.magnetic_fields.CurrentPotentialField
     desc.magnetic_fields.FourierCurrentPotentialField
+    desc.magnetic_fields.DommaschkPotentialField
+    desc.magnetic_fields.OmnigenousField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
     desc.magnetic_fields.VerticalMagneticField
-    desc.magnetic_fields.PoloidalMagneticField
-    desc.magnetic_fields.SplineMagneticField
-    desc.magnetic_fields.ScalarPotentialField
-    desc.magnetic_fields.DommaschkPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
 
@@ -173,6 +174,9 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixOmniBmax
+    desc.objectives.FixOmniMap
+    desc.objectives.FixOmniWell
     desc.objectives.FixParameter
     desc.objectives.FixPressure
     desc.objectives.FixPsi
@@ -195,6 +199,7 @@ Objective Functions
     desc.objectives.MercierStability
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
+    desc.objectives.Omnigenity
     desc.objectives.PlasmaVesselDistance
     desc.objectives.Pressure
     desc.objectives.PrincipalCurvature

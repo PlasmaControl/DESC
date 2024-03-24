@@ -119,6 +119,27 @@ class TestComputeUtils:
                 test_b_theta(label, cg_sym, eq)
 
     @pytest.mark.unit
+    def test_unknown_unique_grid_integral(self):
+        """Test that averages are invariant to whether grids have unique_idx."""
+        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, endpoint=False)
+        q = jnp.arange(lg.num_nodes) ** 2
+        result = surface_integrals(lg, q, surface_label="rho")
+        del lg._unique_rho_idx
+        np.testing.assert_allclose(
+            surface_integrals(lg, q, surface_label="rho"), result
+        )
+        result = surface_averages(lg, q, surface_label="theta")
+        del lg._unique_theta_idx
+        np.testing.assert_allclose(
+            surface_averages(lg, q, surface_label="theta"), result
+        )
+        result = surface_variance(lg, q, surface_label="zeta")
+        del lg._unique_zeta_idx
+        np.testing.assert_allclose(
+            surface_variance(lg, q, surface_label="zeta"), result
+        )
+
+    @pytest.mark.unit
     def test_surface_integrals_transform(self):
         """Test surface integral of a kernel function."""
 

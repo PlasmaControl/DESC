@@ -785,30 +785,53 @@ def test_find_least_rational_surfaces():
 def test_custom_jitable_grid_indexing():
     """Test that unique/inverse indices are set correctly when jitable=True."""
     eq = get("NCSX")
-    rho = np.random.random(100)
-    theta = np.random.random(100) * 2 * np.pi
-    zeta = np.random.random(100) * 2 * np.pi / eq.NFP
-    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
-    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    # field lines on two surfaces
+    rho = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
+    theta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
+    zeta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
+    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
+    grid3 = Grid(np.array([rho, theta, zeta]).T, jitable=True, _unique_rho_idx=[0, 10])
+    np.testing.assert_allclose(grid1.nodes, grid2.nodes)
 
-    attrs = [
-        "unique_rho_idx",
-        "inverse_rho_idx",
-        "unique_theta_idx",
-        "inverse_theta_idx",
-        "unique_zeta_idx",
-        "inverse_zeta_idx",
-    ]
+    x = np.random.random(grid1.num_nodes)
 
-    for attr in attrs:
-        np.testing.assert_array_equal(
-            getattr(grid1, attr), getattr(grid2, attr), err_msg=attr
-        )
+    # these shouldn't error
+    _ = grid1.unique_rho_idx
+    _ = grid1.unique_theta_idx
+    _ = grid1.unique_zeta_idx
+    _ = grid1.inverse_rho_idx
+    _ = grid1.inverse_theta_idx
+    _ = grid1.inverse_zeta_idx
+    _ = grid3.unique_rho_idx
+
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_rho_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_theta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_zeta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_rho_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_theta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_zeta_idx
+
+    y1 = grid1.copy_data_from_other(x, grid2, "rho")
+    y2 = grid2.copy_data_from_other(x, grid1, "rho")
+    y3 = grid3.copy_data_from_other(x, grid1, "rho")
+
+    np.testing.assert_allclose(y1, y2)
+    np.testing.assert_allclose(y1, y3)
 
     # make sure compress/expand done when override_grid=True works as expected
     b1 = eq.compute(["|B|"], grid=grid1, override_grid=True)["|B|"]
-    b2 = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
-    np.testing.assert_allclose(b1, b2)
+    with pytest.raises(AttributeError):
+        _ = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
+    b3 = eq.compute(["|B|"], grid=grid3, override_grid=True)["|B|"]
+    np.testing.assert_allclose(b1, b3)
 
 
 @pytest.mark.unit

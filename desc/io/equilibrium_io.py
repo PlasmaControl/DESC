@@ -413,7 +413,9 @@ def get_driver():
     return None
 
 
-def load_to_database(filename, configid, initialization_method="surface", user="yge"):
+def load_to_database(
+    filename, configid, initialization_method="surface", user="yge", copy=False
+):
     """Load a DESC equilibrium and upload it to the database.
 
     Parameters
@@ -516,7 +518,10 @@ def load_to_database(filename, configid, initialization_method="surface", user="
     finally:
         # Clean up resources
         driver.quit()
-        os.remove(zip_filename)
+        if not copy:
+            os.remove(zip_filename)
+            os.remove(csv_filename)
+            os.remove(config_csv_filename)
 
 
 def desc_to_csv(  # noqa
@@ -601,11 +606,12 @@ def desc_to_csv(  # noqa
 
     ############ DESC_runs Data Table ############
     # FIXME: what to do for these?
-    data_desc_runs["configid"] = name  # FIXME what should this be? how to hash?
-
-    # FIXME: Defaults for these?
-    data_desc_runs["provenance"] = provenance
-    data_desc_runs["description"] = description
+    if name is not None:
+        data_desc_runs["configid"] = name
+    if provenance is not None:
+        data_desc_runs["provenance"] = provenance
+    if description is not None:
+        data_desc_runs["description"] = description
 
     data_desc_runs[
         "version"
@@ -613,7 +619,8 @@ def desc_to_csv(  # noqa
     data_desc_runs[
         "git_commit"
     ] = version  # this is basically redundant with git commit I think
-    data_desc_runs["inputfilename"] = inputfilename
+    if inputfilename is not None:
+        data_desc_runs["inputfilename"] = inputfilename
 
     data_desc_runs["initialization_method"] = initialization_method
 
@@ -688,7 +695,8 @@ def desc_to_csv(  # noqa
     data_configurations["NFP"] = eq.NFP
     data_configurations["stell_sym"] = bool(eq.sym)
 
-    data_configurations["deviceid"] = kwargs.get("deviceid", None)
+    if kwargs.get("deviceid", None) is not None:
+        data_configurations["deviceid"] = kwargs.get("deviceid", None)
 
     # FIXME: Defaults for these?
     data_configurations["provenance"] = provenance
@@ -714,7 +722,8 @@ def desc_to_csv(  # noqa
     data_configurations["average_elongation"] = float(
         f'{np.mean(position_data["a_major/a_minor"]):1.4e}'
     )
-    data_configurations["class"] = kwargs.get("config_class", None)
+    if kwargs.get("config_class", None) is not None:
+        data_configurations["class"] = kwargs.get("config_class", None)
     if eq.N == 0:  # is axisymmetric
         data_configurations["class"] = "AS"
 
@@ -769,9 +778,6 @@ def desc_to_csv(  # noqa
         data_configurations[
             "current_profile_data2"
         ] = eq.current.params  # these are the coefficients
-        data_configurations["iota_profile_type"] = None
-        data_configurations["iota_profile_data1"] = None
-        data_configurations["iota_profile_data2"] = None
 
     elif eq.iota:
         data_configurations["iota_profile_type"] = "power_series"
@@ -781,9 +787,6 @@ def desc_to_csv(  # noqa
         data_configurations[
             "iota_profile_data2"
         ] = eq.iota.params  # these are the coefficients
-        data_configurations["current_profile_type"] = None
-        data_configurations["current_profile_data1"] = None
-        data_configurations["current_profile_data2"] = None
 
     data_configurations["date_created"] = kwargs.get("date_created", today)
     data_configurations["date_updated"] = kwargs.get("date_updated", today)

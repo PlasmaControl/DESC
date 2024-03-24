@@ -269,7 +269,7 @@ class Curve(IOAble, Optimizable, ABC):
     def to_FourierRZ(self, N=None, grid=None, s=None, NFP=None, name=""):
         """Convert Curve to FourierRZCurve representation.
 
-            *Note: Some types of curves may not be representable in this basis.
+            NOTE: Some types of curves may not be representable in this basis.
 
         Parameters
         ----------

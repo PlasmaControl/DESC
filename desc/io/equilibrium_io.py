@@ -699,8 +699,10 @@ def desc_to_csv(  # noqa
         data_configurations["deviceid"] = kwargs.get("deviceid", None)
 
     # FIXME: Defaults for these?
-    data_configurations["provenance"] = provenance
-    data_configurations["description"] = description
+    if provenance is not None:
+        data_configurations["provenance"] = provenance
+    if description is not None:
+        data_configurations["description"] = description
 
     data_configurations["toroidal_flux"] = eq.Psi
     data_configurations["aspect_ratio"] = eq.compute("R0/a")["R0/a"]

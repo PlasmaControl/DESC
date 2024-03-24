@@ -705,7 +705,6 @@ def _get_grid_surface(grid, surface_label):
         inverse_idx = getattr(grid, "_inverse_theta_idx", jnp.array([]))
         has_endpoint_dupe = (
             isinstance(grid, LinearGrid)
-            and hasattr(grid, "_inverse_theta_idx")
             and hasattr(grid, "_unique_theta_idx")
             and (grid.nodes[grid.unique_theta_idx[0], 1] == 0)
             & (grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi)
@@ -716,7 +715,6 @@ def _get_grid_surface(grid, surface_label):
         inverse_idx = getattr(grid, "_inverse_zeta_idx", jnp.array([]))
         has_endpoint_dupe = (
             isinstance(grid, LinearGrid)
-            and hasattr(grid, "_inverse_zeta_idx")
             and hasattr(grid, "_unique_zeta_idx")
             and (grid.nodes[grid.unique_zeta_idx[0], 2] == 0)
             & (grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP)
@@ -930,9 +928,12 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         # Converting nodes from numpy.ndarray to jaxlib.xla_extension.ArrayImpl
         # reduces memory usage by > 400% for the forward computation and Jacobian.
         nodes = jnp.asarray(nodes)
-        # This implementation was benchmarked to be more efficient than
-        # alternatives with explicit loops in GitHub pull request #934.
+        # This branch will execute for custom grids, which don't have a use
+        # case for having duplicate nodes, so we don't bother to modulo nodes
+        # by 2pi or 2pi/NFP.
         mask = jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol
+        # The above implementation was benchmarked to be more efficient than
+        # alternatives with explicit loops in GitHub pull request #934.
 
     def integrate(q=jnp.array([1.0])):
         """Compute a surface integral for each surface in the grid.
@@ -958,9 +959,6 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
             Surface integral of the input over each surface in the grid.
 
         """
-        # q may have shape (g.size, *f.shape), where
-        # g.size is grid.num_nodes and iterating along this axis varies the object,
-        # e.g. some function f, held in the remaining axes over the nodes of the grid.
         integrands = (spacing * jnp.nan_to_num(q).T).T
         integrals = jnp.tensordot(mask, integrands, axes=1)
         return grid.expand(integrals, surface_label) if expand_out else integrals
@@ -1052,7 +1050,8 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
         ``function(q, sqrt_g)``.
 
     """
-    expand_out = expand_out and hasattr(grid, f"num_{surface_label}")
+    if not hasattr(grid, f"num_{surface_label}"):
+        expand_out = False  # don't try to expand already expanded output
     integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
 
     def _surface_averages(q, sqrt_g=jnp.array([1.0]), denominator=None):

@@ -449,7 +449,7 @@ class _Grid(IOAble, ABC):
 
             def body(i, y):
                 y = jnp.where(
-                    jnp.abs(self_nodes[:, axis] - other_nodes[i, axis]) < tol,
+                    jnp.abs(self_nodes[:, axis] - other_nodes[i, axis]) <= tol,
                     x[i],
                     y,
                 )

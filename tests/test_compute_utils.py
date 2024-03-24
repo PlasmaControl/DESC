@@ -118,6 +118,17 @@ class TestComputeUtils:
                 # theta integrals are poorly defined on concentric grids
                 test_b_theta(label, cg_sym, eq)
 
+        q = jnp.arange(lg.num_nodes) ** 2
+        result = surface_integrals(lg, q, "rho")
+        del lg._unique_rho_idx
+        np.testing.assert_allclose(surface_integrals(lg, q, "rho"), result)
+        result = surface_integrals(lg, q, "theta")
+        del lg._unique_theta_idx
+        np.testing.assert_allclose(surface_integrals(lg, q, "theta"), result)
+        result = surface_integrals(lg, q, "zeta")
+        del lg._unique_zeta_idx
+        np.testing.assert_allclose(surface_integrals(lg, q, "zeta"), result)
+
     @pytest.mark.unit
     def test_surface_integrals_transform(self):
         """Test surface integral of a kernel function."""

@@ -695,24 +695,33 @@ def _get_grid_surface(grid, surface_label):
     """
     assert surface_label in {"rho", "theta", "zeta"}
     if surface_label == "rho":
-        unique_size = grid.num_rho
-        inverse_idx = grid.inverse_rho_idx
         spacing = grid.spacing[:, 1:]
         has_endpoint_dupe = False
+        unique_size = getattr(grid, "num_rho", -1)
+        inverse_idx = getattr(grid, "_inverse_rho_idx", jnp.array([]))
     elif surface_label == "theta":
-        unique_size = grid.num_theta
-        inverse_idx = grid.inverse_theta_idx
         spacing = grid.spacing[:, [0, 2]]
-        has_endpoint_dupe = (grid.nodes[grid.unique_theta_idx[0], 1] == 0) & (
-            grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
+        unique_size = getattr(grid, "num_theta", -1)
+        inverse_idx = getattr(grid, "_inverse_theta_idx", jnp.array([]))
+        has_endpoint_dupe = (
+            isinstance(grid, LinearGrid)
+            and hasattr(grid, "_inverse_theta_idx")
+            and hasattr(grid, "_unique_theta_idx")
+            and (grid.nodes[grid.unique_theta_idx[0], 1] == 0)
+            & (grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi)
         )
     else:
-        unique_size = grid.num_zeta
-        inverse_idx = grid.inverse_zeta_idx
         spacing = grid.spacing[:, :2]
-        has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
-            grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
+        unique_size = getattr(grid, "num_zeta", -1)
+        inverse_idx = getattr(grid, "_inverse_zeta_idx", jnp.array([]))
+        has_endpoint_dupe = (
+            isinstance(grid, LinearGrid)
+            and hasattr(grid, "_inverse_zeta_idx")
+            and hasattr(grid, "_unique_zeta_idx")
+            and (grid.nodes[grid.unique_zeta_idx[0], 2] == 0)
+            & (grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP)
         )
+
     return unique_size, inverse_idx, spacing, has_endpoint_dupe
 
 
@@ -722,6 +731,7 @@ def line_integrals(
     line_label="theta",
     fix_surface=("rho", 1.0),
     expand_out=True,
+    tol=1e-14,
 ):
     """Compute line integrals over curves covering the given surface.
 
@@ -765,6 +775,9 @@ def line_integrals(
         shape as the input. Defaults to true so that the output may be
         broadcast in the same way as the input. Setting to false will save
         memory.
+    tol : float
+        Tolerance for considering nodes the same.
+        Only relevant if the grid object doesn't already have this information.
 
     Returns
     -------
@@ -797,10 +810,12 @@ def line_integrals(
     mask = grid.nodes[:, column_id] == fix_surface[1]
     q_prime = (mask * jnp.atleast_1d(q).T / grid.spacing[:, column_id]).T
     (surface_label,) = labels.keys() - {line_label, fix_surface[0]}
-    return surface_integrals(grid, q_prime, surface_label, expand_out)
+    return surface_integrals(grid, q_prime, surface_label, expand_out, tol)
 
 
-def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=True):
+def surface_integrals(
+    grid, q=jnp.array([1.0]), surface_label="rho", expand_out=True, tol=1e-14
+):
     """Compute a surface integral for each surface in the grid.
 
     Notes
@@ -826,6 +841,9 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=
         shape as the input. Defaults to true so that the output may be
         broadcast in the same way as the input. Setting to false will save
         memory.
+    tol : float
+        Tolerance for considering nodes the same.
+        Only relevant if the grid object doesn't already have this information.
 
     Returns
     -------
@@ -834,10 +852,10 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=
         By default, the returned array has the same shape as the input.
 
     """
-    return surface_integrals_map(grid, surface_label, expand_out)(q)
+    return surface_integrals_map(grid, surface_label, expand_out, tol)(q)
 
 
-def surface_integrals_map(grid, surface_label="rho", expand_out=True):
+def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
     """Returns a method to compute any surface integral for each surface in the grid.
 
     Parameters
@@ -851,6 +869,9 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         shape as the input. Defaults to true so that the output may be
         broadcast in the same way as the input. Setting to false will save
         memory.
+    tol : float
+        Tolerance for considering nodes the same.
+        Only relevant if the grid object doesn't already have this information.
 
     Returns
     -------
@@ -872,38 +893,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     )
     spacing = jnp.prod(spacing, axis=1)
 
-    # Todo: Define masks as a sparse matrix once sparse matrices are no longer
-    #       experimental in jax.
-    # The ith row of masks is True only at the indices which correspond to the
-    # ith surface. The integral over the ith surface is the dot product of the
-    # ith row vector and the integrand defined over all the surfaces.
-    masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
-    # Imagine a torus cross-section at zeta=π.
-    # A grid with a duplicate zeta=π node has 2 of those cross-sections.
-    #     In grid.py, we multiply by 1/n the areas of surfaces with
-    # duplicity n. This prevents the area of that surface from being
-    # double-counted, as surfaces with the same node value are combined
-    # into 1 integral, which sums their areas. Thus, if the zeta=π
-    # cross-section has duplicity 2, we ensure that the area on the zeta=π
-    # surface will have the correct total area of π+π = 2π.
-    #     An edge case exists if the duplicate surface has nodes with
-    # different values for the surface label, which only occurs when
-    # has_endpoint_dupe is true. If ``has_endpoint_dupe`` is true, this grid
-    # has a duplicate surface at surface_label=0 and
-    # surface_label=max surface value. Although the modulo of these values
-    # are equal, their numeric values are not, so the integration
-    # would treat them as different surfaces. We solve this issue by
-    # combining the indices corresponding to the integrands of the duplicated
-    # surface, so that the duplicate surface is treated as one, like in the
-    # previous paragraph.
-    masks = cond(
-        has_endpoint_dupe,
-        lambda _: put(masks, jnp.array([0, -1]), masks[0] | masks[-1]),
-        lambda _: masks,
-        operand=None,
-    )
-
-    def _surface_integrals(q=jnp.array([1.0])):
+    def integrate(q=jnp.array([1.0])):
         """Compute a surface integral for each surface in the grid.
 
         Notes
@@ -927,15 +917,84 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
             Surface integral of the input over each surface in the grid.
 
         """
-        integrands = (spacing * jnp.nan_to_num(q).T).T
-        # `integrands` may have shape (g.size, *f.shape), where
+        # q may have shape (g.size, *f.shape), where
         #  g.size is grid.num_nodes and iterating along this axis varies the object,
         #  e.g. some function f, held in the remaining axes over the nodes of the grid.
-        # Uses less memory than jnp.einsum("ug,g...->u...", masks, integrands).
-        integrals = jnp.tensordot(masks, integrands, axes=1)
+        integrands = (spacing * jnp.nan_to_num(q).T).T
+        integrals = jnp.tensordot(mask, integrands, axes=1)
         return grid.expand(integrals, surface_label) if expand_out else integrals
 
-    return _surface_integrals
+    def integrate_unknown_unique_size(q=jnp.array([1.0])):
+        """Compute a surface integral for each surface in the grid.
+
+        Notes
+        -----
+            It is assumed that the integration surface has area 4π² when the
+            surface label is rho and area 2π when the surface label is theta or
+            zeta. You may want to multiply the input by the surface area Jacobian.
+
+        Parameters
+        ----------
+        q : ndarray
+            Quantity to integrate.
+            The first dimension of the array should have size ``grid.num_nodes``.
+            When ``q`` is n-dimensional, the intention is to integrate,
+            over the domain parameterized by rho, theta, and zeta,
+            an n-dimensional function over the previously mentioned domain.
+
+        Returns
+        -------
+        integrals : ndarray
+            Surface integral of the input over each surface in the grid.
+
+        """
+        column_idx = {"rho": 0, "theta": 1, "zeta": 2}[surface_label]
+        nodes = jnp.asarray(grid.nodes[:, column_idx])
+        integrands = (spacing * jnp.nan_to_num(q).T).T
+        integrals = jnp.tensordot(
+            jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol, integrands, axes=1
+        )
+        return integrals
+
+    if hasattr(grid, f"num_{surface_label}"):
+        # Todo: Define masks as a sparse matrix once sparse matrices are no longer
+        #       experimental in jax.
+        # The ith row of masks is True only at the indices which correspond to the
+        # ith surface. The integral over the ith surface is the dot product of the
+        # ith row vector and the integrand defined over all the surfaces.
+        mask = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
+        # Imagine a torus cross-section at zeta=π.
+        # A grid with a duplicate zeta=π node has 2 of those cross-sections.
+        #     In grid.py, we multiply by 1/n the areas of surfaces with
+        # duplicity n. This prevents the area of that surface from being
+        # double-counted, as surfaces with the same node value are combined
+        # into 1 integral, which sums their areas. Thus, if the zeta=π
+        # cross-section has duplicity 2, we ensure that the area on the zeta=π
+        # surface will have the correct total area of π+π = 2π.
+        #     An edge case exists if the duplicate surface has nodes with
+        # different values for the surface label, which only occurs when
+        # has_endpoint_dupe is true. If ``has_endpoint_dupe`` is true, this grid
+        # has a duplicate surface at surface_label=0 and
+        # surface_label=max surface value. Although the modulo of these values
+        # are equal, their numeric values are not, so the integration
+        # would treat them as different surfaces. We solve this issue by
+        # combining the indices corresponding to the integrands of the duplicated
+        # surface, so that the duplicate surface is treated as one, like in the
+        # previous paragraph.
+        mask = cond(
+            has_endpoint_dupe,
+            lambda _: put(mask, jnp.array([0, -1]), mask[0] | mask[-1]),
+            lambda _: mask,
+            operand=None,
+        )
+        return integrate
+    else:
+        assert expand_out, (
+            "Grid lacks information to return unique values."
+            " (This information cannot be automatically determined when the grid"
+            " is constructed with the parameter jitable is specified as True)."
+        )
+        return integrate_unknown_unique_size
 
 
 def surface_averages(
@@ -945,6 +1004,7 @@ def surface_averages(
     surface_label="rho",
     denominator=None,
     expand_out=True,
+    tol=1e-14,
 ):
     """Compute a surface average for each surface in the grid.
 
@@ -979,6 +1039,9 @@ def surface_averages(
         shape as the input. Defaults to true so that the output may be
         broadcast in the same way as the input. Setting to false will save
         memory.
+    tol : float
+        Tolerance for considering nodes the same.
+        Only relevant if the grid object doesn't already have this information.
 
     Returns
     -------
@@ -987,10 +1050,12 @@ def surface_averages(
         By default, the returned array has the same shape as the input.
 
     """
-    return surface_averages_map(grid, surface_label, expand_out)(q, sqrt_g, denominator)
+    return surface_averages_map(grid, surface_label, expand_out, tol)(
+        q, sqrt_g, denominator
+    )
 
 
-def surface_averages_map(grid, surface_label="rho", expand_out=True):
+def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
     """Returns a method to compute any surface average for each surface in the grid.
 
     Parameters
@@ -1004,6 +1069,9 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
         shape as the input. Defaults to true so that the output may be
         broadcast in the same way as the input. Setting to false will save
         memory.
+    tol : float
+        Tolerance for considering nodes the same.
+        Only relevant if the grid object doesn't already have this information.
 
     Returns
     -------
@@ -1013,7 +1081,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
         ``function(q, sqrt_g)``.
 
     """
-    integrate = surface_integrals_map(grid, surface_label, False)
+    integrate = surface_integrals_map(grid, surface_label, False, tol)
 
     def _surface_averages(q, sqrt_g=jnp.array([1.0]), denominator=None):
         """Compute a surface average for each surface in the grid.
@@ -1140,6 +1208,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # transform into the computational domain, so the second dimension that
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
+    assert hasattr(grid, f"inverse_{surface_label}_idx")
     return surface_integrals_map(grid, surface_label, expand_out=False)
 
 
@@ -1150,6 +1219,7 @@ def surface_variance(
     bias=False,
     surface_label="rho",
     expand_out=True,
+    tol=1e-14,
 ):
     """Compute the weighted sample variance of ``q`` on each surface of the grid.
 
@@ -1211,6 +1281,9 @@ def surface_variance(
         shape as the input. Defaults to true so that the output may be
         broadcast in the same way as the input. Setting to false will save
         memory.
+    tol : float
+        Tolerance for considering nodes the same.
+        Only relevant if the grid object doesn't already have this information.
 
     Returns
     -------
@@ -1220,7 +1293,7 @@ def surface_variance(
 
     """
     _, _, spacing, _ = _get_grid_surface(grid, surface_label)
-    integrate = surface_integrals_map(grid, surface_label, expand_out=False)
+    integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
 
     v1 = integrate(weights)
     v2 = integrate(weights**2 * jnp.prod(spacing, axis=-1))

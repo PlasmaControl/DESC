@@ -1,6 +1,11 @@
 Changelog
 =========
 
+New Features
+
+- Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
+to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
+
 v0.11.0
 -------
 

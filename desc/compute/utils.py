@@ -924,43 +924,9 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         integrals = jnp.tensordot(mask, integrands, axes=1)
         return grid.expand(integrals, surface_label) if expand_out else integrals
 
-    def integrate_unknown_unique_size(q=jnp.array([1.0])):
-        """Compute a surface integral for each surface in the grid.
-
-        Notes
-        -----
-            It is assumed that the integration surface has area 4π² when the
-            surface label is rho and area 2π when the surface label is theta or
-            zeta. You may want to multiply the input by the surface area Jacobian.
-
-        Parameters
-        ----------
-        q : ndarray
-            Quantity to integrate.
-            The first dimension of the array should have size ``grid.num_nodes``.
-            When ``q`` is n-dimensional, the intention is to integrate,
-            over the domain parameterized by rho, theta, and zeta,
-            an n-dimensional function over the previously mentioned domain.
-
-        Returns
-        -------
-        integrals : ndarray
-            Surface integral of the input over each surface in the grid.
-
-        """
-        nodes = grid.nodes[:, {"rho": 0, "theta": 1, "zeta": 2}[surface_label]]
-        integrands = (spacing * jnp.nan_to_num(q).T).T
-        integrals = jnp.tensordot(
-            # don't store this mask in parent function since it is a large matrix
-            jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol,
-            integrands,
-            axes=1,
-        )
-        return integrals
-
+    # Todo: Define masks as a sparse matrix once sparse matrices are no longer
+    #       experimental in jax.
     if hasattr(grid, f"num_{surface_label}"):
-        # Todo: Define masks as a sparse matrix once sparse matrices are no longer
-        #       experimental in jax.
         # The ith row of masks is True only at the indices which correspond to the
         # ith surface. The integral over the ith surface is the dot product of the
         # ith row vector and the integrand defined over all the surfaces.
@@ -989,9 +955,16 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
             lambda _: mask,
             operand=None,
         )
-        return integrate
     else:
-        return integrate_unknown_unique_size
+        expand_out = False
+        nodes = grid.nodes[:, {"rho": 0, "theta": 1, "zeta": 2}[surface_label]]
+        # Converting nodes from numpy.ndarray to jaxlib.xla_extension.ArrayImpl
+        # reduces memory usage by > 400% for the forward computation and Jacobian.
+        nodes = jnp.asarray(nodes)
+        # This implementation was benchmarked to be more efficient than
+        # alternatives with explicit loops in GitHub pull request #934.
+        mask = jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol
+    return integrate
 
 
 def surface_averages(

@@ -893,37 +893,6 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
     )
     spacing = jnp.prod(spacing, axis=1)
 
-    def integrate(q=jnp.array([1.0])):
-        """Compute a surface integral for each surface in the grid.
-
-        Notes
-        -----
-            It is assumed that the integration surface has area 4π² when the
-            surface label is rho and area 2π when the surface label is theta or
-            zeta. You may want to multiply the input by the surface area Jacobian.
-
-        Parameters
-        ----------
-        q : ndarray
-            Quantity to integrate.
-            The first dimension of the array should have size ``grid.num_nodes``.
-            When ``q`` is n-dimensional, the intention is to integrate,
-            over the domain parameterized by rho, theta, and zeta,
-            an n-dimensional function over the previously mentioned domain.
-
-        Returns
-        -------
-        integrals : ndarray
-            Surface integral of the input over each surface in the grid.
-
-        """
-        # q may have shape (g.size, *f.shape), where
-        # g.size is grid.num_nodes and iterating along this axis varies the object,
-        # e.g. some function f, held in the remaining axes over the nodes of the grid.
-        integrands = (spacing * jnp.nan_to_num(q).T).T
-        integrals = jnp.tensordot(mask, integrands, axes=1)
-        return grid.expand(integrals, surface_label) if expand_out else integrals
-
     # Todo: Define masks as a sparse matrix once sparse matrices are no longer
     #       experimental in jax.
     if hasattr(grid, f"num_{surface_label}"):
@@ -964,6 +933,38 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         # This implementation was benchmarked to be more efficient than
         # alternatives with explicit loops in GitHub pull request #934.
         mask = jnp.abs(nodes - nodes[:, jnp.newaxis]) <= tol
+
+    def integrate(q=jnp.array([1.0])):
+        """Compute a surface integral for each surface in the grid.
+
+        Notes
+        -----
+            It is assumed that the integration surface has area 4π² when the
+            surface label is rho and area 2π when the surface label is theta or
+            zeta. You may want to multiply the input by the surface area Jacobian.
+
+        Parameters
+        ----------
+        q : ndarray
+            Quantity to integrate.
+            The first dimension of the array should have size ``grid.num_nodes``.
+            When ``q`` is n-dimensional, the intention is to integrate,
+            over the domain parameterized by rho, theta, and zeta,
+            an n-dimensional function over the previously mentioned domain.
+
+        Returns
+        -------
+        integrals : ndarray
+            Surface integral of the input over each surface in the grid.
+
+        """
+        # q may have shape (g.size, *f.shape), where
+        # g.size is grid.num_nodes and iterating along this axis varies the object,
+        # e.g. some function f, held in the remaining axes over the nodes of the grid.
+        integrands = (spacing * jnp.nan_to_num(q).T).T
+        integrals = jnp.tensordot(mask, integrands, axes=1)
+        return grid.expand(integrals, surface_label) if expand_out else integrals
+
     return integrate
 
 

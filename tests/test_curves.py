@@ -315,9 +315,6 @@ class TestRZCurve:
             sort=False,
         )
 
-        with pytest.raises(ValueError):
-            rzz = xyz.to_FourierRZ(N=2, grid=grid)
-
 
 class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""

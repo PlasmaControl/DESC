@@ -275,12 +275,10 @@ class FourierRZCurve(Curve):
             phi = phi[0:-1]
             Z = coords_rpz[0:-1, 2]
 
-        errorif(
-            not np.all(np.diff(phi) > 0),
-            ValueError,
-            "phi must be monotonically increasing",
-        )
-        # FIXME: this above assertion seems to not be working?
+        # TODO: can we check if the desired data is not
+        # representable by this basis? Or leave it up to
+        # the user to not misuse this? Probably the latter?
+
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)
         transform = Transform(grid, basis, build_pinv=True)

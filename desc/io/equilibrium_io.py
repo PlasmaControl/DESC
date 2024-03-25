@@ -453,6 +453,7 @@ def load_to_database(
     cfg_upload_button_id = "configToUpload"
     confirm_button_id = "confirmDesc"
 
+    # Check input files, if there isn't any create automatically
     if inputfilename is None:
         if os.path.exists("auto_generated_" + filename + "_input.txt"):
             inputfilename = "auto_generated_" + filename + "_input.txt"
@@ -462,18 +463,16 @@ def load_to_database(
             inputfilename = "auto_generated_" + filename + "_input.txt"
             from desc.input_reader import InputReader
 
+            print("Auto-generating input file...")
             writer = InputReader()
             writer.desc_output_to_input(inputfilename, filename + ".h5")
 
     # Zip the files
+    print("Zipping files...")
     zip_filename = filename + ".zip"
     with zipfile.ZipFile(zip_filename, "w") as zipf:
         zipf.write(filename + ".h5")
-        if os.path.exists(filename + "_input.txt"):
-            zipf.write(filename + "_input.txt")
-        elif os.path.exists("auto_generated_" + filename + "_input.txt"):
-            zipf.write("auto_generated_" + filename + "_input.txt")
-        elif inputfilename is not None:
+        if inputfilename is not None:
             if os.path.exists(inputfilename):
                 zipf.write(inputfilename)
 
@@ -484,9 +483,9 @@ def load_to_database(
         print(f"Previous {csv_filename} has been deleted.")
     if os.path.exists(config_csv_filename):
         os.remove(config_csv_filename)
-        print(f"Previous {config_csv_filename} has been deleted.\n")
+        print(f"Previous {config_csv_filename} has been deleted.")
 
-    print("Creating desc_runs.csv and configurations.csv...\n")
+    print("Creating desc_runs.csv and configurations.csv...")
     desc_to_csv(
         filename + ".h5",  # output filename
         name=configid,  # some string descriptive name, not necessarily unique
@@ -501,6 +500,7 @@ def load_to_database(
         initialization_method=initialization_method,
     )
 
+    print("Uploading to database...\n")
     driver = get_driver()
     driver.get("https://ye2698.mycpanel.princeton.edu/import-page/")
 
@@ -569,33 +569,38 @@ def desc_to_csv(  # noqa
 ):
     """Save DESC output file as a csv with relevant information.
 
-    Args
-    ----
-        eq (Equilibrium or str): DESC equilibrium to save or path to .h5 of
-         DESC equilibrium to save
-        current (bool): True if the equilibrium was solved with fixed current or not
-            if False, was solved with fixed iota
-        name (str) : name of configuration (and desc run)
-        provenance (str): where this configuration (and desc run) came from, e.g.
-            DESC github repo
-        description (str): description of the configuration (and desc run)
-        inputfilename (str): name of the input file corresponding to this
-            configuration (and desc run)
-        initialization_method (str): how the DESC equilibrium solution was initialized
+    Parameters
+    ----------
+        eq : str
+            DESC equilibrium to save or path to .h5 of DESC equilibrium to save
+        current : bool
+            True if the equilibrium was solved with fixed current or not if False,
+            was solved with fixed iota
+        name : str
+            name of configuration (and desc run)
+        provenance : str
+            where this configuration (and desc run) came from, e.g. DESC github repo
+        description : str
+            description of the configuration (and desc run)
+        inputfilename : str
+            name of the input file corresponding to this configuration (and desc run)
+        initialization_method : str
+            how the DESC equilibrium solution was initialized
             one of "surface", "NAE", or the name of a .nc or .h5 file
             corresponding to a VMEC (if .nc) or DESC (if .h5) solution
 
     Kwargs
     ------
-        date_created (str): when the DESC run was created, defaults to current day
-        publicationid (str): unique ID for a publication which this DESC output file is
-            associated with.
-        deviceid (str): unique ID for a device/concept which this configuration
-         is associated with.
-        config_class (str): class of configuration i.e. quasisymmetry (QA, QH, QP)
+        date_created : str
+            when the DESC run was created, defaults to current day
+        publicationid : str
+            unique ID for a publication which this DESC output file is associated with.
+        deviceid : str
+            unique ID for a device/concept which this configuration is associated with.
+        config_class : str
+            class of configuration i.e. quasisymmetry (QA, QH, QP)
             or omnigenity (QI, OT, OH) or axisymmetry (AS).
-            Defaults to None for a stellarator
-            and (AS) for a tokamak
+            Defaults to None for a stellarator and (AS) for a tokamak
             #TODO: can we attempt to automatically detect this for QS configs?
             maybe with a threshold on low QS, then if passes that, classify
             based on largest Boozer mode? can add a flag to the table like
@@ -606,7 +611,6 @@ def desc_to_csv(  # noqa
     -------
         None
     """
-    from desc.equilibrium import EquilibriaFamily
     from desc.grid import LinearGrid
     from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 
@@ -617,23 +621,15 @@ def desc_to_csv(  # noqa
     desc_runs_csv_name = "desc_runs.csv"
     configurations_csv_name = "configurations.csv"
 
-    if isinstance(eq, str):
+    if isinstance(eq, str) and os.path.exists(eq):
         data_desc_runs["outputfile"] = os.path.basename(eq)
         reader = hdf5Reader(eq)
         version = reader.read_dict()["__version__"]
         eq = load(eq)
-
-    elif isinstance(eq, EquilibriaFamily):
-        eq = eq[-1]  # just use last equilibrium
-        runid = None  # TODO: is this needed, the equilibriaFamily being an input?
-        savename = kwargs.pop("savename", f"DESC_eq_runid_{runid}.h5")
-        data_desc_runs["outputfile"] = savename
-        from desc import __version__ as version
-    if isinstance(eq, EquilibriaFamily):
-        eq = eq[-1]
+    else:
+        raise TypeError(f"Expected type str for eq, got type {type(eq)}")
 
     ############ DESC_runs Data Table ############
-    # FIXME: what to do for these?
     if name is not None:
         data_desc_runs["configid"] = name
     if provenance is not None:
@@ -715,18 +711,17 @@ def desc_to_csv(  # noqa
         data_desc_runs["user_created"] = user_created
     if user_updated is not None:
         data_desc_runs["user_updated"] = user_updated
-    # FIXME: publicationid should exist in the database
+    if kwargs.get("publicationid", None) is not None:
+        data_desc_runs["publicationid"] = kwargs.get("publicationid", None)
 
     ############ configuration Data Table ############
-    data_configurations["configid"] = name  # FIXME what should this be? how to hash?
+    data_configurations["configid"] = name
     data_configurations["name"] = name
     data_configurations["NFP"] = eq.NFP
     data_configurations["stell_sym"] = bool(eq.sym)
 
     if kwargs.get("deviceid", None) is not None:
         data_configurations["deviceid"] = kwargs.get("deviceid", None)
-
-    # FIXME: Defaults for these?
     if provenance is not None:
         data_configurations["provenance"] = provenance
     if description is not None:

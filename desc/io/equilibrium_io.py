@@ -457,6 +457,11 @@ def load_to_database(
         zipf.write(filename + ".h5")
         if os.path.exists(filename + "_input.txt"):
             zipf.write(filename + "_input.txt")
+        elif os.path.exists("auto_generated_" + filename + "_input.txt"):
+            zipf.write("auto_generated_" + filename + "_input.txt")
+        elif inputfilename is not None:
+            if os.path.exists(inputfilename):
+                zipf.write(inputfilename)
 
     csv_filename = "desc_runs.csv"
     config_csv_filename = "configurations.csv"

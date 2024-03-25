@@ -2204,6 +2204,72 @@ class Equilibrium(IOAble, Optimizable):
 
         return eq
 
+    def load_to_database(
+        self,
+        filename,
+        configid,
+        user,
+        deviceid=None,
+        description=None,
+        provenance=None,
+        inputfilename=None,
+        config_class=None,
+        current=True,
+        initialization_method="surface",
+        copy=False,
+    ):
+        """Load an equilibrium to the database.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the file to save the equilibrium to (without .h5 extension).
+        configid : str
+            Configuration ID.
+        user : str
+            User name as it occurs in the database.
+        deviceid : str, optional
+            Name of the physical device i.e. W7-X, ATF, etc.
+        description : str, optional
+            Description of the equilibrium.
+        provenance : str, optional
+            Provenance of the equilibrium.
+        inputfilename : str, optional
+            Name of the input file.
+        config_class : str, optional
+            Configuration class.
+        current : bool, optional
+            Whether the equilibrium is the current equilibrium.
+        initialization_method : str, optional
+            Method used to initialize the equilibrium i.e. surface, axis, xsection etc.
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
+
+        """
+        import os
+
+        from desc.io import load_to_database
+
+        self.save(filename + ".h5")
+        if inputfilename is not None:
+            if not os.path.exists(inputfilename):
+                inputfilename = "auto_generated_" + filename + "_input.txt"
+                # TODO: add input file generation
+
+        load_to_database(
+            filename,
+            configid=configid,
+            user=user,
+            deviceid=deviceid,
+            description=description,
+            provenance=provenance,
+            inputfilename=inputfilename,
+            config_class=config_class,
+            current=current,
+            initialization_method=initialization_method,
+            copy=copy,
+        )
+
 
 class EquilibriaFamily(IOAble, MutableSequence):
     """EquilibriaFamily stores a list of Equilibria.

@@ -2204,7 +2204,7 @@ class Equilibrium(IOAble, Optimizable):
 
         return eq
 
-    def load_to_database(
+    def save_to_database(
         self,
         filename,
         configid,
@@ -2248,12 +2248,12 @@ class Equilibrium(IOAble, Optimizable):
         """
         import os
 
-        from desc.io import load_to_database
+        from desc.io import save_to_database
 
         if not os.path.exists(filename + ".h5"):
             self.save(filename + ".h5")
 
-        load_to_database(
+        save_to_database(
             filename,
             configid=configid,
             user=user,

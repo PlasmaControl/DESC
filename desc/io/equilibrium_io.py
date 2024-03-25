@@ -415,7 +415,7 @@ def get_driver():
     return None
 
 
-def load_to_database(
+def save_to_database(
     filename,
     configid,
     user,

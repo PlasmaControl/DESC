@@ -7,7 +7,7 @@
 from desc.input_reader import InputReader
 
 from .ascii_io import read_ascii, write_ascii
-from .equilibrium_io import IOAble, load, load_to_database
+from .equilibrium_io import IOAble, load, save_to_database
 from .hdf5_io import hdf5Reader, hdf5Writer
 from .pickle_io import PickleReader, PickleWriter
 

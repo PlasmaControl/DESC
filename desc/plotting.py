@@ -21,6 +21,11 @@ from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
+from desc.singularities import (
+    DFTInterpolator,
+    FFTInterpolator,
+    virtual_casing_biot_savart,
+)
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -631,7 +636,7 @@ def plot_2d(
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
     component = kwargs.pop("component", None)
-    if name != "Bn":
+    if name != "B*n":
         data, label = _compute(
             eq,
             name,
@@ -650,8 +655,40 @@ def plot_2d(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data, _ = field.compute_Bnormal(eq, eval_grid=grid, source_grid=field_grid)
+            vc_data = eq.compute(
+                [
+                    "K_vc",
+                    "B",
+                    "R",
+                    "phi",
+                    "Z",
+                    "e^rho",
+                    "n_rho",
+                    "|e_theta x e_zeta|",
+                ],
+                grid=grid,
+            )
+            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            s = k - 1
+            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            q = k // 2 + int(np.sqrt(k))
+            try:
+                interpolator = FFTInterpolator(grid, grid, s, q)
+            except AssertionError:
+                interpolator = DFTInterpolator(grid, grid, s, q)
+            Bplasma = virtual_casing_biot_savart(
+                vc_data,
+                vc_data,
+                interpolator,
+            )
+            # need extra factor of B/2 bc we're evaluating on plasma surface
+            Bplasma = Bplasma + vc_data["B"] / 2
+            data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
+
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         label = r"$|B_n| ~(\mathrm{T})$"
+        # get Bn from plasma contribution
+
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
@@ -879,7 +916,7 @@ def plot_3d(
     levels = kwargs.pop("levels", None)
     component = kwargs.pop("component", None)
 
-    if name != "Bn":
+    if name != "B*n":
         data, label = _compute(
             eq,
             name,
@@ -898,6 +935,35 @@ def plot_3d(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data, _ = field.compute_Bnormal(eq, eval_grid=grid, source_grid=field_grid)
+            vc_data = eq.compute(
+                [
+                    "K_vc",
+                    "B",
+                    "R",
+                    "phi",
+                    "Z",
+                    "e^rho",
+                    "n_rho",
+                    "|e_theta x e_zeta|",
+                ],
+                grid=grid,
+            )
+            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            s = k - 1
+            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            q = k // 2 + int(np.sqrt(k))
+            try:
+                interpolator = FFTInterpolator(grid, grid, s, q)
+            except AssertionError:
+                interpolator = DFTInterpolator(grid, grid, s, q)
+            Bplasma = virtual_casing_biot_savart(
+                vc_data,
+                vc_data,
+                interpolator,
+            )
+            # need extra factor of B/2 bc we're evaluating on plasma surface
+            Bplasma = Bplasma + vc_data["B"] / 2
+            data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         label = r"$|B_n| ~(\mathrm{T})$"
     errorif(

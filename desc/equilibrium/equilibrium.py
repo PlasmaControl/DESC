@@ -2250,11 +2250,8 @@ class Equilibrium(IOAble, Optimizable):
 
         from desc.io import load_to_database
 
-        self.save(filename + ".h5")
-        if inputfilename is not None:
-            if not os.path.exists(inputfilename):
-                inputfilename = "auto_generated_" + filename + "_input.txt"
-                # TODO: add input file generation
+        if not os.path.exists(filename + ".h5"):
+            self.save(filename + ".h5")
 
         load_to_database(
             filename,

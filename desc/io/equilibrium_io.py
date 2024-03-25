@@ -451,6 +451,18 @@ def load_to_database(
     cfg_upload_button_id = "configToUpload"
     confirm_button_id = "confirmDesc"
 
+    if inputfilename is None:
+        if os.path.exists("auto_generated_" + filename + "_input.txt"):
+            inputfilename = "auto_generated_" + filename + "_input.txt"
+        elif os.path.exists(filename + "_input.txt"):
+            inputfilename = filename + "_input.txt"
+        else:
+            inputfilename = "auto_generated_" + filename + "_input.txt"
+            from desc.input_reader import InputReader
+
+            writer = InputReader()
+            writer.desc_output_to_input(inputfilename, filename + ".h5")
+
     # Zip the files
     zip_filename = filename + ".zip"
     with zipfile.ZipFile(zip_filename, "w") as zipf:
@@ -538,6 +550,7 @@ def load_to_database(
             os.remove(zip_filename)
             os.remove(csv_filename)
             os.remove(config_csv_filename)
+            os.remove(inputfilename)
 
 
 def desc_to_csv(  # noqa

@@ -414,7 +414,17 @@ def get_driver():
 
 
 def load_to_database(
-    filename, configid, initialization_method="surface", user="yge", copy=False
+    filename,
+    configid,
+    user,
+    deviceid=None,
+    description=None,
+    provenance=None,
+    inputfilename=None,
+    config_class=None,
+    current=True,
+    initialization_method="surface",
+    copy=False,
 ):
     """Load a DESC equilibrium and upload it to the database.
 
@@ -461,11 +471,12 @@ def load_to_database(
     desc_to_csv(
         filename + ".h5",  # output filename
         name=configid,  # some string descriptive name, not necessarily unique
-        provenance="Test upload zip",
-        inputfilename=None,
-        current=True,
-        deviceid=None,
-        config_class=None,
+        provenance=provenance,
+        description=description,
+        inputfilename=inputfilename,
+        current=current,
+        deviceid=deviceid,
+        config_class=config_class,
         user_updated=user,
         user_created=user,
         initialization_method=initialization_method,

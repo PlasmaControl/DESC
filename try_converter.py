@@ -2,7 +2,7 @@
 
 import os
 
-from database_converter import desc_to_csv
+from desc.io.equilibrium_io import desc_to_csv
 
 names = []
 

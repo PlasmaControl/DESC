@@ -1,5 +1,5 @@
 """try using the device and concept table creation util."""
-from database_converter import device_or_concept_to_csv
+from desc.io.equilibrium_io import device_or_concept_to_csv
 
 device_or_concept_to_csv(
     name="Wendelstein 7-X",

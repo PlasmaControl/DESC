@@ -7,19 +7,6 @@ import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
 from simsopt.mhd.vmec import Vmec
 
-
-def get_VMEC_runid(eq):  # or take in the data from a DESC eq?
-    """Take in a DESC equilibrium and return a unique hash for the run."""
-    return None
-
-
-def get_config_hash(eq):  # or take in the data from a DESC eq?
-    """Take in a DESC equilibrium and return a unique hash for the configuration."""
-    # what to do? first 10 bdry modes and their strengths?
-    # name and a number?
-    return None
-
-
 # TODO: add threshold to truncate at what amplitude surface Fourier coefficient
 # that it is working
 
@@ -41,43 +28,49 @@ def vmec_to_csv(  # noqa
     description=None,
     inputfilename=None,
     initialization_method="surface",
+    user_created=None,
+    user_updated=None,
     **kwargs,
 ):
     """Save VMEC output file as a csv with relevant information.
 
-    Args
-    ----
-        eq (Equilibrium or str): VMEC equilibrium to save or path to .wout of
-         VMEC equilibrium to save
-        current (bool): True if the equilibrium was solved with fixed current or not
-            if False, was solved with fixed iota
-        name (str) : name of configuration (and vmec run)
-        provenance (str): where this configuration (and desc run) came from, e.g.
-            SIMSOPT github repo
-        description (str): description of the configuration (and vmec run)
-        inputfilename (str): name of the input file corresponding to this
-            configuration (and vmec run)
-        initialization_method (str): the name of a .nc file
-            corresponding to a VMEC solution
+    Parameters
+    ----------
+        eq : str
+            VMEC equilibrium to save or path to .h5 of VMEC equilibrium to save
+        current : bool
+            True if the equilibrium was solved with fixed current or not if False,
+            was solved with fixed iota
+        name : str
+            name of configuration (and VMEC run)
+        provenance : str
+            where this configuration (and VMEC run) came from, e.g. VMEC github repo
+        description : str
+            description of the configuration (and VMEC run)
+        inputfilename : str
+            name of the input file corresponding to this configuration (and VMEC run)
+        initialization_method : str
+            how the VMEC equilibrium solution was initialized
+            one of "surface", "NAE", or the name of a .nc or .h5 file
+            corresponding to a VMEC (if .nc) or DESC (if .h5) solution
 
     Kwargs
     ------
-        date_created (str): when the DESC run was created, defaults to current day
-        publicationid (str): unique ID for a publication which this VMEC output file is
-            associated with.
-        deviceid (str): unique ID for a device/concept which this configuration
-         is associated with.
-        config_class (str): class of configuration i.e. quasisymmetry (QA, QH, QP)
+        date_created : str
+            when the VMEC run was created, defaults to current day
+        publicationid : str
+            unique ID for a publication which this VMEC output file is associated with.
+        deviceid : str
+            unique ID for a device/concept which this configuration is associated with.
+        config_class : str
+            class of configuration i.e. quasisymmetry (QA, QH, QP)
             or omnigenity (QI, OT, OH) or axisymmetry (AS).
-            Defaults to None for a stellarator
-            and (AS) for a tokamak
+            Defaults to None for a stellarator and (AS) for a tokamak
             #TODO: can we attempt to automatically detect this for QS configs?
             maybe with a threshold on low QS, then if passes that, classify
             based on largest Boozer mode? can add a flag to the table like
             "automatically labelled class" if this occurs
             to be transparent about source of the class if it was not a human
-
-
 
     Returns
     -------
@@ -105,21 +98,16 @@ def vmec_to_csv(  # noqa
         raise TypeError("Wrong VMEC file or object was passed!")
 
     ############ VMEC_runs Data Table ############
-    # FIXME: what to do for these?
-    data_vmec_runs[
-        "vmec_run_ID"
-    ] = None  # FIXME what should this be? how to hash? commit ID?
-    data_vmec_runs["configid"] = name  # FIXME what should this be? how to hash?
-
-    # FIXME: Defaults for these?
-    data_vmec_runs["provenance"] = provenance
-    data_vmec_runs["description"] = description
+    data_vmec_runs["configid"] = name
+    if provenance is not None:
+        data_vmec_runs["provenance"] = provenance
+    if description is not None:
+        data_vmec_runs["description"] = description
 
     data_vmec_runs["version"] = version  # version property in wout
     data_vmec_runs["git_commit"] = version  # not sure how this is standarised for vmec
-    data_vmec_runs[
-        "inputfilename"
-    ] = inputfilename  # this could be constructed from the wout output
+    if inputfilename is not None:
+        data_vmec_runs["inputfilename"] = inputfilename
 
     data_vmec_runs[
         "initialization_method"
@@ -169,14 +157,13 @@ def vmec_to_csv(  # noqa
 
     today = date.today()
     data_vmec_runs["date_created"] = kwargs.get("date_created", today)
-    data_vmec_runs["user_created"] = kwargs.get(
-        "user_created", None
-    )  # FIXME: what is this?
     data_vmec_runs["date_updated"] = kwargs.get("date_updated", today)
-    data_vmec_runs["user_updated"] = kwargs.get(
-        "user_updated", None
-    )  # FIXME: what is this?
-    data_vmec_runs["publicationid"] = kwargs.get("publicationid", None)
+    if kwargs.get("publicationid", None) is not None:
+        data_vmec_runs["publicationid"] = kwargs.get("publicationid", None)
+    if user_created is not None:
+        data_vmec_runs["user_created"] = user_created
+    if user_updated is not None:
+        data_vmec_runs["user_updated"] = user_updated
 
     ############ configuration Data Table ############
     data_configurations["configid"] = name  # FIXME what should this be? how to hash?
@@ -184,12 +171,13 @@ def vmec_to_csv(  # noqa
     data_configurations["NFP"] = eq.nfp
     data_configurations["stell_sym"] = not eq.lasym
 
-    data_configurations["deviceid"] = kwargs.get("deviceid", None)
-    data_configurations["hashkey"] = get_config_hash(eq)  # FIXME: what is this?
+    if kwargs.get("deviceid", None) is not None:
+        data_configurations["deviceid"] = kwargs.get("deviceid", None)
 
-    # FIXME: Defaults for these?
-    data_configurations["provenance"] = provenance
-    data_configurations["description"] = description
+    if provenance is not None:
+        data_configurations["provenance"] = provenance
+    if description is not None:
+        data_configurations["description"] = description
 
     data_configurations["toroidal_flux"] = eq.phi[-1]
     data_configurations["aspect_ratio"] = eq.aspect
@@ -270,13 +258,11 @@ def vmec_to_csv(  # noqa
         data_configurations["current_profile_data"] = None
 
     data_configurations["date_created"] = kwargs.get("date_created", today)
-    data_configurations["user_created"] = kwargs.get(
-        "user_created", None
-    )  # FIXME: what is this?
     data_configurations["date_updated"] = kwargs.get("date_updated", today)
-    data_configurations["user_updated"] = kwargs.get(
-        "user_updated", None
-    )  # FIXME: what is this?
+    if user_created is not None:
+        data_configurations["user_created"] = user_created
+    if user_updated is not None:
+        data_configurations["user_updated"] = user_updated
 
     csv_columns_desc_runs = list(data_vmec_runs.keys())
     csv_columns_desc_runs.sort()

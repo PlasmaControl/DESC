@@ -686,7 +686,7 @@ def plot_2d(
             data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
 
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-        label = r"$|B_n| ~(\mathrm{T})$"
+        label = r"$|\mathbf{B} \cdot \hat{n}| ~(\mathrm{T})$"
         # get Bn from plasma contribution
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
@@ -965,7 +965,7 @@ def plot_3d(
             Bplasma = Bplasma + vc_data["B"] / 2
             data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-        label = r"$|B_n| ~(\mathrm{T})$"
+        label = r"$|\mathbf{B} \cdot \hat{n}| ~(\mathrm{T})$"
     errorif(
         len(kwargs) != 0,
         ValueError,

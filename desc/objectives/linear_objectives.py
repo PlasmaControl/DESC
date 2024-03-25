@@ -110,6 +110,7 @@ class FixParameter(_FixedObjective):
         normalize_target=False,
         name="Fixed parameter",
     ):
+        # TODO: assert that `thing` is not of type `OptimizableCollection`
         self._target_from_user = target
         self._params = params
         self._indices = indices
@@ -160,8 +161,8 @@ class FixParameter(_FixedObjective):
         errorif(
             len(self._params) != len(self._indices),
             ValueError,
-            f"not enough indices ({len(self._indices)}) "
-            + f"for params ({len(self._params)})",
+            f"Unequal number of indices ({len(self._indices)}) "
+            + f"and params ({len(self._params)}).",
         )
         for idx, par in zip(self._indices, self._params):
             if isinstance(idx, bool) and idx:
@@ -207,6 +208,176 @@ class FixParameter(_FixedObjective):
         """
         return jnp.concatenate(
             [params[par][self._indices[par]] for par in self._params]
+        )
+
+
+class FixCollectionParameters(_FixedObjective):
+    """Fix specific degrees of freedom associated with a given OptimizableCollection.
+
+    Parameters
+    ----------
+    thing : OptimizableCollection
+        Object whose degrees of freedom are being fixed.
+    params : str or list of str
+        Names of parameters to fix. Defaults to all parameters.
+    index : array-like or list of array-like
+        Indices to fix for each parameter in params. Use True to fix all indices.
+    target : dict of {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Should have the same tree structure as thing.params. Defaults to things.params.
+    bounds : tuple of dict {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Should have the same tree structure as thing.params.
+    weight : dict of {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Should be a scalar or have the same tree structure as thing.params.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Has no effect for this objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(~)"
+    _print_value_fmt = "Fixed parameters error: {:10.3e} "
+
+    def __init__(
+        self,
+        thing,
+        params=None,
+        indices=True,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name="Fixed parameters",
+    ):
+        # TODO: assert that `thing` is of type `OptimizableCollection`
+        self._target_from_user = target
+        self._params = params
+        self._indices = indices
+        super().__init__(
+            things=thing,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        thing = self.things[0]
+        params = setdefault(self._params, thing.optimizable_params)
+
+        if not isinstance(params, (list, tuple)):
+            params = [params]
+        for par in params:
+            errorif(
+                par not in thing.optimizable_params,  # FIXME: can't search nested list
+                ValueError,
+                f"parameter {par} not found in optimizable_parameters: "
+                + f"{thing.optimizable_params}",
+            )
+        self._params = params
+
+        # replace indices=True with actual indices
+        if isinstance(self._indices, bool) and self._indices:
+            self._indices = [
+                [np.arange(thing.dimensions[k][par]) for par in self._params[k]]
+                for k in range(len(thing))
+            ]
+        # make sure its iterable if only a scalar was passed in
+        if not isinstance(self._indices, (list, tuple)):
+            self._indices = [self._indices]
+        # replace idx=True with array of all indices, throwing an error if the length
+        # of indices is different from number of params
+        errorif(
+            len(sum(self._params, [])) != len(sum(self._indices, [])),
+            ValueError,
+            f"Unequal number of indices ({len(self._indices)}) "
+            + f"and params ({len(self._params)}).",
+        )
+        indices = []
+        for k in range(len(thing)):
+            indices.append({})
+            for idx, par in zip(self._indices[k], self._params[k]):
+                if isinstance(idx, bool) and idx:
+                    idx = np.arange(thing.dimensions[k][par])
+                indices[k][par] = np.atleast_1d(idx)
+        self._indices = indices
+        self._dim_f = sum(
+            t.size for t in self._indices[k].values() for k in range(len(thing))
+        )
+
+        # FIXME: I don't think custom target/bounds works yet (default target is ok)
+        default_target = [
+            {par: thing.params_dict[k][par][self._indices[k][par]] for par in params[k]}
+            for k in range(len(thing))
+        ]
+        default_bounds = None
+        target, bounds = self._parse_target_from_user(
+            self._target_from_user, default_target, default_bounds, indices
+        )
+        if target:
+            self.target = jnp.concatenate(
+                [
+                    jnp.concatenate([target[k][par] for par in params[k]])
+                    for k in range(len(thing))
+                ]
+            )
+            self.bounds = None
+        else:
+            self.target = None
+            self.bounds = (
+                jnp.concatenate([bounds[0][par] for par in params]),
+                jnp.concatenate([bounds[1][par] for par in params]),
+            )
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed degree of freedom errors.
+
+        Parameters
+        ----------
+        params : list of dict
+            List of dictionaries of degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed degree of freedom errors.
+
+        """
+        return jnp.concatenate(
+            [
+                jnp.concatenate(
+                    [params[k][par][self._indices[k][par]] for par in self._params[k]]
+                )
+                for k in range(len(self._params))
+            ]
         )
 
 

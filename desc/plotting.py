@@ -676,6 +676,8 @@ def plot_2d(
                 interpolator = FFTInterpolator(grid, grid, s, q)
             except AssertionError:
                 interpolator = DFTInterpolator(grid, grid, s, q)
+            if hasattr(eq.surface, "Phi_mn"):
+                vc_data["K_vc"] += eq.surface.compute("K", grid=grid)["K"]
             Bplasma = virtual_casing_biot_savart(
                 vc_data,
                 vc_data,
@@ -956,6 +958,8 @@ def plot_3d(
                 interpolator = FFTInterpolator(grid, grid, s, q)
             except AssertionError:
                 interpolator = DFTInterpolator(grid, grid, s, q)
+            if hasattr(eq.surface, "Phi_mn"):
+                vc_data["K_vc"] += eq.surface.compute("K", grid=grid)["K"]
             Bplasma = virtual_casing_biot_savart(
                 vc_data,
                 vc_data,

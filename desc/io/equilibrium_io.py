@@ -419,6 +419,7 @@ def save_to_database(
     filename,
     configid,
     user,
+    isDeviceNew=False,
     deviceid=None,
     description=None,
     provenance=None,
@@ -426,6 +427,9 @@ def save_to_database(
     config_class=None,
     current=True,
     initialization_method="surface",
+    deviceNFP=1,
+    deviceDescription=None,
+    device_stell_sym=False,
     copy=False,
 ):
     """Load a DESC equilibrium and upload it to the database.
@@ -451,6 +455,7 @@ def save_to_database(
     zip_upload_button_id = "zipToUpload"
     csv_upload_button_id = "descToUpload"
     cfg_upload_button_id = "configToUpload"
+    device_upload_button_id = "deviceToUpload"
     confirm_button_id = "confirmDesc"
 
     # Check input files, if there isn't any create automatically
@@ -478,12 +483,16 @@ def save_to_database(
 
     csv_filename = "desc_runs.csv"
     config_csv_filename = "configurations.csv"
+    device_csv_filename = "devices_and_concepts.csv"
     if os.path.exists(csv_filename):
         os.remove(csv_filename)
         print(f"Previous {csv_filename} has been deleted.")
     if os.path.exists(config_csv_filename):
         os.remove(config_csv_filename)
         print(f"Previous {config_csv_filename} has been deleted.")
+    if os.path.exists(device_csv_filename):
+        os.remove(device_csv_filename)
+        print(f"Previous {device_csv_filename} has been deleted.")
 
     print("Creating desc_runs.csv and configurations.csv...")
     desc_to_csv(
@@ -499,6 +508,32 @@ def save_to_database(
         user_created=user,
         initialization_method=initialization_method,
     )
+
+    if isDeviceNew:
+        if (
+            deviceid is not None
+            and config_class is not None
+            and deviceDescription is not None
+            and deviceNFP is not None
+            and device_stell_sym is not None
+            and configid is not None
+        ):
+            print("Creating devices_and_concepts.csv...")
+            device_or_concept_to_csv(
+                name=configid,
+                device_class=config_class,
+                NFP=deviceNFP,
+                description=deviceDescription,
+                stell_sym=device_stell_sym,
+                deviceid=deviceid,
+                user_created=user,
+                user_updated=user,
+            )
+        else:
+            raise ValueError(
+                "If the device is new, deviceid, config_class, deviceDescription, "
+                + "deviceNFP, and device_stell_sym must be provided."
+            )
 
     print("Uploading to database...\n")
     driver = get_driver()
@@ -522,6 +557,13 @@ def save_to_database(
             EC.presence_of_element_located((By.ID, cfg_upload_button_id))
         )
         file_input3.send_keys(os.path.abspath(config_csv_filename))
+
+        # Upload the csv file if the device is new
+        if isDeviceNew:
+            file_input4 = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, device_upload_button_id))
+            )
+            file_input4.send_keys(os.path.abspath(device_csv_filename))
 
         # Confirm the upload
         confirm_button = WebDriverWait(driver, 10).until(
@@ -553,6 +595,8 @@ def save_to_database(
             os.remove(csv_filename)
             os.remove(config_csv_filename)
             os.remove(inputfilename)
+            if isDeviceNew:
+                os.remove(device_csv_filename)
 
 
 def desc_to_csv(  # noqa
@@ -855,6 +899,8 @@ def device_or_concept_to_csv(  # noqa
     description=None,
     stell_sym=False,
     deviceid=None,
+    user_created=None,
+    user_updated=None,
 ):
     """Save DESC as a csv with relevant information.
 
@@ -888,6 +934,14 @@ def device_or_concept_to_csv(  # noqa
 
     devices_and_concepts["description"] = description
     devices_and_concepts["deviceid"] = deviceid
+    if user_created is not None:
+        devices_and_concepts["user_created"] = user_created
+    if user_updated is not None:
+        devices_and_concepts["user_updated"] = user_updated
+
+    today = date.today()
+    devices_and_concepts["date_created"] = today
+    devices_and_concepts["date_updated"] = today
 
     csv_columns_desc_runs = list(devices_and_concepts.keys())
     csv_columns_desc_runs.sort()

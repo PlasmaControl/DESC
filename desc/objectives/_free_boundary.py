@@ -462,12 +462,11 @@ class BoundaryError(_Objective):
         if self._source_grid is None:
             # for axisymmetry we still need to know about toroidal effects, so its
             # cheapest to pretend there are extra field periods
-            source_NFP = eq.NFP if eq.N > 0 else 64
             source_grid = LinearGrid(
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
-                NFP=source_NFP,
+                NFP=int(eq.NFP) if eq.N > 0 else 64,
                 sym=False,
             )
         else:

@@ -739,6 +739,7 @@ class _Objective(IOAble, ABC):
     _equilibrium = False
     _io_attrs_ = [
         "_target",
+        "_bounds",
         "_weight",
         "_name",
         "_normalize",
@@ -857,14 +858,12 @@ class _Objective(IOAble, ABC):
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):
+            grid = self._constants["transforms"]["grid"]
             if self._coordinates == "rtz":
-                w = self._constants["transforms"]["grid"].weights
-                w *= jnp.sqrt(self._constants["transforms"]["grid"].num_nodes)
+                w = grid.weights
+                w *= jnp.sqrt(grid.num_nodes)
             elif self._coordinates == "r":
-                w = self._constants["transforms"]["grid"].compress(
-                    self._constants["transforms"]["grid"].spacing[:, 0],
-                    surface_label="rho",
-                )
+                w = grid.compress(grid.spacing[:, 0], surface_label="rho")
                 w = jnp.sqrt(w)
             else:
                 w = jnp.ones((self.dim_f,))

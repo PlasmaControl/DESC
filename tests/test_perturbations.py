@@ -174,9 +174,9 @@ def test_optimal_perturb():
 
     assert eq2.is_nested()
     # recompute surface from R_lmn etc.
-    surf1 = eq1.get_surface_at(1)
+    surf1 = eq2.get_surface_at(1)
     # this is the surface from perturbed coefficients
-    surf2 = eq1.surface
+    surf2 = eq2.surface
 
     np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-12, rtol=1e-12)

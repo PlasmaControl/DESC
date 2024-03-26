@@ -14,7 +14,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import zernike_radial, zernike_radial_coeffs
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, flatten_list, setdefault, unique_list
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -110,6 +110,7 @@ class FixParameter(_FixedObjective):
         normalize_target=False,
         name="Fixed parameter",
     ):
+        # TODO: assert that `thing` is not of type `OptimizableCollection`
         self._target_from_user = target
         self._params = params
         self._indices = indices
@@ -160,8 +161,8 @@ class FixParameter(_FixedObjective):
         errorif(
             len(self._params) != len(self._indices),
             ValueError,
-            f"not enough indices ({len(self._indices)}) "
-            + f"for params ({len(self._params)})",
+            f"Unequal number of indices ({len(self._indices)}) "
+            + f"and params ({len(self._params)}).",
         )
         for idx, par in zip(self._indices, self._params):
             if isinstance(idx, bool) and idx:
@@ -207,6 +208,182 @@ class FixParameter(_FixedObjective):
         """
         return jnp.concatenate(
             [params[par][self._indices[par]] for par in self._params]
+        )
+
+
+class FixCollectionParameters(_FixedObjective):
+    """Fix specific degrees of freedom associated with a given OptimizableCollection.
+
+    Parameters
+    ----------
+    thing : OptimizableCollection
+        Object whose degrees of freedom are being fixed.
+    params : str or list of str
+        Names of parameters to fix. Defaults to all parameters.
+    index : array-like or list of array-like
+        Indices to fix for each parameter in params. Use True to fix all indices.
+    target : dict of {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Should have the same tree structure as thing.params. Defaults to things.params.
+    bounds : tuple of dict {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Should have the same tree structure as thing.params.
+    weight : dict of {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Should be a scalar or have the same tree structure as thing.params.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Has no effect for this objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(~)"
+    _print_value_fmt = "Fixed parameters error: {:10.3e} "
+
+    def __init__(
+        self,
+        thing,
+        params=None,
+        indices=True,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name="Fixed parameters",
+    ):
+        errorif(
+            not hasattr(thing, "__len__"),
+            ValueError,
+            f"Thing must be of type `OptimizableCollection`; got {thing}.",
+        )
+        self._target_from_user = target
+        self._params = params
+        self._indices = indices
+        super().__init__(
+            things=thing,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        thing = self.things[0]
+        thing_idx = range(len(thing))  # indices of things in OptimizableCollection
+        params = setdefault(self._params, thing.optimizable_params)
+
+        if not isinstance(params, (list, tuple)):
+            params = [params]
+        if not all([isinstance(par, (list, tuple)) for par in params]):
+            params = [params for _ in thing_idx]
+        for k in thing_idx:
+            for par in params[k]:
+                errorif(
+                    par not in unique_list(flatten_list(thing.optimizable_params))[0],
+                    ValueError,
+                    f"Parameter {par} not found in optimizable_parameters: "
+                    + f"{thing.optimizable_params}.",
+                )
+        self._params = params
+
+        # replace indices=True with actual indices
+        if isinstance(self._indices, bool) and self._indices:
+            self._indices = [
+                [np.arange(thing.dimensions[k][par]) for par in self._params[k]]
+                for k in thing_idx
+            ]
+        # make sure its iterable if only a scalar was passed in
+        if not isinstance(self._indices, (list, tuple)):
+            self._indices = [self._indices]
+        # replace idx=True with array of all indices, throwing an error if the length
+        # of indices is different from number of params
+        errorif(
+            len(sum(self._params, [])) != len(sum(self._indices, [])),
+            ValueError,
+            f"Unequal number of indices ({len(self._indices)}) "
+            + f"and params ({len(self._params)}).",
+        )
+        indices = []
+        for k in thing_idx:
+            indices.append({})
+            for idx, par in zip(self._indices[k], self._params[k]):
+                if isinstance(idx, bool) and idx:
+                    idx = np.arange(thing.dimensions[k][par])
+                indices[k][par] = np.atleast_1d(idx)
+        self._indices = indices
+        self._dim_f = sum(t.size for t in self._indices[k].values() for k in thing_idx)
+
+        # FIXME: I don't think custom target/bounds works yet (default target is ok)
+        default_target = [
+            {par: thing.params_dict[k][par][self._indices[k][par]] for par in params[k]}
+            for k in thing_idx
+        ]
+        default_bounds = None
+        target, bounds = self._parse_target_from_user(
+            self._target_from_user, default_target, default_bounds, indices
+        )
+        if target:
+            self.target = jnp.concatenate(
+                [
+                    jnp.concatenate([target[k][par] for par in params[k]])
+                    for k in thing_idx
+                ]
+            )
+            self.bounds = None
+        else:
+            self.target = None
+            self.bounds = (
+                jnp.concatenate([bounds[0][par] for par in params]),
+                jnp.concatenate([bounds[1][par] for par in params]),
+            )
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed degree of freedom errors.
+
+        Parameters
+        ----------
+        params : list of dict
+            List of dictionaries of degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed degree of freedom errors.
+
+        """
+        return jnp.concatenate(
+            [
+                jnp.concatenate(
+                    [params[k][par][self._indices[k][par]] for par in self._params[k]]
+                )
+                for k in range(len(self._params))
+            ]
         )
 
 
@@ -433,7 +610,6 @@ class AxisRSelfConsistency(_Objective):
         eq,
         name="axis R self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -520,7 +696,6 @@ class AxisZSelfConsistency(_Objective):
         eq,
         name="axis Z self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -992,7 +1167,6 @@ class FixThetaSFL(_Objective):
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq, name="Theta SFL"):
-
         super().__init__(things=eq, target=0, weight=1, name=name)
 
     def build(self, use_jit=False, verbose=1):
@@ -1128,8 +1302,7 @@ class FixAxisR(_FixedObjective):
                 modes.view(dtype),
                 return_indices=True,
             )
-            # rearrange modes to match order of eq.axis.R_basis.modes
-            # and eq.axis.R_n,
+            # rearrange modes to match order of eq.axis.R_basis.modes and eq.axis.R_n,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.axis.R_basis.modes[idx, :])
 
@@ -1267,8 +1440,7 @@ class FixAxisZ(_FixedObjective):
                 modes.view(dtype),
                 return_indices=True,
             )
-            # rearrange modes to match order of eq.axis.Z_basis.modes
-            # and eq.axis.Z_n,
+            # rearrange modes to match order of eq.axis.Z_basis.modes and eq.axis.Z_n,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.axis.Z_basis.modes[idx, :])
 
@@ -1393,21 +1565,20 @@ class FixModeR(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
-            idx = np.arange(eq.R_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.R_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.R_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1419,7 +1590,7 @@ class FixModeR(_FixedObjective):
         self._dim_f = modes_idx.size
 
         self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.R_lmn[idx], None, modes_idx
+            self._target_from_user, eq.R_lmn[self._idx], None, modes_idx
         )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -1522,21 +1693,20 @@ class FixModeZ(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
-            idx = np.arange(eq.Z_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.Z_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.Z_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1548,7 +1718,7 @@ class FixModeZ(_FixedObjective):
         self._dim_f = modes_idx.size
 
         self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.Z_lmn[idx], None, modes_idx
+            self._target_from_user, eq.Z_lmn[self._idx], None, modes_idx
         )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -1652,21 +1822,20 @@ class FixModeLambda(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
-            idx = np.arange(eq.L_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.L_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.L_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1678,7 +1847,7 @@ class FixModeLambda(_FixedObjective):
         self._dim_f = modes_idx.size
 
         self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.L_lmn[idx], None, modes_idx
+            self._target_from_user, eq.L_lmn[self._idx], None, modes_idx
         )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -1756,7 +1925,6 @@ class FixSumModesR(_FixedObjective):
         modes=True,
         name="Fix Sum Modes R",
     ):
-
         errorif(
             modes is None or modes is False,
             ValueError,
@@ -1816,8 +1984,7 @@ class FixSumModesR(_FixedObjective):
                 return_indices=True,
             )
             self._idx = idx
-            # rearrange modes and weights to match order of eq.R_basis.modes
-            # and eq.R_lmn,
+            # rearrange modes & weights to match order of eq.R_basis.modes and eq.R_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.R_basis.modes[idx, :])
             if self._sum_weights is not None:
@@ -1983,8 +2150,7 @@ class FixSumModesZ(_FixedObjective):
                 return_indices=True,
             )
             self._idx = idx
-            # rearrange modes and weights to match order of eq.Z_basis.modes
-            # and eq.Z_lmn,
+            # rearrange modes & weights to match order of eq.Z_basis.modes and eq.Z_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
             if self._sum_weights is not None:
@@ -2238,7 +2404,7 @@ class _FixProfile(_FixedObjective, ABC):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2336,7 +2502,7 @@ class FixPressure(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2442,7 +2608,7 @@ class FixAnisotropy(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -2546,7 +2712,7 @@ class FixIota(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices.
         corresponding to knots for a SplineProfile).
-        Must len(target) = len(weight) = len(modes).
+        Must len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2649,7 +2815,7 @@ class FixCurrent(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2755,7 +2921,7 @@ class FixElectronTemperature(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2861,7 +3027,7 @@ class FixElectronDensity(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2967,7 +3133,7 @@ class FixIonTemperature(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -3074,7 +3240,7 @@ class FixAtomicNumber(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -3433,3 +3599,320 @@ class FixCurveRotation(_FixedObjective):
 
         """
         return params["rotmat"]
+
+
+class FixOmniWell(_FixedObjective):
+    """Fixes OmnigenousField.B_lm coefficients.
+
+    Parameters
+    ----------
+    field : OmnigenousField
+        Field that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses field value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    indices : ndarray or bool, optional
+        indices of the feld.B_lm array to fix.
+        Must have len(target) = len(weight) = len(indices).
+        If True/False uses all/none of the field.B_lm indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _target_arg = "B_lm"
+    _units = "(T)"
+    _print_value_fmt = "Fixed omnigenity well error: {:10.3e} "
+
+    def __init__(
+        self,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        indices=True,
+        name="fixed omnigenity well",
+    ):
+        self._field = field
+        self._indices = indices
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=field,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        field = self.things[0]
+
+        # find indices to fix
+        if self._indices is False or self._indices is None:  # no indices to fix
+            self._idx = np.array([], dtype=int)
+        elif self._indices is True:  # all indices
+            self._idx = np.arange(np.size(self._field.B_lm))
+        else:  # specified indices
+            self._idx = np.atleast_1d(self._indices)
+
+        self._dim_f = self._idx.size
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, field.B_lm[self._idx], None, self._idx
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed omnigenity well error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed well shape error.
+
+        """
+        return params["B_lm"][self._idx]
+
+
+class FixOmniMap(_FixedObjective):
+    """Fixes OmnigenousField.x_lmn coefficients.
+
+    Parameters
+    ----------
+    field : OmnigenousField
+        Field that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses field value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    indices : ndarray or bool, optional
+        indices of the feld.x_lmn array to fix.
+        Must have len(target) = len(weight) = len(indices).
+        If True/False uses all/none of the field.x_lmn indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _target_arg = "x_lmn"
+    _units = "(rad)"
+    _print_value_fmt = "Fixed omnigenity map error: {:10.3e} "
+
+    def __init__(
+        self,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        indices=True,
+        name="fixed omnigenity map",
+    ):
+        self._field = field
+        self._indices = indices
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=field,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        field = self.things[0]
+
+        # find indices to fix
+        if self._indices is False or self._indices is None:  # no indices to fix
+            self._idx = np.array([], dtype=int)
+        elif self._indices is True:  # all indices
+            self._idx = np.arange(np.size(self._field.x_lmn))
+        else:  # specified indices
+            self._idx = np.atleast_1d(self._indices)
+
+        self._dim_f = self._idx.size
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, field.x_lmn[self._idx], None, self._idx
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed omnigenity map error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed omnigenity map error.
+
+        """
+        return params["x_lmn"][self._idx]
+
+
+class FixOmniBmax(_FixedObjective):
+    """Ensures the B_max contour is straight in Boozer coordinates.
+
+    Parameters
+    ----------
+    field : OmnigenousField
+        Field that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses field value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _target_arg = "x_lmn"
+    _fixed = False  # not "diagonal", since it is fixing a sum
+    _units = "(rad)"
+    _print_value_fmt = "Fixed omnigenity B_max error: {:10.3e} "
+
+    def __init__(
+        self,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name="fixed omnigenity B_max",
+    ):
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=field,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        field = self.things[0]
+
+        basis = field.x_basis
+        self._dim_f = int(basis.num_modes / (basis.M + 1))
+
+        self._A = np.zeros((self._dim_f, basis.num_modes))
+        m0_modes = basis.modes[np.nonzero(basis.modes[:, 1] == 0)[0]]
+        for i, (l, m, n) in enumerate(m0_modes):
+            idx_0 = np.nonzero((basis.modes == [l, m, n]).all(axis=1))[0]
+            idx_m = np.nonzero(
+                np.logical_and(
+                    (basis.modes[:, (0, 2)] == [l, n]).all(axis=1),
+                    np.logical_and((basis.modes[:, 1] % 2 == 0), basis.modes[:, 1] > 0),
+                )
+            )[0]
+            mm = basis.modes[idx_m, 2]
+            self._A[i, idx_0] = 1
+            self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, 0, None, np.array([0])
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed omnigenity B_max error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed omnigenity B_max error.
+
+        """
+        f = jnp.dot(self._A, params["x_lmn"])
+        return f

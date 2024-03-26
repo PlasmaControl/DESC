@@ -89,7 +89,7 @@ def _unjittable(x):
 
 
 def _make_hashable(x):
-    # turn unhashable ndarray of ints nto a hashable tuple
+    # turn unhashable ndarray of ints into a hashable tuple
     if hasattr(x, "shape"):
         return ("ndarray", x.shape, tuple(x.flatten()))
     return x
@@ -114,16 +114,29 @@ class _AutoRegisterPytree(type):
                 # use subclass method
                 return obj.tree_flatten()
 
-            children = {
-                key: val for key, val in obj.__dict__.items() if not _unjittable(val)
-            }
-            aux_data = tuple(
-                [
-                    (key, _make_hashable(val))
-                    for key, val in obj.__dict__.items()
-                    if _unjittable(val)
-                ]
-            )
+            # in jax parlance, "children" of a pytree are things like arrays etc
+            # that get traced and can change. "aux_data" is metadata that is assumed
+            # static and must be hashable. By default we assume floating point arrays
+            # are children, and int/bool arrays are metadata that should be static
+            children = {}
+            aux_data = []
+
+            # this allows classes to override the default static/dynamic stuff
+            # if they need certain floats to be static or ints to by dynamic etc.
+            static_attrs = getattr(obj, "_static_attrs", [])
+            dynamic_attrs = getattr(obj, "_dynamic_attrs", [])
+            assert set(static_attrs).isdisjoint(set(dynamic_attrs))
+
+            for key, val in obj.__dict__.items():
+                if key in static_attrs:
+                    aux_data += [(key, _make_hashable(val))]
+                elif key in dynamic_attrs:
+                    children[key] = val
+                elif _unjittable(val):
+                    aux_data += [(key, _make_hashable(val))]
+                else:
+                    children[key] = val
+
             return ((children,), aux_data)
 
         def _generic_tree_unflatten(aux_data, children):

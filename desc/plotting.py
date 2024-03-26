@@ -21,6 +21,11 @@ from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
+from desc.singularities import (
+    DFTInterpolator,
+    FFTInterpolator,
+    virtual_casing_biot_savart,
+)
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -599,6 +604,10 @@ def plot_2d(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
+        * ``field``: MagneticField, a magnetic field with which to calculate Bn on
+          the surface, must be provided if Bn is entered as the variable to plot.
+        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
+          from which to calculate Bn, by default None.
 
     Returns
     -------
@@ -626,8 +635,62 @@ def plot_2d(
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
+    component = kwargs.pop("component", None)
+    if name != "B*n":
+        data, label = _compute(
+            eq,
+            name,
+            grid,
+            component=component,
+        )
+    else:
+        field = kwargs.pop("field", None)
+        errorif(
+            field is None,
+            ValueError,
+            "If Bn is entered as the variable to plot, a magnetic field"
+            " must be provided.",
+        )
+        field_grid = kwargs.pop("field_grid", None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data, _ = field.compute_Bnormal(eq, eval_grid=grid, source_grid=field_grid)
+            vc_data = eq.compute(
+                [
+                    "K_vc",
+                    "B",
+                    "R",
+                    "phi",
+                    "Z",
+                    "e^rho",
+                    "n_rho",
+                    "|e_theta x e_zeta|",
+                ],
+                grid=grid,
+            )
+            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            s = k - 1
+            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            q = k // 2 + int(np.sqrt(k))
+            try:
+                interpolator = FFTInterpolator(grid, grid, s, q)
+            except AssertionError:
+                interpolator = DFTInterpolator(grid, grid, s, q)
+            if hasattr(eq.surface, "Phi_mn"):
+                vc_data["K_vc"] += eq.surface.compute("K", grid=grid)["K"]
+            Bplasma = virtual_casing_biot_savart(
+                vc_data,
+                vc_data,
+                interpolator,
+            )
+            # need extra factor of B/2 bc we're evaluating on plasma surface
+            Bplasma = Bplasma + vc_data["B"] / 2
+            data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+        label = r"$|\mathbf{B} \cdot \hat{n}| ~(\mathrm{T})$"
+        # get Bn from plasma contribution
+
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
@@ -812,6 +875,10 @@ def plot_3d(
         * ``cmap``: string denoting colormap to use.
         * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
+        * ``field``: MagneticField, a magnetic field with which to calculate Bn on
+          the surface, must be provided if Bn is entered as the variable to plot.
+        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
+          from which to calculate Bn, by default None.
 
     Returns
     -------
@@ -851,17 +918,62 @@ def plot_3d(
     levels = kwargs.pop("levels", None)
     component = kwargs.pop("component", None)
 
+    if name != "B*n":
+        data, label = _compute(
+            eq,
+            name,
+            grid,
+            component=component,
+        )
+    else:
+        field = kwargs.pop("field", None)
+        errorif(
+            field is None,
+            ValueError,
+            "If Bn is entered as the variable to plot, a magnetic field"
+            " must be provided.",
+        )
+        field_grid = kwargs.pop("field_grid", None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data, _ = field.compute_Bnormal(eq, eval_grid=grid, source_grid=field_grid)
+            vc_data = eq.compute(
+                [
+                    "K_vc",
+                    "B",
+                    "R",
+                    "phi",
+                    "Z",
+                    "e^rho",
+                    "n_rho",
+                    "|e_theta x e_zeta|",
+                ],
+                grid=grid,
+            )
+            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            s = k - 1
+            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            q = k // 2 + int(np.sqrt(k))
+            try:
+                interpolator = FFTInterpolator(grid, grid, s, q)
+            except AssertionError:
+                interpolator = DFTInterpolator(grid, grid, s, q)
+            if hasattr(eq.surface, "Phi_mn"):
+                vc_data["K_vc"] += eq.surface.compute("K", grid=grid)["K"]
+            Bplasma = virtual_casing_biot_savart(
+                vc_data,
+                vc_data,
+                interpolator,
+            )
+            # need extra factor of B/2 bc we're evaluating on plasma surface
+            Bplasma = Bplasma + vc_data["B"] / 2
+            data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
+        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+        label = r"$|\mathbf{B} \cdot \hat{n}| ~(\mathrm{T})$"
     errorif(
         len(kwargs) != 0,
         ValueError,
         f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
-    )
-
-    data, label = _compute(
-        eq,
-        name,
-        grid,
-        component=component,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

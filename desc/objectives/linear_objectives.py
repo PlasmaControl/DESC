@@ -14,7 +14,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import zernike_radial, zernike_radial_coeffs
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, flatten_list, setdefault, unique_list
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -261,7 +261,11 @@ class FixCollectionParameters(_FixedObjective):
         normalize_target=False,
         name="Fixed parameters",
     ):
-        # TODO: assert that `thing` is of type `OptimizableCollection`
+        errorif(
+            not hasattr(thing, "__len__"),
+            ValueError,
+            f"Thing must be of type `OptimizableCollection`; got {thing}.",
+        )
         self._target_from_user = target
         self._params = params
         self._indices = indices
@@ -287,24 +291,28 @@ class FixCollectionParameters(_FixedObjective):
 
         """
         thing = self.things[0]
+        thing_idx = range(len(thing))  # indices of things in OptimizableCollection
         params = setdefault(self._params, thing.optimizable_params)
 
         if not isinstance(params, (list, tuple)):
             params = [params]
-        for par in params:
-            errorif(
-                par not in thing.optimizable_params,  # FIXME: can't search nested list
-                ValueError,
-                f"parameter {par} not found in optimizable_parameters: "
-                + f"{thing.optimizable_params}",
-            )
+        if not all([isinstance(par, (list, tuple)) for par in params]):
+            params = [params for _ in thing_idx]
+        for k in thing_idx:
+            for par in params[k]:
+                errorif(
+                    par not in unique_list(flatten_list(thing.optimizable_params))[0],
+                    ValueError,
+                    f"Parameter {par} not found in optimizable_parameters: "
+                    + f"{thing.optimizable_params}.",
+                )
         self._params = params
 
         # replace indices=True with actual indices
         if isinstance(self._indices, bool) and self._indices:
             self._indices = [
                 [np.arange(thing.dimensions[k][par]) for par in self._params[k]]
-                for k in range(len(thing))
+                for k in thing_idx
             ]
         # make sure its iterable if only a scalar was passed in
         if not isinstance(self._indices, (list, tuple)):
@@ -318,21 +326,19 @@ class FixCollectionParameters(_FixedObjective):
             + f"and params ({len(self._params)}).",
         )
         indices = []
-        for k in range(len(thing)):
+        for k in thing_idx:
             indices.append({})
             for idx, par in zip(self._indices[k], self._params[k]):
                 if isinstance(idx, bool) and idx:
                     idx = np.arange(thing.dimensions[k][par])
                 indices[k][par] = np.atleast_1d(idx)
         self._indices = indices
-        self._dim_f = sum(
-            t.size for t in self._indices[k].values() for k in range(len(thing))
-        )
+        self._dim_f = sum(t.size for t in self._indices[k].values() for k in thing_idx)
 
         # FIXME: I don't think custom target/bounds works yet (default target is ok)
         default_target = [
             {par: thing.params_dict[k][par][self._indices[k][par]] for par in params[k]}
-            for k in range(len(thing))
+            for k in thing_idx
         ]
         default_bounds = None
         target, bounds = self._parse_target_from_user(
@@ -342,7 +348,7 @@ class FixCollectionParameters(_FixedObjective):
             self.target = jnp.concatenate(
                 [
                     jnp.concatenate([target[k][par] for par in params[k]])
-                    for k in range(len(thing))
+                    for k in thing_idx
                 ]
             )
             self.bounds = None

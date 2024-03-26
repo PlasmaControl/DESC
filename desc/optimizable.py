@@ -4,6 +4,8 @@ import inspect
 import warnings
 from abc import ABC
 
+import numpy as np
+
 from desc.backend import jnp
 
 
@@ -199,7 +201,7 @@ class OptimizableCollection(Optimizable):
             list of dictionary of ndarray of optimizable parameters.
 
         """
-        split_idx = jnp.cumsum(jnp.array([s.dim_x for s in self]))
+        split_idx = np.cumsum(np.array([s.dim_x for s in self]))  # must be np not jnp
         xs = jnp.split(x, split_idx)
         params = [s.unpack_params(xi) for s, xi in zip(self, xs)]
         return params

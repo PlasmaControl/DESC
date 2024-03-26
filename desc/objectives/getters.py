@@ -1,5 +1,7 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
+from desc.utils import flatten_list, unique_list
+
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
     AxisRSelfConsistency,
@@ -213,12 +215,8 @@ def maybe_add_self_consistency(thing, constraints):
         return any([isinstance(t, cls) for t in things])
 
     # Equilibrium
-    if (
-        hasattr(thing, "Ra_n")
-        and hasattr(thing, "Za_n")
-        and hasattr(thing, "Rb_lmn")
-        and hasattr(thing, "Zb_lmn")
-        and hasattr(thing, "L_lmn")
+    if {"Rb_lmn", "Zb_lmn", "L_lmn", "Ra_n", "Za_n"} <= set(
+        unique_list(flatten_list(thing.optimizable_params))[0]
     ):
         if not _is_any_instance(constraints, BoundaryRSelfConsistency):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
@@ -232,7 +230,10 @@ def maybe_add_self_consistency(thing, constraints):
             constraints += (AxisZSelfConsistency(eq=thing),)
 
     # Curve
-    elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):
+    # FIXME: make this work for CoilSet
+    elif not hasattr(thing, "__len__") and {"shift", "rotmat"} <= set(
+        unique_list(flatten_list(thing.optimizable_params))[0]
+    ):
         if not _is_any_instance(constraints, FixCurveShift):
             constraints += (FixCurveShift(curve=thing),)
         if not _is_any_instance(constraints, FixCurveRotation):

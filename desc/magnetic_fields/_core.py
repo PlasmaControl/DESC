@@ -983,6 +983,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
         "_currents",
         "_NFP",
     ]
+    # by default floats are considered dynamic but for this to work with jit these
+    # need to be static
+    _static_attrs = ["_extrap", "_period"]
 
     def __init__(
         self, R, phi, Z, BR, Bphi, BZ, currents=1.0, NFP=1, method="cubic", extrap=False
@@ -1208,7 +1211,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             else:  # "raw"
                 extcur = 1  # coil current scaling factor
         nextcur = int(mgrid["nextcur"][()])  # number of coils
-        extcur = np.broadcast_to(extcur, nextcur)
+        extcur = np.broadcast_to(extcur, nextcur).astype(float)
 
         # compute grid knots in cylindrical coordinates
         ir = int(mgrid["ir"][()])  # number of grid points in the R coordinate
@@ -1281,29 +1284,6 @@ class SplineMagneticField(_MagneticField, Optimizable):
             method=method,
             extrap=extrap,
         )
-
-    def tree_flatten(self):
-        """Convert DESC objects to JAX pytrees."""
-        # the default flattening method in the IOAble base class assumes all floats
-        # are non-static, but for the periodic BC to work we need the period to be
-        # a static value, so we override the default tree flatten/unflatten method
-        # so that we can pass a SplineMagneticField into a jitted function such as
-        # an objective.
-        static = ["_method", "_extrap", "_period", "_axisym"]
-        children = {key: val for key, val in self.__dict__.items() if key not in static}
-        aux_data = tuple(
-            [(key, val) for key, val in self.__dict__.items() if key in static]
-        )
-        return ((children,), aux_data)
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        """Recreate a DESC object from JAX pytree."""
-        obj = cls.__new__(cls)
-        obj.__dict__.update(children[0])
-        for kv in aux_data:
-            setattr(obj, kv[0], kv[1])
-        return obj
 
 
 class ScalarPotentialField(_MagneticField):

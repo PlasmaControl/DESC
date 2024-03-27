@@ -14,7 +14,6 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
-from desc.optimizable import Optimizable, optimizable_parameter
 from desc.equilibrium import Equilibrium
 from desc.plotting import plot_section, plot_surfaces
 
@@ -50,7 +49,8 @@ def init_fn_learning(
     # combine objectives
     objective = ObjectiveFunction((objective_force,))  # objective_jac,
 
-    # this fixes the rlmn and zlmn at each iteration step, which changes the fixed point during training = very bad
+    # this fixes the rlmn and zlmn at each iteration step,
+    # which changes the fixed point during training = very bad
     # constraint = ObjectiveFunction(
     #     (BoundaryRSelfConsistency(eq), BoundaryZSelfConsistency(eq))
     # )
@@ -70,7 +70,8 @@ def init_fn_learning(
     # get random seed for module init
     init_key = random.PRNGKey(seed)
 
-    # get the initial guess encoded in the spectral domain with linear constraint projection
+    # get the initial guess encoded in the spectral
+    # domain with linear constraint projection
     # we predict in spectral with x = x_nn + x_init
     x_init = objective.x()
 
@@ -216,12 +217,13 @@ if __name__ == "__main__":
     #### Some tests:
 
     """ multiMLP with or without scaling, [32, 32], 100 steps, SGD
-    without:     2.593e-01      4.783e-04      1.728e-04      3.284e+00 
-    with:        4.098e-01      5.533e-04      3.687e-04      1.158e+00   but more stable decrease
+    without:     2.593e-01      4.783e-04      1.728e-04      3.284e+00
+    with:        4.098e-01      5.533e-04      3.687e-04      1.158e+00
+        "with" has more stable decrease
     """
 
     """ multiMLP with SGD or with BFGS, [32, 32], 100 steps, scaling=False
-    SGD:         2.593e-01      4.783e-04      1.728e-04      3.284e+00 
+    SGD:         2.593e-01      4.783e-04      1.728e-04      3.284e+00
     BFGS:        takes 2 long
     """
 
@@ -231,17 +233,17 @@ if __name__ == "__main__":
     """
 
     """ singleMLP with SGD or with BFGS, [32, 32], 100 steps, scaling=True
-    SGD:         4.246e-01      5.435e-04      3.158e-04      1.305e+00   
+    SGD:         4.246e-01      5.435e-04      3.158e-04      1.305e+00
     BFGS:
-    BFGS with [6,6]:       divergence 
+    BFGS with [6,6]:       divergence
     """
 
     """ singleMLP with or without scaling, [32, 32], 100 steps, SGD
     without:    divergence!?
-    with:       4.246e-01      5.435e-04      3.158e-04      1.305e+00   
+    with:       4.246e-01      5.435e-04      3.158e-04      1.305e+00
     """
 
     """ both with scaling , [32, 32], 25 steps, SGD
-    multiMLP after 25 steps: 4.826e-01      1.902e-03      8.368e-04      4.343e+00 
-    singleMLP after 25 steps: 4.936e-01      2.484e-03      7.290e-04      5.591e+00 
+    multiMLP after 25 steps: 4.826e-01      1.902e-03      8.368e-04      4.343e+00
+    singleMLP after 25 steps: 4.936e-01      2.484e-03      7.290e-04      5.591e+00
     """

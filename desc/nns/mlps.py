@@ -50,7 +50,9 @@ class MultiMLP(SomeNN):
     # projection of scaling factors
     x_scale: jax.Array
 
-    dimy: int  # shape of y prediction which desc handles s.t. boundary is always satisfied
+    # shape of y prediction which desc handles s.t.
+    # boundary is always satisfied
+    dimy: int
     name: str = "multiMLP"
 
     @nn.compact
@@ -129,9 +131,11 @@ class SingleMLP(SomeNN):
     """
     one single MLP one for each of Rlmn, llmn, Zlmn
 
-    * flattened(Rb_lmn, random_uniform_like(Zb_lmn)*0.05, Zb_lmn)  -> flattened(R_lmn, L_lmn, Z_lmn)
+    * flattened(Rb_lmn, random_uniform_like(Zb_lmn)*0.05, Zb_lmn)
+        -> flattened(R_lmn, L_lmn, Z_lmn)
 
-    this is done because objective.x() might shuffle the coefficients so we need to relax
+    this is done because objective.x() might shuffle
+      the coefficients so we need to relax
     the explicit connection between boundary and whole-volume modes
     """
 
@@ -140,7 +144,7 @@ class SingleMLP(SomeNN):
     x_init: jax.Array
     # projection of scaling factors
     x_scale: jax.Array
-    dimy: int  # shape of y prediction which desc handles s.t. boundary is always satisfied
+    dimy: int
     name: str = "singleMLP"
 
     @nn.compact
@@ -200,4 +204,5 @@ class SingleMLP(SomeNN):
         return module_config
 
 
-# class stackedMLP(SomeNN):  # predict lower order modes and higher order modes with separate nns todo
+# class stackedMLP(SomeNN):  # predict lower order modes and
+# higher order modes with separate nns todo

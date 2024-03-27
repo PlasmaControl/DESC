@@ -21,7 +21,6 @@ from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
-from desc.singularities import FFTInterpolator, virtual_casing_biot_savart
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -658,7 +657,8 @@ def plot_2d(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
 
-            if grid.endpoint is True:
+            if grid.endpoint:
+                print("changing grids")
                 # cannot use a grid with endpoint=True for FFT interpolator
                 vc_grid = LinearGrid(
                     theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
@@ -669,39 +669,10 @@ def plot_2d(
             else:
                 vc_grid = grid
             data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid
+                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
             )
-            vc_data = eq.compute(
-                [
-                    "K_vc",
-                    "B",
-                    "R",
-                    "phi",
-                    "Z",
-                    "e^rho",
-                    "n_rho",
-                    "|e_theta x e_zeta|",
-                ],
-                grid=vc_grid,
-            )
-
-            k = min(vc_grid.num_theta, vc_grid.num_zeta * vc_grid.NFP)
-            s = k - 1
-            k = min(vc_grid.num_theta, vc_grid.num_zeta * vc_grid.NFP)
-            q = k // 2 + int(np.sqrt(k))
-            interpolator = FFTInterpolator(vc_grid, vc_grid, s, q)
-            if hasattr(eq.surface, "Phi_mn"):
-                vc_data["K_vc"] += eq.surface.compute("K", grid=vc_grid)["K"]
-            Bplasma = virtual_casing_biot_savart(
-                vc_data,
-                vc_data,
-                interpolator,
-            )
-            # need extra factor of B/2 bc we're evaluating on plasma surface
-            Bplasma = Bplasma + vc_data["B"] / 2
-            data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
         data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint is True:
+        if grid.endpoint:
             data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
             data = np.vstack((data, data[0, :]))
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -961,7 +932,7 @@ def plot_3d(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
 
-            if grid.endpoint is True:
+            if grid.endpoint:
                 # cannot use a grid with endpoint=True for FFT interpolator
                 vc_grid = LinearGrid(
                     theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
@@ -972,39 +943,10 @@ def plot_3d(
             else:
                 vc_grid = grid
             data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid
+                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
             )
-            vc_data = eq.compute(
-                [
-                    "K_vc",
-                    "B",
-                    "R",
-                    "phi",
-                    "Z",
-                    "e^rho",
-                    "n_rho",
-                    "|e_theta x e_zeta|",
-                ],
-                grid=vc_grid,
-            )
-
-            k = min(vc_grid.num_theta, vc_grid.num_zeta * vc_grid.NFP)
-            s = k - 1
-            k = min(vc_grid.num_theta, vc_grid.num_zeta * vc_grid.NFP)
-            q = k // 2 + int(np.sqrt(k))
-            interpolator = FFTInterpolator(vc_grid, vc_grid, s, q)
-            if hasattr(eq.surface, "Phi_mn"):
-                vc_data["K_vc"] += eq.surface.compute("K", grid=vc_grid)["K"]
-            Bplasma = virtual_casing_biot_savart(
-                vc_data,
-                vc_data,
-                interpolator,
-            )
-            # need extra factor of B/2 bc we're evaluating on plasma surface
-            Bplasma = Bplasma + vc_data["B"] / 2
-            data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
         data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint is True:
+        if grid.endpoint:
             data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
             data = np.vstack((data, data[0, :]))
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -2936,7 +2878,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     plot_data["f_T"] = f_T
     plot_data["rho"] = rho
 
-    if log is True:
+    if log:
         if fB:
             ax.semilogy(
                 rho,

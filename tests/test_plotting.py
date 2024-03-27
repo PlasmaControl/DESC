@@ -1017,7 +1017,7 @@ def test_2d_plot_Bn():
         "B*n",
         field=ToroidalMagneticField(1, 1),
         field_grid=LinearGrid(M=10, N=10),
-        grid=LinearGrid(M=30, N=30, NFP=eq.NFP),
+        grid=LinearGrid(M=30, N=30, NFP=eq.NFP, endpoint=True),
     )
     return fig
 

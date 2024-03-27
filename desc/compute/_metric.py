@@ -144,9 +144,7 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
     # The limit eventually reduces to a form where the technique used to compute
     # lim |e_theta x e_zeta|_r can be applied.
     data["|e_theta x e_zeta|_rr"] = transforms["grid"].replace_at_axis(
-        safediv(
-            norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a
-        ),
+        safediv(norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a),
         lambda: safediv(dot(a_r, a_rr), norm_a_r),
     )
     return data
@@ -292,9 +290,7 @@ def _e_rho_x_e_theta_rr(params, transforms, profiles, data, **kwargs):
     # The limit eventually reduces to a form where the technique used to compute
     # lim |e_rho x e_theta|_r can be applied.
     data["|e_rho x e_theta|_rr"] = transforms["grid"].replace_at_axis(
-        safediv(
-            norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a
-        ),
+        safediv(norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a),
         lambda: safediv(dot(a_r, a_rr), norm_a_r),
     )
     return data

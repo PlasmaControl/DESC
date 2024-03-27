@@ -1,4 +1,5 @@
 """High order method for singular surface integrals, from Malhotra 2019."""
+
 from abc import ABC, abstractmethod
 
 import numpy as np

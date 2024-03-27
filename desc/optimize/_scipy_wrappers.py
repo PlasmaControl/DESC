@@ -353,7 +353,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     x_scale = "jac" if x_scale == "auto" else x_scale
-    fun, jac = objective.compute_scaled_error, objective.jac_scaled
+    fun, jac = objective.compute_scaled_error, objective.jac_scaled_error
     # need to use some "global" variables here
     fun_allx = []
     fun_allf = []

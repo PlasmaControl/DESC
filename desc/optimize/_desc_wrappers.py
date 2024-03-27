@@ -187,7 +187,7 @@ def _optimize_desc_aug_lagrangian_least_squares(
     result = lsq_auglag(
         lambda x, *c: objective.compute_scaled_error(x, c[0]),
         x0=x0,
-        jac=lambda x, *c: objective.jac_scaled(x, c[0]),
+        jac=lambda x, *c: objective.jac_scaled_error(x, c[0]),
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
         args=(objective.constants, constraint.constants if constraint else None),
@@ -270,7 +270,7 @@ def _optimize_desc_least_squares(
     result = lsqtr(
         objective.compute_scaled_error,
         x0=x0,
-        jac=objective.jac_scaled,
+        jac=objective.jac_scaled_error,
         args=(objective.constants,),
         x_scale=x_scale,
         ftol=stoptol["ftol"],

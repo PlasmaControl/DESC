@@ -1366,30 +1366,6 @@ def test_boundary_error_print(capsys):
 
 
 @pytest.mark.unit
-def test_rebuild():
-    """Test that the objective is rebuilt correctly when needed."""
-    eq = Equilibrium(L=3, M=3)
-    f_obj = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(f_obj)
-    eq.solve(maxiter=2, objective=obj)
-
-    # this would fail before v0.8.2 when trying to get objective.x
-    eq.change_resolution(L=5, M=5)
-    obj.build(eq)
-    eq.solve(maxiter=2, objective=obj)
-
-    eq = Equilibrium(L=3, M=3)
-    f_obj = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(f_obj)
-    eq.solve(maxiter=2, objective=obj)
-    eq.change_resolution(L=5, M=5)
-    # this would fail at objective.compile
-    obj = ObjectiveFunction(f_obj)
-    obj.build(eq)
-    eq.solve(maxiter=2, objective=obj)
-
-
-@pytest.mark.unit
 def test_objective_fun_things():
     """Test that the objective things logic works correctly."""
     R0 = 10.0

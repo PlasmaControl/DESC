@@ -1004,7 +1004,7 @@ class _Objective(IOAble, ABC):
 
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
-        return self._jac_scaled(*args, **kwargs)
+        return self._jac_scaled_error(*args, **kwargs)
 
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""

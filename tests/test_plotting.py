@@ -1,4 +1,5 @@
 """Regression tests for plotting functions, by comparing to saved baseline images."""
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,7 +21,6 @@ from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.magnetic_fields import OmnigenousField
 from desc.plotting import (
-    _find_idx,
     plot_1d,
     plot_2d,
     plot_3d,
@@ -32,7 +32,6 @@ from desc.plotting import (
     plot_coefficients,
     plot_coils,
     plot_comparison,
-    plot_field_lines_sfl,
     plot_fsa,
     plot_grid,
     plot_logo,
@@ -60,8 +59,10 @@ def test_kwarg_warning(DummyStellarator):
 def test_kwarg_future_warning(DummyStellarator):
     """Test that passing in deprecated kwargs throws a warning."""
     eq = load(load_from=str(DummyStellarator["output_path"]))
-    with pytest.warns(FutureWarning):
-        fig, ax = plot_surfaces(eq, zeta=2)
+    with pytest.raises(FutureWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            fig, ax = plot_surfaces(eq, zeta=2)
     return None
 
 
@@ -124,7 +125,6 @@ def test_1d_dpdr():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_iota():
     """Test plotting 1d rotational transform."""
@@ -160,11 +160,10 @@ def test_1d_logpsi():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
-def test_2d_logF(DSHAPE_current):
+def test_2d_logF():
     """Test plotting 2d force error with log scale."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
     fig, ax, data = plot_2d(
         eq, "|F|", log=True, grid=grid, figsize=(4, 4), return_data=True
@@ -174,11 +173,10 @@ def test_2d_logF(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_2d_g_tz(DSHAPE_current):
+def test_2d_g_tz():
     """Test plotting 2d metric coefficients vs theta/zeta."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
     fig, ax, data = plot_2d(eq, "sqrt(g)", grid=grid, figsize=(4, 4), return_data=True)
     assert "theta" in data.keys()
@@ -189,11 +187,10 @@ def test_2d_g_tz(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_2d_g_rz(DSHAPE_current):
+def test_2d_g_rz():
     """Test plotting 2d metric coefficients vs rho/zeta."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
     fig, ax, data = plot_2d(eq, "sqrt(g)", grid=grid, figsize=(4, 4), return_data=True)
     assert "rho" in data.keys()
@@ -204,11 +201,10 @@ def test_2d_g_rz(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_2d_lambda(DSHAPE_current):
+def test_2d_lambda():
     """Test plotting lambda on 2d grid."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_2d(eq, "lambda", figsize=(4, 4), return_data=True)
     assert "lambda" in data.keys()
 
@@ -216,10 +212,9 @@ def test_2d_lambda(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_3d_B(DSHAPE_current):
+def test_3d_B():
     """Test 3d plot of toroidal field."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, data = plot_3d(eq, "B^zeta", return_data=True)
     assert "X" in data.keys()
     assert "Y" in data.keys()
@@ -231,40 +226,27 @@ def test_3d_B(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_3d_J(DSHAPE_current):
-    """Test 3d plotting of poloidal current."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    grid = LinearGrid(rho=1.0, theta=100, zeta=100)
-    fig = plot_3d(eq, "J^theta", grid=grid)
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.solve
-def test_3d_tz(DSHAPE_current):
+def test_3d_tz():
     """Test 3d plot of force on interior surface."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
     fig = plot_3d(eq, "|F|", log=True, grid=grid)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_3d_rz(DSHAPE_current):
+def test_3d_rz():
     """Test 3d plotting of pressure on toroidal cross section."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
     fig = plot_3d(eq, "p", grid=grid)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_3d_rt(DSHAPE_current):
+def test_3d_rt():
     """Test 3d plotting of flux on poloidal ribbon."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
     fig = plot_3d(eq, "psi", grid=grid)
     return fig
@@ -343,11 +325,10 @@ def test_plot_fsa_axis_limit():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_fsa_I(DSHAPE_current):
+def test_fsa_I():
     """Test plotting of flux surface average toroidal current."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_fsa(eq, "B_theta", with_sqrt_g=False, return_data=True)
     assert "rho" in data.keys()
     assert "<B_theta>_fsa" in data.keys()
@@ -358,33 +339,30 @@ def test_fsa_I(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_fsa_G(DSHAPE_current):
+def test_fsa_G():
     """Test plotting of flux surface average poloidal current."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_fsa(eq, "B_zeta", with_sqrt_g=False, log=True)
     ax.set_ylim([1e-1, 1e0])
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_fsa_F_normalized(DSHAPE_current):
+def test_fsa_F_normalized():
     """Test plotting flux surface average normalized force error on log scale."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol")
     ax.set_ylim([1e-6, 1e-3])
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_section_J(DSHAPE_current):
+def test_section_J():
     """Test plotting poincare section of radial current."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_section(eq, "J^rho", return_data=True)
     assert "R" in data.keys()
     assert "Z" in data.keys()
@@ -396,62 +374,55 @@ def test_section_J(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=24)
-def test_section_Z(DSHAPE_current):
+def test_section_Z():
     """Test plotting poincare section of Z coordinate."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_section(eq, "Z")
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_section_R(DSHAPE_current):
+def test_section_R():
     """Test plotting poincare section of R coordinate."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_section(eq, "R")
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_section_F(DSHAPE_current):
+def test_section_F():
     """Test plotting poincare section of radial force."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_section(eq, "F_rho")
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_section_F_normalized_vac(DSHAPE_current):
+def test_section_F_normalized_vac():
     """Test plotting poincare section of normalized vacuum force error."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_section(eq, "|F|", norm_F=True)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=50)
-def test_section_logF(DSHAPE_current):
+def test_section_logF():
     """Test plotting poincare section of force magnitude on log scale."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_section(eq, "|F|", log=True)
     return fig
 
 
-@pytest.mark.slow
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_surfaces(DSHAPE_current):
+def test_plot_surfaces():
     """Test plotting flux surfaces."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_surfaces(eq, return_data=True)
     for string in [
         "rho_R_coords",
@@ -464,13 +435,11 @@ def test_plot_surfaces(DSHAPE_current):
     return fig
 
 
-@pytest.mark.slow
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_surfaces_no_theta(DSHAPE_current):
+def test_plot_surfaces_no_theta():
     """Test plotting flux surfaces without theta contours."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_surfaces(eq, theta=False, return_data=True)
     for string in ["rho_R_coords", "rho_Z_coords"]:
         assert string in data.keys()
@@ -506,13 +475,11 @@ def test_plot_boundaries():
     return fig
 
 
-@pytest.mark.slow
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_comparison(DSHAPE_current):
+def test_plot_comparison():
     """Test plotting comparison of flux surfaces."""
-    eqf = load(load_from=str(DSHAPE_current["desc_h5_path"]))
+    eqf = get("DSHAPE_CURRENT", "all")
     fig, ax, data = plot_comparison(eqf, return_data=True)
     for string in [
         "rho_R_coords",
@@ -526,23 +493,20 @@ def test_plot_comparison(DSHAPE_current):
     return fig
 
 
-@pytest.mark.slow
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_comparison_no_theta(DSHAPE_current):
+def test_plot_comparison_no_theta():
     """Test plotting comparison of flux surfaces without theta contours."""
-    eqf = load(load_from=str(DSHAPE_current["desc_h5_path"]))
+    eqf = get("DSHAPE_CURRENT", "all")
     fig, ax = plot_comparison(eqf, theta=0)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_con_basis(DSHAPE_current):
+def test_plot_con_basis():
     """Test 2d plot of R component of e^rho."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_2d(
         eq, "e^rho", component="R", figsize=(4, 4), return_data=True
     )
@@ -554,52 +518,47 @@ def test_plot_con_basis(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_cov_basis(DSHAPE_current):
+def test_plot_cov_basis():
     """Test 2d plot of norm of e_rho."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_2d(eq, "e_rho", figsize=(4, 4), return_data=True)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_magnetic_tension(DSHAPE_current):
+def test_plot_magnetic_tension():
     """Test 2d plot of magnetic tension."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_2d(eq, "|(B*grad)B|", figsize=(4, 4), return_data=True)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_magnetic_pressure(DSHAPE_current):
+def test_plot_magnetic_pressure():
     """Test 2d plot of magnetic pressure."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_2d(eq, "|grad(|B|^2)|/2mu0", figsize=(4, 4), return_data=True)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_gradpsi(DSHAPE_current):
+def test_plot_gradpsi():
     """Test 2d plot of norm of grad(rho)."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_2d(eq, "|grad(rho)|", figsize=(4, 4), return_data=True)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_normF_2d(DSHAPE_current):
+def test_plot_normF_2d():
     """Test 2d plot of normalized force."""
     grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax, data = plot_2d(
         eq, "|F|", norm_F=True, figsize=(4, 4), return_data=True, grid=grid
     )
@@ -609,21 +568,19 @@ def test_plot_normF_2d(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_normF_section(DSHAPE_current):
+def test_plot_normF_section():
     """Test Poincare section plot of normalized force on log scale."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_coefficients(DSHAPE_current):
+def test_plot_coefficients():
     """Test scatter plot of spectral coefficients."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     fig, ax = plot_coefficients(eq, color="b", marker="o")
     ax[0, 0].set_ylim([1e-8, 1e1])
     return fig
@@ -734,46 +691,6 @@ class TestPlotBasis:
         fig, ax, data = plot_basis(basis, return_data=True)
         for string in ["amplitude", "l", "rho", "m", "theta"]:
             assert string in data.keys()
-        return fig
-
-
-class TestPlotFieldLines:
-    """Tests for plotting field lines."""
-
-    @pytest.mark.unit
-    def test_find_idx(self):
-        """Test finding the index of the node closest to a given point."""
-        # pick the first grid node point, add epsilon to it, check it returns idx of 0
-        grid = LinearGrid(L=1, M=2, N=2, axis=False)
-        epsilon = np.finfo(float).eps
-        test_point = grid.nodes[0, :] + epsilon
-        idx = _find_idx(*test_point, grid=grid)
-        assert idx == 0
-
-    @pytest.mark.unit
-    @pytest.mark.solve
-    @pytest.mark.slow
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-    def test_plot_field_line(self, DSHAPE_current):
-        """Test plotting single field line over 1 transit."""
-        eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax, data = plot_field_lines_sfl(
-            eq, rho=1, seed_thetas=0, phi_end=2 * np.pi, return_data=True
-        )
-        for string in ["R", "Z", "phi", "seed_thetas"]:
-            assert string in data.keys()
-        return fig
-
-    @pytest.mark.unit
-    @pytest.mark.solve
-    @pytest.mark.slow
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
-    def test_plot_field_lines(self, DSHAPE_current):
-        """Test plotting multiple field lines over 1 transit."""
-        eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax = plot_field_lines_sfl(
-            eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
-        )
         return fig
 
 

@@ -1,0 +1,7 @@
+D_Mercier,D_Mercier_max,D_Mercier_min,bdry_ratio,current_profile,current_specification,date_created,date_updated,description,git_commit,initialization_method,iota_max,iota_min,iota_profile,l_grid,l_rad,m_grid,m_pol,n_grid,n_tor,outputfile,pressure_max,pressure_min,pressure_profile,profile_rho,provenance,user_created,version
+"[-8.39606013e+42 -2.06163694e+03 -4.97819426e+02 -1.98109303e+02
+ -9.80575036e+01 -5.52324030e+01 -3.28276197e+01 -2.04568348e+01
+ -1.34514683e+01 -8.31690688e+00  5.46523524e-01]",0.5465235236482868,-8.396060127130347e+42,1.0,"[     0.           4569.51656131  18695.45887217  43131.69452079
+  78659.69017613 127411.82970752 193302.65931359 281738.89007209
+ 400998.01369613 563059.94581864 787785.46082072]",iota,2024-03-27,2024-03-27,test,0.10.3+295.g7c8a04012,surface,2.5,1.0,[1.    1.015 1.06  1.135 1.24  1.375 1.54  1.735 1.96  2.215 2.5  ],36,24,18,12,6,3,HELIOTRON_output.h5,18000.0,0.0,"[18000.  17641.8 16588.8 14905.8 12700.8 10125.   7372.8  4681.8  2332.8
+   649.8     0. ]",[0.  0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1. ],DESC examples,yge,0.10.3+295.g7c8a04012

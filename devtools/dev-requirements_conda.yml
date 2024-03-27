@@ -53,3 +53,6 @@ dependencies:
 
   # building
   - python-build
+
+  # uploading to database
+  - selenium

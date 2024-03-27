@@ -21,11 +21,7 @@ from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
-from desc.singularities import (
-    DFTInterpolator,
-    FFTInterpolator,
-    virtual_casing_biot_savart,
-)
+from desc.singularities import FFTInterpolator, virtual_casing_biot_savart
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -648,13 +644,33 @@ def plot_2d(
         errorif(
             field is None,
             ValueError,
-            "If Bn is entered as the variable to plot, a magnetic field"
+            "If B*n is entered as the variable to plot, a magnetic field"
             " must be provided.",
         )
+        errorif(
+            not np.all(np.isclose(grid.nodes[:, 0], 1)),
+            ValueError,
+            "If B*n is entered as the variable to plot, "
+            "the grid nodes must be at rho=1.",
+        )
+
         field_grid = kwargs.pop("field_grid", None)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            data, _ = field.compute_Bnormal(eq, eval_grid=grid, source_grid=field_grid)
+
+            if grid.endpoint is True:
+                # cannot use a grid with endpoint=True for FFT interpolator
+                vc_grid = LinearGrid(
+                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
+                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
+                    NFP=grid.NFP,
+                    endpoint=False,
+                )
+            else:
+                vc_grid = grid
+            data, _ = field.compute_Bnormal(
+                eq, eval_grid=vc_grid, source_grid=field_grid
+            )
             vc_data = eq.compute(
                 [
                     "K_vc",
@@ -666,18 +682,16 @@ def plot_2d(
                     "n_rho",
                     "|e_theta x e_zeta|",
                 ],
-                grid=grid,
+                grid=vc_grid,
             )
-            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+
+            k = min(vc_grid.num_theta, vc_grid.num_zeta * vc_grid.NFP)
             s = k - 1
-            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            k = min(vc_grid.num_theta, vc_grid.num_zeta * vc_grid.NFP)
             q = k // 2 + int(np.sqrt(k))
-            try:
-                interpolator = FFTInterpolator(grid, grid, s, q)
-            except AssertionError:
-                interpolator = DFTInterpolator(grid, grid, s, q)
+            interpolator = FFTInterpolator(vc_grid, vc_grid, s, q)
             if hasattr(eq.surface, "Phi_mn"):
-                vc_data["K_vc"] += eq.surface.compute("K", grid=grid)["K"]
+                vc_data["K_vc"] += eq.surface.compute("K", grid=vc_grid)["K"]
             Bplasma = virtual_casing_biot_savart(
                 vc_data,
                 vc_data,
@@ -686,10 +700,13 @@ def plot_2d(
             # need extra factor of B/2 bc we're evaluating on plasma surface
             Bplasma = Bplasma + vc_data["B"] / 2
             data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
-
+        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
+        if grid.endpoint is True:
+            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
+            data = np.vstack((data, data[0, :]))
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-        label = r"$|\mathbf{B} \cdot \hat{n}| ~(\mathrm{T})$"
-        # get Bn from plasma contribution
+
+        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
@@ -930,13 +947,33 @@ def plot_3d(
         errorif(
             field is None,
             ValueError,
-            "If Bn is entered as the variable to plot, a magnetic field"
+            "If B*n is entered as the variable to plot, a magnetic field"
             " must be provided.",
         )
+        errorif(
+            not np.all(np.isclose(grid.nodes[:, 0], 1)),
+            ValueError,
+            "If B*n is entered as the variable to plot, "
+            "the grid nodes must be at rho=1.",
+        )
+
         field_grid = kwargs.pop("field_grid", None)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            data, _ = field.compute_Bnormal(eq, eval_grid=grid, source_grid=field_grid)
+
+            if grid.endpoint is True:
+                # cannot use a grid with endpoint=True for FFT interpolator
+                vc_grid = LinearGrid(
+                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
+                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
+                    NFP=grid.NFP,
+                    endpoint=False,
+                )
+            else:
+                vc_grid = grid
+            data, _ = field.compute_Bnormal(
+                eq, eval_grid=vc_grid, source_grid=field_grid
+            )
             vc_data = eq.compute(
                 [
                     "K_vc",
@@ -948,18 +985,16 @@ def plot_3d(
                     "n_rho",
                     "|e_theta x e_zeta|",
                 ],
-                grid=grid,
+                grid=vc_grid,
             )
-            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+
+            k = min(vc_grid.num_theta, vc_grid.num_zeta * vc_grid.NFP)
             s = k - 1
-            k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+            k = min(vc_grid.num_theta, vc_grid.num_zeta * vc_grid.NFP)
             q = k // 2 + int(np.sqrt(k))
-            try:
-                interpolator = FFTInterpolator(grid, grid, s, q)
-            except AssertionError:
-                interpolator = DFTInterpolator(grid, grid, s, q)
+            interpolator = FFTInterpolator(vc_grid, vc_grid, s, q)
             if hasattr(eq.surface, "Phi_mn"):
-                vc_data["K_vc"] += eq.surface.compute("K", grid=grid)["K"]
+                vc_data["K_vc"] += eq.surface.compute("K", grid=vc_grid)["K"]
             Bplasma = virtual_casing_biot_savart(
                 vc_data,
                 vc_data,
@@ -968,8 +1003,13 @@ def plot_3d(
             # need extra factor of B/2 bc we're evaluating on plasma surface
             Bplasma = Bplasma + vc_data["B"] / 2
             data += np.sum(Bplasma * vc_data["n_rho"], axis=-1)
+        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
+        if grid.endpoint is True:
+            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
+            data = np.vstack((data, data[0, :]))
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-        label = r"$|\mathbf{B} \cdot \hat{n}| ~(\mathrm{T})$"
+
+        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
     errorif(
         len(kwargs) != 0,
         ValueError,

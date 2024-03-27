@@ -5,7 +5,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import Grid, LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -117,6 +117,19 @@ class MercierStability(_Objective):
             )
         else:
             grid = self._grid
+
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "MercierStability objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "MercierStability objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
@@ -280,6 +293,19 @@ class MagneticWell(_Objective):
             )
         else:
             grid = self._grid
+
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "MagneticWell objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "MagneticWell objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]

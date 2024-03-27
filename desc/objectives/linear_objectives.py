@@ -35,6 +35,7 @@ class _FixedObjective(_Objective):
 
         """
         self.target = np.atleast_1d(getattr(eq, self._target_arg, self.target))
+        self._target_from_user = self.target  # in case the Objective is re-built
         if self._use_jit:
             self.jit()
 
@@ -266,20 +267,22 @@ class BoundaryRSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        Js = np.array(Js)
+        # Broadcasting at once is faster. We need to use np.arange to avoid
+        # setting the value to the whole row.
+        self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
+            surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -364,20 +367,22 @@ class BoundaryZSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.Z_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        Js = np.array(Js)
+        # Broadcasting at once is faster. We need to use np.arange to avoid
+        # setting the value to the whole row.
+        self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
+            surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -3429,7 +3434,7 @@ class FixOmniWell(_FixedObjective):
         return params["B_lm"][self._idx]
 
 
-class FixOmniShift(_FixedObjective):
+class FixOmniMap(_FixedObjective):
     """Fixes OmnigenousField.x_lmn coefficients.
 
     Parameters
@@ -3459,7 +3464,7 @@ class FixOmniShift(_FixedObjective):
 
     _target_arg = "x_lmn"
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity shift error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity map error: {:10.3e} "
 
     def __init__(
         self,
@@ -3470,7 +3475,7 @@ class FixOmniShift(_FixedObjective):
         normalize=False,
         normalize_target=False,
         indices=True,
-        name="fixed omnigenity shift",
+        name="fixed omnigenity map",
     ):
         self._field = field
         self._indices = indices
@@ -3515,7 +3520,7 @@ class FixOmniShift(_FixedObjective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute fixed omnigenity shift error.
+        """Compute fixed omnigenity map error.
 
         Parameters
         ----------
@@ -3528,7 +3533,7 @@ class FixOmniShift(_FixedObjective):
         Returns
         -------
         f : ndarray
-            Fixed omnigenity shift error.
+            Fixed omnigenity map error.
 
         """
         return params["x_lmn"][self._idx]

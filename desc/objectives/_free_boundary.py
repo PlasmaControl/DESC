@@ -40,8 +40,8 @@ class VacuumBoundaryError(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    ext_field : MagneticField
-        External field produced by coils.
+    field : MagneticField
+        External field produced by coils or other sources outside the plasma.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
@@ -69,7 +69,10 @@ class VacuumBoundaryError(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
     field_grid : Grid, optional
-        Grid used to discretize ext_field.
+        Grid used to discretize field.
+    field_fixed : bool
+        Whether to assume the field is fixed. For free boundary solve, should
+        be fixed. For single stage optimization, should be False (default).
     name : str
         Name of the objective function.
 
@@ -84,7 +87,7 @@ class VacuumBoundaryError(_Objective):
     def __init__(
         self,
         eq,
-        ext_field,
+        field,
         target=None,
         bounds=None,
         weight=1,
@@ -94,15 +97,20 @@ class VacuumBoundaryError(_Objective):
         deriv_mode="auto",
         grid=None,
         field_grid=None,
+        field_fixed=False,
         name="Vacuum boundary error",
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self._ext_field = ext_field
+        self._eq = eq
+        self._field = field
         self._field_grid = field_grid
-        things = [eq]
-
+        self._field_fixed = field_fixed
+        if field_fixed:
+            things = [eq]
+        else:
+            things = [eq, field]
         super().__init__(
             things=things,
             target=target,
@@ -178,7 +186,7 @@ class VacuumBoundaryError(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
-            "ext_field": self._ext_field,
+            "field": self._field,
             "quad_weights": np.sqrt(np.tile(transforms["grid"].weights, 2)),
         }
 
@@ -198,13 +206,15 @@ class VacuumBoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, constants=None):
+    def compute(self, eq_params, field_params=None, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
         eq_params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        field_params : dict
+            Dictionary of field parameters, if field is not fixed.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -226,8 +236,10 @@ class VacuumBoundaryError(_Objective):
             profiles=constants["profiles"],
         )
         x = jnp.array([data["R"], data["phi"], data["Z"]]).T
-        Bext = constants["ext_field"].compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz"
+        # can always pass in field params. If they're None, it just uses the
+        # defaults for the given field.
+        Bext = constants["field"].compute_magnetic_field(
+            x, source_grid=self._field_grid, basis="rpz", params=field_params
         )
         Bex_total = Bext
         Bin_total = data["B"]
@@ -321,7 +333,8 @@ class BoundaryError(_Objective):
     current potential on the LCFS. All residuals are weighted by the local area
     element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
 
-    The third equation is only included if a sheet current is supplied, otherwise it
+    The third equation is only included if a sheet current is supplied by making
+    the ``equilibrium.surface`` object a FourierCurrentPotentialField, otherwise it
     is trivially satisfied. If it is known that the external field accurately reproduces
     the target equilibrium with low normal field error and pressure at the edge is zero,
     then the sheet current will generally be negligible and can be omitted to save
@@ -335,12 +348,8 @@ class BoundaryError(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    ext_field : MagneticField
+    field : MagneticField
         External field produced by coils.
-    sheet_current : FourierCurrentPotentialField
-        Sheet current on the last closed flux surface. Not required for vacuum fields,
-        but generally needed to correctly solve at finite beta/current. Geometry will
-        be automatically constrained to be the same as the equilibrium LCFS.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
@@ -374,12 +383,31 @@ class BoundaryError(_Objective):
         Savart integral and where to evaluate errors. source_grid should not be
         stellarator symmetric, and both should be at rho=1.
     field_grid : Grid, optional
-        Grid used to discretize ext_field.
+        Grid used to discretize field.
+    field_fixed : bool
+        Whether to assume the field is fixed. For free boundary solve, should
+        be fixed. For single stage optimization, should be False (default).
     loop : bool
         If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
         less memory.
     name : str
         Name of the objective function.
+
+
+    Examples
+    --------
+    Assigning a surface current to the equilibrium:
+
+    .. code-block:: python
+
+        from desc.magnetic_fields import FourierCurrentPotentialField
+        # turn the regular FourierRZToroidalSurface into a current potential on the
+        # last closed flux surface
+        eq.surface = FourierCurrentPotentialField.from_surface(eq.surface,
+                                                              M_Phi=eq.M,
+                                                              N_Phi=eq.N,
+                                                              )
+        objective = BoundaryError(eq, field)
 
     """
 
@@ -393,8 +421,7 @@ class BoundaryError(_Objective):
     def __init__(
         self,
         eq,
-        ext_field,
-        sheet_current=None,
+        field,
         target=None,
         bounds=None,
         weight=1,
@@ -407,6 +434,7 @@ class BoundaryError(_Objective):
         source_grid=None,
         eval_grid=None,
         field_grid=None,
+        field_fixed=False,
         loop=True,
         name="Boundary error",
     ):
@@ -416,14 +444,14 @@ class BoundaryError(_Objective):
         self._eval_grid = eval_grid
         self._s = s
         self._q = q
-        self._ext_field = ext_field
+        self._field = field
         self._field_grid = field_grid
         self._loop = loop
-        self._sheet_current = None
-        things = [eq]
-        if sheet_current:
-            things += [sheet_current]
-            self._sheet_current = True
+        self._sheet_current = hasattr(eq.surface, "Phi_mn")
+        if field_fixed:
+            things = [eq]
+        else:
+            things = [eq, field]
 
         super().__init__(
             things=things,
@@ -545,24 +573,17 @@ class BoundaryError(_Objective):
             "source_transforms": source_transforms,
             "source_profiles": source_profiles,
             "interpolator": interpolator,
-            "ext_field": self._ext_field,
+            "field": self._field,
             "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, neq)),
         }
 
         if self._sheet_current:
-            sheet_current = self.things[1]
-            assert (
-                (sheet_current.M == eq.surface.M)
-                and (sheet_current.N == eq.surface.N)
-                and (sheet_current.NFP == eq.surface.NFP)
-                and (sheet_current.sym == eq.surface.sym)
-            ), "sheet current must have same resolution as eq.surface"
             self._sheet_data_keys = ["K"]
             sheet_eval_transforms = get_transforms(
-                self._sheet_data_keys, obj=sheet_current, grid=eval_grid
+                self._sheet_data_keys, obj=eq.surface, grid=eval_grid
             )
             sheet_source_transforms = get_transforms(
-                self._sheet_data_keys, obj=sheet_current, grid=source_grid
+                self._sheet_data_keys, obj=eq.surface, grid=source_grid
             )
             self._constants["sheet_eval_transforms"] = sheet_eval_transforms
             self._constants["sheet_source_transforms"] = sheet_source_transforms
@@ -590,15 +611,15 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, sheet_params=None, constants=None):
+    def compute(self, eq_params, field_params=None, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
         eq_params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        sheet_params : dict
-            Dictionary of sheet current degrees of freedom.
+        field_params : dict
+            Dictionary of field parameters, if field is not fixed.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -628,19 +649,22 @@ class BoundaryError(_Objective):
             profiles=constants["eval_profiles"],
         )
         if self._sheet_current:
-            assert sheet_params is not None
-            # enforce that they're the same surface
-            sheet_params["R_lmn"] = eq_params["Rb_lmn"]
-            sheet_params["Z_lmn"] = eq_params["Zb_lmn"]
+            sheet_params = {
+                "R_lmn": eq_params["Rb_lmn"],
+                "Z_lmn": eq_params["Zb_lmn"],
+                "I": eq_params["I"],
+                "G": eq_params["G"],
+                "Phi_mn": eq_params["Phi_mn"],
+            }
             sheet_source_data = compute_fun(
-                "desc.magnetic_fields.FourierCurrentPotentialField",
+                "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
                 self._sheet_data_keys,
                 params=sheet_params,
                 transforms=constants["sheet_source_transforms"],
                 profiles={},
             )
             sheet_eval_data = compute_fun(
-                "desc.magnetic_fields.FourierCurrentPotentialField",
+                "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
                 self._sheet_data_keys,
                 params=sheet_params,
                 transforms=constants["sheet_eval_transforms"],
@@ -657,8 +681,10 @@ class BoundaryError(_Objective):
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = Bplasma + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
-        Bext = constants["ext_field"].compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz"
+        # can always pass in field params. If they're None, it just uses the
+        # defaults for the given field.
+        Bext = constants["field"].compute_magnetic_field(
+            x, source_grid=self._field_grid, basis="rpz", params=field_params
         )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]
@@ -771,7 +797,7 @@ class BoundaryErrorNESTOR(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    ext_field : MagneticField
+    field : MagneticField
         External field produced by coils.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -787,7 +813,7 @@ class BoundaryErrorNESTOR(_Objective):
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use in NESTOR.
     field_grid : Grid, optional
-        Grid used to discretize ext_field.
+        Grid used to discretize field.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -817,7 +843,7 @@ class BoundaryErrorNESTOR(_Objective):
     def __init__(
         self,
         eq,
-        ext_field,
+        field,
         target=None,
         bounds=None,
         weight=1,
@@ -838,7 +864,7 @@ class BoundaryErrorNESTOR(_Objective):
         self.nf = nf
         self.ntheta = ntheta
         self.nzeta = nzeta
-        self.ext_field = ext_field
+        self.field = field
         self.field_grid = field_grid
         super().__init__(
             things=eq,
@@ -871,7 +897,7 @@ class BoundaryErrorNESTOR(_Objective):
 
         nest = Nestor(
             eq,
-            self.ext_field,
+            self.field,
             self.mf,
             self.nf,
             self.ntheta,
@@ -897,7 +923,7 @@ class BoundaryErrorNESTOR(_Objective):
         self._constants = {
             "profiles": profiles,
             "transforms": transforms,
-            "ext_field": self.ext_field,
+            "field": self.field,
             "nestor": nest,
             "quad_weights": np.sqrt(transforms["grid"].weights),
         }

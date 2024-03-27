@@ -770,7 +770,7 @@ class SplineXYZCurve(Curve):
     @knots.setter
     def knots(self, new):
         if len(new) == len(self.knots):
-            knots = jnp.atleast_1d(new)
+            knots = jnp.atleast_1d(jnp.asarray(new))
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,

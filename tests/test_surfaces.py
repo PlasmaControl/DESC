@@ -56,7 +56,7 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(c.Z_lmn, [2])
 
         s = c.copy()
-        assert s.eq(c)
+        assert s.equiv(c)
 
         c.change_resolution(0, 5, 5)
         with pytest.raises(ValueError):
@@ -393,7 +393,7 @@ class TestZernikeRZToroidalSection:
         with pytest.raises(ValueError):
             c.set_coeffs(0, 0, None, 2)
         s = c.copy()
-        assert s.eq(c)
+        assert s.equiv(c)
 
         c.change_resolution(5, 5, 0)
         with pytest.raises(ValueError):

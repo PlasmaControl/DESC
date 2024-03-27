@@ -13,7 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer, get_instance, setdefault
+from desc.utils import Timer, errorif, get_instance, setdefault
 
 from .utils import f_where_x
 
@@ -23,7 +23,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     Given a problem of the form
 
-    min_x f(x)  subject to A*x=b
+    min_x f(x) subject to A*x=b
 
     We can write any feasible x=xp + Z*x_reduced where xp is a particular solution to
     Ax=b (taken to be the least norm solution), Z is a representation for the null
@@ -35,27 +35,38 @@ class LinearConstraintProjection(ObjectiveFunction):
     ----------
     objective : ObjectiveFunction
         Objective function to optimize.
-    constraints : tuple of Objective
-        Linear constraints to enforce. Should be a tuple or list of Objective,
-        and must all be linear.
-    verbose : int, optional
-        Level of output.
+    constraint : ObjectiveFunction
+        Objective function of linear constraints to enforce.
     name : str
         Name of the objective function.
     """
 
-    def __init__(self, objective, constraints, name="LinearConstraintProjection"):
-        assert isinstance(objective, ObjectiveFunction), (
-            "objective should be instance of ObjectiveFunction." ""
+    def __init__(self, objective, constraint, name="LinearConstraintProjection"):
+        errorif(
+            not isinstance(objective, ObjectiveFunction),
+            ValueError,
+            "Objective should be instance of ObjectiveFunction.",
         )
-        for con in constraints:
-            if not con.linear:
-                raise ValueError(
-                    "LinearConstraintProjection method "
-                    + "cannot handle nonlinear constraint {}.".format(con)
-                )
+        errorif(
+            not isinstance(constraint, ObjectiveFunction),
+            ValueError,
+            "Constraint should be instance of ObjectiveFunction.",
+        )
+        for con in constraint.objectives:
+            errorif(
+                not con.linear,
+                ValueError,
+                "LinearConstraintProjection method cannot handle "
+                + f"nonlinear constraint {con}.",
+            )
+            errorif(
+                con.bounds is not None,
+                ValueError,
+                f"Linear constraint {con} must use target instead of bounds.",
+            )
+
         self._objective = objective
-        self._constraints = constraints
+        self._constraint = constraint
         self._built = False
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
@@ -82,9 +93,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         # do it before this wrapper is created for them.
         if not self._objective.built:
             self._objective.build(verbose=verbose)
-        for con in self._constraints:
-            if not con.built:
-                con.build(verbose=verbose)
+        if not self._constraint.built:
+            self._constraint.build(verbose=verbose)
 
         self._dim_f = self._objective.dim_f
         self._scalar = self._objective.scalar
@@ -97,8 +107,8 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._project,
             self._recover,
         ) = factorize_linear_constraints(
-            self._constraints,
             self._objective,
+            self._constraint,
         )
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
@@ -449,11 +459,12 @@ class ProximalProjection(ObjectiveFunction):
             "constraint should be instance of ObjectiveFunction." ""
         )
         for con in constraint.objectives:
-            if not con._equilibrium:
-                raise ValueError(
-                    "ProximalProjection method "
-                    + "cannot handle general nonlinear constraint {}.".format(con)
-                )
+            errorif(
+                not con._equilibrium,
+                ValueError,
+                "ProximalProjection method cannot handle general "
+                + "nonlinear constraint {}.".format(con),
+            )
         self._objective = objective
         self._constraint = constraint
         solve_options = {} if solve_options is None else solve_options
@@ -475,15 +486,11 @@ class ProximalProjection(ObjectiveFunction):
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
-        (
-            xp,
-            A,
-            b,
-            self._Z,
-            self._unfixed_idx,
-            project,
-            recover,
-        ) = factorize_linear_constraints(self._linear_constraints, self._constraint)
+        linear_constraint = ObjectiveFunction(self._linear_constraints)
+        linear_constraint.build()
+        _, A, _, self._Z, self._unfixed_idx, _, _ = factorize_linear_constraints(
+            self._constraint, linear_constraint
+        )
 
         # dx/dc - goes from the full state to optimization variables for eq
         dxdc = []
@@ -540,12 +547,14 @@ class ProximalProjection(ObjectiveFunction):
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
 
-        assert self._constraint.things == [
-            eq
-        ], "ProximalProjection can only handle constraints on the equilibrium."
+        errorif(
+            self._constraint.things != [eq],
+            ValueError,
+            "ProximalProjection can only handle constraints on the equilibrium.",
+        )
 
         self._objectives = [self._objective, self._constraint]
-        self._set_things(self._all_things)
+        self._set_things()
 
         self._eq_idx = self.things.index(self._eq)
 
@@ -609,7 +618,7 @@ class ProximalProjection(ObjectiveFunction):
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
 
-        x = jnp.atleast_1d(x)
+        x = jnp.atleast_1d(jnp.asarray(x))
         if x.size != self.dim_x:
             raise ValueError(
                 "Input vector dimension is invalid, expected "
@@ -632,7 +641,13 @@ class ProximalProjection(ObjectiveFunction):
                 params += [t.unpack_params(xi)]
 
         if per_objective:
+            # params is a list of lists of dicts, for each thing and for each objective
             params = self._unflatten(params)
+            # this filters out the params of things that are unused by each objective
+            params = [
+                [par for par, thing in zip(param, self.things) if thing in obj.things]
+                for param, obj in zip(params, self.objectives)
+            ]
         return params
 
     def x(self, *things):
@@ -719,15 +734,14 @@ class ProximalProjection(ObjectiveFunction):
             self._eq.params_dict = xeq_dict
             x_list[self._eq_idx] = xeq_dict
             self.history.append(x_list)
-            for con in self._linear_constraints:
-                if hasattr(con, "update_target"):
-                    con.update_target(self._eq)
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
-            for con in self._linear_constraints:
-                if hasattr(con, "update_target"):
-                    con.update_target(self._eq)
+
+        for con in self._linear_constraints:
+            if hasattr(con, "update_target"):
+                con.update_target(self._eq)
+
         return xopt, xeq
 
     def compute_scaled(self, x, constants=None):

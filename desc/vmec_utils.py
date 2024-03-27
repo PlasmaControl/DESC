@@ -1,9 +1,9 @@
 """Utility functions needed for converting VMEC inputs/outputs."""
 
 import numpy as np
-from scipy.linalg import block_diag, null_space
+from scipy.linalg import null_space
 
-from desc.backend import sign
+from desc.backend import block_diag, sign
 from desc.basis import zernike_radial
 
 

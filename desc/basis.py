@@ -1314,7 +1314,6 @@ def polyder_vec(p, m, exact=False):
 
 
 def _polyder_exact(p, m):
-    factorial = np.math.factorial
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
     order = p.shape[1] - 1
@@ -1332,7 +1331,7 @@ def _polyder_exact(p, m):
 
 @jit
 def _polyder_jax(p, m):
-    p = jnp.atleast_2d(p)
+    p = jnp.atleast_2d(jnp.asarray(p))
     m = jnp.asarray(m).astype(int)
     order = p.shape[1] - 1
     D = jnp.arange(order, -1, -1)
@@ -1391,8 +1390,8 @@ def _polyval_exact(p, x, prec):
 
 @jit
 def _polyval_jax(p, x):
-    p = jnp.atleast_2d(p)
-    x = jnp.atleast_1d(x).flatten()
+    p = jnp.atleast_2d(jnp.asarray(p))
+    x = jnp.atleast_1d(jnp.asarray(x)).flatten()
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
     nx = len(x)  # number of coordinates
@@ -1565,9 +1564,8 @@ def _zernike_radial_vectorized(r, l, m, dr):
         # Calculate Radial part of Zernike for N,alpha
         result = (-1) ** N * r**alpha * P_n
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -1837,9 +1835,8 @@ def _zernike_radial_vectorized_d1(r, l, m, dr):
             - coef[1] * 4 * r ** (alpha + 1) * P_n[1]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -1930,9 +1927,8 @@ def _zernike_radial_vectorized_d2(r, l, m, dr):
             + coef[2] * 16 * r ** (alpha + 2) * P_n[2]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -2025,9 +2021,8 @@ def _zernike_radial_vectorized_d3(r, l, m, dr):
             - coef[3] * 64 * r ** (alpha + 3) * P_n[3]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -2131,9 +2126,8 @@ def _zernike_radial_vectorized_d4(r, l, m, dr):
             + coef[4] * 256 * r ** (alpha + 4) * P_n[4]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial

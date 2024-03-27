@@ -4,9 +4,8 @@ import numbers
 import warnings
 
 import numpy as np
-import scipy
 
-from desc.backend import jit, jnp, put, root_scalar, sign, vmap
+from desc.backend import block_diag, jit, jnp, put, root_scalar, sign, vmap
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
@@ -500,7 +499,7 @@ class FourierRZToroidalSurface(Surface):
             )
             AZ = transform.matrices[transform.method][0][0][0]
 
-            A = scipy.linalg.block_diag(W @ AR, W @ AZ)
+            A = block_diag(W @ AR, W @ AZ)
             b = np.concatenate([w * R, w * Z])
             x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]
 

@@ -5,6 +5,7 @@ import pytest
 from scipy import special
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import (
     ConcentricGrid,
     Grid,
@@ -778,3 +779,48 @@ def test_find_least_rational_surfaces():
     max_rational = max(lior)
 
     assert np.all(np.array(lio) > max_rational)
+
+
+@pytest.mark.unit
+def test_custom_jitable_grid_indexing():
+    """Test that unique/inverse indices are set correctly when jitable=True."""
+    eq = get("NCSX")
+    rho = np.random.random(100)
+    theta = np.random.random(100) * 2 * np.pi
+    zeta = np.random.random(100) * 2 * np.pi / eq.NFP
+    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
+    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+
+    attrs = [
+        "unique_rho_idx",
+        "inverse_rho_idx",
+        "unique_theta_idx",
+        "inverse_theta_idx",
+        "unique_zeta_idx",
+        "inverse_zeta_idx",
+    ]
+
+    for attr in attrs:
+        np.testing.assert_array_equal(
+            getattr(grid1, attr), getattr(grid2, attr), err_msg=attr
+        )
+
+    # make sure compress/expand done when override_grid=True works as expected
+    b1 = eq.compute(["|B|"], grid=grid1, override_grid=True)["|B|"]
+    b2 = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
+    np.testing.assert_allclose(b1, b2)
+
+
+@pytest.mark.unit
+def test_custom_jitable_grid_weights():
+    """Test that grid weights are set correctly when jitable=True."""
+    rho = np.random.random(100)
+    theta = np.random.random(100) * 2 * np.pi
+    zeta = np.random.random(100) * 2 * np.pi
+    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
+    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+
+    np.testing.assert_allclose(grid1.spacing, grid2.spacing)
+    np.testing.assert_allclose(grid1.weights, grid2.weights)
+    np.testing.assert_allclose(grid1.weights.sum(), 4 * np.pi**2)
+    np.testing.assert_allclose(grid2.weights.sum(), 4 * np.pi**2)

@@ -1,5 +1,7 @@
 """Tests for optimizers and Optimizer class."""
 
+import warnings
+
 import numpy as np
 import pytest
 from numpy.random import default_rng
@@ -497,11 +499,11 @@ def test_wrappers():
     )
     con_nl = (ForceBalance(eq=eq),)
     obj = ForceBalance(eq=eq)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
-    ob = LinearConstraintProjection(ObjectiveFunction(obj), con)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), ObjectiveFunction(con))
     ob.build()
     assert ob.built
 
@@ -629,20 +631,22 @@ def test_scipy_constrained_solve():
         MeanCurvature(eq=eq, bounds=Hbounds),
     )
     obj = ObjectiveFunction(ForceBalance(eq=eq))
-    eq2, result = eq.optimize(
-        objective=obj,
-        constraints=constraints,
-        optimizer="scipy-trust-constr",
-        maxiter=50,
-        verbose=1,
-        x_scale="auto",
-        copy=True,
-        options={
-            "disp": 1,
-            "verbose": 3,
-            "initial_barrier_parameter": 1e-4,
-        },
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="delta_grad == 0.0")
+        eq2, result = eq.optimize(
+            objective=obj,
+            constraints=constraints,
+            optimizer="scipy-trust-constr",
+            maxiter=50,
+            verbose=1,
+            x_scale="auto",
+            copy=True,
+            options={
+                "disp": 1,
+                "verbose": 3,
+                "initial_barrier_parameter": 1e-4,
+            },
+        )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     H2 = eq2.compute(
@@ -1248,13 +1252,14 @@ def test_LinearConstraint_jacobian():
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
+
     obj1 = ObjectiveFunction(ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched")
     obj2 = ObjectiveFunction(ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped")
     obj3 = ObjectiveFunction(ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked")
 
-    con1 = get_fixed_boundary_constraints(eq1)
-    con2 = get_fixed_boundary_constraints(eq2)
-    con3 = get_fixed_boundary_constraints(eq3)
+    con1 = ObjectiveFunction(get_fixed_boundary_constraints(eq1))
+    con2 = ObjectiveFunction(get_fixed_boundary_constraints(eq2))
+    con3 = ObjectiveFunction(get_fixed_boundary_constraints(eq3))
 
     lc1 = LinearConstraintProjection(obj1, con1)
     lc2 = LinearConstraintProjection(obj2, con2)

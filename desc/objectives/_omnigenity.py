@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -122,10 +122,27 @@ class QuasisymmetryBoozer(_Objective):
         else:
             grid = self._grid
 
-        self._data_keys = ["|B|_mn"]
+        errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
+        errorif(
+            grid.num_rho != 1,
+            ValueError,
+            "QuasisymmetryBoozer grid must be on a single surface. "
+            "To target multiple surfaces, use multiple objectives.",
+        )
+        warnif(
+            grid.num_theta < 2 * eq.M,
+            RuntimeWarning,
+            "QuasisymmetryBoozer objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "QuasisymmetryBoozer objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
-        assert grid.sym is False
-        assert grid.num_rho == 1
+        self._data_keys = ["|B|_mn"]
 
         timer = Timer()
         if verbose > 0:
@@ -318,6 +335,19 @@ class QuasisymmetryTwoTerm(_Objective):
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
+
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "QuasisymmetryTwoTerm objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "QuasisymmetryTwoTerm objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C"]
@@ -568,7 +598,7 @@ class Omnigenity(_Objective):
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-       Whether target and bounds should be normalized before comparing to computed
+        Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
     loss_function : {None, 'mean', 'min', 'max'}, optional
@@ -583,12 +613,13 @@ class Omnigenity(_Objective):
     eq_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for equilibrium data.
         Defaults to a linearly space grid on the rho=1 surface.
-        Must be a single flux suface without stellarator symmetry.
+        Must be a single flux surface without stellarator symmetry.
     field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
-        The grid nodes are given in the usual (ρ,θ,ζ) coordinates, but θ is mapped to η
-        and ζ is mapped to α. Defaults to a linearly space grid on the rho=1 surface.
-        Must be a single flux suface without stellarator symmetry.
+        The grid nodes are given in the usual (ρ,θ,ζ) coordinates (with θ ∈ [0, 2π),
+        ζ ∈ [0, 2π/NFP)), but θ is mapped to η and ζ is mapped to α. Defaults to a
+        linearly space grid on the rho=1 surface. Must be a single flux surface without
+        stellarator symmetry.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
@@ -628,7 +659,7 @@ class Omnigenity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",  # FIXME: get it working with rev mode, set default to auto
+        deriv_mode="fwd",  # FIXME: get it working with rev mode (see GH issue #943)
         eq_grid=None,
         field_grid=None,
         M_booz=None,
@@ -650,7 +681,7 @@ class Omnigenity(_Objective):
         self.eta_weight = eta_weight
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
-        if not eq_fixed or field_fixed:
+        if not eq_fixed and not field_fixed:
             things = [eq, field]
         elif eq_fixed and not field_fixed:
             things = [field]
@@ -694,14 +725,22 @@ class Omnigenity(_Objective):
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
+        # default grids
+        if self._eq_grid is None and self._field_grid is not None:
+            rho = self._field_grid.nodes[0, 0]
+        elif self._eq_grid is not None and self._field_grid is None:
+            rho = self._eq_grid.nodes[0, 0]
+        elif self._eq_grid is None and self._field_grid is None:
+            rho = 1.0
         if self._eq_grid is None:
-            eq_grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
+            eq_grid = LinearGrid(
+                rho=rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
+            )
         else:
             eq_grid = self._eq_grid
-
         if self._field_grid is None:
             field_grid = LinearGrid(
-                theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
+                rho=rho, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
             )
         else:
             field_grid = self._field_grid
@@ -774,7 +813,7 @@ class Omnigenity(_Objective):
         if self._field_fixed:
             # precompute the field data since it is fixed during the optimization
             field_data = compute_fun(
-                "desc.magnetic_fields.OmnigenousField",
+                "desc.magnetic_fields._core.OmnigenousField",
                 self._field_data_keys,
                 params=self._field.params_dict,
                 transforms=self._constants["field_transforms"],
@@ -827,11 +866,10 @@ class Omnigenity(_Objective):
             eq_params = params_1
             field_params = params_2
 
-        # compute data
+        # compute eq data
         if self._eq_fixed:
             eq_data = constants["eq_data"]
         else:
-            eq_params = params_1
             eq_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._eq_data_keys,
@@ -839,11 +877,13 @@ class Omnigenity(_Objective):
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
+
+        # compute field data
         if self._field_fixed:
             field_data = constants["field_data"]
             # update theta_B and zeta_B with new iota from the equilibrium
             M, N = constants["helicity"]
-            iota = eq_data["iota"][0]
+            iota = jnp.mean(eq_data["iota"])
             matrix = jnp.where(
                 M == 0,
                 jnp.array([N, iota / N, 0, 1 / N]),  # OP
@@ -860,13 +900,13 @@ class Omnigenity(_Objective):
             field_data["zeta_B"] = booz[1, :]
         else:
             field_data = compute_fun(
-                "desc.magnetic_fields.OmnigenousField",
+                "desc.magnetic_fields._core.OmnigenousField",
                 self._field_data_keys,
                 params=field_params,
                 transforms=constants["field_transforms"],
                 profiles={},
                 helicity=constants["helicity"],
-                iota=eq_data["iota"][0],
+                iota=jnp.mean(eq_data["iota"]),
             )
 
         # additional computations that cannot be part of the regular compute API

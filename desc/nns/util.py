@@ -3,6 +3,8 @@ from typing import Callable
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import orbax, flax
+
 import desc
 
 
@@ -64,6 +66,14 @@ def get_desc_opt(
     else:
         raise NotImplementedError(f"optimizer {name} not implemented")
     return opt
+
+
+def get_nn_opt(name: str):
+    assert name in ["adamw", "lbfgs"]
+
+
+def get_train_state():
+    raise NotImplementedError
 
 
 def get_filter_params(params, keys_to_keep: list):

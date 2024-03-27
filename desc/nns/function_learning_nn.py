@@ -4,6 +4,7 @@ import pprint
 
 import jax
 from jax import random
+import optax
 import matplotlib.pyplot as plt
 
 import desc.grid
@@ -13,6 +14,7 @@ from desc.objectives import (
     ForceBalance,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
+    # GenericObjective,
 )
 from desc.equilibrium import Equilibrium
 from desc.plotting import plot_section, plot_surfaces
@@ -43,7 +45,7 @@ def init_fn_learning(
 
     # constrain the jacobian to be positive with high weights
     # objective_jac = GenericObjective(
-    #     "sqrt(g)", eq, weight=1e6, bounds=(0, 1e12), name="positive_jacobian"
+    #     "sqrt(g)", eq, weight=1, name="positive_jacobian"  # bounds=(0, 1e12),
     # )
 
     # combine objectives
@@ -125,7 +127,7 @@ def optimize_module(
         df_dx=df_dx,
         tols=tols,
         verbose=2,
-        maxiter=1e4,
+        maxiter=10000,
     )
     res = opt()
 
@@ -167,7 +169,7 @@ def main(inp, module_name="singleMLP"):
     }
 
     ir = InputReader(cl_args=inp)
-    input_idx = 0  # which continuation step to take
+    input_idx = 1  # which continuation step to take
 
     input_spec = ir.inputs[
         input_idx
@@ -206,7 +208,7 @@ def main(inp, module_name="singleMLP"):
         objective=objective,
         module_inp=module_input,
         module_params=module_params,
-        inp_str_name=module_name + "_" + inp,
+        inp_str_name=module_name + "_" + inp + "_" + input_idx,
     )
 
 

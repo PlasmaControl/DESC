@@ -81,8 +81,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     import jax
     import jax.numpy as jnp
     import jaxlib
+    from jax import config as jax_config
     from jax import custom_jvp
-    from jax.config import config as jax_config
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp

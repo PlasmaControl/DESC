@@ -11,6 +11,7 @@ from netCDF4 import Dataset
 import desc.examples
 from desc.__main__ import main
 from desc.backend import sign
+from desc.compute.utils import cross, dot
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
@@ -436,3 +437,118 @@ def test_backward_compatible_load_and_resolve():
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj)
     eq.solve(maxiter=1, objective=obj)
+
+
+def test_shifted_circle_geometry():
+    """
+    In this test, we calculate a low-beta shifted circle equilibrium with DESC.
+
+    and compare the various geometric coefficients with their analytical expressions.
+    """
+    from scipy.interpolate import interp1d
+
+    psi = 0.5  # Actually rho^2 (normalized)
+    alpha = 0
+    ntor = 2.0
+
+    eq = desc.examples.get("W7-X")[-1]
+
+    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
+
+    data_eq = eq.compute(eq_keys)
+
+    fi = interp1d(data_eq["rho"], data_eq["iota"])
+    fs = interp1d(data_eq["rho"], data_eq["iota_r"])
+
+    iotas = fi(np.sqrt(psi))
+    shears = fs(np.sqrt(psi))
+
+    N = int((2 * eq.M_grid * eq.N_grid) * ntor + 1)
+    coords1 = np.zeros((N, 3))
+    coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
+    coords1[:, 1] = alpha * np.ones(N, dtype=int) + iotas * np.linspace(
+        -ntor * np.pi, ntor * np.pi, N
+    )
+    zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
+    coords1[:, 2] = zeta
+
+    c1 = eq.compute_theta_coords(coords1)
+    grid = Grid(c1, sort=False)
+
+    data_keys = [
+        "p_r",
+        "|grad(psi)|^2",
+        "grad(|B|)",
+        "grad(alpha)",
+        "grad(psi)",
+        "B",
+        "grad(|B|)",
+        "kappa",
+        "iota",
+        "lambda_t",
+        "lambda_z",
+        "lambda_tt",
+        "lambda_zz",
+        "lambda_tz",
+        "|B|",
+        "|B|_z",
+        "B^zeta",
+    ]
+
+    data = eq.compute(data_keys, grid=grid)
+
+    psib = data_eq["psi"][-1]
+    sign_psi = psib / np.abs(psib)
+    sign_iota = iotas / np.abs(iotas)
+
+    # normalizations
+    Lref = data_eq["a"]
+    Bref = 2 * np.abs(psib) / Lref**2
+
+    modB = data["|B|"]
+    x = Lref * np.sqrt(psi)
+    shat = -x / iotas * shears / Lref
+
+    grad_psi = data["grad(psi)"]
+    grad_psi_sq = data["|grad(psi)|^2"]
+    grad_alpha = data["grad(alpha)"]
+
+    iota = data["iota"]
+
+    modB = data["|B|"]
+
+    B_sup_zeta = data["B^zeta"]
+    gradpar = Lref * B_sup_zeta / modB * 1 / iota
+
+    gds2 = np.array(dot(grad_alpha, grad_alpha)) * Lref**2 * psi
+
+    gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
+
+    gds22 = grad_psi_sq * (1 / psi) * (shat / (Lref * Bref)) ** 2
+
+    gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
+    gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
+
+    cvdrift = (
+        -sign_psi
+        * 2
+        * Bref
+        * Lref**2
+        * np.sqrt(psi)
+        * dot(cross(data["B"], data["kappa"]), grad_alpha)
+        / modB**2
+    )
+
+    gds2_an = 0.0
+    gds21_an = 0.0
+    gds22_an = 0.0
+    cvdrift_an = 0.0
+    gbdrift_an = 0.0
+    gradpar_an = 0.0
+
+    np.testing.assert_allclose(gradpar, gradpar_an, rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(gds2, gds2_an, rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(gds21, gds21_an, rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(gds22, gds22_an, rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(cvdrift, cvdrift_an, rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(gbdrift, gbdrift_an, rtol=1e-4, atol=1e-4)

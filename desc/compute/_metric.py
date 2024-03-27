@@ -1827,3 +1827,74 @@ def _gradtheta(params, transforms, profiles, data, **kwargs):
 def _gradzeta(params, transforms, profiles, data, **kwargs):
     data["|grad(zeta)|"] = jnp.sqrt(data["g^zz"])
     return data
+
+
+@register_compute_fun(
+    name="gbdrift",
+    label="\\mathrm{gradB-drift}",
+    units="~",
+    units_long="None",
+    description="Binormal component of th geometric part of the gradB drift"
+    + " used for local stability analyses,"
+    + " energetic particle proxy,"
+    + " effective field ripple",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|", "b", "grad(alpha)", "grad(|B|)"],
+)
+def _gbdrift(params, transforms, profiles, data, **kwargs):
+    data["gbdrift"] = (
+        1
+        / data["|B|"] ** 2
+        * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="cvdrift",
+    label="\\mathrm{curvature-drift}",
+    units="~",
+    units_long="None",
+    description="Binormal component of th geometric part of the curvature drift"
+    + " used for local stability analyses,"
+    + " energetic particle proxy"
+    + " effective field ripple",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["p_r", "psi_r", "|B|", "gbdrift"],
+)
+def _cvdrift(params, transforms, profiles, data, **kwargs):
+    mu_0 = 4 * jnp.pi * 1.0e-7
+    dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
+    data["cvdrift"] = 1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
+    return data
+
+
+@register_compute_fun(
+    name="cvdrift0",
+    label="\\mathrm{curvature-drift-1}",
+    units="~",
+    units_long="None",
+    description="Radial component of the geometric part of the curvature drift"
+    + " used for local stability analyses,"
+    + " energetic particle proxy"
+    + " effective field ripple",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|", "b", "e^rho", "grad(|B|)"],
+)
+def _cvdrift0(params, transforms, profiles, data, **kwargs):
+    data["cvdrift0"] = (
+        1 / data["|B|"] ** 2 * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
+    )
+    return data

@@ -10,6 +10,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
     AspectRatio,
     AxisRSelfConsistency,
@@ -30,6 +31,8 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixOmniMap,
+    FixOmniWell,
     FixParameter,
     FixPressure,
     FixPsi,
@@ -133,25 +136,37 @@ def test_constrain_bdry_with_only_one_mode():
 def test_constrain_asserts():
     """Test error checking for incompatible constraints."""
     eqi = Equilibrium(iota=PowerSeriesProfile(0, 0), pressure=PowerSeriesProfile(0, 0))
-    eqc = Equilibrium(current=PowerSeriesProfile(0))
+    eqc = Equilibrium(current=PowerSeriesProfile(1))
+    obj_i = get_equilibrium_objective(eqi, "force")
+    obj_c = get_equilibrium_objective(eqc, "force")
+    obj_i.build()
+    obj_c.build()
     # nonexistent toroidal current can't be constrained
     with pytest.raises(RuntimeError):
-        eqi.solve(constraints=FixCurrent(eq=eqi))
+        con = FixCurrent(eq=eqi)
+        con.build()
     # nonexistent rotational transform can't be constrained
     with pytest.raises(RuntimeError):
-        eqc.solve(constraints=FixIota(eq=eqc))
+        con = FixIota(eq=eqc)
+        con.build()
     # toroidal current and rotational transform can't be constrained simultaneously
     with pytest.raises(ValueError):
-        eqi.solve(constraints=(FixCurrent(eq=eqi), FixIota(eq=eqi)))
-    with pytest.raises(AssertionError):
-        eqi.solve(
-            constraints=(FixPressure(eq=eqi, target=2), FixPressure(eq=eqi, target=1))
-        )
+        con = (FixCurrent(eq=eqi), FixIota(eq=eqi))
+        eqi.solve(constraints=con)
     # cannot use two incompatible constraints
     with pytest.raises(AssertionError):
         con1 = FixCurrent(target=eqc.c_l, eq=eqc)
         con2 = FixCurrent(target=eqc.c_l + 1, eq=eqc)
-        eqc.solve(constraints=(con1, con2))
+        con = ObjectiveFunction((con1, con2))
+        con.build()
+        _ = factorize_linear_constraints(obj_c, con)
+    # if only slightly off, should raise only a warning
+    with pytest.warns(UserWarning):
+        con1 = FixCurrent(target=eqc.c_l, eq=eqc)
+        con2 = FixCurrent(target=eqc.c_l * (1 + 1e-9), eq=eqc)
+        con = ObjectiveFunction((con1, con2))
+        con.build()
+        _ = factorize_linear_constraints(obj_c, con)
 
 
 @pytest.mark.regression
@@ -340,7 +355,7 @@ def test_factorize_linear_constraints_asserts():
 def test_build_init():
     """Ensure that passing an equilibrium to init builds the objective correctly.
 
-    Related to gh issue #378
+    Test for GH issue #378.
     """
     eq = Equilibrium(M=3, N=1)
 
@@ -869,3 +884,40 @@ def test_FixNAE_util_correct_objectives():
     assert _is_any_instance(cs, FixIonTemperature)
     assert _is_any_instance(cs, FixAtomicNumber)
     assert _is_any_instance(cs, FixIota)
+
+
+@pytest.mark.unit
+def test_fix_omni_indices():
+    """Test that omnigenity parameters are constrained properly.
+
+    Test for GH issue #768.
+    """
+    NFP = 3
+    field = OmnigenousField(
+        L_B=1, M_B=5, L_x=2, M_x=3, N_x=4, NFP=NFP, helicity=(1, NFP)
+    )
+
+    # no indices
+    constraint = FixOmniWell(field=field, indices=False)
+    constraint.build()
+    assert constraint._idx.size == 0
+    constraint = FixOmniMap(field=field, indices=False)
+    constraint.build()
+    assert constraint._idx.size == 0
+
+    # all indices
+    constraint = FixOmniWell(field=field, indices=True)
+    constraint.build()
+    assert constraint._idx.size == field.B_lm.size
+    constraint = FixOmniMap(field=field, indices=True)
+    constraint.build()
+    assert constraint._idx.size == field.x_lmn.size
+
+    # specified indices
+    indices = np.arange(3, 8)
+    constraint = FixOmniWell(field=field, indices=indices)
+    constraint.build()
+    assert constraint._idx.size == indices.size
+    constraint = FixOmniMap(field=field, indices=indices)
+    constraint.build()
+    assert constraint._idx.size == indices.size

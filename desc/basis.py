@@ -17,6 +17,7 @@ __all__ = [
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
+    "ChebyshevPolynomial",
 ]
 
 
@@ -149,8 +150,8 @@ class _Basis(IOAble, ABC):
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -294,8 +295,8 @@ class PowerSeries(_Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -900,8 +901,8 @@ class ChebyshevDoubleFourierBasis(_Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -1192,6 +1193,98 @@ class FourierZernikeBasis(_Basis):
             self._set_up()
 
 
+class ChebyshevPolynomial(_Basis):
+    """Shifted Chebyshev polynomial of the first kind.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+
+    """
+
+    def __init__(self, L):
+        self._L = L
+        self._M = 0
+        self._N = 0
+        self._NFP = 1
+        self._sym = False
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L)
+
+        super().__init__()
+
+    def _get_modes(self, L=0):
+        """Get mode numbers for shifted Chebyshev polynomials of the first kind.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        l = np.arange(L + 1).reshape((-1, 1))
+        z = np.zeros((L + 1, 2))
+        return np.hstack([l, z])
+
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            basis functions evaluated at nodes
+
+        """
+        if modes is None:
+            modes = self.modes
+        if (derivatives[1] != 0) or (derivatives[2] != 0):
+            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        r, t, z = nodes.T
+        l, m, n = modes.T
+
+        radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
+        return radial
+
+    def change_resolution(self, L):
+        """Change resolution of the basis to the given resolution.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+
+        """
+        if L != self.L:
+            self._L = L
+            self._modes = self._get_modes(self.L)
+            self._set_up()
+
+
 def polyder_vec(p, m, exact=False):
     """Vectorized version of polyder.
 
@@ -1471,9 +1564,8 @@ def _zernike_radial_vectorized(r, l, m, dr):
         # Calculate Radial part of Zernike for N,alpha
         result = (-1) ** N * r**alpha * P_n
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -1743,9 +1835,8 @@ def _zernike_radial_vectorized_d1(r, l, m, dr):
             - coef[1] * 4 * r ** (alpha + 1) * P_n[1]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -1836,9 +1927,8 @@ def _zernike_radial_vectorized_d2(r, l, m, dr):
             + coef[2] * 16 * r ** (alpha + 2) * P_n[2]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -1931,9 +2021,8 @@ def _zernike_radial_vectorized_d3(r, l, m, dr):
             - coef[3] * 64 * r ** (alpha + 3) * P_n[3]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -2037,9 +2126,8 @@ def _zernike_radial_vectorized_d4(r, l, m, dr):
             + coef[4] * 256 * r ** (alpha + 4) * P_n[4]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, _, _, out = fori_loop(
-            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
-        )
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial

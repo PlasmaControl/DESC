@@ -5,7 +5,7 @@ import numpy as np
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -264,6 +264,19 @@ class RotationalTransform(_Objective):
         else:
             grid = self._grid
 
+        warnif(
+            (eq.iota is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
+            RuntimeWarning,
+            "RotationalTransform objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            (eq.iota is None) and (grid.num_zeta < 2 * eq.N),
+            RuntimeWarning,
+            "RotationalTransform objective grid requires toroidal "
+            "resolution for surface averages",
+        )
+
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
         )
@@ -418,6 +431,17 @@ class Shear(_Objective):
         else:
             grid = self._grid
 
+        warnif(
+            (eq.iota is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
+            RuntimeWarning,
+            "Shear objective grid requires poloidal " "resolution for surface averages",
+        )
+        warnif(
+            (eq.iota is None) and (grid.num_zeta < 2 * eq.N),
+            RuntimeWarning,
+            "Shear objective grid requires toroidal " "resolution for surface averages",
+        )
+
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
         )
@@ -569,6 +593,19 @@ class ToroidalCurrent(_Objective):
             )
         else:
             grid = self._grid
+
+        warnif(
+            (eq.current is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
+            RuntimeWarning,
+            "ToroidalCurrent objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            (eq.current is None) and (grid.num_zeta < 2 * eq.N),
+            RuntimeWarning,
+            "ToroidalCurrent objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]

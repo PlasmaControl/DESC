@@ -375,7 +375,7 @@ class TestProfiles:
     def test_solve_with_combined(self):
         """Make sure combined profiles work correctly for solving equilibrium.
 
-        Test for gh issue #347
+        Test for GH issue #347.
         """
         ne = PowerSeriesProfile(3.0e19 * np.array([1, -1]), modes=[0, 10])
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])

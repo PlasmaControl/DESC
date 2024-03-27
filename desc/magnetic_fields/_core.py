@@ -4,19 +4,26 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-from interpax import approx_df, interp2d, interp3d
+import scipy.linalg
+from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 
-from desc.backend import fori_loop, jit, jnp, odeint
-from desc.basis import DoubleFourierSeries
+from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
+    DoubleFourierSeries,
+)
+from desc.compute import compute as compute_fun
 from desc.compute import rpz2xyz_vec, xyz2rpz
+from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, flatten_list, setdefault
+from desc.utils import copy_coeffs, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -976,6 +983,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
         "_currents",
         "_NFP",
     ]
+    # by default floats are considered dynamic but for this to work with jit these
+    # need to be static
+    _static_attrs = ["_extrap", "_period"]
 
     def __init__(
         self, R, phi, Z, BR, Bphi, BZ, currents=1.0, NFP=1, method="cubic", extrap=False
@@ -1201,7 +1211,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             else:  # "raw"
                 extcur = 1  # coil current scaling factor
         nextcur = int(mgrid["nextcur"][()])  # number of coils
-        extcur = np.broadcast_to(extcur, nextcur)
+        extcur = np.broadcast_to(extcur, nextcur).astype(float)
 
         # compute grid knots in cylindrical coordinates
         ir = int(mgrid["ir"][()])  # number of grid points in the R coordinate
@@ -1274,29 +1284,6 @@ class SplineMagneticField(_MagneticField, Optimizable):
             method=method,
             extrap=extrap,
         )
-
-    def tree_flatten(self):
-        """Convert DESC objects to JAX pytrees."""
-        # the default flattening method in the IOAble base class assumes all floats
-        # are non-static, but for the periodic BC to work we need the period to be
-        # a static value, so we override the default tree flatten/unflatten method
-        # so that we can pass a SplineMagneticField into a jitted function such as
-        # an objective.
-        static = ["_method", "_extrap", "_period", "_axisym"]
-        children = {key: val for key, val in self.__dict__.items() if key not in static}
-        aux_data = tuple(
-            [(key, val) for key, val in self.__dict__.items() if key in static]
-        )
-        return ((children,), aux_data)
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        """Recreate a DESC object from JAX pytree."""
-        obj = cls.__new__(cls)
-        obj.__dict__.update(children[0])
-        for kv in aux_data:
-            setattr(obj, kv[0], kv[1])
-        return obj
 
 
 class ScalarPotentialField(_MagneticField):
@@ -1397,14 +1384,14 @@ def field_line_integrate(
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box.
         If supplied, the RHS of the field line equations will be
-        multipled by exp(-r) where r is the distance to the bounding box,
+        multiplied by exp(-r) where r is the distance to the bounding box,
         this is meant to prevent the field lines which escape to infinity from
         slowing the integration down by being traced to infinity.
         defaults to (0,np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for field line integration bounding box.
         If supplied, the RHS of the field line equations will be
-        multipled by exp(-r) where r is the distance to the bounding box,
+        multiplied by exp(-r) where r is the distance to the bounding box,
         this is meant to prevent the field lines which escape to infinity from
         slowing the integration down by being traced to infinity.
         Defaults to (-np.inf,np.inf)
@@ -1449,7 +1436,7 @@ def field_line_integrate(
             ),
             jnp.array(
                 [
-                    # we mult by decay_accel to accelerate the decay so that the
+                    # we multiply by decay_accel to accelerate the decay so that the
                     # integration is stopped soon after the bounds are exited.
                     jnp.exp(-(decay_accel * (r - bounds_R[0]) ** 2)),
                     jnp.exp(-(decay_accel * (r - bounds_R[1]) ** 2)),
@@ -1460,7 +1447,7 @@ def field_line_integrate(
             1.0,
         )
         # multiply all together, the conditions that are not violated
-        # are just one while the violated ones are continous decaying exponentials
+        # are just one while the violated ones are continuous decaying exponentials
         decay_factor = jnp.prod(decay_factor, axis=0)
 
         br, bp, bz = field.compute_magnetic_field(
@@ -1478,3 +1465,339 @@ def field_line_integrate(
     r = x[:, :, 0].T.reshape((len(phis), *rshape))
     z = x[:, :, 2].T.reshape((len(phis), *rshape))
     return r, z
+
+
+class OmnigenousField(Optimizable, IOAble):
+    """A magnetic field with perfect omnigenity (but is not necessarily analytic).
+
+    Uses parameterization from Dudt et. al. [1]_
+
+    Parameters
+    ----------
+    L_B : int
+        Resolution of the radial Chebyshev polynomials for magnetic well parameters.
+    M_B : int
+        Number of monotonic spline knots per surface of the magnetic well parameters.
+    L_x : int
+        Resolution of the radial Chebyshev polynomials for the omnigenity parameters.
+    M_x : int
+        Resolution of the Fourier series in eta for the omnigenity parameters.
+    N_x : int
+        Resolution of the Fourier series in alpha for the omnigenity parameters.
+    NFP : int
+        Number of field periods.
+    helicity : tuple, optional
+        Type of pseudo-symmetry (M, N). Default = toroidal contours (1, 0).
+    B_lm : ndarray, optional
+        Magnetic well parameters describing ||B||(ρ,η). These values are a flattened 2D
+        array of shape (L_B + 1, M_B), where the rows are Chebyshev coefficients
+        corresponding to the modes in `B_basis` for the radial variation, and the
+        columns are the values of ||B|| at linearly spaced monotonic spline knots.
+        (The array is flattened in the default row-major or 'C'-style order.)
+        If not supplied, `B_lm` defaults to a constant field of 1 T.
+    x_lmn : ndarray, optional
+        Omnigenity parameters describing h(ρ,η,α). The coefficients correspond to the
+        modes in `x_basis`. If not supplied, `x_lmn` defaults to zero for all modes.
+
+    Notes
+    -----
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
+    computational coordinates, not vector B in lab coordinates.
+
+    References
+    ----------
+    .. [1] Dudt, Daniel W., et al. "Magnetic fields with general omnigenity."
+       Journal of Plasma Physics (2024) doi:10.1017/S0022377824000151
+    """
+
+    _io_attrs_ = [
+        "_L_B",
+        "_M_B",
+        "_L_x",
+        "_M_x",
+        "_N_x",
+        "_NFP",
+        "_helicity",
+        "_B_basis",
+        "_x_basis",
+        "_B_lm",
+        "_x_lmn",
+    ]
+
+    def __init__(
+        self,
+        L_B=0,
+        M_B=2,
+        L_x=0,
+        M_x=0,
+        N_x=0,
+        NFP=1,
+        helicity=(1, 0),
+        B_lm=None,
+        x_lmn=None,
+    ):
+        self._L_B = int(L_B)
+        self._M_B = int(M_B)
+        self._L_x = int(L_x)
+        self._M_x = int(M_x)
+        self._N_x = int(N_x)
+        self._NFP = int(NFP)
+        self.helicity = helicity
+        self._B_basis = ChebyshevPolynomial(L=self.L_B)
+        self._x_basis = ChebyshevDoubleFourierBasis(
+            L=self.L_x,
+            M=self.M_x,
+            N=self.N_x,
+            NFP=self.NFP,
+            sym="cos(t)",
+        )
+        if B_lm is None:
+            self._B_lm = np.concatenate(
+                (
+                    np.ones((self.M_B,)),  # constant |B| = 1 T
+                    np.zeros((self.L_B * self.M_B,)),  # same field on all flux surfaces
+                )
+            )
+        else:
+            assert len(B_lm) == (self.L_B + 1) * self.M_B
+            self._B_lm = B_lm
+        if x_lmn is None:
+            self._x_lmn = np.zeros(self.x_basis.num_modes)
+        else:
+            assert len(x_lmn) == self.x_basis.num_modes
+            self._x_lmn = x_lmn
+
+        # TODO: should we not allow some types of helicity?
+        helicity_sign = sign(helicity[0]) * sign(helicity[1])
+        warnif(
+            self.helicity != (0, self.NFP * helicity_sign)
+            and abs(self.helicity[0]) != 1,
+            UserWarning,
+            "Typical helicity (M,N) has M=1.",
+        )
+        warnif(
+            self.helicity != (helicity_sign, 0) and abs(self.helicity[1]) != self.NFP,
+            UserWarning,
+            "Typical helicity (M,N) has N=NFP.",
+        )
+
+    def change_resolution(
+        self,
+        L_B=None,
+        M_B=None,
+        L_x=None,
+        M_x=None,
+        N_x=None,
+        NFP=None,
+    ):
+        """Set the spectral resolution of field parameters.
+
+        Parameters
+        ----------
+        L_B : int
+            Resolution of the radial Chebyshev polynomials for magnetic well params.
+        M_B : int
+            Number of monotonic spline knots per surface of the magnetic well params.
+        L_x : int
+            Resolution of the radial Chebyshev polynomials for the omnigenity params.
+        M_x : int
+            Resolution of the Fourier series in eta for the omnigenity params.
+        N_x : int
+            Resolution of the Fourier series in alpha for the omnigenity params.
+        NFP : int
+            Number of field periods.
+
+        """
+        old_L_B = self.L_B
+
+        self._NFP = setdefault(NFP, self.NFP)
+        self._L_B = setdefault(L_B, self.L_B)
+        self._M_B = setdefault(M_B, self.M_B)
+        self._L_x = setdefault(L_x, self.L_x)
+        self._M_x = setdefault(M_x, self.M_x)
+        self._N_x = setdefault(N_x, self.N_x)
+
+        # change well parameters and basis
+        rho = (  # Chebyshev-Gauss-Lobatto nodes
+            1 - np.cos(np.arange(old_L_B // 2, old_L_B + 1, 1) * np.pi / old_L_B)
+        ) / 2
+        nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
+
+        transform_fwd = self.B_basis.evaluate(nodes)
+        transform_rev = scipy.linalg.pinv(transform_fwd)
+        B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
+
+        eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])
+        eta_new = np.linspace(0, jnp.pi / 2, num=self.M_B)
+
+        B_new = np.zeros((old_L_B + 1, self.M_B))
+        for i in range(old_L_B + 1):
+            B_new[i, :] = interp1d(eta_new, eta_old, B_old[i, :], method="monotonic-0")
+        B_lm_old = transform_rev @ B_new
+
+        old_modes_well = self.B_basis.modes
+        self.B_basis.change_resolution(self.L_B)
+
+        B_lm_new = np.zeros((self.L_B + 1, self.M_B))
+        for j in range(self.M_B):
+            B_lm_new[:, j] = copy_coeffs(
+                B_lm_old[:, j], old_modes_well, self.B_basis.modes
+            )
+        self._B_lm = B_lm_new.flatten()
+
+        # change mapping parameters and basis
+        old_modes_map = self.x_basis.modes
+        self.x_basis.change_resolution(
+            self.L_x, self.M_x, self.N_x, NFP=self.NFP, sym="cos(t)"
+        )
+        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_map, self.x_basis.modes)
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. The grid nodes are given in the usual
+            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
+            Defaults to a linearly space grid on the rho=1 surface.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+        **kwargs : dict, optional
+            Valid keyword arguments are:
+
+            * ``iota``: rotational transform
+            * ``helicity``: helicity (defaults to self.helicity)
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            grid = LinearGrid(
+                theta=2 * self.M_B, N=2 * self.N_x, NFP=self.NFP, sym=False
+            )
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
+
+        if params is None:
+            params = get_params(names, obj=self)
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            helicity=kwargs.pop("helicity", self.helicity),
+            **kwargs,
+        )
+        return data
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @property
+    def L_B(self):
+        """int: Radial resolution of the magnetic well parameters well_l."""
+        return self._L_B
+
+    @property
+    def M_B(self):
+        """int: Number of spline points in the magnetic well parameters well_l."""
+        return self._M_B
+
+    @property
+    def L_x(self):
+        """int: Radial resolution of x_lmn."""
+        return self._L_x
+
+    @property
+    def M_x(self):
+        """int: Poloidal resolution of x_lmn."""
+        return self._M_x
+
+    @property
+    def N_x(self):
+        """int: Toroidal resolution of x_lmn."""
+        return self._N_x
+
+    @property
+    def B_basis(self):
+        """ChebyshevPolynomial: Spectral basis for B_lm."""
+        return self._B_basis
+
+    @property
+    def x_basis(self):
+        """ChebyshevDoubleFourierBasis: Spectral basis for x_lmn."""
+        return self._x_basis
+
+    @optimizable_parameter
+    @property
+    def B_lm(self):
+        """ndarray: Omnigenity magnetic well shape parameters."""
+        return self._B_lm
+
+    @B_lm.setter
+    def B_lm(self, B_lm):
+        assert len(B_lm) == (self.L_B + 1) * self.M_B
+        self._B_lm = B_lm
+
+    @optimizable_parameter
+    @property
+    def x_lmn(self):
+        """ndarray: Omnigenity coordinate mapping parameters."""
+        return self._x_lmn
+
+    @x_lmn.setter
+    def x_lmn(self, x_lmn):
+        assert len(x_lmn) == self.x_basis.num_modes
+        self._x_lmn = x_lmn
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        self._helicity = helicity

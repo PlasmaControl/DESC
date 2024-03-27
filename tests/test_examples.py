@@ -9,13 +9,14 @@ import pytest
 from qic import Qic
 from qsc import Qsc
 
-import desc.examples
+from desc.backend import jnp
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import SplineMagneticField
+from desc.magnetic_fields import OmnigenousField, SplineMagneticField
 from desc.objectives import (
     AspectRatio,
     BoundaryError,
@@ -24,14 +25,19 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixOmniBmax,
+    FixOmniMap,
     FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
     ForceBalance,
     ForceBalanceAnisotropic,
+    GenericObjective,
+    LinearObjectiveFromUser,
     MeanCurvature,
     ObjectiveFunction,
+    Omnigenity,
     PlasmaVesselDistance,
     PrincipalCurvature,
     QuasisymmetryBoozer,
@@ -127,7 +133,7 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
 def test_solve_bounds():
     """Tests optimizing with bounds=(lower bound, upper bound)."""
     # decrease resolution and double pressure so no longer in force balance
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
     eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
     eq.p_l *= 2
 
@@ -146,7 +152,7 @@ def test_solve_bounds():
 @pytest.mark.optimize
 def test_1d_optimization():
     """Tests 1D optimization for target aspect ratio."""
-    eq = desc.examples.get("SOLOVEV")
+    eq = get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
     constraints = (
         ForceBalance(eq=eq),
@@ -167,7 +173,7 @@ def test_1d_optimization():
 @pytest.mark.optimize
 def test_1d_optimization_old():
     """Tests 1D optimization for target aspect ratio."""
-    eq = desc.examples.get("SOLOVEV")
+    eq = get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
     eq._optimize(
         objective,
@@ -277,7 +283,7 @@ def test_qh_optimization():
 def test_ATF_results(tmpdir_factory):
     """Test automatic continuation method with ATF."""
     output_dir = tmpdir_factory.mktemp("result")
-    eq0 = desc.examples.get("ATF")
+    eq0 = get("ATF")
     eq = Equilibrium(
         Psi=eq0.Psi,
         NFP=eq0.NFP,
@@ -694,9 +700,250 @@ def test_multiobject_optimization_prox():
 
 
 @pytest.mark.unit
+@pytest.mark.optimize
+def test_omnigenity_qa():
+    """Test optimizing omnigenity parameters to match an axisymmetric equilibrium."""
+    # Solov'ev examples has B_max contours at theta=pi, need to change to theta=0
+    eq = get("SOLOVEV")
+    rone = np.ones_like(eq.R_lmn)
+    rone[eq.R_basis.modes[:, 1] != 0] *= -1
+    eq.R_lmn *= rone
+    zone = np.ones_like(eq.Z_lmn)
+    zone[eq.Z_basis.modes[:, 1] != 0] *= -1
+    eq.Z_lmn *= zone
+    lone = np.ones_like(eq.L_lmn)
+    lone[eq.L_basis.modes[:, 1] != 0] *= -1
+    eq.L_lmn *= lone
+    eq.axis = eq.get_axis()
+    eq.surface = eq.get_surface_at(rho=1)
+    eq.Psi *= 5  # B0 = 1 T
+    eq.solve()
+
+    field = OmnigenousField(
+        L_B=1, M_B=4, L_x=1, M_x=1, N_x=1, NFP=eq.NFP, helicity=(1, 0)
+    )
+
+    eq_axis_grid = LinearGrid(rho=1e-2, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+
+    field_axis_grid = LinearGrid(
+        rho=1e-2, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
+    )
+    field_lcfs_grid = LinearGrid(
+        rho=1.0, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
+    )
+
+    objective = ObjectiveFunction(
+        (
+            Omnigenity(
+                eq=eq,
+                field=field,
+                eq_grid=eq_axis_grid,
+                field_grid=field_axis_grid,
+                eq_fixed=True,
+            ),
+            Omnigenity(
+                eq=eq,
+                field=field,
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                eq_fixed=True,
+            ),
+        )
+    )
+
+    optimizer = Optimizer("lsq-exact")
+    (field,), _ = optimizer.optimize(
+        field,
+        objective,
+        maxiter=100,
+        ftol=1e-6,
+        xtol=1e-6,
+        verbose=3,
+    )
+
+    B_lm = field.B_lm.reshape((field.B_basis.L + 1, -1))
+    B0 = field.B_basis.evaluate(np.array([[0, 0, 0]])) @ B_lm
+    B1 = field.B_basis.evaluate(np.array([[1, 0, 0]])) @ B_lm
+
+    # x_lmn=0 because the equilibrium is QS
+    np.testing.assert_allclose(field.x_lmn, 0, atol=1e-12)
+
+    # check that magnetic well parameters get |B| on axis correct
+    grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+    data = eq.compute("|B|", grid=grid)
+    np.testing.assert_allclose(B0, np.mean(data["|B|"]), rtol=1e-3)
+
+    # check that magnetic well parameters get |B| min & max on LCFS correct
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
+    data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=grid)
+    np.testing.assert_allclose(np.min(B1), data["min_tz |B|"][0], rtol=2e-3)
+    np.testing.assert_allclose(np.max(B1), data["max_tz |B|"][0], rtol=2e-3)
+
+
+@pytest.mark.regression
+@pytest.mark.optimize
+@pytest.mark.slow
+def test_omnigenity_optimization():
+    """Test a realistic OP omnigenity optimization."""
+    # this same example is used in docs/notebooks/tutorials/omnigenity
+
+    # initial equilibrium from QP model
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=3,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=2,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="force", verbose=3)
+
+    # omnigenity optimization
+    field = OmnigenousField(
+        L_B=1,
+        M_B=3,
+        L_x=1,
+        M_x=1,
+        N_x=1,
+        NFP=eq.NFP,
+        helicity=(0, eq.NFP),
+        B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
+    )
+
+    def mirrorRatio(params):
+        B_lm = params["B_lm"]
+        f = jnp.array(
+            [
+                B_lm[0] - B_lm[field.M_B],  # B_min on axis
+                B_lm[field.M_B - 1] - B_lm[-1],  # B_max on axis
+            ]
+        )
+        return f
+
+    eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+
+    field_half_grid = LinearGrid(rho=0.5, theta=16, zeta=8, NFP=field.NFP, sym=False)
+    field_lcfs_grid = LinearGrid(rho=1.0, theta=16, zeta=8, NFP=field.NFP, sym=False)
+
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            Omnigenity(
+                eq=eq,
+                field=field,
+                eq_grid=eq_half_grid,
+                field_grid=field_half_grid,
+                eta_weight=1,
+            ),
+            Omnigenity(
+                eq=eq,
+                field=field,
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                eta_weight=2,
+            ),
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+        FixOmniBmax(field=field),
+        FixOmniMap(field=field, indices=np.where(field.x_basis.modes[:, 1] == 0)[0]),
+        LinearObjectiveFromUser(mirrorRatio, field, target=[0.8, 1.2]),
+    )
+    optimizer = Optimizer("lsq-auglag")
+    (eq, field), _ = optimizer.optimize(
+        (eq, field), objective, constraints, maxiter=100, verbose=3
+    )
+    eq, _ = eq.solve(objective="force", verbose=3)
+
+    # check omnigenity error is low
+    f = objective.compute_unscaled(objective.x(*(eq, field)))  # error in Tesla
+    np.testing.assert_allclose(f[2:], 0, atol=1.2e-2)  # f[:2] is R0 and R0/a
+
+    # check mirror ratio is correct
+    grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([0]))
+    data = eq.compute("|B|", grid=grid)
+    np.testing.assert_allclose(np.min(data["|B|"]), 0.8, atol=2e-2)
+    np.testing.assert_allclose(np.max(data["|B|"]), 1.2, atol=2e-2)
+
+
+@pytest.mark.unit
+def test_omnigenity_proximal():
+    """Test omnigenity optimization with proximal optimizer."""
+    # this only tests that the optimization runs, not that it gives a good result
+
+    # initial equilibrium and omnigenous field
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=3,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=2,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="force", verbose=3)
+    field = OmnigenousField(
+        L_B=1,
+        M_B=3,
+        L_x=1,
+        M_x=1,
+        N_x=1,
+        NFP=eq.NFP,
+        helicity=(0, eq.NFP),
+        B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
+    )
+
+    # first, test optimizing the equilibrium with the field fixed
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            Omnigenity(eq=eq, field=field, field_fixed=True),  # field is fixed
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    eq, _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
+
+    # second, test optimizing both the equilibrium and the field simultaneously
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            Omnigenity(eq=eq, field=field),  # field is not fixed
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    (eq, field), _ = optimizer.optimize(
+        (eq, field), objective, constraints, maxiter=2, verbose=3
+    )
+
+
+@pytest.mark.unit
 def test_non_eq_optimization():
     """Test for optimizing a non-eq object by fixing all eq parameters."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
     Rmax = 4
     Rmin = 2
 
@@ -740,7 +987,7 @@ def test_non_eq_optimization():
 @pytest.mark.unit
 def test_only_non_eq_optimization():
     """Test for optimizing only a non-eq object."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
     surf = eq.surface
 
     surf.change_resolution(M=eq.M, N=eq.N)
@@ -785,7 +1032,9 @@ def test_freeb_vacuum():
         FixPressure(eq=eq),
         FixPsi(eq=eq),
     )
-    objective = ObjectiveFunction(VacuumBoundaryError(eq=eq, ext_field=ext_field))
+    objective = ObjectiveFunction(
+        VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
+    )
     eq, out = eq.optimize(
         objective,
         constraints,
@@ -841,7 +1090,9 @@ def test_freeb_axisym():
         FixPressure(eq=eq),
         FixPsi(eq=eq),
     )
-    objective = ObjectiveFunction(BoundaryError(eq=eq, ext_field=ext_field))
+    objective = ObjectiveFunction(
+        BoundaryError(eq=eq, field=ext_field, field_fixed=True)
+    )
 
     # we know this is a pretty simple shape so we'll only use |m| <= 2
     R_modes = (
@@ -875,36 +1126,36 @@ class TestGetExample:
     def test_missing_example(self):
         """Test for correct error thrown when no example is found."""
         with pytest.raises(ValueError, match="example FOO not found"):
-            desc.examples.get("FOO")
+            get("FOO")
 
     @pytest.mark.unit
     def test_example_get_eq(self):
         """Test getting a single equilibrium."""
-        eq = desc.examples.get("SOLOVEV")
+        eq = get("SOLOVEV")
         assert eq.Psi == 1
 
     @pytest.mark.unit
     def test_example_get_eqf(self):
         """Test getting full equilibria family."""
-        eqf = desc.examples.get("DSHAPE", "all")
+        eqf = get("DSHAPE", "all")
         np.testing.assert_allclose(eqf[0].pressure.params, 0)
 
     @pytest.mark.unit
     def test_example_get_boundary(self):
         """Test getting boundary surface."""
-        surf = desc.examples.get("HELIOTRON", "boundary")
+        surf = get("HELIOTRON", "boundary")
         np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
 
     @pytest.mark.unit
     def test_example_get_pressure(self):
         """Test getting pressure profile."""
-        pres = desc.examples.get("ATF", "pressure")
+        pres = get("ATF", "pressure")
         np.testing.assert_allclose(pres.params[:5], [5e5, -1e6, 5e5, 0, 0])
 
     @pytest.mark.unit
     def test_example_get_iota(self):
         """Test getting iota profile."""
-        iota = desc.examples.get("W7-X", "iota")
+        iota = get("W7-X", "iota")
         np.testing.assert_allclose(
             iota.params[:5],
             [
@@ -919,7 +1170,7 @@ class TestGetExample:
     @pytest.mark.unit
     def test_example_get_current(self):
         """Test getting current profile."""
-        current = desc.examples.get("NCSX", "current")
+        current = get("NCSX", "current")
         np.testing.assert_allclose(
             current.params[:11],
             [

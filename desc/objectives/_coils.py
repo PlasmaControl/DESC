@@ -412,7 +412,7 @@ class CoilCurvature(_CoilObjective):
         Name of the objective function.
     """
 
-    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _scalar = False
     _units = "(m^-1)"
     _print_value_fmt = "Coil curvature: {:10.3e} "
 
@@ -527,7 +527,7 @@ class CoilTorsion(_CoilObjective):
         Name of the objective function.
     """
 
-    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _scalar = False
     _units = "(m^-1)"
     _print_value_fmt = "Coil torsion: {:10.3e} "
 

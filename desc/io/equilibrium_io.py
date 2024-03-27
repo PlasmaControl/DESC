@@ -377,7 +377,7 @@ def writer_factory(file_name, file_format, file_mode="w"):
     return writer
 
 
-def get_driver():
+def get_driver():  # pragma: no cover
     """Initialize a webdriver for use in uploading to the database."""
     from selenium import webdriver
 
@@ -415,7 +415,7 @@ def get_driver():
     return None
 
 
-def save_to_database(
+def save_to_database(  # pragma: no cover
     filename,
     configid,
     user,

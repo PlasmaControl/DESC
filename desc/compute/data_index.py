@@ -1,4 +1,5 @@
 """data_index contains all the quantities calculated by the compute functions."""
+
 import functools
 from collections import deque
 

@@ -1,4 +1,5 @@
 """Classes for spectral bases and functions for evaluation."""
+
 import functools
 from abc import ABC, abstractmethod
 from math import factorial

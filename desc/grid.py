@@ -148,9 +148,7 @@ class _Grid(IOAble, ABC):
         temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
         # scale weights sum to full volume
         if temp_spacing.prod(axis=1).sum():
-            temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (
-                1 / 3
-            )
+            temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.

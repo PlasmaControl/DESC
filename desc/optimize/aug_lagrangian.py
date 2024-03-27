@@ -362,9 +362,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         "scipy": jnp.linalg.norm(z * scale_inv / v**0.5),
         "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
         "mix": jnp.sqrt(
-            (g_h @ g_h)
-            / abs(g_h @ H_h @ g_h)
-            * jnp.linalg.norm(z * scale_inv / v**0.5)
+            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * jnp.linalg.norm(z * scale_inv / v**0.5)
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "conngould")

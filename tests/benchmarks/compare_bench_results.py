@@ -1,4 +1,5 @@
 """Reads benchmark times and computes differences to comment on PR."""
+
 import json
 import os
 

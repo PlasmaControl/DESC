@@ -609,6 +609,8 @@ def desc_to_csv(  # noqa
     initialization_method="surface",
     user_created=None,
     user_updated=None,
+    output_csv_name_desc="desc_runs.csv",
+    output_csv_name_config="configurations.csv",
     **kwargs,
 ):
     """Save DESC output file as a csv with relevant information.
@@ -662,14 +664,14 @@ def desc_to_csv(  # noqa
     data_desc_runs = {}
     data_configurations = {}
 
-    desc_runs_csv_name = "desc_runs.csv"
-    configurations_csv_name = "configurations.csv"
+    desc_runs_csv_name = output_csv_name_desc
+    configurations_csv_name = output_csv_name_config
 
     if isinstance(eq, str) and os.path.exists(eq):
         data_desc_runs["outputfile"] = os.path.basename(eq)
         reader = hdf5Reader(eq)
         version = reader.read_dict()["__version__"]
-        eq = load(eq)
+        eq = load(eq)[-1]
     else:
         raise TypeError(f"Expected type str for eq, got type {type(eq)}")
 

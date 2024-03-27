@@ -2204,7 +2204,7 @@ class Equilibrium(IOAble, Optimizable):
 
         return eq
 
-    def save_to_database(
+    def save_to_database(  # pragma: no cover
         self,
         filename,
         configid,

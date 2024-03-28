@@ -833,7 +833,7 @@ def test_dommaschk_radial_field():
 
 @pytest.mark.unit
 def test_dommaschk_vertical_field():
-    """Test the Dommaschk potential for a 2/R toroidal + pure vertical field."""
+    """Test the Dommaschk potential for a 1/R toroidal + pure vertical field."""
     phi = jnp.linspace(0, 2 * jnp.pi, 10)
     R = jnp.linspace(0.1, 1.5, 50)
     Z = jnp.linspace(-0.5, 0.5, 50)

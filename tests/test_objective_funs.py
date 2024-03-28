@@ -5,6 +5,7 @@ that is done in test_compute_functions or regression tests.
 
 This module primarily tests the constructing/building/calling methods.
 """
+
 import warnings
 
 import numpy as np
@@ -1556,6 +1557,7 @@ class TestComputeScalarResolution:
         BoundaryError,
         VacuumBoundaryError,
         GenericObjective,
+        Omnigenity,
         # need to avoid blowup near the axis
         MercierStability,
         # don't test these since they depend on what user wants
@@ -1742,6 +1744,40 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=2e-2)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_omnigenity(self):
+        """Omnigenity."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+        eq, _ = eq.solve(objective="force", verbose=3)
+        field = OmnigenousField(
+            L_B=0,
+            M_B=2,
+            L_x=0,
+            M_x=0,
+            N_x=0,
+            NFP=eq.NFP,
+            helicity=(0, eq.NFP),
+            B_lm=np.array([0.8, 1.2]),
+        )
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array + 0.5):  # omnigenity needs higher res
+            grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+            obj = ObjectiveFunction(
+                Omnigenity(eq=eq, field=field, eq_grid=grid, field_grid=grid)
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x(eq, field))
+        np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+
+    @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective", sorted(other_objectives, key=lambda x: str(x.__name__))
     )
@@ -1760,41 +1796,6 @@ class TestComputeScalarResolution:
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
-
-    # TODO: add test for PlasmaVesselDistance
-
-    # Omnigenity
-    # (needs an approximately QP equilibrium and field)
-    surf = FourierRZToroidalSurface.from_qp_model(
-        major_radius=1,
-        aspect_ratio=20,
-        elongation=6,
-        mirror_ratio=0.2,
-        torsion=0.1,
-        NFP=1,
-        sym=True,
-    )
-    eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
-    eq, _ = eq.solve(objective="force", verbose=3)
-    field = OmnigenousField(
-        L_B=0,
-        M_B=2,
-        L_x=0,
-        M_x=0,
-        N_x=0,
-        NFP=eq.NFP,
-        helicity=(0, eq.NFP),
-        B_lm=np.array([0.8, 1.2]),
-    )
-    f = np.zeros_like(res_array, dtype=float)
-    for i, res in enumerate(res_array + 0.5):  # omnigenity needs higher resolution
-        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
-        obj = ObjectiveFunction(
-            Omnigenity(eq=eq, field=field, eq_grid=grid, field_grid=grid)
-        )
-        obj.build(verbose=0)
-        f[i] = obj.compute_scalar(obj.x(eq, field))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-3)
 
 
 class TestObjectiveNaNGrad:
@@ -1878,7 +1879,7 @@ class TestObjectiveNaNGrad:
         eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
         obj = ObjectiveFunction(BoundaryError(eq, ext_field), use_jit=False)
         obj.build()
-        g = obj.grad(obj.x(eq))
+        g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "boundary error"
 
     @pytest.mark.unit
@@ -1901,7 +1902,7 @@ class TestObjectiveNaNGrad:
         obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field), use_jit=False)
         with pytest.warns(UserWarning):
             obj.build()
-        g = obj.grad(obj.x(eq))
+        g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "vacuum boundary error"
 
     @pytest.mark.unit

@@ -6,8 +6,8 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective

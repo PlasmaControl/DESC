@@ -781,7 +781,7 @@ def test_multiobject_optimization_prox():
     )
     surf.change_resolution(M=4, N=0)
     constraints = (
-        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        ForceBalance(eq=eq),
         FixPressure(eq=eq),
         FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
         FixParameter(eq, ["Psi", "i_l"]),

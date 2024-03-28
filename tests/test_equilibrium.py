@@ -473,7 +473,8 @@ def test_shifted_circle_geometry():
     In this test, we calculate a low-beta shifted circle equilibrium with DESC.
 
     We then compare the various geometric coefficients with their respective analytical
-    expressions.
+    expressions. These expression are available in Edmund Highcock's thesis on arxiv
+    https://arxiv.org/pdf/1207.4419.pdf
     """
     eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
 

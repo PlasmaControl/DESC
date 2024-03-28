@@ -534,7 +534,7 @@ def test_shifted_circle_geometry():
     bmag = modB / Bref
 
     x = Lref * np.sqrt(psi)
-    shat = -x / iotas * shears / Lref
+    s_hat = -x / iotas * shears / Lref
 
     grad_psi = data["grad(psi)"]
     grad_alpha = data["grad(alpha)"]
@@ -543,7 +543,7 @@ def test_shifted_circle_geometry():
 
     gradpar = Lref * data["B^zeta"] / modB
 
-    gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
+    gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * s_hat / Bref
 
     gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
     gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
@@ -559,7 +559,7 @@ def test_shifted_circle_geometry():
     )
 
     cvdrift0 = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_psi))
-    cvdrift0 *= sign_iota * sign_psi * shat * 2 / modB**3 / np.sqrt(psi)
+    cvdrift0 *= sign_iota * sign_psi * s_hat * 2 / modB**3 / np.sqrt(psi)
 
     cvdrift_2 = data["cvdrift"]
     gbdrift_2 = data["gbdrift"]
@@ -574,7 +574,7 @@ def test_shifted_circle_geometry():
     a0_over_R0 = Lref * np.sqrt(psi)
 
     fudge_factor1 = -3.8
-    cvdrift0_an = fudge_factor1 * a0_over_R0 * shat * np.sin(theta_PEST)
+    cvdrift0_an = fudge_factor1 * a0_over_R0 * s_hat * np.sin(theta_PEST)
     np.testing.assert_allclose(cvdrift0, cvdrift0_an, atol=1e-2)
 
     bmag_an = np.mean(bmag) * (1 - a0_over_R0 * np.cos(theta_PEST))
@@ -587,13 +587,13 @@ def test_shifted_circle_geometry():
     alpha_MHD = -dPdrho * 1 / iota**2 * 0.5
 
     gds21_an = (
-        -1 * shat * (shat * theta_PEST - alpha_MHD / bmag**4 * np.sin(theta_PEST))
+        -1 * s_hat * (s_hat * theta_PEST - alpha_MHD / bmag**4 * np.sin(theta_PEST))
     )
     np.testing.assert_allclose(gds21, gds21_an, atol=5e-2)
 
     fudge_factor2 = 0.19
     gbdrift_an = fudge_factor2 * (
-        -1 * shat + (np.cos(theta_PEST) - 1.0 * gds21 / shat * np.sin(theta_PEST))
+        -1 * s_hat + (np.cos(theta_PEST) - 1.0 * gds21 / s_hat * np.sin(theta_PEST))
     )
 
     fudge_factor3 = 0.07

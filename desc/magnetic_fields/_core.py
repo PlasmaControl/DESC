@@ -268,11 +268,12 @@ class _MagneticField(IOAble, ABC):
                 rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
         if vc_source_grid is None:
+            source_NFP = surface.NFP if surface.N > 0 else 64
             vc_source_grid = LinearGrid(
                 rho=jnp.array(1.0),
                 M=2 * surface.M,
                 N=2 * surface.N,
-                NFP=surface.NFP,
+                NFP=source_NFP,
                 sym=False,
             )
 

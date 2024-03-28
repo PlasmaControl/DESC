@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from scipy.constants import mu_0
+
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
@@ -1827,16 +1829,15 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="gbdrift",
-    label="\\mathrm{gradB-drift}",
-    units="~",
+    label="\\mathrm{gradB-drift} = 1/B^{2} * (\\bm{b}\\times\\nabla (B)) \\dot"
+    + "\\nabla(\\alpha)",
+    units="1/(T-m^{2})",
     units_long="None",
-    description="Binormal component of th geometric part of the gradB drift"
-    + " used for local stability analyses,"
-    + " energetic particle proxy,"
-    + " effective field ripple",
+    description="Binormal component of the geometric part of the gradB drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=["|B|", "b", "grad(alpha)", "grad(|B|)"],
@@ -1852,22 +1853,20 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="cvdrift",
-    label="\\mathrm{curvature-drift}",
-    units="~",
+    label="\\mathrm{curvature-drift} = 1/B^{3} * (\\bm{b}\\times\\nabla(p + B^2/2))"
+    + "\\dot\\nabla(\\alpha)",
+    units="1/(T-m^{2})",
     units_long="None",
-    description="Binormal component of th geometric part of the curvature drift"
-    + " used for local stability analyses,"
-    + " energetic particle proxy"
-    + " effective field ripple",
+    description="Binormal component of the geometric part of the curvature drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=["p_r", "psi_r", "|B|", "gbdrift"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
-    mu_0 = 4 * jnp.pi * 1.0e-7
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
     data["cvdrift"] = 1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
     return data
@@ -1875,16 +1874,15 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="cvdrift0",
-    label="\\mathrm{curvature-drift-1}",
-    units="~",
+    label="\\mathrm{curvature-drift-1} = 1/B^{2} * (\\bm{b}\\times\\nabla(B))"
+    + "\\dot\\nabla(rho)",
+    units="1/(T-m^{2})",
     units_long="None",
     description="Radial component of the geometric part of the curvature drift"
-    + " used for local stability analyses,"
-    + " energetic particle proxy"
-    + " effective field ripple",
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=["|B|", "b", "e^rho", "grad(|B|)"],

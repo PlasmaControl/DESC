@@ -13,7 +13,6 @@ from desc.backend import sign
 from desc.compute.utils import cross, dot
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
@@ -475,26 +474,7 @@ def test_shifted_circle_geometry():
     We then compare the various geometric coefficients with their respective analytical
     expressions.
     """
-    R0 = 1
-    a0 = 0.1
-
-    surf = FourierRZToroidalSurface(
-        R_lmn=[R0, a0],
-        Z_lmn=[0.0, -a0],
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[0, 0], [-1, 0]]),
-        sym=True,
-        NFP=1.0,
-    )
-
-    pressure = PowerSeriesProfile([1.5e5, 0, -1.5e5])
-    iota = PowerSeriesProfile([0.5, 0, -0.2])
-
-    eq = Equilibrium(
-        L=10, M=10, N=0, surface=surf, Psi=0.1, pressure=pressure, iota=iota
-    )
-
-    eq, _ = eq.solve(objective="force", ftol=1e-3, gtol=1e-6, maxiter=30, verbose=3)
+    eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
 
     eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
 
@@ -591,15 +571,16 @@ def test_shifted_circle_geometry():
     np.testing.assert_allclose(gbdrift, gbdrift_2, atol=1e-4)
     np.testing.assert_allclose(cvdrift, cvdrift_2, atol=1e-3)
 
-    a0_over_R0 = a0 / R0 * np.sqrt(psi)
+    a0_over_R0 = Lref * np.sqrt(psi)
 
-    cvdrift0_an = -3.8 * a0_over_R0 * shat * np.sin(theta_PEST)
+    fudge_factor1 = -3.8
+    cvdrift0_an = fudge_factor1 * a0_over_R0 * shat * np.sin(theta_PEST)
     np.testing.assert_allclose(cvdrift0, cvdrift0_an, atol=1e-2)
 
     bmag_an = np.mean(bmag) * (1 - a0_over_R0 * np.cos(theta_PEST))
     np.testing.assert_allclose(bmag, bmag_an, rtol=5e-3, atol=5e-3)
 
-    gradpar_an = 2 * Lref * iota * 1 / R0 * (1 - a0_over_R0 * np.cos(theta_PEST))
+    gradpar_an = 2 * Lref * iota * (1 - a0_over_R0 * np.cos(theta_PEST))
     np.testing.assert_allclose(gradpar, gradpar_an, rtol=1e-2, atol=1e-2)
 
     dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * modB**2)
@@ -610,11 +591,13 @@ def test_shifted_circle_geometry():
     )
     np.testing.assert_allclose(gds21, gds21_an, atol=5e-2)
 
-    fudge_factor = 0.19
-    gbdrift_an = fudge_factor * (
+    fudge_factor2 = 0.19
+    gbdrift_an = fudge_factor2 * (
         -1 * shat + (np.cos(theta_PEST) - 1.0 * gds21 / shat * np.sin(theta_PEST))
     )
-    cvdrift_an = gbdrift_an + 0.07 * alpha_MHD / bmag**2
+
+    fudge_factor3 = 0.07
+    cvdrift_an = gbdrift_an + fudge_factor3 * alpha_MHD / bmag**2
 
     # Comparing coefficients with their analytical expressions
     np.testing.assert_allclose(gbdrift, gbdrift_an, atol=3e-2)

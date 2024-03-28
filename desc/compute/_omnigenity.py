@@ -9,13 +9,12 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-import numpy as np
 from interpax import interp1d
 
-from desc.backend import jnp, put, sign, vmap
+from desc.backend import jnp, sign, vmap
 
 from .data_index import register_compute_fun
-from .utils import cross, dot
+from .utils import cross, dot, safediv
 
 
 @register_compute_fun(
@@ -77,15 +76,17 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     wm = transforms["w"].basis.modes[:, 1]
     wn = transforms["w"].basis.modes[:, 2]
     NFP = transforms["w"].basis.NFP
-    # indices of matching modes in w and B bases
-    # need to use np instead of jnp here as jnp.where doesn't work under jit
-    # even if the args are static
-    ib, iw = np.where((Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0))
-    jb, jw = np.where(
-        (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
-    )
-    w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
-    w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
+    mask_t = (Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0)
+    mask_z = (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
+
+    num_t = (mask_t @ sign(wn)) * data["B_theta_mn"]
+    den_t = mask_t @ jnp.abs(wm)
+    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"]
+    den_z = mask_z @ jnp.abs(NFP * wn)
+
+    w_mn = jnp.where(mask_t.any(axis=0), mask_t.T @ safediv(num_t, den_t), w_mn)
+    w_mn = jnp.where(mask_z.any(axis=0), mask_z.T @ safediv(num_z, den_z), w_mn)
+
     data["w_Boozer_mn"] = w_mn
     return data
 

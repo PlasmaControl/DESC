@@ -1127,7 +1127,7 @@ class BConsistencyError(_Objective):
             "K_vc",
             "B",
             "R",
-            "zeta",
+            "phi",
             "Z",
             "e^rho",
             "n_rho",
@@ -1200,11 +1200,9 @@ class BConsistencyError(_Objective):
         )
 
         # this is in cartesian
-        Bplasma = -virtual_casing_biot_savart(
+        Bplasma = virtual_casing_biot_savart(
             eval_data,
-            constants["eval_transforms"]["grid"],
             src_data,
-            constants["src_transforms"]["grid"],
             constants["interpolator"],
             loop=self._loop,
         )

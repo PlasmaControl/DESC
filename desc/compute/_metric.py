@@ -1830,7 +1830,7 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="gbdrift",
     # Exact definition of the magnetic drifts taken from
-    # Introduction to Quasisymmetry by Landreman
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
     label="\\mathrm{gradB-drift} = 1/B^{2} * (\\bm{b}\\times\\nabla (B)) \\dot"
     + "\\nabla(\\alpha)",
@@ -1857,7 +1857,7 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="cvdrift",
     # Exact definition of the magnetic drifts taken from
-    # Introduction to Quasisymmetry by Landreman
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
     label="\\mathrm{curvature-drift} = 1/B^{3} * (\\bm{b}\\times\\nabla(p + B^2/2))"
     + "\\dot\\nabla(\\alpha)",
@@ -1881,7 +1881,7 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="cvdrift0",
     # Exact definition of the magnetic drifts taken from
-    # Introduction to Quasisymmetry by Landreman
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
     label="\\mathrm{curvature-drift-1} = 1/B^{2} * (\\bm{b}\\times\\nabla(B))"
     + "\\dot\\nabla(rho)",

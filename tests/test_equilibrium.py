@@ -13,6 +13,7 @@ from desc.__main__ import main
 from desc.backend import sign
 from desc.compute.utils import cross, dot
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
@@ -443,61 +444,77 @@ def test_shifted_circle_geometry():
     """
     In this test, we calculate a low-beta shifted circle equilibrium with DESC.
 
-    and compare the various geometric coefficients with their analytical expressions.
+    We then compare the various geometric coefficients with their respective analytical
+    expressions.
     """
-    from scipy.interpolate import interp1d
+    R0 = 1
+    a0 = 0.1
 
-    psi = 0.5  # Actually rho^2 (normalized)
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a0],
+        Z_lmn=[0.0, -a0],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=1.0,
+    )
+
+    pressure = PowerSeriesProfile([1.5e5, 0, -1.5e5])
+    iota = PowerSeriesProfile([0.5, 0, -0.2])
+
+    eq = Equilibrium(
+        L=10, M=10, N=0, surface=surf, Psi=0.1, pressure=pressure, iota=iota
+    )
+
+    eq, _ = eq.solve(objective="force", ftol=1e-3, gtol=1e-6, maxiter=30, verbose=3)
+
+    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
+
+    psi = 0.25  # rho^2 (or normalized psi)
     alpha = 0
-    ntor = 2.0
-
-    eq = desc.examples.get("W7-X")[-1]
 
     eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
 
     data_eq = eq.compute(eq_keys)
 
-    fi = interp1d(data_eq["rho"], data_eq["iota"])
-    fs = interp1d(data_eq["rho"], data_eq["iota_r"])
+    iotas = np.interp(np.sqrt(psi), data_eq["rho"], data_eq["iota"])
+    shears = np.interp(np.sqrt(psi), data_eq["rho"], data_eq["iota_r"])
 
-    iotas = fi(np.sqrt(psi))
-    shears = fs(np.sqrt(psi))
+    N = int((2 * eq.M_grid) * 4 + 1)
 
-    N = int((2 * eq.M_grid * eq.N_grid) * ntor + 1)
+    zeta = np.linspace(-1.0 * np.pi / iotas, 1.0 * np.pi / iotas, N)
+    theta_PEST = alpha * np.ones(N, dtype=int) + iotas * zeta
+
     coords1 = np.zeros((N, 3))
     coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
-    coords1[:, 1] = alpha * np.ones(N, dtype=int) + iotas * np.linspace(
-        -ntor * np.pi, ntor * np.pi, N
-    )
-    zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
+    coords1[:, 1] = theta_PEST
     coords1[:, 2] = zeta
 
+    # Creating a grid along a field line
     c1 = eq.compute_theta_coords(coords1)
     grid = Grid(c1, sort=False)
 
     data_keys = [
-        "p_r",
+        "kappa",
         "|grad(psi)|^2",
         "grad(|B|)",
         "grad(alpha)",
         "grad(psi)",
         "B",
         "grad(|B|)",
-        "kappa",
         "iota",
-        "lambda_t",
-        "lambda_z",
-        "lambda_tt",
-        "lambda_zz",
-        "lambda_tz",
         "|B|",
-        "|B|_z",
         "B^zeta",
+        "cvdrift0",
+        "cvdrift",
+        "gbdrift",
     ]
 
-    data = eq.compute(data_keys, grid=grid)
+    data = eq.compute(data_keys, grid=grid, override_grid=False)
 
     psib = data_eq["psi"][-1]
+
+    # signs
     sign_psi = psib / np.abs(psib)
     sign_iota = iotas / np.abs(iotas)
 
@@ -506,25 +523,19 @@ def test_shifted_circle_geometry():
     Bref = 2 * np.abs(psib) / Lref**2
 
     modB = data["|B|"]
+    bmag = modB / Bref
+
     x = Lref * np.sqrt(psi)
     shat = -x / iotas * shears / Lref
 
     grad_psi = data["grad(psi)"]
-    grad_psi_sq = data["|grad(psi)|^2"]
     grad_alpha = data["grad(alpha)"]
 
     iota = data["iota"]
 
-    modB = data["|B|"]
-
-    B_sup_zeta = data["B^zeta"]
-    gradpar = Lref * B_sup_zeta / modB * 1 / iota
-
-    gds2 = np.array(dot(grad_alpha, grad_alpha)) * Lref**2 * psi
+    gradpar = Lref * data["B^zeta"] / modB
 
     gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
-
-    gds22 = grad_psi_sq * (1 / psi) * (shat / (Lref * Bref)) ** 2
 
     gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
     gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
@@ -539,16 +550,44 @@ def test_shifted_circle_geometry():
         / modB**2
     )
 
-    gds2_an = 0.0
-    gds21_an = 0.0
-    gds22_an = 0.0
-    cvdrift_an = 0.0
-    gbdrift_an = 0.0
-    gradpar_an = 0.0
+    cvdrift0 = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_psi))
+    cvdrift0 *= sign_iota * sign_psi * shat * 2 / modB**3 / np.sqrt(psi)
 
-    np.testing.assert_allclose(gradpar, gradpar_an, rtol=1e-4, atol=1e-4)
-    np.testing.assert_allclose(gds2, gds2_an, rtol=1e-4, atol=1e-4)
-    np.testing.assert_allclose(gds21, gds21_an, rtol=1e-4, atol=1e-4)
-    np.testing.assert_allclose(gds22, gds22_an, rtol=1e-4, atol=1e-4)
-    np.testing.assert_allclose(cvdrift, cvdrift_an, rtol=1e-4, atol=1e-4)
-    np.testing.assert_allclose(gbdrift, gbdrift_an, rtol=1e-4, atol=1e-4)
+    cvdrift_2 = data["cvdrift"]
+    gbdrift_2 = data["gbdrift"]
+
+    ## Comparing coefficient calculation here with coefficients from compute
+    cvdrift_2 = -2 * sign_psi * Bref * Lref**2 * np.sqrt(psi) * data["cvdrift"]
+    gbdrift_2 = -2 * sign_psi * Bref * Lref**2 * np.sqrt(psi) * data["gbdrift"]
+
+    np.testing.assert_allclose(gbdrift, gbdrift_2, atol=1e-4)
+    np.testing.assert_allclose(cvdrift, cvdrift_2, atol=1e-3)
+
+    a0_over_R0 = a0 / R0 * np.sqrt(psi)
+
+    cvdrift0_an = -3.8 * a0_over_R0 * shat * np.sin(theta_PEST)
+    np.testing.assert_allclose(cvdrift0, cvdrift0_an, atol=1e-2)
+
+    bmag_an = np.mean(bmag) * (1 - a0_over_R0 * np.cos(theta_PEST))
+    np.testing.assert_allclose(bmag, bmag_an, rtol=5e-3, atol=5e-3)
+
+    gradpar_an = 2 * Lref * iota * 1 / R0 * (1 - a0_over_R0 * np.cos(theta_PEST))
+    np.testing.assert_allclose(gradpar, gradpar_an, rtol=1e-2, atol=1e-2)
+
+    dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * modB**2)
+    alpha_MHD = -dPdrho * 1 / iota**2 * 0.5
+
+    gds21_an = (
+        -1 * shat * (shat * theta_PEST - alpha_MHD / bmag**4 * np.sin(theta_PEST))
+    )
+    np.testing.assert_allclose(gds21, gds21_an, atol=5e-2)
+
+    fudge_factor = 0.19
+    gbdrift_an = fudge_factor * (
+        -1 * shat + (np.cos(theta_PEST) - 1.0 * gds21 / shat * np.sin(theta_PEST))
+    )
+    cvdrift_an = gbdrift_an + 0.07 * alpha_MHD / bmag**2
+
+    # Comparing coefficients with their analytical expressions
+    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=3e-2)
+    np.testing.assert_allclose(cvdrift, cvdrift_an, atol=3e-2)

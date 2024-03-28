@@ -131,7 +131,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         #####################
         # b is made, now do A
         #####################
-        num_modes = 1 + (max_l) * (max_m // NFP + 1) * 4
+        num_modes = 1 + (max_l) * (max_m + 1) * 4
         # TODO: if symmetric, technically only need half the modes
         # however, the field and functions are setup to accept equal
         # length arrays for a,b,c,d, so we will just zero out the
@@ -168,7 +168,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         # and if l is odd then b=c=0
 
         for l in range(1, max_l + 1):
-            for m in range(0, max_m + 1, NFP):
+            for m in range(0, max_m * NFP + 1, NFP):
                 if not sym:
                     pass  # no sym, use all coefs
                 elif l // 2 == 0:
@@ -188,7 +188,6 @@ class DommaschkPotentialField(ScalarPotentialField):
                         abcd_zero_due_to_sym_inds[which_coef].append(0)
                     else:
                         abcd_zero_due_to_sym_inds[which_coef].append(1)
-
                 ms.append(m)
                 ls.append(l)
         for i in range(4):

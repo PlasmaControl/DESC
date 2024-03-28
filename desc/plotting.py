@@ -658,7 +658,6 @@ def plot_2d(
             warnings.simplefilter("ignore")
 
             if grid.endpoint:
-                print("changing grids")
                 # cannot use a grid with endpoint=True for FFT interpolator
                 vc_grid = LinearGrid(
                     theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],

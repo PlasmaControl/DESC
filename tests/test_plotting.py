@@ -1011,7 +1011,7 @@ def test_plot_omnigenous_field():
 @pytest.mark.unit
 def test_2d_plot_Bn():
     """Test 2d plotting of Bn on equilibrium surface."""
-    eq = get("precise_QA")
+    eq = get("HELIOTRON")
     fig, _ = plot_2d(
         eq,
         "B*n",
@@ -1026,9 +1026,11 @@ def test_2d_plot_Bn():
 def test_3d_plot_Bn():
     """Test 3d plotting of Bn on equilibrium surface."""
     eq = get("precise_QA")
+    eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
     fig = plot_3d(
         eq,
         "B*n",
         field=ToroidalMagneticField(1, 1),
+        grid=LinearGrid(M=30, N=30, NFP=1, endpoint=False),
     )
     return fig

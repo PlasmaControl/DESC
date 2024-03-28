@@ -1832,10 +1832,10 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{gradB-drift} = 1/B^{2} * (\\bm{b}\\times\\nabla (B)) \\dot"
-    + "\\nabla(\\alpha)",
+    label="\\mathrm{gradB-drift} = 1/B^{2} * (\\mathbf{b}\\times\\nabla (B)) \\cdot"
+    + "\\nabla \\alpha",
     units="1/(T-m^{2})",
-    units_long="None",
+    units_long="inverse Tesla meters^2",
     description="Binormal component of the geometric part of the gradB drift"
     + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
@@ -1859,10 +1859,10 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{curvature-drift} = 1/B^{3} * (\\bm{b}\\times\\nabla(p + B^2/2))"
-    + "\\dot\\nabla(\\alpha)",
+    label="\\mathrm{curvature-drift} = 1/B^{3} * (\\mathbf{b}\\times\\nabla(p + B^2/2))"
+    + "\\cdot \\nabla \\alpha",
     units="1/(T-m^{2})",
-    units_long="None",
+    units_long="inverse Tesla meters^2",
     description="Binormal component of the geometric part of the curvature drift"
     + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
@@ -1883,10 +1883,10 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{curvature-drift-1} = 1/B^{2} * (\\bm{b}\\times\\nabla(B))"
-    + "\\dot\\nabla(rho)",
+    label="\\mathrm{curvature-drift-1} = 1/B^{2} * (\\mathbf{b}\\times\\nabla(B))"
+    + "\\cdot \\nabla rho",
     units="1/(T-m^{2})",
-    units_long="None",
+    units_long="inverse Tesla meters^2",
     description="Radial component of the geometric part of the curvature drift"
     + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,

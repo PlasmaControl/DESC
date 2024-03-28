@@ -1,4 +1,5 @@
 """Regression tests for plotting functions, by comparing to saved baseline images."""
+
 import warnings
 
 import matplotlib.pyplot as plt

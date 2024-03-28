@@ -417,7 +417,9 @@ def D_m_n(R, Z, m, n):
     def body_fun(k, val):
         coef = CD_m_k(R, m, k) / gamma(n - 2 * k + 1)
         exp = n - 2 * k
-        return val + coef * Z**exp
+        mask = (Z == 0) & (exp == 0)
+        exp = jnp.where(max, 1, exp)
+        return val + coef * jnp.where(mask, 0, Z**exp)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
@@ -430,7 +432,9 @@ def N_m_n(R, Z, m, n):
     def body_fun(k, val):
         coef = CN_m_k(R, m, k) / gamma(n - 2 * k + 1)
         exp = n - 2 * k
-        return val + coef * Z**exp
+        mask = (Z == 0) & (exp == 0)
+        exp = jnp.where(max, 1, exp)
+        return val + coef * jnp.where(mask, 0, Z**exp)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 

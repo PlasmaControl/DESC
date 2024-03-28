@@ -535,7 +535,7 @@ class FourierCurrentPotentialField(
         modes_Phi=np.array([[0, 0]]),
         I=0,
         G=0,
-        sym_Phi=False,
+        sym_Phi="auto",
         M_Phi=None,
         N_Phi=None,
     ):
@@ -563,9 +563,10 @@ class FourierCurrentPotentialField(
             and increasing when going in the clockwise direction, which with the
             convention n x grad(phi) will result in a toroidal field in the negative
             toroidal direction.
-        sym_Phi :  {False,"cos","sin"}
+        sym_Phi :  {"auto", "cos","sin", False}
             whether to enforce a given symmetry for the DoubleFourierSeries part of the
-            current potential.
+            current potential. If "auto", assumes sin symmetry if the surface is
+            symmetric, else False.
         M_Phi, N_Phi: int or None
             Maximum poloidal and toroidal mode numbers for the single valued part of the
             current potential.
@@ -583,6 +584,8 @@ class FourierCurrentPotentialField(
         NFP = surface.NFP
         sym = surface.sym
         name = surface.name
+        if sym_Phi == "auto":
+            sym_Phi = "sin" if surface.sym else False
 
         return cls(
             Phi_mn=Phi_mn,

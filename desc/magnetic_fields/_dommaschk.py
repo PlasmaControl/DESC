@@ -93,7 +93,9 @@ class DommaschkPotentialField(ScalarPotentialField):
             if ndarray, must be an ndarray of the magnetic field in rpz,
                 of shape (num_nodes,3) with the columns being (B_R, B_phi, B_Z)
         coords (ndarray): shape (num_nodes,3) of R,phi,Z points to fit field at
-        max_m (int): maximum m to use for Dommaschk Potentials
+        max_m (int): maximum m to use for Dommaschk Potentials, within one field period
+            i.e. if NFP= 2 and max_m = 3, then modes with arguments up to 3*2*phi will
+            be included
         max_l (int): maximum l to use for Dommaschk Potentials
         sym (bool): if field is stellarator symmetric or not.
             if True, only stellarator-symmetric modes will

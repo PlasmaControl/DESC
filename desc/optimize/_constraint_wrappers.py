@@ -500,7 +500,15 @@ class ProximalProjection(ObjectiveFunction):
                 not con._equilibrium,
                 ValueError,
                 "ProximalProjection method cannot handle general "
-                + "nonlinear constraint {}.".format(con),
+                + f"nonlinear constraint {con}.",
+            )
+            # can't have bounds on constraint bc if constraint is satisfied then
+            # Fx == 0, and that messes with Gx @ Fx^-1 Fc etc.
+            errorif(
+                con.bounds is not None,
+                ValueError,
+                "ProximalProjection can only handle equality constraints, "
+                + f"got bounds for constraint {con}",
             )
         self._objective = objective
         self._constraint = constraint

@@ -1031,6 +1031,6 @@ def test_3d_plot_Bn():
         eq,
         "B*n",
         field=ToroidalMagneticField(1, 1),
-        grid=LinearGrid(M=30, N=30, NFP=1, endpoint=False),
+        grid=LinearGrid(M=30, N=30, NFP=1, endpoint=True),
     )
     return fig

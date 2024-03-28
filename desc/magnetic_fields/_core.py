@@ -286,33 +286,19 @@ class _MagneticField(IOAble, ABC):
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
 
         if calc_Bplasma:
-            ## do virtual casing to find plasma contribution to Bnormal
-            vc_eval_data = eq.compute(
-                [
-                    "K_vc",
-                    "B",
-                    "R",
-                    "phi",
-                    "Z",
-                    "e^rho",
-                    "n_rho",
-                    "|e_theta x e_zeta|",
-                ],
-                grid=eval_grid,
-            )
-            vc_data = eq.compute(
-                [
-                    "K_vc",
-                    "B",
-                    "R",
-                    "phi",
-                    "Z",
-                    "e^rho",
-                    "n_rho",
-                    "|e_theta x e_zeta|",
-                ],
-                grid=vc_source_grid,
-            )
+            # do virtual casing to find plasma contribution to Bnormal
+            data_keys = [
+                "K_vc",
+                "B",
+                "R",
+                "phi",
+                "Z",
+                "e^rho",
+                "n_rho",
+                "|e_theta x e_zeta|",
+            ]
+            vc_eval_data = eq.compute(data_keys, grid=eval_grid)
+            vc_data = eq.compute(data_keys, grid=vc_source_grid)
 
             k = min(
                 vc_source_grid.num_theta, vc_source_grid.num_zeta * vc_source_grid.NFP

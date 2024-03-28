@@ -474,7 +474,7 @@ def test_shifted_circle_geometry():
 
     We then compare the various geometric coefficients with their respective analytical
     expressions. These expression are available in Edmund Highcock's thesis on arxiv
-    https://arxiv.org/pdf/1207.4419.pdf
+    https://arxiv.org/pdf/1207.4419.pdf  (Table 3.5)
     """
     eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
 

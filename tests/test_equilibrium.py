@@ -562,9 +562,6 @@ def test_shifted_circle_geometry():
     cvdrift0 = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_psi))
     cvdrift0 *= sign_iota * sign_psi * s_hat * 2 / modB**3 / np.sqrt(psi)
 
-    cvdrift_2 = data["cvdrift"]
-    gbdrift_2 = data["gbdrift"]
-
     ## Comparing coefficient calculation here with coefficients from compute/_mtric
     cvdrift_2 = -2 * sign_psi * Bref * Lref**2 * np.sqrt(psi) * data["cvdrift"]
     gbdrift_2 = -2 * sign_psi * Bref * Lref**2 * np.sqrt(psi) * data["gbdrift"]

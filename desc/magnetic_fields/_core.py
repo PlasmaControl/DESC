@@ -267,6 +267,15 @@ class _MagneticField(IOAble, ABC):
             eval_grid = LinearGrid(
                 rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
+        if vc_source_grid is None:
+            vc_source_grid = LinearGrid(
+                rho=jnp.array(1.0),
+                M=2 * surface.M,
+                N=2 * surface.N,
+                NFP=surface.NFP,
+                sym=False,
+            )
+
         data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="xyz")
         coords = data["x"]
         surf_normal = data["n_rho"]

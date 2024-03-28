@@ -307,9 +307,7 @@ class TestInitialGuess:
         # specify an interior flux surface
         surface = FourierRZToroidalSurface(rho=0.5)
         eq.set_initial_guess(surface)
-        np.testing.assert_allclose(
-            eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2**2
-        )
+        np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2**2)
 
     @pytest.mark.unit
     def test_guess_from_points(self):

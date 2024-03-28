@@ -278,7 +278,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Rcon = FixSumModesR(
@@ -292,7 +292,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Zcon = FixSumModesZ(
@@ -307,7 +307,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             target = NAEcoeff * r
             for k in range(1, int((desc_eq.L + 1) / 2) + 1):
                 modes.append([2 * k - 1, -1, n])
-                sum_weights.append([(-1) ** k * k])
+                sum_weights.append((-1) ** k * k)
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
             Lcon = FixSumModesLambda(
@@ -321,7 +321,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Rcon = FixSumModesR(
@@ -335,7 +335,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Zcon = FixSumModesZ(
@@ -350,7 +350,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             target = NAEcoeff * r
             for k in range(1, int((desc_eq.L + 1) / 2) + 1):
                 modes.append([2 * k - 1, 1, n])
-                sum_weights.append([(-1) ** k * k])
+                sum_weights.append((-1) ** k * k)
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
             Lcon = FixSumModesLambda(

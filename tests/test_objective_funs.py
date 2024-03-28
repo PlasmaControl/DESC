@@ -18,7 +18,11 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
-from desc.magnetic_fields import FourierCurrentPotentialField, SplineMagneticField
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    OmnigenousField,
+    SplineMagneticField,
+)
 from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
@@ -39,6 +43,7 @@ from desc.objectives import (
     MercierStability,
     ObjectiveFromUser,
     ObjectiveFunction,
+    Omnigenity,
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
@@ -397,12 +402,12 @@ class TestObjectiveFunction:
 
         # symmetric grid
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             QuasisymmetryBoozer(eq=eq, grid=grid).build()
 
         # multiple flux surfaces
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=[0.25, 0.5, 0.75, 1])
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             QuasisymmetryBoozer(eq=eq, grid=grid).build()
 
     @pytest.mark.unit
@@ -444,12 +449,13 @@ class TestObjectiveFunction:
         coilset = CoilSet.linspaced_angular(coil, n=100)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
-        sheet_current = FourierCurrentPotentialField()
-        sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=eq.M, N_Phi=eq.N
+        )
         eq.solve()
-        obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)
+        obj = BoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq, sheet_current))
+        f = obj.compute_scaled_error(*obj.xs())
         n = len(f) // 3
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -468,7 +474,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = BoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq))
+        f = obj.compute_scaled_error(*obj.xs())
         n = len(f) // 2
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -485,7 +491,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq))
+        f = obj.compute_scaled_error(*obj.xs())
         n = len(f) // 2
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -502,7 +508,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = BoundaryErrorNESTOR(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq))
+        f = obj.compute_scaled_error(*obj.xs())
         np.testing.assert_allclose(f, 0, atol=2e-3)
 
     @pytest.mark.unit
@@ -677,7 +683,7 @@ def test_rejit():
 
 @pytest.mark.unit
 def test_generic_compute():
-    """Test for gh issue #388."""
+    """Test for GH issue #388."""
     eq = Equilibrium()
     obj = ObjectiveFunction(AspectRatio(target=2, weight=1, eq=eq))
     obj.build()
@@ -1108,7 +1114,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(*obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1183,7 +1189,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(*obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1251,17 +1257,16 @@ def test_boundary_error_print(capsys):
     )
     assert out.out == corr_out
 
-    sheet_current = FourierCurrentPotentialField()
-    sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
-    obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)
+    eq.surface = FourierCurrentPotentialField.from_surface(eq.surface)
+    obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq, sheet_current)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
     n = len(f) // 3
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    obj.print_value(*obj.xs(eq, sheet_current))
+    obj.print_value(*obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1934,6 +1939,41 @@ def test_compute_scalar_resolution():  # noqa: C901
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
+    # TODO: add test for PlasmaVesselDistance
+
+    # Omnigenity
+    # (needs an approximately QP equilibrium and field)
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=20,
+        elongation=6,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=1,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="force", verbose=3)
+    field = OmnigenousField(
+        L_B=0,
+        M_B=2,
+        L_x=0,
+        M_x=0,
+        N_x=0,
+        NFP=eq.NFP,
+        helicity=(0, eq.NFP),
+        B_lm=np.array([0.8, 1.2]),
+    )
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array + 0.5):  # omnigenity needs higher resolution
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+        obj = ObjectiveFunction(
+            Omnigenity(eq=eq, field=field, eq_grid=grid, field_grid=grid)
+        )
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq, field))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+
 
 @pytest.mark.unit
 def test_objective_no_nangrad():
@@ -1980,14 +2020,16 @@ def test_objective_no_nangrad():
     eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
     obj = ObjectiveFunction(BoundaryError(eq, ext_field))
     obj.build()
-    g = obj.grad(obj.x(eq))
+    g = obj.grad(obj.x())
     assert not np.any(np.isnan(g)), "boundary error"
 
     obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field))
     with pytest.warns(UserWarning):
         obj.build()
-    g = obj.grad(obj.x(eq))
+    g = obj.grad(obj.x())
     assert not np.any(np.isnan(g)), "vacuum boundary error"
+
+    # TODO: add Omnigenity objective (see GH issue #943)
 
     # these only need basic equilibrium
     eq = Equilibrium(L=2, M=2, N=2)

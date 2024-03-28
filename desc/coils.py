@@ -181,7 +181,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis.lower() == "rpz":
             phi = coords[:, 1]
             coords = rpz2xyz(coords)
@@ -601,7 +601,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "rpz":
             coords = rpz2xyz(coords)
         if params is None:
@@ -878,7 +878,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):

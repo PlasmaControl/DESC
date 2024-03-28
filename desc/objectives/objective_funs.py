@@ -5,18 +5,11 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, use_jax
+from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
-from desc.utils import (
-    Timer,
-    errorif,
-    flatten_list,
-    is_broadcastable,
-    setdefault,
-    unique_list,
-)
+from desc.utils import Timer, flatten_list, is_broadcastable, setdefault, unique_list
 
 
 class ObjectiveFunction(IOAble):
@@ -200,13 +193,19 @@ class ObjectiveFunction(IOAble):
         Sets ``self._flatten`` as a function to return unique flattened list of things
         and ``self._unflatten`` to recreate full nested list of things
         from unique flattened version.
-        """
-        from jax.tree_util import tree_flatten, tree_unflatten
 
-        things = setdefault(things, [obj.things for obj in self.objectives])
+        """
+        # This is a unique list of the things the ObjectiveFunction knows about.
+        # By default it is only the things that each sub-Objective needs,
+        # but it can be set to include extra things from other objectives.
+        self._things = setdefault(
+            things,
+            unique_list(flatten_list([obj.things for obj in self.objectives]))[0],
+        )
+        things_per_objective = [self._things for _ in self.objectives]
 
         flat_, treedef_ = tree_flatten(
-            things, is_leaf=lambda x: isinstance(x, Optimizable)
+            things_per_objective, is_leaf=lambda x: isinstance(x, Optimizable)
         )
         unique_, inds_ = unique_list(flat_)
 
@@ -221,7 +220,7 @@ class ObjectiveFunction(IOAble):
             )
             assert treedef == treedef_
             assert len(flat) == len(flat_)
-            unique, inds = unique_list(flat)
+            unique, _ = unique_list(flat)
             return unique
 
         self._unflatten = unflatten
@@ -372,7 +371,7 @@ class ObjectiveFunction(IOAble):
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
 
-        x = jnp.atleast_1d(x)
+        x = jnp.atleast_1d(jnp.asarray(x))
         if x.size != self.dim_x:
             raise ValueError(
                 "Input vector dimension is invalid, expected "
@@ -383,7 +382,13 @@ class ObjectiveFunction(IOAble):
         xs = jnp.split(x, xs_splits)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
         if per_objective:
+            # params is a list of lists of dicts, for each thing and for each objective
             params = self._unflatten(params)
+            # this filters out the params of things that are unused by each objective
+            params = [
+                [par for par, thing in zip(param, self.things) if thing in obj.things]
+                for param, obj in zip(params, self.objectives)
+            ]
         return params
 
     def x(self, *things):
@@ -686,47 +691,9 @@ class ObjectiveFunction(IOAble):
         )
 
     @property
-    def _all_things(self):
-        """list: all things known to this objective, used and unused."""
-        if not hasattr(self, "_extra_things"):
-            self._extra_things = []
-        return [obj.things for obj in self.objectives] + self._extra_things
-
-    @property
     def things(self):
-        """list: Optimizable things that this objective is tied to."""
-        errorif(
-            not hasattr(self, "_flatten"),
-            RuntimeError,
-            "ObjectiveFunction must be built with ObjectiveFunction.build() first",
-        )
-        return self._flatten(self._all_things)
-
-    @things.setter
-    def things(self, new):
-        if not isinstance(new, (tuple, list)):
-            new = [new]
-        assert all(isinstance(x, Optimizable) for x in new)
-        # in general this is a hard problem, since we don't really know which object
-        # to replace with which if there are multiple of the same type, but we can
-        # do our best and throw an error if we can't figure it out here.
-        expected_types = [type(a) for a in self.things]
-        got_types = [type(a) for a in new]
-        errorif(
-            expected_types != got_types,
-            TypeError,
-            "Cannot unambiguously parse Optimizable objects to individual Objectives, "
-            + f"expected types {expected_types} but got types {got_types}. "
-            + "Try setting Objective.things on each sub Objective individually then "
-            + "call ObjectiveFunction.build().",
-        )
-        # now we know that new and self.things contains instances of unique classes, so
-        # we should be able to just replace like with like
-        things = self._unflatten(new)
-        for obj, t in zip(self.objectives, things[: -len(self._extra_things)]):
-            obj.things = t
-            # can maybe improve this later to not rebuild if resolution is the same
-            obj._built = False
+        """list: Unique list of optimizable things that this objective is tied to."""
+        return self._things
 
 
 class _Objective(IOAble, ABC):
@@ -772,6 +739,7 @@ class _Objective(IOAble, ABC):
     _equilibrium = False
     _io_attrs_ = [
         "_target",
+        "_bounds",
         "_weight",
         "_name",
         "_normalize",
@@ -890,14 +858,12 @@ class _Objective(IOAble, ABC):
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):
+            grid = self._constants["transforms"]["grid"]
             if self._coordinates == "rtz":
-                w = self._constants["transforms"]["grid"].weights
-                w *= jnp.sqrt(self._constants["transforms"]["grid"].num_nodes)
+                w = grid.weights
+                w *= jnp.sqrt(grid.num_nodes)
             elif self._coordinates == "r":
-                w = self._constants["transforms"]["grid"].compress(
-                    self._constants["transforms"]["grid"].spacing[:, 0],
-                    surface_label="rho",
-                )
+                w = grid.compress(grid.spacing[:, 0], surface_label="rho")
                 w = jnp.sqrt(w)
             else:
                 w = jnp.ones((self.dim_f,))
@@ -1021,19 +987,21 @@ class _Objective(IOAble, ABC):
         ----------
         v : tuple of ndarray
             Vectors to right-multiply the Jacobian by.
-        x : ndarray
+        x : tuple of ndarray
             Optimization variables.
         constants : list
             Constant parameters passed to sub-objectives.
 
         """
         v = v if isinstance(v, (tuple, list)) else (v,)
+        x = x if isinstance(x, (tuple, list)) else (x,)
+        assert len(x) == len(v)
 
         compute_scaled = lambda *x: self.compute_scaled(*x, constants=constants)
         jvpfun = lambda *dx: Derivative.compute_jvp(
             compute_scaled, tuple(range(len(x))), dx, *x
         )
-        sig = "(n)" * len(x) + "->(k)"
+        sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
         return jnp.vectorize(jvpfun, signature=sig)(*v)
 
     def jvp_unscaled(self, v, x, constants=None):
@@ -1045,19 +1013,21 @@ class _Objective(IOAble, ABC):
         ----------
         v : tuple of ndarray
             Vectors to right-multiply the Jacobian by.
-        x : ndarray
+        x : tuple of ndarray
             Optimization variables.
         constants : list
             Constant parameters passed to sub-objectives.
 
         """
         v = v if isinstance(v, (tuple, list)) else (v,)
+        x = x if isinstance(x, (tuple, list)) else (x,)
+        assert len(x) == len(v)
 
         compute_unscaled = lambda *x: self.compute_unscaled(*x, constants=constants)
         jvpfun = lambda *dx: Derivative.compute_jvp(
             compute_unscaled, tuple(range(len(x))), dx, *x
         )
-        sig = "(n)" * len(x) + "->(k)"
+        sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
         return jnp.vectorize(jvpfun, signature=sig)(*v)
 
     def print_value(self, *args, **kwargs):

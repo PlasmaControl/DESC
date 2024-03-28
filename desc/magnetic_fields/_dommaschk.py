@@ -259,8 +259,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         # we zero out the terms that should be zero due to symmetry here
         # TODO: should also just not return any zeroed-out modes, but
         # the way the modes are cataloged here with the ls and ms arrays,
-        # it is not straightforward to do that. By that I mean
-        # say ls = [1,2] ms = [1,1]
+        # it is not straightforward to do that
         a_arr = c[1 : n + 1] * abcd_zero_due_to_sym_inds[0]
         b_arr = c[n + 1 : 2 * n + 1] * abcd_zero_due_to_sym_inds[1]
         c_arr = c[2 * n + 1 : 3 * n + 1] * abcd_zero_due_to_sym_inds[2]

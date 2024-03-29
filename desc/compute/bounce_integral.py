@@ -857,7 +857,7 @@ def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):
     return out_arr
 
 
-def field_line_to_desc_coords(eq, rho, alpha, zeta):
+def field_line_to_desc_coords(eq, rho, alpha, zeta, jitable=True):
     """Get DESC grid from unique field line coordinates."""
     r, a, z = jnp.meshgrid(rho, alpha, zeta, indexing="ij")
     r, a, z = r.ravel(), a.ravel(), z.ravel()
@@ -873,7 +873,7 @@ def field_line_to_desc_coords(eq, rho, alpha, zeta):
     # transform to approximate theta_PEST and the poloidal stream function anyway.
     # TODO: map coords recently updated, so maybe just switch to that
     lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    lg_data = eq.compute("iota", grid=lg)
+    lg_data = eq.compute(["iota", "iota_r", "iota_rr"], grid=lg)
     data = {
         d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
         for d in lg_data
@@ -882,5 +882,5 @@ def field_line_to_desc_coords(eq, rho, alpha, zeta):
     }
     sfl_coords = jnp.column_stack([r, a + data["iota"] * z, z])
     desc_coords = eq.compute_theta_coords(sfl_coords)
-    grid = Grid(desc_coords, jitable=True)
+    grid = Grid(desc_coords, jitable=jitable)
     return grid, data

@@ -101,14 +101,15 @@ def map_coordinates(  # noqa: C901
 
     params = setdefault(params, eq.params_dict)
 
+    profiles = get_profiles(inbasis + basis_derivs, eq, None)
+    # do surface average to get iota once
+    if "iota" in profiles and profiles["iota"] is None:
+        profiles["iota"] = eq.get_profile("iota")
+
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
         grid = Grid(y, sort=False, jitable=True)
-        profiles = get_profiles(inbasis + basis_derivs, eq, grid, jitable=True)
-        # do surface average to get iota once
-        if "current" in profiles and profiles["current"] is not None:
-            profiles["iota"] = eq.get_profile("iota")
-        transforms = get_transforms(inbasis + basis_derivs, eq, grid, jitable=True)
+        transforms = get_transforms(basis, eq, grid, jitable=True)
         data = compute_fun(eq, basis, params, transforms, profiles)
         x = jnp.array([data[k] for k in basis]).T
         return x

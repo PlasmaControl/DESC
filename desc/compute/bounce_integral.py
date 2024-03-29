@@ -1,4 +1,5 @@
 """Methods for computing bounce integrals."""
+
 from functools import partial
 
 from interpax import CubicHermiteSpline, interp1d

@@ -235,7 +235,6 @@ def test_elliptic_integral_limit():
 def _compute_bounce_points_with_root_finding(
     eq, pitch, rho, alpha, resolution=20, zeta_max=10 * np.pi
 ):
-    """Find bounce points."""
     # TODO: avoid separate root finding routines in residual and jac
     #       and use previous desc coords as initial guess for next iteration
     def residual(zeta, i):

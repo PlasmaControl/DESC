@@ -171,9 +171,9 @@ class DommaschkPotentialField(ScalarPotentialField):
             for m in range(0, max_m * NFP + 1, NFP):
                 if not sym:
                     pass  # no sym, use all coefs
-                elif l // 2 == 0:
+                elif l % 2 == 0:
                     zero_due_to_sym_inds = [0, 3]  # a=d=0 for even l with sym
-                elif l // 2 == 1:
+                elif l % 2 == 1:
                     zero_due_to_sym_inds = [1, 2]  # b=c=0 for odd l with sym
                 for which_coef in range(4):
                     if which_coef == 0:
@@ -419,7 +419,7 @@ def D_m_n(R, Z, m, n):
         exp = n - 2 * k
         mask = (Z == 0) & (exp == 0)
         exp = jnp.where(mask, 1, exp)
-        return val + coef * jnp.where(mask, 0, Z**exp)
+        return val + coef * jnp.where(mask, 1, Z**exp)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
@@ -434,7 +434,7 @@ def N_m_n(R, Z, m, n):
         exp = n - 2 * k
         mask = (Z == 0) & (exp == 0)
         exp = jnp.where(mask, 1, exp)
-        return val + coef * jnp.where(mask, 0, Z**exp)
+        return val + coef * jnp.where(mask, 1, Z**exp)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 

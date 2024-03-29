@@ -11,6 +11,7 @@ from qsc import Qsc
 from scipy.constants import mu_0
 
 from desc.backend import jnp
+from desc.coils import FourierRZCoil
 from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -27,6 +28,9 @@ from desc.magnetic_fields import (
 from desc.objectives import (
     AspectRatio,
     BoundaryError,
+    CoilCurvature,
+    CoilLength,
+    CoilTorsion,
     CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
@@ -790,7 +794,7 @@ def test_multiobject_optimization_prox():
     )
     surf.change_resolution(M=4, N=0)
     constraints = (
-        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        ForceBalance(eq=eq),
         FixPressure(eq=eq),
         FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
         FixParameter(eq, ["Psi", "i_l"]),
@@ -1873,3 +1877,42 @@ def test_regcoil_ellipse_modular_coils_check_coil_B(
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3, rtol=1e-2)
+
+
+@pytest.mark.unit
+def test_single_coil_optimization():
+    """Test that single coil (not coilset) optimization works."""
+    # testing that the objectives work and that the optimization framework
+    # works when a single coil is passed in.
+
+    opt = Optimizer("fmintr")
+    coil = FourierRZCoil()
+    coil.change_resolution(N=1)
+    target_R = 9
+    # length and curvature
+    target_length = 2 * np.pi * target_R
+    target_curvature = 1 / target_R
+    grid = LinearGrid(N=2)
+    obj = ObjectiveFunction(
+        (
+            CoilLength(coil, target=target_length),
+            CoilCurvature(coil, target=target_curvature, grid=grid),
+        ),
+    )
+    opt.optimize([coil], obj, maxiter=200)
+    np.testing.assert_allclose(
+        coil.compute("length")["length"], target_length, rtol=1e-4
+    )
+    np.testing.assert_allclose(
+        coil.compute("curvature", grid=grid)["curvature"], target_curvature, rtol=1e-4
+    )
+
+    # torsion
+    # initialize with some torsion
+    coil.Z_n = coil.Z_n.at[0].set(0.1)
+    target = 0
+    obj = ObjectiveFunction(CoilTorsion(coil, target=target))
+    opt.optimize([coil], obj, maxiter=200, ftol=0)
+    np.testing.assert_allclose(
+        coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
+    )

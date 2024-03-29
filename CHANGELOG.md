@@ -16,8 +16,15 @@ regularization term from surface current in the REGCOIL algorithm)
     the optimization framework, and combined with other objectives as well.
 - Adds functionality to optimize for omnigenity. This includes the ``OmnigenousField`` magnetic field class, the ``Omnigenity`` objective function, and an accompanying tutorial.
 
+v0.11.0
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.4...v0.11.0)
+
 New Features
 
+- Adds functionality to optimize for omnigenity. This includes the ``OmnigenousField``
+  magnetic field class, the ``Omnigenity`` objective function, and an accompanying tutorial.
 - Adds new objectives for free boundary equilibria: ``BoundaryError`` and
 ``VacuumBoundaryError``, along with a new tutorial notebook demonstrating their usage.
 - Objectives ``Volume``, ``AspectRatio``, ``Elongation`` now work for
@@ -62,9 +69,12 @@ mesh. Previously they were saved on the full mesh.
 - Fixed incorrect rotation matrix for `FourierPlanarCurve`.
 - Fixed bug where ``plot_boundaries`` with a single ``phi`` value would return an
 empty plot.
+
+Breaking Changes
+
 - Renames the method for comparing equivalence between DESC objects from `eq` to `equiv`
 to avoid confusion with the common shorthand for `Equilibrium`.
-
+- Minimum Python version is now 3.9
 
 v0.10.4
 -------

@@ -645,6 +645,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
         "method": [],
+        "intervals": [],
     },
     profiles=[],
     coordinates="s",
@@ -655,30 +656,46 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
 
-    Xq = interp1d(
-        xq,
-        params["knots"],
-        params["X"],
-        method=transforms["method"],
-        derivative=0,
-        period=2 * jnp.pi,
-    )
-    Yq = interp1d(
-        xq,
-        params["knots"],
-        params["Y"],
-        method=transforms["method"],
-        derivative=0,
-        period=2 * jnp.pi,
-    )
-    Zq = interp1d(
-        xq,
-        params["knots"],
-        params["Z"],
-        method=transforms["method"],
-        derivative=0,
-        period=2 * jnp.pi,
-    )
+    for interval in transforms["intervals"]:
+
+        query_range = (xq > interval[0]) & (xq < interval[1])
+        interval_range = (params["knots"] > interval[0]) & (
+            params["knots"] < interval[1]
+        )
+
+        xq_in_interval = xq[query_range]
+        knots_in_interval = params["knots"][interval_range]
+        X_in_interval = params["X"][interval_range]
+        Y_in_interval = params["Y"][interval_range]
+        Z_in_interval = params["Z"][interval_range]
+
+        # TODO: hmm
+        period = 2 * jnp.pi if abs(interval[1] - interval[0]) == 2 * jnp.pi else None
+
+        Xq = interp1d(
+            xq_in_interval,
+            knots_in_interval,
+            X_in_interval,
+            method=transforms["method"],
+            derivative=0,
+            period=period,
+        )
+        Yq = interp1d(
+            xq_in_interval,
+            knots_in_interval,
+            Y_in_interval,
+            method=transforms["method"],
+            derivative=0,
+            period=period,
+        )
+        Zq = interp1d(
+            xq_in_interval,
+            knots_in_interval,
+            Z_in_interval,
+            method=transforms["method"],
+            derivative=0,
+            period=period,
+        )
 
     coords = jnp.stack([Xq, Yq, Zq], axis=1)
     coords = (

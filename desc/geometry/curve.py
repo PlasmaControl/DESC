@@ -675,6 +675,7 @@ class SplineXYZCurve(Curve):
         Y,
         Z,
         knots=None,
+        discontinuous_knots=None,
         method="cubic",
         name="",
     ):
@@ -711,8 +712,25 @@ class SplineXYZCurve(Curve):
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
             knots = knots[:-1] if closed_flag else knots
 
+        if discontinuous_knots is None:
+            intervals = [[0, 2 * np.pi]]
+        else:
+            find_nearest = lambda array, val: (np.abs(array - val)).argmin()
+            discontinuous_indices = [
+                find_nearest(knots, val) for val in discontinuous_knots
+            ]
+            discontinuous_knots = knots[discontinuous_indices]
+
+            intervals = [
+                [discontinuous_knots[i - 1], 2 * np.pi]
+                # TODO: this doesn't seem like the best way to do this
+                if i == 0 else [discontinuous_knots[i - 1], discontinuous_knots[i]]
+                for i in range(len(discontinuous_knots))
+            ]
+
         self._knots = knots
         self.method = method
+        self.intervals = intervals
 
     @optimizable_parameter
     @property
@@ -857,54 +875,3 @@ class SplineXYZCurve(Curve):
         return SplineXYZCurve(
             coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name
         )
-
-
-class DiscontinuousCurve(Curve):
-    def __init__(
-        self,
-        X,
-        Y,
-        Z,
-        knots=None,
-        method="cubic",
-        name="",
-    ):
-        pass
-
-    @optimizable_parameter
-    @property
-    def X(self):
-        """Coordinates for X."""
-        return self._X
-
-    @X.setter
-    def X(self, new):
-        if len(new) == len(self.knots):
-            self._X = jnp.asarray(new)
-        else:
-            raise ValueError(
-                "X should have the same size as the knots, "
-                + f"got {len(new)} X values for {len(self.knots)} knots"
-            )
-
-    @optimizable_parameter
-    @property
-    def Y(self):
-        """Coordinates for Y."""
-        return self._Y
-
-    @Y.setter
-    def Y(self, new):
-        if len(new) == len(self.knots):
-            self._Y = jnp.asarray(new)
-        else:
-            raise ValueError(
-                "Y should have the same size as the knots, "
-                + f"got {len(new)} Y values for {len(self.knots)} knots"
-            )
-
-    @optimizable_parameter
-    @property
-    def Z(self):
-        """Coordinates for Z."""
-        return self._Z

@@ -761,3 +761,19 @@ class TestSplineXYZCurve:
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         with pytest.raises(TypeError):
             c.compute("length", grid=np.linspace(0, 1, 10))
+
+    @pytest.mark.unit
+    def test_discontinuous(self):
+        """Test with discontinuous knots."""
+        discontinuous_knots = [0, np.pi]
+        R = 2
+        phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+        d = SplineXYZCurve(
+            X=R * np.cos(phi),
+            Y=R * np.sin(phi),
+            Z=np.zeros_like(phi),
+            knots="arclength",
+            discontinuous_knots=discontinuous_knots,
+        )
+        print(d.compute("x"))
+        assert 1 == 1

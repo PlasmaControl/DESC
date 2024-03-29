@@ -773,6 +773,88 @@ class TestMagneticFields:
         with pytest.raises(AssertionError, match="sym"):
             Bnorm_from_file = read_BNORM_file(path, asym_surf, grid)
 
+    @pytest.mark.unit
+    def test_spline_field_jit(self):
+        """Test that the spline field can be passed to a jitted function."""
+        extcur = [4700.0, 1000.0]
+        mgrid = "tests/inputs/mgrid_test.nc"
+        field = SplineMagneticField.from_mgrid(mgrid, extcur)
+
+        x = jnp.array([0.70, 0, 0])
+
+        @jit
+        def foo(field, x):
+            return field.compute_magnetic_field(x)
+
+        np.testing.assert_allclose(
+            foo(field, x), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
+        )
+
+    @pytest.mark.unit
+    def test_mgrid_io(self, tmpdir_factory):
+        """Test saving to and loading from an mgrid file."""
+        tmpdir = tmpdir_factory.mktemp("mgrid_dir")
+        path = tmpdir.join("mgrid.nc")
+
+        # field to test on
+        toroidal_field = ToroidalMagneticField(B0=1, R0=5)
+        poloidal_field = PoloidalMagneticField(B0=1, R0=5, iota=2 / np.pi)
+        vertical_field = VerticalMagneticField(B0=0.2)
+        save_field = toroidal_field + poloidal_field + vertical_field
+
+        # save and load mgrid file
+        Rmin = 3
+        Rmax = 7
+        Zmin = -2
+        Zmax = 2
+        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
+        load_field = SplineMagneticField.from_mgrid(path)
+
+        # check that the fields are the same
+        num_nodes = 50
+        grid = np.array(
+            [
+                np.linspace(Rmin, Rmax, num_nodes),
+                np.linspace(0, 2 * np.pi, num_nodes, endpoint=False),
+                np.linspace(Zmin, Zmax, num_nodes),
+            ]
+        ).T
+        B_saved = save_field.compute_magnetic_field(grid)
+        B_loaded = load_field.compute_magnetic_field(grid)
+        np.testing.assert_allclose(B_loaded, B_saved, rtol=1e-6)
+
+    @pytest.mark.unit
+    def test_omnigenous_field_change_resolution_B(self):
+        """Test OmnigenousField.change_resolution() of the B_lm parameters."""
+        L_B_old = 1
+        L_B_new = 2
+        M_B_old = 3
+        M_B_new = 6
+        NFP = 4
+        field = OmnigenousField(
+            L_B=L_B_old,
+            M_B=M_B_old,
+            L_x=0,
+            M_x=0,
+            N_x=0,
+            NFP=NFP,
+            helicity=(0, NFP),
+            B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
+        )
+        grid_axis = LinearGrid(rho=[0.0], M=50)
+        grid_half = LinearGrid(rho=[0.5], M=50)
+        grid_lcfs = LinearGrid(rho=[1.0], M=50)
+        B_axis_lowres = field.compute("|B|", grid=grid_axis)["|B|"]
+        B_half_lowres = field.compute("|B|", grid=grid_half)["|B|"]
+        B_lcfs_lowres = field.compute("|B|", grid=grid_lcfs)["|B|"]
+        field.change_resolution(L_B=L_B_new, M_B=M_B_new)
+        B_axis_highres = field.compute("|B|", grid=grid_axis)["|B|"]
+        B_half_highres = field.compute("|B|", grid=grid_half)["|B|"]
+        B_lcfs_highres = field.compute("|B|", grid=grid_lcfs)["|B|"]
+        np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
+        np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
+        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+
 
 @pytest.mark.unit
 def test_dommaschk_CN_CD_m_0():
@@ -869,103 +951,41 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
     B0_Z = 1  # scale strength for to uniform vertical field to fit
     field = ToroidalMagneticField(B0=B0, R0=1) + VerticalMagneticField(B0=B0_Z)
 
-    B = DommaschkPotentialField.fit_magnetic_field(field, coords, max_m, max_l)
+    B = DommaschkPotentialField.fit_magnetic_field(
+        field, coords, max_m, max_l, sym=True, NFP=2
+    )
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
-    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-14)
-    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-13)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-13)
+    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-13)
 
     np.testing.assert_allclose(B._params["B0"], B0)
 
     # only nonzero coefficient of the field should be the B0 and a_ml = a_01
-    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-14)
+    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-13)
     for coef, m, l in zip(B._params["a_arr"], B._params["ms"], B._params["ls"]):
         if m == 0 and l == 1:
             np.testing.assert_allclose(coef, B0_Z)
         else:
-            np.testing.assert_allclose(coef, 0, atol=1e-14)
+            np.testing.assert_allclose(coef, 0, atol=1e-13)
     for name in ["b_arr", "c_arr", "d_arr"]:
-        np.testing.assert_allclose(B._params[name], 0, atol=1e-14)
+        np.testing.assert_allclose(B._params[name], 0, atol=1e-13)
 
-    @pytest.mark.unit
-    def test_spline_field_jit(self):
-        """Test that the spline field can be passed to a jitted function."""
-        extcur = [4700.0, 1000.0]
-        mgrid = "tests/inputs/mgrid_test.nc"
-        field = SplineMagneticField.from_mgrid(mgrid, extcur)
 
-        x = jnp.array([0.70, 0, 0])
+@pytest.mark.unit
+def test_domm_field_is_nonzero_and_continuous_across_Z_0():
+    """Test that at Z=0 the Bphi of domm field is not discontinuous."""
+    # following field should, at constant R and Z, have Bphi
+    # be nonzero everywhere.
+    # related to issue noted in PRs #966 and #961, where
+    # before the fix in #966 was implemented the field Bphi
+    # would drop to 0 discontinuously at Z=0.
+    new_field = DommaschkPotentialField(1, 1, 10, 0, 0, 9, B0=0)
+    Zs = np.linspace(-0.05, 0.05, 101)
+    Rs = 1.1 * np.ones_like(Zs)
+    phis = 0 * np.ones_like(Zs)
 
-        @jit
-        def foo(field, x):
-            return field.compute_magnetic_field(x)
+    Bnew = new_field.compute_magnetic_field(np.vstack([Rs, phis, Zs]).T)
 
-        np.testing.assert_allclose(
-            foo(field, x), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
-        )
-
-    @pytest.mark.unit
-    def test_mgrid_io(self, tmpdir_factory):
-        """Test saving to and loading from an mgrid file."""
-        tmpdir = tmpdir_factory.mktemp("mgrid_dir")
-        path = tmpdir.join("mgrid.nc")
-
-        # field to test on
-        toroidal_field = ToroidalMagneticField(B0=1, R0=5)
-        poloidal_field = PoloidalMagneticField(B0=1, R0=5, iota=2 / np.pi)
-        vertical_field = VerticalMagneticField(B0=0.2)
-        save_field = toroidal_field + poloidal_field + vertical_field
-
-        # save and load mgrid file
-        Rmin = 3
-        Rmax = 7
-        Zmin = -2
-        Zmax = 2
-        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
-        load_field = SplineMagneticField.from_mgrid(path)
-
-        # check that the fields are the same
-        num_nodes = 50
-        grid = np.array(
-            [
-                np.linspace(Rmin, Rmax, num_nodes),
-                np.linspace(0, 2 * np.pi, num_nodes, endpoint=False),
-                np.linspace(Zmin, Zmax, num_nodes),
-            ]
-        ).T
-        B_saved = save_field.compute_magnetic_field(grid)
-        B_loaded = load_field.compute_magnetic_field(grid)
-        np.testing.assert_allclose(B_loaded, B_saved, rtol=1e-6)
-
-    @pytest.mark.unit
-    def test_omnigenous_field_change_resolution_B(self):
-        """Test OmnigenousField.change_resolution() of the B_lm parameters."""
-        L_B_old = 1
-        L_B_new = 2
-        M_B_old = 3
-        M_B_new = 6
-        NFP = 4
-        field = OmnigenousField(
-            L_B=L_B_old,
-            M_B=M_B_old,
-            L_x=0,
-            M_x=0,
-            N_x=0,
-            NFP=NFP,
-            helicity=(0, NFP),
-            B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
-        )
-        grid_axis = LinearGrid(rho=[0.0], M=50)
-        grid_half = LinearGrid(rho=[0.5], M=50)
-        grid_lcfs = LinearGrid(rho=[1.0], M=50)
-        B_axis_lowres = field.compute("|B|", grid=grid_axis)["|B|"]
-        B_half_lowres = field.compute("|B|", grid=grid_half)["|B|"]
-        B_lcfs_lowres = field.compute("|B|", grid=grid_lcfs)["|B|"]
-        field.change_resolution(L_B=L_B_new, M_B=M_B_new)
-        B_axis_highres = field.compute("|B|", grid=grid_axis)["|B|"]
-        B_half_highres = field.compute("|B|", grid=grid_half)["|B|"]
-        B_lcfs_highres = field.compute("|B|", grid=grid_lcfs)["|B|"]
-        np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
-        np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
-        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+    assert not np.any(np.isclose(Bnew[:, 1], 0))

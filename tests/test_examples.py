@@ -17,7 +17,12 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, SplineMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    SplineMagneticField,
+    ToroidalMagneticField,
+    VerticalMagneticField,
+)
 from desc.objectives import (
     AspectRatio,
     BoundaryError,
@@ -27,6 +32,7 @@ from desc.objectives import (
     CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCollectionParameters,
     FixCurrent,
     FixIota,
     FixOmniBmax,
@@ -1344,3 +1350,23 @@ def test_single_coil_optimization():
     np.testing.assert_allclose(
         coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
     )
+
+
+@pytest.mark.unit
+def test_second_stage_optimization():
+    """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
+    # This also tests that FixCollectionParameters works properly when fixing a
+    # parameter that does not exist for all things in the collection.
+
+    # TODO: change the objective to QuadraticFlux
+    eq = get("DSHAPE")
+    field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
+    objective = ObjectiveFunction(BoundaryError(eq=eq, field=field))
+    constraints = (FixParameter(eq), FixCollectionParameters(field, "R0"))
+    optimizer = Optimizer("lsq-exact")
+    (eq, field), _ = optimizer.optimize(
+        things=(eq, field), objective=objective, constraints=constraints
+    )
+    np.testing.assert_allclose(field[0].R0, 3.5)
+    np.testing.assert_allclose(field[0].B0, 0.218, rtol=1e-3)  # toroidal field
+    np.testing.assert_allclose(field[1].B0, -0.021, rtol=2e-2)  # vertical field

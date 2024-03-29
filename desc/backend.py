@@ -73,6 +73,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     vmap = jax.vmap
     scan = jax.lax.scan
     bincount = jnp.bincount
+    repeat = jnp.repeat
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -629,6 +630,13 @@ else:  # pragma: no cover
     def bincount(x, weights=None, minlength=None, length=None):
         """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
         return np.bincount(x, weights, minlength)
+
+    def repeat(a, repeats, axis=None, total_repeat_length=None):
+        """A numpy implementation of jnp.repeat."""
+        out = np.repeat(a, repeats, axis)
+        if total_repeat_length is not None:
+            out = out[:total_repeat_length]
+        return out
 
     def custom_jvp(fun, *args, **kwargs):
         """Dummy function for custom_jvp without JAX."""

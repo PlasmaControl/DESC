@@ -7,7 +7,9 @@ import pytest
 
 from desc.backend import put
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.coords import _field_line_to_desc_coords
 from desc.equilibrium.initial_guess import _initial_guess_surface
+from desc.examples import get
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -449,6 +451,42 @@ class TestInitialGuess:
             eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
 
         assert eq.is_nested()
+
+    # pytest -s -k test_hairy_ball_theorem tests/test_configuration.py
+    @pytest.mark.unit
+    def test_hairy_ball_theorem(self):
+        """Ensure |B| does not vanish after coordinate mapping."""
+        eq = get("W7-X")
+        rho = np.linspace(0, 1, 5)
+        alpha = np.linspace(0, 2 * np.pi, 2)
+        zeta = np.linspace(0, 4 * np.pi, 10)
+
+        grid_jit, data_jit = _field_line_to_desc_coords(
+            eq, rho, alpha, zeta, jitable=True
+        )
+        data_jit = eq.compute("|B|", grid=grid_jit, data=data_jit)
+        grid_no_jit, data_no_jit = _field_line_to_desc_coords(
+            eq, rho, alpha, zeta, jitable=False
+        )
+        data_no_jit = eq.compute("|B|", grid=grid_no_jit, data=data_no_jit)
+        print(data_jit["|B|"])
+        print()
+        print(data_no_jit["|B|"])
+        # I think there are two separate bugs.
+        # Bug 1:
+        # Regardless of any logic issues with the coordinate mapping etc., I think
+        # these two arrays should be approximately equal. However, the jitted |B|
+        # has varies between 0 and 10^11, while the no jit |B| varies from 0 to 3.
+        np.testing.assert_allclose(
+            data_jit["|B|"],
+            data_no_jit["|B|"],
+            err_msg="jitting issue? grid weights issue?"
+            " mixing grids with different weights to compute things?",
+        )
+        # Bug 2: vanishing |B|.
+        assert np.all(
+            ~np.isclose(data_no_jit["|B|"], 0)
+        ), "logic issue in field_line_to_desc_coords?"
 
 
 class TestGetSurfaces:

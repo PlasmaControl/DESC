@@ -9,7 +9,7 @@ from termcolor import colored
 from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_profiles, get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid, _meshgrid_expand
 from desc.transform import Transform
 from desc.utils import setdefault
 
@@ -453,3 +453,32 @@ def to_sfl(
     eq_sfl.L_lmn = L_lmn_sfl
 
     return eq_sfl
+
+
+def _field_line_to_desc_coords(eq, rho, alpha, zeta, jitable=True):
+    """Get DESC grid from unique field line coordinates."""
+    r, a, z = jnp.meshgrid(rho, alpha, zeta, indexing="ij")
+    r, a, z = r.ravel(), a.ravel(), z.ravel()
+    # Map these Clebsch-Type field-line coordinates to DESC coordinates.
+    # Note that the rotational transform can be computed apriori because it is a single
+    # variable function of rho, and the coordinate mapping does not change rho. Once
+    # this is known, it is simple to compute theta_PEST from alpha. Then we transform
+    # from straight field-line coordinates to DESC coordinates with the method
+    # compute_theta_coords. This is preferred over transforming from Clebsch-Type
+    # coordinates to DESC coordinates directly with the more general method
+    # map_coordinates. That method requires an initial guess to be compatible with JIT,
+    # and generating a reasonable initial guess requires computing the rotational
+    # transform to approximate theta_PEST and the poloidal stream function anyway.
+    # TODO: map coords recently updated, so maybe just switch to that
+    lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    lg_data = eq.compute(["iota", "iota_r", "iota_rr"], grid=lg)
+    data = {
+        d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
+        for d in lg_data
+        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
+        == "r"
+    }
+    sfl_coords = jnp.column_stack([r, a + data["iota"] * z, z])
+    desc_coords = eq.compute_theta_coords(sfl_coords)
+    grid = Grid(desc_coords, jitable=jitable)
+    return grid, data

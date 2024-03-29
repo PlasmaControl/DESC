@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from scipy import optimize, special
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, repeat
 from desc.io import IOAble
 from desc.utils import Index
 
@@ -1478,3 +1478,56 @@ def find_least_rational_surfaces(
     io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
     rho = _find_rho(iota, io, tol=atol)
     return rho, io
+
+
+def _meshgrid_expand(x, rho_size, theta_size, zeta_size, surface_label="rho"):
+    """Expand ``x`` by duplicating elements to match a meshgrid pattern.
+
+    It is common to construct a meshgrid in the following manner.
+        .. code-block:: python
+
+        # In this meshgrid, the fastest (slowest) changing coordinate is zeta (theta).
+        r, t, z = jnp.meshgrid(rho, theta, zeta, indexing="ij")
+        r, t, z = r.ravel(), t.ravel(), z.ravel()
+        nodes = jnp.column_stack([r, t, z])
+        grid = Grid(nodes, sort=False, jitable=True)
+
+    Since ``jitable=True`` was specified, the attribute ``grid.inverse_*_idx``
+    is not computed, which is needed for the method ``grid.expand(x)``.
+    On such grids, this method should be used instead.
+
+    Parameters
+    ----------
+    x : ndarray
+        Stores the values of a surface function (constant over a surface)
+        for all unique surfaces of the specified label on the grid.
+        The length of ``x`` should match the number of unique surfaces of
+        the corresponding label in this grid. ``x`` should be sorted such
+        that x[i] corresponds to the value associated with surface_label[i].
+
+    Returns
+    -------
+    expand_x : ndarray
+        ``x`` expanded to match the meshgrid pattern.
+
+    """
+    assert surface_label in {"rho", "theta", "zeta"}, (
+        "These labels need not correspond to DESC coordinates. "
+        "They should correspond to the order the arrays were given to construct "
+        "the meshgrid as shown in the example code in the docstring."
+    )
+    if surface_label == "rho":
+        assert len(x) == rho_size
+        return jnp.tile(
+            repeat(x, zeta_size, total_repeat_length=rho_size * zeta_size), theta_size
+        )
+    if surface_label == "theta":
+        assert len(x) == theta_size
+        return repeat(
+            x,
+            rho_size * zeta_size,
+            total_repeat_length=rho_size * theta_size * zeta_size,
+        )
+    if surface_label == "zeta":
+        assert len(x) == zeta_size
+        return jnp.tile(x, rho_size * theta_size)

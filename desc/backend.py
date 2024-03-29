@@ -80,7 +80,14 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
-    from jax.tree_util import register_pytree_node, tree_flatten, tree_unflatten
+    from jax.tree_util import (
+        register_pytree_node,
+        tree_flatten,
+        tree_leaves,
+        tree_map,
+        tree_structure,
+        tree_unflatten,
+    )
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -449,6 +456,18 @@ else:  # pragma: no cover
 
     def tree_unflatten(*args, **kwargs):
         """Unflatten pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_map(*args, **kwargs):
+        """Map pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_structure(*args, **kwargs):
+        """Get structure of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_leaves(*args, **kwargs):
+        """Get leaves of pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

@@ -419,7 +419,7 @@ def D_m_n(R, Z, m, n):
         exp = n - 2 * k
         mask = (Z == 0) & (exp == 0)
         exp = jnp.where(mask, 1, exp)
-        return val + coef * jnp.where(mask, 0, Z**exp)
+        return val + coef * jnp.where(mask, 1, Z**exp)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
@@ -434,7 +434,7 @@ def N_m_n(R, Z, m, n):
         exp = n - 2 * k
         mask = (Z == 0) & (exp == 0)
         exp = jnp.where(mask, 1, exp)
-        return val + coef * jnp.where(mask, 0, Z**exp)
+        return val + coef * jnp.where(mask, 1, Z**exp)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 

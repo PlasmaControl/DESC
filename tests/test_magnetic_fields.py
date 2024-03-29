@@ -869,7 +869,9 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
     B0_Z = 1  # scale strength for to uniform vertical field to fit
     field = ToroidalMagneticField(B0=B0, R0=1) + VerticalMagneticField(B0=B0_Z)
 
-    B = DommaschkPotentialField.fit_magnetic_field(field, coords, max_m, max_l)
+    B = DommaschkPotentialField.fit_magnetic_field(
+        field, coords, max_m, max_l, sym=True, NFP=2
+    )
 
     B_dom = B.compute_magnetic_field(coords)
     np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)

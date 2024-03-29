@@ -171,9 +171,9 @@ class DommaschkPotentialField(ScalarPotentialField):
             for m in range(0, max_m * NFP + 1, NFP):
                 if not sym:
                     pass  # no sym, use all coefs
-                elif l // 2 == 0:
+                elif l % 2 == 0:
                     zero_due_to_sym_inds = [0, 3]  # a=d=0 for even l with sym
-                elif l // 2 == 1:
+                elif l % 2 == 1:
                     zero_due_to_sym_inds = [1, 2]  # b=c=0 for odd l with sym
                 for which_coef in range(4):
                     if which_coef == 0:

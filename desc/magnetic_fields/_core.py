@@ -15,18 +15,14 @@ from desc.basis import (
     DoubleFourierSeries,
 )
 from desc.compute import compute as compute_fun
-from desc.compute import rpz2xyz_vec, xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.singularities import (
-    DFTInterpolator,
-    FFTInterpolator,
-    virtual_casing_biot_savart,
-)
+from desc.singularities import compute_B_plasma
 from desc.transform import Transform
 from desc.utils import copy_coeffs, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
@@ -267,68 +263,21 @@ class _MagneticField(IOAble, ABC):
             eval_grid = LinearGrid(
                 rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
-        if vc_source_grid is None:
-            source_NFP = surface.NFP if surface.N > 0 else 64
-            vc_source_grid = LinearGrid(
-                rho=jnp.array(1.0),
-                M=2 * surface.M,
-                N=2 * surface.N,
-                NFP=source_NFP,
-                sym=False,
-            )
 
-        data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="xyz")
+        data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="rpz")
         coords = data["x"]
         surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
-            coords, basis="xyz", source_grid=source_grid, params=params
+            coords, basis="rpz", source_grid=source_grid, params=params
         )
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
 
         if calc_Bplasma:
-            # do virtual casing to find plasma contribution to Bnormal
-            data_keys = [
-                "K_vc",
-                "B",
-                "R",
-                "phi",
-                "Z",
-                "e^rho",
-                "n_rho",
-                "|e_theta x e_zeta|",
-            ]
-            vc_eval_data = eq.compute(data_keys, grid=eval_grid)
-            vc_data = eq.compute(data_keys, grid=vc_source_grid)
+            Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
+            Bnorm += Bplasma
 
-            k = min(
-                vc_source_grid.num_theta, vc_source_grid.num_zeta * vc_source_grid.NFP
-            )
-            s = k - 1
-            k = min(
-                vc_source_grid.num_theta, vc_source_grid.num_zeta * vc_source_grid.NFP
-            )
-            q = k // 2 + int(np.sqrt(k))
-            try:
-                interpolator = FFTInterpolator(eval_grid, vc_source_grid, s, q)
-            except AssertionError as e:
-                print(
-                    f"Unable to create FFTInterpolator, got error {e},"
-                    "falling back to DFT method which is much slower"
-                )
-                interpolator = DFTInterpolator(eval_grid, vc_source_grid, s, q)
-            if hasattr(eq.surface, "Phi_mn"):
-                vc_data["K_vc"] += eq.surface.compute("K", grid=vc_source_grid)["K"]
-            Bplasma = virtual_casing_biot_savart(
-                vc_eval_data,
-                vc_data,
-                interpolator,
-            )
-            # need extra factor of B/2 bc we're evaluating on plasma surface
-            Bplasma = Bplasma + vc_eval_data["B"] / 2
-            Bnorm += np.sum(Bplasma * vc_eval_data["n_rho"], axis=-1)
-
-        if basis.lower() == "rpz":
-            coords = xyz2rpz(coords)
+        if basis.lower() == "xyz":
+            coords = rpz2xyz(coords)
 
         return Bnorm, coords
 

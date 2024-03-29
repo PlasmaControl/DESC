@@ -297,7 +297,10 @@ class FixCollectionParameters(_FixedObjective):
         if not isinstance(params, (list, tuple)):
             params = [params]
         if not all([isinstance(par, (list, tuple)) for par in params]):
-            params = [params for _ in thing_idx]
+            params = [
+                params if set(params) <= set(thing[k].optimizable_params) else []
+                for k in thing_idx
+            ]
         for k in thing_idx:
             for par in params[k]:
                 errorif(
@@ -311,7 +314,11 @@ class FixCollectionParameters(_FixedObjective):
         # replace indices=True with actual indices
         if isinstance(self._indices, bool) and self._indices:
             self._indices = [
-                [np.arange(thing.dimensions[k][par]) for par in self._params[k]]
+                [
+                    np.arange(thing.dimensions[k][par])
+                    for par in self._params[k]
+                    if par in thing.dimensions[k].keys()
+                ]
                 for k in thing_idx
             ]
         # make sure its iterable if only a scalar was passed in
@@ -322,8 +329,8 @@ class FixCollectionParameters(_FixedObjective):
         errorif(
             len(sum(self._params, [])) != len(sum(self._indices, [])),
             ValueError,
-            f"Unequal number of indices ({len(self._indices)}) "
-            + f"and params ({len(self._params)}).",
+            f"Unequal number of indices ({len(sum(self._indices, []))}) "
+            + f"and params ({len(sum(self._params, []))}).",
         )
         indices = []
         for k in thing_idx:
@@ -333,7 +340,9 @@ class FixCollectionParameters(_FixedObjective):
                     idx = np.arange(thing.dimensions[k][par])
                 indices[k][par] = np.atleast_1d(idx)
         self._indices = indices
-        self._dim_f = sum(t.size for t in self._indices[k].values() for k in thing_idx)
+        self._dim_f = sum(
+            sum(t.size for t in self._indices[k].values()) for k in thing_idx
+        )
 
         # FIXME: I don't think custom target/bounds works yet (default target is ok)
         default_target = [
@@ -347,7 +356,11 @@ class FixCollectionParameters(_FixedObjective):
         if target:
             self.target = jnp.concatenate(
                 [
-                    jnp.concatenate([target[k][par] for par in params[k]])
+                    (
+                        jnp.concatenate([target[k][par] for par in params[k]])
+                        if par in target[k].keys()
+                        else jnp.array([])
+                    )
                     for k in thing_idx
                 ]
             )
@@ -379,8 +392,15 @@ class FixCollectionParameters(_FixedObjective):
         """
         return jnp.concatenate(
             [
-                jnp.concatenate(
-                    [params[k][par][self._indices[k][par]] for par in self._params[k]]
+                (
+                    jnp.concatenate(
+                        [
+                            params[k][par][self._indices[k][par]]
+                            for par in self._params[k]
+                        ]
+                    )
+                    if len(self._params[k])
+                    else jnp.array([])
                 )
                 for k in range(len(self._params))
             ]

@@ -201,7 +201,7 @@ class OptimizableCollection(Optimizable):
             list of dictionary of ndarray of optimizable parameters.
 
         """
-        split_idx = np.cumsum(np.array([s.dim_x for s in self]))  # must be np not jnp
+        split_idx = np.cumsum([s.dim_x for s in self])  # must be np not jnp
         xs = jnp.split(x, split_idx)
         params = [s.unpack_params(xi) for s, xi in zip(self, xs)]
         return params

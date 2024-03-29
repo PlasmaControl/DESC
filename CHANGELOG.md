@@ -1,6 +1,19 @@
 Changelog
 =========
 
+v0.11.1
+-------
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.11.0...v0.11.1)
+
+- Change default symmetry to ``"sin"`` for current potential fields created with the ``from_surface`` method when the surface is stellarator symmetric
+- Add objectives for coil length, curvature and torsion
+- Improve Dommaschk potential magnetic field fitting by adding NFP option to only use potentials with the desired periodicity
+- Fix incorrect Jacobian when bounds constraints are used by adding explicit Jacobian of ``compute_scaled_error``
+- Fix bug in Dommaschk potentials that arose when evaluating the potential at Z=0
+- Fix bug in Dommaschk potential fitting when symmetry is set to true
+- Bump black version from 22.10.0 to 24.3.0
+
+
 v0.11.0
 -------
 

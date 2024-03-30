@@ -142,7 +142,7 @@ def _last_value(a):
     """Assuming a is padded with nan at the right, return the last non-nan value."""
     assert a.ndim == 1
     a = a[::-1]
-    idx = flatnonzero(~jnp.isnan(a), size=1, fill_value=a.size)
+    idx = flatnonzero(~jnp.isnan(a), size=1, fill_value=0)
     return a[idx]
 
 

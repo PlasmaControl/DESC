@@ -107,13 +107,11 @@ def take_mask(a, mask, size=None, fill_value=jnp.nan):
     a : ndarray
         The source array.
     mask : ndarray
-        Boolean mask to index into ``a``.
-        Should have same size as ``a``.
+        Boolean mask to index into ``a``. Should have same size as ``a``.
     size :
         Elements of ``a`` at the first size True indices of ``mask`` will be returned.
         If there are fewer elements than size indicates, the returned array will be
-        padded with fill_value.
-        Defaults to ``a.size``.
+        padded with fill_value. Defaults to ``a.size``.
     fill_value :
         When there are fewer than the indicated number of elements,
         the remaining elements will be filled with ``fill_value``.
@@ -139,55 +137,12 @@ def take_mask(a, mask, size=None, fill_value=jnp.nan):
     return a_mask
 
 
-def diff_mask(a, mask, n=1, axis=-1, prepend=None):
-    """Calculate the n-th discrete difference along the given axis of ``a[mask]``.
-
-    The first difference is given by ``out[i] = a[i+1] - a[i]`` along
-    the given axis, higher differences are calculated by using `diff`
-    recursively. This method is JIT compatible.
-
-    Parameters
-    ----------
-    a : array_like
-        Input array
-    mask : array_like
-        Boolean mask to index like ``a[mask]`` prior to computing difference.
-        Should have same size as ``a``.
-    n : int, optional
-        The number of times values are differenced.
-    axis : int, optional
-        The axis along which the difference is taken, default is the
-        last axis.
-    prepend : array_like, optional
-        Values to prepend to `a` along axis prior to performing the difference.
-        Scalar values are expanded to arrays with length 1 in the direction of
-        axis and the shape of the input array in along all other axes.
-        Otherwise, the dimension and shape must match `a` except along axis.
-
-    Returns
-    -------
-    diff : ndarray
-        The n-th differences. The shape of the output is the same as ``a``
-        except along ``axis`` where the dimension is smaller by ``n``. The
-        type of the output is the same as the type of the difference
-        between any two elements of ``a``.
-
-    Notes
-    -----
-    The result is padded with nan at the end to be jit compilable.
-
-    """
-    prepend = () if prepend is None else (prepend,)
-    return jnp.diff(take_mask(a, mask, fill_value=jnp.nan), n, axis, *prepend)
-
-
 @vmap
-def _last_element(a, mask):
-    """Return last element of ``a`` where ``mask`` is nonzero."""
-    assert a.ndim == mask.ndim == 1
-    assert a.shape == mask.shape
-    assert mask.dtype == bool
-    idx = flatnonzero(~mask, size=1, fill_value=a.size) - 1
+def _last_value(a):
+    """Assuming a is padded with nan at the right, return the last non-nan value."""
+    assert a.ndim == 1
+    a = a[::-1]
+    idx = flatnonzero(~jnp.isnan(a), size=1, fill_value=a.size)
     return a[idx]
 
 
@@ -444,7 +399,7 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # If, in addition, the last intersect satisfies B_z < 0, then we have the
     # required information to compute a bounce integral between these points.
     # The below logic handles both tasks.
-    last_intersect = jnp.squeeze(_last_element(intersect, is_intersect))
+    last_intersect = jnp.squeeze(_last_value(intersect))
     bp1 = _roll_and_replace(bp1, bp1[:, 0] > bp2[:, 0], last_intersect - knots[-1])
     # Notice that for the latter, an "approximation" is made that the field line is
     # periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so that the
@@ -595,14 +550,14 @@ def bounce_integral(
     --------
     .. code-block:: python
 
-        rho = np.linspace(1e-12, 1, 6)
-        alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
+        rho = jnp.linspace(1e-12, 1, 6)
+        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 5)
         bi, items = bounce_integral(eq, rho=rho, alpha=alpha, return_items=True)
         name = "g_zz"
         f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
         B = items["data"]["B"].reshape(alpha.size * rho.size, -1)
-        pitch = np.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), 30).reshape(
-            pitch_res, alpha.size, rho.size
+        pitch = jnp.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), 30).reshape(
+            -1, alpha.size, rho.size
         )
         result = bi(f, pitch)
 
@@ -767,14 +722,14 @@ def bounce_average(
     --------
     .. code-block:: python
 
-        rho = np.linspace(1e-12, 1, 6)
-        alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
+        rho = jnp.linspace(1e-12, 1, 6)
+        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 5)
         ba, items = bounce_average(eq, rho=rho, alpha=alpha, return_items=True)
         name = "g_zz"
         f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
         B = items["data"]["B"].reshape(alpha.size * rho.size, -1)
-        pitch = np.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), 30).reshape(
-            pitch_res, alpha.size, rho.size
+        pitch = jnp.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), 30).reshape(
+            -1, alpha.size, rho.size
         )
         result = ba(f, pitch)
 
@@ -813,6 +768,79 @@ def bounce_average(
         return _bounce_average, items
     else:
         return _bounce_average
+
+
+def field_line_to_desc_coords(eq, rho, alpha, zeta, jitable=True):
+    """Get DESC grid from unique field line coordinates."""
+    r, a, z = jnp.meshgrid(rho, alpha, zeta, indexing="ij")
+    r, a, z = r.ravel(), a.ravel(), z.ravel()
+    # Map these Clebsch-Type field-line coordinates to DESC coordinates.
+    # Note that the rotational transform can be computed apriori because it is a single
+    # variable function of rho, and the coordinate mapping does not change rho. Once
+    # this is known, it is simple to compute theta_PEST from alpha. Then we transform
+    # from straight field-line coordinates to DESC coordinates with the method
+    # compute_theta_coords. This is preferred over transforming from Clebsch-Type
+    # coordinates to DESC coordinates directly with the more general method
+    # map_coordinates. That method requires an initial guess to be compatible with JIT,
+    # and generating a reasonable initial guess requires computing the rotational
+    # transform to approximate theta_PEST and the poloidal stream function anyway.
+    # TODO: map coords recently updated, so maybe just switch to that
+    lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    lg_data = eq.compute(["iota", "iota_r", "iota_rr"], grid=lg)
+    data = {
+        d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
+        for d in lg_data
+        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
+        == "r"
+    }
+    sfl_coords = jnp.column_stack([r, a + data["iota"] * z, z])
+    desc_coords = eq.compute_theta_coords(sfl_coords)
+    grid = Grid(desc_coords, jitable=jitable)
+    return grid, data
+
+
+# Current algorithm used for bounce integrals no longer requires these
+# two functions. TODO: Delete before merge.
+def diff_mask(a, mask, n=1, axis=-1, prepend=None):
+    """Calculate the n-th discrete difference along the given axis of ``a[mask]``.
+
+    The first difference is given by ``out[i] = a[i+1] - a[i]`` along
+    the given axis, higher differences are calculated by using `diff`
+    recursively. This method is JIT compatible.
+
+    Parameters
+    ----------
+    a : array_like
+        Input array
+    mask : array_like
+        Boolean mask to index like ``a[mask]`` prior to computing difference.
+        Should have same size as ``a``.
+    n : int, optional
+        The number of times values are differenced.
+    axis : int, optional
+        The axis along which the difference is taken, default is the
+        last axis.
+    prepend : array_like, optional
+        Values to prepend to `a` along axis prior to performing the difference.
+        Scalar values are expanded to arrays with length 1 in the direction of
+        axis and the shape of the input array in along all other axes.
+        Otherwise, the dimension and shape must match `a` except along axis.
+
+    Returns
+    -------
+    diff : ndarray
+        The n-th differences. The shape of the output is the same as ``a``
+        except along ``axis`` where the dimension is smaller by ``n``. The
+        type of the output is the same as the type of the difference
+        between any two elements of ``a``.
+
+    Notes
+    -----
+    The result is padded with nan at the end to be jit compilable.
+
+    """
+    prepend = () if prepend is None else (prepend,)
+    return jnp.diff(take_mask(a, mask, fill_value=jnp.nan), n, axis, *prepend)
 
 
 def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):
@@ -855,32 +883,3 @@ def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):
         axis=-1,
     )
     return out_arr
-
-
-def field_line_to_desc_coords(eq, rho, alpha, zeta, jitable=True):
-    """Get DESC grid from unique field line coordinates."""
-    r, a, z = jnp.meshgrid(rho, alpha, zeta, indexing="ij")
-    r, a, z = r.ravel(), a.ravel(), z.ravel()
-    # Map these Clebsch-Type field-line coordinates to DESC coordinates.
-    # Note that the rotational transform can be computed apriori because it is a single
-    # variable function of rho, and the coordinate mapping does not change rho. Once
-    # this is known, it is simple to compute theta_PEST from alpha. Then we transform
-    # from straight field-line coordinates to DESC coordinates with the method
-    # compute_theta_coords. This is preferred over transforming from Clebsch-Type
-    # coordinates to DESC coordinates directly with the more general method
-    # map_coordinates. That method requires an initial guess to be compatible with JIT,
-    # and generating a reasonable initial guess requires computing the rotational
-    # transform to approximate theta_PEST and the poloidal stream function anyway.
-    # TODO: map coords recently updated, so maybe just switch to that
-    lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    lg_data = eq.compute(["iota", "iota_r", "iota_rr"], grid=lg)
-    data = {
-        d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
-        for d in lg_data
-        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
-        == "r"
-    }
-    sfl_coords = jnp.column_stack([r, a + data["iota"] * z, z])
-    desc_coords = eq.compute_theta_coords(sfl_coords)
-    grid = Grid(desc_coords, jitable=jitable)
-    return grid, data

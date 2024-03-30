@@ -6,6 +6,7 @@ from interpax import Akima1DInterpolator
 
 from desc.backend import fori_loop, put, root_scalar
 from desc.compute.bounce_integral import (
+    _last_value,
     bounce_average,
     bounce_integral,
     compute_bounce_points,
@@ -14,6 +15,7 @@ from desc.compute.bounce_integral import (
     polyder,
     polyint,
     polyval,
+    take_mask,
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import Equilibrium
@@ -27,6 +29,28 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
+
+
+@pytest.mark.unit
+def test_mask_operation():
+    """Test custom masked array operation."""
+    rows = 5
+    cols = 7
+    a = np.random.rand(rows, cols)
+    nan_idx = np.random.choice(rows * cols, size=(rows * cols) // 2, replace=False)
+    a.ravel()[nan_idx] = np.nan
+    taken = take_mask(a, ~np.isnan(a))
+    last = _last_value(taken)
+    for i in range(rows):
+        desired = a[i, ~np.isnan(a[i])]
+        np.testing.assert_allclose(
+            actual=taken[i],
+            desired=np.pad(desired, (0, cols - desired.size), constant_values=np.nan),
+            err_msg="take_mask",
+        )
+        np.testing.assert_allclose(
+            actual=last[i], desired=desired[-1], err_msg="_last_value"
+        )
 
 
 @pytest.mark.unit

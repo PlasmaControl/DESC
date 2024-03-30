@@ -2238,13 +2238,12 @@ def _B_mag(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_mag_r(params, transforms, profiles, data, **kwargs):
-    data["|B|_r"] = safediv(
+    data["|B|_r"] = (
         data["B^theta_r"] * data["B_theta"]
         + data["B^theta"] * data["B_theta_r"]
         + data["B^zeta_r"] * data["B_zeta"]
-        + data["B^zeta"] * data["B_zeta_r"],
-        2 * data["|B|"],
-    )
+        + data["B^zeta"] * data["B_zeta_r"]
+    ) / (2 * data["|B|"])
     return data
 
 
@@ -2272,13 +2271,12 @@ def _B_mag_r(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_mag_t(params, transforms, profiles, data, **kwargs):
-    data["|B|_t"] = safediv(
+    data["|B|_t"] = (
         data["B^theta_t"] * data["B_theta"]
         + data["B^theta"] * data["B_theta_t"]
         + data["B^zeta_t"] * data["B_zeta"]
-        + data["B^zeta"] * data["B_zeta_t"],
-        2 * data["|B|"],
-    )
+        + data["B^zeta"] * data["B_zeta_t"]
+    ) / (2 * data["|B|"])
     return data
 
 
@@ -2306,13 +2304,12 @@ def _B_mag_t(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_mag_z(params, transforms, profiles, data, **kwargs):
-    data["|B|_z"] = safediv(
+    data["|B|_z"] = (
         data["B^theta_z"] * data["B_theta"]
         + data["B^theta"] * data["B_theta_z"]
         + data["B^zeta_z"] * data["B_zeta"]
-        + data["B^zeta"] * data["B_zeta_z"],
-        2 * data["|B|"],
-    )
+        + data["B^zeta"] * data["B_zeta_z"]
+    ) / (2 * data["|B|"])
     return data
 
 

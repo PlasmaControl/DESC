@@ -843,6 +843,19 @@ else:  # pragma: no cover
             if fill_value is None:
                 # TODO: Interpret default fill value based on dtype of a.
                 fill_value = np.nan
+            if fill_value is None:
+                # copy jax logic
+                # https://jax.readthedocs.io/en/latest/_modules/jax/_src/lax/slicing.html#gather
+                if np.issubdtype(a.dtype, np.inexact):
+                    fill_value = np.nan
+                elif np.issubdtype(a.dtype, np.signedinteger):
+                    fill_value = np.iinfo(a.dtype).min
+                elif np.issubdtype(a.dtype, np.unsignedinteger):
+                    fill_value = np.iinfo(a.dtype).max
+                elif a.dtype == np.bool_:
+                    fill_value = True
+                else:
+                    raise ValueError(f"Unsupported dtype {a.dtype}.")
             out = np.where(
                 (-a.size <= indices) & (indices < a.size),
                 np.take(a, indices, axis, out, mode="wrap"),

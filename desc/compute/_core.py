@@ -29,29 +29,6 @@ def _0(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="1",
-    label="1",
-    units="~",
-    units_long="None",
-    description="Ones",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="rtz",
-    data=[],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-        "desc.geometry.core.Curve",
-    ],
-)
-def _1(params, transforms, profiles, data, **kwargs):
-    data["1"] = jnp.ones(transforms["grid"].num_nodes)
-    return data
-
-
-@register_compute_fun(
     name="R",
     label="R",
     units="m",

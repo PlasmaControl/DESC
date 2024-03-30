@@ -862,10 +862,12 @@ def plot_3d(
         * ``cmap``: string denoting colormap to use.
         * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
+        * ``showscale``: Bool, whether or not to show the colorbar. True by default
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
           from which to calculate Bn, by default None.
+
 
     Returns
     -------
@@ -951,6 +953,7 @@ def plot_3d(
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
         label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
+    showscale = kwargs.get("showscale", True)
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -1013,6 +1016,7 @@ def plot_3d(
         flatshading=True,
         name=LatexNodes2Text().latex_to_text(label),
         colorbar=cbar,
+        showscale=showscale,
     )
 
     if fig is None:

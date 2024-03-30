@@ -1052,8 +1052,6 @@ class FourierCurrentPotentialField(
         dz = 2 * np.pi / nfp / npts
         if not jnp.isclose(helicity, 0):
             # helical coils
-            # we start below 0 for zeta to allow for contours which may go in/out of
-            # the zeta=0 plane
             zeta_full = jnp.arange(
                 0,
                 2 * jnp.pi / nfp + 1e-6,
@@ -1073,6 +1071,8 @@ class FourierCurrentPotentialField(
         else:
             # modular coils
             theta_full = jnp.linspace(0, 2 * jnp.pi, npts + 1)
+            # we start below 0 for zeta to allow for contours which may go in/out of
+            # the zeta=0 plane
             zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1 / nfp) * jnp.pi, dz)
             # TODO: make this also go to only 2pi/NFP, and make it so that
             # the number of coils means coils per field period

@@ -10,6 +10,7 @@ from netCDF4 import Dataset
 
 from desc.__main__ import main
 from desc.backend import sign
+from desc.compute.utils import cross, dot
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
@@ -464,3 +465,141 @@ def test_backward_compatible_load_and_resolve():
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj)
     eq.solve(maxiter=1, objective=obj)
+
+
+@pytest.mark.unit
+def test_shifted_circle_geometry():
+    """
+    In this test, we calculate a low-beta shifted circle equilibrium with DESC.
+
+    We then compare the various geometric coefficients with their respective analytical
+    expressions. These expression are available in Edmund Highcock's thesis on arxiv
+    https://arxiv.org/pdf/1207.4419.pdf  (Table 3.5)
+    """
+    eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
+
+    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
+
+    psi = 0.25  # rho^2 (or normalized psi)
+    alpha = 0
+
+    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
+
+    data_eq = eq.compute(eq_keys)
+
+    iotas = np.interp(np.sqrt(psi), data_eq["rho"], data_eq["iota"])
+    shears = np.interp(np.sqrt(psi), data_eq["rho"], data_eq["iota_r"])
+
+    N = int((2 * eq.M_grid) * 4 + 1)
+
+    zeta = np.linspace(-1.0 * np.pi / iotas, 1.0 * np.pi / iotas, N)
+    theta_PEST = alpha * np.ones(N, dtype=int) + iotas * zeta
+
+    coords1 = np.zeros((N, 3))
+    coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
+    coords1[:, 1] = theta_PEST
+    coords1[:, 2] = zeta
+
+    # Creating a grid along a field line
+    c1 = eq.compute_theta_coords(coords1)
+    grid = Grid(c1, sort=False)
+
+    data_keys = [
+        "kappa",
+        "|grad(psi)|^2",
+        "grad(|B|)",
+        "grad(alpha)",
+        "grad(psi)",
+        "B",
+        "grad(|B|)",
+        "iota",
+        "|B|",
+        "B^zeta",
+        "cvdrift0",
+        "cvdrift",
+        "gbdrift",
+    ]
+
+    data = eq.compute(data_keys, grid=grid, override_grid=False)
+
+    psib = data_eq["psi"][-1]
+
+    # signs
+    sign_psi = psib / np.abs(psib)
+    sign_iota = iotas / np.abs(iotas)
+
+    # normalizations
+    Lref = data_eq["a"]
+    Bref = 2 * np.abs(psib) / Lref**2
+
+    modB = data["|B|"]
+    bmag = modB / Bref
+
+    x = Lref * np.sqrt(psi)
+    s_hat = -x / iotas * shears / Lref
+
+    grad_psi = data["grad(psi)"]
+    grad_alpha = data["grad(alpha)"]
+
+    iota = data["iota"]
+
+    gradpar = Lref * data["B^zeta"] / modB
+
+    gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * s_hat / Bref
+
+    gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
+    gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
+
+    cvdrift = (
+        -sign_psi
+        * 2
+        * Bref
+        * Lref**2
+        * np.sqrt(psi)
+        * dot(cross(data["B"], data["kappa"]), grad_alpha)
+        / modB**2
+    )
+
+    cvdrift0 = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_psi))
+    cvdrift0 *= sign_iota * sign_psi * s_hat * 2 / modB**3 / np.sqrt(psi)
+
+    ## Comparing coefficient calculation here with coefficients from compute/_mtric
+    cvdrift_2 = -2 * sign_psi * Bref * Lref**2 * np.sqrt(psi) * data["cvdrift"]
+    gbdrift_2 = -2 * sign_psi * Bref * Lref**2 * np.sqrt(psi) * data["gbdrift"]
+
+    # The error here should be of the same order as the max force error
+    np.testing.assert_allclose(gbdrift, gbdrift_2, atol=1e-5, rtol=1e-5)
+    np.testing.assert_allclose(cvdrift, cvdrift_2, atol=8e-4, rtol=9e-5)
+
+    a0_over_R0 = Lref * np.sqrt(psi)
+
+    # For the rest of the expressions, the error ~ a0_over_R0
+    fudge_factor1 = -3.8
+    cvdrift0_an = fudge_factor1 * a0_over_R0 * s_hat * np.sin(theta_PEST)
+    np.testing.assert_allclose(cvdrift0, cvdrift0_an, atol=5e-3, rtol=5e-3)
+
+    bmag_an = np.mean(bmag) * (1 - a0_over_R0 * np.cos(theta_PEST))
+    np.testing.assert_allclose(bmag, bmag_an, atol=5e-3, rtol=5e-3)
+
+    gradpar_an = 2 * Lref * iota * (1 - a0_over_R0 * np.cos(theta_PEST))
+    np.testing.assert_allclose(gradpar, gradpar_an, atol=9e-3, rtol=5e-3)
+
+    dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * modB**2)
+    alpha_MHD = -dPdrho * 1 / iota**2 * 0.5
+
+    gds21_an = (
+        -1 * s_hat * (s_hat * theta_PEST - alpha_MHD / bmag**4 * np.sin(theta_PEST))
+    )
+    np.testing.assert_allclose(gds21, gds21_an, atol=1.7e-2, rtol=5e-4)
+
+    fudge_factor2 = 0.19
+    gbdrift_an = fudge_factor2 * (
+        -1 * s_hat + (np.cos(theta_PEST) - 1.0 * gds21 / s_hat * np.sin(theta_PEST))
+    )
+
+    fudge_factor3 = 0.07
+    cvdrift_an = gbdrift_an + fudge_factor3 * alpha_MHD / bmag**2
+
+    # Comparing coefficients with their analytical expressions
+    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.5e-2, rtol=5e-3)
+    np.testing.assert_allclose(cvdrift, cvdrift_an, atol=9e-3, rtol=5e-3)

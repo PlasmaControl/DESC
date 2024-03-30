@@ -595,20 +595,20 @@ def bounce_integral(
     --------
     .. code-block:: python
 
-        bi, items = bounce_integral(eq, return_items=True)
+        rho = np.linspace(1e-12, 1, 6)
+        alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
+        bi, items = bounce_integral(eq, rho=rho, alpha=alpha, return_items=True)
         name = "g_zz"
         f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-        # Same pitch for every field line may give sparse result.
-        # See tests/test_bounce_integral.py::test_pitch_input for an alternative.
-        pitch_res = 30
-        B = items["data"]["B"]
-        pitch = jnp.linspace(1 / B.max(), 1 / B.min(), pitch_res)
-        pitch = pitch[:, jnp.newaxis, jnp.newaxis]
+        B = items["data"]["B"].reshape(alpha.size * rho.size, -1)
+        pitch = np.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), 30).reshape(
+            pitch_res, alpha.size, rho.size
+        )
         result = bi(f, pitch)
 
     """
     if rho is None:
-        rho = jnp.linspace(0, 1, 10)
+        rho = jnp.linspace(1e-12, 1, 10)
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
     rho = jnp.atleast_1d(rho)
@@ -767,15 +767,15 @@ def bounce_average(
     --------
     .. code-block:: python
 
-        ba, items = bounce_average(eq, return_items=True)
+        rho = np.linspace(1e-12, 1, 6)
+        alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
+        ba, items = bounce_average(eq, rho=rho, alpha=alpha, return_items=True)
         name = "g_zz"
         f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-        # Same pitch for every field line may give sparse result.
-        # See tests/test_bounce_integral.py::test_pitch_input for an alternative.
-        pitch_res = 30
-        B = items["data"]["B"]
-        pitch = jnp.linspace(1 / B.max(), 1 / B.min(), pitch_res)
-        pitch = pitch[:, jnp.newaxis, jnp.newaxis]
+        B = items["data"]["B"].reshape(alpha.size * rho.size, -1)
+        pitch = np.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), 30).reshape(
+            pitch_res, alpha.size, rho.size
+        )
         result = ba(f, pitch)
 
     """

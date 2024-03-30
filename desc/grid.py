@@ -377,28 +377,18 @@ class _Grid(IOAble, ABC):
 
         """
         assert surface_label in {"rho", "theta", "zeta"}
+        errorif(
+            not hasattr(self, f"_inverse_{surface_label}_idx"),
+            AttributeError,
+            "expand operation undefined for jit compatible grids",
+        )
         if surface_label == "rho":
-            errorif(
-                not hasattr(self, "_inverse_rho_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
             assert len(x) == self.num_rho
             return x[self.inverse_rho_idx]
         if surface_label == "theta":
-            errorif(
-                not hasattr(self, "_inverse_theta_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
             assert len(x) == self.num_theta
             return x[self.inverse_theta_idx]
         if surface_label == "zeta":
-            errorif(
-                not hasattr(self, "_inverse_zeta_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
             assert len(x) == self.num_zeta
             return x[self.inverse_zeta_idx]
 
@@ -1580,16 +1570,14 @@ def find_least_rational_surfaces(
     return rho, io
 
 
-def _meshgrid_expand(x, rho_size, theta_size, zeta_size, surface_label="rho"):
+def _meshgrid_expand(x, a_size, b_size, c_size, order=0):
     """Expand ``x`` by duplicating elements to match a meshgrid pattern.
 
     It is common to construct a meshgrid in the following manner.
         .. code-block:: python
 
-        # In this meshgrid, the fastest (slowest) changing coordinate is zeta (theta).
-        r, t, z = jnp.meshgrid(rho, theta, zeta, indexing="ij")
-        r, t, z = r.ravel(), t.ravel(), z.ravel()
-        nodes = jnp.column_stack([r, t, z])
+        A, B, C = jnp.meshgrid(a, b, c, indexing="ij")
+        nodes = jnp.column_stack(tuple(map(np.ravel, (A, B, C))))
         grid = Grid(nodes, sort=False, jitable=True)
 
     Since ``jitable=True`` was specified, the attribute ``grid.inverse_*_idx``
@@ -1602,8 +1590,10 @@ def _meshgrid_expand(x, rho_size, theta_size, zeta_size, surface_label="rho"):
         Stores the values of a surface function (constant over a surface)
         for all unique surfaces of the specified label on the grid.
         The length of ``x`` should match the number of unique surfaces of
-        the corresponding label in this grid. ``x`` should be sorted such
-        that x[i] corresponds to the value associated with surface_label[i].
+        the corresponding label in this grid.
+    order : int
+        0, 1, or 2. Corresponds to whether ``x`` is a surface function
+        of a, b, or c in the example code in the docstring.
 
     Returns
     -------
@@ -1611,23 +1601,14 @@ def _meshgrid_expand(x, rho_size, theta_size, zeta_size, surface_label="rho"):
         ``x`` expanded to match the meshgrid pattern.
 
     """
-    assert surface_label in {"rho", "theta", "zeta"}, (
-        "These labels need not correspond to DESC coordinates. "
-        "They should correspond to the order the arrays were given to construct "
-        "the meshgrid as shown in the example code in the docstring."
-    )
-    if surface_label == "rho":
-        assert len(x) == rho_size
-        return jnp.tile(
-            repeat(x, zeta_size, total_repeat_length=rho_size * zeta_size), theta_size
-        )
-    if surface_label == "theta":
-        assert len(x) == theta_size
-        return repeat(
-            x,
-            rho_size * zeta_size,
-            total_repeat_length=rho_size * theta_size * zeta_size,
-        )
-    if surface_label == "zeta":
-        assert len(x) == zeta_size
-        return jnp.tile(x, rho_size * theta_size)
+    order = int(order)
+    assert 0 <= order <= 2
+    if order == 0:
+        assert len(x) == a_size
+        return repeat(x, b_size * c_size, total_repeat_length=a_size * b_size * c_size)
+    if order == 1:
+        assert len(x) == b_size
+        return jnp.tile(repeat(x, c_size, total_repeat_length=b_size * c_size), a_size)
+    if order == 2:
+        assert len(x) == c_size
+        return jnp.tile(x, a_size * b_size)

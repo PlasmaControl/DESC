@@ -11,6 +11,7 @@ from desc.grid import (
     Grid,
     LinearGrid,
     QuadratureGrid,
+    _meshgrid_expand,
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
@@ -753,6 +754,24 @@ class TestGrid:
         test("rho", cg_sym)
         test("theta", cg_sym)
         test("zeta", cg_sym)
+
+    @pytest.mark.unit
+    def test_meshgrid_expand(self):
+        """Ensure alternative expansion works for grids made from meshgrid."""
+        rho = np.linspace(0, 1, 4)
+        alpha = np.linspace(0, 2 * np.pi, 2)
+        zeta = np.linspace(0, 10 * np.pi, 3)
+        r, a, z = np.meshgrid(rho, alpha, zeta, indexing="ij")
+        r, a, z = r.ravel(), a.ravel(), z.ravel()
+        np.testing.assert_allclose(
+            r, _meshgrid_expand(rho, rho.size, alpha.size, zeta.size, order=0)
+        )
+        np.testing.assert_allclose(
+            a, _meshgrid_expand(alpha, rho.size, alpha.size, zeta.size, order=1)
+        )
+        np.testing.assert_allclose(
+            z, _meshgrid_expand(zeta, rho.size, alpha.size, zeta.size, order=2)
+        )
 
 
 @pytest.mark.unit

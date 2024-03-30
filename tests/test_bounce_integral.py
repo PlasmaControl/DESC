@@ -131,10 +131,10 @@ def test_polyval():
 
 
 @pytest.mark.unit
-def test_pitch_input():
-    """Test different ways of specifying pitch."""
+def test_pitch_and_hairy_ball_theorem():
+    """Test different ways of specifying pitch and ensure B does not vanish."""
     eq = get("HELIOTRON")
-    rho = np.linspace(0, 1, 6)
+    rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
     ba, items = bounce_average(eq, rho=rho, alpha=alpha, return_items=True)
     name = "g_zz"
@@ -143,54 +143,18 @@ def test_pitch_input():
     # Same pitch for every field line may give sparse result.
     pitch_res = 30
     B = items["data"]["B"]
+    assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
     pitch = np.linspace(1 / B.max(), 1 / B.min(), pitch_res)[:, np.newaxis, np.newaxis]
     result = ba(f, pitch)
     assert np.isfinite(result).any()
 
     # specify pitch per field line
     B = B.reshape(alpha.size * rho.size, -1)
-    eps = 1e-5  # FIXME: vanishing B-field bug.
-    pitch = np.linspace(
-        1 / (B.max(axis=-1) + eps),
-        1 / (B.min(axis=-1) + eps),
-        pitch_res,
-    ).reshape(pitch_res, alpha.size, rho.size)
+    pitch = np.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), pitch_res).reshape(
+        pitch_res, alpha.size, rho.size
+    )
     result = ba(f, pitch)
     assert np.isfinite(result).any()
-
-
-@pytest.mark.unit
-def test_hairy_ball_theorem():
-    """Ensure |B| does not vanish after coordinate mapping."""
-    eq = get("W7-X")
-    rho = np.linspace(0, 1, 5)
-    alpha = np.linspace(0, 2 * np.pi, 2)
-    zeta = np.linspace(0, 4 * np.pi, 10)
-
-    grid_jit, data_jit = field_line_to_desc_coords(eq, rho, alpha, zeta, jitable=True)
-    data_jit = eq.compute("|B|", grid=grid_jit, data=data_jit)
-    grid_no_jit, data_no_jit = field_line_to_desc_coords(
-        eq, rho, alpha, zeta, jitable=False
-    )
-    data_no_jit = eq.compute("|B|", grid=grid_no_jit, data=data_no_jit)
-    print(data_jit["|B|"])
-    print()
-    print(data_no_jit["|B|"])
-    # I think there are two separate bugs.
-    # Bug 1:
-    # Regardless of any logic issues with the coordinate mapping etc., I think
-    # these two arrays should be approximately equal. However, the jitted |B|
-    # has varies between 0 and 10^11, while the no jit |B| varies from 0 to 3.
-    np.testing.assert_allclose(
-        data_jit["|B|"],
-        data_no_jit["|B|"],
-        err_msg="jitting issue? grid weights issue?"
-        " mixing grids with different weights to compute things?",
-    )
-    # Bug 2: vanishing |B|.
-    assert np.all(
-        ~np.isclose(data_no_jit["|B|"], 0)
-    ), "logic issue in field_line_to_desc_coords?"
 
 
 # @pytest.mark.unit

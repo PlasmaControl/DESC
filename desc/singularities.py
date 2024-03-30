@@ -10,6 +10,7 @@ from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import safediv, safenorm
+from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
 
@@ -773,3 +774,99 @@ def virtual_casing_biot_savart(eval_data, source_data, interpolator, loop=True):
         interpolator,
         loop,
     )
+
+
+def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
+    """Evaluate magnetic field on surface due to enclosed plasma currents.
+
+    The magnetic field due to the plasma current can be written as a Biot-Savart
+    integral over the plasma volume:
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫') × (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d³𝐫'
+
+    Where 𝐉 is the plasma current density, 𝐫 is a point on the plasma surface, and 𝐫' is
+    a point in the plasma volume.
+
+    This 3D integral can be converted to a 2D integral over the plasma boundary using
+    the virtual casing principle [1]_
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ (𝐧' ⋅ 𝐁(𝐫')) (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d²𝐫'
+            + μ₀/4π ∫ (𝐧' × 𝐁(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫'
+            + 𝐁(𝐫)/2
+
+    Where 𝐁 is the total field on the surface and 𝐧' is the outward surface normal.
+    Because the total field is tangent, the first term in the integrand is zero leaving
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ K_vc(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫' + 𝐁(𝐫)/2
+
+    Where we have defined the virtual casing sheet current K_vc = 𝐧' × 𝐁(𝐫')
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that is the source of the plasma current.
+    eval_grid : Grid
+        Evaluation points for the magnetic field.
+    source_grid : Grid, optional
+        Source points for integral.
+    normal_only : bool
+        If True, only compute and return the normal component of the plasma field 𝐁ᵥ⋅𝐧
+
+    Returns
+    -------
+    f : ndarray, shape(eval_grid.num_nodes, 3) or shape(eval_grid.num_nodes,)
+        Magnetic field evaluated at eval_grid.
+        If normal_only=False, vector B is in rpz basis.
+
+    References
+    ----------
+    .. [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
+       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
+
+    """
+    if source_grid is None:
+        source_NFP = eq.NFP if eq.N > 0 else 64
+        source_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=source_NFP,
+            sym=False,
+        )
+
+    data_keys = [
+        "K_vc",
+        "B",
+        "R",
+        "phi",
+        "Z",
+        "e^rho",
+        "n_rho",
+        "|e_theta x e_zeta|",
+    ]
+    eval_data = eq.compute(data_keys, grid=eval_grid)
+    source_data = eq.compute(data_keys, grid=source_grid)
+
+    k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+    s = k - 1
+    q = k // 2 + int(np.sqrt(k))
+    try:
+        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
+    except AssertionError as e:
+        print(
+            f"Unable to create FFTInterpolator, got error {e},"
+            "falling back to DFT method which is much slower"
+        )
+        interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
+    if hasattr(eq.surface, "Phi_mn"):
+        source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
+    Bplasma = virtual_casing_biot_savart(
+        eval_data,
+        source_data,
+        interpolator,
+    )
+    # need extra factor of B/2 bc we're evaluating on plasma surface
+    Bplasma = Bplasma + eval_data["B"] / 2
+    if normal_only:
+        Bplasma = jnp.sum(Bplasma * source_data["n_rho"], axis=1)
+    return Bplasma

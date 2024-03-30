@@ -841,9 +841,6 @@ else:  # pragma: no cover
         """A numpy implementation of jnp.take."""
         if mode == "fill":
             if fill_value is None:
-                # TODO: Interpret default fill value based on dtype of a.
-                fill_value = np.nan
-            if fill_value is None:
                 # copy jax logic
                 # https://jax.readthedocs.io/en/latest/_modules/jax/_src/lax/slicing.html#gather
                 if np.issubdtype(a.dtype, np.inexact):

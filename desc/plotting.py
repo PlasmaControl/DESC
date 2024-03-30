@@ -906,6 +906,7 @@ def plot_3d(
     title = kwargs.pop("title", "")
     levels = kwargs.pop("levels", None)
     component = kwargs.pop("component", None)
+    showscale = kwargs.pop("showscale", True)
 
     if name != "B*n":
         data, label = _compute(
@@ -953,7 +954,6 @@ def plot_3d(
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
         label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
-    showscale = kwargs.get("showscale", True)
     errorif(
         len(kwargs) != 0,
         ValueError,

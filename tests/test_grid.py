@@ -12,6 +12,8 @@ from desc.grid import (
     LinearGrid,
     QuadratureGrid,
     _meshgrid_expand,
+    _meshgrid_inverse_idx,
+    _meshgrid_unique_idx,
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
@@ -756,22 +758,32 @@ class TestGrid:
         test("zeta", cg_sym)
 
     @pytest.mark.unit
-    def test_meshgrid_expand(self):
-        """Ensure alternative expansion works for grids made from meshgrid."""
-        rho = np.linspace(0, 1, 4)
-        alpha = np.linspace(0, 2 * np.pi, 2)
-        zeta = np.linspace(0, 10 * np.pi, 3)
-        r, a, z = np.meshgrid(rho, alpha, zeta, indexing="ij")
-        r, a, z = r.ravel(), a.ravel(), z.ravel()
+    def test_meshgrid_idx(self):
+        """Test unique, inverse idx computing logic from meshgrid."""
+        R = np.linspace(0, 1, 4)
+        T = np.linspace(0, 2 * np.pi, 2)
+        Z = np.linspace(0, 10 * np.pi, 3)
+        r, t, z = map(np.ravel, np.meshgrid(R, T, Z, indexing="ij"))
         np.testing.assert_allclose(
-            r, _meshgrid_expand(rho, rho.size, alpha.size, zeta.size, order=0)
+            r, _meshgrid_expand(R, R.size, T.size, Z.size, order=0)
         )
         np.testing.assert_allclose(
-            a, _meshgrid_expand(alpha, rho.size, alpha.size, zeta.size, order=1)
+            t, _meshgrid_expand(T, R.size, T.size, Z.size, order=1)
         )
         np.testing.assert_allclose(
-            z, _meshgrid_expand(zeta, rho.size, alpha.size, zeta.size, order=2)
+            z, _meshgrid_expand(Z, R.size, T.size, Z.size, order=2)
         )
+        uR, uT, uZ = _meshgrid_unique_idx(R.size, T.size, Z.size)
+        iR, iT, iZ = _meshgrid_inverse_idx(R.size, T.size, Z.size)
+        _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(uR, unique)
+        np.testing.assert_allclose(iR, inverse)
+        _, unique, inverse = np.unique(t, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(uT, unique)
+        np.testing.assert_allclose(iT, inverse)
+        _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(uZ, unique)
+        np.testing.assert_allclose(iZ, inverse)
 
 
 @pytest.mark.unit

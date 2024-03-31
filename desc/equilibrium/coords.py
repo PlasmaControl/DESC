@@ -9,7 +9,15 @@ from termcolor import colored
 from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_profiles, get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid, _meshgrid_expand
+from desc.grid import (
+    ConcentricGrid,
+    Grid,
+    LinearGrid,
+    QuadratureGrid,
+    _meshgrid_expand,
+    _meshgrid_inverse_idx,
+    _meshgrid_unique_idx,
+)
 from desc.transform import Transform
 from desc.utils import setdefault
 
@@ -304,6 +312,15 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     # Choose nodes such that even spacing will yield correct flux surface integrals.
     t = jnp.linspace(0, 2 * jnp.pi, 2 * eq.M_grid + 1, endpoint=False)
     z = jnp.linspace(0, 2 * jnp.pi / eq.NFP, 2 * eq.N_grid + 1, endpoint=False)
+    label = ["rho", "theta", "zeta"]
+    unique_idx = {
+        f"_unique_{label[i]}_idx": idx
+        for i, idx in enumerate(_meshgrid_unique_idx(rho.size, t.size, z.size))
+    }
+    inverse_idx = {
+        f"_inverse_{label[i]}_idx": idx
+        for i, idx in enumerate(_meshgrid_inverse_idx(rho.size, t.size, z.size))
+    }
     grid = Grid(
         nodes=jnp.column_stack(
             tuple(map(jnp.ravel, jnp.meshgrid(rho, t, z, indexing="ij")))
@@ -313,7 +330,8 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
         ],
         sort=False,
         jitable=True,
-        _unique_rho_idx=jnp.arange(rho.size) * t.size * z.size,
+        **unique_idx,
+        **inverse_idx,
     )
     # We only need to compute the rotational transform to transform to straight
     # field-line coordinates. However, it is a good idea to compute other flux
@@ -332,11 +350,16 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     r, a, z_fl = map(jnp.ravel, jnp.meshgrid(rho, alpha, zeta, indexing="ij"))
     coords_sfl = jnp.column_stack([r, a + data_desc["iota"] * z_fl, z_fl])
     coords_desc = eq.compute_theta_coords(coords_sfl)
+    unique_idx = {
+        f"_unique_{label[i]}_idx": idx
+        for i, idx in enumerate(_meshgrid_unique_idx(rho.size, alpha.size, zeta.size))
+    }
+    inverse_idx = {
+        f"_inverse_{label[i]}_idx": idx
+        for i, idx in enumerate(_meshgrid_inverse_idx(rho.size, alpha.size, zeta.size))
+    }
     grid_desc = Grid(
-        nodes=coords_desc,
-        sort=False,
-        jitable=True,
-        _unique_rho_idx=jnp.arange(rho.size) * alpha.size * zeta.size,
+        nodes=coords_desc, sort=False, jitable=True, **unique_idx, **inverse_idx
     )
     return grid_desc, data_desc
 

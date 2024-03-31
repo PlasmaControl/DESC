@@ -254,6 +254,14 @@ class _Grid(IOAble, ABC):
         )
         return self._unique_zeta_idx
 
+    def _inverse_idx_from_unique_idx(self, surface_label):
+        axis = {"rho": 0, "theta": 1, "zeta": 2}[surface_label]
+        nodes = jnp.asarray(self.nodes[:, axis])
+        unique_idx = getattr(self, f"_unique_{surface_label}_idx")
+        inverse_idx = jnp.zeros(self.num_nodes, dtype=int)
+        for i, u in enumerate(unique_idx):
+            inverse_idx = jnp.where(nodes == nodes[u], i, inverse_idx)
+
     @property
     def inverse_rho_idx(self):
         """ndarray: Indices of unique_rho_idx that recover the rho coordinates."""
@@ -420,14 +428,14 @@ class _Grid(IOAble, ABC):
             xc = other_grid.compress(x, surface_label)
             y = self.expand(xc, surface_label)
         except AttributeError:
-            self_nodes = jnp.asarray(self.nodes)
-            other_nodes = jnp.asarray(other_grid.nodes)
             axis = {"rho": 0, "theta": 1, "zeta": 2}[surface_label]
+            self_nodes = jnp.asarray(self.nodes[:, axis])
+            other_nodes = jnp.asarray(other_grid.nodes[:, axis])
             y = jnp.zeros((self.num_nodes, *x.shape[1:]))
 
             def body(i, y):
                 y = jnp.where(
-                    jnp.abs(self_nodes[:, axis] - other_nodes[i, axis]) <= tol,
+                    jnp.abs(self_nodes - other_nodes[i]) <= tol,
                     x[i],
                     y,
                 )
@@ -481,13 +489,15 @@ class Grid(_Grid):
         Node coordinates, in (rho,theta,zeta)
     sort : bool
         Whether to sort the nodes for use with FFT method.
+    spacing : ndarray of shape(num_nodes, 3)
+        May be provided to ensure even spacing for surface averages etc.
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
         etc may be wrong if grid contains duplicate nodes.
     """
 
-    def __init__(self, nodes, sort=False, jitable=False, **kwargs):
+    def __init__(self, nodes, sort=False, jitable=False, spacing=None, **kwargs):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
@@ -533,6 +543,8 @@ class Grid(_Grid):
         self._L = self.num_nodes
         self._M = self.num_nodes
         self._N = self.num_nodes
+        if spacing is not None:
+            self._spacing = spacing
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
     def _create_nodes(self, nodes):
@@ -1576,8 +1588,9 @@ def _meshgrid_expand(x, a_size, b_size, c_size, order=0):
     It is common to construct a meshgrid in the following manner.
         .. code-block:: python
 
-        A, B, C = jnp.meshgrid(a, b, c, indexing="ij")
-        nodes = jnp.column_stack(tuple(map(np.ravel, (A, B, C))))
+        a, b, c = jnp.meshgrid(a, b, c, indexing="ij")
+        a, b, c = map(jnp.ravel, (a, b, c))
+        nodes = jnp.column_stack([a, b, c])
         grid = Grid(nodes, sort=False, jitable=True)
 
     Since ``jitable=True`` was specified, the attribute ``grid.inverse_*_idx``
@@ -1591,6 +1604,12 @@ def _meshgrid_expand(x, a_size, b_size, c_size, order=0):
         for all unique surfaces of the specified label on the grid.
         The length of ``x`` should match the number of unique surfaces of
         the corresponding label in this grid.
+    a_size : int
+        Size of the first array.
+    b_size : int
+        Size of the second array.
+    c_size : int
+        Size of the third array.
     order : int
         0, 1, or 2. Corresponds to whether ``x`` is a surface function
         of a, b, or c in the example code in the docstring.
@@ -1612,3 +1631,82 @@ def _meshgrid_expand(x, a_size, b_size, c_size, order=0):
     if order == 2:
         assert len(x) == c_size
         return jnp.tile(x, a_size * b_size)
+
+
+def _meshgrid_inverse_idx(a_size, b_size, c_size):
+    """Return inverse indices for meshgrid pattern.
+
+    It is common to construct a meshgrid in the following manner.
+        .. code-block:: python
+
+        a, b, c = jnp.meshgrid(a, b, c, indexing="ij")
+        a, b, c = map(jnp.ravel, (a, b, c))
+        nodes = jnp.column_stack([a, b, c])
+        grid = Grid(nodes, sort=False, jitable=True)
+
+    Since ``jitable=True`` was specified, the attribute ``grid.inverse_*_idx``
+    This method computes these indices.
+
+    Parameters
+    ----------
+    a_size : int
+        Size of the first array.
+    b_size : int
+        Size of the second array.
+    c_size : int
+        Size of the third array.
+    order : int
+        0, 1, or 2. Whether to retrieve unique indices into a, b, or c.
+
+    Returns
+    -------
+    inverse_idx : ndarray, ndarray, ndarray
+        The inverse indices.
+
+    """
+    a = jnp.arange(a_size)
+    inverse_a_idx = repeat(
+        a, b_size * c_size, total_repeat_length=a_size * b_size * c_size
+    )
+    b = jnp.arange(b_size)
+    inverse_b_idx = jnp.tile(
+        repeat(b, c_size, total_repeat_length=b_size * c_size), a_size
+    )
+    c = jnp.arange(c_size)
+    inverse_c_idx = jnp.tile(c, a_size * b_size)
+    return inverse_a_idx, inverse_b_idx, inverse_c_idx
+
+
+def _meshgrid_unique_idx(a_size, b_size, c_size):
+    """Return unique indices for meshgrid pattern.
+
+    It is common to construct a meshgrid in the following manner.
+        .. code-block:: python
+
+        a, b, c = jnp.meshgrid(a, b, c, indexing="ij")
+        a, b, c = map(jnp.ravel, (a, b, c))
+        nodes = jnp.column_stack([a, b, c])
+        grid = Grid(nodes, sort=False, jitable=True)
+
+    Since ``jitable=True`` was specified, the attribute ``grid.unique_*_idx``
+    This method computes these indices.
+
+    Parameters
+    ----------
+    a_size : int
+        Size of the first array.
+    b_size : int
+        Size of the second array.
+    c_size : int
+        Size of the third array.
+
+    Returns
+    -------
+    unique_idx : ndarray, ndarray, ndarray
+        The unique indices.
+
+    """
+    unique_a_idx = jnp.arange(a_size) * b_size * c_size
+    unique_b_idx = jnp.arange(b_size) * c_size
+    unique_c_idx = jnp.arange(c_size)
+    return unique_a_idx, unique_b_idx, unique_c_idx

@@ -893,7 +893,9 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
 
     # Todo: Define masks as a sparse matrix once sparse matrices are no longer
     #       experimental in jax.
-    if hasattr(grid, f"num_{surface_label}"):
+    if hasattr(grid, f"num_{surface_label}") and hasattr(
+        grid, f"_inverse_{surface_label}_idx"
+    ):
         # The ith row of masks is True only at the indices which correspond to the
         # ith surface. The integral over the ith surface is the dot product of the
         # ith row vector and the integrand defined over all the surfaces.

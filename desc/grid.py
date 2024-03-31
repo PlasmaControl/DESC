@@ -254,14 +254,6 @@ class _Grid(IOAble, ABC):
         )
         return self._unique_zeta_idx
 
-    def _inverse_idx_from_unique_idx(self, surface_label):
-        axis = {"rho": 0, "theta": 1, "zeta": 2}[surface_label]
-        nodes = jnp.asarray(self.nodes[:, axis])
-        unique_idx = getattr(self, f"_unique_{surface_label}_idx")
-        inverse_idx = jnp.zeros(self.num_nodes, dtype=int)
-        for i, u in enumerate(unique_idx):
-            inverse_idx = jnp.where(nodes == nodes[u], i, inverse_idx)
-
     @property
     def inverse_rho_idx(self):
         """ndarray: Indices of unique_rho_idx that recover the rho coordinates."""

@@ -11,12 +11,12 @@ from desc.grid import (
     Grid,
     LinearGrid,
     QuadratureGrid,
-    _meshgrid_expand,
-    _meshgrid_inverse_idx,
-    _meshgrid_unique_idx,
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
+    meshgrid_expand,
+    meshgrid_inverse_idx,
+    meshgrid_unique_idx,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -765,16 +765,16 @@ class TestGrid:
         Z = np.linspace(0, 10 * np.pi, 3)
         r, t, z = map(np.ravel, np.meshgrid(R, T, Z, indexing="ij"))
         np.testing.assert_allclose(
-            r, _meshgrid_expand(R, R.size, T.size, Z.size, order=0)
+            r, meshgrid_expand(R, R.size, T.size, Z.size, order=0)
         )
         np.testing.assert_allclose(
-            t, _meshgrid_expand(T, R.size, T.size, Z.size, order=1)
+            t, meshgrid_expand(T, R.size, T.size, Z.size, order=1)
         )
         np.testing.assert_allclose(
-            z, _meshgrid_expand(Z, R.size, T.size, Z.size, order=2)
+            z, meshgrid_expand(Z, R.size, T.size, Z.size, order=2)
         )
-        uR, uT, uZ = _meshgrid_unique_idx(R.size, T.size, Z.size)
-        iR, iT, iZ = _meshgrid_inverse_idx(R.size, T.size, Z.size)
+        uR, uT, uZ = meshgrid_unique_idx(R.size, T.size, Z.size)
+        iR, iT, iZ = meshgrid_inverse_idx(R.size, T.size, Z.size)
         _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
         np.testing.assert_allclose(uR, unique)
         np.testing.assert_allclose(iR, inverse)

@@ -14,9 +14,9 @@ from desc.grid import (
     Grid,
     LinearGrid,
     QuadratureGrid,
-    _meshgrid_expand,
-    _meshgrid_inverse_idx,
-    _meshgrid_unique_idx,
+    meshgrid_expand,
+    meshgrid_inverse_idx,
+    meshgrid_unique_idx,
 )
 from desc.transform import Transform
 from desc.utils import setdefault
@@ -315,11 +315,11 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     label = ["rho", "theta", "zeta"]
     unique_idx = {
         f"_unique_{label[i]}_idx": idx
-        for i, idx in enumerate(_meshgrid_unique_idx(rho.size, t.size, z.size))
+        for i, idx in enumerate(meshgrid_unique_idx(rho.size, t.size, z.size))
     }
     inverse_idx = {
         f"_inverse_{label[i]}_idx": idx
-        for i, idx in enumerate(_meshgrid_inverse_idx(rho.size, t.size, z.size))
+        for i, idx in enumerate(meshgrid_inverse_idx(rho.size, t.size, z.size))
     }
     grid = Grid(
         nodes=jnp.column_stack(
@@ -341,7 +341,7 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     # on the returned DESC grid inaccurate.
     data = eq.compute(names=["iota", "iota_r"], grid=grid)
     data_desc = {
-        d: _meshgrid_expand(grid.compress(data[d]), rho.size, alpha.size, zeta.size)
+        d: meshgrid_expand(grid.compress(data[d]), rho.size, alpha.size, zeta.size)
         for d in data
         if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
         == "r"
@@ -352,11 +352,11 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     coords_desc = eq.compute_theta_coords(coords_sfl)
     unique_idx = {
         f"_unique_{label[i]}_idx": idx
-        for i, idx in enumerate(_meshgrid_unique_idx(rho.size, alpha.size, zeta.size))
+        for i, idx in enumerate(meshgrid_unique_idx(rho.size, alpha.size, zeta.size))
     }
     inverse_idx = {
         f"_inverse_{label[i]}_idx": idx
-        for i, idx in enumerate(_meshgrid_inverse_idx(rho.size, alpha.size, zeta.size))
+        for i, idx in enumerate(meshgrid_inverse_idx(rho.size, alpha.size, zeta.size))
     }
     grid_desc = Grid(
         nodes=coords_desc, sort=False, jitable=True, **unique_idx, **inverse_idx

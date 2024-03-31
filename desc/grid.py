@@ -1574,7 +1574,7 @@ def find_least_rational_surfaces(
     return rho, io
 
 
-def _meshgrid_expand(x, a_size, b_size, c_size, order=0):
+def meshgrid_expand(x, a_size, b_size, c_size, order=0):
     """Expand ``x`` by duplicating elements to match a meshgrid pattern.
 
     It is common to construct a meshgrid in the following manner.
@@ -1597,11 +1597,11 @@ def _meshgrid_expand(x, a_size, b_size, c_size, order=0):
         The length of ``x`` should match the number of unique surfaces of
         the corresponding label in this grid.
     a_size : int
-        Size of the first array.
+        Size of the first argument to meshgrid.
     b_size : int
-        Size of the second array.
+        Size of the second argument to meshgrid.
     c_size : int
-        Size of the third array.
+        Size of the third argument to meshgrid.
     order : int
         0, 1, or 2. Corresponds to whether ``x`` is a surface function
         of a, b, or c in the example code in the docstring.
@@ -1625,7 +1625,7 @@ def _meshgrid_expand(x, a_size, b_size, c_size, order=0):
         return jnp.tile(x, a_size * b_size)
 
 
-def _meshgrid_inverse_idx(a_size, b_size, c_size):
+def meshgrid_inverse_idx(a_size, b_size, c_size):
     """Return inverse indices for meshgrid pattern.
 
     It is common to construct a meshgrid in the following manner.
@@ -1637,16 +1637,17 @@ def _meshgrid_inverse_idx(a_size, b_size, c_size):
         grid = Grid(nodes, sort=False, jitable=True)
 
     Since ``jitable=True`` was specified, the attribute ``grid.inverse_*_idx``
-    This method computes these indices.
+    can not be automatically computed.  This method computes these indices.
+    One can then pass them in as keyword arguments to the Grid constructor.
 
     Parameters
     ----------
     a_size : int
-        Size of the first array.
+        Size of the first argument to meshgrid.
     b_size : int
-        Size of the second array.
+        Size of the second argument to meshgrid.
     c_size : int
-        Size of the third array.
+        Size of the third argument to meshgrid.
     order : int
         0, 1, or 2. Whether to retrieve unique indices into a, b, or c.
 
@@ -1669,7 +1670,7 @@ def _meshgrid_inverse_idx(a_size, b_size, c_size):
     return inverse_a_idx, inverse_b_idx, inverse_c_idx
 
 
-def _meshgrid_unique_idx(a_size, b_size, c_size):
+def meshgrid_unique_idx(a_size, b_size, c_size):
     """Return unique indices for meshgrid pattern.
 
     It is common to construct a meshgrid in the following manner.
@@ -1681,16 +1682,17 @@ def _meshgrid_unique_idx(a_size, b_size, c_size):
         grid = Grid(nodes, sort=False, jitable=True)
 
     Since ``jitable=True`` was specified, the attribute ``grid.unique_*_idx``
-    This method computes these indices.
+    can not be automatically computed. This method computes these indices.
+    One can then pass them in as keyword arguments to the Grid constructor.
 
     Parameters
     ----------
     a_size : int
-        Size of the first array.
+        Size of the first argument to meshgrid.
     b_size : int
-        Size of the second array.
+        Size of the second argument to meshgrid.
     c_size : int
-        Size of the third array.
+        Size of the third argument to meshgrid.
 
     Returns
     -------

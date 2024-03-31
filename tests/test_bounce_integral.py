@@ -11,7 +11,6 @@ from desc.compute.bounce_integral import (
     bounce_integral,
     compute_bounce_points,
     cubic_poly_roots,
-    field_line_to_desc_coords,
     polyder,
     polyint,
     polyval,
@@ -19,6 +18,7 @@ from desc.compute.bounce_integral import (
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import desc_grid_from_field_line_coords
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.objectives import (
@@ -155,7 +155,7 @@ def test_polyval():
 
 
 @pytest.mark.unit
-def test_pitch_and_hairy_ball_theorem():
+def test_pitch_and_hairy_ball():
     """Test different ways of specifying pitch and ensure B does not vanish."""
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
@@ -260,12 +260,12 @@ def _compute_bounce_points_with_root_finding(
     # TODO: avoid separate root finding routines in residual and jac
     #       and use previous desc coords as initial guess for next iteration
     def residual(zeta, i):
-        grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
+        grid, data = desc_grid_from_field_line_coords(rho, alpha, zeta, eq)
         data = eq.compute(["|B|"], grid=grid, data=data)
         return data["|B|"] - pitch[i]
 
     def jac(zeta):
-        grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
+        grid, data = desc_grid_from_field_line_coords(rho, alpha, zeta, eq)
         data = eq.compute(["|B|_z|r,a"], grid=grid, data=data)
         return data["|B|_z|r,a"]
 
@@ -275,7 +275,7 @@ def _compute_bounce_points_with_root_finding(
     # let us form a boundary mesh around root estimates to limit search domain
     # of the root finding algorithms.
     zeta = np.linspace(0, zeta_max, 3 * resolution)
-    grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
+    grid, data = desc_grid_from_field_line_coords(rho, alpha, zeta, eq)
     data = eq.compute(["|B|"], grid=grid, data=data)
     B_norm = data["|B|"].reshape(alpha.size, rho.size, -1)  # constant field line chunks
 

@@ -1158,7 +1158,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
 
         Input
         -----
-        If ``q`` has one-dimension, then it should have shape
+        If ``q`` has one dimension, then it should have shape
         (``grid.num_nodes``, ).
         If ``q`` has multiple dimensions, then it should have shape
         (``grid.num_nodes``, *f.shape).

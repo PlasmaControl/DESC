@@ -9,7 +9,7 @@ from termcolor import colored
 from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_profiles, get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid, _meshgrid_expand
 from desc.transform import Transform
 from desc.utils import setdefault
 
@@ -260,6 +260,85 @@ def compute_theta_coords(
     if full_output:
         return out, (res, niter)
     return out
+
+
+def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
+    """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
+
+    Create a meshgrid from the given field line coordinates,
+    and transform this to a meshgrid in DESC coordinates.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium on which to perform coordinate mapping.
+    rho : ndarray
+        Unique flux surface label coordinates.
+    alpha : ndarray
+        Unique field line label coordinates over a constant rho surface.
+    zeta : ndarray
+        Unique Field line-following ζ coordinates.
+
+    Returns
+    -------
+    grid_desc : Grid
+        DESC coordinate grid.
+    data_desc : dict
+        Some flux surface quantities that may be more accurate than what
+        can be computed on the returned grid.
+
+    """
+    # The rotational transform can be computed apriori to the coordinate
+    # transformation because it is a single variable function of the flux surface
+    # label rho, and the coordinate mapping does not change rho. Once it is known,
+    # we can compute the straight field-line poloidal angle theta_PEST from the
+    # field-line label alpha.
+    # Then we transform from straight field-line coordinates to DESC coordinates
+    # with the root-finding method ``compute_theta_coords``.
+    # This is preferable to transforming from field-line coordinates to DESC
+    # coordinates directly with the more general root-finding method
+    # ``map_coordinates``. That method requires an initial guess, and generating
+    # a reasonable initial guess requires computing the rotational transform to
+    # approximate theta_PEST and the poloidal stream function anyway.
+
+    # Choose nodes such that even spacing will yield correct flux surface integrals.
+    t = jnp.linspace(0, 2 * jnp.pi, 2 * eq.M_grid + 1, endpoint=False)
+    z = jnp.linspace(0, 2 * jnp.pi / eq.NFP, 2 * eq.N_grid + 1, endpoint=False)
+    grid = Grid(
+        nodes=jnp.column_stack(
+            tuple(map(jnp.ravel, jnp.meshgrid(rho, t, z, indexing="ij")))
+        ),
+        spacing=jnp.array([1 / rho.size, 2 * jnp.pi / t.size, 2 * jnp.pi / z.size])[
+            jnp.newaxis
+        ],
+        sort=False,
+        jitable=True,
+        _unique_rho_idx=jnp.arange(rho.size) * t.size * z.size,
+    )
+    # We only need to compute the rotational transform to transform to straight
+    # field-line coordinates. However, it is a good idea to compute other flux
+    # surface quantities on this grid because the DESC coordinates corresponding
+    # to the given field line coordinates may not be uniformly distributed over
+    # flux surfaces. This would make quadratures performed over flux surfaces
+    # on the returned DESC grid inaccurate.
+    data = eq.compute(names=["iota", "iota_r"], grid=grid)
+    data_desc = {
+        d: _meshgrid_expand(grid.compress(data[d]), rho.size, alpha.size, zeta.size)
+        for d in data
+        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
+        == "r"
+    }
+    # meshgrid of Clebsch-Type field-line coordinates
+    r, a, z_fl = map(jnp.ravel, jnp.meshgrid(rho, alpha, zeta, indexing="ij"))
+    coords_sfl = jnp.column_stack([r, a + data_desc["iota"] * z_fl, z_fl])
+    coords_desc = eq.compute_theta_coords(coords_sfl)
+    grid_desc = Grid(
+        nodes=coords_desc,
+        sort=False,
+        jitable=True,
+        _unique_rho_idx=jnp.arange(rho.size) * alpha.size * zeta.size,
+    )
+    return grid_desc, data_desc
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

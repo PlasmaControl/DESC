@@ -825,7 +825,7 @@ else:  # pragma: no cover
         """A numpy implementation of jnp.flatnonzero."""
         nz = np.flatnonzero(a)
         if size is not None:
-            nz = np.append(nz, np.repeat(fill_value, max(size - nz.size, 0)))
+            nz = np.pad(nz, (0, max(size - nz.size, 0)), constant_values=fill_value)
         return nz
 
     def take(

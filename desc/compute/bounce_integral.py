@@ -5,9 +5,7 @@ from functools import partial
 from interpax import CubicHermiteSpline, interp1d
 
 from desc.backend import complex_sqrt, flatnonzero, jnp, put, put_along_axis, take, vmap
-from desc.grid import Grid, LinearGrid, _meshgrid_expand
-
-from .data_index import data_index
+from desc.equilibrium.coords import desc_grid_from_field_line_coords
 
 
 # vmap to compute a bounce integral for every pitch along every field line.
@@ -99,7 +97,7 @@ def tanh_sinh_quadrature(resolution=7):
 
 
 @vmap
-def take_mask(a, mask, size=None, fill_value=jnp.nan):
+def take_mask(a, mask, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 
     Parameters
@@ -108,13 +106,17 @@ def take_mask(a, mask, size=None, fill_value=jnp.nan):
         The source array.
     mask : ndarray
         Boolean mask to index into ``a``. Should have same size as ``a``.
-    size :
+    size : int
         Elements of ``a`` at the first size True indices of ``mask`` will be returned.
         If there are fewer elements than size indicates, the returned array will be
         padded with fill_value. Defaults to ``a.size``.
     fill_value :
         When there are fewer than the indicated number of elements,
         the remaining elements will be filled with ``fill_value``.
+        Defaults to NaN for inexact types,
+        the largest negative value for signed types,
+        the largest positive value for unsigned types,
+        and True for booleans.
 
     Returns
     -------
@@ -139,7 +141,7 @@ def take_mask(a, mask, size=None, fill_value=jnp.nan):
 
 @vmap
 def _last_value(a):
-    """Assuming a is padded with nan at the right, return the last non-nan value."""
+    """Return the last non-nan value in a."""
     assert a.ndim == 1
     a = a[::-1]
     idx = flatnonzero(~jnp.isnan(a), size=1, fill_value=0)
@@ -471,7 +473,7 @@ def bounce_integral(
     pitch=None,
     rho=None,
     alpha=None,
-    zeta=20,
+    zeta=jnp.linspace(0, 10 * jnp.pi, 20),
     quadrature=tanh_sinh_quadrature,
     **kwargs,
 ):
@@ -504,18 +506,17 @@ def bounce_integral(
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
-    rho : ndarray or float
+    rho : ndarray
         Unique flux surface label coordinates.
-    alpha : ndarray or float
+    alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
-    zeta : ndarray or int
+    zeta : ndarray
         A cubic spline of the integrand is computed at these values of the field
         line following coordinate, for every field line in the meshgrid formed from
         rho and alpha specified above.
         The number of knots specifies the grid resolution as increasing the
         number of knots increases the accuracy of representing the integrand
         and the accuracy of the locations of the bounce points.
-        If an integer is given, that many knots are linearly spaced from 0 to 10 pi.
     quadrature : callable
         The quadrature scheme used to evaluate the integral.
         Should return quadrature points and weights when called.
@@ -569,12 +570,10 @@ def bounce_integral(
     rho = jnp.atleast_1d(rho)
     alpha = jnp.atleast_1d(alpha)
     zeta = jnp.atleast_1d(zeta)
-    if zeta.size == 1:
-        zeta = jnp.linspace(0, 10 * jnp.pi, zeta.item())
     R = rho.size
     A = alpha.size
 
-    grid, data = field_line_to_desc_coords(eq, rho, alpha, zeta)
+    grid, data = desc_grid_from_field_line_coords(eq, rho, alpha, zeta)
     data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid, data=data)
     B_sup_z = data["B^zeta"].reshape(A * R, -1)
     B = data["|B|"].reshape(A * R, -1)
@@ -641,7 +640,7 @@ def bounce_average(
     pitch=None,
     rho=None,
     alpha=None,
-    zeta=20,
+    zeta=jnp.linspace(0, 10 * jnp.pi, 20),
     quadrature=tanh_sinh_quadrature,
     **kwargs,
 ):
@@ -675,11 +674,11 @@ def bounce_average(
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
-    rho : ndarray or float
+    rho : ndarray
         Unique flux surface label coordinates.
-    alpha : ndarray or float
+    alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
-    zeta : ndarray or int
+    zeta : ndarray
         A cubic spline of the integrand is computed at these values of the field
         line following coordinate, for every field line in the meshgrid formed from
         rho and alpha specified above.
@@ -770,35 +769,6 @@ def bounce_average(
         return _bounce_average
 
 
-def field_line_to_desc_coords(eq, rho, alpha, zeta, jitable=True):
-    """Get DESC grid from unique field line coordinates."""
-    r, a, z = jnp.meshgrid(rho, alpha, zeta, indexing="ij")
-    r, a, z = r.ravel(), a.ravel(), z.ravel()
-    # Map these Clebsch-Type field-line coordinates to DESC coordinates.
-    # Note that the rotational transform can be computed apriori because it is a single
-    # variable function of rho, and the coordinate mapping does not change rho. Once
-    # this is known, it is simple to compute theta_PEST from alpha. Then we transform
-    # from straight field-line coordinates to DESC coordinates with the method
-    # compute_theta_coords. This is preferred over transforming from Clebsch-Type
-    # coordinates to DESC coordinates directly with the more general method
-    # map_coordinates. That method requires an initial guess to be compatible with JIT,
-    # and generating a reasonable initial guess requires computing the rotational
-    # transform to approximate theta_PEST and the poloidal stream function anyway.
-    # TODO: map coords recently updated, so maybe just switch to that
-    lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    lg_data = eq.compute(["iota", "iota_r", "iota_rr"], grid=lg)
-    data = {
-        d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
-        for d in lg_data
-        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
-        == "r"
-    }
-    sfl_coords = jnp.column_stack([r, a + data["iota"] * z, z])
-    desc_coords = eq.compute_theta_coords(sfl_coords)
-    grid = Grid(desc_coords, jitable=jitable)
-    return grid, data
-
-
 # Current algorithm used for bounce integrals no longer requires these
 # two functions. TODO: Delete before merge.
 def diff_mask(a, mask, n=1, axis=-1, prepend=None):
@@ -840,7 +810,7 @@ def diff_mask(a, mask, n=1, axis=-1, prepend=None):
 
     """
     prepend = () if prepend is None else (prepend,)
-    return jnp.diff(take_mask(a, mask, fill_value=jnp.nan), n, axis, *prepend)
+    return jnp.diff(take_mask(a, mask), n, axis, *prepend)
 
 
 def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):

@@ -1,5 +1,7 @@
 """Test bounce integral methods."""
 
+import inspect
+
 import numpy as np
 import pytest
 from interpax import Akima1DInterpolator
@@ -54,10 +56,46 @@ def test_mask_operation():
 
 
 @pytest.mark.unit
+def test_reshape_convention():
+    """Test the reshaping convention separates data across field lines."""
+    rho = np.linspace(0, 1, 3)
+    alpha = np.linspace(0, 2 * np.pi, 4)
+    zeta = np.linspace(0, 10 * np.pi, 5)
+    r, a, z = map(np.ravel, np.meshgrid(rho, alpha, zeta, indexing="ij"))
+    # functions of zeta should separate along first two axes
+    # since those are contiguous, this should work
+    f = z.reshape(-1, zeta.size)
+    for i in range(1, f.shape[0]):
+        np.testing.assert_allclose(f[i - 1], f[i])
+    # likewise for rho
+    f = r.reshape(rho.size, -1)
+    for i in range(1, f.shape[-1]):
+        np.testing.assert_allclose(f[:, i - 1], f[:, i])
+    # test final reshape of bounce integral result won't mix data
+    f = (a**2 + z).reshape(rho.size, alpha.size, zeta.size)
+    for i in range(1, f.shape[0]):
+        np.testing.assert_allclose(f[i - 1], f[i])
+    f = (r**2 + z).reshape(rho.size, alpha.size, zeta.size)
+    for i in range(1, f.shape[1]):
+        np.testing.assert_allclose(f[:, i - 1], f[:, i])
+    f = (r**2 + a).reshape(rho.size, alpha.size, zeta.size)
+    for i in range(1, f.shape[-1]):
+        np.testing.assert_allclose(f[..., i - 1], f[..., i])
+
+    err_msg = "The ordering conventions are required for correctness."
+    src = inspect.getsource(bounce_integral)
+    assert "R, A" in src and "A, R" not in src, err_msg
+    assert "A, zeta.size" in src, err_msg
+    src = inspect.getsource(desc_grid_from_field_line_coords)
+    assert 'indexing="ij"' in src, err_msg
+    assert 'meshgrid(rho, alpha, zeta, indexing="ij")' in src, err_msg
+
+
+@pytest.mark.unit
 def test_cubic_poly_roots():
     """Test vectorized computation of cubic polynomial exact roots."""
     cubic = 4
-    poly = np.arange(-60, 60).reshape(cubic, 6, -1)
+    poly = np.arange(-24, 24).reshape(cubic, 6, -1)
     poly[0] = np.where(poly[0] == 0, np.ones_like(poly[0]), poly[0])
     poly = poly * np.e * np.pi
     # make sure broadcasting won't hide error in implementation
@@ -77,7 +115,7 @@ def test_cubic_poly_roots():
 def test_polyint():
     """Test vectorized computation of polynomial primitive."""
     quintic = 6
-    poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+    poly = np.arange(-18, 18).reshape(quintic, 3, -1) * np.e * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
     constant = np.broadcast_to(np.arange(poly.shape[-1]), poly.shape[1:])
@@ -95,7 +133,7 @@ def test_polyint():
 def test_polyder():
     """Test vectorized computation of polynomial derivative."""
     quintic = 6
-    poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+    poly = np.arange(-18, 18).reshape(quintic, 3, -1) * np.e * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
     derivative = polyder(poly)
@@ -109,8 +147,8 @@ def test_polyder():
 @pytest.mark.unit
 def test_polyval():
     """Test vectorized computation of polynomial evaluation."""
-    quintic = 6
-    c = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+    quartic = 5
+    c = np.arange(-60, 60).reshape(quartic, 3, -1) * np.e * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(c.shape).size == c.ndim
     x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
@@ -161,21 +199,21 @@ def test_pitch_and_hairy_ball():
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
     ba, items = bounce_average(eq, rho=rho, alpha=alpha, return_items=True)
-    name = "g_zz"
-    f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-
-    # Same pitch for every field line may give sparse result.
-    pitch_res = 30
     B = items["data"]["B"]
     assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
+
+    name = "g_zz"
+    f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
+    # Same pitch for every field line may give sparse result.
+    pitch_res = 30
     pitch = np.linspace(1 / B.max(), 1 / B.min(), pitch_res)[:, np.newaxis, np.newaxis]
     result = ba(f, pitch)
     assert np.isfinite(result).any()
 
     # specify pitch per field line
-    B = B.reshape(alpha.size * rho.size, -1)
+    B = B.reshape(rho.size * alpha.size, -1)
     pitch = np.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), pitch_res).reshape(
-        pitch_res, alpha.size, rho.size
+        -1, rho.size, alpha.size
     )
     result = ba(f, pitch)
     assert np.isfinite(result).any()

@@ -4,7 +4,7 @@ from functools import partial
 
 from interpax import CubicHermiteSpline, interp1d
 
-from desc.backend import complex_sqrt, flatnonzero, jnp, put, put_along_axis, take, vmap
+from desc.backend import complex_sqrt, flatnonzero, jnp, put, take, vmap
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
 
 
@@ -323,21 +323,21 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
 
     Parameters
     ----------
-    pitch : ndarray, shape(P, A * R)
+    pitch : ndarray, shape(P, R * A)
         λ values.
         Last two axes should specify the λ value for a particular field line
-        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
+        parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., ρ, α]``
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
     knots : ndarray, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
-    poly_B : ndarray, shape(4, A * R, knots.size - 1)
+    poly_B : ndarray, shape(4, R * A, knots.size - 1)
         Polynomial coefficients of the cubic spline of |B|.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
-    poly_B_z : ndarray, shape(3, A * R, knots.size - 1)
+    poly_B_z : ndarray, shape(3, R * A, knots.size - 1)
         Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
@@ -347,13 +347,13 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     -------
     bp1, bp2 : ndarray, ndarray
         Field line-following ζ coordinates of bounce points for a given pitch
-        along a field line. Has shape (P, A * R, (knots.size - 1) * 3).
+        along a field line. Has shape (P, R * A, (knots.size - 1) * 3).
         If there were less than (knots.size - 1) * 3 bounce points along a
         field line, then the last axis is padded with nan.
 
     """
     P = pitch.shape[0]  # batch size
-    AR = poly_B.shape[1]  # alpha.size * rho.size
+    RA = poly_B.shape[1]  # rho.size * alpha.size
     N = knots.size - 1  # number of piecewise cubic polynomials per field line
     assert poly_B.shape[-1] == poly_B_z.shape[-1] == N
 
@@ -368,19 +368,19 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
         a_max=knots[1:],
         sort=True,
     )
-    assert intersect.shape == (P, AR, N, 3)
+    assert intersect.shape == (P, RA, N, 3)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense remaining axes to vmap over them.
-    B_z = polyval(x=intersect, c=poly_B_z[..., jnp.newaxis]).reshape(P * AR, -1)
-    intersect = intersect.reshape(P * AR, -1)
+    B_z = polyval(x=intersect, c=poly_B_z[..., jnp.newaxis]).reshape(P * RA, -1)
+    intersect = intersect.reshape(P * RA, -1)
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = ~jnp.isnan(intersect)
 
     # Rearrange so that all intersects along a field line are contiguous.
     intersect = take_mask(intersect, is_intersect)
     B_z = take_mask(B_z, is_intersect)
-    assert intersect.shape == B_z.shape == is_intersect.shape == (P * AR, N * 3)
+    assert intersect.shape == B_z.shape == is_intersect.shape == (P * RA, N * 3)
     # The boolean masks is_bp1 and is_bp2 will encode whether a given entry in
     # intersect is a valid starting and ending bounce point, respectively.
     # Sign of derivative determines whether an intersect is a valid bounce point.
@@ -416,8 +416,8 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # to the value of |B| of at ζ = knots[-1]. In general, continuity implies
     # |B|(knots[-1] < ζ < knots[-1] + knots[0]) will approximately equal
     # |B|(0 < ζ < knots[0]) as long as ζ = knots[-1] is large enough.
-    bp1 = bp1.reshape(P, AR, -1)
-    bp2 = bp2.reshape(P, AR, -1)
+    bp1 = bp1.reshape(P, RA, -1)
+    bp2 = bp2.reshape(P, RA, -1)
     return bp1, bp2
 
 
@@ -429,18 +429,18 @@ def _compute_bp_if_given_pitch(pitch, knots, poly_B, poly_B_z, *original, err=Fa
     pitch : ndarray, shape(P, A, R)
         λ values.
         Last two axes should specify the λ value for a particular field line
-        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
+        parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., ρ, α]``
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
     knots : ndarray, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
-    poly_B : ndarray, shape(4, A * R, knots.size - 1)
+    poly_B : ndarray, shape(4, R * A, knots.size - 1)
         Polynomial coefficients of the cubic spline of |B|.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
-    poly_B_z : ndarray, shape(3, A * R, knots.size - 1)
+    poly_B_z : ndarray, shape(3, R * A, knots.size - 1)
         Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
@@ -456,7 +456,7 @@ def _compute_bp_if_given_pitch(pitch, knots, poly_B, poly_B_z, *original, err=Fa
             raise ValueError("No pitch values were given.")
         return original
     else:
-        # ensure pitch has shape (batch size, alpha.size, rho.size)
+        # ensure pitch has shape (batch size, rho.size, alpha.size)
         pitch = jnp.atleast_2d(pitch)
         if pitch.ndim == 2:
             # Can't use atleast_3d; see https://github.com/numpy/numpy/issues/25805.
@@ -471,7 +471,7 @@ def _compute_bp_if_given_pitch(pitch, knots, poly_B, poly_B_z, *original, err=Fa
 def bounce_integral(
     eq,
     pitch=None,
-    rho=None,
+    rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
     zeta=jnp.linspace(0, 10 * jnp.pi, 20),
     quadrature=tanh_sinh_quadrature,
@@ -502,7 +502,7 @@ def bounce_integral(
         λ values to evaluate the bounce integral at each field line.
         May be specified later.
         Last two axes should specify the λ value for a particular field line
-        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
+        parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., ρ, α]``
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
@@ -536,12 +536,12 @@ def bounce_integral(
                 DESC coordinate grid for the given field line coordinates.
             data : dict
                 Dictionary of ndarrays of stuff evaluated on ``grid``.
-            poly_B : ndarray, shape(4, A * R, zeta.size - 1)
+            poly_B : ndarray, shape(4, R * A, zeta.size - 1)
                 Polynomial coefficients of the cubic spline of |B|.
                 First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
-            poly_B_z : ndarray, shape(3, A * R, zeta.size - 1)
+            poly_B_z : ndarray, shape(3, R * A, zeta.size - 1)
                 Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
                 First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
@@ -556,15 +556,13 @@ def bounce_integral(
         bi, items = bounce_integral(eq, rho=rho, alpha=alpha, return_items=True)
         name = "g_zz"
         f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-        B = items["data"]["B"].reshape(alpha.size * rho.size, -1)
+        B = items["data"]["B"].reshape(rho.size * alpha.size, -1)
         pitch = jnp.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), 30).reshape(
-            -1, alpha.size, rho.size
+            -1, rho.size, alpha.size
         )
         result = bi(f, pitch)
 
     """
-    if rho is None:
-        rho = jnp.linspace(1e-12, 1, 10)
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
     rho = jnp.atleast_1d(rho)
@@ -575,14 +573,14 @@ def bounce_integral(
 
     grid, data = desc_grid_from_field_line_coords(eq, rho, alpha, zeta)
     data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid, data=data)
-    B_sup_z = data["B^zeta"].reshape(A * R, -1)
-    B = data["|B|"].reshape(A * R, -1)
-    B_z_ra = data["|B|_z|r,a"].reshape(A * R, -1)
+    B_sup_z = data["B^zeta"].reshape(R * A, -1)
+    B = data["|B|"].reshape(R * A, -1)
+    B_z_ra = data["|B|_z|r,a"].reshape(R * A, -1)
     poly_B = CubicHermiteSpline(zeta, B, B_z_ra, axis=-1, check=False).c
     poly_B = jnp.moveaxis(poly_B, 1, -1)
     poly_B_z = polyder(poly_B)
-    assert poly_B.shape == (4, A * R, zeta.size - 1)
-    assert poly_B_z.shape == (3, A * R, zeta.size - 1)
+    assert poly_B.shape == (4, R * A, zeta.size - 1)
+    assert poly_B_z.shape == (3, R * A, zeta.size - 1)
 
     return_items = kwargs.pop("return_items", False)
     x, w = quadrature(**kwargs)
@@ -601,14 +599,14 @@ def bounce_integral(
             λ values to evaluate the bounce integral at each field line.
             If None, uses the values given to the parent function.
             Last two axes should specify the λ value for a particular field line
-            parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
+            parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., ρ, α]``
             where in the latter the labels are interpreted as indices that correspond
             to that field line.
             If an additional axis exists on the left, it is the batch axis as usual.
 
         Returns
         -------
-        result : ndarray, shape(P, alpha.size, rho.size, (zeta.size - 1) * 3)
+        result : ndarray, shape(P, rho.size, alpha.size, (zeta.size - 1) * 3)
             The last axis iterates through every bounce integral performed
             along that field line padded by nan.
 
@@ -617,14 +615,14 @@ def bounce_integral(
             pitch, zeta, poly_B, poly_B_z, *original, err=True
         )
         P = pitch.shape[0]
-        pitch = jnp.broadcast_to(pitch, shape=(P, A * R))
+        pitch = jnp.broadcast_to(pitch, shape=(P, R * A))
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
-        f = f.reshape(A * R, -1)
+        f = f.reshape(R * A, zeta.size)
         result = jnp.reshape(
             bounce_quadrature(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra)
             # complete the change of variable
             / (bp2 - bp1) * jnp.pi,
-            newshape=(P, A, R, -1),
+            newshape=(P, R, A, -1),
         )
         return result
 
@@ -638,7 +636,7 @@ def bounce_integral(
 def bounce_average(
     eq,
     pitch=None,
-    rho=None,
+    rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
     zeta=jnp.linspace(0, 10 * jnp.pi, 20),
     quadrature=tanh_sinh_quadrature,
@@ -670,7 +668,7 @@ def bounce_average(
         λ values to evaluate the bounce average at each field line.
         May be specified later.
         Last two axes should specify the λ value for a particular field line
-        parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
+        parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., ρ, α]``
         where in the latter the labels are interpreted as indices that correspond
         to that field line.
         If an additional axis exists on the left, it is the batch axis as usual.
@@ -706,12 +704,12 @@ def bounce_average(
                 DESC coordinate grid for the given field line coordinates.
             data : dict
                 Dictionary of ndarrays of stuff evaluated on ``grid``.
-            poly_B : ndarray, shape(4, A * R, zeta.size - 1)
+            poly_B : ndarray, shape(4, R * A, zeta.size - 1)
                 Polynomial coefficients of the cubic spline of |B|.
                 First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
-            poly_B_z : ndarray, shape(3, A * R, zeta.size - 1)
+            poly_B_z : ndarray, shape(3, R * A, zeta.size - 1)
                 Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
                 First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
@@ -726,9 +724,9 @@ def bounce_average(
         ba, items = bounce_average(eq, rho=rho, alpha=alpha, return_items=True)
         name = "g_zz"
         f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-        B = items["data"]["B"].reshape(alpha.size * rho.size, -1)
+        B = items["data"]["B"].reshape(rho.size * alpha.size, -1)
         pitch = jnp.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), 30).reshape(
-            -1, alpha.size, rho.size
+            -1, rho.size, alpha.size
         )
         result = ba(f, pitch)
 
@@ -745,14 +743,14 @@ def bounce_average(
             λ values to evaluate the bounce average at each field line.
             If None, uses the values given to the parent function.
             Last two axes should specify the λ value for a particular field line
-            parameterized by α, ρ. That is, λ(α, ρ) is specified by ``pitch[..., α, ρ]``
+            parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., ρ, α]``
             where in the latter the labels are interpreted as indices that correspond
             to that field line.
             If an additional axis exists on the left, it is the batch axis as usual.
 
         Returns
         -------
-        result : ndarray, shape(P, alpha.size, rho.size, (zeta.size - 1) * 3)
+        result : ndarray, shape(P, rho.size, alpha.size, (zeta.size - 1) * 3)
             The last axis iterates through every bounce average performed
             along that field line padded by nan.
 
@@ -767,89 +765,3 @@ def bounce_average(
         return _bounce_average, items
     else:
         return _bounce_average
-
-
-# Current algorithm used for bounce integrals no longer requires these
-# two functions. TODO: Delete before merge.
-def diff_mask(a, mask, n=1, axis=-1, prepend=None):
-    """Calculate the n-th discrete difference along the given axis of ``a[mask]``.
-
-    The first difference is given by ``out[i] = a[i+1] - a[i]`` along
-    the given axis, higher differences are calculated by using `diff`
-    recursively. This method is JIT compatible.
-
-    Parameters
-    ----------
-    a : array_like
-        Input array
-    mask : array_like
-        Boolean mask to index like ``a[mask]`` prior to computing difference.
-        Should have same size as ``a``.
-    n : int, optional
-        The number of times values are differenced.
-    axis : int, optional
-        The axis along which the difference is taken, default is the
-        last axis.
-    prepend : array_like, optional
-        Values to prepend to `a` along axis prior to performing the difference.
-        Scalar values are expanded to arrays with length 1 in the direction of
-        axis and the shape of the input array in along all other axes.
-        Otherwise, the dimension and shape must match `a` except along axis.
-
-    Returns
-    -------
-    diff : ndarray
-        The n-th differences. The shape of the output is the same as ``a``
-        except along ``axis`` where the dimension is smaller by ``n``. The
-        type of the output is the same as the type of the difference
-        between any two elements of ``a``.
-
-    Notes
-    -----
-    The result is padded with nan at the end to be jit compilable.
-
-    """
-    prepend = () if prepend is None else (prepend,)
-    return jnp.diff(take_mask(a, mask), n, axis, *prepend)
-
-
-def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):
-    """Stretch batches of ``in_arr``.
-
-    Given that ``in_arr`` is composed of N batches of ``in_batch_size``
-    along its last axis, stretch the last axis so that it is composed of
-    N batches of ``out_batch_size``. The ``out_batch_size - in_batch_size``
-    missing elements in each batch are populated with ``fill``.
-    By default, these elements are populated evenly surrounding the input batches.
-
-    Parameters
-    ----------
-    in_arr : ndarray, shape(..., in_batch_size * N)
-        Input array
-    in_batch_size : int
-        Length of batches along last axis of input array.
-    out_batch_size : int
-        Length of batches along last axis of output array.
-    fill : bool or int or float
-        Value to fill at missing indices of each batch.
-
-    Returns
-    -------
-    out_arr : ndarray, shape(..., out_batch_size * N)
-        Output array
-
-    """
-    assert out_batch_size >= in_batch_size
-    N = in_arr.shape[-1] // in_batch_size
-    out_shape = in_arr.shape[:-1] + (N * out_batch_size,)
-    offset = (out_batch_size - in_batch_size) // 2
-    idx = jnp.arange(in_arr.shape[-1])
-    out_arr = put_along_axis(
-        arr=jnp.full(out_shape, fill, dtype=in_arr.dtype),
-        indices=(idx // in_batch_size) * out_batch_size
-        + offset
-        + (idx % in_batch_size),
-        values=in_arr,
-        axis=-1,
-    )
-    return out_arr

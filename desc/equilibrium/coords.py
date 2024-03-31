@@ -312,26 +312,23 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     # Choose nodes such that even spacing will yield correct flux surface integrals.
     t = jnp.linspace(0, 2 * jnp.pi, 2 * eq.M_grid + 1, endpoint=False)
     z = jnp.linspace(0, 2 * jnp.pi / eq.NFP, 2 * eq.N_grid + 1, endpoint=False)
-    label = ["rho", "theta", "zeta"]
+    nodes = jnp.column_stack(
+        tuple(map(jnp.ravel, jnp.meshgrid(rho, t, z, indexing="ij")))
+    )
+    spacing = jnp.array([1 / rho.size, 2 * jnp.pi / t.size, 2 * jnp.pi / z.size])[
+        jnp.newaxis
+    ]
+    labels = ["rho", "theta", "zeta"]
     unique_idx = {
-        f"_unique_{label[i]}_idx": idx
-        for i, idx in enumerate(meshgrid_unique_idx(rho.size, t.size, z.size))
+        f"_unique_{label}_idx": idx
+        for label, idx in zip(labels, meshgrid_unique_idx(rho.size, t.size, z.size))
     }
     inverse_idx = {
-        f"_inverse_{label[i]}_idx": idx
-        for i, idx in enumerate(meshgrid_inverse_idx(rho.size, t.size, z.size))
+        f"_inverse_{label}_idx": idx
+        for label, idx in zip(labels, meshgrid_inverse_idx(rho.size, t.size, z.size))
     }
     grid = Grid(
-        nodes=jnp.column_stack(
-            tuple(map(jnp.ravel, jnp.meshgrid(rho, t, z, indexing="ij")))
-        ),
-        spacing=jnp.array([1 / rho.size, 2 * jnp.pi / t.size, 2 * jnp.pi / z.size])[
-            jnp.newaxis
-        ],
-        sort=False,
-        jitable=True,
-        **unique_idx,
-        **inverse_idx,
+        nodes, spacing=spacing, sort=False, jitable=True, **unique_idx, **inverse_idx
     )
     # We only need to compute the rotational transform to transform to straight
     # field-line coordinates. However, it is a good idea to compute other flux
@@ -346,20 +343,15 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
         if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
         == "r"
     }
-    # meshgrid of Clebsch-Type field-line coordinates
     r, a, z_fl = map(jnp.ravel, jnp.meshgrid(rho, alpha, zeta, indexing="ij"))
     coords_sfl = jnp.column_stack([r, a + data_desc["iota"] * z_fl, z_fl])
     coords_desc = eq.compute_theta_coords(coords_sfl)
-    unique_idx = {
-        f"_unique_{label[i]}_idx": idx
-        for i, idx in enumerate(meshgrid_unique_idx(rho.size, alpha.size, zeta.size))
-    }
-    inverse_idx = {
-        f"_inverse_{label[i]}_idx": idx
-        for i, idx in enumerate(meshgrid_inverse_idx(rho.size, alpha.size, zeta.size))
-    }
     grid_desc = Grid(
-        nodes=coords_desc, sort=False, jitable=True, **unique_idx, **inverse_idx
+        nodes=coords_desc,
+        sort=False,
+        jitable=True,
+        _unique_rho_idx=meshgrid_unique_idx(rho.size, alpha.size, zeta.size)[0],
+        _inverse_rho_idx=meshgrid_inverse_idx(rho.size, alpha.size, zeta.size)[0],
     )
     return grid_desc, data_desc
 

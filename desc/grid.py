@@ -497,6 +497,8 @@ class Grid(_Grid):
         self._sym = False
         self._node_pattern = "custom"
         self._nodes, self._spacing = self._create_nodes(nodes)
+        if spacing is not None:
+            self._spacing = spacing
         if sort:
             self._sort_nodes()
         if jitable:
@@ -535,8 +537,6 @@ class Grid(_Grid):
         self._L = self.num_nodes
         self._M = self.num_nodes
         self._N = self.num_nodes
-        if spacing is not None:
-            self._spacing = spacing
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
     def _create_nodes(self, nodes):
@@ -1649,7 +1649,7 @@ def meshgrid_inverse_idx(a_size, b_size, c_size):
     c_size : int
         Size of the third argument to meshgrid.
     order : int
-        0, 1, or 2. Whether to retrieve unique indices into a, b, or c.
+        0, 1, or 2. Whether to retrieve inverse indices for label a, b, or c.
 
     Returns
     -------

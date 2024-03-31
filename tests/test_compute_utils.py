@@ -69,7 +69,17 @@ class TestComputeUtils:
             Surface integral of the input over each surface in the grid.
 
         """
-        _, _, spacing, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
+        _, _, spacing, _, _ = _get_grid_surface(grid, surface_label)
+        if surface_label == "rho":
+            has_endpoint_dupe = False
+        elif surface_label == "theta":
+            has_endpoint_dupe = (grid.nodes[grid.unique_theta_idx[0], 1] == 0) & (
+                grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
+            )
+        else:
+            has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
+                grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
+            )
         weights = (spacing.prod(axis=1) * np.nan_to_num(q).T).T
 
         surfaces = {}

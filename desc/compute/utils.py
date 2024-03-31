@@ -691,36 +691,26 @@ def _get_grid_surface(grid, surface_label):
     has_endpoint_dupe : bool
         Whether this surface label's nodes have a duplicate at the endpoint
         of a periodic domain. (e.g. a node at 0 and 2π).
+    has_idx : bool
+        Whether the grid knows the number of unique nodes and inverse idx.
 
     """
     assert surface_label in {"rho", "theta", "zeta"}
     if surface_label == "rho":
         spacing = grid.spacing[:, 1:]
         has_endpoint_dupe = False
-        unique_size = getattr(grid, "num_rho", -1)
-        inverse_idx = getattr(grid, "_inverse_rho_idx", jnp.array([]))
     elif surface_label == "theta":
         spacing = grid.spacing[:, [0, 2]]
-        unique_size = getattr(grid, "num_theta", -1)
-        inverse_idx = getattr(grid, "_inverse_theta_idx", jnp.array([]))
-        has_endpoint_dupe = (
-            isinstance(grid, LinearGrid)
-            and hasattr(grid, "_unique_theta_idx")
-            and (grid.nodes[grid.unique_theta_idx[0], 1] == 0)
-            & (grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi)
-        )
+        has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._theta_endpoint
     else:
         spacing = grid.spacing[:, :2]
-        unique_size = getattr(grid, "num_zeta", -1)
-        inverse_idx = getattr(grid, "_inverse_zeta_idx", jnp.array([]))
-        has_endpoint_dupe = (
-            isinstance(grid, LinearGrid)
-            and hasattr(grid, "_unique_zeta_idx")
-            and (grid.nodes[grid.unique_zeta_idx[0], 2] == 0)
-            & (grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP)
-        )
-
-    return unique_size, inverse_idx, spacing, has_endpoint_dupe
+        has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._zeta_endpoint
+    has_idx = hasattr(grid, f"num_{surface_label}") & hasattr(
+        grid, f"_inverse_{surface_label}_idx"
+    )
+    unique_size = getattr(grid, f"num_{surface_label}", -1)
+    inverse_idx = getattr(grid, f"_inverse_{surface_label}_idx", jnp.array([]))
+    return unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx
 
 
 def line_integrals(
@@ -886,16 +876,14 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
                 "yellow",
             )
         )
-    unique_size, inverse_idx, spacing, has_endpoint_dupe = _get_grid_surface(
+    unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = _get_grid_surface(
         grid, surface_label
     )
     spacing = jnp.prod(spacing, axis=1)
 
     # Todo: Define masks as a sparse matrix once sparse matrices are no longer
     #       experimental in jax.
-    if hasattr(grid, f"num_{surface_label}") and hasattr(
-        grid, f"_inverse_{surface_label}_idx"
-    ):
+    if has_idx:
         # The ith row of masks is True only at the indices which correspond to the
         # ith surface. The integral over the ith surface is the dot product of the
         # ith row vector and the integrand defined over all the surfaces.
@@ -1052,8 +1040,12 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
         ``function(q, sqrt_g)``.
 
     """
-    if not hasattr(grid, f"num_{surface_label}"):
-        expand_out = False  # don't try to expand already expanded output
+    expand_out = (
+        expand_out
+        # don't try to expand already expanded output
+        & hasattr(grid, f"num_{surface_label}")
+        & hasattr(grid, f"_inverse_{surface_label}_idx")
+    )
     integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
 
     def _surface_averages(q, sqrt_g=jnp.array([1.0]), denominator=None):
@@ -1181,7 +1173,9 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # transform into the computational domain, so the second dimension that
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
-    assert hasattr(grid, f"num_{surface_label}")
+    assert hasattr(grid, f"num_{surface_label}") & hasattr(
+        grid, f"_inverse_{surface_label}_idx"
+    )
     return surface_integrals_map(grid, surface_label, expand_out=False)
 
 
@@ -1265,7 +1259,7 @@ def surface_variance(
         By default, the returned array has the same shape as the input.
 
     """
-    _, _, spacing, _ = _get_grid_surface(grid, surface_label)
+    _, _, spacing, _, has_idx = _get_grid_surface(grid, surface_label)
     integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
 
     v1 = integrate(weights)
@@ -1278,10 +1272,10 @@ def surface_variance(
     q = jnp.atleast_1d(q)
     # compute variance in two passes to avoid catastrophic round off error
     mean = (integrate((weights * q.T).T).T / v1).T
-    if hasattr(grid, f"num_{surface_label}"):
+    if has_idx:
         mean = grid.expand(mean, surface_label)
     variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T
-    if hasattr(grid, f"num_{surface_label}") and expand_out:
+    if has_idx & expand_out:
         return grid.expand(variance, surface_label)
     else:
         return variance
@@ -1330,7 +1324,9 @@ def surface_min(grid, x, surface_label="rho"):
         The returned array has the same shape as the input.
 
     """
-    unique_size, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
+    unique_size, inverse_idx, _, _, has_idx = _get_grid_surface(grid, surface_label)
+    if not has_idx:
+        raise NotImplementedError("Grid should have unique and inverse idx.")
     inverse_idx = jnp.asarray(inverse_idx)
     x = jnp.asarray(x)
     mins = jnp.full(unique_size, jnp.inf)

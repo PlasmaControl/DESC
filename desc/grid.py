@@ -626,6 +626,8 @@ class LinearGrid(_Grid):
         self._NFP = NFP
         self._sym = sym
         self._endpoint = bool(endpoint)
+        self._theta_endpoint = False
+        self._zeta_endpoint = False
         self._node_pattern = "linear"
         self._nodes, self._spacing = self._create_nodes(
             L=L,
@@ -861,38 +863,26 @@ class LinearGrid(_Grid):
             else:
                 dz = np.array([ZETA_ENDPOINT])
 
-        self._endpoint = (
+        self._theta_endpoint = (
             t.size > 0
-            and z.size > 0
-            and (
-                (
-                    np.isclose(t[0], 0, atol=1e-12)
-                    and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
-                )
-                or (t.size == 1 and z.size > 1)
-            )
-            and (
-                (
-                    np.isclose(z[0], 0, atol=1e-12)
-                    and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
-                )
-                or (z.size == 1 and t.size > 1)
-            )
-        )  # if only one theta or one zeta point, can have endpoint=True
+            and np.isclose(t[0], 0, atol=1e-12)
+            and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
+        )
+        self._zeta_endpoint = (
+            z.size > 0
+            and np.isclose(z[0], 0, atol=1e-12)
+            and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
+        )
+        # if only one theta or one zeta point, can have endpoint=True
         # if the other one is a full array
+        self._endpoint = (self._theta_endpoint or (t.size == 1 and z.size > 1)) and (
+            self._zeta_endpoint or (z.size == 1 and t.size > 1)
+        )
 
-        r, t, z = np.meshgrid(r, t, z, indexing="ij")
-        r = r.flatten()
-        t = t.flatten()
-        z = z.flatten()
-
-        dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
-        dr = dr.flatten()
-        dt = dt.flatten()
-        dz = dz.flatten()
-
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
+        r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
+        dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
+        nodes = np.column_stack([r, t, z])
+        spacing = np.column_stack([dr, dt, dz])
 
         return nodes, spacing
 

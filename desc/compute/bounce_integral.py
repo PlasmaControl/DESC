@@ -426,7 +426,7 @@ def _compute_bp_if_given_pitch(pitch, knots, poly_B, poly_B_z, *original, err=Fa
 
     Parameters
     ----------
-    pitch : ndarray, shape(P, A, R)
+    pitch : ndarray, shape(P, R, A)
         λ values.
         Last two axes should specify the λ value for a particular field line
         parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., ρ, α]``

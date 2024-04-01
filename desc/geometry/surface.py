@@ -1,6 +1,5 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
-import numbers
 import warnings
 
 import numpy as np
@@ -141,13 +140,6 @@ class FourierRZToroidalSurface(Surface):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
-
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
 
     @property
     def R_basis(self):

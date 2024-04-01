@@ -1,7 +1,5 @@
 """Classes for parameterized 3D space curves."""
 
-import numbers
-
 import numpy as np
 
 from desc.backend import jnp, put
@@ -114,13 +112,6 @@ class FourierRZCurve(Curve):
     def NFP(self):
         """Number of field periods."""
         return self._NFP
-
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
 
     @property
     def N(self):

@@ -1203,42 +1203,20 @@ class Equilibrium(IOAble, Optimizable):
         """int: Number of (toroidal) field periods."""
         return self._NFP
 
-    @NFP.setter
-    def NFP(self, NFP):
-        assert (
-            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
-        ), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFP=NFP)
-
     @property
     def L(self):
         """int: Maximum radial mode number."""
         return self._L
-
-    @L.setter
-    def L(self, L):
-        _assert_nonnegint(L, "L")
-        self.change_resolution(L=L)
 
     @property
     def M(self):
         """int: Maximum poloidal fourier mode number."""
         return self._M
 
-    @M.setter
-    def M(self, M):
-        _assert_nonnegint(M, "M")
-        self.change_resolution(M=M)
-
     @property
     def N(self):
         """int: Maximum toroidal fourier mode number."""
         return self._N
-
-    @N.setter
-    def N(self, N):
-        _assert_nonnegint(N, "N")
-        self.change_resolution(N=N)
 
     @optimizable_parameter
     @property

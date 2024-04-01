@@ -170,30 +170,15 @@ class _Basis(IOAble, ABC):
         """int: Maximum radial resolution."""
         return self.__dict__.setdefault("_L", 0)
 
-    @L.setter
-    def L(self, L):
-        assert int(L) == L, "Basis Resolution must be an integer!"
-        self._L = int(L)
-
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
         return self.__dict__.setdefault("_M", 0)
 
-    @M.setter
-    def M(self, M):
-        assert int(M) == M, "Basis Resolution must be an integer!"
-        self._M = int(M)
-
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
         return self.__dict__.setdefault("_N", 0)
-
-    @N.setter
-    def N(self, N):
-        assert int(N) == N, "Basis Resolution must be an integer!"
-        self._N = int(N)
 
     @property
     def NFP(self):
@@ -209,10 +194,6 @@ class _Basis(IOAble, ABC):
     def modes(self):
         """ndarray: Mode numbers [l,m,n]."""
         return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
-
-    @modes.setter
-    def modes(self, modes):
-        self._modes = modes
 
     @property
     def num_modes(self):

@@ -122,7 +122,7 @@ def convert_spectral_to_FE(
             * Lprime_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
     ).reshape(I, Q, I, Q)
-    k_plus1 = np.arange(0, L + 1, 2) + 1
+    # Commenting out k_plus1 = np.arange(0, L + 1, 2) + 1
 
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)
@@ -188,32 +188,6 @@ def convert_spectral_to_FE(
     )
     t2 = time.time()
     print("Time to construct vector b = ", t2 - t1)
-
-    # Bjb and Aj should both be scaled by the grid spacing, but this cancels out
-    # if the grid spacing is uniform, so we omit it here.
-    # However, factor of pi from the orthonormality of the radial basis functions
-    # being used in the finite element representation.
-    t1 = time.time()
-    Aj_R = 2 * k_plus1[:, np.newaxis, np.newaxis] * Aj_R.reshape(lmodes, I, Q)
-    Aj_Z = 2 * k_plus1[:, np.newaxis, np.newaxis] * Aj_Z.reshape(lmodes, I, Q)
-    Aj_L = 2 * k_plus1[:, np.newaxis, np.newaxis] * Aj_L.reshape(lmodes, I, Q)
-    Aj_R = np.array(Aj_R.reshape(nmodes))
-    Aj_Z = np.array(Aj_Z.reshape(nmodes))
-    Aj_L = np.array(Aj_L.reshape(nmodes))
-
-    Bjb_R = Bjb_R.reshape(I * Q, I * Q)
-    Bjb_L = Bjb_L.reshape(I * Q, I * Q)
-    Bjb_Z = Bjb_Z.reshape(I * Q, I * Q)
-    Bjb_R_expanded = np.zeros((lmodes, I * Q, lmodes, I * Q))
-    Bjb_Z_expanded = np.zeros((lmodes, I * Q, lmodes, I * Q))
-    Bjb_L_expanded = np.zeros((lmodes, I * Q, lmodes, I * Q))
-    for ii in range(lmodes):
-        Bjb_R_expanded[ii, :, ii, :] = Bjb_R
-        Bjb_Z_expanded[ii, :, ii, :] = Bjb_Z
-        Bjb_L_expanded[ii, :, ii, :] = Bjb_L
-    Bjb_R = np.reshape(Bjb_R_expanded, (nmodes, nmodes))
-    Bjb_Z = np.reshape(Bjb_Z_expanded, (nmodes, nmodes))
-    Bjb_L = np.reshape(Bjb_L_expanded, (nmodes, nmodes))
 
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
     # this linear system of equations. Use an LU

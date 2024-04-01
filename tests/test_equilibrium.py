@@ -81,7 +81,7 @@ def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
     eq = get("DSHAPE")
 
-    inbasis = ["alpha", "phi", "rho"]
+    inbasis = ["R", "phi", "Z"]
     outbasis = ["rho", "theta_PEST", "zeta"]
 
     rho = np.linspace(0.01, 0.99, 20)
@@ -98,7 +98,7 @@ def test_map_coordinates():
         in_coords,
         inbasis,
         outbasis,
-        period=(2 * np.pi, 2 * np.pi, np.inf),
+        period=(np.inf, 2 * np.pi, np.inf),
         maxiter=40,
     )
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)

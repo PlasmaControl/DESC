@@ -122,7 +122,7 @@ def convert_spectral_to_FE(
             * Lprime_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
     ).reshape(I, Q, I, Q)
-    # Commenting out k_plus1 = np.arange(0, L + 1, 2) + 1
+    # Comment out k_plus1 = np.arange(0, L + 1, 2) + 1
 
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)

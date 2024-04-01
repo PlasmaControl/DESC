@@ -14,6 +14,7 @@ from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.optimizable import Optimizable, optimizable_parameter
+from desc.singularities import compute_B_plasma
 from desc.utils import Timer, copy_coeffs, errorif, setdefault, warnif
 
 from ._core import _MagneticField, biot_savart_general
@@ -683,7 +684,8 @@ class FourierCurrentPotentialField(
             by default 8
         source_grid : Grid, optional
             Source grid upon which to evaluate the surface current when calculating
-            the normal field on the plasma surface.
+            the normal field on the plasma surface. Also used to evaluate the
+            virtual casing current, if the plasma has finite plasma currents.
         eval_grid : _type_, optional
             Grid upon which to evaluate the normal field on the plasma surface, and
             at which the normal field is minimized.
@@ -775,18 +777,8 @@ class FourierCurrentPotentialField(
         # ensure vacuum eq, as we don't yet support finite beta
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))
-        warnif(
-            pres > 1e-8,
-            UserWarning,
-            f"Pressure is non-zero (max {pres} Pa), "
-            + "finite beta not supported yet.",
-        )
-        warnif(
-            curr > 1e-8,
-            UserWarning,
-            f"Current is non-zero (max {curr} A), "
-            + "finite plasma currents not supported yet.",
-        )
+        include_plasma_currents = pres > 1e-8 or curr > 1e-8
+
         data = {}
         if external_field:  # ensure given field is an instance of _MagneticField
             assert hasattr(external_field, "compute_magnetic_field"), (
@@ -911,9 +903,12 @@ class FourierCurrentPotentialField(
         # find the normal field from the secular part of the current potential
         B_GI_normal = B_from_K_secular(I, G)
         # FIXME: use virtual casing to find this once free bdry is merged in
-        Bn_plasma = jnp.zeros_like(
-            B_GI_normal
-        )  # from plasma current, currently assume is 0
+        if include_plasma_currents:
+            Bn_plasma = compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
+        else:
+            Bn_plasma = jnp.zeros_like(
+                B_GI_normal
+            )  # from plasma current, currently assume is 0
         # find external field's Bnormal contribution
         if external_field:
             Bn_ext, _ = external_field.compute_Bnormal(

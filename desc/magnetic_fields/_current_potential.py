@@ -902,7 +902,6 @@ class FourierCurrentPotentialField(
         self.G = float(G)
         # find the normal field from the secular part of the current potential
         B_GI_normal = B_from_K_secular(I, G)
-        # FIXME: use virtual casing to find this once free bdry is merged in
         if include_plasma_currents:
             Bn_plasma = compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
         else:

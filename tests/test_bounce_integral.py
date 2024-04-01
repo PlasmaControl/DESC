@@ -56,17 +56,19 @@ def test_mask_operation():
         )
 
     shift = np.random.choice([True, False], size=rows)
-    replacement = last * shift + a[:, 0] * (~shift)
     # This might be a better way to perform this computation, without
     # the jax.cond, which will get transformed to jax.select under vmap
     # which performs both branches of the computation.
     # But perhaps computing replacement as above, while fine for jit,
-    # will make the computation non-differentiable...
+    # will make the computation non-differentiable.
     desired = put_along_axis(
-        vmap(jnp.roll)(a, shift), jnp.array([0]), replacement[:, np.newaxis], axis=-1
+        vmap(jnp.roll)(taken, shift),
+        np.array([0]),
+        np.expand_dims(last * shift + taken[:, 0] * (~shift), axis=-1),
+        axis=-1,
     )
     np.testing.assert_allclose(
-        actual=_roll_and_replace_if_shift(a, shift, replacement),
+        actual=_roll_and_replace_if_shift(taken, shift, last),
         desired=desired,
         err_msg="_roll_and_replace_if_shift() has bugs.",
     )

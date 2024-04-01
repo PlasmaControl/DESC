@@ -26,7 +26,8 @@ integral = mesh.integrate(np.ones((M * mesh.nquad, 1000)))
 length_total = 0.0
 for interval in mesh.intervals:
     length_total += interval.length
-assert np.allclose(integral, 2 * np.pi)
+assert np.allclose(integral,
+       2*np.pi)
 
 quadpoints = mesh.return_quadrature_points()
 integral = mesh.integrate(np.array([np.cos(quadpoints)]).T)

@@ -35,11 +35,19 @@ from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
-from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
+from desc.utils import (
+    Timer,
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    only1,
+    setdefault,
+)
 
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
-from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
+from .utils import parse_axis, parse_profile, parse_surface
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -196,11 +204,7 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing, getattr(surface, "spectral_indexing", "ansi")
         )
 
-        errorif(
-            (NFP is not None) and not isposint(NFP),
-            ValueError,
-            f"NFP should be a positive integer, got {NFP}",
-        )
+        NFP = check_posint(NFP, "NFP")
         self._NFP = int(
             setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
         )
@@ -229,12 +233,12 @@ class Equilibrium(IOAble, Optimizable):
         self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
 
         # resolution
-        _assert_nonnegint(L, "L")
-        _assert_nonnegint(M, "M")
-        _assert_nonnegint(N, "N")
-        _assert_nonnegint(L_grid, "L_grid")
-        _assert_nonnegint(M_grid, "M_grid")
-        _assert_nonnegint(N_grid, "N_grid")
+        L = check_nonnegint(L, "L")
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        L_grid = check_nonnegint(L_grid, "L_grid")
+        M_grid = check_nonnegint(M_grid, "M_grid")
+        N_grid = check_nonnegint(N_grid, "N_grid")
 
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, self.surface.M))

@@ -7,7 +7,7 @@ from scipy import optimize, special
 
 from desc.backend import jnp, put
 from desc.io import IOAble
-from desc.utils import Index
+from desc.utils import Index, check_nonnegint, check_posint
 
 __all__ = [
     "Grid",
@@ -526,10 +526,10 @@ class LinearGrid(_Grid):
         theta=np.array(0.0),
         zeta=np.array(0.0),
     ):
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L")
+        self._M = check_nonnegint(M, "M")
+        self._N = check_nonnegint(N, "N")
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._endpoint = bool(endpoint)
         self._node_pattern = "linear"
@@ -605,7 +605,7 @@ class LinearGrid(_Grid):
             node spacing, based on local volume around the node
 
         """
-        self._NFP = NFP
+        self._NFP = check_posint(NFP, "NFP", False)
         axis = bool(axis)
         endpoint = bool(endpoint)
         THETA_ENDPOINT = 2 * np.pi
@@ -613,7 +613,7 @@ class LinearGrid(_Grid):
 
         # rho
         if L is not None:
-            self._L = L
+            self._L = check_nonnegint(L, "L")
             rho = L + 1
         else:
             self._L = len(np.atleast_1d(rho))
@@ -636,7 +636,7 @@ class LinearGrid(_Grid):
 
         # theta
         if M is not None:
-            self._M = M
+            self._M = check_nonnegint(M, "M")
             theta = 2 * (M + 1) if self.sym else 2 * M + 1
         else:
             self._M = len(np.atleast_1d(theta))
@@ -729,7 +729,7 @@ class LinearGrid(_Grid):
         # spacing corresponds to a node's weight in an integral --
         # such as integral = sum(dt * dz * data["B"]) -- not the node's coordinates
         if N is not None:
-            self._N = N
+            self._N = check_nonnegint(N, "N")
             zeta = 2 * N + 1
         else:
             self._N = len(np.atleast_1d(zeta))
@@ -862,10 +862,10 @@ class QuadratureGrid(_Grid):
     """
 
     def __init__(self, L, M, N, NFP=1):
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "N", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "quad"
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
@@ -905,10 +905,10 @@ class QuadratureGrid(_Grid):
             node spacing, based on local volume around the node
 
         """
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         L = L + 1
         M = 2 * M + 1
         N = 2 * N + 1
@@ -1007,10 +1007,10 @@ class ConcentricGrid(_Grid):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._node_pattern = node_pattern
         self._nodes, self._spacing = self._create_nodes(
@@ -1063,10 +1063,10 @@ class ConcentricGrid(_Grid):
             node spacing, based on local volume around the node
 
         """
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
 
         def ocs(L):
             # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”

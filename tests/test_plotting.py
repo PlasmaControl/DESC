@@ -20,7 +20,7 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField
+from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -922,4 +922,33 @@ def test_plot_omnigenous_field():
         x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
     )
     fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+@pytest.mark.unit
+def test_2d_plot_Bn():
+    """Test 2d plotting of Bn on equilibrium surface."""
+    eq = get("HELIOTRON")
+    fig, _ = plot_2d(
+        eq,
+        "B*n",
+        field=ToroidalMagneticField(1, 1),
+        field_grid=LinearGrid(M=10, N=10),
+        grid=LinearGrid(M=30, N=30, NFP=eq.NFP, endpoint=True),
+    )
+    return fig
+
+
+@pytest.mark.unit
+def test_3d_plot_Bn():
+    """Test 3d plotting of Bn on equilibrium surface."""
+    eq = get("precise_QA")
+    eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
+    fig = plot_3d(
+        eq,
+        "B*n",
+        field=ToroidalMagneticField(1, 1),
+        grid=LinearGrid(M=30, N=30, NFP=1, endpoint=True),
+    )
     return fig

@@ -14,7 +14,7 @@ from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
-from desc.coils import CoilSet, FourierXYZCoil
+from desc.coils import CoilSet, FourierPlanarCoil, FourierXYZCoil, MixedCoilSet
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -30,6 +30,9 @@ from desc.objectives import (
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
+    CoilCurvature,
+    CoilLength,
+    CoilTorsion,
     Elongation,
     Energy,
     ForceBalance,
@@ -735,6 +738,83 @@ class TestObjectiveFunction:
         L2 = obj2.compute_unscaled(*obj2.xs(eq2))
 
         np.testing.assert_array_less(L1, L2)
+
+    @pytest.mark.unit
+    def test_coil_length(self):
+        """Tests coil length."""
+
+        def test(coil, grid=None):
+            obj = CoilLength(coil, grid=grid)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, 2 * np.pi, rtol=1e-8)
+            assert len(f) == obj.dim_f
+
+        coil = FourierPlanarCoil(r_n=1)
+        coils = CoilSet.linspaced_linear(coil, n=2)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
+        nested_coils = MixedCoilSet(coils, coils)
+
+        nested_grids = [
+            [LinearGrid(N=5), LinearGrid(N=5)],
+            [LinearGrid(N=5), LinearGrid(N=5)],
+        ]
+        test(coil, grid=LinearGrid(N=5))
+        test(coils)
+        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
+        test(nested_coils, grid=nested_grids)
+
+    @pytest.mark.unit
+    def test_coil_curvature(self):
+        """Tests coil curvature."""
+
+        def test(coil, grid=None):
+            obj = CoilCurvature(coil, grid=grid)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)
+            assert len(f) == obj.dim_f
+
+        coil = FourierPlanarCoil()
+        coils = CoilSet.linspaced_linear(coil, n=2)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
+        nested_coils = MixedCoilSet(coils, coils)
+
+        nested_grids = [
+            [LinearGrid(N=5), LinearGrid(N=5)],
+            [LinearGrid(N=5), LinearGrid(N=5)],
+        ]
+
+        test(coil, grid=LinearGrid(N=5))
+        test(coils)
+        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
+        test(nested_coils, grid=nested_grids)
+
+    @pytest.mark.unit
+    def test_coil_torsion(self):
+        """Tests coil torsion."""
+
+        def test(coil, grid=None):
+            obj = CoilTorsion(coil, grid=grid)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, 0, atol=1e-8)
+            assert len(f) == obj.dim_f
+
+        coil = FourierPlanarCoil()
+        coils = CoilSet.linspaced_linear(coil, n=2)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
+        nested_coils = MixedCoilSet(coils, coils)
+
+        nested_grids = [
+            [LinearGrid(N=5), LinearGrid(N=5)],
+            [LinearGrid(N=5), LinearGrid(N=5)],
+        ]
+
+        test(coil, grid=LinearGrid(N=5))
+        test(coils)
+        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
+        test(nested_coils, grid=nested_grids)
 
 
 @pytest.mark.regression
@@ -1558,6 +1638,9 @@ class TestComputeScalarResolution:
         VacuumBoundaryError,
         GenericObjective,
         Omnigenity,
+        CoilLength,
+        CoilTorsion,
+        CoilCurvature,
         # need to avoid blowup near the axis
         MercierStability,
         # don't test these since they depend on what user wants
@@ -1797,6 +1880,21 @@ class TestComputeScalarResolution:
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
+    @pytest.mark.regression
+    @pytest.mark.parametrize("objective", [CoilLength, CoilTorsion, CoilCurvature])
+    def test_compute_scalar_resolution_coils(self, objective):
+        """Coil objectives."""
+        coil = FourierXYZCoil()
+        coilset = CoilSet.linspaced_angular(coil)
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            obj = ObjectiveFunction(
+                objective(coilset, grid=LinearGrid(N=5 + 3 * res)), use_jit=False
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
+
 
 class TestObjectiveNaNGrad:
     """Make sure reverse mode AD works correctly for all objectives."""
@@ -1817,6 +1915,9 @@ class TestObjectiveNaNGrad:
         BootstrapRedlConsistency,
         BoundaryError,
         VacuumBoundaryError,
+        CoilLength,
+        CoilCurvature,
+        CoilTorsion,
         # we don't test these since they depend too much on what exactly the user wants
         GenericObjective,
         LinearObjectiveFromUser,
@@ -1915,6 +2016,17 @@ class TestObjectiveNaNGrad:
         obj = ObjectiveFunction(objective(eq), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), str(objective)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("objective", [CoilLength, CoilTorsion, CoilCurvature])
+    def test_objective_no_nangrad_coils(self, objective):
+        """Coil objectives."""
+        coil = FourierXYZCoil()
+        coilset = CoilSet.linspaced_angular(coil)
+        obj = ObjectiveFunction(objective(coilset), use_jit=False)
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(objective)
 
 

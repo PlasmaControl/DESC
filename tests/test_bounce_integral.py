@@ -6,9 +6,10 @@ import numpy as np
 import pytest
 from interpax import Akima1DInterpolator
 
-from desc.backend import fori_loop, put, root_scalar
+from desc.backend import fori_loop, jnp, put, put_along_axis, root_scalar, vmap
 from desc.compute.bounce_integral import (
     _last_value,
+    _roll_and_replace_if_shift,
     bounce_average,
     bounce_integral,
     compute_bounce_points,
@@ -48,11 +49,27 @@ def test_mask_operation():
         np.testing.assert_allclose(
             actual=taken[i],
             desired=np.pad(desired, (0, cols - desired.size), constant_values=np.nan),
-            err_msg="take_mask",
+            err_msg="take_mask() has bugs.",
         )
         np.testing.assert_allclose(
-            actual=last[i], desired=desired[-1], err_msg="_last_value"
+            actual=last[i], desired=desired[-1], err_msg="_last_value() has bugs."
         )
+
+    shift = np.random.choice([True, False], size=rows)
+    replacement = last * shift + a[:, 0] * (~shift)
+    # This might be a better way to perform this computation, without
+    # the jax.cond, which will get transformed to jax.select under vmap
+    # which performs both branches of the computation.
+    # But perhaps computing replacement as above, while fine for jit,
+    # will make the computation non-differentiable...
+    desired = put_along_axis(
+        vmap(jnp.roll)(a, shift), jnp.array([0]), replacement[:, np.newaxis], axis=-1
+    )
+    np.testing.assert_allclose(
+        actual=_roll_and_replace_if_shift(a, shift, replacement),
+        desired=desired,
+        err_msg="_roll_and_replace_if_shift() has bugs.",
+    )
 
 
 @pytest.mark.unit

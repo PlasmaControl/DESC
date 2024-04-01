@@ -4,7 +4,7 @@ from functools import partial
 
 from interpax import CubicHermiteSpline, interp1d
 
-from desc.backend import complex_sqrt, flatnonzero, jnp, put, take, vmap
+from desc.backend import complex_sqrt, cond, flatnonzero, jnp, put, take, vmap
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
 
 
@@ -38,7 +38,7 @@ def bounce_quadrature(pitch, X, w, knots, f, B_sup_z, B, B_z_ra):
         Bounce integrals for every pitch along a particular field line.
 
     """
-    assert pitch.ndim == 1
+    assert pitch.ndim == 1 == w.ndim
     assert X.shape == (pitch.size, (knots.size - 1) * 3, w.size)
     assert knots.shape == f.shape == B_sup_z.shape == B.shape == B_z_ra.shape
     # Cubic spline the integrand so that we can evaluate it at quadrature points
@@ -141,22 +141,38 @@ def take_mask(a, mask, size=None, fill_value=None):
 
 @vmap
 def _last_value(a):
-    """Return the last non-nan value in a."""
-    assert a.ndim == 1
-    a = a[::-1]
-    idx = flatnonzero(~jnp.isnan(a), size=1, fill_value=0)
+    """Return the last non-nan value in ``a``."""
+    a = jnp.ravel(a)[::-1]
+    idx = jnp.squeeze(flatnonzero(~jnp.isnan(a), size=1, fill_value=0))
     return a[idx]
 
 
 @vmap
-def _roll_and_replace(a, shift, replacement):
-    assert a.ndim == 1
-    assert shift.size == 1 and shift.dtype == bool
-    assert replacement.size == 1
-    # maybe jax will prefer this to an if statement
-    replacement = replacement * shift + a[0] * (~shift)
-    a = put(jnp.roll(a, shift), jnp.array([0]), replacement)
-    return a
+def _roll_and_replace_if_shift(a, shift, replacement):
+    """If shift is true, roll right and put replacement value at index 0.
+
+    Parameters
+    ----------
+    a : ndarray
+        Array to roll.
+    shift : ndarray, shape(1, )
+        Whether to roll array.
+    replacement : ndarray, shape(1, )
+        Value to place at index zero.
+
+    Returns
+    -------
+    result : ndarray
+        The (possibly) rolled array.
+
+    """
+    return cond(
+        shift,
+        lambda x, r: put(jnp.roll(x, shift=1), jnp.array([0]), r),
+        lambda x, r: x,
+        a,
+        replacement,
+    )
 
 
 def polyint(c, k=None):
@@ -401,8 +417,9 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # If, in addition, the last intersect satisfies B_z < 0, then we have the
     # required information to compute a bounce integral between these points.
     # The below logic handles both tasks.
-    last_intersect = jnp.squeeze(_last_value(intersect))
-    bp1 = _roll_and_replace(bp1, bp1[:, 0] > bp2[:, 0], last_intersect - knots[-1])
+    bp1 = _roll_and_replace_if_shift(
+        bp1, bp1[:, 0] > bp2[:, 0], _last_value(intersect) - knots[-1]
+    )
     # Notice that for the latter, an "approximation" is made that the field line is
     # periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so that the
     # distance between these bounce points is well-defined. This may worry the

@@ -15,13 +15,14 @@ from desc.basis import (
     DoubleFourierSeries,
 )
 from desc.compute import compute as compute_fun
-from desc.compute import rpz2xyz_vec, xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
+from desc.singularities import compute_B_plasma
 from desc.transform import Transform
 from desc.utils import copy_coeffs, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
@@ -205,7 +206,13 @@ class _MagneticField(IOAble, ABC):
         return self.compute_magnetic_field(grid, params, basis)
 
     def compute_Bnormal(
-        self, surface, eval_grid=None, source_grid=None, params=None, basis="rpz"
+        self,
+        surface,
+        eval_grid=None,
+        source_grid=None,
+        vc_source_grid=None,
+        params=None,
+        basis="rpz",
     ):
         """Compute Bnormal from self on the given surface.
 
@@ -213,7 +220,9 @@ class _MagneticField(IOAble, ABC):
         ----------
         surface : Surface or Equilibrium
             Surface to calculate the magnetic field's Bnormal on.
-            If an Equilibrium is supplied, will use its boundary surface.
+            If an Equilibrium is supplied, will use its boundary surface,
+            and also include the contribution from the equilibrium currents
+            using the virtual casing principle.
         eval_grid : Grid, optional
             Grid of points on the surface to calculate the Bnormal at,
             if None defaults to a LinearGrid with twice
@@ -222,6 +231,11 @@ class _MagneticField(IOAble, ABC):
         source_grid : Grid, int or None
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
+        vc_source_grid : LinearGrid
+            LinearGrid to use for the singular integral for the virtual casing
+            principle to calculate the component of the normal field from the
+            plasma currents. Must have endpoint=False and sym=False and be linearly
+            spaced in theta and zeta, with nodes only at rho=1.0
         params : list or tuple of dict, optional
             parameters to pass to underlying field's compute_magnetic_field function.
             If None, uses the default parameters for each field.
@@ -240,25 +254,32 @@ class _MagneticField(IOAble, ABC):
             given as an ``(grid.num_nodes , 3)`` shaped array.
 
         """
+        calc_Bplasma = False
         if isinstance(surface, EquilibriaFamily):
             surface = surface[-1]
         if isinstance(surface, Equilibrium):
-            surface = surface.surface
+            calc_Bplasma = True
+            eq = surface
+            surface = eq.surface
         if eval_grid is None:
             eval_grid = LinearGrid(
                 rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
-        data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="xyz")
+
+        data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="rpz")
         coords = data["x"]
         surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
-            coords, basis="xyz", source_grid=source_grid, params=params
+            coords, basis="rpz", source_grid=source_grid, params=params
         )
-
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
 
-        if basis.lower() == "rpz":
-            coords = xyz2rpz(coords)
+        if calc_Bplasma:
+            Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
+            Bnorm += Bplasma
+
+        if basis.lower() == "xyz":
+            coords = rpz2xyz(coords)
 
         return Bnorm, coords
 

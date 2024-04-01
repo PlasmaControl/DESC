@@ -600,6 +600,10 @@ def plot_2d(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
+        * ``field``: MagneticField, a magnetic field with which to calculate Bn on
+          the surface, must be provided if Bn is entered as the variable to plot.
+        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
+          from which to calculate Bn, by default None.
 
     Returns
     -------
@@ -627,8 +631,54 @@ def plot_2d(
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
+    component = kwargs.pop("component", None)
+    if name != "B*n":
+        data, label = _compute(
+            eq,
+            name,
+            grid,
+            component=component,
+        )
+    else:
+        field = kwargs.pop("field", None)
+        errorif(
+            field is None,
+            ValueError,
+            "If B*n is entered as the variable to plot, a magnetic field"
+            " must be provided.",
+        )
+        errorif(
+            not np.all(np.isclose(grid.nodes[:, 0], 1)),
+            ValueError,
+            "If B*n is entered as the variable to plot, "
+            "the grid nodes must be at rho=1.",
+        )
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+        field_grid = kwargs.pop("field_grid", None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            if grid.endpoint:
+                # cannot use a grid with endpoint=True for FFT interpolator
+                vc_grid = LinearGrid(
+                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
+                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
+                    NFP=grid.NFP,
+                    endpoint=False,
+                )
+            else:
+                vc_grid = grid
+            data, _ = field.compute_Bnormal(
+                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
+            )
+        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
+        if grid.endpoint:
+            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
+            data = np.vstack((data, data[0, :]))
+        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+
+        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
+
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
@@ -815,7 +865,11 @@ def plot_3d(
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
         * ``showgrid``: bool of whether or not to show gridlines in the plot.
         * ``zeroline``: bool of whether or not to show the zero gridline in the plot.
-
+        * ``showscale``: Bool, whether or not to show the colorbar. True by default
+        * ``field``: MagneticField, a magnetic field with which to calculate Bn on
+          the surface, must be provided if Bn is entered as the variable to plot.
+        * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
+          from which to calculate Bn, by default None.
 
 
     Returns
@@ -857,17 +911,58 @@ def plot_3d(
     component = kwargs.pop("component", None)
     showgrid = kwargs.pop("showgrid", True)
     zeroline = kwargs.pop("zeroline", True)
+    showscale = kwargs.pop("showscale", True)
+
+    if name != "B*n":
+        data, label = _compute(
+            eq,
+            name,
+            grid,
+            component=component,
+        )
+    else:
+        field = kwargs.pop("field", None)
+        errorif(
+            field is None,
+            ValueError,
+            "If B*n is entered as the variable to plot, a magnetic field"
+            " must be provided.",
+        )
+        errorif(
+            not np.all(np.isclose(grid.nodes[:, 0], 1)),
+            ValueError,
+            "If B*n is entered as the variable to plot, "
+            "the grid nodes must be at rho=1.",
+        )
+
+        field_grid = kwargs.pop("field_grid", None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            if grid.endpoint:
+                # cannot use a grid with endpoint=True for FFT interpolator
+                vc_grid = LinearGrid(
+                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
+                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
+                    NFP=grid.NFP,
+                    endpoint=False,
+                )
+            else:
+                vc_grid = grid
+            data, _ = field.compute_Bnormal(
+                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
+            )
+        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
+        if grid.endpoint:
+            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
+            data = np.vstack((data, data[0, :]))
+        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+
+        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
     errorif(
         len(kwargs) != 0,
         ValueError,
         f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
-    )
-
-    data, label = _compute(
-        eq,
-        name,
-        grid,
-        component=component,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -926,6 +1021,7 @@ def plot_3d(
         flatshading=True,
         name=LatexNodes2Text().latex_to_text(label),
         colorbar=cbar,
+        showscale=showscale,
     )
 
     if fig is None:
@@ -2796,7 +2892,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     plot_data["f_T"] = f_T
     plot_data["rho"] = rho
 
-    if log is True:
+    if log:
         if fB:
             ax.semilogy(
                 rho,

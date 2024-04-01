@@ -17,7 +17,7 @@ from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBa
 from desc.geometry import convert_spectral_to_FE
 
 plt.figure()
-L = 20
+L = 18
 M = 20
 N = 0
 K = 2

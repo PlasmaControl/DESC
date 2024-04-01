@@ -258,7 +258,7 @@ class TestRZCurve:
         xyz = FourierXYZCurve(modes=[-1, 1], X_n=[0, 10], Y_n=[10, 0], Z_n=[0, 0])
         grid = LinearGrid(N=10, endpoint=False)
         # convert back and check now
-        rzz = xyz.to_FourierRZ(N=2, grid=grid, s=grid.nodes[:, 2])
+        rzz = xyz.to_FourierRZ(N=2, grid=grid)
         np.testing.assert_allclose(rzz.R_n[rzz.R_basis.get_idx(0)], 10)
         np.testing.assert_allclose(rzz.Z_n, 0)
 
@@ -282,7 +282,7 @@ class TestRZCurve:
 
         # same thing but pass in a closed grid
         grid = LinearGrid(N=10, endpoint=True)
-        rzz = xyz.to_FourierRZ(N=2, grid=grid, s=grid.nodes[:, 2])
+        rzz = xyz.to_FourierRZ(N=2, grid=grid)
         np.testing.assert_allclose(rzz.R_n[rzz.R_basis.get_idx(0)], 10)
         np.testing.assert_allclose(rzz.Z_n, 0)
         np.testing.assert_allclose(
@@ -314,6 +314,8 @@ class TestRZCurve:
             ).T,
             sort=False,
         )
+        with pytest.raises(AssertionError):
+            xyz.to_FourierRZ(N=1, grid=grid)
 
 
 class TestFourierXYZCurve:

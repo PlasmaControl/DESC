@@ -266,7 +266,7 @@ class Curve(IOAble, Optimizable, ABC):
             coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    def to_FourierRZ(self, N=None, grid=None, s=None, NFP=None, name=""):
+    def to_FourierRZ(self, N=None, grid=None, NFP=None, name=""):
         """Convert Curve to FourierRZCurve representation.
 
         Note that some types of curves may not be representable in this basis.
@@ -278,9 +278,6 @@ class Curve(IOAble, Optimizable, ABC):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierRZCurve.
             If an integer, uses that many equally spaced points.
-        s : ndarray, optional
-            Curve parameter values to calculate coordinates at for the fitting.
-            Used if grid is None, else the passed-in grid will be used.
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
@@ -295,8 +292,6 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import FourierRZCurve
 
-        if (grid is None) and (s is not None):
-            grid = LinearGrid(zeta=s)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCurve.from_values(
             coords, N=N, NFP=NFP if NFP is not None else 1, basis="xyz", name=name

@@ -275,9 +275,9 @@ class FourierRZCurve(Curve):
             phi = phi[0:-1]
             Z = coords_rpz[0:-1, 2]
 
-        # TODO: can we check if the desired data is not
-        # representable by this basis? Or leave it up to
-        # the user to not misuse this? Probably the latter?
+        # assert the curve is not doubling back on itself in ph,
+        # which can't be represented with a curve parameterized by phi
+        assert np.all(np.diff(phi) > 0), "Supplied phi must be monotonic"
 
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)

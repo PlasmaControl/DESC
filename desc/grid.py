@@ -47,6 +47,14 @@ class _Grid(IOAble, ABC):
         """Allow for custom node creation."""
         pass
 
+    def _set_up(self):
+        """Do things after loading."""
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry.
 

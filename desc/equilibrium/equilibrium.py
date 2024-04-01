@@ -404,6 +404,15 @@ class Equilibrium(IOAble, Optimizable):
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
 
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+        self._L_grid = int(self._L_grid)
+        self._M_grid = int(self._M_grid)
+        self._N_grid = int(self._N_grid)
+
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
 

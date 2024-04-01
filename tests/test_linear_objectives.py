@@ -10,6 +10,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
     AspectRatio,
     AxisRSelfConsistency,
@@ -33,6 +34,8 @@ from desc.objectives import (
     FixNearAxisLambda,
     FixNearAxisR,
     FixNearAxisZ,
+    FixOmniMap,
+    FixOmniWell,
     FixParameter,
     FixPressure,
     FixPsi,
@@ -355,7 +358,7 @@ def test_factorize_linear_constraints_asserts():
 def test_build_init():
     """Ensure that passing an equilibrium to init builds the objective correctly.
 
-    Related to gh issue #378
+    Test for GH issue #378.
     """
     eq = Equilibrium(M=3, N=1)
 
@@ -894,3 +897,40 @@ def test_FixNAE_util_correct_objectives():
     assert _is_any_instance(cs, FixIonTemperature)
     assert _is_any_instance(cs, FixAtomicNumber)
     assert _is_any_instance(cs, FixIota)
+
+
+@pytest.mark.unit
+def test_fix_omni_indices():
+    """Test that omnigenity parameters are constrained properly.
+
+    Test for GH issue #768.
+    """
+    NFP = 3
+    field = OmnigenousField(
+        L_B=1, M_B=5, L_x=2, M_x=3, N_x=4, NFP=NFP, helicity=(1, NFP)
+    )
+
+    # no indices
+    constraint = FixOmniWell(field=field, indices=False)
+    constraint.build()
+    assert constraint._idx.size == 0
+    constraint = FixOmniMap(field=field, indices=False)
+    constraint.build()
+    assert constraint._idx.size == 0
+
+    # all indices
+    constraint = FixOmniWell(field=field, indices=True)
+    constraint.build()
+    assert constraint._idx.size == field.B_lm.size
+    constraint = FixOmniMap(field=field, indices=True)
+    constraint.build()
+    assert constraint._idx.size == field.x_lmn.size
+
+    # specified indices
+    indices = np.arange(3, 8)
+    constraint = FixOmniWell(field=field, indices=indices)
+    constraint.build()
+    assert constraint._idx.size == indices.size
+    constraint = FixOmniMap(field=field, indices=indices)
+    constraint.build()
+    assert constraint._idx.size == indices.size

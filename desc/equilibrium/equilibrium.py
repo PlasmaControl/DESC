@@ -1809,7 +1809,7 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        objective : {"force", "forces", "energy", "vacuum"}
+        objective : {"force", "forces", "energy"}
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles

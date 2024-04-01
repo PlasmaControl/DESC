@@ -244,7 +244,7 @@ class PowerSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L):
         """Get mode numbers for power series.
 
         Parameters
@@ -357,7 +357,7 @@ class FourierSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, N=0):
+    def _get_modes(self, N):
         """Get mode numbers for Fourier series.
 
         Parameters
@@ -479,7 +479,7 @@ class DoubleFourierSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, M=0, N=0):
+    def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
 
         Parameters
@@ -641,7 +641,7 @@ class ZernikePolynomial(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -679,9 +679,6 @@ class ZernikePolynomial(_Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -838,7 +835,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0, M=0, N=0):
+    def _get_modes(self, L, M, N):
         """Get mode numbers for Chebyshev-Fourier series.
 
         Parameters
@@ -991,7 +988,7 @@ class FourierZernikeBasis(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, N, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -1031,9 +1028,6 @@ class FourierZernikeBasis(_Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -1197,7 +1191,7 @@ class ChebyshevPolynomial(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L):
         """Get mode numbers for shifted Chebyshev polynomials of the first kind.
 
         Parameters

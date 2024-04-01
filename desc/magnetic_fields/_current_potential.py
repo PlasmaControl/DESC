@@ -1,0 +1,1459 @@
+"""Magnetic field due to sheet current on a winding surface."""
+
+import warnings
+
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.constants import mu_0
+from scipy.optimize import brentq
+
+from desc.backend import fori_loop, jnp
+from desc.basis import DoubleFourierSeries
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute.utils import safediv
+from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import Grid, LinearGrid
+from desc.optimizable import Optimizable, optimizable_parameter
+from desc.utils import Timer, copy_coeffs, errorif, setdefault, warnif
+
+from ._core import _MagneticField, biot_savart_general
+
+
+class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
+    """Magnetic field due to a surface current potential on a toroidal surface.
+
+    Surface current K is assumed given by K = n x ∇ Φ
+    where:
+
+        - n is the winding surface unit normal.
+        - Phi is the current potential function, which is a function of theta and zeta.
+
+    This function then uses biot-savart to find the B field from this current
+    density K on the surface.
+
+    Parameters
+    ----------
+    potential : callable
+        function to compute the current potential. Should have a signature of
+        the form potential(theta,zeta,**params) -> ndarray.
+        theta,zeta are poloidal and toroidal angles on the surface
+    potential_dtheta: callable
+        function to compute the theta derivative of the current potential
+    potential_dzeta: callable
+        function to compute the zeta derivative of the current potential
+    params : dict, optional
+        default parameters to pass to potential function (and its derivatives)
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for winding surface R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry for the surface geometry.
+        Default is "auto" which enforces if modes are symmetric. If True,
+        non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
+    name : str
+        name for this field
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = (
+        _MagneticField._io_attrs_
+        + FourierRZToroidalSurface._io_attrs_
+        + [
+            "_params",
+        ]
+    )
+
+    def __init__(
+        self,
+        potential,
+        potential_dtheta,
+        potential_dzeta,
+        params=None,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        M=None,
+        N=None,
+        name="",
+        check_orientation=True,
+    ):
+        assert callable(potential), "Potential must be callable!"
+        assert callable(potential_dtheta), "Potential derivative must be callable!"
+        assert callable(potential_dzeta), "Potential derivative must be callable!"
+
+        self._potential = potential
+        self._potential_dtheta = potential_dtheta
+        self._potential_dzeta = potential_dzeta
+        self._params = params
+
+        super().__init__(
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            M=M,
+            N=N,
+            name=name,
+            check_orientation=check_orientation,
+        )
+
+    @property
+    def params(self):
+        """Dict of parameters to pass to potential function and its derivatives."""
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        warnif(
+            len(new) != len(self._params),
+            UserWarning,
+            "Length of new params is different from length of current params! "
+            "May cause errors unless potential function is also changed.",
+        )
+        self._params = new
+
+    @property
+    def potential(self):
+        """Potential function, signature (theta,zeta,**params) -> potential value."""
+        return self._potential
+
+    @potential.setter
+    def potential(self, new):
+        if new != self._potential:
+            assert callable(new), "Potential must be callable!"
+            self._potential = new
+
+    @property
+    def potential_dtheta(self):
+        """Phi poloidal deriv. function, signature (theta,zeta,**params) -> value."""
+        return self._potential_dtheta
+
+    @potential_dtheta.setter
+    def potential_dtheta(self, new):
+        if new != self._potential_dtheta:
+            assert callable(new), "Potential derivative must be callable!"
+            self._potential_dtheta = new
+
+    @property
+    def potential_dzeta(self):
+        """Phi toroidal deriv. function, signature (theta,zeta,**params) -> value."""
+        return self._potential_dzeta
+
+    @potential_dzeta.setter
+    def potential_dzeta(self, new):
+        if new != self._potential_dzeta:
+            assert callable(new), "Potential derivative must be callable!"
+            self._potential_dzeta = new
+
+    def save(self, file_name, file_format=None, file_mode="w"):
+        """Save the object.
+
+        **Not supported for this object!**
+
+        Parameters
+        ----------
+        file_name : str file path OR file instance
+            location to save object
+        file_format : str (Default hdf5)
+            format of save file. Only used if file_name is a file path
+        file_mode : str (Default w - overwrite)
+            mode for save file. Only used if file_name is a file path
+
+        """
+        raise OSError(
+            "Saving CurrentPotentialField is not supported,"
+            " as the potential function cannot be serialized."
+        )
+
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * self.M,
+            N=30 + 2 * self.N,
+            NFP=self.NFP,
+        )
+        return _compute_magnetic_field_from_CurrentPotentialField(
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
+        )
+
+    @classmethod
+    def from_surface(
+        cls,
+        surface,
+        potential,
+        potential_dtheta,
+        potential_dzeta,
+        params=None,
+    ):
+        """Create CurrentPotentialField using geometry provided by given surface.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface, optional, default None
+            Existing FourierRZToroidalSurface object to create a
+            CurrentPotentialField with.
+        potential : callable
+            function to compute the current potential. Should have a signature of
+            the form potential(theta,zeta,**params) -> ndarray.
+            theta,zeta are poloidal and toroidal angles on the surface
+        potential_dtheta: callable
+            function to compute the theta derivative of the current potential
+        potential_dzeta: callable
+            function to compute the zeta derivative of the current potential
+        params : dict, optional
+            default parameters to pass to potential function (and its derivatives)
+
+        """
+        errorif(
+            not isinstance(surface, FourierRZToroidalSurface),
+            TypeError,
+            "Expected type FourierRZToroidalSurface for argument surface, "
+            f"instead got type {type(surface)}",
+        )
+
+        R_lmn = surface.R_lmn
+        Z_lmn = surface.Z_lmn
+        modes_R = surface._R_basis.modes[:, 1:]
+        modes_Z = surface._Z_basis.modes[:, 1:]
+        NFP = surface.NFP
+        sym = surface.sym
+        name = surface.name
+
+        return cls(
+            potential,
+            potential_dtheta,
+            potential_dzeta,
+            params,
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            name=name,
+            check_orientation=False,
+        )
+
+
+class FourierCurrentPotentialField(
+    _MagneticField, FourierRZToroidalSurface, Optimizable
+):
+    """Magnetic field due to a surface current potential on a toroidal surface.
+
+    Surface current K is assumed given by
+
+    K = n x ∇ Φ
+
+    Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    where:
+
+        - n is the winding surface unit normal.
+        - Phi is the current potential function, which is a function of theta and zeta,
+          and is given as a secular linear term in theta/zeta and a double Fourier
+          series in theta/zeta.
+
+    This function then uses biot-savart to find the B field from this current
+    density K on the surface.
+
+    Parameters
+    ----------
+    Phi_mn : ndarray
+        Fourier coefficients of the double FourierSeries part of the current potential.
+    modes_Phi : array-like, shape(k,2)
+        Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
+        coefficients.
+    I : float
+        Net current linking the plasma and the surface toroidally
+        Denoted I in the algorithm
+    G : float
+        Net current linking the plasma and the surface poloidally
+        Denoted G in the algorithm
+        NOTE: a negative G will tend to produce a positive toroidal magnetic field
+        B in DESC, as in DESC the poloidal angle is taken to be positive
+        and increasing when going in the clockwise direction, which with the
+        convention n x grad(phi) will result in a toroidal field in the negative
+        toroidal direction.
+    sym_Phi :  {False,"cos","sin"}
+        whether to enforce a given symmetry for the DoubleFourierSeries part of the
+        current potential.
+    M_Phi, N_Phi: int or None
+        Maximum poloidal and toroidal mode numbers for the single valued part of the
+        current potential.
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for winding surface R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry for the surface geometry.
+        Default is "auto" which enforces if modes are symmetric. If True,
+        non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
+    name : str
+        name for this field
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = (
+        _MagneticField._io_attrs_
+        + FourierRZToroidalSurface._io_attrs_
+        + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi"]
+    )
+
+    def __init__(
+        self,
+        Phi_mn=np.array([0.0]),
+        modes_Phi=np.array([[0, 0]]),
+        I=0,
+        G=0,
+        sym_Phi=False,
+        M_Phi=None,
+        N_Phi=None,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        M=None,
+        N=None,
+        name="",
+        check_orientation=True,
+    ):
+        Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
+        assert (
+            Phi_mn.size == modes_Phi.shape[0]
+        ), "Phi_mn size and modes_Phi.shape[0] must be the same size!"
+
+        assert np.issubdtype(modes_Phi.dtype, np.integer)
+
+        M_Phi = setdefault(M_Phi, np.max(abs(modes_Phi[:, 0])))
+        N_Phi = setdefault(N_Phi, np.max(abs(modes_Phi[:, 1])))
+
+        self._M_Phi = M_Phi
+        self._N_Phi = N_Phi
+
+        self._sym_Phi = sym_Phi
+        self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
+        self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
+
+        self._I = float(np.squeeze(I))
+        self._G = float(np.squeeze(G))
+
+        super().__init__(
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            M=M,
+            N=N,
+            name=name,
+            check_orientation=check_orientation,
+        )
+
+    @optimizable_parameter
+    @property
+    def I(self):  # noqa: E743
+        """Net current linking the plasma and the surface toroidally."""
+        return self._I
+
+    @I.setter
+    def I(self, new):  # noqa: E743
+        self._I = float(np.squeeze(new))
+
+    @optimizable_parameter
+    @property
+    def G(self):
+        """Net current linking the plasma and the surface poloidally."""
+        return self._G
+
+    @G.setter
+    def G(self, new):
+        self._G = float(np.squeeze(new))
+
+    @optimizable_parameter
+    @property
+    def Phi_mn(self):
+        """Fourier coefficients describing single-valued part of potential."""
+        return self._Phi_mn
+
+    @Phi_mn.setter
+    def Phi_mn(self, new):
+        if len(new) == self.Phi_basis.num_modes:
+            self._Phi_mn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Phi_mn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Phi_basis.num_modes} modes."
+            )
+
+    @property
+    def Phi_basis(self):
+        """DoubleFourierSeries: Spectral basis for Phi."""
+        return self._Phi_basis
+
+    @property
+    def sym_Phi(self):
+        """str: Type of symmetry of periodic part of Phi (no symmetry if False)."""
+        return self._sym_Phi
+
+    @property
+    def M_Phi(self):
+        """int: Poloidal resolution of periodic part of Phi."""
+        return self._M_Phi
+
+    @property
+    def N_Phi(self):
+        """int: Toroidal resolution of periodic part of Phi."""
+        return self._N_Phi
+
+    def change_Phi_resolution(self, M=None, N=None, NFP=None, sym_Phi=None):
+        """Change the maximum poloidal and toroidal resolution for Phi.
+
+        Parameters
+        ----------
+        M : int
+            Poloidal resolution to change Phi basis to.
+            If None, defaults to current self.Phi_basis poloidal resolution
+        N : int
+            Toroidal resolution to change Phi basis to.
+            If None, defaults to current self.Phi_basis toroidal resolution
+        NFP : int
+            Number of field periods for surface and Phi basis.
+            If None, defaults to current NFP.
+            Note: will change the NFP of the surface geometry as well as the
+            Phi basis.
+        sym_Phi :  {"auto","cos","sin",False}
+            whether to enforce a given symmetry for the DoubleFourierSeries part of the
+            current potential. Default is "auto" which enforces if modes are symmetric.
+            If True, non-symmetric modes will be truncated.
+
+        """
+        M = M or self._M_Phi
+        N = N or self._M_Phi
+        NFP = NFP or self.NFP
+        sym_Phi = sym_Phi or self.sym_Phi
+
+        Phi_modes_old = self.Phi_basis.modes
+        self.Phi_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=sym_Phi)
+
+        self._Phi_mn = copy_coeffs(self.Phi_mn, Phi_modes_old, self.Phi_basis.modes)
+        self._M_Phi = M
+        self._N_Phi = N
+        self._sym_Phi = sym_Phi
+        self.change_resolution(
+            NFP=NFP
+        )  # make sure surface and Phi basis NFP are the same
+
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * max(self.M, self.M_Phi),
+            N=30 + 2 * max(self.N, self.N_Phi),
+            NFP=self.NFP,
+        )
+        return _compute_magnetic_field_from_CurrentPotentialField(
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
+        )
+
+    @classmethod
+    def from_surface(
+        cls,
+        surface,
+        Phi_mn=np.array([0.0]),
+        modes_Phi=np.array([[0, 0]]),
+        I=0,
+        G=0,
+        sym_Phi="auto",
+        M_Phi=None,
+        N_Phi=None,
+    ):
+        """Create FourierCurrentPotentialField using geometry of given surface.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface, optional, default None
+            Existing FourierRZToroidalSurface object to create a
+            CurrentPotentialField with.
+        Phi_mn : ndarray
+            Fourier coefficients of the double FourierSeries of the current potential.
+            Should correspond to the given DoubleFourierSeries basis object passed in.
+        modes_Phi : array-like, shape(k,2)
+            Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
+            coefficients
+        I : float
+            Net current linking the plasma and the surface toroidally
+            Denoted I in the algorithm
+        G : float
+            Net current linking the plasma and the surface poloidally
+            Denoted G in the algorithm
+            NOTE: a negative G will tend to produce a positive toroidal magnetic field
+            B in DESC, as in DESC the poloidal angle is taken to be positive
+            and increasing when going in the clockwise direction, which with the
+            convention n x grad(phi) will result in a toroidal field in the negative
+            toroidal direction.
+        sym_Phi :  {"auto", "cos","sin", False}
+            whether to enforce a given symmetry for the DoubleFourierSeries part of the
+            current potential. If "auto", assumes sin symmetry if the surface is
+            symmetric, else False.
+        M_Phi, N_Phi: int or None
+            Maximum poloidal and toroidal mode numbers for the single valued part of the
+            current potential.
+
+        """
+        if not isinstance(surface, FourierRZToroidalSurface):
+            raise TypeError(
+                "Expected type FourierRZToroidalSurface for argument surface, "
+                f"instead got type {type(surface)}"
+            )
+        R_lmn = surface.R_lmn
+        Z_lmn = surface.Z_lmn
+        modes_R = surface._R_basis.modes[:, 1:]
+        modes_Z = surface._Z_basis.modes[:, 1:]
+        NFP = surface.NFP
+        sym = surface.sym
+        name = surface.name
+        if sym_Phi == "auto":
+            sym_Phi = "sin" if surface.sym else False
+
+        return cls(
+            Phi_mn=Phi_mn,
+            modes_Phi=modes_Phi,
+            I=I,
+            G=G,
+            sym_Phi=sym_Phi,
+            M_Phi=M_Phi,
+            N_Phi=N_Phi,
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            name=name,
+            check_orientation=False,
+        )
+
+    def run_regcoil(  # noqa: C901 fxn too complex
+        self,
+        eq,
+        alpha=0.0,
+        M_Phi=8,
+        N_Phi=8,
+        source_grid=None,
+        eval_grid=None,
+        current_helicity=0,
+        external_field=None,
+        external_field_grid=None,
+        scan=False,
+        scan_alphas=None,
+        sym_Phi=None,
+        verbose=1,
+        normalize=True,
+        target_Brms=None,
+    ):
+        """Runs regcoil algorithm to find the current potential for the surface.
+
+        NOTE: will set the FourierCurrentPotentialField's Phi_mn to
+        the lowest alpha value's solution, and will also set I and G
+        to the values corresponding to the input equilibrium, external_field,
+        and current_helicity.
+
+        Follows algorithm of [1] to find the current potential Phi on the surface,
+        given a surface current::
+
+            K = n x ∇ Φ
+            Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+        The algorithm minimizes the quadratic flux on the plasma surface due to the
+        surface current (B_Phi_SV for field from the single valued part Φₛᵥ, and
+        B_GI for that from the secular terms I and G), plasma current, and external
+        fields::
+
+            Bn = ∫ ∫ (B . n)^2 dA
+            B = B_plasma + B_external + B_Phi_SV + B_GI
+
+        G is fixed by the equilibrium magnetic field strength, and I is determined
+        by the desired coil topology (given by ``current_helicity``), with zero
+        helicity corresponding to modular coils, and non-zero helicity corresponding
+        to helical coils. The algorithm then finds the single-valued part of Φ
+        by minimizing the quadratic flux on the plasma surface along with a
+        regularization term on the surface current magnitude::
+
+            min_Φₛᵥ  ∫ ∫ (B . n)^2 dA + α ∫ ∫ |K|^2 dA
+
+        where α is the regularization parameter, smaller alpha corresponds to no
+        regularization (consequently, lower Bn error but more complex and large surface
+        currents) and larger alpha corresponds to more regularization (consequently,
+        higher Bn error but simpler and smaller surface currents).
+
+        [1] Landreman, An improved current potential method for fast computation
+            of stellarator coil shapes, Nuclear Fusion (2017)
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to minimize the quadratic flux (plus regularization) on.
+        alpha : float, optional
+            regularization parameter, > 0, regularizes minimization of Bn
+            on plasma surface with minimization of current density mag K on winding
+            surface i.e. larger alpha, simpler coilset and smaller currents, but
+            worse Bn. by default 0
+        M_Phi : int, optional
+            Poloidal resolution of single-valued part of current potential,
+            by default 8
+        N_Phi : int, optional
+            Toroidal resolution of single-valued part of current potential,
+            by default 8
+        source_grid : Grid, optional
+            Source grid upon which to evaluate the surface current when calculating
+            the normal field on the plasma surface.
+        eval_grid : _type_, optional
+            Grid upon which to evaluate the normal field on the plasma surface, and
+            at which the normal field is minimized.
+        external_field: _MagneticField,
+            DESC _MagneticField object giving the magnetic field
+            provided by any coils/fields external to the winding surface.
+            e.g. can provide a TF coilset to calculate the surface current
+            which is needed to minimize Bn given this external coilset providing
+            the bulk of the required net toroidal magnetic flux, by default None
+        external_field_grid : Grid, optional
+            Source grid with which to evaluate the external field when calculating
+            its contribution to the normal field on the plasma surface (if it is a type
+            that requires a source, like a CoilSet or a CurrentPotentialField).
+            By default None, which will use the default grid for the given
+            external field type.
+        current_helicity : int, optional
+            Ratio of used to determine if coils are modular (0) or helical (!=0)
+            defined as (G - G_ext) / (I * NFP)  = current_helicity
+            positive current_helicity corresponds to coils which rotate in the negative
+            poloidal direction as they rotate toroidally
+        scan : bool, optional
+            Whether to scan over the regularization parameter (alpha) values,
+            in range: np.concatenate([0, np.logspace(scan_lower, scan_upper, nscan)])
+            the returned data dictionary will contain a list for Phi_mn corresponding
+            to the alphas
+        scan_alphas : array, optional
+            Array of alpha values to scan over, if given when scan=True,
+            by default is `np.concatenate([np.array([0]),np.logspace(-30,-1,30)])`
+        sym_Phi :  {"cos","sin",False}
+            whether to enforce a given symmetry for the DoubleFourierSeries part of the
+            current potential. Defaults to ``"sin""`` if eq.sym is True else False.
+            If different than current ``sym_Phi``, non-symmetric modes are truncated.
+        verbose : int, optional
+            level of verbosity, if 0 will print nothing.
+            1 will display jacobian timing info
+            2 will display Bn max,min,average and chi^2 values for each alpha.
+        normalize : bool, optional
+            whether or not to normalize Bn when printing the Bnormal errors. If true,
+            will normalize by the average equilibrium field strength on the surface.
+        target_Brms : float
+            if provided, will root find on lambda until the desired target Brms
+            is found.
+            if target not found after a set amount of iterations, will return an error.
+
+
+
+        Returns
+        -------
+        data : dict
+            Dictionary with the following keys,::
+
+                alpha : regularization parameter the algorithm was ran with, a float
+                        if `scan=False`, or list of float of length `scan_alphas.size`
+                        if `scan=True`, corresponding to the list of `Phi_mn`.
+                Phi_mn : the single-valued current potential coefficients which
+                        minimize the Bn at the given eval_grid on the plasma, subject
+                        to regularization on the surface current magnitude governed by
+                        alpha.
+                        An array of length `self.Phi_basis.num_modes` if `scan=False`,
+                        or a list of arrays, with list length `scan_alphas.size` if
+                        `scan=True`, corresponding to the list of regularization
+                        parameters alpha.
+                I : float, net toroidal current (in Amperes) on the winding surface.
+                    Governed by the `current_helicity` parameter, and is zero for
+                    modular coils (`current_helicity=0`).
+                G : float, net poloidal current (in Amperes) on the winding surface.
+                    Determined by the equilibrium toroidal magnetic field, as well as
+                    the given external field.
+                chi^2_B : quadratic flux integrated over the plasma surface.
+                    a float if `scan=False`, or list of float of length
+                    `scan_alphas.size` if `scan=True`, corresponding to the list
+                    of `alpha`.
+                chi^2_K : Current density magnitude integrated over winding surface.
+                    a float if `scan=False`, or list of float of length
+                    `scan_alphas.size` if `scan=True`, corresponding to the list of
+                    `alpha`.
+                |K| : Current density magnitude on winding surface, evaluated at the
+                    given `source_grid`. An array of length `source_grid.num_nodes` if
+                    `scan=False`, or list of arrays, with list length
+                    `scan_alphas.size`, if `scan=True`, corresponding to the list of
+                    `alpha`.
+                eval_grid: Grid object that Bn was evaluated at.
+                source_grid: Grid object that Phi and K were evaluated at.
+
+
+
+        """
+        assert (
+            int(current_helicity) == current_helicity
+        ), "current_helicity must be an integer!"
+        # maybe it is an EquilibriaFamily
+        if hasattr(eq, "__len__"):
+            eq = eq[-1]
+
+        # ensure vacuum eq, as we don't yet support finite beta
+        pres = np.max(np.abs(eq.compute("p")["p"]))
+        curr = np.max(np.abs(eq.compute("current")["current"]))
+        warnif(
+            pres > 1e-8,
+            UserWarning,
+            f"Pressure is non-zero (max {pres} Pa), "
+            + "finite beta not supported yet.",
+        )
+        warnif(
+            curr > 1e-8,
+            UserWarning,
+            f"Current is non-zero (max {curr} A), "
+            + "finite plasma currents not supported yet.",
+        )
+        data = {}
+        if external_field:  # ensure given field is an instance of _MagneticField
+            assert hasattr(external_field, "compute_magnetic_field"), (
+                "Expected"
+                + "MagneticField for argument external_field,"
+                + f" got type {type(external_field)} "
+            )
+            data["external_field"] = external_field
+            data["external_field_grid"] = external_field_grid
+
+        if source_grid is None:
+            source_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP))
+        if eval_grid is None:
+            eval_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP), sym=eq.sym)
+        if normalize:
+            B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
+            # just need it for normalization, so do a simple mean
+            normalization_B = jnp.mean(B_eq_surf)
+        else:
+            normalization_B = 1
+
+        data["eval_grid"] = eval_grid
+        data["source_grid"] = source_grid
+
+        # plasma surface normal vector magnitude on eval grid
+        ne_mag = eq.compute(["|e_theta x e_zeta|"], eval_grid)["|e_theta x e_zeta|"]
+        # winding surface normal vector magnitude on source grid
+        ns_mag = self.compute(["|e_theta x e_zeta|"], source_grid)["|e_theta x e_zeta|"]
+        if sym_Phi is None:
+            # sin symmetry in current potential is appropriate with eq.sym=True
+            sym_Phi = "sin" if eq.sym else False
+        self.change_Phi_resolution(M=M_Phi, N=N_Phi, sym_Phi=sym_Phi)
+
+        # calculate net enclosed poloidal and toroidal currents
+        G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
+
+        if external_field:
+            # calculate the portion of G provided by external field
+            # by integrating external toroidal field along a curve of constant theta
+            try:
+                G_ext = external_field.G
+            except AttributeError:
+                curve_grid = LinearGrid(
+                    N=int(eq.NFP) * 1000,
+                    theta=jnp.array(jnp.pi),
+                    rho=jnp.array(1.0),
+                    endpoint=True,
+                )
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    # ignore warning from unequal NFP for grid and basis,
+                    # as we don't know a-priori if the external field
+                    # shares the same discrete symmetry as the equilibrium,
+                    # so we will use a grid with NFP=1 to be safe
+                    curve_data = eq.compute(
+                        ["R", "phi", "Z", "e_zeta"],
+                        grid=curve_grid,
+                    )
+                    curve_coords = jnp.vstack(
+                        (curve_data["R"], curve_data["phi"], curve_data["Z"])
+                    ).T
+                    ext_field_along_curve = external_field.compute_magnetic_field(
+                        curve_coords, basis="rpz", source_grid=external_field_grid
+                    )
+                # calculate covariant B_zeta = B dot e_zeta from external field
+                ext_field_B_zeta = jnp.sum(
+                    ext_field_along_curve * curve_data["e_zeta"], axis=-1
+                )
+                # negative sign here because with REGCOIL convention, negative G makes
+                # positive toroidal B
+                G_ext = -(
+                    jnp.trapz(
+                        y=ext_field_B_zeta,
+                        x=curve_grid.nodes[:, 2],
+                    )
+                    / mu_0
+                )
+        else:
+            G_ext = 0
+
+        # G needed by surface current is the total G minus the external contribution
+        G = G_tot - G_ext
+        # calclulate I, net toroidal current on winding surface
+        if current_helicity == 0:  # modular coils
+            I = 0
+        else:  # helical coils
+            I = G / current_helicity / eq.NFP  # toroidal
+
+        def B_from_K_SV(phi_mn):
+            """B from single value part of K from REGCOIL eqn 4."""
+            params = self.params_dict
+            params["Phi_mn"] = phi_mn
+            params["I"] = 0
+            params["G"] = 0
+            Bn, _ = self.compute_Bnormal(
+                eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+            )
+            return Bn
+
+        def B_from_K_secular(I, G):
+            """B from secular part of K, i.e. B^GI_{normal} from REGCOIL eqn 4."""
+            params = self.params_dict
+            params["I"] = I
+            params["G"] = G
+            params["Phi_mn"] = jnp.zeros_like(params["Phi_mn"])
+
+            Bn, _ = self.compute_Bnormal(
+                eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+            )
+            return Bn
+
+        timer = Timer()
+        # calculate the Jacobian matrix A for  Bn_SV = A*Phi_mn
+        timer.start("Jacobian Calculation")
+        A = Derivative(B_from_K_SV).compute(self.Phi_mn)
+        timer.stop("Jacobian Calculation")
+        if verbose > 0:
+            timer.disp("Jacobian Calculation")
+
+        self.I = float(I)
+        self.G = float(G)
+        # find the normal field from the secular part of the current potential
+        B_GI_normal = B_from_K_secular(I, G)
+        # FIXME: use virtual casing to find this once free bdry is merged in
+        Bn_plasma = jnp.zeros_like(
+            B_GI_normal
+        )  # from plasma current, currently assume is 0
+        # find external field's Bnormal contribution
+        if external_field:
+            Bn_ext, _ = external_field.compute_Bnormal(
+                eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
+            )
+        else:
+            Bn_ext = jnp.zeros_like(B_GI_normal)
+
+        rhs = -(Bn_plasma + Bn_ext + B_GI_normal).T @ A
+
+        if scan:
+            scan_alphas = (
+                scan_alphas
+                if scan_alphas is not None
+                else jnp.concatenate((jnp.array([0.0]), jnp.logspace(-30, -1, 30)))
+            )
+        alphas = [alpha] if not scan else scan_alphas
+
+        chi2Bs = []
+        chi2Ks = []
+        K_mags = []
+        phi_mns = []
+        Bn_arrs = []
+        eq_surf_area = eq.compute("S")["S"]
+
+        # calculate the Phi_mn which minimizes (chi^2_B + alpha*chi^2_K) for each alpha
+        for alpha in alphas:
+            printstring = f"Calculating Phi_SV for alpha = {alpha:1.5e}"
+            if verbose > 1:
+                print(
+                    "#" * len(printstring)
+                    + "\n"
+                    + printstring
+                    + "\n"
+                    + "#" * len(printstring)
+                )
+
+            # calculate Phi_mn
+            A_transpose_A = A.T @ A
+            result = jnp.linalg.lstsq(
+                A_transpose_A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
+            )
+            phi_mn_opt = result[0]
+            # TODO: do something with the residuals from lstsq?
+            Bn_SV = A @ phi_mn_opt
+            Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
+
+            chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
+            B_rms = jnp.sqrt(chi_B / eq_surf_area)
+
+            if target_Brms is not None:
+                # iterate over alpha with rootfind until
+                # we get the target we want
+                Bn_GI_and_ext_and_pl = Bn_plasma + B_GI_normal + Bn_ext
+
+                def f(alpha):
+                    result = jnp.linalg.lstsq(
+                        A_transpose_A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
+                    )
+                    phi_mn_opt = result[0]
+                    Bn_SV = A @ phi_mn_opt
+                    Bn_tot = Bn_SV + Bn_GI_and_ext_and_pl
+                    chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
+                    B_rms = jnp.sqrt(chi_B / eq_surf_area)
+                    return float(B_rms) - target_Brms
+
+                lower_bound_alpha = 0
+                upper_bound_alpha = 0
+                diff = B_rms - target_Brms
+                if diff > 0:  # we are above, set as upper bound
+                    while diff > 0:
+                        upper_bound_alpha = alpha
+                        alpha = alpha / 100
+                        diff = f(alpha)
+                    lower_bound_alpha = alpha
+                elif diff < 0:  # we are below, set as lower bound
+                    while diff < 0:
+                        lower_bound_alpha = alpha
+                        alpha = alpha * 100
+                        diff = f(alpha)
+                    upper_bound_alpha = alpha
+
+                alpha = brentq(
+                    f,
+                    lower_bound_alpha,
+                    upper_bound_alpha,
+                    xtol=lower_bound_alpha / 100,
+                )
+                result = jnp.linalg.lstsq(
+                    A_transpose_A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
+                )
+                phi_mn_opt = result[0]
+            Bn_SV = A @ phi_mn_opt
+            Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
+
+            phi_mns.append(phi_mn_opt)
+
+            Bn_SV = A @ phi_mn_opt
+            Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
+
+            chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
+            B_rms = jnp.sqrt(chi_B / eq_surf_area)
+
+            chi2Bs.append(chi_B)
+
+            self.Phi_mn = phi_mn_opt
+            K = self.compute(["K"], grid=source_grid)["K"]
+            K_mag = jnp.linalg.norm(K, axis=-1)
+            chi_K = jnp.sum(K_mag * K_mag * ns_mag * source_grid.weights)
+            chi2Ks.append(chi_K)
+            K_mags.append(K_mag)
+            Bn_print = Bn_tot / normalization_B
+            Bn_arrs.append(Bn_tot)
+            if verbose > 1:
+                units = " (T)" if not normalize else " (unitless)"
+                printstring = f"chi^2 B = {chi_B:1.5e}"
+                print(printstring)
+                printstring = f"min Bnormal = {jnp.min(np.abs(Bn_print)):1.5e}"
+                printstring += units
+                print(printstring)
+                printstring = f"Max Bnormal = {jnp.max(jnp.abs(Bn_print)):1.5e}"
+                printstring += units
+                print(printstring)
+                printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print)):1.5e}"
+                printstring += units
+                print(printstring)
+        data["alpha"] = alphas[0] if not scan else alphas
+        data["Phi_mn"] = phi_mns[0] if not scan else phi_mns
+        data["I"] = I
+        data["G"] = G
+        data["chi^2_B"] = chi2Bs[0] if not scan else chi2Bs
+        data["chi^2_K"] = chi2Ks[0] if not scan else chi2Ks
+        data["|K|"] = K_mags[0] if not scan else K_mags
+        data["Bn_total"] = Bn_arrs[0] if not scan else Bn_arrs
+
+        self.Phi_mn = phi_mns[0]
+
+        return data
+
+    def cut_surface_current_into_coils(  # noqa: C901 - FIXME: simplify this
+        self,
+        desirednumcoils=10,  # TODO: make this coils_per_NFP for modular...
+        step=2,
+        spline_method="cubic",
+        show_plots=False,
+    ):
+        """Find helical or modular coils from this surface current potential.
+
+        Parameters
+        ----------
+        desirednumcoils : int, optional
+            number of coils to discretize the surface current with, by default 10
+        step : int, optional
+            Amount of points to skip by when saving the coil geometry spline
+            by default 2, meaning that every other point will be saved
+            if higher, less points will be saved e.g. 3 saves every 3rd point
+        spline_method : str, optional
+            method of fitting to use for the spline, by default ``"cubic"``
+            see ``SplineXYZCoil`` for more info
+        show_plots : bool, optional,
+            whether to show plots of the contours chosen for coils, by default False
+
+        Returns
+        -------
+        coils : CoilSet
+            DESC CoilSet object that is a discretization of the input
+            surface current on the given winding surface
+        """
+        nfp = self.Phi_basis.NFP
+
+        net_toroidal_current = self.I
+        net_poloidal_current = self.G
+        assert not jnp.isclose(net_toroidal_current, 0) or not jnp.isclose(
+            net_poloidal_current, 0
+        ), (
+            "Detected both net toroidal and poloidal current are both zero, "
+            "this function cannot find windowpane coils"
+        )
+
+        ################################################################
+        # find current helicity
+        ################################################################
+        # we know that I = -(G - G_ext) / (helicity * NFP)
+        # if net_toroidal_current is zero, then we have modular coils,
+        # and just make helicity zero
+        helicity = safediv(
+            net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8
+        )
+        npts = 128  # number of points in the zeta direction, and used
+        dz = 2 * np.pi / nfp / npts
+        if not jnp.isclose(helicity, 0):
+            # helical coils
+            zeta_full = jnp.arange(
+                0,
+                2 * jnp.pi / nfp + 1e-6,
+                dz,
+            )
+            # ensure we have always have points at least from -2pi, 2pi as depending
+            # on sign of I, the contours from Phi = [0, abs(I)] may have their starting
+            # points (the theta value at zeta=0) be positive or negative theta values,
+            # and we want to ensure we catch the start and end of the contours
+            theta_full = jnp.arange(
+                jnp.sign(helicity) * 2 * jnp.pi,
+                -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1) + 1e-6),
+                -jnp.sign(helicity) * 2 * np.pi / npts / nfp,
+            )
+
+            theta_full = jnp.sort(theta_full)
+        else:
+            # modular coils
+            theta_full = jnp.linspace(0, 2 * jnp.pi, npts + 1)
+            # we start below 0 for zeta to allow for contours which may go in/out of
+            # the zeta=0 plane
+            zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1 / nfp) * jnp.pi, dz)
+            # TODO: make this also go to only 2pi/NFP, and make it so that
+            # the number of coils means coils per field period
+
+        ################################################################
+        # find contours of constant phi
+        ################################################################
+        # make linspace contours
+        if not jnp.isclose(helicity, 0):
+            # helical coils
+            # we start them on zeta=0 plane, so we will find contours
+            # going from 0 to I (corresponding to zeta=0, and theta*sign(I) increasing)
+            contours = jnp.linspace(
+                0, jnp.abs(net_toroidal_current), desirednumcoils + 1, endpoint=True
+            )
+            contours = jnp.sort(contours)
+            coil_current = jnp.abs(net_toroidal_current) / desirednumcoils
+
+        else:
+            # modular coils
+            # go from zero to G
+            contours = jnp.linspace(
+                0, jnp.abs(net_poloidal_current), desirednumcoils + 1, endpoint=True
+            ) * jnp.sign(net_poloidal_current)
+            contours = jnp.sort(jnp.asarray(contours))
+            coil_current = net_poloidal_current / desirednumcoils
+
+        # TODO: change this so that  this we only need Ncoils length array
+        theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
+
+        grid = Grid(
+            jnp.vstack(
+                (
+                    jnp.zeros_like(theta_full_2D.flatten(order="F")),
+                    theta_full_2D.flatten(order="F"),
+                    zeta_full_2D.flatten(order="F"),
+                )
+            ).T,
+            sort=False,
+        )
+        phi_total_full = self.compute("Phi", grid=grid)["Phi"].reshape(
+            theta_full.size, zeta_full.size, order="F"
+        )
+
+        N_trial_contours = len(contours) - 1
+        contour_zeta = []
+        contour_theta = []
+        plt.figure(figsize=(18, 10))
+        cdata = plt.contour(
+            zeta_full_2D.T, theta_full_2D.T, jnp.transpose(phi_total_full), contours
+        )
+
+        numCoils = 0
+        plt.xlabel(r"$\zeta$")
+        plt.ylabel(r"$\theta$")
+        for j in range(N_trial_contours):
+            try:
+                p = cdata.collections[j].get_paths()[0]
+            except Exception:
+                print("no path found for given contour")
+                continue
+            v = p.vertices
+
+            contour_zeta.append(v[:, 0])
+            contour_theta.append(v[:, 1])
+
+            # check if closed and if not throw warning
+            ## closure condition in zeta for modular is returns to same zeta,
+            ## while for helical is that the contour dzeta = 2pi/NFP
+            zeta_diff = 2 * jnp.pi / nfp if not jnp.isclose(helicity, 0) else 0.0
+            ## closure condition in theta for modular is that dtheta = 2pi,
+            ## while for helical the dtheta = 2pi*abs(helicity)
+            theta_diff = (
+                2 * jnp.pi * jnp.abs(helicity)
+                if not jnp.isclose(helicity, 0)
+                else 2 * jnp.pi
+            )
+            if not jnp.isclose(
+                jnp.abs(v[-1, 0] - v[0, 0]), zeta_diff
+            ) or not jnp.isclose(jnp.abs(v[-1, 1] - v[0, 1]), theta_diff):
+                warnings.warn(
+                    f"Detected a coil contour (coil index {j}) that may not be "
+                    "closed, this may lead to incorrect coils, "
+                    "check that the surface current potential contours do not contain "
+                    "any local maxima or window-pane-like structures,"
+                    " and that the current potential contours do not go across "
+                    "The edges of the zeta extent used for the plotting:"
+                    "the zeta=0 or zeta=2pi/NFP planes for helical coils or the"
+                    " zeta=-pi/NFP and zeta=2pi+pi/NFP planes, for modular coils. "
+                    "Use `show_plots=True` to visualize the contours.",
+                    UserWarning,
+                )
+
+            numCoils += 1
+            if show_plots:
+                plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
+                plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
+
+        if not jnp.isclose(helicity, 0):
+            # right now these are only over 1 FP
+            # so must tile them s.t. they are full coils, by repeating them
+            #  with a 2pi/NFP shift in zeta
+            # and a -2pi*helicity shift in theta
+
+            for i_contour in range(len(contour_theta)):
+                # check if the contour is arranged with zeta=0 at the start
+                # or at the end, easiest to do this tiling if we assume
+                # the first index is at zeta=0
+                zeta_starts_at_zero = (
+                    contour_zeta[i_contour][-1] > contour_zeta[i_contour][0]
+                )
+                orig_theta = contour_theta[i_contour]
+                orig_zeta = contour_zeta[i_contour]
+                if not zeta_starts_at_zero:
+                    # flip so that the contour starts at zeta=0
+                    orig_theta = jnp.flip(orig_theta)
+                    orig_zeta = jnp.flip(orig_zeta)
+                orig_endpoint_theta = orig_theta[-1]
+
+                # dont need last points here since we will shift the whole
+                # curve over, and we know the last point must be
+                # (zeta0+2pi/NFP, theta0+2pi*abs(helicity)),
+                # so easiest to just not include them initially and shift whole curve
+                orig_theta = jnp.atleast_1d(orig_theta[:-1])
+                orig_zeta = jnp.atleast_1d(orig_zeta[:-1])
+
+                contour_theta[i_contour] = jnp.atleast_1d(orig_theta)
+                contour_zeta[i_contour] = jnp.atleast_1d(orig_zeta)
+
+                theta_shift = -2 * np.pi * helicity
+
+                zeta_shift = 2 * jnp.pi / nfp - orig_zeta[0]
+
+                for i in range(1, nfp):
+                    contour_theta[i_contour] = jnp.concatenate(
+                        [contour_theta[i_contour], orig_theta + theta_shift * i]
+                    )
+                    contour_zeta[i_contour] = jnp.concatenate(
+                        [contour_zeta[i_contour], orig_zeta + zeta_shift * i]
+                    )
+                contour_theta[i_contour] = jnp.append(
+                    contour_theta[i_contour],
+                    nfp * (orig_endpoint_theta - contour_theta[i_contour][0])
+                    + contour_theta[i_contour][0],
+                )
+                contour_zeta[i_contour] = jnp.append(
+                    contour_zeta[i_contour], 2 * jnp.pi
+                )
+
+        else:
+            # TODO: this should be able to easily be used to
+            # find only N contours in one FP then rotate them in zeta
+            # to get the full coilset.
+            pass
+        if not show_plots:
+            plt.close("all")
+
+        # for modular coils, easiest way to check contour direction is to see
+        # direction of the contour thetas
+        sign_of_theta_contours = jnp.sign(contour_theta[0][-1] - contour_theta[0][0])
+
+        ################################################################
+        # Find the XYZ points in real space of the coil contours
+        ################################################################
+        def find_XYZ_points(
+            theta_pts,
+            zeta_pts,
+            surface,
+        ):
+            contour_X = []
+            contour_Y = []
+            contour_Z = []
+            coil_coords = []
+
+            for thetas, zetas in zip(theta_pts, zeta_pts):
+                coords = surface.compute(
+                    "x",
+                    grid=Grid(
+                        jnp.vstack((jnp.zeros_like(thetas), thetas, zetas)).T,
+                        sort=False,
+                    ),
+                    basis="xyz",
+                )["x"]
+                contour_X.append(coords[:, 0])
+                contour_Y.append(coords[:, 1])
+                contour_Z.append(coords[:, 2])
+                coil_coords.append(
+                    jnp.vstack((coords[:, 0], coords[:, 1], coords[:, 2])).T
+                )
+
+            return contour_X, contour_Y, contour_Z
+
+        contour_X, contour_Y, contour_Z = find_XYZ_points(
+            contour_theta,
+            contour_zeta,
+            self,
+        )
+        ################################################################
+        # Create CoilSet object
+        ################################################################
+        # local imports to avoid circular imports
+        from desc.coils import MixedCoilSet, SplineXYZCoil
+
+        coils = []
+        for j in range(len(contour_X)):
+            if not jnp.isclose(helicity, 0):
+                # helical coils
+                # make sure that the sign of the coil current is correct
+                # by dotting K with the vector along the contour
+                # TODO: probably could use helicity sign and just check the slope of
+                # the contours to see which way they are going, but this is easy for
+                # now and not too expensive
+                contour_vector = jnp.array(
+                    [
+                        contour_X[j][1] - contour_X[j][0],
+                        contour_Y[j][1] - contour_Y[j][0],
+                        contour_Z[j][1] - contour_Z[j][0],
+                    ]
+                )
+                K = self.compute(
+                    "K",
+                    grid=Grid(
+                        jnp.array([[0, contour_theta[j][0], contour_zeta[j][0]]])
+                    ),
+                    basis="xyz",
+                )["K"]
+                current_sign = jnp.sign(jnp.dot(contour_vector, K[0, :]))
+                thisCurrent = current_sign * coil_current
+            else:
+                # modular coils
+                # make sure that the sign of the coil current is correct
+                # don't need to dot with K here because we know the direction
+                # based off the direction of the theta contour and sign of G
+                # (extra negative sign because a positive G -> negative toroidal B
+                # but we always have a right-handed coord system, and so current flowing
+                # in positive poloidal direction creates a positive toroidal B)
+                current_sign = -sign_of_theta_contours * jnp.sign(net_poloidal_current)
+                thisCurrent = jnp.abs(coil_current) * current_sign
+            coils.append(
+                SplineXYZCoil(
+                    thisCurrent,
+                    jnp.append(contour_X[j][0::step], contour_X[j][0]),
+                    jnp.append(contour_Y[j][0::step], contour_Y[j][0]),
+                    jnp.append(contour_Z[j][0::step], contour_Z[j][0]),
+                    method=spline_method,
+                )
+            )
+
+        final_coilset = MixedCoilSet(*coils)
+        return final_coilset
+
+
+def _compute_magnetic_field_from_CurrentPotentialField(
+    field,
+    coords,
+    source_grid,
+    params=None,
+    basis="rpz",
+):
+    """Compute magnetic field at a set of points.
+
+    Parameters
+    ----------
+    field : CurrentPotentialField or FourierCurrentPotentialField
+        current potential field object from which to compute magnetic field.
+    coords : array-like shape(N,3)
+        cylindrical or cartesian coordinates
+    source_grid : Grid,
+        source grid upon which to evaluate the surface current density K
+    params : dict, optional
+        parameters to pass to compute function
+        should include the potential
+    basis : {"rpz", "xyz"}
+        basis for input coordinates and returned magnetic field
+
+
+    Returns
+    -------
+    field : ndarray, shape(N,3)
+        magnetic field at specified points
+
+    """
+    assert basis.lower() in ["rpz", "xyz"]
+    coords = jnp.atleast_2d(jnp.asarray(coords))
+    if basis == "rpz":
+        coords = rpz2xyz(coords)
+
+    # compute surface current, and store grid quantities
+    # needed for integration in class
+    # TODO: does this have to be xyz, or can it be computed in rpz as well?
+    data = field.compute(["K", "x"], grid=source_grid, basis="xyz", params=params)
+
+    _rs = xyz2rpz(data["x"])
+    _K = xyz2rpz_vec(data["K"], phi=source_grid.nodes[:, 2])
+
+    # surface element, must divide by NFP to remove the NFP multiple on the
+    # surface grid weights, as we account for that when doing the for loop
+    # over NFP
+    _dV = source_grid.weights * data["|e_theta x e_zeta|"] / source_grid.NFP
+
+    def nfp_loop(j, f):
+        # calculate (by rotating) rs, rs_t, rz_t
+        phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
+            2 * jnp.pi
+        )
+        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
+        rs = rpz2xyz(rs)
+        K = rpz2xyz_vec(_K, phi=phi)
+        fj = biot_savart_general(
+            coords,
+            rs,
+            K,
+            _dV,
+        )
+        f += fj
+        return f
+
+    B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    if basis == "rpz":
+        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+    return B

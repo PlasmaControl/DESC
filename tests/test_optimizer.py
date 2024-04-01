@@ -1,5 +1,7 @@
 """Tests for optimizers and Optimizer class."""
 
+import warnings
+
 import numpy as np
 import pytest
 from numpy.random import default_rng
@@ -34,6 +36,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    QuasisymmetryTripleProduct,
     Volume,
     get_fixed_boundary_constraints,
 )
@@ -352,9 +355,9 @@ def test_overstepping():
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac_scaled = lambda x, *args: objective._jac_scaled(x) + 1e2 * (
-        np.random.random((objective._dim_f, x.size)) - 0.5
-    )
+    objective.jac_scaled_error = lambda x, *args: objective._jac_scaled_error(
+        x
+    ) + 1e2 * (np.random.random((objective._dim_f, x.size)) - 0.5)
 
     n = 10
     R_modes = np.vstack(
@@ -496,11 +499,11 @@ def test_wrappers():
     )
     con_nl = (ForceBalance(eq=eq),)
     obj = ForceBalance(eq=eq)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
-    ob = LinearConstraintProjection(ObjectiveFunction(obj), con)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), ObjectiveFunction(con))
     ob.build()
     assert ob.built
 
@@ -628,20 +631,22 @@ def test_scipy_constrained_solve():
         MeanCurvature(eq=eq, bounds=Hbounds),
     )
     obj = ObjectiveFunction(ForceBalance(eq=eq))
-    eq2, result = eq.optimize(
-        objective=obj,
-        constraints=constraints,
-        optimizer="scipy-trust-constr",
-        maxiter=50,
-        verbose=1,
-        x_scale="auto",
-        copy=True,
-        options={
-            "disp": 1,
-            "verbose": 3,
-            "initial_barrier_parameter": 1e-4,
-        },
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="delta_grad == 0.0")
+        eq2, result = eq.optimize(
+            objective=obj,
+            constraints=constraints,
+            optimizer="scipy-trust-constr",
+            maxiter=50,
+            verbose=1,
+            x_scale="auto",
+            copy=True,
+            options={
+                "disp": 1,
+                "verbose": 3,
+                "initial_barrier_parameter": 1e-4,
+            },
+        )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     H2 = eq2.compute(
@@ -874,7 +879,7 @@ def test_constrained_AL_lsq():
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
-        FixPressure(eq=eq),
+        FixPressure(eq=eq),  # fix pressure profile
         FixParameter(
             eq, "i_l", bounds=(eq.i_l * 0.9, eq.i_l * 1.1)
         ),  # linear inequality
@@ -1127,3 +1132,199 @@ def test_optimize_with_single_constraint():
 
     # test depends on verbose > 0
     optimizer.optimize(eq, objective=objectective, constraints=constraints, verbose=2)
+
+
+@pytest.mark.unit
+def test_proximal_jacobian():
+    """Test that JVPs and manual concatenation give the same result as full jac."""
+    eq = desc.examples.get("HELIOTRON")
+    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+    con1 = ObjectiveFunction(ForceBalance(eq1))
+    con2 = ObjectiveFunction(ForceBalance(eq2))
+    con3 = ObjectiveFunction(ForceBalance(eq3))
+    obj1 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq1, deriv_mode="fwd"),
+            AspectRatio(eq1, deriv_mode="fwd"),
+            Volume(eq1, deriv_mode="fwd"),
+        ),
+        deriv_mode="batched",
+    )
+    obj2 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+            AspectRatio(eq2, deriv_mode="fwd"),
+            Volume(eq2, deriv_mode="fwd"),
+        ),
+        deriv_mode="looped",
+    )
+    obj3 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
+            AspectRatio(eq3, deriv_mode="rev"),
+            Volume(eq3, deriv_mode="rev"),
+        ),
+        deriv_mode="blocked",
+    )
+    prox1 = ProximalProjection(obj1, con1, eq1)
+    prox2 = ProximalProjection(obj2, con2, eq2)
+    prox3 = ProximalProjection(obj3, con3, eq3)
+    prox1.build()
+    prox2.build()
+    prox3.build()
+
+    x = prox1.x(eq)
+    v = np.random.default_rng(1138).random(x.shape)
+
+    # this is basically the old method we're benchmarking against
+    xf = con1.x(eq1)
+    xg = obj1.x(eq1)
+    # for scaled jacobian
+    Fx = con1.jac_scaled(xf)
+    Gx = obj1.jac_scaled(xg)
+    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
+    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fc = Fx @ prox1._dxdc
+    Gc = Gx @ prox1._dxdc
+    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+    jac_scaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+    # for unscaled jacobian
+    Fx = con1.jac_unscaled(xf)
+    Gx = obj1.jac_unscaled(xg)
+    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
+    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fc = Fx @ prox1._dxdc
+    Gc = Gx @ prox1._dxdc
+    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+    jac_unscaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+
+    jvp0 = jac_scaled @ v
+    jvp1 = prox1.jvp_scaled(v, x)
+    jvp2 = prox2.jvp_scaled(v, x)
+    jvp3 = prox3.jvp_scaled(v, x)
+
+    np.testing.assert_allclose(jvp0, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp3, rtol=1e-12, atol=1e-12)
+
+    jvp0 = jac_unscaled @ v
+    jvp1 = prox1.jvp_unscaled(v, x)
+    jvp2 = prox2.jvp_unscaled(v, x)
+    jvp3 = prox3.jvp_unscaled(v, x)
+
+    np.testing.assert_allclose(jvp0, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp3, rtol=1e-12, atol=1e-12)
+
+    jac1 = prox1.jac_scaled(x)
+    jac2 = prox2.jac_scaled(x)
+    jac3 = prox3.jac_scaled(x)
+
+    np.testing.assert_allclose(jac_scaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jac1 = prox1.jac_unscaled(x)
+    jac2 = prox2.jac_unscaled(x)
+    jac3 = prox3.jac_unscaled(x)
+
+    np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_LinearConstraint_jacobian():
+    """Test that JVPs and manual concatenation give the same result as full jac."""
+    eq = desc.examples.get("HELIOTRON")
+    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+
+    obj1 = ObjectiveFunction(ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched")
+    obj2 = ObjectiveFunction(ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped")
+    obj3 = ObjectiveFunction(ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked")
+
+    con1 = ObjectiveFunction(get_fixed_boundary_constraints(eq1))
+    con2 = ObjectiveFunction(get_fixed_boundary_constraints(eq2))
+    con3 = ObjectiveFunction(get_fixed_boundary_constraints(eq3))
+
+    lc1 = LinearConstraintProjection(obj1, con1)
+    lc2 = LinearConstraintProjection(obj2, con2)
+    lc3 = LinearConstraintProjection(obj3, con3)
+
+    lc1.build()
+    lc2.build()
+    lc3.build()
+
+    vl = np.random.default_rng(1729).random(lc1._dim_x_reduced)
+    vr = np.random.default_rng(1729).random(lc1.dim_f)
+
+    x = obj1.x()
+    x_reduced = lc1.x()
+    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    jvp_scaled = jac_scaled @ vl
+    jvp_unscaled = jac_unscaled @ vl
+    vjp_scaled = jac_scaled.T @ vr
+    vjp_unscaled = jac_unscaled.T @ vr
+
+    jac1 = lc1.jac_scaled(x_reduced)
+    jac2 = lc2.jac_scaled(x_reduced)
+    jac3 = lc3.jac_scaled(x_reduced)
+
+    np.testing.assert_allclose(jac_scaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jac1 = lc1.jac_unscaled(x_reduced)
+    jac2 = lc2.jac_unscaled(x_reduced)
+    jac3 = lc3.jac_unscaled(x_reduced)
+
+    np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jvp1 = lc1.jvp_scaled(vl, x_reduced)
+    jvp2 = lc2.jvp_scaled(vl, x_reduced)
+    jvp3 = lc3.jvp_scaled(vl, x_reduced)
+
+    np.testing.assert_allclose(jvp_scaled, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_scaled, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_scaled, jvp3, rtol=1e-12, atol=1e-12)
+
+    jvp1 = lc1.jvp_unscaled(vl, x_reduced)
+    jvp2 = lc2.jvp_unscaled(vl, x_reduced)
+    jvp3 = lc3.jvp_unscaled(vl, x_reduced)
+
+    np.testing.assert_allclose(jvp_unscaled, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_unscaled, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_unscaled, jvp3, rtol=1e-12, atol=1e-12)
+
+    vjp1 = lc1.vjp_scaled(vr, x_reduced)
+    vjp2 = lc2.vjp_scaled(vr, x_reduced)
+    vjp3 = lc3.vjp_scaled(vr, x_reduced)
+
+    np.testing.assert_allclose(vjp_scaled, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_scaled, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_scaled, vjp3, rtol=1e-12, atol=1e-12)
+
+    vjp1 = lc1.vjp_unscaled(vr, x_reduced)
+    vjp2 = lc2.vjp_unscaled(vr, x_reduced)
+    vjp3 = lc3.vjp_unscaled(vr, x_reduced)
+
+    np.testing.assert_allclose(vjp_unscaled, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_unscaled, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_unscaled, vjp3, rtol=1e-12, atol=1e-12)

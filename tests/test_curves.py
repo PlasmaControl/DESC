@@ -102,7 +102,7 @@ class TestRZCurve:
         np.testing.assert_allclose(c.Z_n, [])
 
         s = c.copy()
-        assert s.eq(c)
+        assert s.equiv(c)
 
         c.change_resolution(5)
         assert c.N == 5
@@ -379,7 +379,7 @@ class TestFourierXYZCurve:
         np.testing.assert_allclose(c.Z_n, [-2, 3, 0])
 
         s = c.copy()
-        assert s.eq(c)
+        assert s.equiv(c)
 
         c.change_resolution(5)
         assert c.N == 5
@@ -513,7 +513,7 @@ class TestPlanarCurve:
         np.testing.assert_allclose(c.normal * np.linalg.norm(c.center), c.center[::-1])
 
         s = c.copy()
-        assert s.eq(c)
+        assert s.equiv(c)
 
         c.change_resolution(5)
         with pytest.raises(ValueError):
@@ -752,7 +752,7 @@ class TestSplineXYZCurve:
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
 
         s = c.copy()
-        assert s.eq(c)
+        assert s.equiv(c)
 
     @pytest.mark.unit
     def test_compute_ndarray_error(self):

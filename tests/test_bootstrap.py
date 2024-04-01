@@ -89,9 +89,7 @@ class TestBootstrapCompute:
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"],
-                grid.expand(
-                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])
-                ),
+                grid.expand(np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])),
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
@@ -260,9 +258,7 @@ class TestBootstrapCompute:
 
         # Sauter eq (18d)-(18e):
         ln_Lambda_e = 31.3 - np.log(np.sqrt(ne_rho) / Te_rho)
-        ln_Lambda_ii = 30.0 - np.log(
-            (Zeff_rho**3) * np.sqrt(ni_rho) / (Ti_rho**1.5)
-        )
+        ln_Lambda_ii = 30.0 - np.log((Zeff_rho**3) * np.sqrt(ni_rho) / (Ti_rho**1.5))
 
         # Sauter eq (18b)-(18c):
         nu_e = abs(
@@ -1611,7 +1607,6 @@ def test_bootstrap_optimization_comparison_qa():
     # method 1
     objective = ObjectiveFunction(
         BootstrapRedlConsistency(eq=eq1, grid=grid, helicity=(1, 0)),
-        verbose=0,
     )
     constraints = (
         FixAtomicNumber(eq=eq1),

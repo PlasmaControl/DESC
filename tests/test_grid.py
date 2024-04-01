@@ -5,6 +5,7 @@ import pytest
 from scipy import special
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import (
     ConcentricGrid,
     Grid,
@@ -91,9 +92,11 @@ class TestGrid:
             theta = np.linspace(
                 0,
                 2 * np.pi,
-                (ntheta + endpoint + 1) // 2 * 2 - endpoint
-                if (sym and ntheta > 1)
-                else ntheta,
+                (
+                    (ntheta + endpoint + 1) // 2 * 2 - endpoint
+                    if (sym and ntheta > 1)
+                    else ntheta
+                ),
                 endpoint=endpoint,
             )
             if sym and ntheta > 1:
@@ -488,7 +491,7 @@ class TestGrid:
     def test_concentric_grid_high_res(self):
         """Test that we can create high resolution grids without crashing.
 
-        Verifies solution to GH issue #207.
+        Test for GH issue #207.
         """
         _ = ConcentricGrid(L=32, M=28, N=30)
 
@@ -620,6 +623,15 @@ class TestGrid:
     @pytest.mark.unit
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
+        L = [3, 3, 5, 3]
+        M = [3, 6, 5, 7]
+        N = [2, 2, 2, 2]
+        NFP = [5, 3, 5, 3]
+        sym = np.array([True, True, False, False])
+        # to test code not tested on grids made with M=.
+        even_number = 4
+        n_theta = even_number - sym
+
         # Currently, midpoint rule is false for LinearGrid made with L=number.
         def test(grid, midpoint_rule=False):
             r = grid.nodes[:, 0]
@@ -651,9 +663,11 @@ class TestGrid:
                 expected_integral,
                 true_integral,
                 rtol=0,
-                atol=midpoint_rule_error_bound / 4
-                if midpoint_rule
-                else right_riemann_error_bound / 3,
+                atol=(
+                    midpoint_rule_error_bound / 4
+                    if midpoint_rule
+                    else right_riemann_error_bound / 3
+                ),
                 err_msg=type(grid),
             )
             np.testing.assert_allclose(
@@ -662,15 +676,6 @@ class TestGrid:
                 rtol=1e-15,
                 err_msg=type(grid),
             )
-
-        L = [3, 3, 5, 3]
-        M = [3, 6, 5, 7]
-        N = [2, 2, 2, 2]
-        NFP = [5, 3, 5, 3]
-        sym = np.array([True, True, False, False])
-        # to test code not tested on grids made with M=.
-        even_number = 4
-        n_theta = even_number - sym
 
         for i in range(len(L)):
             test(LinearGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
@@ -774,3 +779,48 @@ def test_find_least_rational_surfaces():
     max_rational = max(lior)
 
     assert np.all(np.array(lio) > max_rational)
+
+
+@pytest.mark.unit
+def test_custom_jitable_grid_indexing():
+    """Test that unique/inverse indices are set correctly when jitable=True."""
+    eq = get("NCSX")
+    rho = np.random.random(100)
+    theta = np.random.random(100) * 2 * np.pi
+    zeta = np.random.random(100) * 2 * np.pi / eq.NFP
+    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
+    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+
+    attrs = [
+        "unique_rho_idx",
+        "inverse_rho_idx",
+        "unique_theta_idx",
+        "inverse_theta_idx",
+        "unique_zeta_idx",
+        "inverse_zeta_idx",
+    ]
+
+    for attr in attrs:
+        np.testing.assert_array_equal(
+            getattr(grid1, attr), getattr(grid2, attr), err_msg=attr
+        )
+
+    # make sure compress/expand done when override_grid=True works as expected
+    b1 = eq.compute(["|B|"], grid=grid1, override_grid=True)["|B|"]
+    b2 = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
+    np.testing.assert_allclose(b1, b2)
+
+
+@pytest.mark.unit
+def test_custom_jitable_grid_weights():
+    """Test that grid weights are set correctly when jitable=True."""
+    rho = np.random.random(100)
+    theta = np.random.random(100) * 2 * np.pi
+    zeta = np.random.random(100) * 2 * np.pi
+    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
+    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+
+    np.testing.assert_allclose(grid1.spacing, grid2.spacing)
+    np.testing.assert_allclose(grid1.weights, grid2.weights)
+    np.testing.assert_allclose(grid1.weights.sum(), 4 * np.pi**2)
+    np.testing.assert_allclose(grid2.weights.sum(), 4 * np.pi**2)

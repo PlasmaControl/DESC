@@ -98,7 +98,11 @@ def map_coordinates(  # noqa: C901
     kwargs.setdefault("tol", tol)
     kwargs.setdefault("maxiter", maxiter)
     period = np.asarray(period)
-    coords = coords % period
+
+    def periodic(x):
+        return jnp.where(jnp.isfinite(period), x % period, x)
+
+    coords = periodic(coords)
 
     params = setdefault(params, eq.params_dict)
 
@@ -118,8 +122,8 @@ def map_coordinates(  # noqa: C901
     @jit
     def residual(y, coords):
         xk = compute(y, inbasis)
-        r = xk % period - coords % period
-        return jnp.where(r > period / 2, -period + r, r)
+        r = periodic(xk) - periodic(coords)
+        return jnp.where((r > period / 2) & jnp.isfinite(period), -period + r, r)
 
     @jit
     def jac(y, coords):
@@ -197,14 +201,17 @@ def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
 
 def _initial_guess_nn_search(yk, coords, inbasis, eq, period, compute):
     # nearest neighbor search on dense grid
-    yg = ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP).nodes
+    yg = ConcentricGrid(eq.L_grid, eq.M_grid, max(eq.N_grid, eq.M_grid)).nodes
     xg = compute(yg, inbasis)
     idx = jnp.zeros(len(coords)).astype(int)
     coords = jnp.asarray(coords)
 
+    def periodic(x):
+        return jnp.where(jnp.isfinite(period), x % period, x)
+
     def _distance_body(i, idx):
-        d = (coords[i] % period) - (xg % period)
-        d = jnp.where(d > period / 2, period - d, d)
+        d = periodic(coords[i]) - periodic(xg)
+        d = jnp.where((d > period / 2) & jnp.isfinite(period), period - d, d)
         distance = jnp.linalg.norm(d, axis=-1)
         k = jnp.argmin(distance)
         idx = put(idx, i, k)

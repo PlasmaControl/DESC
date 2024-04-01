@@ -239,11 +239,11 @@ class FourierRZCurve(Curve):
 
         Parameters
         ----------
-        coords: ndarray
-            coordinates to fit a FourierRZCurve object with.
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierRZCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new R,Z representation.
-            default is 10
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
@@ -484,11 +484,11 @@ class FourierXYZCurve(Curve):
 
         Parameters
         ----------
-        coords: ndarray
-            coordinates to fit a FourierXYZCurve object with.
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierXYZCurve object, with each column
+            corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new X,Y,Z representation.
-            default is 10
         s : ndarray or "arclength"
             arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -874,9 +874,11 @@ class SplineXYZCurve(Curve):
 
         Parameters
         ----------
-        coords: ndarray
-            Points for X, Y, Z describing the curve. If the endpoint is included
-            (ie, X[0] == X[-1]), then the final point will be dropped.
+        coords: ndarray, shape (num_coords,3)
+            Points for X, Y, Z (or R, phi, Z) describing the curve with each column
+            corresponding to xyz or rpz depending on the basis argument. If the
+            endpoint is included (ie, X[0] == X[-1]), then the final point will be
+            dropped.
         knots : ndarray
             arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.

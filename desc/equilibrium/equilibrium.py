@@ -896,9 +896,7 @@ class Equilibrium(IOAble, Optimizable):
             )
             # need to make this data broadcast with the data on the original grid
             data1dr = {
-                key: grid.expand(
-                    grid1dr.compress(val, surface_label="rho"), surface_label="rho"
-                )
+                key: grid.copy_data_from_other(val, grid1dr, surface_label="rho")
                 for key, val in data1dr.items()
                 if key in dep1dr
             }
@@ -925,9 +923,7 @@ class Equilibrium(IOAble, Optimizable):
             )
             # need to make this data broadcast with the data on the original grid
             data1dz = {
-                key: grid.expand(
-                    grid1dz.compress(val, surface_label="zeta"), surface_label="zeta"
-                )
+                key: grid.copy_data_from_other(val, grid1dz, surface_label="zeta")
                 for key, val in data1dz.items()
                 if key in dep1dz
             }

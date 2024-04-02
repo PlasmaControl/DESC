@@ -22,6 +22,8 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
     SplineMagneticField,
+    ToroidalMagneticField,
+    VerticalMagneticField,
 )
 from desc.objectives import (
     AspectRatio,
@@ -57,6 +59,7 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     ToroidalCurrent,
+    ToroidalFlux,
     VacuumBoundaryError,
     Volume,
 )
@@ -653,6 +656,35 @@ class TestObjectiveFunction:
         test(coils)
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
         test(nested_coils, grid=nested_grids)
+
+    @pytest.mark.unit
+    def test_toroidal_flux(self):
+        """Test calculation of toroidal flux from coils."""
+        grid = LinearGrid(L=30, M=30, zeta=np.array(0.0))
+
+        def test(eq, field, correct_value, rtol=1e-14):
+            obj = ToroidalFlux(eq=eq, field=field, eq_fixed=True, eval_grid=grid)
+            obj.build()
+            torflux = obj.compute_unscaled(*obj.xs(eq))
+            np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
+
+        eq = Equilibrium(iota=PowerSeriesProfile(0))
+        test(eq, VerticalMagneticField(B0=1), 0)
+        field = ToroidalMagneticField(B0=1, R0=1)
+        # calc field Psi
+
+        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|"], grid=grid)
+        field_B = field.compute_magnetic_field(
+            np.vstack([data["R"], data["phi"], data["Z"]]).T
+        )
+        psi_from_field = np.sum(
+            grid.spacing[:, 0]
+            * grid.spacing[:, 1]
+            * data["|e_rho x e_theta|"]
+            * field_B[:, 1]
+        )
+
+        test(eq, field, psi_from_field)
 
 
 @pytest.mark.unit

@@ -233,6 +233,10 @@ class TestCoilSet:
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
+        # minimum distance computation
+        min_dist = coils.compute_minimum_distance()
+        np.testing.assert_allclose(min_dist, 10 / (n - 1), rtol=1e-12, atol=1e-12)
+
     @pytest.mark.unit
     def test_linspaced_angular(self):
         """Field from uniform toroidal solenoid."""

@@ -645,9 +645,9 @@ class PowerSeriesProfile(_Profile):
         if self.sym:
             # need to pad with odd numbered modes
             params = jnp.array([params, jnp.zeros_like(params)]).flatten(order="F")
-        r = grid.nodes[grid.unique_rho_idx, 0]
+        r = grid.nodes[:, 0]
         f = polyval_vec(polyder_vec(jnp.atleast_2d(params[::-1]), dr, False), r)[0]
-        return f[grid.inverse_rho_idx]
+        return f
 
     @classmethod
     def from_values(cls, x, y, order=6, rcond=None, w=None, sym="auto", name=""):
@@ -775,11 +775,11 @@ class SplineProfile(_Profile):
             params = self.params
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
-        xq = grid.nodes[grid.unique_rho_idx, 0]
         x = self.knots
         f = params
+        xq = grid.nodes[:, 0]
         fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
-        return fq[grid.inverse_rho_idx]
+        return fq
 
 
 class MTanhProfile(_Profile):
@@ -920,16 +920,14 @@ class MTanhProfile(_Profile):
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
 
-        xq = grid.nodes[grid.unique_rho_idx, 0]
-
         ped = params[0]
         offset = params[1]
         sym = params[2]
         width = params[3]
         core_poly = params[4:]
-
+        xq = grid.nodes[:, 0]
         y = MTanhProfile._mtanh(xq, ped, offset, sym, width, core_poly, dx=dr)
-        return y[grid.inverse_rho_idx]
+        return y
 
     @classmethod
     def from_values(

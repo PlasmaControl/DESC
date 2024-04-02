@@ -836,6 +836,7 @@ class ToroidalFlux(_Objective):
                 transforms=constants["equil_transforms"],
                 profiles=constants["equil_profiles"],
             )
+            plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
         else:
             data = constants["equil_data"]

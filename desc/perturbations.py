@@ -325,7 +325,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jx = objective.jac_scaled(x)
+        Jx = objective.jac_scaled_error(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
@@ -632,7 +632,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Fx = objective_f.jac_scaled(xf)
+        Fx = objective_f.jac_scaled_error(xf)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -641,7 +641,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing dg")
         timer.start("dg computation")
-        Gx = objective_g.jac_scaled(xg)
+        Gx = objective_g.jac_scaled_error(xg)
         timer.stop("dg computation")
         if verbose > 1:
             timer.disp("dg computation")

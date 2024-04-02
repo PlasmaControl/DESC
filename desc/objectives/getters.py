@@ -1,12 +1,6 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from ._equilibrium import (
-    CurrentDensity,
-    Energy,
-    ForceBalance,
-    HelicalForceBalance,
-    RadialForceBalance,
-)
+from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
     AxisRSelfConsistency,
     AxisZSelfConsistency,
@@ -51,10 +45,10 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    mode : one of {"force", "forces", "energy", "vacuum"}
+    mode : one of {"force", "forces", "energy"}
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
-        for minimizing MHD energy. "vacuum" directly minimizes current density.
+        for minimizing MHD energy.
     normalize : bool
         Whether to normalize units of objective.
 
@@ -73,10 +67,6 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
         objectives = (
             RadialForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
             HelicalForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
-        )
-    elif mode == "vacuum":
-        objectives = CurrentDensity(
-            eq=eq, normalize=normalize, normalize_target=normalize
         )
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))

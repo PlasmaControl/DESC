@@ -656,22 +656,25 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
 
+    # TODO: generalize for when each coil has different intervals
     for interval in transforms["intervals"]:
 
-        query_range = (xq > interval[0]) & (xq < interval[1])
-        interval_range = (params["knots"] > interval[0]) & (
-            params["knots"] < interval[1]
+        query_range = (xq >= interval[0]) & (xq <= interval[1])
+        interval_range = (params["knots"] >= interval[0]) & (
+            params["knots"] <= interval[1]
         )
 
         xq_in_interval = xq[query_range]
-        knots_in_interval = params["knots"][interval_range]
-        X_in_interval = params["X"][interval_range]
-        Y_in_interval = params["Y"][interval_range]
-        Z_in_interval = params["Z"][interval_range]
+
+        knots_in_interval = jnp.where(interval_range, params["knots"], jnp.nan)
+        X_in_interval = jnp.where(interval_range, params["X"], jnp.nan)
+        Y_in_interval = jnp.where(interval_range, params["Y"], jnp.nan)
+        Z_in_interval = jnp.where(interval_range, params["Z"], jnp.nan)
 
         # TODO: hmm
         period = 2 * jnp.pi if abs(interval[1] - interval[0]) == 2 * jnp.pi else None
 
+        # TODO: needs to be an array for more than 1 interval
         Xq = interp1d(
             xq_in_interval,
             knots_in_interval,

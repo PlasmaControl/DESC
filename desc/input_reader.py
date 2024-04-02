@@ -873,7 +873,7 @@ class InputReader:
 
         # fit profiles to power series
         grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        rho = grid.nodes[grid._unique_rho_idx, 0]
+        rho = grid.nodes[grid.unique_rho_idx, 0]
         if not isinstance(eq.pressure, PowerSeriesProfile):
             pressure = grid.compress(eq.compute("p", grid=grid)["p"])
             pres_profile = PowerSeriesProfile.from_values(

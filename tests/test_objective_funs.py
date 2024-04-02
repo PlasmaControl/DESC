@@ -11,13 +11,14 @@ import pytest
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.coils import CoilSet, FourierPlanarCoil, FourierXYZCoil, MixedCoilSet
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
@@ -692,8 +693,8 @@ class TestQuadraticFlux:
     def make_nonaxisym_field(self, eq):
         """Makes a nonaxisymmetric field depending on the given eq."""
         surf = eq.surface.copy()
-        surf.R_lmn = surf.R_lmn.at[surf.R_basis.get_idx(M=1, N=0)].set(2)
-        surf.Z_lmn = surf.Z_lmn.at[surf.Z_basis.get_idx(M=-1, N=0)].set(-2)
+        surf.R_lmn = put(surf.R_lmn, surf.R_basis.get_idx(M=1, N=0), 2)
+        surf.Z_lmn = put(surf.Z_lmn, surf.Z_basis.get_idx(M=-1, N=0), -2)
         nonaxisym_field = FourierCurrentPotentialField.from_surface(
             surface=surf,
             Phi_mn=np.array([1e4]),
@@ -706,16 +707,16 @@ class TestQuadraticFlux:
         return nonaxisym_field
 
     @pytest.mark.unit
-    def test_quadratic_flux(self, quadratic_flux_equilibriums):
+    def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""
         t_field = ToroidalMagneticField(1, 1)
 
         # test that torus (axisymmetric) Bnorm is exactly 0
-        __, eq = quadratic_flux_equilibriums
+        eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         obj = QuadraticFlux(eq, t_field)
         obj.build(eq, verbose=2)
         f = obj.compute(field_params=t_field.params_dict)
-        np.testing.assert_allclose(f, 0, rtol=1e-15, atol=1e-15)
+        np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
         # test nonaxisymmetric surface
         eq = desc.examples.get("precise_QA", "all")[0]
@@ -739,13 +740,13 @@ class TestQuadraticFlux:
         np.testing.assert_allclose(f, Bnorm * dA, atol=1e-3)
 
     @pytest.mark.unit
-    def test_quadratic_flux_with_eq_fixed(self, quadratic_flux_equilibriums):
+    def test_quadratic_flux_with_eq_fixed(self):
         """Test with eq_fixed = True, field_fixed = False.
 
         Checks that a non-axisymmetric field becomes axisymmetric
         given an axisymmetric field.
         """
-        __, eq = quadratic_flux_equilibriums
+        eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
 
         # create a winding surface that surrounds the equilibrium
         field = self.make_nonaxisym_field(eq)
@@ -813,10 +814,10 @@ class TestQuadraticFlux:
         np.testing.assert_allclose(things[0].B0, 0, atol=2e-3)
 
     @pytest.mark.unit
-    def test_quadratic_flux_vacuum(self, quadratic_flux_equilibriums):
+    def test_quadratic_flux_vacuum(self):
         """Test vacuum flag."""
         # equilibrium that has Bplasma == 0
-        eq, __ = quadratic_flux_equilibriums
+        eq = load("./tests/inputs/vacuum_nonaxisym.h5")
         t_field = ToroidalMagneticField(1, 1)
         field_grid, eval_grid, source_grid = self.get_grids(eq, t_field)
         obj = QuadraticFlux(

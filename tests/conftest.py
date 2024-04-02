@@ -9,7 +9,6 @@ from netCDF4 import Dataset
 
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry.surface import FourierRZToroidalSurface
 from desc.vmec import VMECIO
 
 
@@ -326,22 +325,3 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     )
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
     return vmec, desc
-
-
-@pytest.fixture(scope="session")
-def quadratic_flux_equilibriums(tmpdir_factory):
-    """Create equilibriums for quadratic flux tests."""
-    surface = FourierRZToroidalSurface(
-        R_lmn=[1, 0.125, 0.1],
-        Z_lmn=[-0.125, -0.1],
-        modes_R=[[0, 0], [1, 0], [0, 1]],
-        modes_Z=[[-1, 0], [0, -1]],
-        NFP=4,
-    )
-    nonaxisym_eq_with_surface = Equilibrium(L=4, M=4, N=4, surface=surface)
-    nonaxisym_eq_with_surface.solve(verbose=0)
-
-    axisym_eq = Equilibrium(L=4, M=4)
-    axisym_eq.solve(verbose=0)
-
-    return nonaxisym_eq_with_surface, axisym_eq

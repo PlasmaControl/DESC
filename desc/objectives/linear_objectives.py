@@ -109,11 +109,15 @@ class FixParameter(_FixedObjective):
         weight=1,
         normalize=False,
         normalize_target=False,
-        name="Fixed parameter",
+        name=None,
     ):
         self._target_from_user = target
-        self._params = params
+        self._params = params = setdefault(params, thing.optimizable_params)
         self._indices = indices
+        self._print_value_fmt = (
+            f"Fixed parameter ({self._params}) error: " + "{:10.3e} "
+        )
+        name = setdefault(name, f"Fixed parameter ({self._params})")
         super().__init__(
             things=thing,
             target=target,

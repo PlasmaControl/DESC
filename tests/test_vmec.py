@@ -911,7 +911,7 @@ def test_vmec_boundary_subspace(DummyStellarator):
     np.testing.assert_allclose(zbs_ref, np.abs(zbs) > tol)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.solve
 def test_write_vmec_input(TmpDir):
     """Test generated VMEC input file gives the original equilibrium when solved."""

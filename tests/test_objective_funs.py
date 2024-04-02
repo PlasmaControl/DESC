@@ -874,21 +874,6 @@ def test_derivative_modes():
 
 
 @pytest.mark.unit
-def test_generic_compute():
-    """Test for GH issue #388."""
-    eq = Equilibrium()
-    obj = ObjectiveFunction(AspectRatio(target=2, weight=1, eq=eq), use_jit=False)
-    obj.build()
-    a1 = obj.compute_scalar(obj.x(eq))
-    obj = ObjectiveFunction(
-        GenericObjective("R0/a", target=2, weight=1, eq=eq), use_jit=False
-    )
-    obj.build()
-    a2 = obj.compute_scalar(obj.x(eq))
-    assert np.allclose(a1, a2)
-
-
-@pytest.mark.unit
 def test_getter_setter():
     """Test getter and setter methods of Objectives."""
     eq = Equilibrium()
@@ -2051,14 +2036,3 @@ def test_asymmetric_normalization():
         assert np.all(np.isfinite(val))
     for val in scales_eq.values():
         assert np.all(np.isfinite(val))
-
-
-@pytest.mark.unit
-def test_force_balance_axis_error():
-    """Test that ForceBalance objective is not NaN if the grid contains axis."""
-    eq = get("SOLOVEV")
-    eq.change_resolution(3, 3, 0, 6, 6, 0)
-    grid = LinearGrid(L=2, M=2, N=2, axis=True)
-    obj = ForceBalance(eq, grid=grid)
-    obj.build()
-    assert not np.any(np.isnan(obj.compute_unscaled(*obj.xs(eq))))

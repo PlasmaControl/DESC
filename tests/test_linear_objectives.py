@@ -105,7 +105,8 @@ def test_LambdaGauge_asym():
         np.testing.assert_allclose(lam, 0, atol=1e-15)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
+@pytest.mark.solve
 def test_bc_on_interior_surfaces():
     """Test applying boundary conditions on internal surface."""
     surf = FourierRZToroidalSurface(rho=0.5)

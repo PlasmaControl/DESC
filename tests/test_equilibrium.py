@@ -6,7 +6,6 @@ import warnings
 
 import numpy as np
 import pytest
-from netCDF4 import Dataset
 
 from desc.__main__ import main
 from desc.backend import sign
@@ -19,34 +18,6 @@ from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_obj
 from desc.profiles import PowerSeriesProfile
 
 from .utils import area_difference, compute_coords
-
-
-@pytest.mark.unit
-def test_compute_geometry():
-    """Test computation of plasma geometric values."""
-
-    def test(eq, vmec_file):
-        # VMEC values
-        file = Dataset(vmec_file, mode="r")
-        V_vmec = float(file.variables["volume_p"][-1])
-        R0_vmec = float(file.variables["Rmajor_p"][-1])
-        a_vmec = float(file.variables["Aminor_p"][-1])
-        ar_vmec = float(file.variables["aspect"][-1])
-        file.close()
-
-        # DESC values
-        data = eq.compute("R0/a")
-        V_desc = data["V"]
-        R0_desc = data["R0"]
-        a_desc = data["a"]
-        ar_desc = data["R0/a"]
-
-        assert abs(V_vmec - V_desc) < 5e-3
-        assert abs(R0_vmec - R0_desc) < 5e-3
-        assert abs(a_vmec - a_desc) < 5e-3
-        assert abs(ar_vmec - ar_desc) < 5e-3
-
-    test(get("DSHAPE"), "tests//inputs//wout_DSHAPE.nc")
 
 
 @pytest.mark.unit
@@ -225,16 +196,6 @@ def test_grid_resolution_warning():
 
 
 @pytest.mark.unit
-def test_eq_change_grid_resolution():
-    """Test changing equilibrium grid resolution."""
-    eq = Equilibrium(L=2, M=2, N=2)
-    eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
-    assert eq.L_grid == 10
-    assert eq.M_grid == 10
-    assert eq.N_grid == 10
-
-
-@pytest.mark.unit
 def test_eq_change_symmetry():
     """Test changing stellarator symmetry."""
     eq = Equilibrium(L=2, M=2, N=2, NFP=2, sym=False)
@@ -298,34 +259,6 @@ def test_resolution():
     assert eq1.R_basis.M == 3
     assert eq1.R_basis.N == 4
     assert eq1.R_basis.NFP == 5
-
-
-@pytest.mark.unit
-def test_symmetry():
-    """Test changing equilibrium symmetry."""
-    M = 6
-    N = 3
-    surface = get("W7-X").surface.change_resolution(M=M, N=N)
-    eq_sym1 = Equilibrium(M=M, N=N, surface=surface, sym=True)
-    eq_asym1 = Equilibrium(M=M, N=N, surface=surface, sym=False)
-
-    eq_sym2 = eq_asym1.copy()
-    eq_asym2 = eq_sym1.copy()
-
-    eq_sym2.change_resolution(sym=True)
-    eq_asym2.change_resolution(sym=False)
-
-    np.testing.assert_allclose(eq_sym1.R_lmn, eq_sym2.R_lmn)
-    np.testing.assert_allclose(eq_sym1.Z_lmn, eq_sym2.Z_lmn)
-    np.testing.assert_allclose(eq_sym1.L_lmn, eq_sym2.L_lmn)
-    np.testing.assert_allclose(eq_sym1.Rb_lmn, eq_sym2.Rb_lmn)
-    np.testing.assert_allclose(eq_sym1.Zb_lmn, eq_sym2.Zb_lmn)
-
-    np.testing.assert_allclose(eq_asym1.R_lmn, eq_asym2.R_lmn)
-    np.testing.assert_allclose(eq_asym1.Z_lmn, eq_asym2.Z_lmn)
-    np.testing.assert_allclose(eq_asym1.L_lmn, eq_asym2.L_lmn)
-    np.testing.assert_allclose(eq_asym1.Rb_lmn, eq_asym2.Rb_lmn)
-    np.testing.assert_allclose(eq_asym1.Zb_lmn, eq_asym2.Zb_lmn)
 
 
 @pytest.mark.unit

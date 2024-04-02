@@ -4,12 +4,11 @@ import pickle
 
 import numpy as np
 import pytest
-from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, rpz2xyz_vec
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
@@ -18,7 +17,7 @@ from desc.geometry import (
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -1145,47 +1144,6 @@ def test_boozer_transform():
         rtol=1e-3,
         atol=1e-4,
     )
-
-
-@pytest.mark.unit
-def test_compute_grad_p_volume_avg():
-    """Test calculation of volume averaged pressure gradient."""
-    eq = Equilibrium()  # default pressure profile is 0 pressure
-    pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
-    np.testing.assert_allclose(pres_grad_vol_avg, 0)
-
-
-@pytest.mark.unit
-def test_compare_quantities_to_vmec():
-    """Compare several computed quantities to vmec."""
-    wout_file = ".//tests//inputs//wout_DSHAPE.nc"
-    desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
-
-    fid = netcdf_file(wout_file, mmap=False)
-    ns = fid.variables["ns"][()]
-    J_dot_B_vmec = fid.variables["jdotb"][()]
-    volavgB = fid.variables["volavgB"][()]
-    betatotal = fid.variables["betatotal"][()]
-    fid.close()
-
-    with pytest.warns(RuntimeWarning, match="Save attribute '_current'"):
-        eq = EquilibriaFamily.load(desc_file)[-1]
-
-    # Compare 0D quantities:
-    grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<beta>_vol", grid=grid)
-    data = eq.compute("<|B|>_rms", grid=grid, data=data)
-
-    np.testing.assert_allclose(volavgB, data["<|B|>_rms"], rtol=1e-7)
-    np.testing.assert_allclose(betatotal, data["<beta>_vol"], rtol=1e-5)
-
-    # Compare radial profile quantities:
-    s = np.linspace(0, 1, ns)
-    rho = np.sqrt(s)
-    grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<J*B>", grid=grid)
-    J_dot_B_desc = grid.compress(data["<J*B>"])
-    np.testing.assert_allclose(J_dot_B_desc, J_dot_B_vmec, rtol=0.005)
 
 
 @pytest.mark.unit

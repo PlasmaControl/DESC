@@ -30,6 +30,7 @@ from desc.objectives import (
     BScaleLength,
     CoilCurvature,
     CoilLength,
+    CoilsetMinDistance,
     CoilTorsion,
     CurrentDensity,
     Elongation,
@@ -653,6 +654,27 @@ class TestObjectiveFunction:
         test(coils)
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
         test(nested_coils, grid=nested_grids)
+
+    @pytest.mark.unit
+    def test_coil_min_distance(self):
+        """Tests coilset minimum distance between coils."""
+        ncoils = 4
+        displacement = [0, 0, 10]
+
+        def test(coil, grid=None):
+            obj = CoilsetMinDistance(coil, grid=grid)
+            obj.build()
+            f = obj.compute(coil_params=coil.params_dict)
+            np.testing.assert_allclose(f, displacement[-1] / (ncoils), rtol=1e-8)
+
+        coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
+        coils = CoilSet.linspaced_linear(coil, n=ncoils, displacement=displacement)
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=ncoils, displacement=displacement
+        )
+
+        test(coils)
+        test(mixed_coils, grid=LinearGrid(N=5))
 
 
 @pytest.mark.unit

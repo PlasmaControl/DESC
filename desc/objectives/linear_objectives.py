@@ -25,16 +25,18 @@ class _FixedObjective(_Objective):
     _linear = True
     _scalar = False
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium.
+    def update_target(self, thing):
+        """Update target values using an Optimizable object.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
+        thing : Optimizable
+            Optimizable object that will be optimized to satisfy the Objective.
 
         """
-        self.target = np.atleast_1d(getattr(eq, self._target_arg, self.target))
+        new_target = self.compute(thing.params_dict)
+        assert len(new_target) == len(self.target)
+        self.target = new_target
         self._target_from_user = self.target  # in case the Objective is re-built
         if self._use_jit:
             self.jit()
@@ -59,7 +61,6 @@ class _FixedObjective(_Objective):
         return target, bounds
 
 
-# TODO: make this work with above, but for multiple target args?
 class FixParameter(_FixedObjective):
     """Fix specific degrees of freedom associated with a given Optimizable object.
 
@@ -611,7 +612,6 @@ class FixBoundaryR(_FixedObjective):
     name : str, optional
         Name of the objective function.
 
-
     Notes
     -----
     If specifying particular modes to fix, the rows of the resulting constraint `A`
@@ -619,7 +619,6 @@ class FixBoundaryR(_FixedObjective):
     `basis.modes` which may be different from the order that was passed in.
     """
 
-    _target_arg = "Rb_lmn"
     _units = "(m)"
     _print_value_fmt = "R boundary error: {:10.3e} "
 
@@ -758,7 +757,6 @@ class FixBoundaryZ(_FixedObjective):
     name : str, optional
         Name of the objective function.
 
-
     Notes
     -----
     If specifying particular modes to fix, the rows of the resulting constraint `A`
@@ -766,7 +764,6 @@ class FixBoundaryZ(_FixedObjective):
     `basis.modes` which may be different from the order that was passed in.
     """
 
-    _target_arg = "Zb_lmn"
     _units = "(m)"
     _print_value_fmt = "Z boundary error: {:10.3e} "
 
@@ -1066,7 +1063,6 @@ class FixAxisR(_FixedObjective):
 
     """
 
-    _target_arg = "Ra_n"
     _units = "(m)"
     _print_value_fmt = "R axis error: {:10.3e} "
 
@@ -1204,7 +1200,6 @@ class FixAxisZ(_FixedObjective):
 
     """
 
-    _target_arg = "Za_n"
     _units = "(m)"
     _print_value_fmt = "Z axis error: {:10.3e} "
 
@@ -1343,7 +1338,6 @@ class FixModeR(_FixedObjective):
 
     """
 
-    _target_arg = "R_lmn"
     _units = "(m)"
     _print_value_fmt = "Fixed-R modes error: {:10.3e} "
 
@@ -1471,7 +1465,6 @@ class FixModeZ(_FixedObjective):
 
     """
 
-    _target_arg = "Z_lmn"
     _units = "(m)"
     _print_value_fmt = "Fixed-Z modes error: {:10.3e} "
 
@@ -1599,7 +1592,6 @@ class FixModeLambda(_FixedObjective):
 
     """
 
-    _target_arg = "L_lmn"
     _units = "(rad)"
     _print_value_fmt = "Fixed-lambda modes error: {:10.3e} "
 
@@ -1731,7 +1723,6 @@ class FixSumModesR(_FixedObjective):
 
     """
 
-    _target_arg = "R_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
     _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
@@ -1897,7 +1888,6 @@ class FixSumModesZ(_FixedObjective):
 
     """
 
-    _target_arg = "Z_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
     _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
@@ -2067,7 +2057,6 @@ class FixSumModesLambda(_FixedObjective):
     """
 
     _fixed = False  # not "diagonal", since its fixing a sum
-    _target_arg = "L_lmn"
     _units = "(rad)"
     _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
 
@@ -2332,7 +2321,6 @@ class FixPressure(_FixProfile):
 
     """
 
-    _target_arg = "p_l"
     _units = "(Pa)"
     _print_value_fmt = "Fixed-pressure profile error: {:10.3e} "
 
@@ -2438,7 +2426,6 @@ class FixAnisotropy(_FixProfile):
 
     """
 
-    _target_arg = "a_lmn"
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-anisotropy profile error: {:10.3e} "
 
@@ -2542,7 +2529,6 @@ class FixIota(_FixProfile):
 
     """
 
-    _target_arg = "i_l"
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-iota profile error: {:10.3e} "
 
@@ -2645,7 +2631,6 @@ class FixCurrent(_FixProfile):
 
     """
 
-    _target_arg = "c_l"
     _units = "(A)"
     _print_value_fmt = "Fixed-current profile error: {:10.3e} "
 
@@ -2751,7 +2736,6 @@ class FixElectronTemperature(_FixProfile):
 
     """
 
-    _target_arg = "Te_l"
     _units = "(eV)"
     _print_value_fmt = "Fixed-electron-temperature profile error: {:10.3e} "
 
@@ -2857,7 +2841,6 @@ class FixElectronDensity(_FixProfile):
 
     """
 
-    _target_arg = "ne_l"
     _units = "(m^-3)"
     _print_value_fmt = "Fixed-electron-density profile error: {:10.3e} "
 
@@ -2963,7 +2946,6 @@ class FixIonTemperature(_FixProfile):
 
     """
 
-    _target_arg = "Ti_l"
     _units = "(eV)"
     _print_value_fmt = "Fixed-ion-temperature profile error: {:10.3e} "
 
@@ -3070,7 +3052,6 @@ class FixAtomicNumber(_FixProfile):
 
     """
 
-    _target_arg = "Zeff_l"
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-atomic-number profile error: {:10.3e} "
 
@@ -3165,7 +3146,6 @@ class FixPsi(_FixedObjective):
 
     """
 
-    _target_arg = "Psi"
     _units = "(Wb)"
     _print_value_fmt = "Fixed-Psi error: {:10.3e} "
 
@@ -3261,7 +3241,6 @@ class FixCurveShift(_FixedObjective):
 
     """
 
-    _target_arg = "shift"
     _units = "(m)"
     _print_value_fmt = "Fixed-shift error: {:10.3e} "
 
@@ -3356,7 +3335,6 @@ class FixCurveRotation(_FixedObjective):
 
     """
 
-    _target_arg = "rotmat"
     _units = "(rad)"
     _print_value_fmt = "Fixed-rotation error: {:10.3e} "
 
@@ -3444,7 +3422,7 @@ class FixOmniWell(_FixedObjective):
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
     indices : ndarray or bool, optional
-        indices of the feld.B_lm array to fix.
+        indices of the field.B_lm array to fix.
         Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the field.B_lm indices.
     name : str
@@ -3452,7 +3430,6 @@ class FixOmniWell(_FixedObjective):
 
     """
 
-    _target_arg = "B_lm"
     _units = "(T)"
     _print_value_fmt = "Fixed omnigenity well error: {:10.3e} "
 
@@ -3549,7 +3526,7 @@ class FixOmniMap(_FixedObjective):
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
     indices : ndarray or bool, optional
-        indices of the feld.x_lmn array to fix.
+        indices of the field.x_lmn array to fix.
         Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the field.x_lmn indices.
     name : str
@@ -3557,7 +3534,6 @@ class FixOmniMap(_FixedObjective):
 
     """
 
-    _target_arg = "x_lmn"
     _units = "(rad)"
     _print_value_fmt = "Fixed omnigenity map error: {:10.3e} "
 
@@ -3658,7 +3634,6 @@ class FixOmniBmax(_FixedObjective):
 
     """
 
-    _target_arg = "x_lmn"
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
     _print_value_fmt = "Fixed omnigenity B_max error: {:10.3e} "

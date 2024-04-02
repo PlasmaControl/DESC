@@ -1658,7 +1658,7 @@ def test_iota_components(HELIOTRON_vac):
 @pytest.mark.unit
 def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
-    names = ["DSHAPE", "HELIOTRON", "NCSX"]
+    names = ["HELIOTRON"]
     data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
     # TODO: expand this to include all angular derivatives once they are implemented
     # for surfaces

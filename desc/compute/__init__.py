@@ -35,8 +35,8 @@ from . import (
     _field,
     _geometry,
     _metric,
+    _omnigenity,
     _profiles,
-    _qs,
     _stability,
     _surface,
 )

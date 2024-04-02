@@ -1661,7 +1661,7 @@ class VMECIO:
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
         lmbda_mn = interpolate.CubicSpline(si, lmns)
 
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         def root_fun(theta):
@@ -1728,13 +1728,13 @@ class VMECIO:
         rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
         r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
-        # straight field-line angles to plot
+        # straight field line angles to plot
         tr = np.linspace(0, 1, 50)
         tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
         tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
         t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         # find theta angles corresponding to desired theta* angles

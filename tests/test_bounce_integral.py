@@ -5,6 +5,7 @@ import inspect
 import numpy as np
 import pytest
 from interpax import Akima1DInterpolator
+from scipy.special import ellipe, ellipk
 
 from desc.backend import fori_loop, jnp, put, put_along_axis, root_scalar, vmap
 from desc.compute.bounce_integral import (
@@ -19,11 +20,13 @@ from desc.compute.bounce_integral import (
     polyval,
     take_mask,
 )
+from desc.compute.utils import dot
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
+from desc.grid import Grid
 from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
@@ -308,6 +311,133 @@ def test_elliptic_integral_limit():
 
     # TODO now compare result to elliptic integral
     bp1, bp2 = compute_bounce_points(pitch, zeta, items["poly_B"], items["poly_B_z"])
+
+
+@pytest.mark.unit
+def test_bounce_averaged_drifts():
+    """Test bounce-averaged drift with analytical expressions.
+
+    Calculate bounce-averaged drifts using the bounce-average routine and
+    compare it with the analytical expression
+    # Note 1: This test can be merged with the elliptic integral test as
+    we do calculate elliptic integrals here
+    # Note 2: Remove tests/test_equilibrium :: test_shifted_circle_geometry
+    # once all the epsilons and Gammas have been implmented and tested
+    """
+    eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
+
+    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
+
+    psi = 0.25  # rho^2 (or normalized psi)
+    alpha = 0
+
+    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
+
+    data_eq = eq.compute(eq_keys)
+
+    iotas = np.interp(np.sqrt(psi), data_eq["rho"], data_eq["iota"])
+    shears = np.interp(np.sqrt(psi), data_eq["rho"], data_eq["iota_r"])
+
+    N = int((2 * eq.M_grid) * 4 + 1)
+
+    zeta = np.linspace(-1.0 * np.pi / iotas, 1.0 * np.pi / iotas, N)
+    theta_PEST = alpha * np.ones(N, dtype=int) + iotas * zeta
+
+    coords1 = np.zeros((N, 3))
+    coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
+    coords1[:, 1] = theta_PEST
+    coords1[:, 2] = zeta
+
+    # Creating a grid along a field line
+    c1 = eq.compute_theta_coords(coords1)
+    grid = Grid(c1, sort=False)
+
+    # The bounce integral operator should be able to take a grid
+    bi, items = bounce_integral(eq, grid=grid, return_items=True)
+
+    data_keys = [
+        "|grad(psi)|^2",
+        "grad(psi)",
+        "B",
+        "iota",
+        "|B|",
+        "B^zeta",
+        "cvdrift0",
+        "cvdrift",
+        "gbdrift",
+    ]
+
+    data = eq.compute(data_keys, grid=grid, override_grid=False)
+
+    psib = data_eq["psi"][-1]
+
+    # signs
+    sign_psi = psib / np.abs(psib)
+    sign_iota = iotas / np.abs(iotas)
+
+    # normalizations
+    Lref = data_eq["a"]
+    Bref = 2 * np.abs(psib) / Lref**2
+
+    modB = data["|B|"]
+    bmag = modB / Bref
+
+    x = Lref * np.sqrt(psi)
+    s_hat = -x / iotas * shears / Lref
+
+    iota = data["iota"]
+    gradpar = Lref * data["B^zeta"] / modB
+
+    ## Comparing coefficient calculation here with coefficients from compute/_mtric
+    cvdrift = -2 * sign_psi * Bref * Lref**2 * np.sqrt(psi) * data["cvdrift"]
+    gbdrift = -2 * sign_psi * Bref * Lref**2 * np.sqrt(psi) * data["gbdrift"]
+
+    a0_over_R0 = Lref * np.sqrt(psi)
+
+    bmag_an = np.mean(bmag) * (1 - a0_over_R0 * np.cos(theta_PEST))
+    np.testing.assert_allclose(bmag, bmag_an, atol=5e-3, rtol=5e-3)
+
+    gradpar_an = 2 * Lref * iota * (1 - a0_over_R0 * np.cos(theta_PEST))
+    np.testing.assert_allclose(gradpar, gradpar_an, atol=9e-3, rtol=5e-3)
+
+    dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * modB**2)
+    alpha_MHD = -dPdrho * 1 / iota**2 * 0.5
+
+    grad_psi = data["grad(psi)"]
+    grad_alpha = data["grad(alpha)"]
+
+    gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * s_hat / Bref
+
+    fudge_factor2 = 0.19
+    gbdrift_an = fudge_factor2 * (
+        -1 * s_hat + (np.cos(theta_PEST) - 1.0 * gds21 / s_hat * np.sin(theta_PEST))
+    )
+
+    fudge_factor3 = 0.07
+    cvdrift_an = gbdrift_an + fudge_factor3 * alpha_MHD / bmag**2
+
+    # Comparing coefficients with their analytical expressions
+    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.5e-2, rtol=5e-3)
+    np.testing.assert_allclose(cvdrift, cvdrift_an, atol=9e-3, rtol=5e-3)
+
+    # Values of pitch angle for which to evaluate the bounce averages
+    lambdas = np.linspace(1 / np.min(bmag), 1 / np.max(bmag), 11)
+
+    bavg_drift_an = (
+        0.5 * cvdrift_an * ellipe(lambdas)
+        + gbdrift_an * ellipk(lambdas)
+        + dPdrho / bmag**2 * ellipe(lambdas)
+    )
+
+    # The quantities are already calculated along a field line
+    bavg_drift_num = bi(
+        np.sqrt(1 - lambdas * bmag) * 0.5 * cvdrift
+        + gbdrift * 1 / np.sqrt(1 - lambdas * bmag)
+        + dPdrho / bmag**2 * np.sqrt(1 - lambdas * bmag),
+        lambdas,
+    )
+
+    np.testing.assert_allclose(bavg_drift_num, bavg_drift_an, atol=2e-2, rtol=1e-2)
 
 
 # TODO: if deemed useful finish details using methods in desc.compute.bounce_integral

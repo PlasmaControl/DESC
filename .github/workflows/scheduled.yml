@@ -39,4 +39,4 @@ jobs:
             --durations=0 \
             --splits 5 \
             --group ${{ matrix.combos.group }} \
-            --splitting-algorithm duration_based_chunks
+            --splitting-algorithm least_duration

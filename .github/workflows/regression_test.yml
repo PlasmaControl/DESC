@@ -52,7 +52,7 @@ jobs:
             --mpl-generate-summary=html \
             --splits 6 \
             --group ${{ matrix.group }} \
-            --splitting-algorithm duration_based_chunks \
+            --splitting-algorithm least_duration \
             --db ./prof.db
       - name: save coverage file and plot comparison results
         if: always()

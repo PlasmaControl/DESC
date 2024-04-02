@@ -868,5 +868,5 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma = Bplasma + eval_data["B"] / 2
     if normal_only:
-        Bplasma = jnp.sum(Bplasma * source_data["n_rho"], axis=1)
+        Bplasma = jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
     return Bplasma

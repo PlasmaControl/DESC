@@ -14,6 +14,7 @@ from desc.objectives.objective_funs import _Objective
 from desc.singularities import (
     DFTInterpolator,
     FFTInterpolator,
+    compute_B_plasma,
     virtual_casing_biot_savart,
 )
 from desc.utils import Timer, errorif, warnif
@@ -789,7 +790,7 @@ class QuadraticFlux(_Objective):
 
     Parameters
     ----------
-    ext_field : MagneticField
+    field : MagneticField
         External field produced by coils.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
@@ -808,17 +809,13 @@ class QuadraticFlux(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    s, q : integer
-        Hyperparameters for singular integration scheme, s is roughly equal to the size
-        of the local singular grid with respect to the global grid, q is the order of
-        integration on the local grid
-    src_grid : Grid, optional
+    source_grid : Grid, optional
         Collocation grid containing the nodes for plasma source terms.
     eval_grid : Grid, optional
         Collocation grid containing the nodes on the plasma surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
     field_grid : Grid, optional
-        Grid used to discretize ext_field (e.g. grid for the magnetic field source from
+        Grid used to discretize field (e.g. grid for the magnetic field source from
         coils).
     vacuum : bool
         If true, Bplasma is set to zero.
@@ -830,21 +827,19 @@ class QuadraticFlux(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary normal field Error: {:10.3e} "
-    _units = "(T)"
+    _units = "(T m^2)"
     _coordinates = "rtz"
 
     def __init__(
         self,
         eq,
-        ext_field,
+        field,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
-        s=None,
-        q=None,
-        src_grid=None,
+        source_grid=None,
         eval_grid=None,
         field_grid=None,
         vacuum=False,
@@ -852,15 +847,13 @@ class QuadraticFlux(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        self._src_grid = src_grid
+        self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._eq = eq
-        self._s = s
-        self._q = q
-        self._ext_field = ext_field
+        self._field = field
         self._field_grid = field_grid
         self._vacuum = vacuum
-        things = [ext_field]
+        things = [field]
         super().__init__(
             things=things,
             target=target,
@@ -898,11 +891,10 @@ class QuadraticFlux(_Objective):
 
         self._data_keys = [
             "R",
-            "zeta",
             "Z",
             "n_rho",
-            "K_vc",
             "phi",
+            "|e_theta x e_zeta|",
         ]
 
         timer = Timer()
@@ -925,63 +917,20 @@ class QuadraticFlux(_Objective):
             profiles=eval_profiles,
         )
 
-        self._constants = {}
-
         # pre-compute Bplasma because we are assuming eq is fixed
         if self._vacuum:
-            Bplasma = np.zeros(np.shape(eval_grid.nodes))
+            Bplasma = jnp.zeros(eval_grid.num_nodes)
 
         else:
-            if self._src_grid is None:
-                src_grid = LinearGrid(
-                    rho=np.array([1.0]),
-                    M=3 * eq.M_grid,
-                    N=3 * eq.N_grid,
-                    NFP=int(eq.NFP),
-                    sym=False,
-                )
-                self._src_grid = src_grid
-            else:
-                src_grid = self._src_grid
-            if self._s is None:
-                k = min(src_grid.num_theta, src_grid.num_zeta)
-                self._s = k // 2 + int(np.sqrt(k))
-            if self._q is None:
-                k = min(src_grid.num_theta, src_grid.num_zeta)
-                self._q = k // 2 + int(np.sqrt(k))
-            try:
-                interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
-            except AssertionError as e:
-                warnings.warn(
-                    "Could not built fft interpolator, switching to dft method which is"
-                    " much slower. Reason: " + str(e)
-                )
-                interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
-
-            self._constants.update(interpolator=interpolator)
-
-            src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
-            src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
-            src_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._data_keys,
-                params=eq.params_dict,
-                transforms=src_transforms,
-                profiles=src_profiles,
+            Bplasma = compute_B_plasma(
+                eq, eval_grid, self._source_grid, normal_only=True
             )
 
-            # don't need extra B/2 since we only care about normal component
-            Bplasma = virtual_casing_biot_savart(
-                eval_data,
-                src_data,
-                self._constants["interpolator"],
-            )
-
-        self._constants.update(
-            quad_weights=w,
-            eval_data=eval_data,
-            Bplasma=Bplasma,
-        )
+        self._constants = {
+            "quad_weights": w,
+            "eval_data": eval_data,
+            "Bplasma": Bplasma,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1020,17 +969,17 @@ class QuadraticFlux(_Objective):
         x = jnp.array(
             [
                 eval_data["R"],
-                eval_data["zeta"],
+                eval_data["phi"],
                 eval_data["Z"],
             ]
         ).T
 
         # Bext is not pre-computed because field is not fixed
-        Bext = self._ext_field.compute_magnetic_field(
+        Bext = self._field.compute_magnetic_field(
             x, source_grid=self._field_grid, basis="rpz", params=field_params
         )
-
-        f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
+        Bext = jnp.sum(Bext * eval_data["n_rho"], axis=-1)
+        f = (Bext + Bplasma) * eval_data["|e_theta x e_zeta|"]
         return f
 
 

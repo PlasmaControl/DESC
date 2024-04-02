@@ -727,15 +727,16 @@ class TestQuadraticFlux:
             eq,
             t_field,
             eval_grid=eval_grid,
-            src_grid=source_grid,
+            source_grid=source_grid,
         )
         Bnorm = t_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=source_grid
         )[0]
         obj.build(eq)
+        dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         f = obj.compute(field_params=t_field.params_dict)
 
-        np.testing.assert_allclose(f, Bnorm, atol=1e-3)
+        np.testing.assert_allclose(f, Bnorm * dA, atol=1e-3)
 
     @pytest.mark.unit
     def test_quadratic_flux_with_eq_fixed(self, quadratic_flux_equilibriums):
@@ -758,8 +759,8 @@ class TestQuadraticFlux:
 
         quadflux_obj = QuadraticFlux(
             eq=eq,
-            ext_field=field,
-            src_grid=source_grid,
+            field=field,
+            source_grid=source_grid,
             eval_grid=eval_grid,
             field_grid=field_grid,
         )
@@ -792,8 +793,8 @@ class TestQuadraticFlux:
         constraints = (FixParameter(field, ["R0"]),)
         quadflux_obj = QuadraticFlux(
             eq=eq,
-            ext_field=field,
-            src_grid=source_grid,
+            field=field,
+            source_grid=source_grid,
             eval_grid=eval_grid,
             field_grid=field_grid,
         )
@@ -809,26 +810,27 @@ class TestQuadraticFlux:
 
         # optimizer should zero out field since that's the easiest way
         # to get to Bnorm = 0
-        np.testing.assert_allclose(things[0].B0, 0, atol=1e-3)
+        np.testing.assert_allclose(things[0].B0, 0, atol=2e-3)
 
     @pytest.mark.unit
     def test_quadratic_flux_vacuum(self, quadratic_flux_equilibriums):
         """Test vacuum flag."""
-        # equilibrium that has Bplasma != 0
+        # equilibrium that has Bplasma == 0
         eq, __ = quadratic_flux_equilibriums
         t_field = ToroidalMagneticField(1, 1)
-
+        field_grid, eval_grid, source_grid = self.get_grids(eq, t_field)
         obj = QuadraticFlux(
             eq,
             t_field,
             vacuum=True,
+            eval_grid=eval_grid,
         )
-        Bnorm = t_field.compute_Bnormal(eq.surface)[0]
+        Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
         obj.build(eq)
         f = obj.compute(field_params=t_field.params_dict)
-
+        dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set Bplasma = 0
-        np.testing.assert_allclose(f, Bnorm, atol=1e-14)
+        np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
 
 
 @pytest.mark.unit

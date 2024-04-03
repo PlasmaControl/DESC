@@ -2186,14 +2186,18 @@ def _g_sup_ra_tz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="gbdrift",
-    label="\\mathrm{gradB-drift}",
-    units="~",
-    units_long="None",
-    description="Geometric part of the gradB drift"
-    + " used for local stability analyses",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="\\mathrm{gradB-drift} = 1/B^{2} * (\\mathbf{b}\\times\\nabla (B)) \\cdot"
+    + "\\nabla \\alpha",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Binormal component of the geometric part of the gradB drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=["|B|", "b", "grad(alpha)", "grad(|B|)"],
@@ -2209,14 +2213,18 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="cvdrift",
-    label="\\mathrm{curvature-drift}",
-    units="~",
-    units_long="None",
-    description="Geometric part of the curvature drift"
-    + "used for local stability analyses",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="\\mathrm{curvature-drift} = 1/B^{3} * (\\mathbf{b}\\times\\nabla(p + B^2/2))"
+    + "\\cdot \\nabla \\alpha",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Binormal component of the geometric part of the curvature drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=["p_r", "psi_r", "|B|", "gbdrift"],
@@ -2229,14 +2237,18 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="cvdrift0",
-    label="\\mathrm{curvature-drift-1}",
-    units="~",
-    units_long="None",
-    description="Geometric part of the curvature drift1"
-    + "used for local stability analyses",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="\\mathrm{curvature-drift-1} = 1/B^{2} * (\\mathbf{b}\\times\\nabla(B))"
+    + "\\cdot \\nabla rho",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Radial component of the geometric part of the curvature drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=["|B|", "b", "e^rho", "grad(|B|)"],

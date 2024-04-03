@@ -733,17 +733,17 @@ class ToroidalFlux(_Objective):
         # ensure vacuum eq, as we don't yet support finite beta
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))
-        warnif(
+        errorif(
             pres > 1e-8,
             UserWarning,
             f"Pressure is non-zero (max {pres} Pa), "
-            + "finite beta not supported yet.",
+            + "this objective is unneeded at finite beta.",
         )
-        warnif(
+        errorif(
             curr > 1e-8,
             UserWarning,
             f"Current is non-zero (max {curr} A), "
-            + "finite plasma currents not supported yet.",
+            + "this objective is unneeded at finite beta.",
         )
 
         # eval_grid.num_nodes for quad flux cost,

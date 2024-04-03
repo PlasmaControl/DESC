@@ -17,6 +17,7 @@ from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
+from desc.coils import CoilSet
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
@@ -2253,6 +2254,11 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
 
     def flatten_coils(coilset):
         if hasattr(coilset, "__len__"):
+            # plot all coils for symmetric coil sets
+            if coilset.NFP > 1 or coilset.sym:
+                coilset = CoilSet.from_symmetry(
+                    coilset, NFP=coilset.NFP, sym=coilset.sym
+                )
             return [a for i in coilset for a in flatten_coils(i)]
         else:
             return [coilset]

@@ -9,7 +9,6 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-import numpy as np
 import scipy
 from scipy.constants import mu_0
 from scipy.integrate import simpson as simps
@@ -257,6 +256,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "phi",
         "iota",
         "psi",
+        "psi_r",
         "rho",
     ],
 )
@@ -297,13 +297,13 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     """
     rho = data["rho"]
 
-    psi_b = params["Psi"] / (2 * np.pi)
+    psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(11)
     # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
+    zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
 
     iota = data["iota"]
     shat = -rho / iota * data["iota_r"]
@@ -405,6 +405,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
         "phi",
         "iota",
         "psi",
+        "psi_r",
         "rho",
     ],
 )
@@ -445,13 +446,13 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     """
     rho = data["rho"]
 
-    psi_b = params["Psi"] / (2 * np.pi)
+    psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(15)
     # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-0.5 * np.pi, 0.5 * np.pi, N_zeta0)
+    zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
     iota = data["iota"]
     shat = -rho / iota * data["iota_r"]
@@ -557,6 +558,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         "phi",
         "iota",
         "psi",
+        "psi_r",
         "rho",
     ],
 )
@@ -604,14 +606,14 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     """
     rho = data["rho"]
 
-    psi_b = params["Psi"] / (2 * np.pi)
+    psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
     # a_N is 0.4
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(11)
     # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
+    zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
 
     iota = data["iota"]
     shat = -rho / iota * data["iota_r"]
@@ -817,12 +819,12 @@ def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
     """
     rho = data["rho"]
 
-    psi_b = params["Psi"] / (2 * np.pi)
+    psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(11)
-    zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
+    zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
 
     iota = data["iota"]
     psi = data["psi"]
@@ -969,7 +971,7 @@ def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
     sub_diag = (
         1
         / h**2
-        * np.ones(
+        * jnp.ones(
             N - 3,
         )
     )
@@ -977,23 +979,23 @@ def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
     diag = (
         -2
         / h**2
-        * np.ones(
+        * jnp.ones(
             N - 2,
         )
     )
 
-    D2 = np.diag(sub_diag, -1) + np.diag(diag + V[1:-1], 0) + np.diag(sup_diag, 1)
+    D2 = jnp.diag(sub_diag, -1) + jnp.diag(diag + V[1:-1], 0) + jnp.diag(sup_diag, 1)
 
     b = f / g
-    M = np.diag(b[1:-1], 0)
+    M = jnp.diag(b[1:-1], 0)
 
     w, v = jax.linlag.eigh(D2, k=1, M=M, sigma=2.0, OPpart="r")
 
     # variational refinement here
-    X = np.zeros((N,))
-    dX = np.zeros((N,))
+    X = jnp.zeros((N,))
+    dX = jnp.zeros((N,))
 
-    X[1:-1] = np.reshape(v[:, 0].real, (-1,)) / np.max(np.abs(v[:, 0].real))
+    X[1:-1] = jnp.reshape(v[:, 0].real, (-1,)) / jnp.max(jnp.abs(v[:, 0].real))
 
     X[0] = 0.0
     X[-1] = 0.0
@@ -1096,12 +1098,12 @@ def _ideal_ballooning_gamma4(params, transforms, profiles, data, *kwargs):
     """
     rho = data["rho"]
 
-    psi_b = params["Psi"] / (2 * np.pi)
+    psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(11)
-    zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
+    zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
 
     iota = data["iota"]
     psi = data["psi"]
@@ -1246,29 +1248,29 @@ def _ideal_ballooning_gamma4(params, transforms, profiles, data, *kwargs):
 
     # Since N remains fixed during optimization, we don't need to recalculate
     # the matrix
-    h = 2 * np.pi / N
-    n1 = int(np.ceil((N - 1) / 2))
-    n2 = int(np.floor((N - 1) / 2))
-    kk1 = np.linspace(1, n1, n1)
-    kk2 = np.linspace(n1 + 1, n1 + n2, n2)
+    h = 2 * jnp.pi / N
+    n1 = int(jnp.ceil((N - 1) / 2))
+    n2 = int(jnp.floor((N - 1) / 2))
+    kk1 = jnp.linspace(1, n1, n1)
+    kk2 = jnp.linspace(n1 + 1, n1 + n2, n2)
 
-    if np.mod(N, 2) == 0:  # of 2nd derivative matrix
-        topc = 1 / (np.sin(np.linspace(1, n1, n1) * h / 2)) ** 2
-        col1 = np.concatenate(
+    if jnp.mod(N, 2) == 0:  # of 2nd derivative matrix
+        topc = 1 / (jnp.sin(jnp.linspace(1, n1, n1) * h / 2)) ** 2
+        col1 = jnp.concatenate(
             (
-                np.array([-(np.pi**2 / 3) / h**2 - 1 / 6]),
+                jnp.array([-(jnp.pi**2 / 3) / h**2 - 1 / 6]),
                 -0.5 * ((-1) ** kk1) * topc,
                 -0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
             )
         )
     else:
         topc = 1 / (
-            np.sin(np.linspace(h / 2, h / 2 * n1, n1))
-            * np.tan(np.linspace(h / 2, h / 2 * n1, n1))
+            jnp.sin(jnp.linspace(h / 2, h / 2 * n1, n1))
+            * jnp.tan(jnp.linspace(h / 2, h / 2 * n1, n1))
         )
-        col1 = np.concatenate(
+        col1 = jnp.concatenate(
             (
-                np.array([-(np.pi**2 / 3) / h**2 + 1 / 12]),
+                jnp.array([-(jnp.pi**2 / 3) / h**2 + 1 / 12]),
                 0.5 * ((-1) ** kk1) * topc,
                 -0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
             )
@@ -1276,10 +1278,10 @@ def _ideal_ballooning_gamma4(params, transforms, profiles, data, *kwargs):
 
     row1 = col1  # first row
 
-    D2 = scipy.linalg.toeplitz(col1, r=row1) * (1 / ntor) ** 2 + np.diag(V, 0)
+    D2 = scipy.linalg.toeplitz(col1, r=row1) * (1 / ntor) ** 2 + jnp.diag(V, 0)
 
     ## eigvals will be deprecated, replace by subset_by_idx in scipy >= 1.12
-    w, v = scipy.linalg.eigh(D2, b=np.diag(b, 0), eigvals=[N - 1, N - 1])
+    w, v = scipy.linalg.eigh(D2, b=jnp.diag(b, 0), eigvals=[N - 1, N - 1])
 
     lam = w + 0.01
     data["ideal_ball_gamma4"] = lam * (lam > 0)

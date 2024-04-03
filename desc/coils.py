@@ -1301,7 +1301,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
         """Convert all coils to SplineXYZCoil.
@@ -1336,7 +1336,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):

@@ -10,8 +10,7 @@ from desc.backend import (
     tree_structure,
     tree_unflatten,
 )
-from desc.compute import get_profiles, get_transforms
-from desc.compute.utils import compute as compute_fun
+from desc.compute import get_transforms
 from desc.grid import LinearGrid, _Grid
 from desc.utils import Timer, errorif, warnif
 
@@ -603,6 +602,11 @@ class CoilTorsion(_CoilObjective):
 class ToroidalFlux(_Objective):
     """Target the toroidal flux in an equilibrium from a magnetic field.
 
+    This objective is needed when performing stage-two coil optimization on
+    a vacuum equilibrium, to avoid the trivial solution of minimizing Bn
+    by making the coil currents zero. Instead, this objective ensures
+    the coils create the necessary toroidal flux for the equilibrium field.
+
     Parameters
     ----------
     eq : Equilibrium, optional
@@ -646,22 +650,12 @@ class ToroidalFlux(_Objective):
         Collocation grid containing the nodes to evaluate the normal magnetic field at
         plasma geometry at. Defaults to a LinearGrid(L=eq.L_grid, M=eq.M_grid,
         zeta=jnp.array(0.0), NFP=eq.NFP).
-    external_field : MagneticField, optional
-        MagneticField object containing the external field to consider when
-        minimizing the Bn errors. If None, the external field is assumed to be zero.
-        e.g. this could be a 1/R field representing external TF coils, or
-        it could be set of discrete TF coils so that coil ripple is considered during
-        the optimization of the ``field`` object.
-    external_field_source_grid : Grid, optional
-        Grid object used to discretize the external field source. Defaults to the
-        default for the given external_field, see the docstring of the field object
-        for the specific default.
     name : str, optional
         Name of the objective function.
     """
 
     _coordinates = "rtz"
-    _units = "T"
+    _units = "T*m^2"
     _print_value_fmt = "Quadratic Flux: {:10.3e} "
 
     def __init__(
@@ -677,23 +671,17 @@ class ToroidalFlux(_Objective):
         deriv_mode="auto",
         source_grid=None,
         eval_grid=None,
-        external_field=None,
-        external_field_source_grid=None,
         name="toroidal-flux",
-        eq_fixed=False,
     ):
         if target is None and bounds is None:
             target = eq.Psi
         self._field = field
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        self._eq_fixed = eq_fixed
-        self._eq = eq if eq_fixed else None
-        self._external_field = external_field
-        self._external_field_source_grid = external_field_source_grid
+        self._eq = eq
 
         super().__init__(
-            things=[field, eq] if not eq_fixed else [field],
+            things=[field],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -715,7 +703,7 @@ class ToroidalFlux(_Objective):
             Level of output.
 
         """
-        eq = self._eq if self._eq_fixed else self.things[1]
+        eq = self._eq
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 L=eq.L_grid, M=eq.M_grid, zeta=jnp.array(0.0), NFP=eq.NFP
@@ -730,7 +718,7 @@ class ToroidalFlux(_Objective):
             "Evaluation grid should be at constant zeta",
         )
 
-        # ensure vacuum eq, as we don't yet support finite beta
+        # ensure vacuum eq, as is unneeded for finite beta
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))
         errorif(
@@ -755,38 +743,17 @@ class ToroidalFlux(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        equil_profiles = get_profiles(
-            self._equil_data_keys,
-            obj=eq,
-            grid=eval_grid,
-            has_axis=eval_grid.axis.size,
-        )
-        equil_transforms = get_transforms(
-            self._equil_data_keys,
-            obj=eq,
-            grid=eval_grid,
-            has_axis=eval_grid.axis.size,
+        data = eq.compute(
+            ["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=eval_grid
         )
 
-        if self._eq_fixed:
-            data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|"], grid=eval_grid)
+        plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
-            plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
-
-        if not self._eq_fixed:
-            self._constants = {
-                "equil_transforms": equil_transforms,
-                "equil_profiles": equil_profiles,
-                "quad_weights": 1.0,
-            }
-        else:
-            self._constants = {
-                "equil_transforms": equil_transforms,
-                "equil_profiles": equil_profiles,
-                "plasma_coords": plasma_coords,
-                "equil_data": data,
-                "quad_weights": 1.0,
-            }
+        self._constants = {
+            "plasma_coords": plasma_coords,
+            "equil_data": data,
+            "quad_weights": 1.0,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -794,16 +761,14 @@ class ToroidalFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1=None, params_2=None, constants=None):
+    def compute(self, field_params=None, constants=None):
         """Compute toroidal flux.
 
         Parameters
         ----------
         field_params : dict
             Dictionary of field degrees of freedom,
-            eg FourierCurrentPotential.params_dict
-        equil_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            eg FourierCurrentPotential.params_dict or CoilSet.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -816,24 +781,9 @@ class ToroidalFlux(_Objective):
         """
         if constants is None:
             constants = self.constants
-        if self._eq_fixed:
-            field_params = params_1
-        else:
-            field_params = params_2
-            equil_params = params_1
-        if not self._eq_fixed:
-            data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._equil_data_keys,
-                params=equil_params,
-                transforms=constants["equil_transforms"],
-                profiles=constants["equil_profiles"],
-            )
-            plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
-        else:
-            data = constants["equil_data"]
-            plasma_coords = constants["plasma_coords"]
+        data = constants["equil_data"]
+        plasma_coords = constants["plasma_coords"]
 
         B = self._field.compute_magnetic_field(
             plasma_coords,
@@ -842,24 +792,14 @@ class ToroidalFlux(_Objective):
             params=field_params,
         )
         grid = self._eval_grid
+
+        B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
+
         Psi = jnp.sum(
             grid.spacing[:, 0]
             * grid.spacing[:, 1]
             * data["|e_rho x e_theta|"]
-            * B[:, 1]
+            * B_dot_n_zeta
         )
-
-        if self._external_field is not None:
-            B_ext = self._external_field.compute_magnetic_field(
-                plasma_coords,
-                grid=self._external_field_source_grid,
-                basis="rpz",
-            )
-            Psi += jnp.sum(
-                grid.spacing[:, 0]
-                * grid.spacing[:, 1]
-                * data["|e_rho x e_theta|"]
-                * B_ext[:, 1]
-            )
 
         return Psi

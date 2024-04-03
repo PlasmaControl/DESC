@@ -663,9 +663,9 @@ class TestObjectiveFunction:
         grid = LinearGrid(L=30, M=30, zeta=np.array(0.0))
 
         def test(eq, field, correct_value, rtol=1e-14):
-            obj = ToroidalFlux(eq=eq, field=field, eq_fixed=True, eval_grid=grid)
+            obj = ToroidalFlux(eq=eq, field=field, eval_grid=grid)
             obj.build()
-            torflux = obj.compute_unscaled(*obj.xs(eq))
+            torflux = obj.compute_unscaled(*obj.xs(field))
             np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
 
         eq = Equilibrium(iota=PowerSeriesProfile(0))
@@ -673,15 +673,18 @@ class TestObjectiveFunction:
         field = ToroidalMagneticField(B0=1, R0=1)
         # calc field Psi
 
-        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|"], grid=grid)
+        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=grid)
         field_B = field.compute_magnetic_field(
             np.vstack([data["R"], data["phi"], data["Z"]]).T
         )
+
+        B_dot_n_zeta = jnp.sum(field_B * data["n_zeta"], axis=1)
+
         psi_from_field = np.sum(
             grid.spacing[:, 0]
             * grid.spacing[:, 1]
             * data["|e_rho x e_theta|"]
-            * field_B[:, 1]
+            * B_dot_n_zeta
         )
 
         test(eq, field, psi_from_field)

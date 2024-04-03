@@ -251,15 +251,6 @@ def test_resolution():
     eq2.change_resolution(**eq1.resolution)
     assert eq1.resolution == eq2.resolution
 
-    eq1.L = 2
-    eq1.M = 3
-    eq1.N = 4
-    eq1.NFP = 5
-    assert eq1.R_basis.L == 2
-    assert eq1.R_basis.M == 3
-    assert eq1.R_basis.N == 4
-    assert eq1.R_basis.NFP == 5
-
 
 @pytest.mark.unit
 def test_equilibrium_from_near_axis():
@@ -367,9 +358,7 @@ def test_backward_compatible_load_and_resolve():
         eq = EquilibriaFamily.load(load_from=".//tests//inputs//NCSX_older.h5")[-1]
 
     # reducing resolution since we only want to test eq.solve
-    eq.L = 4
-    eq.M = 4
-    eq.N = 4
+    eq.change_resolution(4, 4, 4, 4, 4, 4)
 
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj, use_jit=False)

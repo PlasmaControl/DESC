@@ -1,4 +1,5 @@
 """Objectives for targeting MHD stability."""
+
 import numpy as np
 
 from desc.backend import jnp

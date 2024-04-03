@@ -716,13 +716,6 @@ class ToroidalFlux(_Objective):
 
         """
         eq = self._eq if self._eq_fixed else self.things[1]
-        field = self.things[0]
-        # if field is different than self._field, update
-        if field != self._field:
-            self._field = field
-        # if eq is different than self._eq, update
-        if eq != self._eq:
-            self._eq = eq
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 L=eq.L_grid, M=eq.M_grid, zeta=jnp.array(0.0), NFP=eq.NFP

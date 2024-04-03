@@ -8,6 +8,7 @@ of these quantities. These lambda functions are evaluated only when the
 computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
+
 import numpy as np
 import scipy
 from scipy.constants import mu_0
@@ -317,7 +318,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
     gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
-    dpdrho = jnp.mean(mu_0 * data["p_r"])
+    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
 
     gds2 = jnp.reshape(
         rho**2
@@ -329,18 +330,19 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
         (N_alpha, N_zeta0, N),
     )
 
-    f = B_N / a_N**3 * gds2 / B**3 * 1 / gradpar
-    g = 1 / (a_N * B_N) * gds2 / B * gradpar
+    f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
+    g = a_N**3 * B_N * gds2 / B * gradpar
     g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
     c = (
-        -1
-        / (a_N * B_N)
+        1
+        * a_N**3
+        * B_N
         * jnp.reshape(
             2
             / data["B^zeta"][None, :]
             * sign_psi
-            * rho
-            * dpdrho
+            * rho**2
+            * dpdpsi
             * (
                 data["cvdrift"][None, :]
                 - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
@@ -449,7 +451,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     N_zeta0 = int(15)
     # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-np.pi, np.pi, N_zeta0)
+    zeta0 = jnp.linspace(-0.5 * np.pi, 0.5 * np.pi, N_zeta0)
 
     iota = data["iota"]
     shat = -rho / iota * data["iota_r"]
@@ -464,7 +466,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
     gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
-    dpdrho = jnp.mean(mu_0 * data["p_r"])
+    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
 
     gds2 = jnp.reshape(
         rho**2
@@ -476,18 +478,19 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         (N_alpha, N_zeta0, N),
     )
 
-    f = B_N / a_N**3 * gds2 / B**3 * 1 / gradpar
-    g = 1 / (a_N * B_N) * gds2 / B * gradpar
+    f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
+    g = a_N**3 * B_N * gds2 / B * gradpar
     g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
     c = (
-        -1
-        / (a_N * B_N)
+        1
+        * a_N**3
+        * B_N
         * jnp.reshape(
             2
             / data["B^zeta"][None, :]
             * sign_psi
-            * rho
-            * dpdrho
+            * rho**2
+            * dpdpsi
             * (
                 data["cvdrift"][None, :]
                 - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
@@ -624,7 +627,7 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
     gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
-    dpdrho = jnp.mean(mu_0 * data["p_r"])
+    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
 
     gds2 = jnp.reshape(
         rho**2
@@ -636,16 +639,18 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
         (N_alpha, N_zeta0, N),
     )
 
-    g = 1 / (a_N * B_N) * gds2 / B * gradpar
+    g = a_N**3 * B_N * gds2 / B * gradpar
+    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
     c = (
-        -1
-        / (a_N * B_N)
+        1
+        * a_N**3
+        * B_N
         * jnp.reshape(
             2
             / data["B^zeta"][None, :]
             * sign_psi
-            * rho
-            * dpdrho
+            * rho**2
+            * dpdpsi
             * (
                 data["cvdrift"][None, :]
                 - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
@@ -804,8 +809,6 @@ def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
     g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
     c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
         * (b cross kappa) dot grad alpha/ B**2,
-    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3
-        * 1/(b dot grad zeta)
 
     Parameters
     ----------

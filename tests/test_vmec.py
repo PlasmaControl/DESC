@@ -210,7 +210,7 @@ class TestVMECIO:
         x_mn = np.power(np.atleast_2d(rho).T, np.atleast_2d(np.abs(m))) * np.atleast_2d(
             x
         )
-        basis = FourierZernikeBasis(L=-1, M=M, N=N, spectral_indexing="ansi")
+        basis = FourierZernikeBasis(L=M, M=M, N=N, spectral_indexing="ansi")
         x_lmn = fourier_to_zernike(m, n, x_mn, basis)
 
         x_lmn_correct = np.zeros((basis.num_modes,))
@@ -242,7 +242,7 @@ class TestVMECIO:
         x_mn_correct = np.power(
             np.atleast_2d(rho).T, np.atleast_2d(np.abs(m_correct))
         ) * np.atleast_2d(x)
-        basis = FourierZernikeBasis(L=-1, M=M, N=N, spectral_indexing="ansi")
+        basis = FourierZernikeBasis(L=M, M=M, N=N, spectral_indexing="ansi")
 
         x_lmn = np.zeros((basis.num_modes,))
         for k in range(basis.num_modes):

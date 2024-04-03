@@ -188,11 +188,11 @@ class TestConstructor:
     @pytest.mark.unit
     def test_asserts(self):
         """Test error checking in equilibrium creation."""
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(L=3.4)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(M=3.4)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(N=3.4)
         with pytest.raises(ValueError):
             eq = Equilibrium(NFP=3.4j)

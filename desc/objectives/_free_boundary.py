@@ -790,10 +790,12 @@ class QuadraticFlux(_Objective):
 
     Parameters
     ----------
-    field : MagneticField
-        External field produced by coils.
     eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
+        Equilibrium upon whose surface the normal field error will be minimized.
+        The equilibrium is kept fixed during the optimization with this objective.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the normal field error on the provided equilibrium's surface.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
@@ -818,7 +820,8 @@ class QuadraticFlux(_Objective):
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils).
     vacuum : bool
-        If true, Bplasma is set to zero.
+        If true, Bplasma (the contribution to the normal field on the boundary from the
+        plasma currents) is set to zero.
     name : str
         Name of the objective function.
 

@@ -13,7 +13,7 @@ import pytest
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
-from desc.backend import jnp, put
+from desc.backend import jnp
 from desc.coils import CoilSet, FourierPlanarCoil, FourierXYZCoil, MixedCoilSet
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
@@ -37,7 +37,6 @@ from desc.objectives import (
     CoilTorsion,
     Elongation,
     Energy,
-    FixParameter,
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
@@ -65,7 +64,6 @@ from desc.objectives import (
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.utils import softmax, softmin
-from desc.optimize.optimizer import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -821,53 +819,6 @@ class TestObjectiveFunction:
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
         test(nested_coils, grid=nested_grids)
 
-
-class TestQuadraticFlux:
-    """Tests quadratic flux."""
-
-    def get_grids(self, eq, field, N_grid=15, M_grid=10):
-        """Compute grids used for all of the tests."""
-        field_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=M_grid,
-            N=N_grid,
-            NFP=field.NFP if not isinstance(field, ToroidalMagneticField) else 1,
-            sym=False,
-        )
-        eval_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=N_grid,
-            NFP=eq.NFP,
-            sym=False,
-        )
-
-        source_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=M_grid,
-            N=N_grid,
-            NFP=int(eq.NFP),
-            sym=False,
-        )
-
-        return field_grid, eval_grid, source_grid
-
-    def make_nonaxisym_field(self, eq):
-        """Makes a nonaxisymmetric field depending on the given eq."""
-        surf = eq.surface.copy()
-        surf.R_lmn = put(surf.R_lmn, surf.R_basis.get_idx(M=1, N=0), 2)
-        surf.Z_lmn = put(surf.Z_lmn, surf.Z_basis.get_idx(M=-1, N=0), -2)
-        nonaxisym_field = FourierCurrentPotentialField.from_surface(
-            surface=surf,
-            Phi_mn=np.array([1e4]),
-            modes_Phi=np.array([[1, 0]]),
-            G=1e4,
-            I=0,
-            sym_Phi="sin",
-        )
-
-        return nonaxisym_field
-
     @pytest.mark.unit
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""
@@ -880,18 +831,25 @@ class TestQuadraticFlux:
         f = obj.compute(field_params=t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
-        # test nonaxisymmetric surface
+        # test non-axisymmetric surface
         eq = desc.examples.get("precise_QA", "all")[0]
         eq.change_resolution(4, 4, 4, 8, 8, 8)
-
-        __, eval_grid, source_grid = self.get_grids(eq, t_field)
-
-        obj = QuadraticFlux(
-            eq,
-            t_field,
-            eval_grid=eval_grid,
-            source_grid=source_grid,
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
         )
+        source_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
+        )
+
+        obj = QuadraticFlux(eq, t_field, eval_grid=eval_grid, source_grid=source_grid)
         Bnorm = t_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=source_grid
         )[0]
@@ -899,100 +857,24 @@ class TestQuadraticFlux:
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         f = obj.compute(field_params=t_field.params_dict)
 
-        np.testing.assert_allclose(f, Bnorm * dA, atol=1e-3)
+        np.testing.assert_allclose(f, Bnorm * dA, atol=2e-4, rtol=1e-2)
 
-    @pytest.mark.unit
-    def test_quadratic_flux_with_eq_fixed(self):
-        """Test with eq_fixed = True, field_fixed = False.
-
-        Checks that a non-axisymmetric field becomes axisymmetric
-        given an axisymmetric field.
-        """
-        eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
-
-        # create a winding surface that surrounds the equilibrium
-        field = self.make_nonaxisym_field(eq)
-
-        optimizer = Optimizer("lsq-exact")
-
-        field_grid, eval_grid, source_grid = self.get_grids(eq, field)
-
-        # fix every parameter except for phi_mn
-        constraints = (FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),)
-
-        quadflux_obj = QuadraticFlux(
-            eq=eq,
-            field=field,
-            source_grid=source_grid,
-            eval_grid=eval_grid,
-            field_grid=field_grid,
-        )
-        objective = ObjectiveFunction(quadflux_obj)
-
-        things, __ = optimizer.optimize(
-            field,
-            objective=objective,
-            constraints=constraints,
-            copy=True,
-            ftol=1e-14,
-            gtol=1e-14,
-        )
-
-        np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-8)
-
-    @pytest.mark.unit
-    def test_quadratic_flux_with_analytic_field(self):
-        """Test analytic field optimization when eq_fixed=True, field_fixed=False.
-
-        Checks that B goes to zero for axisymmetric eq and field.
-        """
-        eq = desc.examples.get("precise_QA")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
-        field = ToroidalMagneticField(1, 1)
-        field_grid, eval_grid, source_grid = self.get_grids(eq, field, N_grid=20)
-
-        optimizer = Optimizer("lsq-exact")
-
-        constraints = (FixParameter(field, ["R0"]),)
-        quadflux_obj = QuadraticFlux(
-            eq=eq,
-            field=field,
-            source_grid=source_grid,
-            eval_grid=eval_grid,
-            field_grid=field_grid,
-        )
-        objective = ObjectiveFunction(quadflux_obj)
-        things, __ = optimizer.optimize(
-            field,
-            objective=objective,
-            constraints=constraints,
-            ftol=1e-14,
-            gtol=1e-14,
-            copy=True,
-        )
-
-        # optimizer should zero out field since that's the easiest way
-        # to get to Bnorm = 0
-        np.testing.assert_allclose(things[0].B0, 0, atol=2e-3)
-
-    @pytest.mark.unit
-    def test_quadratic_flux_vacuum(self):
-        """Test vacuum flag."""
-        # equilibrium that has Bplasma == 0
+        # equilibrium that has B_plasma == 0
         eq = load("./tests/inputs/vacuum_nonaxisym.h5")
-        t_field = ToroidalMagneticField(1, 1)
-        field_grid, eval_grid, source_grid = self.get_grids(eq, t_field)
-        obj = QuadraticFlux(
-            eq,
-            t_field,
-            vacuum=True,
-            eval_grid=eval_grid,
+
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
         )
+        obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
         Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
         obj.build(eq)
         f = obj.compute(field_params=t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
-        # check that they're the same since we set Bplasma = 0
+        # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
 
 

@@ -798,7 +798,8 @@ class QuadraticFlux(_Objective):
         minimize the normal field error on the provided equilibrium's surface.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
+        len(target) must be equal to Objective.dim_f.
+        Default target is zero.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
         len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
@@ -813,12 +814,16 @@ class QuadraticFlux(_Objective):
         this should also be set to True.
     source_grid : Grid, optional
         Collocation grid containing the nodes for plasma source terms.
+        Default grid is detailed in the docs for ``compute_B_plasma``
     eval_grid : Grid, optional
         Collocation grid containing the nodes on the plasma surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
+        Default grid is: LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
+            NFP=int(eq.NFP), sym=False)
     field_grid : Grid, optional
         Grid used to discretize field (e.g. grid for the magnetic field source from
-        coils).
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
     vacuum : bool
         If true, Bplasma (the contribution to the normal field on the boundary from the
         plasma currents) is set to zero.

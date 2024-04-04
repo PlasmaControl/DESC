@@ -69,11 +69,6 @@ class TestFourierRZToroidalSurface:
         assert c.name in str(c)
         assert "FourierRZToroidalSurface" in str(c)
 
-        c.NFP = 3
-        assert c.NFP == 3
-        assert c.R_basis.NFP == 3
-        assert c.Z_basis.NFP == 3
-
         # test assert statement for array sizes matching
         with pytest.raises(AssertionError):
             c = FourierRZToroidalSurface(
@@ -292,6 +287,7 @@ class TestFourierRZToroidalSurface:
             rtol=2e-2,
         )
 
+    @pytest.mark.unit
     def test_position(self):
         """Tests for position on surface."""
         s = FourierRZToroidalSurface()

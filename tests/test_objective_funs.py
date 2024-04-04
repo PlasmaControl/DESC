@@ -1939,6 +1939,7 @@ class TestObjectiveNaNGrad:
         CoilLength,
         CoilCurvature,
         CoilTorsion,
+        ToroidalFlux,
         # we don't test these since they depend too much on what exactly the user wants
         GenericObjective,
         LinearObjectiveFromUser,
@@ -2026,6 +2027,19 @@ class TestObjectiveNaNGrad:
             obj.build()
         g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "vacuum boundary error"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_toroidal_flux(self):
+        """ToroidalFlux."""
+        ext_field = ToroidalMagneticField(1, 1)
+
+        eq = get("precise_QA")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+
+        obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(ext_field))
+        assert not np.any(np.isnan(g)), "toroidal flux"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

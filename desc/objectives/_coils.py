@@ -721,13 +721,13 @@ class ToroidalFlux(_Objective):
         curr = np.max(np.abs(eq.compute("current")["current"]))
         errorif(
             pres > 1e-8,
-            UserWarning,
+            ValueError,
             f"Pressure is non-zero (max {pres} Pa), "
             + "this objective is unneeded at finite beta.",
         )
         errorif(
             curr > 1e-8,
-            UserWarning,
+            ValueError,
             f"Current is non-zero (max {curr} A), "
             + "this objective is unneeded at finite beta.",
         )

@@ -1662,6 +1662,7 @@ class TestComputeScalarResolution:
         CoilLength,
         CoilTorsion,
         CoilCurvature,
+        ToroidalFlux,
         # need to avoid blowup near the axis
         MercierStability,
         # don't test these since they depend on what user wants
@@ -1762,11 +1763,31 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(
-                VacuumBoundaryError(self.eq, ext_field), use_jit=False
-            )
+            obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field), use_jit=False)
             with pytest.warns(UserWarning):
                 obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_toroidal_flux(self):
+        """ToroidalFlux."""
+        ext_field = ToroidalMagneticField(1, 1)
+        eq = get("precise_QA")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+
+        obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(ext_field))
+        assert not np.any(np.isnan(g)), "toroidal flux"
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 

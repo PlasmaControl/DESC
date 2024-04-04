@@ -610,7 +610,7 @@ class QuadraticFlux(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium upon whose surface the normal field error will be minimized.
         The equilibrium is kept fixed during the optimization with this objective.
     field : MagneticField
@@ -755,6 +755,8 @@ class QuadraticFlux(_Objective):
             )
 
         self._constants = {
+            "field": self._field,
+            "field_grid": self._field_grid,
             "quad_weights": w,
             "eval_data": eval_data,
             "B_plasma": Bplasma,
@@ -766,7 +768,7 @@ class QuadraticFlux(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"]
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -790,9 +792,9 @@ class QuadraticFlux(_Objective):
         if constants is None:
             constants = self.constants
 
-        # Now, calculate B_plasma and B_ext
+        # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
-        Bplasma = constants["B_plasma"]
+        B_plasma = constants["B_plasma"]
 
         x = jnp.array(
             [
@@ -803,9 +805,9 @@ class QuadraticFlux(_Objective):
         ).T
 
         # B_ext is not pre-computed because field is not fixed
-        Bext = self._field.compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz", params=field_params
+        B_ext = constants["field"].compute_magnetic_field(
+            x, source_grid=constants["field_grid"], basis="rpz", params=field_params
         )
-        Bext = jnp.sum(Bext * eval_data["n_rho"], axis=-1)
-        f = (Bext + Bplasma) * eval_data["|e_theta x e_zeta|"]
+        B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+        f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]
         return f

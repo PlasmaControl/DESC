@@ -13,15 +13,19 @@ Making a single triangle can be done with e.g.,
 import numpy as np
 from matplotlib import pyplot as plt
 
-from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
+from desc.basis import (
+    FiniteElementBasis,
+    FiniteElementMesh1D_scikit,
+    FourierZernikeBasis,
+)
 from desc.geometry import convert_spectral_to_FE
 
 plt.figure()
 L = 18
 M = 20
 N = 0
-K = 2
-mesh = FiniteElementMesh1D(M, K=K)
+K = 1
+mesh = FiniteElementMesh1D_scikit(M, K=K)
 integral = mesh.integrate(np.ones((M * mesh.nquad, 1000)))
 length_total = 0.0
 for interval in mesh.intervals:

@@ -6,8 +6,8 @@ from math import factorial
 
 import mpmath
 import numpy as np
+import skfem as fem
 from matplotlib import pyplot as plt
-from scipy.interpolate import BSpline
 
 from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
@@ -16,14 +16,13 @@ from desc.utils import flatten_list
 __all__ = [
     "PowerSeries",
     "FourierSeries",
-    "Bspline",
     "FiniteElementBasis",
-    "DoubleFiniteElementBasis",
     "DoubleFourierSeries",
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
     "FiniteElementMesh1D",
+    "FiniteElementMesh1D_scikit",
     "FiniteElementMesh2D",
 ]
 
@@ -643,156 +642,6 @@ class FourierSeries(_Basis):
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
-
-
-class DoubleFiniteElementBasis(_FE_Basis):
-    """2D basis set for use on a single flux surface.
-
-    Finite elements (Lagrange polynomials)
-    in both the poloidal and toroidal coordinates.
-
-    Parameters
-    ----------
-    I_2MN : int
-        Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-        plane. If have (M x N) points in the grid, I_2MN = 2NM.
-    Q : int
-        Number of basis functions. For order K triangle FE, should be
-        q = (K + 1)(K + 2) / 2.
-    NFP : int
-        Number of field periods.
-    sym : {``'cos'``, ``'sin'``, ``False``}
-        * ``'cos'`` for cos(m*t-n*z) symmetry
-        * ``'sin'`` for sin(m*t-n*z) symmetry
-        * ``False`` for no symmetry (Default)
-
-    """
-
-    def __init__(self, I_2MN, Q, NFP=1, sym=False):
-        self.L = 0
-        self.I_2MN = I_2MN
-        self.Q = Q
-        self._NFP = NFP
-        self._sym = sym
-        self._modes = self._get_modes(M=self.M, N=self.N)
-
-        super().__init__()
-
-    def _get_modes(self, I=0, Q=0):
-        """Get mode numbers for Lagrange polynomial representation.
-
-        For FE basis, this is trivial because I_2MN = 0, ..., 2NM - 1 and
-        Q = 0, ..., (K + 1)(K + 2) / 2, for a 2D tessellation of a
-        N x M grid and using order K triangle finite element.
-
-        Parameters
-        ----------
-        I_2MN : int
-            Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-            plane. If have (M x N) points in the grid, I_2MN = 2NM.
-        Q : int
-            Number of basis functions. For order K triangle FE, should be
-            Q = (K + 1)(K + 2) / 2.
-
-        Returns
-        -------
-        modes : ndarray of int, shape(num_modes, 3)
-            Array of mode numbers [l,i,q].
-            Each row is one basis function with modes (l,m,n).
-
-        """
-        i = np.arange(I)
-        q = np.arange(Q)
-        i, q = np.meshgrid(i, q)
-        ii = i.reshape((-1, 1), order="F")
-        qq = q.reshape((-1, 1), order="F")
-        z = np.zeros_like(ii)
-        y = np.hstack([z, ii, qq])
-        return y
-
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
-        """Evaluate basis functions at specified nodes.
-
-        Parameters
-        ----------
-        nodes : ndarray of float, size(num_nodes, 3)
-            Node coordinates, in (rho, theta, zeta).
-        derivatives : ndarray of int, shape(num_derivatives, 3)
-            Order of derivatives to compute in (rho, theta, zeta).
-        modes : ndarray of in, shape(num_modes, 3), optional
-            Basis modes to evaluate (if None, full basis is used).
-        unique : bool, optional
-            Whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff.
-
-        Returns
-        -------
-        y : ndarray, shape(num_nodes, num_modes)
-            Basis functions evaluated at nodes.
-
-        """
-        if modes is None:
-            modes = self.modes
-        if derivatives[0] != 0:
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
-        if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
-
-        r, t, z = nodes.T
-        l, m, n = modes.T
-
-        if unique:
-            _, tidx, toutidx = np.unique(
-                t, return_index=True, return_inverse=True, axis=0
-            )
-            _, zidx, zoutidx = np.unique(
-                z, return_index=True, return_inverse=True, axis=0
-            )
-            _, midx, moutidx = np.unique(
-                m, return_index=True, return_inverse=True, axis=0
-            )
-            _, nidx, noutidx = np.unique(
-                n, return_index=True, return_inverse=True, axis=0
-            )
-            t = t[tidx]
-            z = z[zidx]
-            m = m[midx]
-            n = n[nidx]
-
-        poloidal = Bspline(t[:, np.newaxis], m, dt=derivatives[1])
-        toroidal = Bspline(z[:, np.newaxis], n, dt=derivatives[2])
-        if unique:
-            poloidal = poloidal[toutidx][:, moutidx]
-            toroidal = toroidal[zoutidx][:, noutidx]
-
-        return poloidal * toroidal
-
-    def change_resolution(self, I_2MN, Q, NFP=None, sym=None):
-        """Change resolution of the basis to the given resolutions.
-
-        Parameters
-        ----------
-        I_2MN : int
-            Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-            plane. If have (M x N) points in the grid, I_2MN = 2NM.
-        Q : int
-            Number of basis functions. For order K triangle FE, should be
-            q = (K + 1)(K + 2) / 2.
-        NFP : int
-            Number of field periods.
-        sym : bool
-            Whether to enforce stellarator symmetry.
-
-        Returns
-        -------
-        None
-
-        """
-        # Do nothing right now since we need to implement local mesh
-        # refinement here. Global mesh refinement should be done by just
-        # setting I and K to larger values in the input reader
 
 
 class DoubleFourierSeries(_Basis):
@@ -2060,45 +1909,6 @@ def chebyshev(r, l, dr=0):
         )
 
 
-# @jit
-def Bspline(theta, i, k=1, dt=0):
-    """Bspline in theta coordinate.
-
-    Parameters
-    ----------
-    theta : ndarray, shape(N,)
-        poloidal/toroidal coordinates to evaluate basis
-    i : ndarray of int, shape(K,)
-        Basis element indices for the basis elements we want to compute
-    k : int
-        Order of the B-spline (Default = 1)
-    dt : int
-        order of derivative (Default = 0)
-    resolution: int
-        Resolution of the overall Bspline mesh (Default = 100)
-
-    Returns
-    -------
-    y : ndarray, shape(N, K)
-        basis function(s) evaluated at specified points
-
-    """
-    if np.all(theta == theta[0, 0]):
-        return np.ones((len(theta), len(i)))
-    B = BSpline(theta[:, 0], np.ones(len(theta)), k, extrapolate="periodic")
-    Bderiv = B.derivative(dt)
-    Bderiv_stacked = np.zeros((len(theta), len(i)))
-    q = 0
-    for ii in i:
-        # Get Bderiv basis element ii from associated knots
-        # and then evaluate it throughout the domain
-        Bderiv_stacked[:, q] = (
-            Bderiv.basis_element(theta[ii : ii + k + 2, 0], extrapolate="True")
-        )(theta[:, 0])
-        q = q + 1
-    return Bderiv_stacked
-
-
 @jit
 def fourier(theta, m, NFP=1, dt=0):
     """Fourier series.
@@ -2261,73 +2071,62 @@ def zernike_norm(l, m):
 
 
 class FiniteElementMesh2D:
-    """Class representing a 2D mesh in (theta, zeta).
+    """Class representing a 2D mesh in (rho, theta).
 
     This class represents a set of I_2MN = 2MN triangles obtained by tessellation
-    of a UNIFORM rectangular N x M mesh in the (theta, zeta) plane.
+    of a UNIFORM rectangular N x M mesh in the (rho, theta) plane.
     The point of this class is to pre-define all the triangles and their
-    associated basis functions so that, given a new point (theta_i, zeta_i),
+    associated basis functions so that, given a new point (rho_i, theta_i),
     we can quickly return which triangle contains this point & its associated
     basis functions.
 
     Parameters
     ----------
+    L : int
+        Number of mesh points in the rho direction.
     M : int
         Number of mesh points in the theta direction.
-    N : int
-        Number of mesh points in the zeta direction.
     K: integer
         The order of the finite elements to use, which gives (K+1)(K+2) / 2
         basis functions.
     """
 
-    def __init__(self, M, N, K=1):
+    def __init__(self, L, M, K=1):
         self.M = M
-        self.N = N
-        self.I_2MN = 2 * M * N
+        self.L = L
+        self.I_2ML = 2 * M * L
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
 
+        rho = np.linspace(0, 1, L, endpoint=False)
         theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
-        zeta = np.linspace(0, 2 * np.pi, N, endpoint=False)
-        Theta, Zeta = np.meshgrid(theta, zeta, indexing="ij")
-        self.Theta = Theta
-        self.Zeta = Zeta
+        Rho, Theta = np.meshgrid(rho, theta, indexing="ij")
+        Rho = np.ravel(Rho)
+        Theta = np.ravel(Theta)
+        mesh = fem.MeshTri(np.array([Rho, Theta]))
+        if K == 1:
+            e = fem.ElementTriP1()
+        else:
+            e = fem.ElementTriP2()
+        basis = fem.CellBasis(mesh, e)
+        vertices = basis.doflocs  # np.ravel(basis.doflocs)
 
-        # Compute the vertices for all 2NM triangles
-        vertices = np.zeros((2 * N * M, 3, 2))
+        from skfem.visuals.matplotlib import draw, draw_mesh2d
+
+        ax = draw(mesh)
+        p = draw_mesh2d(mesh, ax=ax)
+        p.show()
+
+        print(vertices, vertices.shape)
+
+        self.Rho = Rho
+        self.Theta = Theta
+
+        # Compute the triangle elements for all 2NM triangles
         triangles = []
         for i in range(M):
-            for j in range(N):
-                # Deal with the periodic boundary conditions...
-                if i + 1 != M and j + 1 != N:
-                    rect_x1 = np.array([Theta[i, j], Zeta[i, j]])
-                    rect_x2 = np.array([Theta[i + 1, j], Zeta[i, j]])
-                    rect_x3 = np.array([Theta[i, j], Zeta[i, j + 1]])
-                    rect_x4 = np.array([Theta[i + 1, j], Zeta[i, j + 1]])
-                elif i + 1 == M and j + 1 != N:
-                    rect_x1 = np.array([Theta[i, j], Zeta[i, j]])
-                    rect_x2 = np.array([2 * np.pi, Zeta[i, j]])
-                    rect_x3 = np.array([Theta[i, j], Zeta[i, j + 1]])
-                    rect_x4 = np.array([2 * np.pi, Zeta[i, j + 1]])
-                elif i + 1 != M and j + 1 == N:
-                    rect_x1 = np.array([Theta[i, j], Zeta[i, j]])
-                    rect_x2 = np.array([Theta[i + 1, j], Zeta[i, j]])
-                    rect_x3 = np.array([Theta[i, j], 2 * np.pi])
-                    rect_x4 = np.array([Theta[i + 1, j], 2 * np.pi])
-                elif i + 1 == M and j + 1 == N:
-                    rect_x1 = np.array([Theta[i, j], Zeta[i, j]])
-                    rect_x2 = np.array([2 * np.pi, Zeta[i, j]])
-                    rect_x3 = np.array([Theta[i, j], 2 * np.pi])
-                    rect_x4 = np.array([2 * np.pi, 2 * np.pi])
-
-                # Split the (i, j)-th rectangle into two equal-sized triangles
-                vertices[(i + j * M) * 2, 0, :] = rect_x1
-                vertices[(i + j * M) * 2, 1, :] = rect_x2
-                vertices[(i + j * M) * 2, 2, :] = rect_x3
-                vertices[(i + j * M) * 2 + 1, 0, :] = rect_x4
-                vertices[(i + j * M) * 2 + 1, 1, :] = rect_x3
-                vertices[(i + j * M) * 2 + 1, 2, :] = rect_x2
+            for j in range(L):
+                # Deal with the periodic boundary conditions...??
                 triangle1 = TriangleFiniteElement(vertices[(i + j * M) * 2, :, :], K=K)
                 triangle2 = TriangleFiniteElement(
                     vertices[(i + j * M) * 2 + 1, :, :], K=K
@@ -3071,6 +2870,399 @@ class TriangleFiniteElement:
 
 
 class IntervalFiniteElement:
+    """Class representing an interval in a 1D grid of finite elements.
+
+    Takes the range of the isoparametric coordinate eta as [-1, 1],
+    instead of other definitions using [0, 1].
+
+    Parameters
+    ----------
+    vertices: array-like, shape(2)
+        The two vertices of the interval in the theta mesh.
+    K: integer
+        The order of the finite elements to use, which gives (K + 1)
+        basis functions.
+    """
+
+    def __init__(self, vertices, K=1):
+        self.vertices = vertices
+        self.length = vertices[1] - vertices[0]
+        self.Q = K + 1
+        self.K = K
+
+        # if K = 1 or K = 2 with equally-spaced points
+        # Jacobian is length / 2 for isoparametric form eta in [-1, 1]
+        # still true for K > 2 ??
+        self.jacobian = self.length / 2.0
+
+        # Going to construct equally spaced nodes for order K interval,
+        # which gives Q such nodes.
+        self.nodes = np.linspace(vertices[0], vertices[1], self.Q, endpoint=True)
+        self.eta_nodes, _ = self.get_barycentric_coordinates(self.nodes)
+        self.basis_functions_nodes, _ = self.get_basis_functions(self.nodes)
+
+        # Check basis functions vanish at all nodes except the associated node.
+        for i in range(self.Q):
+            assert np.allclose(self.basis_functions_nodes[i, i], 1.0)
+            for j in range(self.Q):
+                if i != j:
+                    assert np.allclose(self.basis_functions_nodes[i, j], 0.0)
+
+        # Check we have the same number of basis functions as nodes.
+        assert self.nodes.shape[0] == self.Q
+
+    def get_basis_functions(self, theta):
+        """
+        Gets the barycentric basis functions.
+
+        Return the interval basis functions, evaluated at the 1D theta
+        mesh points provided to the function.
+
+        Parameters
+        ----------
+        theta : 1D ndarray, shape (M)
+            Coordinates of the original grid, lying inside this triangle.
+
+        Returns
+        -------
+        psi_q : (M, Q)
+            Basis functions in each interval.
+
+        """
+        eta, theta_in_interval = self.get_barycentric_coordinates(theta)
+        theta = theta_in_interval
+
+        # Compute the vertex basis functions first
+        basis_functions = np.zeros((theta.shape[0], self.Q))
+        for i in range(self.Q):
+            basis_functions[:, i] = self.lagrange_polynomial(eta, self.eta_nodes, i)
+
+        if self.K == 1:
+            assert np.allclose(basis_functions[:, 0], 0.5 * (1 - eta))
+            assert np.allclose(basis_functions[:, 1], 0.5 * (1 + eta))
+        if self.K == 2:
+            # Note the basis function ordering
+            assert np.allclose(basis_functions[:, 0], 0.5 * eta * (eta - 1))
+            assert np.allclose(basis_functions[:, 2], 0.5 * eta * (eta + 1))
+            assert np.allclose(basis_functions[:, 1], 1 - eta**2)
+
+        return basis_functions, theta_in_interval
+
+    def lagrange_polynomial(self, eta_i, eta_nodes_i, q):
+        """
+        Computes lagrange polynomials.
+
+        Computes the lagrange polynomial given the ith component of the
+        Barycentric coordinates on a theta mesh, the ith component
+        of the interval nodes defined for the basis functions,
+        and the index q of which node this is.
+
+        Parameters
+        ----------
+        eta_i : 1D ndarray, shape(M)
+            The barycentric coordinate i defined at theta points.
+        eta_nodes_i : 1D ndarray, shape(Q)
+            The barycentric coordinate i defined at the interval nodes.
+        q : integer
+            The index of the node we are using to define the basis function.
+            Options are 0, ..., Q - 1
+
+        Returns
+        -------
+        lp : 1D ndarray, shape(M)
+            The lagrange polynomial associated with the barycentric
+            coordinate i, the polynomial order K + 1, and the node q.
+
+        """
+        denom = 1.0
+        numerator = np.ones(len(eta_i))
+        # Avoid choosing the node q associated with this basis function
+        for i in range(self.Q):
+            if i != q:
+                numerator *= eta_i - eta_nodes_i[i]
+                denom *= eta_nodes_i[q] - eta_nodes_i[i]
+        lp = numerator / denom
+        return lp
+
+    def get_barycentric_coordinates(self, theta):
+        """
+        Gets the barycentric coordinates, given a mesh in theta.
+
+        Parameters
+        ----------
+        theta : 1D ndarray, shape (M)
+            Coordinates of the original grid, lying inside this interval.
+
+        Returns
+        -------
+        eta_u: 1D array, shape (M)
+            Barycentric coordinates defined by the interval and evaluated
+            at the points theta.
+        """
+        # Get the Barycentric coordinates
+        eta = 2 * (theta - self.vertices[0]) / self.length - 1
+        try:
+            eta_shape = eta.shape[0]
+        except IndexError:
+            eta = np.array([eta])
+            theta = np.array([theta])
+            eta_shape = eta.shape[0]
+
+        # zero out numerical errors or weird minus signs like -0
+        eta[np.isclose(eta, 0.0)] = 0.0
+
+        # Check that all the points are indeed inside the triangle
+        eta_final = []
+        theta_in_interval = []
+        for i in range(eta_shape):
+            if eta[i] < -1 or eta[i] > 1:
+                warnings.warn(
+                    "Found theta points outside this interval ... "
+                    "Not using these points to evaluate the barycentric "
+                    "coordinates."
+                )
+            else:
+                eta_final.append(eta[i])
+                theta_in_interval.append(theta[i])
+        return np.array(eta_final), np.array(theta_in_interval)
+
+    def plot_interval(self):
+        """
+        Plot the interval.
+
+        Also plots all of the basis functions.
+
+        Parameters
+        ----------
+        plot_quadrature_points : bool
+            Flag to indicate whether or not the quadrature points for
+            integration should also be plotted on the mesh.
+        """
+        # Define uniform grid in (theta, zeta)
+        theta = np.linspace(self.vertices[0], self.vertices[1], endpoint=True)
+
+        # Get the basis functions in the triangle
+        psi_q, theta_in_interval = self.get_basis_functions(theta)
+
+        for i in range(self.Q):
+            plt.subplot(1, self.Q, i + 1)
+            plt.grid()
+
+            # Plot the nodes of the interval
+            plt.plot(self.nodes, np.zeros(self.Q), "ro", markersize=2)
+
+            # Plot the ith basis function
+            plt.plot(theta_in_interval, psi_q[:, i], "b--")
+            plt.xlim(0, 2 * np.pi)
+            plt.ylabel(r"$\psi_q(\theta)$")
+            plt.xlabel(r"$\theta$")
+
+
+class FiniteElementMesh1D_scikit:
+    """Class representing a 1D mesh in theta.
+
+    This class represents a 1D FE basis coming from a
+    set of M uniform points sampled in theta.
+
+    Parameters
+    ----------
+    M : int
+        Number of mesh points in the theta direction.
+    K: integer
+        The order of the finite elements to use, which gives (K+1)(K+2) / 2
+        basis functions.
+    """
+
+    def __init__(self, M, K=1, nquad=2):
+        self.M = M
+        self.Q = K + 1
+        self.K = K
+        mesh = fem.MeshLine(np.linspace(0, 2 * np.pi, M, endpoint=True))
+
+        if K == 1:
+            e = fem.ElementLineP1()
+        else:
+            e = fem.ElementLineP2()
+        basis = fem.CellBasis(mesh, e)
+        vertices = np.ravel(basis.doflocs)
+
+        # can exactly integrate 2 * nquad - 1 degree polynomials
+        self.nquad = max(nquad, K + 1)
+
+        theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
+        self.Theta = theta
+
+        # Compute the basis functions at each node
+        intervals = []
+        for i in range(M - 1):
+            # Deal with the periodic boundary conditions...
+            interval = IntervalFiniteElement(
+                np.array([vertices[i], vertices[i + 1]]).T, K=K
+            )
+            intervals.append(interval)
+
+        # Have M vertices and M-1 intervals
+        self.vertices = vertices
+        self.intervals = intervals
+
+        # Setup quadrature points and weights for numerical integration
+        # Using Gauss-Legendre quadrature
+        integration_points = []
+        weights = []
+        # Ordered these from smallest to largest
+        if self.nquad == 1:
+            integration_points = [0.0]
+            weights = [2.0]
+        elif self.nquad == 2:
+            integration_points = [-1.0 / np.sqrt(3), 1.0 / np.sqrt(3)]
+            weights = [1.0, 1.0]
+        elif self.nquad == 3:
+            integration_points = [-np.sqrt(0.6), 0.0, np.sqrt(0.6)]
+            weights = [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0]
+        elif self.nquad == 4:
+            integration_points = [
+                -np.sqrt(3 + np.sqrt(4.8)) / 7.0,
+                -np.sqrt(3 - np.sqrt(4.8)) / 7.0,
+                np.sqrt(3 - np.sqrt(4.8)) / 7.0,
+                np.sqrt(3 + np.sqrt(4.8)) / 7.0,
+            ]
+            weights = [
+                0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
+                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
+                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
+                0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
+            ]
+
+        self.integration_points = np.array(integration_points)
+        self.weights = np.ravel(np.array(weights))
+
+    def plot_intervals(self, plot_quadrature_points=False):
+        """Plot all the intervals in the 1D mesh."""
+        plt.figure(100)
+        for i, interval in enumerate(self.intervals):
+            interval.plot_interval()
+        if plot_quadrature_points:
+            quadpoints = self.return_quadrature_points()
+            for i in range(self.Q):
+                plt.subplot(1, self.Q, i + 1)
+                plt.plot(quadpoints, np.zeros(len(quadpoints)), "ko")
+        plt.show()
+
+    def full_basis_functions_corresponding_to_points(self, theta):
+        """Given points on the mesh, find all (I, Q) basis functions values.
+
+        Parameters
+        ----------
+        theta : 1D ndarray, shape (num_points)
+            Set of points for which we want to find the intervals that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        basis_functions : 3D ndarray, shape (num_points, I, Q)
+            All of the IQ basis functions evaluated at the points.
+            Most will be zero at a given point.
+        """
+        basis_functions = np.zeros((theta.shape[0], self.M - 1, self.Q))
+        for i in range(theta.shape[0]):
+            v = theta[i]
+            for j, interval in enumerate(self.intervals):
+                v1 = interval.vertices[0]
+                v2 = interval.vertices[1]
+                if v >= v1 and v <= v2:
+                    bfs, _ = interval.get_basis_functions(v)
+                    basis_functions[i, j, :] = bfs
+                    break
+        return basis_functions
+
+    def find_intervals_corresponding_to_points(self, theta):
+        """Given a point on the mesh, find which interval it lies inside.
+
+        Parameters
+        ----------
+        theta : 1D ndarray, shape (num_points)
+            Set of points for which we want to find the intervals that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        interval_indices : 1D ndarray, shape (num_points)
+            Set of indices that specific the intervals where each point lies.
+        basis_functions : 2D ndarray, shape (num_points, Q)
+            The basis functions corresponding to the intervals in
+            interval_indices.
+        """
+        interval_indices = np.zeros(theta.shape[0])
+        basis_functions = np.zeros((theta.shape[0], self.Q))
+        for i in range(theta.shape[0]):
+            v = theta[i]
+            for j, interval in enumerate(self.intervals):
+                v1 = interval.vertices[0]
+                v2 = interval.vertices[1]
+                if v >= v1 and v <= v2:
+                    interval_indices[i] = j
+                    basis_functions[i, :], _ = interval.get_basis_functions(v)
+        return interval_indices, basis_functions
+
+    def return_quadrature_points(self):
+        """Get quadrature points for numerical integration over the mesh.
+
+        Returns
+        -------
+        quadrature points: 1D ndarray, shape (nquad * (M - 1))
+            Points in theta representing the quadrature point
+            locations for integration in barycentric coordinates.
+
+        """
+        nquad = self.nquad
+        quadrature_points = np.zeros((self.M - 1) * nquad)
+        q = 0
+        for interval in self.intervals:
+            for i in range(nquad):
+                theta1 = interval.vertices[0]
+                theta2 = interval.vertices[1]
+                quadrature_points[q] = (theta2 - theta1) * (
+                    self.integration_points[i] + 1
+                ) / 2.0 + theta1
+                q = q + 1
+
+        return quadrature_points
+
+    def integrate(self, f):
+        """Integrates a function over the 1D mesh in theta.
+
+        This function allows one to integrate any set of functions of theta
+        ver the full 1D mesh. Uses Gauss-Legendre quadrature
+        formula for in the barycentric coordinates.
+
+        Parameters
+        ----------
+        f : 1D ndarray, shape (nquad * M, num_functions)
+            Vector function defined on the mesh in theta
+            that we would like to integrate component-wise with respect
+            to the basis functions. For integration over the barycentric
+            coordinates, we need f to be prescribed at the quadrature points
+            in a barycentric coordinate system.
+
+        Returns
+        -------
+        integral: 1D ndarray, shape (num_functions)
+            Value of the integral over the mesh for each component of f.
+
+        """
+        nquad = self.nquad
+        if f.shape[1] > 1:
+            integral = np.zeros(f.shape[1])
+        else:
+            integral = 0.0
+        for i, interval in enumerate(self.intervals):
+            integral += (
+                interval.jacobian * self.weights @ f[i * nquad : (i + 1) * nquad, :]
+            )
+        return integral
+
+
+class IntervalFiniteElement_scikit:
     """Class representing an interval in a 1D grid of finite elements.
 
     Takes the range of the isoparametric coordinate eta as [-1, 1],

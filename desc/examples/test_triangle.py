@@ -16,10 +16,10 @@ from desc.basis import FiniteElementMesh2D
 
 # Try triangulating whole mesh
 M = 4
-N = 4
-mesh = FiniteElementMesh2D(M, N, K=2)
+L = 4
+mesh = FiniteElementMesh2D(L, M, K=1)
 mesh.plot_triangles(plot_quadrature_points=False)
-integral = mesh.integrate(np.ones((2 * M * N * mesh.nquad, 10000)))
+integral = mesh.integrate(np.ones((2 * M * L * mesh.nquad, 10000)))
 area2_total = 0.0
 for triangle in mesh.triangles:
     area2_total += triangle.area2

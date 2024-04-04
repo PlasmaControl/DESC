@@ -706,8 +706,7 @@ class ToroidalFlux(_Objective):
                 L=eq.L_grid, M=eq.M_grid, zeta=jnp.array(0.0), NFP=eq.NFP
             )
             self._eval_grid = eval_grid
-        else:
-            eval_grid = self._eval_grid
+        eval_grid = self._eval_grid
 
         warnif(
             not np.allclose(eval_grid.nodes[:, 2], eval_grid.nodes[0, 2]),

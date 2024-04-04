@@ -822,20 +822,20 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_toroidal_flux(self):
         """Test calculation of toroidal flux from coils."""
-        grid = LinearGrid(L=30, M=30, zeta=np.array(0.0))
+        grid1 = LinearGrid(L=10, M=10, zeta=np.array(0.0))
 
-        def test(eq, field, correct_value, rtol=1e-14):
+        def test(eq, field, correct_value, rtol=1e-14, grid=None):
             obj = ToroidalFlux(eq=eq, field=field, eval_grid=grid)
-            obj.build()
+            obj.build(verbose=2)
             torflux = obj.compute_unscaled(*obj.xs(field))
             np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
 
         eq = Equilibrium(iota=PowerSeriesProfile(0))
-        test(eq, VerticalMagneticField(B0=1), 0)
+        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1)
         field = ToroidalMagneticField(B0=1, R0=1)
         # calc field Psi
 
-        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=grid)
+        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=grid1)
         field_B = field.compute_magnetic_field(
             np.vstack([data["R"], data["phi"], data["Z"]]).T
         )
@@ -843,11 +843,12 @@ class TestObjectiveFunction:
         B_dot_n_zeta = jnp.sum(field_B * data["n_zeta"], axis=1)
 
         psi_from_field = np.sum(
-            grid.spacing[:, 0]
-            * grid.spacing[:, 1]
+            grid1.spacing[:, 0]
+            * grid1.spacing[:, 1]
             * data["|e_rho x e_theta|"]
             * B_dot_n_zeta
         )
+        eq.change_resolution(L_grid=10, M_grid=10)
 
         test(eq, field, psi_from_field)
 

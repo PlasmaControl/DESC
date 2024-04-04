@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset
 
+import desc.examples
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -874,12 +875,11 @@ def test_vmec_save_2(VMEC_save):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=1)
-def test_plot_vmec_comparison(SOLOVEV):
+def test_plot_vmec_comparison():
     """Test that DESC and VMEC flux surface plots match."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = VMECIO.plot_vmec_comparison(eq, str(SOLOVEV["vmec_nc_path"]))
+    eq = desc.examples.get("SOLOVEV")
+    fig, ax = VMECIO.plot_vmec_comparison(eq, "tests/inputs/wout_SOLOVEV.nc")
     return fig
 
 
@@ -911,7 +911,7 @@ def test_vmec_boundary_subspace(DummyStellarator):
     np.testing.assert_allclose(zbs_ref, np.abs(zbs) > tol)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.solve
 def test_write_vmec_input(TmpDir):
     """Test generated VMEC input file gives the original equilibrium when solved."""

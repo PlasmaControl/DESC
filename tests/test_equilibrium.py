@@ -47,10 +47,10 @@ def test_compute_theta_coords():
 @pytest.mark.unit
 def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) for common use cases."""
+    # finding coordinates along a single field line
     eq = get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
-    # finding coordinates along a single field line
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
     out = eq.map_coordinates(
         coords,
@@ -60,22 +60,29 @@ def test_map_coordinates():
     )
     assert not np.any(np.isnan(out))
 
-    # contours of const theta for plotting
-    grid_kwargs = {
-        "rho": np.linspace(0, 1, 10),
-        "NFP": eq.NFP,
-        "theta": np.linspace(0, 2 * np.pi, 3, endpoint=False),
-        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 2, endpoint=False),
-    }
-    t_grid = LinearGrid(**grid_kwargs)
+    eq = get("DSHAPE")
+
+    inbasis = ["R", "phi", "Z"]
+    outbasis = ["rho", "theta_PEST", "zeta"]
+
+    rho = np.linspace(0.01, 0.99, 20)
+    theta = np.linspace(0, np.pi, 20, endpoint=False)
+    zeta = np.linspace(0, np.pi, 20, endpoint=False)
+
+    grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
+    in_data = eq.compute(inbasis, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    out_data = eq.compute(outbasis, grid=grid)
+    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
 
     out = eq.map_coordinates(
-        t_grid.nodes,
-        ["rho", "theta_PEST", "phi"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        in_coords,
+        inbasis,
+        outbasis,
+        period=(np.inf, 2 * np.pi, np.inf),
+        maxiter=40,
     )
-    assert not np.any(np.isnan(out))
+    np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.unit
@@ -97,7 +104,7 @@ def test_map_coordinates_derivative():
     import jax
 
     @jax.jit
-    def foo(params):
+    def foo(params, in_coords):
         out = eq.map_coordinates(
             in_coords,
             inbasis,
@@ -109,8 +116,8 @@ def test_map_coordinates_derivative():
         )
         return out
 
-    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict)
-    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict)
+    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
+    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
     for j1, j2 in zip(J1.values(), J2.values()):
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))

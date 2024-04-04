@@ -40,8 +40,8 @@ from desc.objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    GenericObjective,
     ObjectiveFunction,
-    QuasisymmetryTwoTerm,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
@@ -105,7 +105,8 @@ def test_LambdaGauge_asym():
         np.testing.assert_allclose(lam, 0, atol=1e-15)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
+@pytest.mark.solve
 def test_bc_on_interior_surfaces():
     """Test applying boundary conditions on internal surface."""
     surf = FourierRZToroidalSurface(rho=0.5)
@@ -408,15 +409,15 @@ def test_correct_indexing_passed_modes():
     """Test Indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
-    )
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
+            # just need dummy objective for factorizing constraints
+            GenericObjective("0", eq=eq),
         ),
+        use_jit=False,
     )
     objective.build()
 
@@ -438,7 +439,7 @@ def test_correct_indexing_passed_modes():
         BoundaryZSelfConsistency(eq=eq),
         FixPressure(eq=eq),
     )
-    constraint = ObjectiveFunction(constraints)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -461,15 +462,12 @@ def test_correct_indexing_passed_modes_and_passed_target():
     """Test Indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
-    )
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
-        (
-            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
-        ),
+        (GenericObjective("0", eq=eq),),
+        use_jit=False,
     )
     objective.build()
 
@@ -484,6 +482,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     idxs = []
     for mode in R_modes:
         idxs.append(eq.surface.R_basis.get_idx(*mode))
+    idxs = np.array(idxs)
     target_R = eq.surface.R_lmn[idxs]
 
     Z_modes = eq.surface.Z_basis.modes[
@@ -492,6 +491,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     idxs = []
     for mode in Z_modes:
         idxs.append(eq.surface.Z_basis.get_idx(*mode))
+    idxs = np.array(idxs)
     target_Z = eq.surface.Z_lmn[idxs]
 
     constraints = (
@@ -501,7 +501,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
         BoundaryZSelfConsistency(eq=eq),
         FixPressure(eq=eq),
     )
-    constraint = ObjectiveFunction(constraints)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -524,15 +524,13 @@ def test_correct_indexing_passed_modes_axis():
     """Test Indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
-    )
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    eq.surface = eq.get_surface_at(1.0)
+    eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (
-            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
-        ),
+        (GenericObjective("0", eq=eq),),
+        use_jit=False,
     )
     objective.build()
 
@@ -562,7 +560,7 @@ def test_correct_indexing_passed_modes_axis():
         FixSumModesZ(eq=eq, modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
         FixPressure(eq=eq),
     )
-    constraint = ObjectiveFunction(constraints)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -586,16 +584,13 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     n = 1
 
     eq = desc.examples.get("W7-X")
-
-    grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
-    )
+    eq.change_resolution(4, 4, 4, 8, 8, 8)
+    eq.surface = eq.get_surface_at(1.0)
+    eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (
-            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
-        ),
+        (GenericObjective("0", eq=eq),),
+        use_jit=False,
     )
     objective.build()
 
@@ -609,6 +604,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     idxs = []
     for mode in R_modes:
         idxs.append(eq.axis.R_basis.get_idx(*mode))
+    idxs = np.array(idxs)
     target_R = eq.axis.R_n[idxs]
 
     Z_modes = eq.axis.Z_basis.modes[np.max(np.abs(eq.axis.Z_basis.modes), 1) > n + 1, :]
@@ -616,6 +612,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     idxs = []
     for mode in Z_modes:
         idxs.append(eq.axis.Z_basis.get_idx(*mode))
+    idxs = np.array(idxs)
     target_Z = eq.axis.Z_n[idxs]
 
     constraints = (
@@ -691,7 +688,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             normalize=False,
         ),
     )
-    constraint = ObjectiveFunction(constraints)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(

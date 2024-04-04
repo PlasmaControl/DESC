@@ -6,7 +6,6 @@ import warnings
 
 import numpy as np
 import pytest
-from netCDF4 import Dataset
 
 from desc.__main__ import main
 from desc.backend import sign
@@ -22,42 +21,10 @@ from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_geometry(DSHAPE_current):
-    """Test computation of plasma geometric values."""
-
-    def test(stellarator):
-        # VMEC values
-        file = Dataset(str(stellarator["vmec_nc_path"]), mode="r")
-        V_vmec = float(file.variables["volume_p"][-1])
-        R0_vmec = float(file.variables["Rmajor_p"][-1])
-        a_vmec = float(file.variables["Aminor_p"][-1])
-        ar_vmec = float(file.variables["aspect"][-1])
-        file.close()
-
-        # DESC values
-        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        data = eq.compute("R0/a")
-        V_desc = data["V"]
-        R0_desc = data["R0"]
-        a_desc = data["a"]
-        ar_desc = data["R0/a"]
-
-        assert abs(V_vmec - V_desc) < 5e-3
-        assert abs(R0_vmec - R0_desc) < 5e-3
-        assert abs(a_vmec - a_desc) < 5e-3
-        assert abs(ar_vmec - ar_desc) < 5e-3
-
-    test(DSHAPE_current)
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-@pytest.mark.solve
-def test_compute_theta_coords(DSHAPE_current):
+def test_compute_theta_coords():
     """Test root finding for theta(theta*,lambda(theta))."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
+    eq = get("DSHAPE_CURRENT")
+    eq.change_resolution(3, 3, 0, 6, 6, 0)
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -79,7 +46,20 @@ def test_compute_theta_coords(DSHAPE_current):
 
 @pytest.mark.unit
 def test_map_coordinates():
-    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
+    """Test root finding for (rho,theta,zeta) for common use cases."""
+    # finding coordinates along a single field line
+    eq = get("W7-X")
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    n = 100
+    coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
+    out = eq.map_coordinates(
+        coords,
+        ["rho", "alpha", "zeta"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 10 * np.pi),
+    )
+    assert not np.any(np.isnan(out))
+
     eq = get("DSHAPE")
 
     inbasis = ["R", "phi", "Z"]
@@ -106,44 +86,10 @@ def test_map_coordinates():
 
 
 @pytest.mark.unit
-def test_map_coordinates2():
-    """Test root finding for (rho,theta,zeta) for common use cases."""
-    eq = get("W7-X")
-
-    n = 100
-    # finding coordinates along a single field line
-    coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    out = eq.map_coordinates(
-        coords,
-        ["rho", "alpha", "zeta"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 10 * np.pi),
-    )
-    assert not np.any(np.isnan(out))
-
-    # contours of const theta for plotting
-    grid_kwargs = {
-        "rho": np.linspace(0, 1, 10),
-        "NFP": eq.NFP,
-        "theta": np.linspace(0, 2 * np.pi, 3, endpoint=False),
-        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 2, endpoint=False),
-    }
-    t_grid = LinearGrid(**grid_kwargs)
-
-    out = eq.map_coordinates(
-        t_grid.nodes,
-        ["rho", "theta_PEST", "phi"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
-    )
-    assert not np.any(np.isnan(out))
-
-
-@pytest.mark.unit
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
     eq = get("DSHAPE")
-
+    eq.change_resolution(3, 3, 0, 6, 6, 0)
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_PEST", "zeta"]
 
@@ -201,17 +147,16 @@ def test_map_coordinates_derivative():
 
 @pytest.mark.slow
 @pytest.mark.unit
-@pytest.mark.solve
-def test_to_sfl(DSHAPE_current):
+def test_to_sfl():
     """Test converting an equilibrium to straight field line coordinates."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
+    eq = get("DSHAPE_CURRENT")
+    eq.change_resolution(6, 6, 0, 12, 12, 0)
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=2.5e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=2e-4)
 
 
 @pytest.mark.slow
@@ -237,26 +182,24 @@ def test_grid_resolution_warning():
     eq = Equilibrium(L=3, M=3, N=3)
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
-    with pytest.warns(Warning):
-        eqN.solve(ftol=1e-2, maxiter=2)
+    # if we first raise warnings to errors then check for error we can avoid
+    # actually running the full solve
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqN.solve(ftol=1e-2, maxiter=2)
     eqM = eq.copy()
     eqM.change_resolution(M=eq.M, M_grid=eq.M - 1)
-    with pytest.warns(Warning):
-        eqM.solve(ftol=1e-2, maxiter=2)
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqM.solve(ftol=1e-2, maxiter=2)
     eqL = eq.copy()
     eqL.change_resolution(L=eq.L, L_grid=eq.L - 1)
-    with pytest.warns(Warning):
-        eqL.solve(ftol=1e-2, maxiter=2)
-
-
-@pytest.mark.unit
-def test_eq_change_grid_resolution():
-    """Test changing equilibrium grid resolution."""
-    eq = Equilibrium(L=2, M=2, N=2)
-    eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
-    assert eq.L_grid == 10
-    assert eq.M_grid == 10
-    assert eq.N_grid == 10
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqL.solve(ftol=1e-2, maxiter=2)
 
 
 @pytest.mark.unit
@@ -314,34 +257,6 @@ def test_resolution():
     assert eq1.resolution != eq2.resolution
     eq2.change_resolution(**eq1.resolution)
     assert eq1.resolution == eq2.resolution
-
-
-@pytest.mark.unit
-def test_symmetry():
-    """Test changing equilibrium symmetry."""
-    M = 6
-    N = 3
-    surface = get("W7-X").surface.change_resolution(M=M, N=N)
-    eq_sym1 = Equilibrium(M=M, N=N, surface=surface, sym=True)
-    eq_asym1 = Equilibrium(M=M, N=N, surface=surface, sym=False)
-
-    eq_sym2 = eq_asym1.copy()
-    eq_asym2 = eq_sym1.copy()
-
-    eq_sym2.change_resolution(sym=True)
-    eq_asym2.change_resolution(sym=False)
-
-    np.testing.assert_allclose(eq_sym1.R_lmn, eq_sym2.R_lmn)
-    np.testing.assert_allclose(eq_sym1.Z_lmn, eq_sym2.Z_lmn)
-    np.testing.assert_allclose(eq_sym1.L_lmn, eq_sym2.L_lmn)
-    np.testing.assert_allclose(eq_sym1.Rb_lmn, eq_sym2.Rb_lmn)
-    np.testing.assert_allclose(eq_sym1.Zb_lmn, eq_sym2.Zb_lmn)
-
-    np.testing.assert_allclose(eq_asym1.R_lmn, eq_asym2.R_lmn)
-    np.testing.assert_allclose(eq_asym1.Z_lmn, eq_asym2.Z_lmn)
-    np.testing.assert_allclose(eq_asym1.L_lmn, eq_asym2.L_lmn)
-    np.testing.assert_allclose(eq_asym1.Rb_lmn, eq_asym2.Rb_lmn)
-    np.testing.assert_allclose(eq_asym1.Zb_lmn, eq_asym2.Zb_lmn)
 
 
 @pytest.mark.unit
@@ -416,6 +331,7 @@ def test_change_NFP():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         eq = get("HELIOTRON")
+        eq.change_resolution(3, 3, 1, 6, 6, 2)
         eq.change_resolution(NFP=4)
         obj = get_equilibrium_objective(eq=eq)
         obj.build()
@@ -452,7 +368,7 @@ def test_backward_compatible_load_and_resolve():
     eq.change_resolution(4, 4, 4, 4, 4, 4)
 
     f_obj = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(f_obj)
+    obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)
 
 

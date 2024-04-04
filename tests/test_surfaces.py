@@ -287,6 +287,7 @@ class TestFourierRZToroidalSurface:
             rtol=2e-2,
         )
 
+    @pytest.mark.unit
     def test_position(self):
         """Tests for position on surface."""
         s = FourierRZToroidalSurface()

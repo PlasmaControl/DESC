@@ -1,7 +1,7 @@
 """Classes defining objectives for equilibrium and optimization."""
 
 from ._bootstrap import BootstrapRedlConsistency
-from ._coils import CoilCurvature, CoilLength, CoilTorsion
+from ._coils import CoilCurvature, CoilLength, CoilTorsion, QuadraticFlux
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -10,7 +10,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._free_boundary import BoundaryError, QuadraticFlux, VacuumBoundaryError
+from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,

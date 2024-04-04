@@ -10,8 +10,10 @@ from desc.backend import (
     tree_structure,
     tree_unflatten,
 )
-from desc.compute import get_transforms
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid, _Grid
+from desc.singularities import compute_B_plasma
 from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
@@ -46,7 +48,7 @@ class _CoilObjective(_Objective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -270,7 +272,7 @@ class CoilLength(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -400,7 +402,7 @@ class CoilCurvature(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -515,7 +517,7 @@ class CoilTorsion(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -597,3 +599,213 @@ class CoilTorsion(_CoilObjective):
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
         out = jnp.concatenate([dat["torsion"] for dat in data])
         return out
+
+
+class QuadraticFlux(_Objective):
+    """Target B*n = 0 on LCFS.
+
+    Uses virtual casing to find plasma component of B and penalizes
+    (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
+    field is unfixed.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium upon whose surface the normal field error will be minimized.
+        The equilibrium is kept fixed during the optimization with this objective.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the normal field error on the provided equilibrium's surface.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f.
+        Default target is zero.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes for plasma source terms.
+        Default grid is detailed in the docs for ``compute_B_plasma``
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes on the plasma surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
+        Default grid is: LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
+            NFP=int(eq.NFP), sym=False)
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    vacuum : bool
+        If true, B_plasma (the contribution to the normal field on the boundary from the
+        plasma currents) is set to zero.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Boundary normal field Error: {:10.3e} "
+    _units = "(T m^2)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        source_grid=None,
+        eval_grid=None,
+        field_grid=None,
+        vacuum=False,
+        name="Quadratic flux",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._source_grid = source_grid
+        self._eval_grid = eval_grid
+        self._eq = eq
+        self._field = field
+        self._field_grid = field_grid
+        self._vacuum = vacuum
+        things = [field]
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self._eq
+
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=int(eq.NFP),
+                sym=False,
+            )
+            self._eval_grid = eval_grid
+        else:
+            eval_grid = self._eval_grid
+
+        self._data_keys = [
+            "R",
+            "Z",
+            "n_rho",
+            "phi",
+            "|e_theta x e_zeta|",
+        ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._dim_f = eval_grid.num_nodes
+
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
+
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=eq.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
+
+        # pre-compute B_plasma because we are assuming eq is fixed
+        if self._vacuum:
+            Bplasma = jnp.zeros(eval_grid.num_nodes)
+
+        else:
+            Bplasma = compute_B_plasma(
+                eq, eval_grid, self._source_grid, normal_only=True
+            )
+
+        self._constants = {
+            "quad_weights": w,
+            "eval_data": eval_data,
+            "B_plasma": Bplasma,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, field_params, constants=None):
+        """Compute boundary force error.
+
+        Parameters
+        ----------
+        field_params : dict
+            Dictionary of the external field's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Bnorm from B_ext and B_plasma
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        # Now, calculate B_plasma and B_ext
+        eval_data = constants["eval_data"]
+        Bplasma = constants["B_plasma"]
+
+        x = jnp.array(
+            [
+                eval_data["R"],
+                eval_data["phi"],
+                eval_data["Z"],
+            ]
+        ).T
+
+        # B_ext is not pre-computed because field is not fixed
+        Bext = self._field.compute_magnetic_field(
+            x, source_grid=self._field_grid, basis="rpz", params=field_params
+        )
+        Bext = jnp.sum(Bext * eval_data["n_rho"], axis=-1)
+        f = (Bext + Bplasma) * eval_data["|e_theta x e_zeta|"]
+        return f

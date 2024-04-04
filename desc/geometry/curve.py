@@ -1,7 +1,5 @@
 """Classes for parameterized 3D space curves."""
 
-import numbers
-
 import numpy as np
 
 from desc.backend import jnp, put
@@ -11,7 +9,7 @@ from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, isposint
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif
 
 from .core import Curve
 
@@ -77,7 +75,6 @@ class FourierRZCurve(Curve):
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-        assert isposint(NFP)
 
         if sym == "auto":
             if np.all(R_n[modes_R < 0] == 0) and np.all(Z_n[modes_Z >= 0] == 0):
@@ -88,7 +85,7 @@ class FourierRZCurve(Curve):
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
-        self._NFP = int(NFP)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
         self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
 
@@ -115,13 +112,6 @@ class FourierRZCurve(Curve):
         """Number of field periods."""
         return self._NFP
 
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
-
     @property
     def N(self):
         """Maximum mode number."""
@@ -129,6 +119,8 @@ class FourierRZCurve(Curve):
 
     def change_resolution(self, N=None, NFP=None, sym=None):
         """Change the maximum toroidal resolution."""
+        N = check_nonnegint(N, "N")
+        NFP = check_posint(NFP, "NFP")
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))
@@ -376,6 +368,7 @@ class FourierXYZCurve(Curve):
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
+        N = check_nonnegint(N, "N")
         if (N is not None) and (N != self.N):
             N = int(N)
             Xmodes_old = self.X_basis.modes
@@ -613,6 +606,7 @@ class FourierPlanarCurve(Curve):
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
+        N = check_nonnegint(N, "N")
         if (N is not None) and (N != self.N):
             N = int(N)
             modes_old = self.r_basis.modes

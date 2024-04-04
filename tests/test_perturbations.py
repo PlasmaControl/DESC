@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.objectives import (
@@ -19,10 +19,9 @@ from desc.perturbations import optimal_perturb, perturb
 
 @pytest.mark.regression
 @pytest.mark.slow
-@pytest.mark.solve
-def test_perturbation_orders(SOLOVEV):
+def test_perturbation_orders():
     """Test that higher-order perturbations are more accurate."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
 
     objective = get_equilibrium_objective(eq=eq)
     constraints = get_fixed_boundary_constraints(eq=eq)
@@ -129,13 +128,16 @@ def test_optimal_perturb():
     # particular solution. Here we do a simple test to ensure the interior and boundary
     # agree
     eq1 = desc.examples.get("DSHAPE")
+    eq1.change_resolution(3, 3, 0, 6, 6, 0)
     eq1.change_resolution(N=1, N_grid=5)
+    eq1.surface = eq1.get_surface_at(1.0)
     objective = ObjectiveFunction(
         ToroidalCurrent(
             eq=eq1, grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1
-        )
+        ),
+        use_jit=False,
     )
-    constraint = ObjectiveFunction(ForceBalance(eq=eq1, target=0))
+    constraint = ObjectiveFunction(ForceBalance(eq=eq1, target=0), use_jit=False)
 
     objective.build()
     constraint.build()

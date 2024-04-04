@@ -30,6 +30,11 @@ class Curve(IOAble, Optimizable, ABC):
         self._rotmat = jnp.eye(3, dtype=float).flatten()
         self._name = name
 
+    def _set_up(self):
+        """Set things after loading."""
+        if hasattr(self, "_NFP"):
+            self._NFP = int(self._NFP)
+
     @optimizable_parameter
     @property
     def shift(self):
@@ -302,6 +307,14 @@ class Surface(IOAble, Optimizable, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
     _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
+
+    def _set_up(self):
+        """Set things after loading."""
+        if hasattr(self, "_NFP"):
+            self._NFP = int(self._NFP)
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
 
     @property
     def name(self):

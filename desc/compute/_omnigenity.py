@@ -320,8 +320,8 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="f_C",
-    label="(M \\iota - N) (\\mathbf{B} \\times \\nabla \\psi) \\cdot \\nabla B"
-    + " - (M G + N I) \\mathbf{B} \\cdot \\nabla B",
+    label="[(M \\iota - N) (\\mathbf{B} \\times \\nabla \\psi)"
+    + " - (M G + N I) \\mathbf{B}] \\cdot \\nabla B",
     units="T^{3}",
     units_long="Tesla cubed",
     description="Two-term quasisymmetry metric",

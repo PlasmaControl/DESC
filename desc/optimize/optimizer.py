@@ -13,7 +13,15 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
-from desc.utils import Timer, flatten_list, get_instance, unique_list, warnif
+from desc.utils import (
+    Timer,
+    errorif,
+    flatten_list,
+    get_instance,
+    is_any_instance,
+    unique_list,
+    warnif,
+)
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
@@ -147,6 +155,11 @@ class Optimizer(IOAble):
         """
         if not isinstance(constraints, (tuple, list)):
             constraints = (constraints,)
+        errorif(
+            not isinstance(objective, ObjectiveFunction),
+            TypeError,
+            "objective should be of type ObjectiveFunction.",
+        )
 
         # get unique things
         things, indices = unique_list(flatten_list(things, flatten_tuple=True))
@@ -161,10 +174,19 @@ class Optimizer(IOAble):
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
+        from desc.objectives import QuadraticFlux
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
         if eq is not None:
+            # check if stage 2 objectives are here:
+            errorif(
+                is_any_instance(constraints, QuadraticFlux)
+                or is_any_instance(objective.objectives, QuadraticFlux),
+                ValueError,
+                "QuadraticFlux objective assumes equilibrium is fixed but equilibrium "
+                + " in things to optimize.",
+            )
             # save these for later
             eq_params_init = eq.params_dict.copy()
 

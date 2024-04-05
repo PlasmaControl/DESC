@@ -113,7 +113,9 @@ def map_coordinates(  # noqa: C901
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
-        grid = Grid(y, sort=False, jitable=True)
+        # need some dummy spacing values bc iota_num/iota_den still computed using FSA
+        # even if iota profile is given, but we don't care about those values.
+        grid = Grid(y, spacing=jnp.ones_like(y), sort=False, jitable=True)
         transforms = get_transforms(basis, eq, grid, jitable=True)
         data = compute_fun(eq, basis, params, transforms, profiles)
         x = jnp.array([data[k] for k in basis]).T

@@ -31,12 +31,13 @@ class MercierStability(_Objective):
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
-        locations.
+        locations. Defaults to ``bounds=(0, np.inf)``
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``bounds=(0, np.inf)``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -208,12 +209,13 @@ class MagneticWell(_Objective):
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
-        locations.
+        locations. Defaults to ``bounds=(0, np.inf)``
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``bounds=(0, np.inf)``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f

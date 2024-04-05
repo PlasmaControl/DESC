@@ -26,13 +26,14 @@ class GenericObjective(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to to Objective.dim_f.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
         Has no effect for this objective
@@ -181,10 +182,11 @@ class LinearObjectiveFromUser(_FixedObjective):
         Object whose degrees of freedom are being constrained.
     target : dict of {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Should have the same tree structure as thing.params. Defaults to things.params.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of dict {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Should have the same tree structure as thing.params.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : dict of {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Should be a scalar or have the same tree structure as thing.params.
@@ -303,10 +305,11 @@ class ObjectiveFromUser(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f

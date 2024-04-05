@@ -654,7 +654,7 @@ class QuadraticFlux(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary normal field Error: {:10.3e} "
+    _print_value_fmt = "Boundary normal field error: {:10.3e} "
     _units = "(T m^2)"
     _coordinates = "rtz"
 
@@ -717,13 +717,7 @@ class QuadraticFlux(_Objective):
         else:
             eval_grid = self._eval_grid
 
-        self._data_keys = [
-            "R",
-            "Z",
-            "n_rho",
-            "phi",
-            "|e_theta x e_zeta|",
-        ]
+        self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
 
         timer = Timer()
         if verbose > 0:
@@ -796,13 +790,7 @@ class QuadraticFlux(_Objective):
         eval_data = constants["eval_data"]
         B_plasma = constants["B_plasma"]
 
-        x = jnp.array(
-            [
-                eval_data["R"],
-                eval_data["phi"],
-                eval_data["Z"],
-            ]
-        ).T
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
         # B_ext is not pre-computed because field is not fixed
         B_ext = constants["field"].compute_magnetic_field(

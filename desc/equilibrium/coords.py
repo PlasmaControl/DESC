@@ -383,9 +383,8 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
         == "r"
     }
     r, a, z_fl = map(jnp.ravel, jnp.meshgrid(rho, alpha, zeta, indexing="ij"))
-    coords_sfl = jnp.column_stack(
-        [r, (a + data_desc["iota"] * z_fl) % (2 * jnp.pi), z_fl]
-    )
+    # don't modulo field line zeta by 2pi
+    coords_sfl = jnp.column_stack([r, a + data_desc["iota"] * z_fl, z_fl])
     coords_desc = eq.compute_theta_coords(coords_sfl)
     grid_desc = Grid(
         nodes=coords_desc,

@@ -400,7 +400,9 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # The boolean masks is_bp1 and is_bp2 will encode whether a given entry in
     # intersect is a valid starting and ending bounce point, respectively.
     # Sign of derivative determines whether an intersect is a valid bounce point.
-    is_bp1 = B_z < 0
+    # Need to include zero derivative intersects to compute the WFB
+    # (world's fattest banana) orbit bounce integrals.
+    is_bp1 = B_z <= 0
     is_bp2 = B_z >= 0
     # Get ζ values of bounce points from the masks.
     bp1 = take_mask(intersect, is_bp1)
@@ -412,27 +414,24 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # there can be at most one inversion, and if it exists, the inversion must be
     # at the first pair. To correct the inversion, it suffices to roll forward bp1.
     # Then the pairs bp1[:, i] and bp2[:, i] for i > 0 form integration boundaries.
-    # Moreover, if the first intersect satisfies B_z >= 0, that particle may be
-    # trapped in a well outside this snapshot of the field line.
-    # If, in addition, the last intersect satisfies B_z < 0, then we have the
-    # required information to compute a bounce integral between these points.
-    # The below logic handles both tasks.
     bp1 = _roll_and_replace_if_shift(
         bp1, bp1[:, 0] > bp2[:, 0], _last_value(intersect) - knots[-1]
     )
-    # Notice that for the latter, an "approximation" is made that the field line is
-    # periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so that the
-    # distance between these bounce points is well-defined. This may worry the
-    # reader if they recall that it is not desirable to have field lines close
-    # on themselves. However, for any irrational value for the rotational
-    # transform, there exists an arbitrarily close rational value (I'm just saying
-    # the basic result that rational numbers are dense in the real numbers).
-    # After such a rational amount of transits, the points corresponding to this
-    # distance along the field line and the start of the field line will be
-    # physically close. By continuity, the value of |B| at ζ = 0 is then close
-    # to the value of |B| of at ζ = knots[-1]. In general, continuity implies
-    # |B|(knots[-1] < ζ < knots[-1] + knots[0]) will approximately equal
-    # |B|(0 < ζ < knots[0]) as long as ζ = knots[-1] is large enough.
+    # Moreover, if the first intersect satisfies B_z >= 0, that particle may be
+    # trapped in a well outside this snapshot of the field line.
+    # If, in addition, the last intersect satisfies B_z <= 0, then we have the
+    # required information to compute a bounce integral between these points.
+    # This single bounce integral is somewhat undefined since the field typically
+    # does not close on itself, but in some cases it can make sense to include it.
+    # (To make this integral well-defined, an approximation is made that the field
+    # line is periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so
+    # that the distance between these bounce points is well-defined. This is fine
+    # as long as after a transit the field line begins physically close to where
+    # it began on the previous transit, for then continuity of |B| implies
+    # |B|(knots[-1] < ζ < knots[-1] + knots[0]) is close to |B|(0 < ζ < knots[0])).
+    # The above rolling logic handles both tasks.
+    # We don't need to check the conditions for the latter, because if they are
+    # not satisfied, the quadrature will evaluate √(1 − λ |B|) as nan, as desired.
     bp1 = bp1.reshape(P, RA, -1)
     bp2 = bp2.reshape(P, RA, -1)
     return bp1, bp2
@@ -490,7 +489,7 @@ def bounce_integral(
     pitch=None,
     rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
-    zeta=jnp.linspace(0, 10 * jnp.pi, 20),
+    zeta=jnp.linspace(0, 6 * jnp.pi, 20),
     quadrature=tanh_sinh_quadrature,
     **kwargs,
 ):
@@ -655,7 +654,7 @@ def bounce_average(
     pitch=None,
     rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
-    zeta=jnp.linspace(0, 10 * jnp.pi, 20),
+    zeta=jnp.linspace(0, 6 * jnp.pi, 20),
     quadrature=tanh_sinh_quadrature,
     **kwargs,
 ):

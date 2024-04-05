@@ -15,6 +15,7 @@ from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
+from desc.coils import CoilSet
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
@@ -2217,6 +2218,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
 
         Valid keyword arguments are:
 
+        * ``unique``: bool, only plots unique coils from a CoilSet if True
         * ``figsize``: tuple of length 2, the size of the figure in inches
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
@@ -2234,6 +2236,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     ls = kwargs.pop("ls", "solid")
     figsize = kwargs.pop("figsize", (10, 10))
     color = kwargs.pop("color", "black")
+    unique = kwargs.pop("unique", False)
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -2251,6 +2254,12 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
 
     def flatten_coils(coilset):
         if hasattr(coilset, "__len__"):
+            if hasattr(coilset, "_NFP") and hasattr(coilset, "_sym"):
+                if not unique and (coilset.NFP > 1 or coilset.sym):
+                    # plot all coils for symmetric coil sets
+                    coilset = CoilSet.from_symmetry(
+                        coilset, NFP=coilset.NFP, sym=coilset.sym
+                    )
             return [a for i in coilset for a in flatten_coils(i)]
         else:
             return [coilset]

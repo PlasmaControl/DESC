@@ -66,7 +66,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     for name in names:
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
-    bad_kwargs = kwargs.keys() - allowed_kwargs
+    bad_kwargs = kwargs.keys() - (allowed_kwargs | {"method"})
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 

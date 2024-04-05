@@ -713,7 +713,7 @@ class SplineXYZCurve(Curve):
             knots = knots[:-1] if closed_flag else knots
 
         if discontinuous_knots is None:
-            intervals = [[0, 2 * jnp.pi]]
+            interval_indices = [[0, -1]]
         else:
             find_nearest = lambda array, val: (np.abs(array - val)).argmin()
             discontinuous_indices = [
@@ -721,16 +721,15 @@ class SplineXYZCurve(Curve):
             ]
             discontinuous_knots = knots[discontinuous_indices]
 
-            intervals = [
-                [discontinuous_knots[i - 1], 2 * np.pi]
-                # TODO: this doesn't seem like the best way to do this
-                if i == 0 else [discontinuous_knots[i - 1], discontinuous_knots[i]]
-                for i in range(len(discontinuous_knots))
+            interval_indices = [
+                [discontinuous_indices[i - 1], discontinuous_indices[i]]
+                for i in range(len(discontinuous_indices))
             ]
+            print(interval_indices)
 
         self._knots = knots
         self.method = method
-        self.intervals = intervals
+        self.intervals = interval_indices
 
     @optimizable_parameter
     @property

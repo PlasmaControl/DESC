@@ -765,9 +765,9 @@ class TestSplineXYZCurve:
     @pytest.mark.unit
     def test_discontinuous(self):
         """Test with discontinuous knots."""
-        discontinuous_knots = [0, np.pi]
+        discontinuous_knots = [0, np.pi / 2, np.pi, 3 * np.pi / 2]
         R = 2
-        phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+        phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
         d = SplineXYZCurve(
             X=R * np.cos(phi),
             Y=R * np.sin(phi),
@@ -775,5 +775,5 @@ class TestSplineXYZCurve:
             knots="arclength",
             discontinuous_knots=discontinuous_knots,
         )
-        print(d.compute("x"))
+        d.compute("x")
         assert 1 == 1

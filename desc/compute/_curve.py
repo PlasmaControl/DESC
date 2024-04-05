@@ -654,53 +654,60 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     basis="basis",
 )
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    def get_arr_in_interval(arr, knots, istart, istop):
+        arr_temp = jnp.where(knots > knots[istop], arr[istop], arr)
+        arr_temp = jnp.where(knots < knots[istart], arr[istart], arr_temp)
+
+        return arr_temp
+
     xq = data["s"]
 
+    knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
+    X = jnp.append(params["X"], params["X"][0])
+    Y = jnp.append(params["Y"], params["Y"][0])
+    Z = jnp.append(params["Z"], params["Z"][0])
+
+    Xq = jnp.zeros(len(xq))
+    Yq = jnp.zeros(len(xq))
+    Zq = jnp.zeros(len(xq))
+
     # TODO: generalize for when each coil has different intervals
-    for interval in transforms["intervals"]:
+    for istart, istop in transforms["intervals"]:
+        istop = -1 if istop == 0 else istop
 
-        query_range = (xq >= interval[0]) & (xq <= interval[1])
-        interval_range = (params["knots"] >= interval[0]) & (
-            params["knots"] <= interval[1]
-        )
+        X_in_interval = get_arr_in_interval(X, knots, istart, istop)
+        Y_in_interval = get_arr_in_interval(Y, knots, istart, istop)
+        Z_in_interval = get_arr_in_interval(Z, knots, istart, istop)
 
-        xq_in_interval = xq[query_range]
+        # TODO: never use period?
 
-        knots_in_interval = jnp.where(interval_range, params["knots"], jnp.nan)
-        X_in_interval = jnp.where(interval_range, params["X"], jnp.nan)
-        Y_in_interval = jnp.where(interval_range, params["Y"], jnp.nan)
-        Z_in_interval = jnp.where(interval_range, params["Z"], jnp.nan)
-
-        # TODO: hmm
-        period = 2 * jnp.pi if abs(interval[1] - interval[0]) == 2 * jnp.pi else None
-
-        # TODO: needs to be an array for more than 1 interval
-        Xq = interp1d(
-            xq_in_interval,
-            knots_in_interval,
+        Xq_temp = interp1d(
+            xq,
+            knots,
             X_in_interval,
             method=transforms["method"],
             derivative=0,
-            period=period,
         )
-        Yq = interp1d(
-            xq_in_interval,
-            knots_in_interval,
+        Yq_temp = interp1d(
+            xq,
+            knots,
             Y_in_interval,
             method=transforms["method"],
             derivative=0,
-            period=period,
         )
-        Zq = interp1d(
-            xq_in_interval,
-            knots_in_interval,
+        Zq_temp = interp1d(
+            xq,
+            knots,
             Z_in_interval,
             method=transforms["method"],
             derivative=0,
-            period=period,
         )
 
-    coords = jnp.stack([Xq, Yq, Zq], axis=1)
+        Xq = jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Xq_temp, Xq)
+        Yq = jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Yq_temp, Yq)
+        Zq = jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Zq_temp, Zq)
+
+    coords = jnp.stack(jnp.stack([Xq, Yq, Zq]), axis=1)
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
     )

@@ -184,8 +184,8 @@ class Optimizer(IOAble):
                 is_any_instance(constraints, QuadraticFlux)
                 or is_any_instance(objective.objectives, QuadraticFlux),
                 ValueError,
-                "QuadraticFlux objective assumes equilibrium is fixed but equilibrium "
-                + " in things to optimize.",
+                "QuadraticFlux objective assumes Equilibrium is fixed but Equilibrium "
+                + "is in things to optimize.",
             )
             # save these for later
             eq_params_init = eq.params_dict.copy()

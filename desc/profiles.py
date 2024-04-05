@@ -760,7 +760,8 @@ class PowerLawProfile(_Profile):
         r = grid.nodes[:, 0]
         if dr == 0:
             f = a * (1 - r**b) ** c
-        # df/dr = inf at rho = 1 for all dr > 0
+        # df/dr = inf at rho = 0 if b < 1
+        # df/dr = inf at rho = 1 if b or c < dr
         elif dr == 1:
             f = r ** (b - 1) * self.compute(grid, params=[-a * b * c, b, c - 1])
         elif dr == 2:

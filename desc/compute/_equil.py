@@ -717,7 +717,7 @@ def _W_Btor(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["p", "sqrt(g)"],
-    gamma="gamma",
+    gamma="float: Adiabatic index. Default 0",
 )
 def _W_p(params, transforms, profiles, data, **kwargs):
     data["W_p"] = jnp.sum(data["p"] * data["sqrt(g)"] * transforms["grid"].weights) / (

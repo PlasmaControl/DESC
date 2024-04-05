@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../"))
 import csv
 
-from desc.compute import data_index
+from desc.compute import all_kwargs, data_index
 
 
 def _escape(line):

@@ -50,6 +50,7 @@ class Pressure(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid)``.
     name : str, optional
         Name of the objective function.
 
@@ -205,6 +206,9 @@ class RotationalTransform(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
     name : str, optional
         Name of the objective function.
 
@@ -373,6 +377,9 @@ class Shear(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
     name : str, optional
         Name of the objective function.
 
@@ -537,6 +544,9 @@ class ToroidalCurrent(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
     name : str, optional
         Name of the objective function.
 

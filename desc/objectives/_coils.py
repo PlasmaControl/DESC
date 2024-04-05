@@ -279,6 +279,7 @@ class CoilLength(_CoilObjective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
     """
@@ -410,6 +411,7 @@ class CoilCurvature(_CoilObjective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
     """
@@ -526,6 +528,7 @@ class CoilTorsion(_CoilObjective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
     """

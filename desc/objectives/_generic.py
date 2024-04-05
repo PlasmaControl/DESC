@@ -52,6 +52,7 @@ class GenericObjective(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
     name : str, optional
         Name of the objective function.
 
@@ -331,6 +332,7 @@ class ObjectiveFromUser(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
     name : str, optional
         Name of the objective function.
 

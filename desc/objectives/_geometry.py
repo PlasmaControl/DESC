@@ -51,7 +51,9 @@ class AspectRatio(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -211,7 +213,9 @@ class Elongation(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -370,7 +374,9 @@ class Volume(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -555,8 +561,10 @@ class PlasmaVesselDistance(_Objective):
         reverse mode and forward over reverse mode respectively.
     surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     use_softmin: bool, optional
         Use softmin or hard min.
     surface_fixed: bool, optional
@@ -802,7 +810,9 @@ class MeanCurvature(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -960,7 +970,9 @@ class PrincipalCurvature(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -1114,7 +1126,8 @@ class BScaleLength(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
 

@@ -48,6 +48,7 @@ class QuasisymmetryBoozer(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Must be a LinearGrid with a single flux surface and sym=False.
+        Defaults to ``LinearGrid(M=M_booz, N=N_booz)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
     M_booz : int, optional
@@ -273,6 +274,7 @@ class QuasisymmetryTwoTerm(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N).
     name : str, optional
@@ -466,6 +468,7 @@ class QuasisymmetryTripleProduct(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
 
@@ -970,6 +973,7 @@ class Isodynamicity(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
 

@@ -29,7 +29,7 @@ class TestTransform:
         grid_3 = ConcentricGrid(L=4, M=2, N=2)
 
         basis_1 = DoubleFourierSeries(M=1, N=1)
-        basis_2 = FourierZernikeBasis(L=-1, M=1, N=1)
+        basis_2 = FourierZernikeBasis(L=1, M=1, N=1)
 
         transf_11 = Transform(grid_1, basis_1)
         transf_21 = Transform(grid_2, basis_1)
@@ -146,7 +146,7 @@ class TestTransform:
     def test_volume_zernike(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume."""
         grid = ConcentricGrid(L=4, M=2, N=2)
-        basis = FourierZernikeBasis(L=-1, M=1, N=1, sym="sin")
+        basis = FourierZernikeBasis(L=1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
         r = grid.nodes[:, 0]  # rho coordinates
@@ -173,7 +173,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_set_grid(self):
         """Tests the grid setter method."""
-        basis = FourierZernikeBasis(L=-1, M=1, N=1)
+        basis = FourierZernikeBasis(L=1, M=1, N=1)
 
         grid_1 = LinearGrid(L=0)
         grid_3 = LinearGrid(L=2)
@@ -197,9 +197,9 @@ class TestTransform:
         """Tests the basis setter method."""
         grid = ConcentricGrid(L=4, M=2, N=1)
 
-        basis_20 = FourierZernikeBasis(L=-1, M=2, N=0)
-        basis_21 = FourierZernikeBasis(L=-1, M=2, N=1)
-        basis_31 = FourierZernikeBasis(L=-1, M=3, N=1)
+        basis_20 = FourierZernikeBasis(L=1, M=2, N=0)
+        basis_21 = FourierZernikeBasis(L=1, M=2, N=1)
+        basis_31 = FourierZernikeBasis(L=1, M=3, N=1)
 
         transf_20 = Transform(grid, basis_20, method="fft")
         transf_21 = Transform(grid, basis_21, method="fft")
@@ -392,7 +392,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_project(self):
         """Tests projection method for Galerkin method."""
-        basis = FourierZernikeBasis(L=-1, M=5, N=3)
+        basis = FourierZernikeBasis(L=1, M=5, N=3)
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
@@ -406,7 +406,7 @@ class TestTransform:
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
-        basis = FourierZernikeBasis(L=-1, M=5, N=3, sym="cos")
+        basis = FourierZernikeBasis(L=1, M=5, N=3, sym="cos")
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
@@ -420,7 +420,7 @@ class TestTransform:
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
-        basis = FourierZernikeBasis(L=-1, M=5, N=0, sym="sin")
+        basis = FourierZernikeBasis(L=1, M=5, N=0, sym="sin")
         grid = ConcentricGrid(L=4, M=2, N=5, sym=True)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")

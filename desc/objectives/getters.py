@@ -1,5 +1,7 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
+import numpy as np
+
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
     AxisRSelfConsistency,
@@ -20,6 +22,7 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixParameter,
     FixPressure,
     FixPsi,
 )
@@ -102,6 +105,9 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
                 constraints += (
                     con(eq=eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(eq, param, [])).size:
+            constraints += (FixParameter(eq, param),)
 
     return constraints
 
@@ -135,6 +141,9 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
                 constraints += (
                     con(eq=eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(eq, param, [])).size:
+            constraints += (FixParameter(eq, param),)
 
     return constraints
 
@@ -190,6 +199,9 @@ def get_NAE_constraints(
                 constraints += (
                     con(eq=desc_eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(desc_eq, param, [])).size:
+            constraints += (FixParameter(desc_eq, param),)
 
     if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(

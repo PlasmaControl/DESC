@@ -94,4 +94,3 @@ def _build_data_index():
 
 
 _build_data_index()
-allowed_kwargs = set(flatten_list(allowed_kwargs))

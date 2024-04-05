@@ -366,7 +366,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "w":  # used for Boozer transfrom
+        elif c == "w":  # used for Boozer transform
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(

@@ -125,7 +125,8 @@ def register_compute_fun(
         "axis_limit_data": [] if axis_limit_data is None else axis_limit_data,
         "kwargs": list(kwargs.keys()),
     }
-    allowed_kwargs.append(list(kwargs.keys()))
+    for kw in kwargs:
+        allowed_kwargs.add(kw)
     permutable_names = ["R_", "Z_", "phi_", "lambda_", "omega_"]
     if not aliases and "".join(name.split("_")[:-1]) + "_" in permutable_names:
         aliases = find_permutations(name)
@@ -230,4 +231,4 @@ _class_inheritance = {
 
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
-allowed_kwargs = []
+allowed_kwargs = set()

@@ -609,7 +609,7 @@ class ToroidalFlux(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     field : MagneticField
         MagneticField object, the parameters of this will be optimized
@@ -638,8 +638,8 @@ class ToroidalFlux(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    source_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate field source at on
+    field_grid : Grid, optional
+        Grid containing the nodes to evaluate field source at on
         the winding surface. (used if e.g. field is a CoilSet or
         FourierCurrentPotentialField). Defaults to the default for the
         given field, see the docstring of the field object for the specific default.
@@ -666,14 +666,14 @@ class ToroidalFlux(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        source_grid=None,
+        field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
     ):
         if target is None and bounds is None:
             target = eq.Psi
         self._field = field
-        self._source_grid = source_grid
+        self._field_grid = field_grid
         self._eval_grid = eval_grid
         self._eq = eq
 
@@ -708,9 +708,9 @@ class ToroidalFlux(_Objective):
             self._eval_grid = eval_grid
         eval_grid = self._eval_grid
 
-        warnif(
+        errorif(
             not np.allclose(eval_grid.nodes[:, 2], eval_grid.nodes[0, 2]),
-            UserWarning,
+            ValueError,
             "Evaluation grid should be at constant zeta",
         )
         if self._normalize:
@@ -719,23 +719,21 @@ class ToroidalFlux(_Objective):
         # ensure vacuum eq, as is unneeded for finite beta
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))
-        errorif(
+        warnif(
             pres > 1e-8,
-            ValueError,
-            f"Pressure is non-zero (max {pres} Pa), "
+            UserWarning,
+            f"Pressure appears to be non-zero (max {pres} Pa), "
             + "this objective is unneeded at finite beta.",
         )
-        errorif(
+        warnif(
             curr > 1e-8,
-            ValueError,
-            f"Current is non-zero (max {curr} A), "
+            UserWarning,
+            f"Current appears to be non-zero (max {curr} A), "
             + "this objective is unneeded at finite beta.",
         )
 
         # eval_grid.num_nodes for quad flux cost,
         self._dim_f = 1
-        self._equil_data_keys = ["|e_rho x e_theta|", "R", "phi", "Z"]
-
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
@@ -751,6 +749,9 @@ class ToroidalFlux(_Objective):
             "plasma_coords": plasma_coords,
             "equil_data": data,
             "quad_weights": 1.0,
+            "field": self._field,
+            "field_grid": self._field_grid,
+            "eval_grid": eval_grid,
         }
 
         timer.stop("Precomputing transforms")
@@ -783,13 +784,13 @@ class ToroidalFlux(_Objective):
         data = constants["equil_data"]
         plasma_coords = constants["plasma_coords"]
 
-        B = self._field.compute_magnetic_field(
+        B = constants["field"].compute_magnetic_field(
             plasma_coords,
             basis="rpz",
-            source_grid=self._source_grid,
+            source_grid=constants["field_grid"],
             params=field_params,
         )
-        grid = self._eval_grid
+        grid = constants["eval_grid"]
 
         B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
 

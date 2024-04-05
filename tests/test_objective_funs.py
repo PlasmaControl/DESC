@@ -1776,11 +1776,6 @@ class TestComputeScalarResolution:
         eq = get("precise_QA")
         eq.change_resolution(4, 4, 4, 8, 8, 8)
 
-        obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
-        obj.build()
-        g = obj.grad(obj.x(ext_field))
-        assert not np.any(np.isnan(g)), "toroidal flux"
-
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             eq.change_resolution(

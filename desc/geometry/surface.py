@@ -11,7 +11,7 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, setdefault
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, setdefault
 
 from .core import Surface
 
@@ -518,6 +518,83 @@ class FourierRZToroidalSurface(Surface):
             check_orientation=check_orientation,
         )
         return surf
+
+    @classmethod
+    def from_shape_parameters(
+        cls,
+        major_radius=10.0,
+        minor_radius=1.0,
+        elongation=1.0,
+        triangularity=0.3,
+        squareness=0.0,
+        eccentricity=0.0,
+        torsion=0.0,
+        twist=0.0,
+        NFP=1,
+        sym=True,
+    ):
+        """Create a surface using a generalized Miller parameterization.
+
+        Parameters
+        ----------
+        major_radius : float > 0
+            Average major radius. Constant term in the R coordinate.
+        minor_radius : float > 0
+            Average minor radius of the cross section.
+        elongation : float > 0
+            Elongation of the elliptical surface = major axis / minor axis.
+        triangularity : float
+            Positive triangularity makes a "D" like cross section, negative
+            triangularity makes a backwards "D".
+        squareness : float
+            Positive squareness makes a "□" type cross section. Negative squareness
+            makes a "+" like cross section.
+        eccentricity : float in [0, 1)
+            Eccentricity of the magnetic axis.
+        torsion : float
+            How non-planar the magnetic axis is.
+        twist : float
+            How much the cross section twists you go toroidally around.
+        NFP : int
+            Number of field periods.
+        sym : bool (optional)
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            Surface with given geometric properties.
+
+        """
+        errorif(major_radius <= 0, ValueError, "major_radius must be positive")
+        errorif(minor_radius <= 0, ValueError, "minor_radius must be positive")
+        errorif(eccentricity < 0, ValueError, "eccentricity must be in [0,1)")
+        errorif(eccentricity >= 1, ValueError, "eccentricity must be in [0,1)")
+        errorif(elongation <= 0, ValueError, "elongation should be positive")
+        grid = LinearGrid(L=0, M=30, N=30, NFP=NFP, endpoint=True)
+        theta = grid.nodes[:, 1]
+        zeta = grid.nodes[:, 2]
+
+        # create cross section shape using miller parameterization
+        Rp = minor_radius * np.cos(
+            theta + triangularity * np.sin(theta) - squareness * np.sin(2 * theta)
+        )
+        Zp = -elongation * minor_radius * np.sin(theta + squareness * np.sin(2 * theta))
+
+        # create axis shape using ellipse + torsion
+        a = 2 * major_radius / (1 + np.sqrt(1 - eccentricity**2))
+        b = a * np.sqrt(1 - eccentricity**2)
+        Ra = (
+            a
+            * b
+            / np.sqrt(b**2 * np.cos(NFP * zeta) ** 2 + a**2 * np.sin(NFP * zeta) ** 2)
+        )
+        Za = 0.0 + torsion * np.sin(NFP * zeta)
+        # combine axis + cross section with twist
+        R = Ra + Rp - twist * Zp * np.sin(NFP * zeta)
+        Z = Za + Zp + twist * Rp * np.cos(NFP * zeta)
+
+        return cls.from_values(np.array([R, zeta, Z]).T, theta, NFP=NFP, sym=sym)
 
     def constant_offset_surface(
         self, offset, grid=None, M=None, N=None, full_output=False

@@ -4,7 +4,16 @@ from functools import partial
 
 from interpax import CubicHermiteSpline, interp1d
 
-from desc.backend import complex_sqrt, cond, flatnonzero, jnp, put, take, vmap
+from desc.backend import (
+    complex_sqrt,
+    cond,
+    flatnonzero,
+    jnp,
+    put,
+    put_along_axis,
+    take,
+    vmap,
+)
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
 
 
@@ -124,8 +133,9 @@ def take_mask(a, mask, size=None, fill_value=None):
         Output array.
 
     """
+    assert a.size == mask.size
     if size is None:
-        size = a.size
+        size = mask.size
     idx = flatnonzero(mask, size=size, fill_value=mask.size)
     a_mask = take(
         a,
@@ -148,15 +158,15 @@ def _last_value(a):
 
 
 @vmap
-def _roll_and_replace_if_shift(a, shift, replacement):
-    """If shift is true, roll right and put replacement value at index 0.
+def _maybe_roll_and_replace(maybe, a, replacement):
+    """If maybe is true, roll a right and put replacement value at a[0].
 
     Parameters
     ----------
+    maybe : ndarray, shape(1, )
+        Whether to roll array.
     a : ndarray
         Array to roll.
-    shift : ndarray, shape(1, )
-        Whether to roll array.
     replacement : ndarray, shape(1, )
         Value to place at index zero.
 
@@ -167,7 +177,7 @@ def _roll_and_replace_if_shift(a, shift, replacement):
 
     """
     return cond(
-        shift,
+        maybe,
         lambda x, r: put(jnp.roll(x, shift=1), jnp.array([0]), r),
         lambda x, r: x,
         a,
@@ -277,7 +287,7 @@ def cubic_poly_roots(coef, k=0, a_min=None, a_max=None, sort=False):
     coef : ndarray
         First axis should store coefficients of a polynomial. For a polynomial
         given by c₁ x³ + c₂ x² + c₃ x + c₄, ``coef[i]`` should store cᵢ.
-        It is assumed that c₁ is nonzero.
+        In writing the above polynomial, it is assumed that c₁ is nonzero.
     k : ndarray
         Specify to find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``k``.
         Should broadcast with arrays of shape(*coef.shape[1:]).
@@ -317,7 +327,7 @@ def cubic_poly_roots(coef, k=0, a_min=None, a_max=None, sort=False):
 
     def clip_to_nan(root):
         return jnp.where(
-            jnp.isreal(root) & (a_min <= root) & (root <= a_max),
+            jnp.isclose(jnp.imag(root), 0) & (a_min <= root) & (root <= a_max),
             jnp.real(root),
             jnp.nan,
         )
@@ -331,6 +341,7 @@ def cubic_poly_roots(coef, k=0, a_min=None, a_max=None, sort=False):
     roots = jnp.stack(roots, axis=-1)
     if sort:
         roots = jnp.sort(roots, axis=-1)
+    # TODO: make sure that double roots, triple roots, are filtered into single roots
     return roots
 
 
@@ -349,12 +360,12 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     knots : ndarray, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
     poly_B : ndarray, shape(4, R * A, knots.size - 1)
-        Polynomial coefficients of the cubic spline of |B|.
+        Polynomial coefficients of the cubic spline of |B| in local power basis.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
     poly_B_z : ndarray, shape(3, R * A, knots.size - 1)
-        Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
+        Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ in local power basis.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
@@ -366,6 +377,8 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
         along a field line. Has shape (P, R * A, (knots.size - 1) * 3).
         If there were less than (knots.size - 1) * 3 bounce points along a
         field line, then the last axis is padded with nan.
+        The pairs bp1[..., i] and bp2[..., i] form integration boundaries
+        for bounce integrals.
 
     """
     P = pitch.shape[0]  # batch size
@@ -378,10 +391,11 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # case where each cubic polynomial intersects 1 / λ thrice.
     # nan values in ``intersect`` denote a polynomial has less than three intersects.
     intersect = cubic_poly_roots(
+        # coefficients are in local power basis expansion
         coef=poly_B,
         k=jnp.expand_dims(1 / pitch, axis=-1),
-        a_min=knots[:-1],
-        a_max=knots[1:],
+        a_min=jnp.array([0]),
+        a_max=jnp.diff(knots),
         sort=True,
     )
     assert intersect.shape == (P, RA, N, 3)
@@ -389,6 +403,8 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense remaining axes to vmap over them.
     B_z = polyval(x=intersect, c=poly_B_z[..., jnp.newaxis]).reshape(P * RA, -1)
+    # Transform from local power basis expansion to real space.
+    intersect = intersect + knots[:-1, jnp.newaxis]
     intersect = intersect.reshape(P * RA, -1)
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = ~jnp.isnan(intersect)
@@ -396,7 +412,7 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # Rearrange so that all intersects along a field line are contiguous.
     intersect = take_mask(intersect, is_intersect)
     B_z = take_mask(B_z, is_intersect)
-    assert intersect.shape == B_z.shape == is_intersect.shape == (P * RA, N * 3)
+    assert intersect.shape == is_intersect.shape == B_z.shape == (P * RA, N * 3)
     # The boolean masks is_bp1 and is_bp2 will encode whether a given entry in
     # intersect is a valid starting and ending bounce point, respectively.
     # Sign of derivative determines whether an intersect is a valid bounce point.
@@ -404,37 +420,34 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # (world's fattest banana) orbit bounce integrals.
     is_bp1 = B_z <= 0
     is_bp2 = B_z >= 0
-    # Get ζ values of bounce points from the masks.
-    bp1 = take_mask(intersect, is_bp1)
-    bp2 = take_mask(intersect, is_bp2)
     # For correctness, it is necessary that the first intersect satisfies B_z <= 0.
     # That is, the pairs bp1[:, i] and bp2[:, i] are the boundaries of an
     # integral only if bp1[:, i] <= bp2[:, i].
     # Now, because B_z[:, i] <= 0 implies B_z[:, i + 1] >= 0 by continuity,
     # there can be at most one inversion, and if it exists, the inversion must be
-    # at the first pair. To correct the inversion, it suffices to roll forward bp1.
-    # Then the pairs bp1[:, i] and bp2[:, i] for i > 0 form integration boundaries.
-    bp1 = _roll_and_replace_if_shift(
-        bp1, bp1[:, 0] > bp2[:, 0], _last_value(intersect) - knots[-1]
-    )
-    # Moreover, if the first intersect satisfies B_z >= 0, that particle may be
-    # trapped in a well outside this snapshot of the field line.
-    # If, in addition, the last intersect satisfies B_z <= 0, then we have the
-    # required information to compute a bounce integral between these points.
-    # This single bounce integral is somewhat undefined since the field typically
-    # does not close on itself, but in some cases it can make sense to include it.
-    # (To make this integral well-defined, an approximation is made that the field
-    # line is periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so
-    # that the distance between these bounce points is well-defined. This is fine
-    # as long as after a transit the field line begins physically close to where
-    # it began on the previous transit, for then continuity of |B| implies
-    # |B|(knots[-1] < ζ < knots[-1] + knots[0]) is close to |B|(0 < ζ < knots[0])).
-    # The above rolling logic handles both tasks.
-    # We don't need to check the conditions for the latter, because if they are
-    # not satisfied, the quadrature will evaluate √(1 − λ |B|) as nan, as desired.
-    bp1 = bp1.reshape(P, RA, -1)
-    bp2 = bp2.reshape(P, RA, -1)
+    # at the first pair. To correct the inversion, it suffices to disqualify
+    # the first intersect as a right bounce point.
+    edge_case = (B_z[:, 0] == 0) & (B_z[:, 1] < 0)
+    is_bp2 = put_along_axis(is_bp2, jnp.array([0]), edge_case[:, jnp.newaxis], axis=-1)
+    # Get ζ values of bounce points from the masks.
+    bp1 = take_mask(intersect, is_bp1).reshape(P, RA, -1)
+    bp2 = take_mask(intersect, is_bp2).reshape(P, RA, -1)
     return bp1, bp2
+    # This is no longer implemented at the moment, but can be simply.
+    #   If the first intersect satisfies B_z >= 0, that particle may be
+    #   trapped in a well outside this snapshot of the field line.
+    #   If, in addition, the last intersect satisfies B_z <= 0, then we have the
+    #   required information to compute a bounce integral between these points.
+    #   This single bounce integral is somewhat undefined since the field typically
+    #   does not close on itself, but in some cases it can make sense to include it.
+    #   (To make this integral well-defined, an approximation is made that the field
+    #   line is periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so
+    #   that the distance between these bounce points is well-defined. This is fine
+    #   as long as after a transit the field line begins physically close to where
+    #   it began on the previous transit, for then continuity of |B| implies
+    #   |B|(knots[-1] < ζ < knots[-1] + knots[0]) is close to |B|(0 < ζ < knots[0])).
+    #   We don't need to check the conditions for the latter, because if they are
+    #   not satisfied, the quadrature will evaluate √(1 − λ |B|) as nan, as desired.
 
 
 def _compute_bp_if_given_pitch(pitch, knots, poly_B, poly_B_z, *original, err=False):
@@ -452,12 +465,12 @@ def _compute_bp_if_given_pitch(pitch, knots, poly_B, poly_B_z, *original, err=Fa
     knots : ndarray, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
     poly_B : ndarray, shape(4, R * A, knots.size - 1)
-        Polynomial coefficients of the cubic spline of |B|.
+        Polynomial coefficients of the cubic spline of |B| in local power basis.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
     poly_B_z : ndarray, shape(3, R * A, knots.size - 1)
-        Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
+        Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ in local power basis.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
@@ -553,13 +566,13 @@ def bounce_integral(
             data : dict
                 Dictionary of ndarrays of stuff evaluated on ``grid``.
             poly_B : ndarray, shape(4, R * A, zeta.size - 1)
-                Polynomial coefficients of the cubic spline of |B|.
+                Polynomial coefficients of the cubic spline of |B| in local power basis.
                 First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
             poly_B_z : ndarray, shape(3, R * A, zeta.size - 1)
-                Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
-                First axis should iterate through coefficients of power series,
+                Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ in local power
+                basis. First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
 
@@ -721,13 +734,13 @@ def bounce_average(
             data : dict
                 Dictionary of ndarrays of stuff evaluated on ``grid``.
             poly_B : ndarray, shape(4, R * A, zeta.size - 1)
-                Polynomial coefficients of the cubic spline of |B|.
+                Polynomial coefficients of the cubic spline of |B| in local power basis.
                 First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
             poly_B_z : ndarray, shape(3, R * A, zeta.size - 1)
-                Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
-                First axis should iterate through coefficients of power series,
+                Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ in local power
+                basis. First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
 

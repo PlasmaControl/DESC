@@ -4,13 +4,14 @@ import inspect
 
 import numpy as np
 import pytest
-from interpax import Akima1DInterpolator
+from interpax import Akima1DInterpolator, CubicHermiteSpline
+from matplotlib import pyplot as plt
 from scipy.special import ellipe, ellipk
 
 from desc.backend import fori_loop, jnp, put, put_along_axis, root_scalar, vmap
 from desc.compute.bounce_integral import (
     _last_value,
-    _roll_and_replace_if_shift,
+    _maybe_roll_and_replace,
     bounce_average,
     bounce_integral,
     compute_bounce_points,
@@ -58,20 +59,20 @@ def test_mask_operation():
             actual=last[i], desired=desired[-1], err_msg="_last_value() has bugs."
         )
 
-    shift = np.random.choice([True, False], size=rows)
+    maybe = np.random.choice([True, False], size=rows)
     # This might be a better way to perform this computation, without
     # the jax.cond, which will get transformed to jax.select under vmap
     # which performs both branches of the computation.
     # But perhaps computing replacement as above, while fine for jit,
     # will make the computation non-differentiable.
     desired = put_along_axis(
-        vmap(jnp.roll)(taken, shift),
+        vmap(jnp.roll)(taken, maybe),
         np.array([0]),
-        np.expand_dims(last * shift + taken[:, 0] * (~shift), axis=-1),
+        np.expand_dims(last * maybe + taken[:, 0] * (~maybe), axis=-1),
         axis=-1,
     )
     np.testing.assert_allclose(
-        actual=_roll_and_replace_if_shift(taken, shift, last),
+        actual=_maybe_roll_and_replace(maybe, taken, last),
         desired=desired,
         err_msg="_roll_and_replace_if_shift() has bugs.",
     )
@@ -215,6 +216,30 @@ def test_polyval():
 
 
 @pytest.mark.unit
+def test_compute_bounce_points():
+    """Test that the bounce points are computed correctly."""
+    pitch = np.atleast_2d([2])
+    start = np.pi / 3
+    end = 6 * np.pi
+    knots = np.linspace(start, end, 5)
+    B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
+    bp1, bp2 = compute_bounce_points(
+        pitch, knots, B.c[:, np.newaxis], B.derivative().c[:, np.newaxis]
+    )
+    bp1, bp2 = map(np.ravel, (bp1, bp2))
+    bp1, bp2 = map(lambda bp: bp[~np.isnan(bp)], (bp1, bp2))
+    np.testing.assert_allclose(bp1, np.array([1.04719755, 7.13120418]))
+    np.testing.assert_allclose(bp2, np.array([5.19226163, 17.57830469]))
+    # TODO: add all the edge cases I parameterized, and use root finding
+    # as baseline test instead of hardcoding.
+    plt.axvline(x=knots, color="red", linestyle="--")
+    x = np.linspace(start, end, 50)
+    plt.plot(x, B(x))
+    plt.plot(x, np.ones(x.size) / pitch.ravel())
+    plt.show()
+
+
+@pytest.mark.unit
 def test_pitch_and_hairy_ball():
     """Test different ways of specifying pitch and ensure B does not vanish."""
     eq = get("HELIOTRON")
@@ -322,11 +347,9 @@ def test_bounce_averaged_drifts():
     # Note 1: This test can be merged with the elliptic integral test as
     we do calculate elliptic integrals here
     # Note 2: Remove tests/test_equilibrium :: test_shifted_circle_geometry
-    # once all the epsilons and Gammas have been implmented and tested
+    # once all the epsilons and Gammas have been implemented and tested
     """
     eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
-
-    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
 
     psi = 0.25  # rho^2 (or normalized psi)
     alpha = 0

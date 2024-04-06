@@ -137,7 +137,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             array is treated as if a flattened 1d view had been created of it.
 
         """
-        if axis != -1:
+        if not (axis == -1 or axis == arr.ndim - 1):
             raise NotImplementedError(
                 f"put_along_axis for axis={axis} not implemented yet."
             )

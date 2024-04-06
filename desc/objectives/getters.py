@@ -2,6 +2,8 @@
 
 import numpy as np
 
+from desc.utils import is_any_instance
+
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
     AxisRSelfConsistency,
@@ -220,10 +222,6 @@ def get_NAE_constraints(
 
 def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
-
-    def _is_any_instance(things, cls):
-        return any([isinstance(t, cls) for t in things])
-
     # Equilibrium
     if (
         hasattr(thing, "Ra_n")
@@ -232,22 +230,22 @@ def maybe_add_self_consistency(thing, constraints):
         and hasattr(thing, "Zb_lmn")
         and hasattr(thing, "L_lmn")
     ):
-        if not _is_any_instance(constraints, BoundaryRSelfConsistency):
+        if not is_any_instance(constraints, BoundaryRSelfConsistency):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, BoundaryZSelfConsistency):
+        if not is_any_instance(constraints, BoundaryZSelfConsistency):
             constraints += (BoundaryZSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, FixLambdaGauge):
+        if not is_any_instance(constraints, FixLambdaGauge):
             constraints += (FixLambdaGauge(eq=thing),)
-        if not _is_any_instance(constraints, AxisRSelfConsistency):
+        if not is_any_instance(constraints, AxisRSelfConsistency):
             constraints += (AxisRSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, AxisZSelfConsistency):
+        if not is_any_instance(constraints, AxisZSelfConsistency):
             constraints += (AxisZSelfConsistency(eq=thing),)
 
     # Curve
     elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):
-        if not _is_any_instance(constraints, FixCurveShift):
+        if not is_any_instance(constraints, FixCurveShift):
             constraints += (FixCurveShift(curve=thing),)
-        if not _is_any_instance(constraints, FixCurveRotation):
+        if not is_any_instance(constraints, FixCurveRotation):
             constraints += (FixCurveRotation(curve=thing),)
 
     return constraints

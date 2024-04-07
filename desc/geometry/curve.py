@@ -677,7 +677,7 @@ class SplineXYZCurve(Curve):
         knots=None,
         method="cubic",
         name="",
-        discontinuous_knots=None,
+        discontinuous_indices=None,
     ):
         super().__init__(name)
         X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
@@ -712,20 +712,13 @@ class SplineXYZCurve(Curve):
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
             knots = knots[:-1] if closed_flag else knots
 
-        if discontinuous_knots is None:
+        if discontinuous_indices is None:
             interval_indices = [[0, -1]]
         else:
-            find_nearest = lambda array, val: (np.abs(array - val)).argmin()
-            discontinuous_indices = [
-                find_nearest(knots, val) for val in discontinuous_knots
-            ]
-            discontinuous_knots = knots[discontinuous_indices]
-
             interval_indices = [
                 [discontinuous_indices[i - 1], discontinuous_indices[i]]
                 for i in range(len(discontinuous_indices))
             ]
-            print(interval_indices)
 
         self._knots = knots
         self.method = method

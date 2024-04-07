@@ -4,17 +4,11 @@ from functools import partial
 
 from interpax import CubicHermiteSpline, interp1d
 
-from desc.backend import (
-    complex_sqrt,
-    cond,
-    flatnonzero,
-    jnp,
-    put,
-    put_along_axis,
-    take,
-    vmap,
-)
+from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take, vmap
+from desc.compute.utils import safediv
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
+
+roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(n)->(m)")
 
 
 # vmap to compute a bounce integral for every pitch along every field line.
@@ -26,7 +20,7 @@ def bounce_quadrature(pitch, X, w, knots, f, B_sup_z, B, B_z_ra):
     ----------
     pitch : ndarray, shape(pitch.size, )
         λ values.
-    X : ndarray, shape(pitch.size, (knots.size - 1) * 3, w.size)
+    X : ndarray, shape(pitch.size, (knots.size - 1) * degree, w.size)
         Quadrature points.
     w : ndarray, shape(w.size, )
         Quadrature weights.
@@ -43,14 +37,14 @@ def bounce_quadrature(pitch, X, w, knots, f, B_sup_z, B, B_z_ra):
 
     Returns
     -------
-    inner_product : ndarray, shape(P, (knots.size - 1) * 3)
+    inner_product : ndarray, shape(P, (knots.size - 1) * degree)
         Bounce integrals for every pitch along a particular field line.
 
     """
     assert pitch.ndim == 1 == w.ndim
     assert X.shape == (pitch.size, (knots.size - 1) * 3, w.size)
     assert knots.shape == f.shape == B_sup_z.shape == B.shape == B_z_ra.shape
-    # Cubic spline the integrand so that we can evaluate it at quadrature points
+    # Spline the integrand so that we can evaluate it at quadrature points
     # without expensive coordinate mappings and root finding.
     # Spline each function separately so that the singularity near the bounce
     # points can be captured more accurately than can be by any polynomial.
@@ -149,42 +143,6 @@ def take_mask(a, mask, size=None, fill_value=None):
     return a_mask
 
 
-@vmap
-def _last_value(a):
-    """Return the last non-nan value in ``a``."""
-    a = jnp.ravel(a)[::-1]
-    idx = jnp.squeeze(flatnonzero(~jnp.isnan(a), size=1, fill_value=0))
-    return a[idx]
-
-
-@vmap
-def _maybe_roll_and_replace(maybe, a, replacement):
-    """If maybe is true, roll a right and put replacement value at a[0].
-
-    Parameters
-    ----------
-    maybe : ndarray, shape(1, )
-        Whether to roll array.
-    a : ndarray
-        Array to roll.
-    replacement : ndarray, shape(1, )
-        Value to place at index zero.
-
-    Returns
-    -------
-    result : ndarray
-        The (possibly) rolled array.
-
-    """
-    return cond(
-        maybe,
-        lambda x, r: put(jnp.roll(x, shift=1), jnp.array([0]), r),
-        lambda x, r: x,
-        a,
-        replacement,
-    )
-
-
 def polyint(c, k=None):
     """Coefficients for the primitives of the given set of polynomials.
 
@@ -279,17 +237,80 @@ def polyval(x, c):
     return val
 
 
-def cubic_poly_roots(coef, k=0, a_min=None, a_max=None, sort=False):
-    """Roots of cubic polynomial with given coefficients.
+def _complex_to_nan(root, a_min=-jnp.inf, a_max=jnp.inf):
+    """Set complex-valued roots and real roots outside [a_min, a_max] to nan.
+
+    Parameters
+    ----------
+    root : ndarray
+        Complex-valued roots.
+    a_min, a_max : ndarray
+        Minimum and maximum value to return roots between.
+        Should broadcast with ``root`` array.
+
+    Returns
+    -------
+    roots : ndarray
+        The real roots in [a_min, a_max], others transformed to nan.
+
+    """
+    if a_min is None:
+        a_min = -jnp.inf
+    if a_max is None:
+        a_max = jnp.inf
+    return jnp.where(
+        jnp.isclose(jnp.imag(root), 0) & (a_min <= root) & (root <= a_max),
+        jnp.real(root),
+        jnp.nan,
+    )
+
+
+def _root_linear(a, b):
+    sentinel = -1  # 0 is minimum value for valid root in local power basis
+    return safediv(-b, a, fill=sentinel)
+
+
+def _root_quadratic(a, b, c):
+    t = complex_sqrt(b**2 - 4 * a * c)
+    root = lambda xi: safediv(-b + xi * t, 2 * a)
+    is_linear = jnp.isclose(a, 0)
+    r1 = jnp.where(is_linear, _root_linear(b, c), root(-1))
+    r2 = jnp.where(is_linear, jnp.nan, root(1))
+    return r1, r2
+
+
+def _root_cubic(a, b, c, d):
+    # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
+    t_0 = b**2 - 3 * a * c
+    t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
+    C = ((t_1 + complex_sqrt(t_1**2 - 4 * t_0**3)) / 2) ** (1 / 3)
+    C_is_zero = jnp.isclose(C, 0)
+
+    def root(xi):
+        return safediv(b + xi * C + jnp.where(C_is_zero, 0, t_0 / (xi * C)), -3 * a)
+
+    xi1 = (-1 + (-3) ** 0.5) / 2
+    xi2 = xi1**2
+    xi3 = 1
+    is_quadratic = jnp.isclose(a, 0)
+    q1, q2 = _root_quadratic(b, c, d)
+    r1 = jnp.where(is_quadratic, q1, root(xi1))
+    r2 = jnp.where(is_quadratic, q2, root(xi2))
+    r3 = jnp.where(is_quadratic, jnp.nan, root(xi3))
+    return r1, r2, r3
+
+
+def poly_roots(coef, k=0, a_min=None, a_max=None, sort=False):
+    """Roots of polynomial with given real coefficients.
 
     Parameters
     ----------
     coef : ndarray
-        First axis should store coefficients of a polynomial. For a polynomial
-        given by c₁ x³ + c₂ x² + c₃ x + c₄, ``coef[i]`` should store cᵢ.
-        In writing the above polynomial, it is assumed that c₁ is nonzero.
+        First axis should store coefficients of a polynomial.
+        For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0] - 1``,
+        coefficient cᵢ should be stored at ``c[n - i]``.
     k : ndarray
-        Specify to find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``k``.
+        Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``.
         Should broadcast with arrays of shape(*coef.shape[1:]).
     a_min, a_max : ndarray
         Minimum and maximum value to return roots between.
@@ -301,48 +322,83 @@ def cubic_poly_roots(coef, k=0, a_min=None, a_max=None, sort=False):
 
     Returns
     -------
-    roots : ndarray
-        The roots of the cubic polynomial.
-        The three roots are iterated over the last axis.
+    r : ndarray
+        The roots of the polynomial, iterated over the last axis.
 
     """
-    # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
-    # The common libraries use root-finding which isn't JIT compilable.
-    clip = not (a_min is None and a_max is None)
-    if a_min is None:
-        a_min = -jnp.inf
-    if a_max is None:
-        a_max = jnp.inf
-
-    a, b, c, d = coef
-    d = d - k
-    t_0 = b**2 - 3 * a * c
-    t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
-    C = ((t_1 + complex_sqrt(t_1**2 - 4 * t_0**3)) / 2) ** (1 / 3)
-    is_zero = jnp.isclose(C, 0)
-
-    def compute_root(xi):
-        t_2 = jnp.where(is_zero, 0, t_0 / (xi * C))
-        return -(b + xi * C + t_2) / (3 * a)
-
-    def clip_to_nan(root):
-        return jnp.where(
-            jnp.isclose(jnp.imag(root), 0) & (a_min <= root) & (root <= a_max),
-            jnp.real(root),
-            jnp.nan,
-        )
-
-    xi_1 = (-1 + (-3) ** 0.5) / 2
-    xi_2 = xi_1**2
-    xi_3 = 1
-    roots = tuple(map(compute_root, (xi_1, xi_2, xi_3)))
-    if clip:
-        roots = tuple(map(clip_to_nan, roots))
-    roots = jnp.stack(roots, axis=-1)
+    # TODO: need to add option to filter double/triple roots into single roots
+    if 2 <= coef.shape[0] <= 4:
+        # compute from analytic formula
+        func = {4: _root_cubic, 3: _root_quadratic, 2: _root_linear}[coef.shape[0]]
+        r = func(*coef[:-1], coef[-1] - k)
+        if not (a_min is None and a_max is None):
+            r = tuple(map(partial(_complex_to_nan, a_min=a_min, a_max=a_max), r))
+        r = jnp.stack(r, axis=-1)
+    else:
+        # compute from eigenvalues of polynomial companion matrix
+        d = coef[-1] - k
+        c = [jnp.broadcast_to(c, d.shape) for c in coef[:-1]]
+        c.append(d)
+        coef = jnp.stack(c)
+        r = roots(coef.reshape(coef.shape[0], -1).T).reshape(*coef.shape[1:], -1)
+        if not (a_min is None and a_max is None):
+            if a_min is not None:
+                a_min = a_min[..., jnp.newaxis]
+            if a_max is not None:
+                a_max = a_max[..., jnp.newaxis]
+            r = _complex_to_nan(r, a_min, a_max)
     if sort:
-        roots = jnp.sort(roots, axis=-1)
-    # TODO: make sure that double roots, triple roots, are filtered into single roots
-    return roots
+        r = jnp.sort(r, axis=-1)
+    return r
+
+
+def pitch_extrema(knots, poly_B, poly_B_z):
+    """Returns pitch that will capture fat banana orbits.
+
+    These pitch values are 1/|B|(ζ*) where |B|(ζ*) is a local maximum.
+    The local minimum are returned as well.
+
+    Parameters
+    ----------
+    knots : ndarray, shape(knots.size, )
+        Field line-following ζ coordinates of spline knots.
+    poly_B : ndarray, shape(poly_B.shape[0], R * A, knots.size - 1)
+        Polynomial coefficients of the spline of |B| in local power basis.
+        First axis should iterate through coefficients of power series,
+        and the last axis should iterate through the piecewise
+        polynomials of a particular spline of |B| along field line.
+    poly_B_z : ndarray, shape(poly_B_z.shape[0], R * A, knots.size - 1)
+        Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
+        First axis should iterate through coefficients of power series,
+        and the last axis should iterate through the piecewise
+        polynomials of a particular spline of |B| along field line.
+
+    Returns
+    -------
+    pitch : ndarray, shape((knots.size - 1) * (poly_B_z.shape[0] - 1), R * A)
+        Returns at most pitch.shape[0] many pitch values for every field line.
+        If less extrema were found, then the array has nan padded on the right.
+        You will likely need to reshape the output as follows:
+        pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size).
+
+    """
+    RA = poly_B.shape[1]  # rho.size * alpha.size
+    N = knots.size - 1  # number of piecewise cubic polynomials per field line
+    assert poly_B.shape[1:] == poly_B_z.shape[1:]
+    assert poly_B.shape[-1] == N
+    degree = poly_B_z.shape[0] - 1
+    extrema = poly_roots(
+        coef=poly_B_z,
+        a_min=jnp.array([0]),
+        a_max=jnp.diff(knots),
+        sort=False,  # don't need to sort
+    )
+    assert extrema.shape == (RA, N, degree)
+    B_extrema = polyval(x=extrema, c=poly_B[..., jnp.newaxis]).reshape(RA, -1)
+    B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
+    pitch = 1 / B_extrema.T
+    assert pitch.shape == (N * degree, RA)
+    return pitch
 
 
 def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
@@ -359,13 +415,13 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
         If an additional axis exists on the left, it is the batch axis as usual.
     knots : ndarray, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
-    poly_B : ndarray, shape(4, R * A, knots.size - 1)
-        Polynomial coefficients of the cubic spline of |B| in local power basis.
+    poly_B : ndarray, shape(poly_B.shape[0], R * A, knots.size - 1)
+        Polynomial coefficients of the spline of |B| in local power basis.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
-    poly_B_z : ndarray, shape(3, R * A, knots.size - 1)
-        Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ in local power basis.
+    poly_B_z : ndarray, shape(poly_B_z.shape[0], R * A, knots.size - 1)
+        Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
@@ -384,21 +440,22 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     P = pitch.shape[0]  # batch size
     RA = poly_B.shape[1]  # rho.size * alpha.size
     N = knots.size - 1  # number of piecewise cubic polynomials per field line
-    assert poly_B.shape[-1] == poly_B_z.shape[-1] == N
+    assert poly_B.shape[1:] == poly_B_z.shape[1:]
+    assert poly_B.shape[-1] == N
+    degree = poly_B.shape[0] - 1
 
     # The polynomials' intersection points with 1 / λ is given by ``intersect``.
     # In order to be JIT compilable, this must have a shape that accommodates the
     # case where each cubic polynomial intersects 1 / λ thrice.
     # nan values in ``intersect`` denote a polynomial has less than three intersects.
-    intersect = cubic_poly_roots(
-        # coefficients are in local power basis expansion
+    intersect = poly_roots(
         coef=poly_B,
         k=jnp.expand_dims(1 / pitch, axis=-1),
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
         sort=True,
     )
-    assert intersect.shape == (P, RA, N, 3)
+    assert intersect.shape == (P, RA, N, degree)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense remaining axes to vmap over them.
@@ -412,7 +469,7 @@ def compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     # Rearrange so that all intersects along a field line are contiguous.
     intersect = take_mask(intersect, is_intersect)
     B_z = take_mask(B_z, is_intersect)
-    assert intersect.shape == is_intersect.shape == B_z.shape == (P * RA, N * 3)
+    assert intersect.shape == is_intersect.shape == B_z.shape == (P * RA, N * degree)
     # The boolean masks is_bp1 and is_bp2 will encode whether a given entry in
     # intersect is a valid starting and ending bounce point, respectively.
     # Sign of derivative determines whether an intersect is a valid bounce point.
@@ -464,13 +521,13 @@ def _compute_bp_if_given_pitch(pitch, knots, poly_B, poly_B_z, *original, err=Fa
         If an additional axis exists on the left, it is the batch axis as usual.
     knots : ndarray, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
-    poly_B : ndarray, shape(4, R * A, knots.size - 1)
-        Polynomial coefficients of the cubic spline of |B| in local power basis.
+    poly_B : ndarray, shape(poly_B.shape[0], R * A, knots.size - 1)
+        Polynomial coefficients of the spline of |B| in local power basis.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
-    poly_B_z : ndarray, shape(3, R * A, knots.size - 1)
-        Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ in local power basis.
+    poly_B_z : ndarray, shape(poly_B_z.shape[0], R * A, knots.size - 1)
+        Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
         First axis should iterate through coefficients of power series,
         and the last axis should iterate through the piecewise
         polynomials of a particular spline of |B| along field line.
@@ -540,7 +597,7 @@ def bounce_integral(
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
     zeta : ndarray
-        A cubic spline of the integrand is computed at these values of the field
+        A spline of the integrand is computed at these values of the field
         line following coordinate, for every field line in the meshgrid formed from
         rho and alpha specified above.
         The number of knots specifies the grid resolution as increasing the
@@ -566,12 +623,12 @@ def bounce_integral(
             data : dict
                 Dictionary of ndarrays of stuff evaluated on ``grid``.
             poly_B : ndarray, shape(4, R * A, zeta.size - 1)
-                Polynomial coefficients of the cubic spline of |B| in local power basis.
+                Polynomial coefficients of the spline of |B| in local power basis.
                 First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
             poly_B_z : ndarray, shape(3, R * A, zeta.size - 1)
-                Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ in local power
+                Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power
                 basis. First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
@@ -706,7 +763,7 @@ def bounce_average(
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
     zeta : ndarray
-        A cubic spline of the integrand is computed at these values of the field
+        A spline of the integrand is computed at these values of the field
         line following coordinate, for every field line in the meshgrid formed from
         rho and alpha specified above.
         The number of knots specifies the grid resolution as increasing the
@@ -734,12 +791,12 @@ def bounce_average(
             data : dict
                 Dictionary of ndarrays of stuff evaluated on ``grid``.
             poly_B : ndarray, shape(4, R * A, zeta.size - 1)
-                Polynomial coefficients of the cubic spline of |B| in local power basis.
+                Polynomial coefficients of the spline of |B| in local power basis.
                 First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.
             poly_B_z : ndarray, shape(3, R * A, zeta.size - 1)
-                Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ in local power
+                Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power
                 basis. First axis should iterate through coefficients of power series,
                 and the last axis should iterate through the piecewise
                 polynomials of a particular spline of |B| along field line.

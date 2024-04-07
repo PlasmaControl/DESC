@@ -8,14 +8,23 @@ from interpax import Akima1DInterpolator, CubicHermiteSpline
 from matplotlib import pyplot as plt
 from scipy.special import ellipe, ellipk
 
-from desc.backend import fori_loop, jnp, put, put_along_axis, root_scalar, vmap
+from desc.backend import (
+    cond,
+    flatnonzero,
+    fori_loop,
+    jnp,
+    put,
+    put_along_axis,
+    root_scalar,
+    vmap,
+)
 from desc.compute.bounce_integral import (
-    _last_value,
-    _maybe_roll_and_replace,
+    _compute_bp_if_given_pitch,
     bounce_average,
     bounce_integral,
     compute_bounce_points,
-    cubic_poly_roots,
+    pitch_extrema,
+    poly_roots,
     polyder,
     polyint,
     polyval,
@@ -38,8 +47,44 @@ from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
 
 
+@vmap
+def _last_value(a):
+    """Return the last non-nan value in ``a``."""
+    a = jnp.ravel(a)[::-1]
+    idx = jnp.squeeze(flatnonzero(~jnp.isnan(a), size=1, fill_value=0))
+    return a[idx]
+
+
+@vmap
+def _maybe_roll_and_replace(maybe, a, replacement):
+    """If maybe is true, roll a right and put replacement value at a[0].
+
+    Parameters
+    ----------
+    maybe : ndarray, shape(1, )
+        Whether to roll array.
+    a : ndarray
+        Array to roll.
+    replacement : ndarray, shape(1, )
+        Value to place at index zero.
+
+    Returns
+    -------
+    result : ndarray
+        The (possibly) rolled array.
+
+    """
+    return cond(
+        maybe,
+        lambda x, r: put(jnp.roll(x, shift=1), jnp.array([0]), r),
+        lambda x, r: x,
+        a,
+        replacement,
+    )
+
+
 @pytest.mark.unit
-def test_mask_operation():
+def test_mask_operations():
     """Test custom masked array operation."""
     rows = 5
     cols = 7
@@ -47,6 +92,7 @@ def test_mask_operation():
     nan_idx = np.random.choice(rows * cols, size=(rows * cols) // 2, replace=False)
     a.ravel()[nan_idx] = np.nan
     taken = take_mask(a, ~np.isnan(a))
+    assert np.all(np.diff(np.isnan(a), axis=-1) >= 0), "nan not padded on correctly"
     last = _last_value(taken)
     for i in range(rows):
         desired = a[i, ~np.isnan(a[i])]
@@ -115,30 +161,31 @@ def test_reshape_convention():
 
 
 @pytest.mark.unit
-def test_cubic_poly_roots():
+def test_poly_roots():
     """Test vectorized computation of cubic polynomial exact roots."""
     cubic = 4
-    poly = np.arange(-24, 24).reshape(cubic, 6, -1)
-    poly[0] = np.where(poly[0] == 0, np.ones_like(poly[0]), poly[0])
-    poly = poly * np.e * np.pi
+    poly = np.arange(-24, 24).reshape(cubic, 6, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
     constant = np.broadcast_to(np.arange(poly.shape[-1]), poly.shape[1:])
-    roots = cubic_poly_roots(poly, constant, sort=True)
-    for j in range(poly.shape[1]):
-        for k in range(poly.shape[2]):
-            a, b, c, d = poly[:, j, k]
-            np.testing.assert_allclose(
-                actual=roots[j, k],
-                desired=np.sort_complex(np.roots([a, b, c, d - constant[j, k]])),
-            )
+    constant = np.stack([constant, constant])
+    actual = poly_roots(poly, constant, sort=True)
+
+    for i in range(constant.shape[0]):
+        for j in range(poly.shape[1]):
+            for k in range(poly.shape[2]):
+                d = poly[-1, j, k] - constant[i, j, k]
+                np.testing.assert_allclose(
+                    actual=actual[i, j, k],
+                    desired=np.sort(np.roots([*poly[:-1, j, k], d])),
+                )
 
 
 @pytest.mark.unit
 def test_polyint():
     """Test vectorized computation of polynomial primitive."""
     quintic = 6
-    poly = np.arange(-18, 18).reshape(quintic, 3, -1) * np.e * np.pi
+    poly = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
     constant = np.broadcast_to(np.arange(poly.shape[-1]), poly.shape[1:])
@@ -156,7 +203,7 @@ def test_polyint():
 def test_polyder():
     """Test vectorized computation of polynomial derivative."""
     quintic = 6
-    poly = np.arange(-18, 18).reshape(quintic, 3, -1) * np.e * np.pi
+    poly = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(poly.shape).size == poly.ndim
     derivative = polyder(poly)
@@ -171,7 +218,7 @@ def test_polyder():
 def test_polyval():
     """Test vectorized computation of polynomial evaluation."""
     quartic = 5
-    c = np.arange(-60, 60).reshape(quartic, 3, -1) * np.e * np.pi
+    c = np.arange(-60, 60).reshape(quartic, 3, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(c.shape).size == c.ndim
     x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
@@ -218,25 +265,59 @@ def test_polyval():
 @pytest.mark.unit
 def test_compute_bounce_points():
     """Test that the bounce points are computed correctly."""
-    pitch = np.atleast_2d([2])
-    start = np.pi / 3
-    end = 6 * np.pi
-    knots = np.linspace(start, end, 5)
-    B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
-    bp1, bp2 = compute_bounce_points(
-        pitch, knots, B.c[:, np.newaxis], B.derivative().c[:, np.newaxis]
-    )
-    bp1, bp2 = map(np.ravel, (bp1, bp2))
-    bp1, bp2 = map(lambda bp: bp[~np.isnan(bp)], (bp1, bp2))
-    np.testing.assert_allclose(bp1, np.array([1.04719755, 7.13120418]))
-    np.testing.assert_allclose(bp2, np.array([5.19226163, 17.57830469]))
-    # TODO: add all the edge cases I parameterized, and use root finding
-    # as baseline test instead of hardcoding.
-    plt.axvline(x=knots, color="red", linestyle="--")
-    x = np.linspace(start, end, 50)
-    plt.plot(x, B(x))
-    plt.plot(x, np.ones(x.size) / pitch.ravel())
-    plt.show()
+
+    def filter_nan(bp):
+        is_nan = np.isnan(bp)
+        assert np.all(np.diff(is_nan, axis=-1) >= 0), "nan not padded on correctly"
+        return bp[~is_nan]
+
+    def plot_field_line(B, pitch, start, end):
+        fig, ax = plt.subplots()
+        for knot in B.x:
+            ax.axvline(x=knot, color="red", linestyle="--")
+        z = np.linspace(start, end, 50)
+        ax.plot(z, B(z))
+        ax.plot(z, np.full(z.size, 1 / pitch))
+        plt.show()
+
+    def assert_case_1(plot=False):
+        # 1/pitch does not intersect extrema
+        pitch = 2
+        start = np.pi / 3
+        end = 6 * np.pi
+        knots = np.linspace(start, end, 5)
+        B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
+        # Can observe correctness of bounce points through this plot.
+        if plot:
+            plot_field_line(B, pitch, start, end)
+        _, bp1, bp2 = _compute_bp_if_given_pitch(
+            pitch, knots, B.c[:, np.newaxis], B.derivative().c[:, np.newaxis]
+        )
+        bp1, bp2 = map(filter_nan, (bp1, bp2))
+        # Hardcode desired because CubicHermiteSpline.solve not yet implemented.
+        np.testing.assert_allclose(bp1, desired=np.array([1.04719755, 7.13120418]))
+        np.testing.assert_allclose(bp2, desired=np.array([5.19226163, 17.57830469]))
+
+    def assert_case_2(plot=False):
+        # 1/pitch intersects extrema
+        pitch = 1
+        start = np.pi / 3
+        end = 6 * np.pi
+        knots = np.linspace(start, end, 5)
+        B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
+        # Can observe correctness of bounce points through this plot.
+        if plot:
+            plot_field_line(B, pitch, start, end)
+        _, bp1, bp2 = _compute_bp_if_given_pitch(
+            pitch, knots, B.c[:, np.newaxis], B.derivative().c[:, np.newaxis]
+        )
+        bp1, bp2 = map(filter_nan, (bp1, bp2))
+        # Hardcode desired because CubicHermiteSpline.solve not yet implemented.
+        np.testing.assert_allclose(bp1, desired=np.array([1.04719755, 7.13120418]))
+        np.testing.assert_allclose(bp2, desired=np.array([5.19226163, 17.57830469]))
+
+    # TODO: add all the edge cases I parameterized
+    assert_case_1()
 
 
 @pytest.mark.unit
@@ -245,23 +326,24 @@ def test_pitch_and_hairy_ball():
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
-    ba, items = bounce_average(eq, rho=rho, alpha=alpha, return_items=True)
+    zeta = jnp.linspace(0, 6 * jnp.pi, 20)
+    ba, items = bounce_average(eq, rho=rho, alpha=alpha, zeta=zeta, return_items=True)
     B = items["data"]["B"]
     assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
 
     name = "g_zz"
     f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-    # Same pitch for every field line may give sparse result.
-    pitch_res = 30
-    pitch = np.linspace(1 / B.max(), 1 / B.min(), pitch_res)[:, np.newaxis, np.newaxis]
-    result = ba(f, pitch)
-    assert np.isfinite(result).any()
-
     # specify pitch per field line
+    pitch_res = 30
     B = B.reshape(rho.size * alpha.size, -1)
     pitch = np.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), pitch_res).reshape(
-        -1, rho.size, alpha.size
+        pitch_res, rho.size, alpha.size
     )
+    result = ba(f, pitch)
+    assert np.isfinite(result).any()
+    # specify pitch from extrema of |B|
+    pitch = pitch_extrema(zeta, items["poly_B"], items["poly_B_z"])
+    pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
     result = ba(f, pitch)
     assert np.isfinite(result).any()
 

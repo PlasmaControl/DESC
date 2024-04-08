@@ -12,10 +12,11 @@ from desc.backend import (
     tree_unflatten,
 )
 from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms, rpz2xyz, rpz2xyz_vec
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
-from desc.utils import Timer, errorif, warnif
+from desc.singularities import compute_B_plasma
+from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -49,7 +50,7 @@ class _CoilObjective(_Objective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -273,7 +274,7 @@ class CoilLength(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -403,7 +404,7 @@ class CoilCurvature(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -518,7 +519,7 @@ class CoilTorsion(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -603,73 +604,61 @@ class CoilTorsion(_CoilObjective):
 
 
 class QuadraticFlux(_Objective):
-    """Target the quadratic flux on an equilibrium from a magnetic field.
+    """Target B*n = 0 on LCFS.
 
-    compute
-
-    (B.n)^2
-
-    where n is the normal vector to the plasma surface, and B is the magnetic field at
-    the plasma surface.
-
-    NOTE: Only works for vacuum equilibria currently
+    Uses virtual casing to find plasma component of B and penalizes
+    (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
+    field is unfixed.
 
     Parameters
     ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium
+        Equilibrium upon whose surface the normal field error will be minimized.
+        The equilibrium is kept fixed during the optimization with this objective.
     field : MagneticField
-        MagneticField object, the parameters of this will be optimized
-        to minimize the objective.
-    target : {float, ndarray}, optional
+        External field produced by coils or other source, which will be optimized to
+        minimize the normal field error on the provided equilibrium's surface.
+    target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
-    bounds : tuple of {float, ndarray}, optional
+        len(target) must be equal to Objective.dim_f.
+        Default target is zero.
+    bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect on this objective.
-        FIXME: add normalization for the B part of this objective
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect on this objective.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: has no effect for this objective
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     source_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate field source at on
-        the winding surface. (used if e.g. field is a CoilSet or
-        FourierCurrentPotentialField)
+        Collocation grid containing the nodes for plasma source terms.
+        Default grid is detailed in the docs for ``compute_B_plasma``
     eval_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate the normal magnetic field at
-        plasma geometry at.
-    external_field : MagneticField, optional
-        MagneticField object containing the external field to consider when
-        minimizing the Bn errors. If None, the external field is assumed to be zero.
-        e.g. this could be a 1/R field representing external TF coils, or
-        it could be set of discrete TF coils so that coil ripple is considered during
-        the optimization of the ``field`` object.
-    external_field_source_grid : Grid, optional
-        Grid object used to discretize the external field source.
-    name : str, optional
+        Collocation grid containing the nodes on the plasma surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
+        Default grid is: LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
+            NFP=int(eq.NFP), sym=False)
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    vacuum : bool
+        If true, B_plasma (the contribution to the normal field on the boundary from the
+        plasma currents) is set to zero.
+    name : str
         Name of the objective function.
+
     """
 
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Boundary normal field error: {:10.3e} "
+    _units = "(T m^2)"
     _coordinates = "rtz"
-    _units = "T"
-    _print_value_fmt = "Quadratic Flux: {:10.3e} "
 
     def __init__(
         self,
@@ -680,34 +669,28 @@ class QuadraticFlux(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
         source_grid=None,
         eval_grid=None,
-        external_field=None,
-        external_field_source_grid=None,
-        name="quadratic-flux",
-        eq_fixed=False,
+        field_grid=None,
+        vacuum=False,
+        name="Quadratic flux",
     ):
         if target is None and bounds is None:
             target = 0
-        self._field = field
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        self._eq_fixed = eq_fixed
-        self._eq = eq if eq_fixed else None
-        self._external_field = external_field
-        self._external_field_source_grid = external_field_source_grid
-
+        self._eq = eq
+        self._field = field
+        self._field_grid = field_grid
+        self._vacuum = vacuum
+        things = [field]
         super().__init__(
-            things=[eq, field] if not eq_fixed else [field],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -722,98 +705,76 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
-        eq = self._eq if self._eq_fixed else self.things[0]
-        field = self.things[0] if self._eq_fixed else self.things[1]
-        # if field is different than self._field, update
-        if field != self._field:
-            self._field = field
-        # if eq is different than self._eq, update
-        if eq != self._eq:
-            self._eq = eq
+        eq = self._eq
+
         if self._eval_grid is None:
-            eval_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=int(eq.NFP),
+                sym=False,
+            )
+            self._eval_grid = eval_grid
         else:
             eval_grid = self._eval_grid
-        if not np.allclose(eval_grid.nodes[:, 0], 1):
-            warnings.warn("Evaluation grid includes interior points, should be rho=1")
 
-        # ensure vacuum eq, as we don't yet support finite beta
-        pres = np.max(np.abs(eq.compute("p")["p"]))
-        curr = np.max(np.abs(eq.compute("current")["current"]))
-        warnif(
-            pres > 1e-8,
-            UserWarning,
-            f"Pressure is non-zero (max {pres} Pa), "
-            + "finite beta not supported yet.",
-        )
-        warnif(
-            curr > 1e-8,
-            UserWarning,
-            f"Current is non-zero (max {curr} A), "
-            + "finite plasma currents not supported yet.",
-        )
-
-        # eval_grid.num_nodes for quad flux cost,
-        self._dim_f = eval_grid.num_nodes
-        self._equil_data_keys = ["n_rho", "R", "phi", "Z"]
+        self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        equil_profiles = get_profiles(
-            self._equil_data_keys,
-            obj=eq,
-            grid=eval_grid,
-            has_axis=eval_grid.axis.size,
-        )
-        equil_transforms = get_transforms(
-            self._equil_data_keys,
-            obj=eq,
-            grid=eval_grid,
-            has_axis=eval_grid.axis.size,
+        self._dim_f = eval_grid.num_nodes
+
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
+
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=eq.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
         )
 
-        if self._eq_fixed:
-            data = eq.compute(["R", "phi", "Z", "n_rho"], grid=eval_grid)
+        # pre-compute B_plasma because we are assuming eq is fixed
+        if self._vacuum:
+            Bplasma = jnp.zeros(eval_grid.num_nodes)
 
-            plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
-            data["n_rho"] = rpz2xyz_vec(
-                data["n_rho"], x=plasma_coords[:, 0], y=plasma_coords[:, 1]
+        else:
+            Bplasma = compute_B_plasma(
+                eq, eval_grid, self._source_grid, normal_only=True
             )
 
-        if not self._eq_fixed:
-            self._constants = {
-                "equil_transforms": equil_transforms,
-                "equil_profiles": equil_profiles,
-                "quad_weights": eval_grid.weights * jnp.sqrt(eval_grid.num_nodes),
-            }
-        else:
-            self._constants = {
-                "equil_transforms": equil_transforms,
-                "equil_profiles": equil_profiles,
-                "plasma_coords": plasma_coords,
-                "equil_data": data,
-                "quad_weights": eval_grid.weights * jnp.sqrt(eval_grid.num_nodes),
-            }
+        self._constants = {
+            "field": self._field,
+            "field_grid": self._field_grid,
+            "quad_weights": w,
+            "eval_data": eval_data,
+            "B_plasma": Bplasma,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_one=None, params_two=None, constants=None):
-        """Compute quadratic flux.
+    def compute(self, field_params, constants=None):
+        """Compute boundary force error.
 
         Parameters
         ----------
         field_params : dict
-            Dictionary of field degrees of freedom,
-            eg FourierCurrentPotential.params_dict
-        equil_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of the external field's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -821,54 +782,25 @@ class QuadraticFlux(_Objective):
         Returns
         -------
         f : ndarray
-            Normal field (B.n) on the plasma surface due to the contributions from
-            the ``field`` being optimized and the ``external_field``.
-            NOTE: This will then be squared to form the quadratic flux and minimized
-            by the optimizer.
+            Bnorm from B_ext and B_plasma
 
         """
-        if self._eq_fixed:
-            field_params = params_one
-        else:
-            equil_params = params_one
-            field_params = params_two
         if constants is None:
             constants = self.constants
-        if not self._eq_fixed:
-            data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._equil_data_keys,
-                params=equil_params,
-                transforms=constants["equil_transforms"],
-                profiles=constants["equil_profiles"],
-            )
-            plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
-            data["n_rho"] = rpz2xyz_vec(
-                data["n_rho"], x=plasma_coords[:, 0], y=plasma_coords[:, 1]
-            )
 
-        else:
-            data = constants["equil_data"]
-            plasma_coords = constants["plasma_coords"]
+        # B_plasma from equilibrium precomputed
+        eval_data = constants["eval_data"]
+        B_plasma = constants["B_plasma"]
 
-        B = self._field.compute_magnetic_field(
-            plasma_coords,
-            basis="xyz",
-            source_grid=self._source_grid,
-            params=field_params,
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+
+        # B_ext is not pre-computed because field is not fixed
+        B_ext = constants["field"].compute_magnetic_field(
+            x, source_grid=constants["field_grid"], basis="rpz", params=field_params
         )
-
-        Bn = jnp.sum(B * data["n_rho"], axis=-1)
-
-        if self._external_field is not None:
-            B_ext = self._external_field.compute_magnetic_field(
-                plasma_coords,
-                source_grid=self._external_field_source_grid,
-                basis="xyz",
-            )
-            Bn += jnp.sum(B_ext * data["n_rho"], axis=-1)
-
-        return Bn
+        B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+        f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]
+        return f
 
 
 class SurfaceCurrentRegularization(_Objective):

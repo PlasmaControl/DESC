@@ -1187,16 +1187,29 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # if it is a single group, then only return one coilset, not a
         # nested CoilSet
         groupinds = list(coils.keys())
-        if len(groupinds) == 1:
-            coils = coils[groupinds[0]]
-            return cls(*coils, name=groupnames[0])
-        else:  # return a nested coilset, containing one coilset per coilgroup
-            return MixedCoilSet(
-                *[
-                    cls(*coils[groupind], name=groupname)
-                    for groupname, groupind in zip(groupnames, groupinds)
-                ]
-            )
+        class_init = cls
+        try:
+            if len(groupinds) == 1:
+                return class_init(*coils[groupinds[0]], name=groupnames[0])
+            else:  # return a nested coilset, containing one coilset per coilgroup
+                return MixedCoilSet(
+                    *[
+                        class_init(*coils[groupind], name=groupname)
+                        for groupname, groupind in zip(groupnames, groupinds)
+                    ]
+                )
+        except ValueError:  # can't load as a CoilSet if any of the coils have
+            # different length of knots, so load as MixedCoilSet instead
+            class_init = MixedCoilSet
+            if len(groupinds) == 1:
+                return class_init(*coils[groupinds[0]], name=groupnames[0])
+            else:  # return a nested coilset, containing one coilset per coilgroup
+                return MixedCoilSet(
+                    *[
+                        class_init(*coils[groupind], name=groupname)
+                        for groupname, groupind in zip(groupnames, groupinds)
+                    ]
+                )
 
     def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.
@@ -1261,8 +1274,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # at the end of each individual coil
         if hasattr(grid, "endpoint"):
             endpoint = grid.endpoint
-        elif isinstance(grid, numbers.Integral):
-            endpoint = False  # if int, will create a grid w/ endpoint=False in compute
+        elif isinstance(grid, numbers.Integral) or grid is None:
+            endpoint = (
+                False  # if int or None, will create a grid w/ endpoint=False in compute
+            )
         for i in range(int(len(coils))):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]

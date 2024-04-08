@@ -588,6 +588,62 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_load_and_save_makegrid_coils_diff_length_of_knots(tmpdir_factory):
+    """Test loading and saving coils from MAKEGRID file that are not uniform length."""
+    Ncoils = 2
+    input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils_diff_lengths"
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    tmp_path = tmpdir.join(f"coils.MAKEGRID_format_{Ncoils}_coils")
+    shutil.copyfile(input_path, tmp_path)
+
+    coilset = CoilSet.from_makegrid_coilfile(str(tmp_path))
+    assert len(coilset) == Ncoils  # correct number of coils
+    # if the coils are not all the same number of knots, then making a CoilSet
+    # will fail (as each underyling coil must have same length knots),
+    # instead the function should make a MixedCoilSet
+    assert isinstance(coilset, MixedCoilSet)
+
+    path = tmpdir.join("coils.MAKEGRID_format_desc")
+    # save using the default grids
+    coilset.save_in_makegrid_format(str(path))
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+    assert isinstance(coilset2, MixedCoilSet)
+
+    grid = LinearGrid(N=50, endpoint=False)
+
+    # check values, ensure they are close
+    for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
+
+        coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
+        X1 = coords1[:, 0]
+        Y1 = coords1[:, 1]
+        Z1 = coords1[:, 2]
+
+        coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
+        X2 = coords2[:, 0]
+        Y2 = coords2[:, 1]
+        Z2 = coords2[:, 2]
+        # knots are not the exact same, so these points will be close but not the
+        # same.
+        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(X1, X2, rtol=2e-5, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Y1, Y2, rtol=2e-5, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Z1, Z2, atol=2e-7, rtol=1e-3, err_msg=f"Coil {i}")
+
+    # check magnetic field from both, check that matches
+    grid = LinearGrid(N=200, endpoint=False)
+    B1 = coilset.compute_magnetic_field(
+        np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
+    )
+    B2 = coilset2.compute_magnetic_field(
+        np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
+    )
+
+    np.testing.assert_allclose(B1, B2, atol=1e-7)
+
+
+@pytest.mark.unit
 def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
     """Test loading and saving CoilSets from MAKEGRID format files with coilgroups."""
     Ncoils_per_group = 2

@@ -2070,6 +2070,9 @@ def zernike_norm(l, m):
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
 
 
+
+
+
 class FiniteElementMesh2D:
     """Class representing a 2D mesh in (rho, theta).
 
@@ -2098,18 +2101,37 @@ class FiniteElementMesh2D:
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
 
-        rho = np.linspace(0, 1, L, endpoint=False)
-        theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
-        Rho, Theta = np.meshgrid(rho, theta, indexing="ij")
-        Rho = np.ravel(Rho)
-        Theta = np.ravel(Theta)
-        mesh = fem.MeshTri(np.array([Rho, Theta]))
+        '''
+        # Still working on implementation for any L,M. For now, taking cases and taking advantage
+        of mesh.refined() in scikit. Starting with a unit square in (rho,theta):
+
+        mesh.refined(1) divides [0,1] in half on both axes (8 finite elements)
+        mesh.refined(2) divides [0,1] in quarters on both axes (32 finite elements)
+        .
+        .
+        .
+        mesh.refined(n) divides [0,1] into 2^n (2^(2n+1) finite elements)
+
+
+        ''''
+        if mth.log(M,2).is_integer() == True and  mth.log(L,2).is_integer() == True and L==M:
+
+            p = int(mth.log(M,2)) # How many pieces to divide each interval in
+    
+            mesh = fem.MeshTri().refined(p)
+
+
+        # Rescale Theta axis by 2pi:
+        mesh.doflocs[1] = 2*np.pi*mesh.doflocs[1]
+
+
+        # mesh.doflocs[0] gives all of the x-coordinates, and mesh.doflocs[1] gives all of the y-coordinates 
+
         if K == 1:
             e = fem.ElementTriP1()
         else:
             e = fem.ElementTriP2()
         basis = fem.CellBasis(mesh, e)
-        vertices = basis.doflocs  # np.ravel(basis.doflocs)
 
         from skfem.visuals.matplotlib import draw, draw_mesh2d
 
@@ -2117,12 +2139,9 @@ class FiniteElementMesh2D:
         p = draw_mesh2d(mesh, ax=ax)
         p.show()
 
-        print(vertices, vertices.shape)
 
-        self.Rho = Rho
-        self.Theta = Theta
-
-        # Compute the triangle elements for all 2NM triangles
+        # Will fix this next section later
+        # Compute the triangle elements for all 2ML triangles
         triangles = []
         for i in range(M):
             for j in range(L):

@@ -1076,6 +1076,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
+        If the MAKEGRID contains more than one coil group (denoted by the number listed
+        after the current on the last line defining a given coil), this function will
+        return a MixedCoilSet of CoilSets, with each sub CoilSet pertaining to the
+        different coil groups. The name of the sub CoilSet will be the number and the
+        name of the group listed in the MAKEGRID file.
+
         Parameters
         ----------
         coil_file : str or path-like
@@ -1096,9 +1102,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
               both endpoints
 
         """
-        coils = []  # list of SplineXYZCoils
-        coilinds = [2]  # always start at the 3rd line after periods
-        names = []
+        coils = {}  # dict of list of SplineXYZCoils, one list per coilgroup
+        coilinds = [2]  # List of line indices where coils are at in the file.
+        # always start at the 3rd line after periods
+        coilnames = []  # the coilgroup each coil belongs to
+        # corresponds to each coil in the coilinds list
+        groupnames = []  # this is the groupind + the name of the first coil in
+        # the group
+        groupinds = []  # the coilgroup ind each coil belongs to
+        # corresponds to each coil in the coilinds list
+        # (sometimes, coils in the same group could have different names,
+        # so this separately tracks just the number of the group)
 
         # read in the coils file
         headind = -1
@@ -1108,6 +1122,31 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 if line.find("periods") != -1:
                     headind = i  # skip anything that is above the periods line
                     coilinds[0] += headind
+                    if len(lines[3 + headind].split()) != 4:
+                        raise OSError(
+                            "4th line in file must be the start of the first coil! "
+                            + "Expected a line of length 4 (after .split()), "
+                            + f"instead got length {lines[3+headind].split()}"
+                        )
+                    header_lines_not_as_expected = np.array(
+                        [
+                            len(lines[0 + headind].split()) != 2,
+                            len(lines[1 + headind].split()) != 2,
+                            len(lines[2 + headind].split()) != 2,
+                        ]
+                    )
+                    if np.any(header_lines_not_as_expected):
+                        wronglines = lines[
+                            np.where(header_lines_not_as_expected)[0] + headind
+                        ]
+                        raise OSError(
+                            "First 3 lines in file starting with the periods line "
+                            + "must be the header lines,"
+                            + " each of length 2 (after .split())! "
+                            + f"Line(s) {wronglines}"
+                            + " are not length 2"
+                        )
+
                     continue
                 if (
                     line.find("begin filament") != -1
@@ -1123,43 +1162,41 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     and headind != -1
                 ):
                     coilinds.append(i)
-                    names.append(" ".join(line.split()[4:]))
-        if len(lines[3 + headind].split()) != 4:
-            raise OSError(
-                "4th line in file must be the start of the first coil! "
-                + "Expected a line of length 4 (after .split()), "
-                + f"instead got length {lines[3].split()}"
-            )
-        header_lines_not_as_expected = np.array(
-            [
-                len(lines[0 + headind].split()) != 2,
-                len(lines[1 + headind].split()) != 2,
-                len(lines[2 + headind].split()) != 2,
-            ]
-        )
-        if np.any(header_lines_not_as_expected):
-            raise OSError(
-                "First 3 lines in file starting with the periods line "
-                + "must be the header lines,"
-                + " each of length 2 (after .split())! "
-                + f"Line(s) {lines[np.where(header_lines_not_as_expected)[0]+headind]}"
-                + " are not length 2"
-            )
+                    groupname = " ".join(line.split()[4:])
+                    groupind = int(groupname.split()[0].strip())
+                    if groupind not in coils.keys():
+                        coils[groupind] = []
+                        groupnames.append(groupname)
+                    coilnames.append(groupname)
+                    groupinds.append(groupind)
 
-        for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
+        for i, (start, end, groupind, coilname) in enumerate(
+            zip(coilinds[0:-1], coilinds[1:], groupinds, coilnames)
+        ):
             coords = np.genfromtxt(lines[start + 1 : end])
-            coils.append(
+            coils[groupind].append(
                 SplineXYZCoil(
                     coords[:, -1][0],
                     coords[:, 0],
                     coords[:, 1],
                     coords[:, 2],
                     method=method,
-                    name=names[i],
+                    name=coilname,
                 )
             )
-
-        return cls(*coils)
+        # if it is a single group, then only return one coilset, not a
+        # nested CoilSet
+        groupinds = list(coils.keys())
+        if len(groupinds) == 1:
+            coils = coils[groupinds[0]]
+            return cls(*coils, name=groupnames[0])
+        else:  # return a nested coilset, containing one coilset per coilgroup
+            return MixedCoilSet(
+                *[
+                    cls(*coils[groupind], name=groupname)
+                    for groupname, groupind in zip(groupnames, groupinds)
+                ]
+            )
 
     def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.

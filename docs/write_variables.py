@@ -70,7 +70,8 @@ available for plotting / analysis.
   * **Aliases** : alternative names of a variable that can be used in the same way as
     the primary name
   * **kwargs** : optional keyword arguments that can be passed in when computing
-    certain quantities.
+    certain quantities, see the bottom of this page for a more detailed description
+    and for the default values of the keyword arguments.
 
 
 """

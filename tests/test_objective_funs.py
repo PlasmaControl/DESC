@@ -20,6 +20,7 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
@@ -51,6 +52,7 @@ from desc.objectives import (
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
+    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -818,6 +820,64 @@ class TestObjectiveFunction:
         test(coils)
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
         test(nested_coils, grid=nested_grids)
+
+    @pytest.mark.unit
+    def test_quadratic_flux(self):
+        """Test calculation of quadratic flux on the boundary."""
+        t_field = ToroidalMagneticField(1, 1)
+
+        # test that torus (axisymmetric) Bnorm is exactly 0
+        eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+        obj = QuadraticFlux(eq, t_field)
+        obj.build(eq, verbose=2)
+        f = obj.compute(field_params=t_field.params_dict)
+        np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
+
+        # test non-axisymmetric surface
+        eq = desc.examples.get("precise_QA", "all")[0]
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
+        )
+        source_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
+        )
+
+        obj = QuadraticFlux(eq, t_field, eval_grid=eval_grid, source_grid=source_grid)
+        Bnorm = t_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=source_grid
+        )[0]
+        obj.build(eq)
+        dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        f = obj.compute(field_params=t_field.params_dict)
+
+        np.testing.assert_allclose(f, Bnorm * dA, atol=2e-4, rtol=1e-2)
+
+        # equilibrium that has B_plasma == 0
+        eq = load("./tests/inputs/vacuum_nonaxisym.h5")
+
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
+        )
+        obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
+        Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
+        obj.build(eq)
+        f = obj.compute(field_params=t_field.params_dict)
+        dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        # check that they're the same since we set B_plasma = 0
+        np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):
@@ -1662,6 +1722,7 @@ class TestComputeScalarResolution:
         CoilLength,
         CoilTorsion,
         CoilCurvature,
+        QuadraticFlux,
         ToroidalFlux,
         # need to avoid blowup near the axis
         MercierStability,
@@ -1737,7 +1798,7 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(BoundaryError(self.eq, ext_field), use_jit=False)
+            obj = ObjectiveFunction(BoundaryError(eq, ext_field), use_jit=False)
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -1766,6 +1827,32 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field), use_jit=False)
             with pytest.warns(UserWarning):
                 obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_quadratic_flux(self):
+        """VacuumBoundaryError."""
+        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+
+        pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+        iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+        eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(QuadraticFlux(eq, ext_field), use_jit=False)
+            obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
@@ -1955,6 +2042,7 @@ class TestObjectiveNaNGrad:
         CoilLength,
         CoilCurvature,
         CoilTorsion,
+        QuadraticFlux,
         ToroidalFlux,
         # we don't test these since they depend too much on what exactly the user wants
         GenericObjective,
@@ -2043,6 +2131,28 @@ class TestObjectiveNaNGrad:
             obj.build()
         g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "vacuum boundary error"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_quadratic_flux(self):
+        """QuadraticFlux."""
+        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+
+        pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+        iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+
+        eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+
+        obj = ObjectiveFunction(QuadraticFlux(eq, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(ext_field))
+        assert not np.any(np.isnan(g)), "quadratic flux"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_toroidal_flux(self):

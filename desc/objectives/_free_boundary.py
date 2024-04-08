@@ -69,7 +69,7 @@ class VacuumBoundaryError(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
-        Defaults to ``Linear(M=eq.M_grid, N=eq.N_grid)``
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``
     field_grid : Grid, optional
         Grid used to discretize field. Defaults to the default grid for given field.
     field_fixed : bool
@@ -385,7 +385,7 @@ class BoundaryError(_Objective):
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
         Savart integral and where to evaluate errors. source_grid should not be
         stellarator symmetric, and both should be at rho=1.
-        Defaults to ``Linear(M=eq.M_grid, N=eq.N_grid)`` for both.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
     field_grid : Grid, optional
         Grid used to discretize field. Defaults to default grid for given field.
     field_fixed : bool

@@ -597,7 +597,7 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
             params = self.params
         if basis == "xyz":

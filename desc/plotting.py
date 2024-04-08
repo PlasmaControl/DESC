@@ -3552,7 +3552,14 @@ def plot_logo(save_path=None, **kwargs):
 
 
 def plot_regcoil_outputs(
-    field, data, eq, eval_grid=None, source_grid=None, return_data=False, **kwargs
+    field,
+    data,
+    eq,
+    eval_grid=None,
+    source_grid=None,
+    return_data=False,
+    vacuum=False,
+    **kwargs,
 ):
     """Plot the output of REGCOIL.
 
@@ -3574,6 +3581,20 @@ def plot_regcoil_outputs(
         potential on a default LinearGrid
     return_data : bool, optional
         if True, return the data plotted as well as fig,ax
+    vacuum : bool, optional
+        if True, will not calculate the contribution to the normal field from the
+        plasma currents.
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6))
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+
+
 
     Outputs
     -------
@@ -3609,7 +3630,9 @@ def plot_regcoil_outputs(
     if "external_field" in data.keys():
         external_field = data["external_field"]
         external_field_grid = data["external_field_grid"]
-        B_ext = external_field.compute_Bnormal(eq, eval_grid, external_field_grid)[0]
+        B_ext = external_field.compute_Bnormal(
+            eq.surface, eval_grid, external_field_grid
+        )[0]
 
     else:
         external_field = None
@@ -3623,6 +3646,7 @@ def plot_regcoil_outputs(
 
     ncontours = kwargs.pop("ncontours", 20)
     markersize = kwargs.pop("markersize", 12)
+    vacuum = kwargs.pop("vacuum", False)
     figdata = {}
     axdata = {}
     if not scan:
@@ -3635,7 +3659,9 @@ def plot_regcoil_outputs(
         Bn_tot = (
             Bn_tot
             if not recalc_eval_grid_quantites
-            else field.compute_Bnormal(eq, eval_grid, source_grid)[0]
+            else field.compute_Bnormal(
+                eq if not vacuum else eq.surface, eval_grid, source_grid
+            )[0]
         )
         if external_field:
             Bn_tot += B_ext
@@ -3767,7 +3793,9 @@ def plot_regcoil_outputs(
             Bn = (
                 Bn_tot[ialpha_to_plot[whichPlot] - 1]
                 if not recalc_eval_grid_quantites
-                else field.compute_Bnormal(eq, eval_grid, source_grid)[0]
+                else field.compute_Bnormal(
+                    eq if not vacuum else eq.surface, eval_grid, source_grid
+                )[0]
             )
             if external_field:
                 Bn_tot += B_ext

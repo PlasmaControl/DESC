@@ -628,6 +628,7 @@ class FourierCurrentPotentialField(
         sym_Phi=None,
         verbose=1,
         normalize=True,
+        vacuum=False,
     ):
         """Runs regcoil algorithm to find the current potential for the surface.
 
@@ -725,6 +726,10 @@ class FourierCurrentPotentialField(
         normalize : bool, optional
             whether or not to normalize Bn when printing the Bnormal errors. If true,
             will normalize by the average equilibrium field strength on the surface.
+        vacuum : bool, optional
+            if True, will not include the contribution to the normal field from the
+            plasma currents.
+
 
         Returns
         -------
@@ -765,7 +770,6 @@ class FourierCurrentPotentialField(
                 source_grid: Grid object that Phi and K were evaluated at.
 
 
-
         """
         assert (
             int(current_helicity) == current_helicity
@@ -777,7 +781,18 @@ class FourierCurrentPotentialField(
         # ensure vacuum eq, as we don't yet support finite beta
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))
-        include_plasma_currents = pres > 1e-8 or curr > 1e-8
+        warnif(
+            vacuum and pres > 1e-8,
+            UserWarning,
+            f"Pressure appears to be non-zero (max {pres} Pa), "
+            + "vacuum flag should probably be set to False.",
+        )
+        warnif(
+            vacuum and curr > 1e-8,
+            UserWarning,
+            f"Current appears to be non-zero (max {curr} A), "
+            + "vacuum flag should probably be set to False.",
+        )
 
         data = {}
         if external_field:  # ensure given field is an instance of _MagneticField
@@ -902,7 +917,7 @@ class FourierCurrentPotentialField(
         self.G = float(G)
         # find the normal field from the secular part of the current potential
         B_GI_normal = B_from_K_secular(I, G)
-        if include_plasma_currents:
+        if not vacuum:
             Bn_plasma = compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
         else:
             Bn_plasma = jnp.zeros_like(

@@ -8,15 +8,7 @@ from interpax import Akima1DInterpolator, CubicHermiteSpline
 from matplotlib import pyplot as plt
 from scipy.special import ellipe, ellipk
 
-from desc.backend import (
-    cond,
-    flatnonzero,
-    fori_loop,
-    jnp,
-    put,
-    put_along_axis,
-    root_scalar,
-)
+from desc.backend import flatnonzero, fori_loop, jnp, put, root_scalar
 from desc.compute.bounce_integral import (
     bounce_average,
     bounce_integral,
@@ -45,7 +37,6 @@ from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
 
 
-# TODO: delete if end up not needing
 @np.vectorize(signature="(m)->()")
 def _last_value(a):
     """Return the last non-nan value in ``a``."""
@@ -54,40 +45,10 @@ def _last_value(a):
     return a[idx]
 
 
-@np.vectorize(signature="(),(m),()->(m)")
-def _maybe_roll_and_replace(maybe, a, replacement):
-    """If maybe is true, roll a right and put replacement value at a[0].
-
-    Parameters
-    ----------
-    maybe : ndarray, shape(1, )
-        Whether to roll array.
-    a : ndarray
-        Array to roll.
-    replacement : ndarray, shape(1, )
-        Value to place at index zero.
-
-    Returns
-    -------
-    result : ndarray
-        The (possibly) rolled array.
-
-    """
-    return cond(
-        maybe,
-        lambda x, r: put(jnp.roll(x, shift=1), jnp.array([0]), r),
-        lambda x, r: x,
-        a,
-        replacement,
-    )
-
-
-def filter_nan(a):
+def _filter_not_nan(a):
     """Filter out nan while making sure they have correct padding."""
     is_nan = np.isnan(a)
-    assert np.array_equal(
-        is_nan, np.sort(is_nan, axis=-1)
-    ), "nan not padded on correctly"
+    assert np.array_equal(is_nan, np.sort(is_nan, axis=-1))
     return a[~is_nan]
 
 
@@ -108,26 +69,7 @@ def test_mask_operations():
             np.pad(desired, (0, cols - desired.size), constant_values=np.nan),
             equal_nan=True,
         ), "take_mask() has bugs."
-        assert np.array_equal(last[i], desired[-1]), "_last_value() has bugs."
-
-    maybe = np.random.choice([True, False], size=rows)
-    # This might be a better way to perform this computation, without
-    # the jax.cond, which will get transformed to jax.select under vmap
-    # which performs both branches of the computation.
-    # But perhaps computing replacement as above, while fine for jit,
-    # will make the computation non-differentiable.
-    roll = np.vectorize(np.roll, signature="(m),()->(m)")
-    desired = put_along_axis(
-        roll(taken, maybe),
-        np.array([0]),
-        np.expand_dims(last * maybe + taken[:, 0] * (~maybe), axis=-1),
-        axis=-1,
-    )
-    assert np.array_equal(
-        _maybe_roll_and_replace(maybe, taken, last),
-        desired,
-        equal_nan=True,
-    ), "_roll_and_replace_if_shift() has bugs."
+        assert np.array_equal(last[i], desired[-1]), "flatnonzero() has bugs."
 
 
 @pytest.mark.unit
@@ -159,7 +101,9 @@ def test_reshape_convention():
 
     err_msg = "The ordering conventions are required for correctness."
     assert "P, S, N" in inspect.getsource(bounce_points), err_msg
-    assert "S, zeta.size" in inspect.getsource(bounce_integral), err_msg
+    src = inspect.getsource(bounce_integral)
+    assert "S, zeta.size" in src, err_msg
+    assert "pitch_res, rho.size, alpha.size" in src, err_msg
     src = inspect.getsource(desc_grid_from_field_line_coords)
     assert 'indexing="ij"' in src, err_msg
     assert 'meshgrid(rho, alpha, zeta, indexing="ij")' in src, err_msg
@@ -174,23 +118,40 @@ def test_poly_root():
     assert np.unique(poly.shape).size == poly.ndim
     constant = np.broadcast_to(np.arange(poly.shape[-1]), poly.shape[1:])
     constant = np.stack([constant, constant])
-    actual = poly_root(poly, constant, sort=True)
+    root = poly_root(poly, constant, sort=True)
 
     for i in range(constant.shape[0]):
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
                 d = poly[-1, j, k] - constant[i, j, k]
-                desired = np.sort(np.roots([*poly[:-1, j, k], d]))
-                np.testing.assert_allclose(actual[i, j, k], desired)
+                np.testing.assert_allclose(
+                    actual=root[i, j, k],
+                    desired=np.sort(np.roots([*poly[:-1, j, k], d])),
+                )
 
     poly = np.array(
-        [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [1, -1, -8, 12], [1, -6, 11, -6]]
+        [
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+            [1, -1, -8, 12],
+            [1, -6, 11, -6],
+            [0, -6, 11, -2],
+        ]
     )
-    actual = poly_root(poly.T, sort=True, distinct=True)
+    root = poly_root(poly.T, sort=True, distinct=True)
     for j in range(poly.shape[0]):
-        distinct = actual[j][~np.isnan(actual[j])]
-        desired = np.unique(np.roots(poly[j]))
-        np.testing.assert_allclose(distinct, desired, err_msg=str(j))
+        np.testing.assert_allclose(
+            actual=_filter_not_nan(root[j]),
+            desired=np.unique(np.roots(poly[j])),
+            err_msg=str(j),
+        )
+    poly = np.array([0, 1, -1, -8, 12])
+    np.testing.assert_allclose(
+        actual=_filter_not_nan(poly_root(poly, sort=True, distinct=True)),
+        desired=np.unique(np.roots(poly)),
+    )
 
 
 @pytest.mark.unit
@@ -304,10 +265,10 @@ def test_bounce_points():
             B.derivative().c[:, np.newaxis],
             check=True,
         )
-        bp1, bp2 = map(filter_nan, (bp1, bp2))
-        # Hardcode desired because CubicHermiteSpline.solve not yet implemented.
-        np.testing.assert_allclose(bp1, desired=np.array([1.04719755, 7.13120418]))
-        np.testing.assert_allclose(bp2, desired=np.array([5.19226163, 17.57830469]))
+        bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        # Hardcode because CubicHermiteSpline.solve not yet implemented.
+        np.testing.assert_allclose(bp1, np.array([1.04719755, 7.13120418]))
+        np.testing.assert_allclose(bp2, np.array([5.19226163, 17.57830469]))
 
     def assert_case_2(plot=False):
         # 1/pitch intersects extrema
@@ -326,10 +287,10 @@ def test_bounce_points():
             B.derivative().c[:, np.newaxis],
             check=True,
         )
-        bp1, bp2 = map(filter_nan, (bp1, bp2))
-        # Hardcode desired because CubicHermiteSpline.solve not yet implemented.
-        np.testing.assert_allclose(bp1, desired=np.array([1.04719755, 7.13120418]))
-        np.testing.assert_allclose(bp2, desired=np.array([5.19226163, 17.57830469]))
+        bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        # Hardcode because CubicHermiteSpline.solve not yet implemented.
+        np.testing.assert_allclose(bp1, np.array([1.04719755, 7.13120418]))
+        np.testing.assert_allclose(bp2, np.array([5.19226163, 17.57830469]))
 
     # TODO: add all the edge cases I parameterized
     assert_case_1()

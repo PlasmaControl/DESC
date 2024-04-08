@@ -881,7 +881,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
     )
     spacing = jnp.prod(spacing, axis=1)
 
-    # Todo: Define masks as a sparse matrix once sparse matrices are no longer
+    # Todo: Define mask as a sparse matrix once sparse matrices are no longer
     #       experimental in jax.
     if has_idx:
         # The ith row of masks is True only at the indices which correspond to the

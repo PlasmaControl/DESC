@@ -11,94 +11,6 @@ from desc.equilibrium.coords import desc_grid_from_field_line_coords
 roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(n)->(m)")
 
 
-# vmap to compute a bounce integral for every pitch along every field line.
-@partial(vmap, in_axes=(1, 1, None, None, 0, 0, 0, 0), out_axes=1)
-def bounce_quad(pitch, X, w, knots, f, B_sup_z, B, B_z_ra):
-    """Compute a bounce integral for every pitch along a particular field line.
-
-    Parameters
-    ----------
-    pitch : Array, shape(pitch.size, )
-        λ values.
-    X : Array, shape(pitch.size, X.shape[1], w.size)
-        Quadrature points.
-    w : Array, shape(w.size, )
-        Quadrature weights.
-    knots : Array, shape(knots.size, )
-        Field line-following ζ coordinates of spline knots.
-    f : Array, shape(knots.size, )
-        Function to compute bounce integral of, evaluated at knots.
-    B_sup_z : Array, shape(knots.size, )
-        Contravariant field-line following toroidal component of magnetic field.
-    B : Array, shape(knots.size, )
-        Norm of magnetic field.
-    B_z_ra : Array, shape(knots.size, )
-        Norm of magnetic field derivative with respect to field-line following label.
-
-    Returns
-    -------
-    inner_product : Array, shape(pitch.size, X.shape[1])
-        Bounce integrals for every pitch along a particular field line.
-
-    """
-    assert pitch.ndim == 1 == w.ndim
-    assert X.shape == (pitch.size, X.shape[1], w.size)
-    assert knots.shape == f.shape == B_sup_z.shape == B.shape == B_z_ra.shape
-    # Spline the integrand so that we can evaluate it at quadrature points
-    # without expensive coordinate mappings and root finding.
-    # Spline each function separately so that the singularity near the bounce
-    # points can be captured more accurately than can be by any polynomial.
-    shape = X.shape
-    X = X.ravel()
-    # Use akima spline to suppress oscillation.
-    f = interp1d(X, knots, f, method="akima").reshape(shape)
-    B_sup_z = interp1d(X, knots, B_sup_z, method="akima").reshape(shape)
-    # Specify derivative at knots with fx=B_z_ra for ≈ cubic hermite interpolation.
-    B = interp1d(X, knots, B, fx=B_z_ra, method="cubic").reshape(shape)
-    pitch = pitch[:, jnp.newaxis, jnp.newaxis]
-    inner_product = jnp.dot(f / (B_sup_z * jnp.sqrt(1 - pitch * B)), w)
-    return inner_product
-
-
-def tanh_sinh_quad(resolution=7):
-    """
-    tanh_sinh quadrature.
-
-    This function outputs the quadrature points and weights
-    for a tanh-sinh quadrature.
-
-    ∫₋₁¹ f(x) dx = ∑ₖ wₖ f(xₖ)
-
-    Parameters
-    ----------
-    resolution: int
-        Number of quadrature points, preferably odd.
-
-    Returns
-    -------
-    x : numpy array
-        Quadrature points
-    w : numpy array
-        Quadrature weights
-
-    """
-    # https://github.com/f0uriest/quadax/blob/main/quadax/utils.py#L166
-    # Compute boundary of quadrature.
-    # x_max = 1 - eps with some buffer
-    x_max = jnp.array(1.0) - 10 * jnp.finfo(jnp.array(1.0)).eps
-    tanh_inv = lambda x: jnp.log((1 + x) / (1 - x)) / 2
-    sinh_inv = lambda x: jnp.log(x + jnp.sqrt(x**2 + 1))
-    # inverse of tanh-sinh transformation for x_max
-    t_max = sinh_inv(2 / jnp.pi * tanh_inv(x_max))
-
-    points = jnp.linspace(-t_max, t_max, resolution)
-    h = 2 * t_max / (resolution - 1)
-    sinh_points = jnp.sinh(points)
-    x = jnp.tanh(0.5 * jnp.pi * sinh_points)
-    w = 0.5 * jnp.pi * h * jnp.cosh(points) / jnp.cosh(0.5 * jnp.pi * sinh_points) ** 2
-    return x, w
-
-
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={2, 3})
 def take_mask(a, mask, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
@@ -139,6 +51,142 @@ def take_mask(a, mask, size=None, fill_value=None):
         unique_indices=True,
         indices_are_sorted=True,
     )
+
+
+def _filter_real(a, a_min=-jnp.inf, a_max=jnp.inf):
+    """Keep real values inside [a_min, a_max] and set others to nan.
+
+    Parameters
+    ----------
+    a : Array
+        Complex-valued array.
+    a_min, a_max : Array, Array
+        Minimum and maximum value to keep real values between.
+        Should broadcast with ``a``.
+
+    Returns
+    -------
+    roots : Array
+        The real values of ``a`` in [``a_min``, ``a_max``]; others set to nan.
+        The returned array preserves the order of ``a``.
+
+    """
+    if a_min is None:
+        a_min = -jnp.inf
+    if a_max is None:
+        a_max = jnp.inf
+    return jnp.where(
+        jnp.isclose(jnp.imag(a), 0) & (a_min <= a) & (a <= a_max),
+        jnp.real(a),
+        jnp.nan,
+    )
+
+
+def _root_linear(a, b, *args):
+    """Return r such that a * r + b = 0."""
+    return safediv(-b, a, fill=jnp.where(jnp.isclose(b, 0), 0, jnp.nan))
+
+
+def _root_quadratic(a, b, c, distinct=False):
+    """Return r such that a * r**2 + b * r + c = 0."""
+    discriminant = b**2 - 4 * a * c
+    C = complex_sqrt(discriminant)
+
+    def root(xi):
+        return (-b + xi * C) / (2 * a)
+
+    is_linear = jnp.isclose(a, 0)
+    suppress_root = distinct & jnp.isclose(discriminant, 0)
+    r1 = jnp.where(is_linear, _root_linear(b, c), root(-1))
+    r2 = jnp.where(is_linear | suppress_root, jnp.nan, root(1))
+    return r1, r2
+
+
+def _root_cubic(a, b, c, d, distinct=False):
+    """Return r such that a * r**3 + b * r**2 + c * r + d = 0."""
+    # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
+    t_0 = b**2 - 3 * a * c
+    t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
+    discriminant = t_1**2 - 4 * t_0**3
+    C = ((t_1 + complex_sqrt(discriminant)) / 2) ** (1 / 3)
+    C_is_zero = jnp.isclose(t_0, 0) & jnp.isclose(t_1, 0)
+
+    def root(xi):
+        return (b + xi * C + jnp.where(C_is_zero, 0, t_0 / (xi * C))) / (-3 * a)
+
+    xi0 = 1
+    xi1 = (-1 + (-3) ** 0.5) / 2
+    xi2 = xi1**2
+    is_quadratic = jnp.isclose(a, 0)
+    # C = 0 is equivalent to existence of triple root.
+    # Assuming the coefficients are real, it is also equivalent to
+    # existence of any real roots with multiplicity > 1.
+    suppress_root = distinct & C_is_zero
+    q1, q2 = _root_quadratic(b, c, d, distinct)
+    r1 = jnp.where(is_quadratic, q1, root(xi0))
+    r2 = jnp.where(is_quadratic, q2, jnp.where(suppress_root, jnp.nan, root(xi1)))
+    r3 = jnp.where(is_quadratic | suppress_root, jnp.nan, root(xi2))
+    return r1, r2, r3
+
+
+def poly_root(coef, k=0, a_min=None, a_max=None, sort=False, distinct=False):
+    """Roots of polynomial with given coefficients.
+
+    Parameters
+    ----------
+    coef : Array
+        First axis should store coefficients of a polynomial.
+        For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0] - 1``,
+        coefficient cᵢ should be stored at ``c[n - i]``.
+    k : Array
+        Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``.
+        Should broadcast with arrays of shape(*coef.shape[1:]).
+    a_min, a_max : Array, Array
+        Minimum and maximum value to return roots between.
+        If specified only real roots are returned.
+        If None, returns all complex roots.
+        Should broadcast with arrays of shape(*coef.shape[1:]).
+    sort : bool
+        Whether to sort the roots.
+    distinct : bool
+        Whether to only return the distinct roots. If true, when the
+        multiplicity is greater than one, the repeated roots are set to nan.
+
+    Returns
+    -------
+    r : Array, shape(..., coef.shape[1:], coef.shape[0] - 1)
+        The roots of the polynomial, iterated over the last axis.
+
+    """
+    keep_only_real = not (a_min is None and a_max is None)
+    func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
+    if coef.shape[0] in func:
+        # compute from analytic formula
+        r = func[coef.shape[0]](*coef[:-1], coef[-1] - k, distinct)
+        if keep_only_real:
+            r = tuple(map(partial(_filter_real, a_min=a_min, a_max=a_max), r))
+        r = jnp.stack(r, axis=-1)
+        if sort:
+            r = jnp.sort(r, axis=-1)
+    else:
+        # compute from eigenvalues of polynomial companion matrix
+        c_n = coef[-1] - k
+        c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in coef[:-1]]
+        c.append(c_n)
+        coef = jnp.stack(c)
+        r = roots(coef.reshape(coef.shape[0], -1).T).reshape(*coef.shape[1:], -1)
+        if keep_only_real:
+            if a_min is not None:
+                a_min = a_min[..., jnp.newaxis]
+            if a_max is not None:
+                a_max = a_max[..., jnp.newaxis]
+            r = _filter_real(r, a_min, a_max)
+        if sort or distinct:
+            r = jnp.sort(r, axis=-1)
+        if distinct:
+            mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=jnp.nan), 0)
+            r = jnp.where(mask, jnp.nan, r)
+    return r
 
 
 def poly_int(c, k=None):
@@ -235,145 +283,11 @@ def poly_val(x, c):
     return val
 
 
-def _complex_to_nan(root, a_min=-jnp.inf, a_max=jnp.inf):
-    """Set complex-valued roots and real roots outside [a_min, a_max] to nan.
-
-    Parameters
-    ----------
-    root : Array
-        Complex-valued roots.
-    a_min, a_max : Array, Array
-        Minimum and maximum value to return roots between.
-        Should broadcast with ``root`` array.
-
-    Returns
-    -------
-    roots : Array
-        The real roots in [a_min, a_max]; others transformed to nan.
-
-    """
-    if a_min is None:
-        a_min = -jnp.inf
-    if a_max is None:
-        a_max = jnp.inf
-    return jnp.where(
-        jnp.isclose(jnp.imag(root), 0) & (a_min <= root) & (root <= a_max),
-        jnp.real(root),
-        jnp.nan,
-    )
-
-
-def _root_linear(a, b):
-    """Return r such that a * r + b = 0."""
-    return safediv(-b, a, fill=jnp.where(jnp.isclose(b, 0), 0, jnp.nan))
-
-
-def _root_quadratic(a, b, c, distinct=False):
-    """Return r such that a * r**2 + b * r + c = 0."""
-    discriminant = b**2 - 4 * a * c
-    C = complex_sqrt(discriminant)
-
-    def root(xi):
-        return safediv(-b + xi * C, 2 * a)
-
-    is_linear = jnp.isclose(a, 0)
-    suppress_root = distinct & jnp.isclose(discriminant, 0)
-    r1 = jnp.where(is_linear, _root_linear(b, c), root(-1))
-    r2 = jnp.where(is_linear | suppress_root, jnp.nan, root(1))
-    return r1, r2
-
-
-def _root_cubic(a, b, c, d, distinct=False):
-    """Return r such that a * r**3 + b * r**2 + c * r + d = 0."""
-    # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
-    t_0 = b**2 - 3 * a * c
-    t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
-    discriminant = t_1**2 - 4 * t_0**3
-    C = ((t_1 + complex_sqrt(discriminant)) / 2) ** (1 / 3)
-    C_is_zero = jnp.isclose(t_0, 0) & jnp.isclose(t_1, 0)
-
-    def root(xi):
-        return safediv(b + xi * C + jnp.where(C_is_zero, 0, t_0 / (xi * C)), -3 * a)
-
-    xi0 = 1
-    xi1 = (-1 + (-3) ** 0.5) / 2
-    xi2 = xi1**2
-    is_quadratic = jnp.isclose(a, 0)
-    # C = 0 is equivalent to existence of triple root.
-    # Assuming the coefficients are real, it is also equivalent to
-    # existence of any real roots with multiplicity > 1.
-    suppress_root = distinct & C_is_zero
-    q1, q2 = _root_quadratic(b, c, d, distinct)
-    r1 = jnp.where(is_quadratic, q1, root(xi0))
-    r2 = jnp.where(is_quadratic, q2, jnp.where(suppress_root, jnp.nan, root(xi1)))
-    r3 = jnp.where(is_quadratic | suppress_root, jnp.nan, root(xi2))
-    return r1, r2, r3
-
-
-def poly_root(coef, k=0, a_min=None, a_max=None, sort=False, distinct=False):
-    """Roots of polynomial with given coefficients.
-
-    Parameters
-    ----------
-    coef : Array
-        First axis should store coefficients of a polynomial.
-        For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0] - 1``,
-        coefficient cᵢ should be stored at ``c[n - i]``.
-    k : Array
-        Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``.
-        Should broadcast with arrays of shape(*coef.shape[1:]).
-    a_min, a_max : Array, Array
-        Minimum and maximum value to return roots between.
-        If specified only real roots are returned.
-        If None, returns all complex roots.
-        Should broadcast with arrays of shape(*coef.shape[1:]).
-    sort : bool
-        Whether to sort the roots.
-    distinct : bool
-        Whether to only return the distinct roots. If true, when the
-        multiplicity is greater than one, the repeated roots are set to nan.
-
-    Returns
-    -------
-    r : Array, shape(..., coef.shape[1:], coef.shape[0] - 1)
-        The roots of the polynomial, iterated over the last axis.
-
-    """
-    func = {3: _root_quadratic, 4: _root_cubic}
-    if coef.shape[0] in func:
-        # compute from analytic formula
-        r = func[coef.shape[0]](*coef[:-1], coef[-1] - k, distinct)
-        if not (a_min is None and a_max is None):
-            r = tuple(map(partial(_complex_to_nan, a_min=a_min, a_max=a_max), r))
-        r = jnp.stack(r, axis=-1)
-        if sort:
-            r = jnp.sort(r, axis=-1)
-    else:
-        # compute from eigenvalues of polynomial companion matrix
-        c_n = coef[-1] - k
-        c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in coef[:-1]]
-        c.append(c_n)
-        coef = jnp.stack(c)
-        r = roots(coef.reshape(coef.shape[0], -1).T).reshape(*coef.shape[1:], -1)
-        if not (a_min is None and a_max is None):
-            if a_min is not None:
-                a_min = a_min[..., jnp.newaxis]
-            if a_max is not None:
-                a_max = a_max[..., jnp.newaxis]
-            r = _complex_to_nan(r, a_min, a_max)
-        if sort or distinct:
-            r = jnp.sort(r, axis=-1)
-        if distinct:
-            mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=jnp.nan), 0)
-            r = jnp.where(mask, jnp.nan, r)
-    return r
-
-
 def pitch_of_extrema(knots, poly_B, poly_B_z):
     """Return pitch values that will capture fat banana orbits.
 
-    These pitch values are 1/|B|(ζ*) where |B|(ζ*) is a local maximum.
-    The local minimum are returned as well.
+    These pitch values are 1/|B|(ζ*) where |B|(ζ*) are local maxima.
+    The local minima are returned as well.
 
     Parameters
     ----------
@@ -416,6 +330,7 @@ def pitch_of_extrema(knots, poly_B, poly_B_z):
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
         sort=False,  # don't need to sort
+        # False will double weight orbits with B_z = B_zz = 0 at bounce points.
         distinct=True,
     )
     # Can detect at most degree of |B|_z spline extrema between each knot.
@@ -487,7 +402,7 @@ def bounce_points(pitch, knots, poly_B, poly_B_z, check=False):
 
     # The polynomials' intersection points with 1 / λ is given by ``intersect``.
     # In order to be JIT compilable, this must have a shape that accommodates the
-    # case where each cubic polynomial intersects 1 / λ degree times.
+    # case where each polynomial intersects 1 / λ degree times.
     # nan values in ``intersect`` denote a polynomial has less than degree intersects.
     intersect = poly_root(
         coef=poly_B,
@@ -496,44 +411,43 @@ def bounce_points(pitch, knots, poly_B, poly_B_z, check=False):
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
         sort=True,
-        distinct=True,
+        distinct=True,  # Required for correctness of ``edge_case``.
     )
     assert intersect.shape == (P, S, N, degree)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
-    # Condense remaining axes to vmap over them.
+    # Condense remaining axes to vectorize over them.
     B_z = poly_val(x=intersect, c=poly_B_z[..., jnp.newaxis]).reshape(P * S, -1)
-    # Transform from local power basis expansion to real space.
+    # Transform out of local power basis expansion.
     intersect = intersect + knots[:-1, jnp.newaxis]
     intersect = intersect.reshape(P * S, -1)
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = ~jnp.isnan(intersect)
 
-    # Rearrange so that all intersects along a field line are contiguous.
+    # Reorder so that all intersects along a field line are contiguous.
     intersect = take_mask(intersect, is_intersect)
     B_z = take_mask(B_z, is_intersect)
     assert intersect.shape == B_z.shape == (P * S, N * degree)
-    # The boolean masks is_bp1 and is_bp2 will encode whether a given entry in
-    # intersect is a valid starting and ending bounce point, respectively.
     # Sign of derivative determines whether an intersect is a valid bounce point.
     # Need to include zero derivative intersects to compute the WFB
     # (world's fattest banana) orbit bounce integrals.
     is_bp1 = B_z <= 0
     is_bp2 = B_z >= 0
-    # For correctness, it is necessary that the first intersect satisfies B_z <= 0.
-    # That is, the pairs bp1[:, i] and bp2[:, i] are the boundaries of an
-    # integral only if bp1[:, i] <= bp2[:, i].
-    # Now, because B_z[:, i] <= 0 implies B_z[:, i + 1] >= 0 by continuity,
-    # there can be at most one inversion, and if it exists, the inversion must be
-    # at the first pair. To correct the inversion, it suffices to disqualify
-    # the first intersect as a right bounce point.
+    # The pairs bp1[i, j] and bp2[i, j] are the boundaries of an integral only if
+    # bp1[i, j] <= bp2[i, j]. For correctness of the algorithm, it is necessary
+    # that the first intersect satisfies B_z <= 0. Now, because B_z[i, j] <= 0
+    # implies B_z[i, j + 1] >= 0 by continuity, there can be at most one
+    # inversion, and if it exists, the inversion must be at the first pair. To
+    # correct the inversion, it suffices to disqualify the first intersect as an
+    # ending bounce point.
     edge_case = (B_z[:, 0] == 0) & (B_z[:, 1] < 0)
-    is_bp2 = put_along_axis(is_bp2, jnp.array([0]), edge_case[:, jnp.newaxis], axis=-1)
+    is_bp2 = put_along_axis(is_bp2, jnp.array(0), edge_case, axis=-1)
     # Get ζ values of bounce points from the masks.
     bp1 = take_mask(intersect, is_bp1).reshape(P, S, -1)
     bp2 = take_mask(intersect, is_bp2).reshape(P, S, -1)
     if check:
-        assert jnp.all((bp2 >= bp1) | jnp.isnan(bp1) | jnp.isnan(bp2))
+        if not jnp.all((bp2 >= bp1) | jnp.isnan(bp1) | jnp.isnan(bp2)):
+            raise AssertionError("Bounce points have an inversion.")
     return bp1, bp2
     # This is no longer implemented at the moment.
     #   If the first intersect satisfies B_z >= 0, that particle may be
@@ -574,13 +488,96 @@ def _compute_bp_if_given_pitch(
         return pitch, *bounce_points(pitch, knots, poly_B, poly_B_z, check)
 
 
+def tanh_sinh_quad(resolution=7):
+    """Tanh-Sinh quadrature.
+
+    This function outputs the quadrature points xₖ and weights wₖ
+    for a tanh-sinh quadrature.
+
+    ∫₋₁¹ f(x) dx = ∑ₖ wₖ f(xₖ)
+
+    Parameters
+    ----------
+    resolution: int
+        Number of quadrature points, preferably odd.
+
+    Returns
+    -------
+    x : numpy array
+        Quadrature points
+    w : numpy array
+        Quadrature weights
+
+    """
+    # boundary of integral
+    x_max = jnp.array(1.0)
+    # subtract machine epsilon with buffer for floating point error
+    x_max = x_max - 10 * jnp.finfo(x_max).eps
+    # inverse of tanh-sinh transformation
+    t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
+    kh = jnp.linspace(-t_max, t_max, resolution)
+    h = 2 * t_max / (resolution - 1)
+    x = jnp.tanh(0.5 * jnp.pi * jnp.sinh(kh))
+    w = 0.5 * jnp.pi * h * jnp.cosh(kh) / jnp.cosh(0.5 * jnp.pi * jnp.sinh(kh)) ** 2
+    return x, w
+
+
+# Vectorize to compute a bounce integral for every pitch along every field line.
+@partial(vmap, in_axes=(1, 1, None, None, 0, 0, 0, 0), out_axes=1)
+def _bounce_quad(pitch, X, w, knots, f, B_sup_z, B, B_z_ra):
+    """Compute a bounce integral for every pitch along a particular field line.
+
+    Parameters
+    ----------
+    pitch : Array, shape(pitch.size, )
+        λ values.
+    X : Array, shape(pitch.size, X.shape[1], w.size)
+        Quadrature points.
+    w : Array, shape(w.size, )
+        Quadrature weights.
+    knots : Array, shape(knots.size, )
+        Field line-following ζ coordinates of spline knots.
+    f : Array, shape(knots.size, )
+        Function to compute bounce integral of, evaluated at knots.
+    B_sup_z : Array, shape(knots.size, )
+        Contravariant field-line following toroidal component of magnetic field.
+    B : Array, shape(knots.size, )
+        Norm of magnetic field.
+    B_z_ra : Array, shape(knots.size, )
+        Norm of magnetic field derivative with respect to field-line following label.
+
+    Returns
+    -------
+    inner_product : Array, shape(pitch.size, X.shape[1])
+        Bounce integrals for every pitch along a particular field line.
+
+    """
+    assert pitch.ndim == 1 == w.ndim
+    assert X.shape == (pitch.size, X.shape[1], w.size)
+    assert knots.shape == f.shape == B_sup_z.shape == B.shape == B_z_ra.shape
+    # Spline the integrand so that we can evaluate it at quadrature points
+    # without expensive coordinate mappings and root finding.
+    # Spline each function separately so that the singularity near the bounce
+    # points can be captured more accurately than can be by any polynomial.
+    shape = X.shape
+    X = X.ravel()
+    # Use akima spline to suppress oscillation.
+    f = interp1d(X, knots, f, method="akima").reshape(shape)
+    B_sup_z = interp1d(X, knots, B_sup_z, method="akima").reshape(shape)
+    # Specify derivative at knots with fx=B_z_ra for ≈ cubic hermite interpolation.
+    B = interp1d(X, knots, B, fx=B_z_ra, method="cubic").reshape(shape)
+    pitch = pitch[:, jnp.newaxis, jnp.newaxis]
+    inner_product = jnp.dot(f / (B_sup_z * jnp.sqrt(1 - pitch * B)), w)
+    return inner_product
+
+
 def bounce_integral(
     eq,
     pitch=None,
     rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
     zeta=jnp.linspace(0, 6 * jnp.pi, 20),
-    quadrature=tanh_sinh_quad,
+    quad=tanh_sinh_quad,
     **kwargs,
 ):
     """Returns a method to compute the bounce integral of any quantity.
@@ -623,7 +620,7 @@ def bounce_integral(
         The number of knots specifies the grid resolution as increasing the
         number of knots increases the accuracy of representing the integrand
         and the accuracy of the locations of the bounce points.
-    quadrature : callable
+    quad : callable
         The quadrature scheme used to evaluate the integral.
         Should return quadrature points and weights when called.
         The returned points should be within the domain [-1, 1].
@@ -670,6 +667,9 @@ def bounce_integral(
         result = bi(f, pitch).reshape(pitch_res, rho.size, alpha.size, -1)
 
     """
+    check = kwargs.pop("check", False)
+    return_items = kwargs.pop("return_items", False)
+
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
     rho = jnp.atleast_1d(rho)
@@ -682,15 +682,13 @@ def bounce_integral(
     B_sup_z = data["B^zeta"].reshape(S, -1)
     B = data["|B|"].reshape(S, -1)
     B_z_ra = data["|B|_z|r,a"].reshape(S, -1)
-    poly_B = CubicHermiteSpline(zeta, B, B_z_ra, axis=-1, check=False).c
+    poly_B = CubicHermiteSpline(zeta, B, B_z_ra, axis=-1, check=check).c
     poly_B = jnp.moveaxis(poly_B, 1, -1)
     poly_B_z = poly_der(poly_B)
     assert poly_B.shape == (4, S, zeta.size - 1)
     assert poly_B_z.shape == (3, S, zeta.size - 1)
 
-    check = kwargs.pop("check", False)
-    return_items = kwargs.pop("return_items", False)
-    x, w = quadrature(**kwargs)
+    x, w = quad(**kwargs)
     # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
     x = jnp.arcsin(x) / jnp.pi - 0.5
     original = _compute_bp_if_given_pitch(
@@ -725,10 +723,12 @@ def bounce_integral(
             pitch, zeta, poly_B, poly_B_z, *original, err=True, check=check
         )
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
-        f = f.reshape(S, zeta.size)
+        f = f.reshape(S, -1)
         pitch = jnp.broadcast_to(pitch, shape=(pitch.shape[0], S))
         return (
-            bounce_quad(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra) / (bp2 - bp1) * jnp.pi
+            _bounce_quad(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra)
+            / (bp2 - bp1)
+            * jnp.pi
         )
 
     if return_items:
@@ -744,7 +744,7 @@ def bounce_average(
     rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
     zeta=jnp.linspace(0, 6 * jnp.pi, 20),
-    quadrature=tanh_sinh_quad,
+    quad=tanh_sinh_quad,
     **kwargs,
 ):
     """Returns a method to compute the bounce average of any quantity.
@@ -788,7 +788,7 @@ def bounce_average(
         The number of knots specifies the grid resolution as increasing the
         number of knots increases the accuracy of representing the integrand
         and the accuracy of the locations of the bounce points.
-    quadrature : callable
+    quad : callable
         The quadrature scheme used to evaluate the integral.
         Should return quadrature points and weights when called.
         The returned points should be within the domain [-1, 1].
@@ -864,7 +864,7 @@ def bounce_average(
         # akima suppresses oscillation of the spline.
         return bi(f, pitch) / bi(jnp.ones_like(f), pitch)
 
-    bi = bounce_integral(eq, pitch, rho, alpha, zeta, quadrature, **kwargs)
+    bi = bounce_integral(eq, pitch, rho, alpha, zeta, quad, **kwargs)
     if kwargs.get("return_items"):
         bi, items = bi
         return _bounce_average, items

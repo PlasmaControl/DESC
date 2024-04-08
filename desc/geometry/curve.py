@@ -241,6 +241,7 @@ class FourierRZCurve(Curve):
             according to NFP.
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "rpz"
+
         Returns
         -------
         curve : FourierRZCurve

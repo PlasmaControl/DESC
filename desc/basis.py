@@ -8,6 +8,7 @@ import mpmath
 import numpy as np
 import skfem as fem
 from matplotlib import pyplot as plt
+import math as mth
 
 from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
@@ -2172,6 +2173,121 @@ class FiniteElementMesh2D:
         self.integration_points = np.array(integration_points)
         self.weights = np.ravel(np.array(weights))
         self.nquad = len(self.integration_points)
+
+
+    def get_basis_function(slf)
+
+    def get_basis_functions(self, theta_zeta, K=1):
+        """
+        Gets the barycentric basis functions.
+
+        Return the triangle basis functions, evaluated at the 2D rho
+        and theta mesh points provided to the function.
+
+        Parameters
+        ----------
+        theta_zeta : 2D ndarray, shape (nrho * ntheta, 2)
+            Coordinates of the original grid, lying inside this triangle.
+
+        Returns
+        -------
+        psi_q : (rho_theta, Q)
+
+        """
+
+  # Below is a partial pseudo-code for the basis functions for the standard finite element, will adjust      
+        """
+
+    if K == 1:
+       if node == 0:
+           def f(x,y,z):
+               return x
+       if node == 1:
+           def f(x,y,z):
+               return y
+       if node == 2:
+           def f(x,y,z):
+               return z
+       if node == 3:
+           def f(x,y,z):
+               return (1-x-y-z)
+   
+    
+    if K == 2:
+        if node == 0:
+            def f(x,y):
+                return (2*x-1)*x
+        if node == 1:
+            def f(x,y):
+                return (2*y-1)*y
+        if node == 2:
+            def f(x,y):
+                return (2*(1-x-y)-1)*(1-x-y)
+        if node == 3:
+            def f(x,y):
+                return 4*x*y
+        if node == 4:
+           def f(x,y):
+                return 4*y*(1-x-y)
+        if node == 5:
+            def f(x,y):
+                return 4*x*(1-x-y)
+            
+        return f
+            
+    
+    if K=2:
+        if node == 0:
+            def f(x,y):
+                return (1/2)*(3*x-1)*(3*x-2)*x
+        if node == 1:
+            def f(x,y):
+                return (1/2)*(3*y-1)*(3*y-2)*y
+        if node == 2:
+             def f(x,y):
+                 return (1/2)*(3*(1-x-y)-1)*(3*(1-x-y)-2)*(1-x-y)
+        if node == 3:
+             def f(x,y):
+                 return (9/2)*(x*y*(3*x-1))
+        if node == 4:
+             def f(x,y):
+                 return (9/2)*(x*y*(3*y-1))
+        if node == 5:
+            def f(x,y):
+                return (9/2)*y*(1-x-y)*(3*y-1)
+        if node == 6:
+            def f(x,y):
+                return (9/2)*y*(1-x-y)*(3*(1-x-y)-1)
+        if node == 7:
+            def f(x,y):
+                return (9/2)*x*(1-x-y)*(3*x-1)
+        if node == 8:
+            def f(x,y):
+                return (9/2)*x*(1-x-y)*(3*(1-x-y)-1)
+        if node == 9:
+            def f(x,y):
+                return 27*x*y*(1-x-y)
+            
+        return f
+"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""

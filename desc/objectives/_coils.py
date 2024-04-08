@@ -610,7 +610,9 @@ class ToroidalFlux(_Objective):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+        Equilibrium for which the toroidal flux will be calculated.
+        The Equilibrium is assumed to be held fixed when using this
+        objective.
     field : MagneticField
         MagneticField object, the parameters of this will be optimized
         to minimize the objective.
@@ -652,7 +654,7 @@ class ToroidalFlux(_Objective):
     """
 
     _coordinates = "rtz"
-    _units = "T*m^2"
+    _units = "(Wb))"
     _print_value_fmt = "Toroidal Flux: {:10.3e} "
 
     def __init__(

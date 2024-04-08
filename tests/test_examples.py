@@ -17,7 +17,11 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, SplineMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    SplineMagneticField,
+    ToroidalMagneticField,
+)
 from desc.objectives import (
     AspectRatio,
     BoundaryError,
@@ -44,6 +48,7 @@ from desc.objectives import (
     Omnigenity,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     VacuumBoundaryError,
@@ -1230,3 +1235,44 @@ def test_single_coil_optimization():
     np.testing.assert_allclose(
         coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
     )
+
+
+@pytest.mark.unit
+def test_quadratic_flux_optimization_with_analytic_field():
+    """Test analytic field optimization to reduce quadratic flux.
+
+    Checks that B goes to zero for non-axisymmetric eq and axisymmetric field.
+    """
+    eq = get("precise_QA")
+    field = ToroidalMagneticField(1, 1)
+    eval_grid = LinearGrid(
+        rho=np.array([1.0]),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        sym=False,
+    )
+
+    optimizer = Optimizer("lsq-exact")
+
+    constraints = (FixParameter(field, ["R0"]),)
+    quadflux_obj = QuadraticFlux(
+        eq=eq,
+        field=field,
+        eval_grid=eval_grid,
+        vacuum=True,
+    )
+    objective = ObjectiveFunction(quadflux_obj)
+    things, __ = optimizer.optimize(
+        field,
+        objective=objective,
+        constraints=constraints,
+        ftol=1e-14,
+        gtol=1e-14,
+        copy=True,
+        verbose=3,
+    )
+
+    # optimizer should zero out field since that's the easiest way
+    # to get to Bnorm = 0
+    np.testing.assert_allclose(things[0].B0, 0, atol=1e-12)

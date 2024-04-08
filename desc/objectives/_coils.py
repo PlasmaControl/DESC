@@ -654,7 +654,7 @@ class ToroidalFlux(_Objective):
     """
 
     _coordinates = "rtz"
-    _units = "(Wb))"
+    _units = "(Wb)"
     _print_value_fmt = "Toroidal Flux: {:10.3e} "
 
     def __init__(

@@ -176,8 +176,8 @@ def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         c_n = c[-1] - k
         c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
         c.append(c_n)
-        c = jnp.stack(c)
-        r = _roots(c.reshape(c.shape[0], -1).T).reshape(*c.shape[1:], -1)
+        c = jnp.stack(c, axis=-1)
+        r = _roots(c)
         if keep_only_real:
             if a_min is not None:
                 a_min = a_min[..., jnp.newaxis]
@@ -472,11 +472,11 @@ def bounce_points(knots, B_c, B_z_ra_c, pitch, check=False):
     is_bp1 = B_z_ra <= 0
     is_bp2 = B_z_ra >= 0
     # The pairs bp1[i, j, k] and bp2[i, j, k] are boundaries of an integral only
-    # if bp1[i, j] <= bp2[i, j]. For correctness of the algorithm, it is required
-    # that the first intersect satisfies non-positive derivative. Now, because
-    # B_z_ra[i, j, k] <= 0 implies B_z_ra[i, j, k + 1] >= 0 by continuity, there
-    # can be at most one inversion, and if it exists, the inversion must be at
-    # the first pair. To correct the inversion, it suffices to disqualify the
+    # if bp1[i, j, k] <= bp2[i, j, k]. For correctness of the algorithm, it is
+    # required that the first intersect satisfies non-positive derivative. Now,
+    # because B_z_ra[i, j, k] <= 0 implies B_z_ra[i, j, k + 1] >= 0 by continuity,
+    # there can be at most one inversion, and if it exists, the inversion must be
+    # at the first pair. To correct the inversion, it suffices to disqualify the
     # first intersect as a right boundary, except under the following edge case.
     edge_case = (B_z_ra[..., 0] == 0) & (B_z_ra[..., 1] < 0)
     is_bp2 = put_along_axis(is_bp2, jnp.array(0), edge_case, axis=-1)

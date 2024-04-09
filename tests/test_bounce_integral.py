@@ -116,23 +116,23 @@ def test_reshape_convention():
 def test_poly_root():
     """Test vectorized computation of cubic polynomial exact roots."""
     cubic = 4
-    poly = np.arange(-24, 24).reshape(cubic, 6, -1) * np.pi
+    c = np.arange(-24, 24).reshape(cubic, 6, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
-    assert np.unique(poly.shape).size == poly.ndim
-    constant = np.broadcast_to(np.arange(poly.shape[-1]), poly.shape[1:])
+    assert np.unique(c.shape).size == c.ndim
+    constant = np.broadcast_to(np.arange(c.shape[-1]), c.shape[1:])
     constant = np.stack([constant, constant])
-    root = poly_root(poly, constant, sort=True)
+    root = poly_root(c, constant, sort=True)
 
     for i in range(constant.shape[0]):
-        for j in range(poly.shape[1]):
-            for k in range(poly.shape[2]):
-                d = poly[-1, j, k] - constant[i, j, k]
+        for j in range(c.shape[1]):
+            for k in range(c.shape[2]):
+                d = c[-1, j, k] - constant[i, j, k]
                 np.testing.assert_allclose(
                     actual=root[i, j, k],
-                    desired=np.sort(np.roots([*poly[:-1, j, k], d])),
+                    desired=np.sort(np.roots([*c[:-1, j, k], d])),
                 )
 
-    poly = np.array(
+    c = np.array(
         [
             [1, 0, 0, 0],
             [0, 1, 0, 0],
@@ -143,9 +143,9 @@ def test_poly_root():
             [0, -6, 11, -2],
         ]
     )
-    root = poly_root(poly.T, sort=True, distinct=True)
-    for j in range(poly.shape[0]):
-        unique_roots = np.unique(np.roots(poly[j]))
+    root = poly_root(c.T, sort=True, distinct=True)
+    for j in range(c.shape[0]):
+        unique_roots = np.unique(np.roots(c[j]))
         if j == 4:
             # There are only two distinct roots.
             unique_roots = unique_roots[[0, 1]]
@@ -154,10 +154,10 @@ def test_poly_root():
             desired=unique_roots,
             err_msg=str(j),
         )
-    poly = np.array([0, 1, -1, -8, 12])
+    c = np.array([0, 1, -1, -8, 12])
     np.testing.assert_allclose(
-        actual=_filter_not_nan(poly_root(poly, sort=True, distinct=True)),
-        desired=np.unique(np.roots(poly)),
+        actual=_filter_not_nan(poly_root(c, sort=True, distinct=True)),
+        desired=np.unique(np.roots(c)),
     )
 
 
@@ -165,51 +165,55 @@ def test_poly_root():
 def test_poly_int():
     """Test vectorized computation of polynomial primitive."""
     quintic = 6
-    poly = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
+    c = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
-    assert np.unique(poly.shape).size == poly.ndim
-    constant = np.broadcast_to(np.arange(poly.shape[-1]), poly.shape[1:])
-    primitive = poly_int(poly, k=constant)
-    for j in range(poly.shape[1]):
-        for k in range(poly.shape[2]):
+    assert np.unique(c.shape).size == c.ndim
+    constant = np.broadcast_to(np.arange(c.shape[-1]), c.shape[1:])
+    primitive = poly_int(c, k=constant)
+    for j in range(c.shape[1]):
+        for k in range(c.shape[2]):
             np.testing.assert_allclose(
                 actual=primitive[:, j, k],
-                desired=np.polyint(poly[:, j, k], k=constant[j, k]),
+                desired=np.polyint(c[:, j, k], k=constant[j, k]),
             )
-    assert poly_int(poly).shape == primitive.shape, "Failed broadcasting default k."
+    assert poly_int(c).shape == primitive.shape, "Failed broadcasting default k."
 
 
 @pytest.mark.unit
 def test_poly_der():
     """Test vectorized computation of polynomial derivative."""
     quintic = 6
-    poly = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
+    c = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
-    assert np.unique(poly.shape).size == poly.ndim
-    derivative = poly_der(poly)
-    for j in range(poly.shape[1]):
-        for k in range(poly.shape[2]):
+    assert np.unique(c.shape).size == c.ndim
+    derivative = poly_der(c)
+    for j in range(c.shape[1]):
+        for k in range(c.shape[2]):
             np.testing.assert_allclose(
-                actual=derivative[:, j, k], desired=np.polyder(poly[:, j, k])
+                actual=derivative[:, j, k], desired=np.polyder(c[:, j, k])
             )
 
 
 @pytest.mark.unit
 def test_poly_val():
     """Test vectorized computation of polynomial evaluation."""
+
+    def test(x, c):
+        val = poly_val(x=x, c=c)
+        for index in np.ndindex(c.shape[1:]):
+            idx = (..., *index)
+            np.testing.assert_allclose(
+                actual=val[idx],
+                desired=np.poly1d(c[idx])(x[idx]),
+                err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
+            )
+
     quartic = 5
     c = np.arange(-60, 60).reshape(quartic, 3, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(c.shape).size == c.ndim
     x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
-    val = poly_val(x=x, c=c)
-    for index in np.ndindex(c.shape[1:]):
-        idx = (..., *index)
-        np.testing.assert_allclose(
-            actual=val[idx],
-            desired=np.poly1d(c[idx])(x[idx]),
-            err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
-        )
+    test(x, c)
 
     x = np.stack([x, x * 2], axis=0)
     x = np.stack([x, x * 2, x * 3, x * 4], axis=0)
@@ -217,14 +221,7 @@ def test_poly_val():
     assert np.unique(x.shape).size == x.ndim
     assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
     assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
-    val = poly_val(x=x, c=c)
-    for index in np.ndindex(c.shape[1:]):
-        idx = (..., *index)
-        np.testing.assert_allclose(
-            actual=val[idx],
-            desired=np.poly1d(c[idx])(x[idx]),
-            err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
-        )
+    test(x, c)
 
     # integrate piecewise polynomial and set constants to preserve continuity
     y = np.arange(2, 8)
@@ -424,7 +421,7 @@ def test_pitch_and_hairy_ball():
     result = ba(f, pitch)
     assert np.isfinite(result).any()
     # specify pitch from extrema of |B|
-    pitch = pitch_of_extrema(zeta, items["poly_B"], items["poly_B_z_ra"])
+    pitch = pitch_of_extrema(zeta, items["B.c"], items["B_z_ra.c"])
     result = ba(f, pitch)
     assert np.isfinite(result).any()
 
@@ -501,7 +498,7 @@ def test_elliptic_integral_limit():
     assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
 
     # TODO now compare result to elliptic integral
-    bp1, bp2 = bounce_points(pitch, zeta, items["poly_B"], items["poly_B_z_ra"])
+    bp1, bp2 = bounce_points(pitch, zeta, items["B.c"], items["B_z_ra.c"])
 
 
 @pytest.mark.unit

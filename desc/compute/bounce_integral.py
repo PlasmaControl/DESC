@@ -455,18 +455,17 @@ def bounce_points(knots, B, B_z_ra, pitch, check=False):
     assert intersect.shape == (P, S, N, degree)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
-    # Condense remaining axes to vectorize over them.
-    B_z_ra = poly_val(x=intersect, c=B_z_ra[..., jnp.newaxis]).reshape(P * S, -1)
+    B_z_ra = poly_val(x=intersect, c=B_z_ra[..., jnp.newaxis]).reshape(P, S, -1)
     # Transform out of local power basis expansion.
     intersect = intersect + knots[:-1, jnp.newaxis]
-    intersect = intersect.reshape(P * S, -1)
+    intersect = intersect.reshape(P, S, -1)
 
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = ~jnp.isnan(intersect)
     # Reorder so that all intersects along a field line are contiguous.
     intersect = take_mask(intersect, is_intersect)
     B_z_ra = take_mask(B_z_ra, is_intersect)
-    assert intersect.shape == B_z_ra.shape == (P * S, N * degree)
+    assert intersect.shape == B_z_ra.shape == (P, S, N * degree)
     # Sign of derivative determines whether an intersect is a valid bounce point.
     # Need to include zero derivative intersects to compute the WFB
     # (world's fattest banana) orbit bounce integrals.
@@ -479,11 +478,11 @@ def bounce_points(knots, B, B_z_ra, pitch, check=False):
     # be at most one inversion, and if it exists, the inversion must be at the
     # first pair. To correct the inversion, it suffices to disqualify the first
     # intersect as an ending bounce point, except under the following edge case.
-    edge_case = (B_z_ra[:, 0] == 0) & (B_z_ra[:, 1] < 0)
+    edge_case = (B_z_ra[..., 0] == 0) & (B_z_ra[..., 1] < 0)
     is_bp2 = put_along_axis(is_bp2, jnp.array(0), edge_case, axis=-1)
     # Get ζ values of bounce points from the masks.
-    bp1 = take_mask(intersect, is_bp1).reshape(P, S, -1)
-    bp2 = take_mask(intersect, is_bp2).reshape(P, S, -1)
+    bp1 = take_mask(intersect, is_bp1)
+    bp2 = take_mask(intersect, is_bp2)
 
     if check:
         if jnp.any(bp1 > bp2):

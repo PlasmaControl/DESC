@@ -145,9 +145,13 @@ def test_poly_root():
     )
     root = poly_root(poly.T, sort=True, distinct=True)
     for j in range(poly.shape[0]):
+        unique_roots = np.unique(np.roots(poly[j]))
+        if j == 4:
+            # There are only two distinct roots.
+            unique_roots = unique_roots[[0, 1]]
         np.testing.assert_allclose(
             actual=_filter_not_nan(root[j]),
-            desired=np.unique(np.roots(poly[j])),
+            desired=unique_roots,
             err_msg=str(j),
         )
     poly = np.array([0, 1, -1, -8, 12])

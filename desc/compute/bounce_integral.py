@@ -167,8 +167,8 @@ def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         if keep_only_real:
             r = tuple(map(partial(_filter_real, a_min=a_min, a_max=a_max), r))
         r = jnp.stack(r, axis=-1)
-        if sort:
-            r = jnp.sort(r, axis=-1)
+        # We had ignored the case of double complex roots.
+        distinct = distinct and c.shape[0] > 3 and not keep_only_real
     else:
         # Compute from eigenvalues of polynomial companion matrix.
         # This method can fail to detect roots near extrema, which is often
@@ -184,11 +184,11 @@ def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
             if a_max is not None:
                 a_max = a_max[..., jnp.newaxis]
             r = _filter_real(r, a_min, a_max)
-        if sort or distinct:
-            r = jnp.sort(r, axis=-1)
-        if distinct:
-            mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=jnp.nan), 0)
-            r = jnp.where(mask, jnp.nan, r)
+    if sort or distinct:
+        r = jnp.sort(r, axis=-1)
+    if distinct:
+        mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=jnp.nan), 0)
+        r = jnp.where(mask, jnp.nan, r)
     return r
 
 
@@ -287,27 +287,54 @@ def poly_val(x, c):
 
 
 def _check_shape(knots, B, B_z_ra, pitch=None):
-    """Ensure inputs have correct shape and return labels for those shapes."""
+    """Ensure inputs have compatible shape, and return them with full dimension.
+
+    Parameters
+    ----------
+    knots : Array, shape(knots.size, )
+        Field line-following ζ coordinates of spline knots.
+
+    Returns
+    -------
+    B : Array, shape(B.shape[0], S, knots.size - 1)
+        Polynomial coefficients of the spline of |B| in local power basis.
+        First axis enumerates the coefficients of power series.
+        Second axis enumerates the splines along the field lines.
+        Last axis enumerates the polynomials of the spline along a particular
+        field line.
+    B_z_ra : Array, shape(B.shape[0] - 1, *B.shape[1:])
+        Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
+        First axis enumerates the coefficients of power series.
+        Second axis enumerates the splines along the field lines.
+        Last axis enumerates the polynomials of the spline along a particular
+        field line.
+    pitch : Array, shape(P, S)
+        λ values.
+        Last axis enumerates the λ value for a particular field line
+        parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
+        where in the latter the labels (ρ, α) are interpreted as index into the
+        last axis that corresponds to that field line.
+        If two-dimensional, the first axis is the batch axis as usual.
+
+    """
     if B.ndim == 2 and B_z_ra.ndim == 2:
         # Add axis which enumerates field lines.
         B = B[:, jnp.newaxis]
         B_z_ra = B_z_ra[:, jnp.newaxis]
     err_msg = "Supplied invalid shape for splines."
     assert B.ndim == B_z_ra.ndim == 3, err_msg
-    S = B.shape[1]
-    N = knots.size - 1
-    degree = B.shape[0] - 1
-    assert degree == B_z_ra.shape[0] and B.shape[1:] == B_z_ra.shape[1:], err_msg
-    assert N == B.shape[-1], "Last axis fails to enumerate spline polynomials."
-
-    if pitch is None:
-        return S, N, degree
-    pitch = jnp.atleast_2d(pitch)
-    err_msg = "Supplied invalid shape for pitch angles."
-    assert pitch.ndim == 2, err_msg
-    assert pitch.shape[-1] == 1 or pitch.shape[-1] == B.shape[1], err_msg
-    P = pitch.shape[0]
-    return P, S, N, degree
+    assert (
+        B.shape[0] - 1 == B_z_ra.shape[0] and B.shape[1:] == B_z_ra.shape[1:]
+    ), err_msg
+    assert (
+        B.shape[-1] == knots.size - 1
+    ), "Last axis fails to enumerate spline polynomials."
+    if pitch is not None:
+        pitch = jnp.atleast_2d(pitch)
+        err_msg = "Supplied invalid shape for pitch angles."
+        assert pitch.ndim == 2, err_msg
+        assert pitch.shape[-1] == 1 or pitch.shape[-1] == B.shape[1], err_msg
+    return B, B_z_ra, pitch
 
 
 def pitch_of_extrema(knots, B, B_z_ra):
@@ -345,7 +372,8 @@ def pitch_of_extrema(knots, B, B_z_ra):
         a particular field line, is padded with nan.
 
     """
-    S, N, degree = _check_shape(knots, B, B_z_ra)
+    B, B_z_ra, _ = _check_shape(knots, B, B_z_ra)
+    S, N, degree = B.shape[1], knots.size - 1, B.shape[0] - 1
     extrema = poly_root(
         c=B_z_ra,
         a_min=jnp.array([0]),
@@ -354,12 +382,13 @@ def pitch_of_extrema(knots, B, B_z_ra):
         # False will double weight orbits with B_z = B_zz = 0 at bounce points.
         distinct=True,
     )
+    # Can detect at most degree of |B|_z spline extrema between each knot.
+    assert extrema.shape == (S, N, degree - 1)
     # Reshape so that last axis enumerates (unsorted) extrema along a field line.
     B_extrema = poly_val(x=extrema, c=B[..., jnp.newaxis]).reshape(S, -1)
     # Might be useful to pad all the nan at the end rather than interspersed.
     B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
-    # Can detect at most degree of |B|_z spline extrema between each knot.
     assert pitch.shape == (N * (degree - 1), S)
     return pitch
 
@@ -408,7 +437,8 @@ def bounce_points(knots, B, B_z_ra, pitch, check=False):
         the bounce points for a particular field line, is padded with nan.
 
     """
-    P, S, N, degree = _check_shape(knots, B, B_z_ra, pitch)
+    B, B_z_ra, pitch = _check_shape(knots, B, B_z_ra, pitch)
+    P, S, N, degree = pitch.shape[0], B.shape[1], knots.size - 1, B.shape[0] - 1
     # The polynomials' intersection points with 1 / λ is given by ``intersect``.
     # In order to be JIT compilable, this must have a shape that accommodates the
     # case where each polynomial intersects 1 / λ degree times.
@@ -422,6 +452,7 @@ def bounce_points(knots, B, B_z_ra, pitch, check=False):
         sort=True,
         distinct=True,  # Required for correctness of ``edge_case``.
     )
+    assert intersect.shape == (P, S, N, degree)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     # Condense remaining axes to vectorize over them.
@@ -457,7 +488,7 @@ def bounce_points(knots, B, B_z_ra, pitch, check=False):
     if check:
         if jnp.any(bp1 > bp2):
             raise AssertionError("Bounce points have an inversion.")
-        if jnp.any(bp1[:, 1:] < bp2[:, :-1]):
+        if jnp.any(bp1[..., 1:] < bp2[..., :-1]):
             raise AssertionError(
                 "Discontinuity detected. Is B_z_ra the derivative of the spline of B?"
             )
@@ -538,6 +569,23 @@ def tanh_sinh_quad(resolution=7):
 
 @partial(
     jnp.vectorize,
+    signature="(m),(n),(n)->(m)",
+    excluded={"method", "derivative", "extrap", "period"},
+)
+def _interp1d_vec(
+    xq,
+    x,
+    f,
+    method="cubic",
+    derivative=0,
+    extrap=False,
+    period=None,
+):
+    return interp1d(xq, x, f, method, derivative, extrap, period)
+
+
+@partial(
+    jnp.vectorize,
     signature="(m),(n),(n),(n)->(m)",
     excluded={"method", "derivative", "extrap", "period"},
 )
@@ -552,23 +600,6 @@ def _interp1d_vec_fx(
     period=None,
 ):
     return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
-
-
-@partial(
-    jnp.vectorize,
-    signature="(m),(n),(n)->(m)",
-    excluded={"method", "derivative", "extrap", "period"},
-)
-def _interp1d_vec(
-    xq,
-    x,
-    f,
-    method="cubic",
-    derivative=0,
-    extrap=False,
-    period=None,
-):
-    return interp1d(xq, x, f, method, derivative, extrap, period)
 
 
 def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, pitch, f, f_method):
@@ -598,7 +629,7 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, pitch, f, f_method):
     Returns
     -------
     inner_product : Array, shape(X.shape[:-1])
-        Bounce integrals for every pitch along a particular field line.
+        Bounce integrals for every pitch along every field line.
 
     """
     assert pitch.ndim == 2

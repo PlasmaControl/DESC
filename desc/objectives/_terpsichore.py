@@ -39,6 +39,8 @@ class TERPSICHORE(_Objective):
          COMPLETE THIS
 
     more stuff here
+=======
+
     """
 
     # Used by GX objective, not sure where they're used yet
@@ -49,32 +51,8 @@ class TERPSICHORE(_Objective):
 
 
     # Need to sure up the paths
-    def __init__(
-            self,
-            eq=None,
-            target=None,
-            weight=1,
-            grid=None,
-            name="TERPSICHORE",
-            path=os.getenv['terps_dir'],
-            path_in=os.getenv['terps_dir'],
-            bounds=None,
-            normalize=False,
-            normalize_target=False,
-            awall=1.5,
-            deltajp=4.e-2,
-            modelk=0,
-            al0=-5.e-2,
-            nev=1,
-            nfp=2,
-            xplo=1.e-6,
-            max_bozm=19,
-            max_bozn=14,
-            mode_family=0,
-            max_modem=55,
-            max_moden=8,
-            wout_filename="" # add something
-    ):
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", path=os.getenv['terps_dir'],path_in=os.getenv['terps_dir'],bounds=None,normalize=False,normalize_target=False, awall=1.5, deltajp=4.e-2, modelk=0, al0=-5.e-2, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, max_moden=8):
         
         if target is None and bounds is None:
             target = 0
@@ -112,8 +90,6 @@ class TERPSICHORE(_Objective):
         self.wout_file = os.path.join(self.path, wout_filename)
         self.vmec2terps_app = os.path.join(self.path, "thea-vmec2terps.x")
         self.terps_app = os.path.join(self.path, "tpr_ap.x")
-        # self.t = t # -- Replace with some stability indicator?
-
         self.terps_compute = core.Primitive("terps")
         self.terps_compute.def_impl(self.compute_impl)
         # What are the following two lines?
@@ -143,8 +119,8 @@ class TERPSICHORE(_Objective):
                 NFP=eq.NFP,
             )
 
-
         self._dim_f = 1 # Presumbaly this should be 1? just a growth rate
+
         timer = Timer()
 
         self._eq_keys = [
@@ -183,8 +159,9 @@ class TERPSICHORE(_Objective):
             "profiles": self._profiles_eq,
         }
 
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
+
+        #if self._normalize:
+            #scales = compute_scaling_factors(eq)
             # I think only needed if we're not using the TERPS normalization?
 
         timer.stop("Precomputing transforms")
@@ -197,7 +174,7 @@ class TERPSICHORE(_Objective):
 
         
     def compute_impl(self, params, constants):
-                
+
 #        params, constants = self._parse_args(*args, **kwargs)
         if not np.any(params["R_lmn"]):
             return 0

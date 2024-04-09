@@ -550,8 +550,6 @@ def test_bounce_averaged_drifts():
         return_items=True,
         check=True,
     )
-    grid = items["grid"]
-    grid._unique_zeta_idx = np.unique(grid.nodes[:, 2], return_index=True)[1]
 
     data_keys = [
         "|grad(psi)|^2",
@@ -565,7 +563,30 @@ def test_bounce_averaged_drifts():
         "gbdrift",
     ]
 
-    data = eq.compute(data_keys, grid=grid, data=items["data"])
+    def make_sure_attributes_are_assigned(grid):
+        _, unique_rho_idx, inverse_rho_idx = np.unique(
+            grid.nodes[:, 0], return_index=True, return_inverse=True
+        )
+        _, unique_theta_idx, inverse_theta_idx = np.unique(
+            grid.nodes[:, 1], return_index=True, return_inverse=True
+        )
+        _, unique_zeta_idx, inverse_zeta_idx = np.unique(
+            grid.nodes[:, 2], return_index=True, return_inverse=True
+        )
+        grid._unique_rho_idx = unique_rho_idx
+        grid._inverse_rho_idx = inverse_rho_idx
+        grid._unique_theta_idx = unique_theta_idx
+        grid._inverse_theta_idx = inverse_theta_idx
+        grid._unique_zeta_idx = unique_zeta_idx
+        grid._inverse_zeta_idx = inverse_zeta_idx
+        return grid
+
+    # In the interest of debugging, let's not
+    # pass in already computed data as a seed, e.g. data=items["data"]
+    # so that all data is recomputed  on the correct grids according to
+    # the logic in eq.compute
+    grid = make_sure_attributes_are_assigned(items["grid"])
+    data = eq.compute(data_keys, grid=grid)
 
     psib = data_eq["psi"][-1]
 

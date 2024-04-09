@@ -354,9 +354,9 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     nodes = jnp.column_stack(
         tuple(map(jnp.ravel, jnp.meshgrid(rho, t, z, indexing="ij")))
     )
-    spacing = jnp.array([1 / rho.size, 2 * jnp.pi / t.size, 2 * jnp.pi / z.size])[
-        jnp.newaxis
-    ]
+    spacing = jnp.ones(rho.size * t.size * z.size)[:, jnp.newaxis] * jnp.array(
+        [1 / rho.size, 2 * jnp.pi / t.size, 2 * jnp.pi / z.size]
+    )
     labels = ["rho", "theta", "zeta"]
     unique_idx = {
         f"_unique_{label}_idx": idx

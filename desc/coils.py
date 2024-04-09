@@ -1078,9 +1078,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         If the MAKEGRID contains more than one coil group (denoted by the number listed
         after the current on the last line defining a given coil), this function will
-        return a MixedCoilSet of CoilSets, with each sub CoilSet pertaining to the
-        different coil groups. The name of the sub CoilSet will be the number and the
-        name of the group listed in the MAKEGRID file.
+        attempt to return only a single CoilSet of all of the coils in the file.
 
         Parameters
         ----------
@@ -1102,17 +1100,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
               both endpoints
 
         """
-        coils = {}  # dict of list of SplineXYZCoils, one list per coilgroup
+        coils = []  # list of SplineXYZCoils, ignoring coil groups
         coilinds = [2]  # List of line indices where coils are at in the file.
         # always start at the 3rd line after periods
         coilnames = []  # the coilgroup each coil belongs to
         # corresponds to each coil in the coilinds list
-        groupnames = []  # this is the groupind + the name of the first coil in
-        # the group
-        groupinds = []  # the coilgroup ind each coil belongs to
-        # corresponds to each coil in the coilinds list
-        # (sometimes, coils in the same group could have different names,
-        # so this separately tracks just the number of the group)
 
         # read in the coils file
         headind = -1
@@ -1163,18 +1155,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 ):
                     coilinds.append(i)
                     groupname = " ".join(line.split()[4:])
-                    groupind = int(groupname.split()[0].strip())
-                    if groupind not in coils.keys():
-                        coils[groupind] = []
-                        groupnames.append(groupname)
                     coilnames.append(groupname)
-                    groupinds.append(groupind)
 
-        for i, (start, end, groupind, coilname) in enumerate(
-            zip(coilinds[0:-1], coilinds[1:], groupinds, coilnames)
+        for i, (start, end, coilname) in enumerate(
+            zip(coilinds[0:-1], coilinds[1:], coilnames)
         ):
             coords = np.genfromtxt(lines[start + 1 : end])
-            coils[groupind].append(
+            coils.append(
                 SplineXYZCoil(
                     coords[:, -1][0],
                     coords[:, 0],
@@ -1184,32 +1171,19 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     name=coilname,
                 )
             )
-        # if it is a single group, then only return one coilset, not a
-        # nested CoilSet
-        groupinds = list(coils.keys())
-        class_init = cls
+
         try:
-            if len(groupinds) == 1:
-                return class_init(*coils[groupinds[0]], name=groupnames[0])
-            else:  # return a nested coilset, containing one coilset per coilgroup
-                return MixedCoilSet(
-                    *[
-                        class_init(*coils[groupind], name=groupname)
-                        for groupname, groupind in zip(groupnames, groupinds)
-                    ]
-                )
-        except ValueError:  # can't load as a CoilSet if any of the coils have
-            # different length of knots, so load as MixedCoilSet instead
-            class_init = MixedCoilSet
-            if len(groupinds) == 1:
-                return class_init(*coils[groupinds[0]], name=groupnames[0])
-            else:  # return a nested coilset, containing one coilset per coilgroup
-                return MixedCoilSet(
-                    *[
-                        class_init(*coils[groupind], name=groupname)
-                        for groupname, groupind in zip(groupnames, groupinds)
-                    ]
-                )
+            return cls(*coils)
+        except ValueError as e:  # can't load as a CoilSet if any of the coils have
+            # different length of knots, tell user to load as MixedCoilSet instead
+            errorif(
+                True,
+                ValueError,
+                "Unable to create CoilSet with the coils in the file,"
+                f" got error {e}."
+                "Likely the issue is differing numbers of knots for the coils,"
+                "try using a MixedCoilSet instead of a CoilSet.",
+            )
 
     def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.
@@ -1613,3 +1587,163 @@ class MixedCoilSet(CoilSet):
         if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
         self._coils.insert(i, new_item)
+
+    @classmethod
+    def from_makegrid_coilfile(cls, coil_file, method="cubic", ignore_groups=False):
+        """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.
+
+        If ignore_groups=False and the MAKEGRID contains more than one coil group
+        (denoted by the number listed after the current on the last line defining a
+        given coil), this function will try to return a MixedCoilSet of CoilSets, with
+        each sub CoilSet pertaining to the different coil groups. If the coils in a
+        group have differing numbers of knots, then it will return MixedCoilSets
+        instead. The name of the sub (Mixed)CoilSet will be the number and the name
+        of the group listed in the MAKEGRID file.
+
+        Parameters
+        ----------
+        coil_file : str or path-like
+            path to coil file in txt format
+        method : str
+            method of interpolation
+
+            - ``'nearest'``: nearest neighbor interpolation
+            - ``'linear'``: linear interpolation
+            - ``'cubic'``: C1 cubic splines (aka local splines)
+            - ``'cubic2'``: C2 cubic splines (aka natural splines)
+            - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+            - ``'cardinal'``: C1 cubic general tension splines. If used, default tension
+              of c = 0 will be used
+            - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in
+              the data, and will not introduce new extrema in the interpolated points
+            - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
+              both endpoints
+        ignore_groups : bool
+            If False, return the coils in a nested MixedCoilSet, with a sub coilset per
+            single coilgroup. If there is only a single group, however, this will not
+            return a nested coilset, but just a single coilset for that group. if True,
+            return the coils as just a single MixedCoilSet.
+
+        """
+        coils = {}  # dict of list of SplineXYZCoils, one list per coilgroup
+        coilinds = [2]  # List of line indices where coils are at in the file.
+        # always start at the 3rd line after periods
+        coilnames = []  # the coilgroup each coil belongs to
+        # corresponds to each coil in the coilinds list
+        groupnames = []  # this is the groupind + the name of the first coil in
+        # the group
+        groupinds = []  # the coilgroup ind each coil belongs to
+        # corresponds to each coil in the coilinds list
+        # (sometimes, coils in the same group could have different names,
+        # so this separately tracks just the number of the group)
+
+        # read in the coils file
+        headind = -1
+        with open(coil_file) as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.find("periods") != -1:
+                    headind = i  # skip anything that is above the periods line
+                    coilinds[0] += headind
+                    if len(lines[3 + headind].split()) != 4:
+                        raise OSError(
+                            "4th line in file must be the start of the first coil! "
+                            + "Expected a line of length 4 (after .split()), "
+                            + f"instead got length {lines[3+headind].split()}"
+                        )
+                    header_lines_not_as_expected = np.array(
+                        [
+                            len(lines[0 + headind].split()) != 2,
+                            len(lines[1 + headind].split()) != 2,
+                            len(lines[2 + headind].split()) != 2,
+                        ]
+                    )
+                    if np.any(header_lines_not_as_expected):
+                        wronglines = lines[
+                            np.where(header_lines_not_as_expected)[0] + headind
+                        ]
+                        raise OSError(
+                            "First 3 lines in file starting with the periods line "
+                            + "must be the header lines,"
+                            + " each of length 2 (after .split())! "
+                            + f"Line(s) {wronglines}"
+                            + " are not length 2"
+                        )
+
+                    continue
+                if (
+                    line.find("begin filament") != -1
+                    or line.find("end") != -1
+                    or line.find("mirror") != -1
+                ):
+                    continue  # skip headers and last line
+                if (
+                    len(line.split()) != 4  # find the line immediately before a coil,
+                    # where the line length is greater than 4
+                    and line.strip()  # ensure not counting blank lines
+                    # if we have not found the header yet, skip the line
+                    and headind != -1
+                ):
+                    coilinds.append(i)
+                    groupname = " ".join(line.split()[4:])
+                    groupind = int(groupname.split()[0].strip())
+                    if groupind not in coils.keys():
+                        coils[groupind] = []
+                        groupnames.append(groupname)
+                    coilnames.append(groupname)
+                    groupinds.append(groupind)
+
+        for i, (start, end, groupind, coilname) in enumerate(
+            zip(coilinds[0:-1], coilinds[1:], groupinds, coilnames)
+        ):
+            coords = np.genfromtxt(lines[start + 1 : end])
+            coils[groupind].append(
+                SplineXYZCoil(
+                    coords[:, -1][0],
+                    coords[:, 0],
+                    coords[:, 1],
+                    coords[:, 2],
+                    method=method,
+                    name=coilname,
+                )
+            )
+
+        def flatten_coils(coilset):
+            # helper function for flattening coilset
+            if hasattr(coilset, "__len__"):
+                return [a for i in coilset for a in flatten_coils(i)]
+            else:
+                return [coilset]
+
+        # if it is a single group, then only return one coilset, not a
+        # nested coilset
+        groupinds = list(coils.keys())
+        if len(groupinds) == 1:
+            return cls(*coils[groupinds[0]], name=groupnames[0])
+
+        # if not, possibly return a nested coilset, containing one coilset per coilgroup
+        try:
+            # try making the coilgroups use a CoilSet
+            cset = cls(
+                *[
+                    CoilSet(*coils[groupind], name=groupname)
+                    for groupname, groupind in zip(groupnames, groupinds)
+                ]
+            )
+        except ValueError as e:  # can't load as a CoilSet if any of the coils have
+            # different length of knots, so load as MixedCoilSet instead
+            print(
+                f"Encountered error {e} while using CoilSet for the sub coil groups,"
+                "likely due to coils in the coil group having different numbers of "
+                "knots, falling back to using MixedCoilSet for the coil groups"
+                " instead."
+            )
+            cset = cls(
+                *[
+                    cls(*coils[groupind], name=groupname)
+                    for groupname, groupind in zip(groupnames, groupinds)
+                ]
+            )
+        if ignore_groups:
+            cset = cls(*flatten_coils(cset))
+        return cset

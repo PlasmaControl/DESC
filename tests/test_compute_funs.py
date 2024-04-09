@@ -6,7 +6,13 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierRZWindingSurfaceCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
 from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -14,6 +20,7 @@ from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierRZToroidalSurface,
+    FourierRZWindingSurfaceCurve,
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
@@ -1178,6 +1185,23 @@ def test_compute_everything():
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
         ),
+        "desc.geometry.curve.FourierRZWindingSurfaceCurve": (
+            FourierRZWindingSurfaceCurve(
+                surface=(
+                    FourierRZToroidalSurface(**elliptic_cross_section_with_torsion)
+                ),
+                theta_n=[0.5, 0.5, 0.5],
+                zeta_n=[0.5, 0.5, 0.5],
+                secular_zeta=2,
+            )
+        ),
+        "desc.coils.FourierRZWindingSurfaceCoil": FourierRZWindingSurfaceCoil(
+            surface=FourierRZToroidalSurface(**elliptic_cross_section_with_torsion),
+            theta_n=[0.5, 0.5, 0.5],
+            zeta_n=[0.5, 0.5, 0.5],
+            secular_zeta=2,
+            current=5,
+        ),
         "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
             **elliptic_cross_section_with_torsion
         ),
@@ -1622,6 +1646,26 @@ def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
     names = ["DSHAPE", "HELIOTRON", "NCSX"]
     data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
+    # TODO: expand this to include all angular derivatives once they are implemented
+    # for surfaces
+    data_basis_vecs_fourierRZ = [
+        "e_theta",
+        "e_zeta",
+        "e_theta_t",
+        "e_theta_z",
+        "e_zeta_t",
+        "e_zeta_z",
+    ]
+    data_basis_vecs_ZernikeRZ = [
+        "e_theta",
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rr",
+        "e_rho_t",
+        "e_theta_r",
+        "e_theta_rr",
+        "e_theta_t",
+    ]
     for name in names:
         eq = get(name)
         for key in data:
@@ -1632,3 +1676,33 @@ def test_surface_equilibrium_geometry():
             else:
                 rtol, atol = 1e-8, 0
             np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)
+        # compare at rho=1, where we expect the eq.compute and the
+        # surface.compute to agree for these surface basis vectors
+        grid = LinearGrid(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)
+        data_eq = eq.compute(data_basis_vecs_fourierRZ, grid=grid)
+        data_surf = eq.surface.compute(
+            data_basis_vecs_fourierRZ, grid=grid, basis="rpz"
+        )
+        for thing in data_basis_vecs_fourierRZ:
+            np.testing.assert_allclose(
+                data_eq[thing],
+                data_surf[thing],
+                err_msg=thing,
+                rtol=1e-14,
+                atol=6e-12,
+            )
+        # compare at zeta=0, where we expect the eq.compute and the
+        # poincare surface.compute to agree for these surface basis vectors
+        grid = LinearGrid(zeta=np.array(0.0), M=10, L=10, NFP=eq.NFP)
+        data_eq = eq.compute(data_basis_vecs_ZernikeRZ, grid=grid)
+        data_surf = eq.get_surface_at(zeta=0.0).compute(
+            data_basis_vecs_ZernikeRZ, grid=grid, basis="rpz"
+        )
+        for thing in data_basis_vecs_ZernikeRZ:
+            np.testing.assert_allclose(
+                data_eq[thing],
+                data_surf[thing],
+                err_msg=thing,
+                rtol=3e-13,
+                atol=1e-13,
+            )

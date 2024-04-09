@@ -182,6 +182,9 @@ _class_inheritance = {
     "desc.geometry.curve.FourierRZCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.FourierRZWindingSurfaceCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.curve.FourierXYZCurve": [
         "desc.geometry.core.Curve",
     ],
@@ -199,6 +202,10 @@ _class_inheritance = {
     ],
     "desc.coils.FourierRZCoil": [
         "desc.geometry.curve.FourierRZCurve",
+        "desc.geometry.core.Curve",
+    ],
+    "desc.coils.FourierRZWindingSurfaceCoil": [
+        "desc.geometry.curve.FourierRZWindingSurfaceCurve",
         "desc.geometry.core.Curve",
     ],
     "desc.coils.FourierXYZCoil": [

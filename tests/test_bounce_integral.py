@@ -420,7 +420,7 @@ def test_pitch_and_hairy_ball():
     result = ba(f, pitch)
     assert np.isfinite(result).any()
     # specify pitch from extrema of |B|
-    pitch = pitch_of_extrema(zeta, items["poly_B"], items["poly_B_z"])
+    pitch = pitch_of_extrema(zeta, items["poly_B"], items["poly_B_z_ra"])
     result = ba(f, pitch)
     assert np.isfinite(result).any()
 
@@ -497,7 +497,7 @@ def test_elliptic_integral_limit():
     assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
 
     # TODO now compare result to elliptic integral
-    bp1, bp2 = bounce_points(pitch, zeta, items["poly_B"], items["poly_B_z"])
+    bp1, bp2 = bounce_points(pitch, zeta, items["poly_B"], items["poly_B_z_ra"])
 
 
 @pytest.mark.unit

@@ -4,11 +4,9 @@ from functools import partial
 
 from interpax import CubicHermiteSpline, interp1d
 
-from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take, vmap
+from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take
 from desc.compute.utils import safediv
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
-
-roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={2, 3})
@@ -129,6 +127,9 @@ def _root_cubic(a, b, c, d, distinct=False):
     return r1, r2, r3
 
 
+_roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
+
+
 def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
     """Roots of polynomial with given coefficients.
 
@@ -176,7 +177,7 @@ def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
         c.append(c_n)
         c = jnp.stack(c)
-        r = roots(c.reshape(c.shape[0], -1).T).reshape(*c.shape[1:], -1)
+        r = _roots(c.reshape(c.shape[0], -1).T).reshape(*c.shape[1:], -1)
         if keep_only_real:
             if a_min is not None:
                 a_min = a_min[..., jnp.newaxis]
@@ -535,69 +536,94 @@ def tanh_sinh_quad(resolution=7):
     return x, w
 
 
-interp1d_vec = jnp.vectorize(
-    interp1d, signature="(m),(n),(n)->(m)", excluded={"fx", "method"}
+@partial(
+    jnp.vectorize,
+    signature="(m),(n),(n),(n)->(m)",
+    excluded={"method", "derivative", "extrap", "period"},
 )
+def _interp1d_vec_fx(
+    xq,
+    x,
+    f,
+    fx,
+    method="cubic",
+    derivative=0,
+    extrap=False,
+    period=None,
+):
+    return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
 
 
-# Vectorize to compute a bounce integral for every pitch along every field line.
-@partial(vmap, in_axes=(1, 1, None, None, 1, 0, 0, 0, None), out_axes=1)
-def _bounce_quad(pitch, X, w, knots, f, B_sup_z, B, B_z_ra, f_method):
-    """Compute a bounce integral for every pitch along a particular field line.
+@partial(
+    jnp.vectorize,
+    signature="(m),(n),(n)->(m)",
+    excluded={"method", "derivative", "extrap", "period"},
+)
+def _interp1d_vec(
+    xq,
+    x,
+    f,
+    method="cubic",
+    derivative=0,
+    extrap=False,
+    period=None,
+):
+    return interp1d(xq, x, f, method, derivative, extrap, period)
+
+
+def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, pitch, f, f_method):
+    """Compute bounce integrals for every pitch along every field line.
 
     Parameters
     ----------
-    pitch : Array, shape(pitch.size, )
-        λ values.
-    X : Array, shape(pitch.size, X.shape[1], w.size)
+    X : Array, shape(P, S, X.shape[2], w.size)
         Quadrature points.
     w : Array, shape(w.size, )
         Quadrature weights.
     knots : Array, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
-    f : Array, shape(..., knots.size, )
-        Function to compute bounce integral of, evaluated at knots.
-    B_sup_z : Array, shape(knots.size, )
+    B_sup_z : Array, shape(S, knots.size, )
         Contravariant field-line following toroidal component of magnetic field.
-    B : Array, shape(knots.size, )
+    B : Array, shape(S, knots.size, )
         Norm of magnetic field.
-    B_z_ra : Array, shape(knots.size, )
+    B_z_ra : Array, shape(S, knots.size, )
         Norm of magnetic field derivative with respect to field-line following label.
+    pitch : Array, shape(P, S)
+        λ values.
+    f : Array, shape(P, S, knots.size, )
+        Function to compute bounce integral of, evaluated at knots.
     f_method : str
         Method of interpolation for f.
 
     Returns
     -------
-    inner_product : Array, shape(pitch.size, X.shape[1])
+    inner_product : Array, shape(X.shape[:-1])
         Bounce integrals for every pitch along a particular field line.
 
     """
-    assert pitch.ndim == w.ndim == knots.ndim == 1
-    assert X.shape == (pitch.size, X.shape[1], w.size)
-    assert f.ndim <= 2 and f.shape[-1] == knots.size
-    assert knots.shape == B_sup_z.shape == B.shape == B_z_ra.shape
+    assert pitch.ndim == 2
+    assert w.ndim == knots.ndim == 1
+    assert X.shape == (pitch.shape[0], B.shape[0], X.shape[2], w.size)
+    assert knots.size == B.shape[-1]
+    assert f.ndim == 3 and f.shape[0] == 1 or f.shape[0] == pitch.shape[0]
+    assert f.shape[1:] == B_sup_z.shape == B.shape == B_z_ra.shape
     # Spline the integrand so that we can evaluate it at quadrature points
     # without expensive coordinate mappings and root finding.
     # Spline each function separately so that the singularity near the bounce
     # points can be captured more accurately than can be by any polynomial.
     shape = X.shape
-    X = X.ravel()
+    X = X.reshape(X.shape[0], X.shape[1], -1)
     if f_method == "constant":
-        f = f[..., 0].reshape(-1, 1, 1)
-    elif f.ndim == 1 or f.shape[0] == 1:
-        # Transpose because interp1d broadcasts opposite of numpy standard.
-        f = interp1d(X, knots, f.T, method=f_method).reshape(shape)
+        f = f[..., 0, jnp.newaxis, jnp.newaxis]
     else:
-        # First axis of f is a function of pitch; last axis is a function of knots.
-        f = interp1d_vec(X.reshape(pitch.size, -1), knots, f, method=f_method).reshape(
-            shape
-        )
+        f = _interp1d_vec(X, knots, f, method=f_method).reshape(shape)
     # Use akima spline to suppress oscillation.
-    B_sup_z = interp1d(X, knots, B_sup_z, method="akima").reshape(shape)
-    # Specify derivative at knots with fx=B_z_ra for ≈ cubic hermite interpolation.
-    B = interp1d(X, knots, B, fx=B_z_ra, method="cubic").reshape(shape)
-    pitch = pitch.reshape(-1, 1, 1)
+    B_sup_z = _interp1d_vec(X, knots, B_sup_z, method="akima").reshape(shape)
+    # Specify derivative at knots with B_z_ra for ≈ cubic hermite interpolation.
+    B = _interp1d_vec_fx(X, knots, B, B_z_ra, method="cubic").reshape(shape)
+    pitch = pitch[..., jnp.newaxis, jnp.newaxis]
     inner_product = jnp.dot(f / (B_sup_z * jnp.sqrt(1 - pitch * B)), w)
+    assert inner_product.shape == shape[:-1]
     return inner_product
 
 
@@ -675,7 +701,7 @@ def bounce_integral(
                 Second axis enumerates the splines along the field lines.
                 Last axis enumerates the polynomials of the spline along a particular
                 field line.
-            poly_B_z : Array, shape(3, S, zeta.size - 1)
+            poly_B_z_ra : Array, shape(3, S, zeta.size - 1)
                 Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
                 First axis enumerates the coefficients of power series.
                 Second axis enumerates the splines along the field lines.
@@ -715,15 +741,15 @@ def bounce_integral(
     poly_B = jnp.moveaxis(
         CubicHermiteSpline(zeta, B, B_z_ra, axis=-1, check=check).c, 1, -1
     )
-    poly_B_z = poly_der(poly_B)
+    poly_B_z_ra = poly_der(poly_B)
     assert poly_B.shape == (4, S, zeta.size - 1)
-    assert poly_B_z.shape == (3, S, zeta.size - 1)
+    assert poly_B_z_ra.shape == (3, S, zeta.size - 1)
 
     x, w = quad(**kwargs)
     # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
     x = jnp.arcsin(x) / jnp.pi - 0.5
     original = _compute_bp_if_given_pitch(
-        zeta, poly_B, poly_B_z, pitch, err=False, check=check
+        zeta, poly_B, poly_B_z_ra, pitch, err=False, check=check
     )
 
     def _bounce_integral(f, pitch=None, f_method="akima"):
@@ -756,14 +782,21 @@ def bounce_integral(
 
         """
         bp1, bp2, pitch = _compute_bp_if_given_pitch(
-            zeta, poly_B, poly_B_z, pitch, *original, err=True, check=check
+            zeta, poly_B, poly_B_z_ra, pitch, *original, err=True, check=check
         )
-        f = f.reshape(-1, S, zeta.size)
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
-        # Need explicit broadcast to vectorize over the S axis.
-        pitch = jnp.broadcast_to(pitch, shape=(pitch.shape[0], S))
         result = (
-            _bounce_quad(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra, f_method)
+            _bounce_quad(
+                X=X,
+                w=w,
+                knots=zeta,
+                B_sup_z=B_sup_z,
+                B=B,
+                B_z_ra=B_z_ra,
+                pitch=pitch,
+                f=f.reshape(-1, S, zeta.size),
+                f_method=f_method,
+            )
             / (bp2 - bp1)
             * jnp.pi
         )
@@ -771,7 +804,12 @@ def bounce_integral(
         return result
 
     if return_items:
-        items = {"grid": grid, "data": data, "poly_B": poly_B, "poly_B_z": poly_B_z}
+        items = {
+            "grid": grid,
+            "data": data,
+            "poly_B": poly_B,
+            "poly_B_z_ra": poly_B_z_ra,
+        }
         return _bounce_integral, items
     else:
         return _bounce_integral
@@ -799,10 +837,6 @@ def bounce_average(
     of particle. For a particle with fixed λ, bounce points are defined to be
     the location on the field line such that the particle's velocity parallel
     to the magnetic field is zero, i.e. λ |B| = 1.
-
-    The bounce integral is defined up to a sign.
-    We choose the sign that corresponds the particle's guiding center trajectory
-    traveling in the direction of increasing field-line-following label.
 
     Parameters
     ----------
@@ -852,7 +886,7 @@ def bounce_average(
                 Second axis enumerates the splines along the field lines.
                 Last axis enumerates the polynomials of the spline along a particular
                 field line.
-            poly_B_z : Array, shape(3, S, zeta.size - 1)
+            poly_B_z_ra : Array, shape(3, S, zeta.size - 1)
                 Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
                 First axis enumerates the coefficients of power series.
                 Second axis enumerates the splines along the field lines.
@@ -905,7 +939,7 @@ def bounce_average(
             Last axis enumerates the bounce integrals.
 
         """
-        return bi(f, pitch, f_method) / bi(jnp.ones(f.shape[-1]), pitch, "constant")
+        return bi(f, pitch, f_method) / bi(jnp.ones_like(f), pitch, "constant")
 
     bi = bounce_integral(eq, pitch, rho, alpha, zeta, quad, **kwargs)
     if kwargs.get("return_items"):

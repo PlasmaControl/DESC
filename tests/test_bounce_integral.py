@@ -378,9 +378,9 @@ def test_bounce_points():
     test_bp2_first()
     test_bp1_before_extrema()
     test_bp2_before_extrema()
-    # In theory, this test should only pass if distinct=True when
-    # computing the intersections in bounce points. However, in this case, due
-    # to floating point errors, it also passes when distinct=False.
+    # In theory, this test should only pass if distinct=True when computing the
+    # intersections in bounce points. However, we can get lucky due to floating
+    # point errors, and it may also pass when distinct=False.
     test_extrema_first_and_before_bp1()
     test_extrema_first_and_before_bp2()
 
@@ -429,6 +429,7 @@ def test_elliptic_integral_limit():
         (and not whether the bounce points were accurate).
 
     """
+    assert False
     L, M, N, NFP, sym = 6, 6, 6, 1, True
     surface = FourierRZToroidalSurface(
         R_lmn=[1.0, 0.1],
@@ -521,8 +522,20 @@ def test_bounce_averaged_drifts():
     c1 = eq.compute_theta_coords(coords1)
     grid = Grid(c1, sort=False)
 
-    # The bounce integral operator should be able to take a grid
-    bi, items = bounce_integral(eq, grid=grid, return_items=True, check=True)
+    # TODO: Request: The bounce integral operator should be able to take a grid.
+    #       Response: Currently the API is such that the method does all the
+    #                 above preprocessing for you. Let's test it for correctness
+    #                 first then do this later.
+    bi, items = bounce_integral(
+        eq,
+        rho=np.unique(coords1[:, 0]),
+        alpha=alpha,
+        zeta=zeta,
+        return_items=True,
+        check=True,
+    )
+    grid = items["grid"]
+    grid._unique_zeta_idx = np.unique(grid.nodes[:, 2], return_index=True)[1]
 
     data_keys = [
         "|grad(psi)|^2",
@@ -536,7 +549,7 @@ def test_bounce_averaged_drifts():
         "gbdrift",
     ]
 
-    data = eq.compute(data_keys, grid=grid, override_grid=False)
+    data = eq.compute(data_keys, grid=grid, data=items["data"])
 
     psib = data_eq["psi"][-1]
 
@@ -590,7 +603,7 @@ def test_bounce_averaged_drifts():
     np.testing.assert_allclose(cvdrift, cvdrift_an, atol=9e-3, rtol=5e-3)
 
     # Values of pitch angle for which to evaluate the bounce averages
-    lambdas = np.linspace(1 / np.min(bmag), 1 / np.max(bmag), 11)
+    lambdas = np.linspace(1 / np.max(bmag), 1 / np.min(bmag), 11)
 
     bavg_drift_an = (
         0.5 * cvdrift_an * ellipe(lambdas)

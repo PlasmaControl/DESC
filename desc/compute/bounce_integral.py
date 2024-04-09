@@ -8,7 +8,7 @@ from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take, v
 from desc.compute.utils import safediv
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
 
-roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(n)->(m)")
+roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={2, 3})
@@ -161,7 +161,7 @@ def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
     keep_only_real = not (a_min is None and a_max is None)
     func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
     if c.shape[0] in func:
-        # compute from analytic formula
+        # Compute from analytic formula.
         r = func[c.shape[0]](*c[:-1], c[-1] - k, distinct)
         if keep_only_real:
             r = tuple(map(partial(_filter_real, a_min=a_min, a_max=a_max), r))
@@ -169,7 +169,9 @@ def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         if sort:
             r = jnp.sort(r, axis=-1)
     else:
-        # compute from eigenvalues of polynomial companion matrix
+        # Compute from eigenvalues of polynomial companion matrix.
+        # This method can fail to detect roots near extrema, which is often
+        # where we want to detect roots for bounce integrals.
         c_n = c[-1] - k
         c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
         c.append(c_n)
@@ -284,7 +286,7 @@ def poly_val(x, c):
 
 
 def _check_shape(knots, B, B_z_ra, pitch=None):
-    """Ensure spline polynomial coefficients and pitch have correct shape."""
+    """Ensure inputs have correct shape and return labels for those shapes."""
     if B.ndim == 2 and B_z_ra.ndim == 2:
         # Add axis which enumerates field lines.
         B = B[:, jnp.newaxis]
@@ -427,9 +429,9 @@ def bounce_points(knots, B, B_z_ra, pitch, check=False):
     # Transform out of local power basis expansion.
     intersect = intersect + knots[:-1, jnp.newaxis]
     intersect = intersect.reshape(P * S, -1)
+
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = ~jnp.isnan(intersect)
-
     # Reorder so that all intersects along a field line are contiguous.
     intersect = take_mask(intersect, is_intersect)
     B_z_ra = take_mask(B_z_ra, is_intersect)
@@ -445,7 +447,7 @@ def bounce_points(knots, B, B_z_ra, pitch, check=False):
     # B_z_ra[i, j] <= 0 implies B_z_ra[i, j + 1] >= 0 by continuity, there can
     # be at most one inversion, and if it exists, the inversion must be at the
     # first pair. To correct the inversion, it suffices to disqualify the first
-    # intersect as an ending bounce point.
+    # intersect as an ending bounce point, except under the following edge case.
     edge_case = (B_z_ra[:, 0] == 0) & (B_z_ra[:, 1] < 0)
     is_bp2 = put_along_axis(is_bp2, jnp.array(0), edge_case, axis=-1)
     # Get ζ values of bounce points from the masks.
@@ -453,8 +455,12 @@ def bounce_points(knots, B, B_z_ra, pitch, check=False):
     bp2 = take_mask(intersect, is_bp2).reshape(P, S, -1)
 
     if check:
-        if not jnp.all((bp2 >= bp1) | jnp.isnan(bp1) | jnp.isnan(bp2)):
+        if jnp.any(bp1 > bp2):
             raise AssertionError("Bounce points have an inversion.")
+        if jnp.any(bp1[:, 1:] < bp2[:, :-1]):
+            raise AssertionError(
+                "Discontinuity detected. Is B_z_ra the derivative of the spline of B?"
+            )
 
     return bp1, bp2
     # This is no longer implemented at the moment.

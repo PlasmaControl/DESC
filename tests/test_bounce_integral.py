@@ -239,6 +239,21 @@ def test_poly_val():
 
 
 @pytest.mark.unit
+def test_pitch_of_extrema():
+    """Test that these pitch intersect extrema of |B|."""
+    start = -np.pi
+    end = -2 * start
+    k = np.linspace(start, end, 5)
+    B = CubicHermiteSpline(
+        k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
+    )
+    B_z_ra = B.derivative()
+    pitch_scipy = 1 / B(B_z_ra.roots(extrapolate=False))
+    pitch = _filter_not_nan(pitch_of_extrema(k, B.c, B_z_ra.c))
+    np.testing.assert_allclose(pitch, pitch_scipy)
+
+
+@pytest.mark.unit
 def test_bounce_points():
     """Test that bounce points are computed correctly."""
 
@@ -298,8 +313,8 @@ def test_bounce_points():
 
         bp1, bp2 = bounce_points(k, B.c, B_z_ra.c, pitch, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
-        # Our routine correctly detects intersection, while scipy fails.
         np.testing.assert_allclose(bp1[1], 1.9827671337414938)
         intersect = np.insert(intersect, np.searchsorted(intersect, bp1[1]), bp1[1])
         np.testing.assert_allclose(bp1, intersect[[1, 2]])
@@ -341,8 +356,8 @@ def test_bounce_points():
 
         bp1, bp2 = bounce_points(k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], pitch, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
-        # Our routine correctly detects intersection, while scipy fails.
         np.testing.assert_allclose(bp1[0], 0.8353192766102349)
         intersect = np.insert(intersect, np.searchsorted(intersect, bp1[0]), bp1[0])
         intersect = intersect[intersect >= k[2]]
@@ -365,8 +380,8 @@ def test_bounce_points():
 
         bp1, bp2 = bounce_points(k, B.c, B_z_ra.c, pitch, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
-        # Our routine correctly detects intersection, while scipy fails.
         np.testing.assert_allclose(bp1[0], -0.6719044147510538)
         intersect = np.insert(intersect, np.searchsorted(intersect, bp1[0]), bp1[0])
         np.testing.assert_allclose(bp1, intersect[0::2])
@@ -603,21 +618,25 @@ def test_bounce_averaged_drifts():
     np.testing.assert_allclose(cvdrift, cvdrift_an, atol=9e-3, rtol=5e-3)
 
     # Values of pitch angle for which to evaluate the bounce averages
-    lambdas = np.linspace(1 / np.max(bmag), 1 / np.min(bmag), 11)
+    pitch_res = 11
+    pitch = np.linspace(1 / np.max(bmag), 1 / np.min(bmag), pitch_res).reshape(
+        pitch_res, -1
+    )
 
     bavg_drift_an = (
-        0.5 * cvdrift_an * ellipe(lambdas)
-        + gbdrift_an * ellipk(lambdas)
-        + dPdrho / bmag**2 * ellipe(lambdas)
+        0.5 * cvdrift_an * ellipe(pitch)
+        + gbdrift_an * ellipk(pitch)
+        + dPdrho / bmag**2 * ellipe(pitch)
     )
 
     # The quantities are already calculated along a field line
     bavg_drift_num = bi(
-        np.sqrt(1 - lambdas * bmag) * 0.5 * cvdrift
-        + gbdrift * 1 / np.sqrt(1 - lambdas * bmag)
-        + dPdrho / bmag**2 * np.sqrt(1 - lambdas * bmag),
-        lambdas,
+        np.sqrt(1 - pitch * bmag) * 0.5 * cvdrift
+        + gbdrift * 1 / np.sqrt(1 - pitch * bmag)
+        + dPdrho / bmag**2 * np.sqrt(1 - pitch * bmag),
+        pitch,
     )
+    # might need to use _filter_not_nan function from top.
 
     np.testing.assert_allclose(bavg_drift_num, bavg_drift_an, atol=2e-2, rtol=1e-2)
 

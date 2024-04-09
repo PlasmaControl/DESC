@@ -353,13 +353,12 @@ def pitch_of_extrema(knots, B, B_z_ra):
         # False will double weight orbits with B_z = B_zz = 0 at bounce points.
         distinct=True,
     )
-    # Can detect at most degree of |B|_z spline extrema between each knot.
-    assert extrema.shape == (S, N, degree - 1)
     # Reshape so that last axis enumerates (unsorted) extrema along a field line.
     B_extrema = poly_val(x=extrema, c=B[..., jnp.newaxis]).reshape(S, -1)
     # Might be useful to pad all the nan at the end rather than interspersed.
     B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
+    # Can detect at most degree of |B|_z spline extrema between each knot.
     assert pitch.shape == (N * (degree - 1), S)
     return pitch
 
@@ -536,8 +535,13 @@ def tanh_sinh_quad(resolution=7):
     return x, w
 
 
+interp1d_vec = jnp.vectorize(
+    interp1d, signature="(m),(n),(n)->(m)", excluded={"fx", "method"}
+)
+
+
 # Vectorize to compute a bounce integral for every pitch along every field line.
-@partial(vmap, in_axes=(1, 1, None, None, 0, 0, 0, 0, None), out_axes=1)
+@partial(vmap, in_axes=(1, 1, None, None, 1, 0, 0, 0, None), out_axes=1)
 def _bounce_quad(pitch, X, w, knots, f, B_sup_z, B, B_z_ra, f_method):
     """Compute a bounce integral for every pitch along a particular field line.
 
@@ -551,7 +555,7 @@ def _bounce_quad(pitch, X, w, knots, f, B_sup_z, B, B_z_ra, f_method):
         Quadrature weights.
     knots : Array, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
-    f : Array, shape(knots.size, )
+    f : Array, shape(..., knots.size, )
         Function to compute bounce integral of, evaluated at knots.
     B_sup_z : Array, shape(knots.size, )
         Contravariant field-line following toroidal component of magnetic field.
@@ -568,9 +572,10 @@ def _bounce_quad(pitch, X, w, knots, f, B_sup_z, B, B_z_ra, f_method):
         Bounce integrals for every pitch along a particular field line.
 
     """
-    assert pitch.ndim == 1 == w.ndim
+    assert pitch.ndim == w.ndim == knots.ndim == 1
     assert X.shape == (pitch.size, X.shape[1], w.size)
-    assert knots.shape == f.shape == B_sup_z.shape == B.shape == B_z_ra.shape
+    assert f.ndim <= 2 and f.shape[-1] == knots.size
+    assert knots.shape == B_sup_z.shape == B.shape == B_z_ra.shape
     # Spline the integrand so that we can evaluate it at quadrature points
     # without expensive coordinate mappings and root finding.
     # Spline each function separately so that the singularity near the bounce
@@ -578,14 +583,20 @@ def _bounce_quad(pitch, X, w, knots, f, B_sup_z, B, B_z_ra, f_method):
     shape = X.shape
     X = X.ravel()
     if f_method == "constant":
-        f = f[0]
+        f = f[..., 0].reshape(-1, 1, 1)
+    elif f.ndim == 1 or f.shape[0] == 1:
+        # Transpose because interp1d broadcasts opposite of numpy standard.
+        f = interp1d(X, knots, f.T, method=f_method).reshape(shape)
     else:
-        f = interp1d(X, knots, f, method=f_method).reshape(shape)
+        # First axis of f is a function of pitch; last axis is a function of knots.
+        f = interp1d_vec(X.reshape(pitch.size, -1), knots, f, method=f_method).reshape(
+            shape
+        )
     # Use akima spline to suppress oscillation.
     B_sup_z = interp1d(X, knots, B_sup_z, method="akima").reshape(shape)
     # Specify derivative at knots with fx=B_z_ra for ≈ cubic hermite interpolation.
     B = interp1d(X, knots, B, fx=B_z_ra, method="cubic").reshape(shape)
-    pitch = pitch[:, jnp.newaxis, jnp.newaxis]
+    pitch = pitch.reshape(-1, 1, 1)
     inner_product = jnp.dot(f / (B_sup_z * jnp.sqrt(1 - pitch * B)), w)
     return inner_product
 
@@ -720,8 +731,11 @@ def bounce_integral(
 
         Parameters
         ----------
-        f : Array, shape(items["grid"].num_nodes, )
+        f : Array, shape(P, items["grid"].num_nodes, )
             Quantity to compute the bounce integral of.
+            If two-dimensional, the first axis is interpreted as the batch axis,
+            which enumerates the evaluation of some function at particular pitch
+            values.
         pitch : Array, shape(P, S)
             λ values to evaluate the bounce integral at each field line.
             If None, uses the values given to the parent function.
@@ -744,9 +758,10 @@ def bounce_integral(
         bp1, bp2, pitch = _compute_bp_if_given_pitch(
             zeta, poly_B, poly_B_z, pitch, *original, err=True, check=check
         )
+        f = f.reshape(-1, S, zeta.size)
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
+        # Need explicit broadcast to vectorize over the S axis.
         pitch = jnp.broadcast_to(pitch, shape=(pitch.shape[0], S))
-        f = f.reshape(S, -1)
         result = (
             _bounce_quad(pitch, X, w, zeta, f, B_sup_z, B, B_z_ra, f_method)
             / (bp2 - bp1)
@@ -865,8 +880,11 @@ def bounce_average(
 
         Parameters
         ----------
-        f : Array, shape(items["grid"].num_nodes, )
+        f : Array, shape(P, items["grid"].num_nodes, )
             Quantity to compute the bounce average of.
+            If two-dimensional, the first axis is interpreted as the batch axis,
+            which enumerates the evaluation of some function at particular pitch
+            values.
         pitch : Array, shape(P, S)
             λ values to evaluate the bounce average at each field line.
             If None, uses the values given to the parent function.
@@ -887,7 +905,7 @@ def bounce_average(
             Last axis enumerates the bounce integrals.
 
         """
-        return bi(f, pitch, f_method) / bi(jnp.ones_like(f), pitch, "constant")
+        return bi(f, pitch, f_method) / bi(jnp.ones(f.shape[-1]), pitch, "constant")
 
     bi = bounce_integral(eq, pitch, rho, alpha, zeta, quad, **kwargs)
     if kwargs.get("return_items"):

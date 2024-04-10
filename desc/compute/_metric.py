@@ -1832,7 +1832,7 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{gradB-drift} = 1/B^{2} * (\\mathbf{b}\\times\\nabla (B)) \\cdot"
+    label="\\mathrm{gbdrift} = 1/B^{2} (\\mathbf{b}\\times\\nabla B) \\cdot"
     + "\\nabla \\alpha",
     units="1/(T-m^{2})",
     units_long="inverse Tesla meters^2",
@@ -1859,7 +1859,7 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{curvature-drift} = 1/B^{3} * (\\mathbf{b}\\times\\nabla(p + B^2/2))"
+    label="\\mathrm{cvdrift} = 1/B^{3} (\\mathbf{b}\\times\\nabla(p + B^2/2))"
     + "\\cdot \\nabla \\alpha",
     units="1/(T-m^{2})",
     units_long="inverse Tesla meters^2",
@@ -1883,8 +1883,8 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{curvature-drift-1} = 1/B^{2} * (\\mathbf{b}\\times\\nabla(B))"
-    + "\\cdot \\nabla rho",
+    label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla B)"
+    + "\\cdot \\nabla \\rho",
     units="1/(T-m^{2})",
     units_long="inverse Tesla meters^2",
     description="Radial component of the geometric part of the curvature drift"

@@ -58,7 +58,7 @@ def _ds(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x"],
     parameterization="desc.geometry.core.Curve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _X_curve(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
@@ -82,7 +82,7 @@ def _X_curve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x"],
     parameterization="desc.geometry.core.Curve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _Y_Curve(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
@@ -106,7 +106,7 @@ def _Y_Curve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x"],
     parameterization="desc.geometry.core.Curve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _R_Curve(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
@@ -130,7 +130,7 @@ def _R_Curve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x"],
     parameterization="desc.geometry.core.Curve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _phi_Curve(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
@@ -175,7 +175,7 @@ def _Z_Curve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # create planar curve at Z==0
@@ -212,7 +212,7 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     r = transforms["r"].transform(params["r_n"], dz=0)
@@ -258,7 +258,7 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     r = transforms["r"].transform(params["r_n"], dz=0)
@@ -309,7 +309,7 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     r = transforms["r"].transform(params["r_n"], dz=0)
@@ -369,7 +369,7 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_n"], dz=0)
@@ -404,7 +404,7 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
@@ -438,7 +438,7 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
@@ -476,7 +476,7 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
@@ -514,7 +514,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierXYZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     X = transforms["X"].transform(params["X_n"], dz=0)
@@ -547,7 +547,7 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierXYZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     dX = transforms["X"].transform(params["X_n"], dz=1)
@@ -582,7 +582,7 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierXYZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     d2X = transforms["X"].transform(params["X_n"], dz=2)
@@ -617,7 +617,7 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierXYZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     d3X = transforms["X"].transform(params["X_n"], dz=3)
@@ -650,7 +650,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
@@ -705,7 +705,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
@@ -791,7 +791,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
@@ -876,7 +876,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="basis",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]

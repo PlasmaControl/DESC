@@ -31,7 +31,8 @@ from .utils import surface_averages_map
     coordinates="r",
     data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
     axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
-    n_gauss="n_gauss",
+    n_gauss="int: Number of quadrature points to use for estimating trapped fraction. "
+    + "Default 20.",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     """Evaluate the effective trapped particle fraction.
@@ -333,7 +334,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         "Zeff",
         "rho",
     ],
-    helicity="helicity",
+    helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
 )
 def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
@@ -395,7 +396,8 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     profiles=["current"],
     coordinates="r",
     data=["rho", "psi_r", "p_r", "current", "<|B|^2>", "<J*B> Redl"],
-    degree="degree",
+    degree="int: Degree of polynomial used for fitting current profile. "
+    + "Default grid.num_rho-1",
 )
 def _current_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the current profile consistent with the Redl bootstrap current.

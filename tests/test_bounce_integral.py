@@ -633,14 +633,15 @@ def test_bounce_averaged_drifts():
         + dPdrho / bmag**2 * ellipe(k2)
     )
 
-    # The quantities are already calculated along a field line
-    bavg_drift_num = bi(
-        np.sqrt(1 - pitch * bmag) * 0.5 * cvdrift
-        + gbdrift * 1 / np.sqrt(1 - pitch * bmag)
-        + dPdrho / bmag**2 * np.sqrt(1 - pitch * bmag),
-        pitch,
-    )
-    # might need to use _filter_not_nan function from top.
+    with pytest.warns(RuntimeWarning):
+        # The quantities are already calculated along a field line
+        bavg_drift_num = bi(
+            np.sqrt(1 - pitch * bmag) * 0.5 * cvdrift
+            + gbdrift * 1 / np.sqrt(1 - pitch * bmag)
+            + dPdrho / bmag**2 * np.sqrt(1 - pitch * bmag),
+            pitch,
+        )
+        # might need to use _filter_not_nan function from top.
 
     np.testing.assert_allclose(bavg_drift_num, bavg_drift_an, atol=2e-2, rtol=1e-2)
 

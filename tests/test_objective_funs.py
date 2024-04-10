@@ -26,6 +26,7 @@ from desc.magnetic_fields import (
     OmnigenousField,
     SplineMagneticField,
     ToroidalMagneticField,
+    VerticalMagneticField,
 )
 from desc.objectives import (
     AspectRatio,
@@ -58,6 +59,7 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     ToroidalCurrent,
+    ToroidalFlux,
     VacuumBoundaryError,
     Volume,
 )
@@ -877,6 +879,39 @@ class TestObjectiveFunction:
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
 
+    @pytest.mark.unit
+    def test_toroidal_flux(self):
+        """Test calculation of toroidal flux from coils."""
+        grid1 = LinearGrid(L=10, M=10, zeta=np.array(0.0))
+
+        def test(eq, field, correct_value, rtol=1e-14, grid=None):
+            obj = ToroidalFlux(eq=eq, field=field, eval_grid=grid)
+            obj.build(verbose=2)
+            torflux = obj.compute_unscaled(*obj.xs(field))
+            np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
+
+        eq = Equilibrium(iota=PowerSeriesProfile(0))
+        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1)
+        field = ToroidalMagneticField(B0=1, R0=1)
+        # calc field Psi
+
+        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=grid1)
+        field_B = field.compute_magnetic_field(
+            np.vstack([data["R"], data["phi"], data["Z"]]).T
+        )
+
+        B_dot_n_zeta = jnp.sum(field_B * data["n_zeta"], axis=1)
+
+        psi_from_field = np.sum(
+            grid1.spacing[:, 0]
+            * grid1.spacing[:, 1]
+            * data["|e_rho x e_theta|"]
+            * B_dot_n_zeta
+        )
+        eq.change_resolution(L_grid=10, M_grid=10)
+
+        test(eq, field, psi_from_field)
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -1688,6 +1723,7 @@ class TestComputeScalarResolution:
         CoilTorsion,
         CoilCurvature,
         QuadraticFlux,
+        ToroidalFlux,
         # need to avoid blowup near the axis
         MercierStability,
         # don't test these since they depend on what user wants
@@ -1816,6 +1852,23 @@ class TestComputeScalarResolution:
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
             obj = ObjectiveFunction(QuadraticFlux(eq, ext_field), use_jit=False)
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_toroidal_flux(self):
+        """ToroidalFlux."""
+        ext_field = ToroidalMagneticField(1, 1)
+        eq = get("precise_QA")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -1990,6 +2043,7 @@ class TestObjectiveNaNGrad:
         CoilCurvature,
         CoilTorsion,
         QuadraticFlux,
+        ToroidalFlux,
         # we don't test these since they depend too much on what exactly the user wants
         GenericObjective,
         LinearObjectiveFromUser,
@@ -2099,6 +2153,19 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(ext_field))
         assert not np.any(np.isnan(g)), "quadratic flux"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_toroidal_flux(self):
+        """ToroidalFlux."""
+        ext_field = ToroidalMagneticField(1, 1)
+
+        eq = get("precise_QA")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+
+        obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(ext_field))
+        assert not np.any(np.isnan(g)), "toroidal flux"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

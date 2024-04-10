@@ -2134,6 +2134,8 @@ class FiniteElementMesh2D:
             e = fem.ElementTriP2()
         basis = fem.CellBasis(mesh, e)
 
+
+        # Plotting the 2D Mesh
         from skfem.visuals.matplotlib import draw, draw_mesh2d
 
         ax = draw(mesh)
@@ -2156,22 +2158,32 @@ class FiniteElementMesh2D:
         self.vertices = vertices
         self.triangles = triangles
 
-        # Setup quadrature points and weights for numerical integration
-        integration_points = []
-        weights = []
-        if self.K == 1:
-            integration_points.append([1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0])
-            weights.append([1])
-        elif self.K == 2:
-            integration_points.append([1.0 / 2.0, 1.0 / 2.0, 0.0])
-            integration_points.append([1.0 / 2.0, 0.0, 1.0 / 2.0])
-            integration_points.append([0.0, 1.0 / 2.0, 1.0 / 2.0])
-            weights.append([1.0 / 3.0])
-            weights.append([1.0 / 3.0])
-            weights.append([1.0 / 3.0])
+        # Setup quadrature points and weights for numerical integration using scikit-fem
+        # Will need to write a seperate one for linear:
+
+
+         if K == 1:
+             integration_points = np.array([1/3,1/3,1/3])
+             weights = 1;
+
+         if K == 2:
+            [integration_points,weights] = fem.quadrature.get_quadrature(element, 2)
+            add_row = [integration_points[0][1], integration_points[0][0], integration_points[0][0]]
+            integration_points = np.vstack([add_row,integration_points])
+        
+         
+         if K == 3:
+            [integration_points,weights] = fem.quadrature.get_quadrature(element, 3)
+            add_row = [integration_points[0][0], integration_points[0][1], integration_points[0][1], integration_points[0][2]]
+            integration_points= np.vstack([add_row,integration_points])
+            integration_points = np.transpose(integration_points)
+            
+
+
+        # Integration points, weights, and number of integration points
 
         self.integration_points = np.array(integration_points)
-        self.weights = np.ravel(np.array(weights))
+        self.weights = np.array(weights)
         self.nquad = len(self.integration_points)
 
 

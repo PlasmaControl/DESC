@@ -31,12 +31,13 @@ class MercierStability(_Objective):
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
-        locations.
+        locations. Defaults to ``bounds=(0, np.inf)``
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``bounds=(0, np.inf)``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -57,6 +58,9 @@ class MercierStability(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
     name : str, optional
         Name of the objective function.
 
@@ -208,12 +212,13 @@ class MagneticWell(_Objective):
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
-        locations.
+        locations. Defaults to ``bounds=(0, np.inf)``
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``bounds=(0, np.inf)``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -234,6 +239,9 @@ class MagneticWell(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
     name : str, optional
         Name of the objective function.
 

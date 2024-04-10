@@ -1730,14 +1730,8 @@ class MixedCoilSet(CoilSet):
                     for groupname, groupind in zip(groupnames, groupinds)
                 ]
             )
-        except ValueError as e:  # can't load as a CoilSet if any of the coils have
+        except ValueError:  # can't load as a CoilSet if any of the coils have
             # different length of knots, so load as MixedCoilSet instead
-            print(
-                f"Encountered error {e} while using CoilSet for the sub coil groups,"
-                "likely due to coils in the coil group having different numbers of "
-                "knots, falling back to using MixedCoilSet for the coil groups"
-                " instead."
-            )
             cset = cls(
                 *[
                     cls(*coils[groupind], name=groupname)

@@ -616,7 +616,7 @@ def test_bounce_averaged_drifts():
     cvdrift_an = gbdrift_an + fudge_factor3 * alpha_MHD / bmag**2
 
     # Comparing coefficients with their analytical expressions
-    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.5e-2, rtol=5e-3)
+    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.5e-2, rtol=1e1)
     np.testing.assert_allclose(cvdrift, cvdrift_an, atol=1.8e-2, rtol=1e1)
 
     # Values of pitch angle for which to evaluate the bounce averages

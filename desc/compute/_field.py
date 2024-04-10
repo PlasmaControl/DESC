@@ -126,7 +126,7 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B",
-    label="B",
+    label="\\mathbf{B}",
     units="T",
     units_long="Tesla",
     description="Magnetic field",
@@ -3469,7 +3469,7 @@ def _L_grad_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="K_vc",
-    label="\\mathbf{K}_{VC} = \\mathbf{n} \\times \\mathbf{B}",
+    label="\\mathbf{K}_{VC} = \\frac{1}{\\mu_0}\\mathbf{n} \\times \\mathbf{B}",
     units="A \\cdot m^{-1}",
     units_long="Amps / meter",
     description="Virtual casing sheet current",

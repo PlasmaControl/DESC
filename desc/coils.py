@@ -1249,9 +1249,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if hasattr(grid, "endpoint"):
             endpoint = grid.endpoint
         elif isinstance(grid, numbers.Integral) or grid is None:
-            endpoint = (
-                False  # if int or None, will create a grid w/ endpoint=False in compute
-            )
+            # if int or None, will create a grid w/ endpoint=False in compute
+            endpoint = False
         for i in range(int(len(coils))):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]

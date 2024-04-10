@@ -1589,7 +1589,9 @@ class MixedCoilSet(CoilSet):
         self._coils.insert(i, new_item)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic", ignore_groups=False):
+    def from_makegrid_coilfile(  # noqa: C901 - FIXME: simplify this
+        cls, coil_file, method="cubic", ignore_groups=False
+    ):
         """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.
 
         If ignore_groups=False and the MAKEGRID contains more than one coil group
@@ -1722,22 +1724,15 @@ class MixedCoilSet(CoilSet):
             return cls(*coils[groupinds[0]], name=groupnames[0])
 
         # if not, possibly return a nested coilset, containing one coilset per coilgroup
-        try:
-            # try making the coilgroups use a CoilSet
-            cset = cls(
-                *[
-                    CoilSet(*coils[groupind], name=groupname)
-                    for groupname, groupind in zip(groupnames, groupinds)
-                ]
-            )
-        except ValueError:  # can't load as a CoilSet if any of the coils have
-            # different length of knots, so load as MixedCoilSet instead
-            cset = cls(
-                *[
-                    cls(*coils[groupind], name=groupname)
-                    for groupname, groupind in zip(groupnames, groupinds)
-                ]
-            )
+        coilsets = []  # list of coilsets, so we can attempt to use CoilSet for each one
+        for groupname, groupind in zip(groupnames, groupinds):
+            try:
+                # try making the coilgroup use a CoilSet
+                coilsets.append(CoilSet(*coils[groupind], name=groupname))
+            except ValueError:  # can't load as a CoilSet if any of the coils have
+                # different length of knots, so load as MixedCoilSet instead
+                coilsets.append(cls(*coils[groupind], name=groupname))
+        cset = cls(*coilsets)
         if ignore_groups:
             cset = cls(*flatten_coils(cset))
         return cset

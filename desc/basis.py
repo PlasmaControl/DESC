@@ -25,6 +25,7 @@ __all__ = [
     "FiniteElementMesh1D",
     "FiniteElementMesh1D_scikit",
     "FiniteElementMesh2D",
+    "FiniteElementMesh3D_scikit"
 ]
 
 
@@ -2071,7 +2072,208 @@ def zernike_norm(l, m):
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
 
 
+class FiniteElementMesh3D_scikit:
+    """ Class representing a 3D mesh in (rho, theta, zeta) using scikit-fem
 
+
+    Parameters
+    ----------
+    L : int
+        Number of mesh points in the rho direction.
+    M : int
+        Number of mesh points in the theta direction.
+    N:  int
+        Number of mesh points in the zeta direction
+    K: integer
+        The order of the finite elements to use, which gives (K+1)(K+2)(K+3) / 6
+        basis functions.
+"""
+
+    def __init__(self, L, M, N , K=1):
+        self.M = M
+        self.L = L
+        self.N = N
+        self.I_6LMN = 6 * L * M * N # Considering how to incorporate n_p
+        self.Q = int((K + 1) * (K + 2)*(K + 3) / 6)
+        self.K = K
+
+
+    # Constructing mesh:
+    # Refinement works similarly as in the 2D case, as in powers of 2
+
+     '''
+        # Still working on implementation for any L,M,N. For now, taking cases and taking advantage
+        of mesh.refined() in scikit. Starting with a unit square in (rho,theta,zeta):
+
+        mesh.refined(1) divides [0,1] in half on all three axes (40 finite elements)
+        mesh.refined(2) divides [0,1] in quarters on all three axes (320 finite elements)
+        mesh.refined(3) divides [0,1] in eighths on all three axes (2560 finite elements)
+        mesh.refined(4) divides [0,1] in 1/16th on all three axes
+        .
+        .
+        .
+     
+     '''
+
+
+        if K == 1:
+            e = fem.ElementTetP1()
+        else:
+            e = fem.ElementTetP2()
+        basis = fem.CellBasis(mesh, e)
+
+
+    #Visualization of mesh
+
+    def visualize():
+        # Drawing the edges of the  mesh with draw_mesh3d
+        from skfem.visuals.matplotlib import draw_mesh3d, draw
+        ax = draw(mesh)
+
+        return draw_mesh3d(mesh, color = "pink", ax=ax)
+
+    visualize().show()
+
+
+
+    """
+Partial pseudo-code for incorporating basis functions
+
+
+    if K == 1:
+        if node == 0:
+            def f(x,y,z):
+                return x
+        if node == 1:
+            def f(x,y,z):
+                return y
+        if node == 2:
+            def f(x,y,z):
+                return z
+        if node == 3:
+            def f(x,y,z):
+                return (1-x-y-z)
+    
+    
+    if K == 2:
+        if node == 0:
+            def f(x,y,z):
+                return (2*x-1)*x
+        if node == 1:
+            def f(x,y,z):
+                return (2*y-1)*y
+        if node == 2:
+            def f(x,y,z):
+                return (2*z-1)*z
+        if node == 3:
+            def f(x,y,z):
+                return (2*(1-x-y-z)-1)*(1-x-y-z)
+        if node == 4:
+            def f(x,y,z):
+                return  4*x*y
+        if node == 5:
+            def f(x,y,z):
+                return 4*y*z
+        if node == 6:
+            def f(x,y,z):
+                return 4*x*z
+        if node == 7:
+            def f(x,y,z):
+                return 4*x*(1-x-y-z)
+        if node == 8:
+             def f(x,y,z):
+                 return 4*y*(1-x-y-z)
+        if node == 9:
+             def f(x,y,z):
+                 return 4*z*(1-x-y-z)
+             
+                
+    if K == 3:
+        if node == 0:
+            def f(x,y,z):
+                return 0.5*(3*x-1)*(3*x-2)*x
+            
+        if node == 1:
+            def f(x,y,z):
+                return 0.5*(3*y-1)*(3*y-2)*y
+            
+        if node == 2:
+            def f(x,y,z):
+                return 0.5*(3*z-1)*(3*z-2)*z
+        
+        if node == 3:
+            def f(x,y,z):
+                return 0.5*(3*(1-x-y-z)-1)*(3*(1-x-y-z)-2)*(1-x-y-z)
+            
+        if node == 4:
+            def f(x,y,z):
+                return 4.5*x*z*(3*x-1)
+        
+        if node == 5:
+            def f(x,y,z):
+                return 4.5*(3*z-1)*x*z
+            
+        if node == 6:
+            def f(x,y,z):
+                return 4.5*(3*x-1)*x*y
+            
+        if node == 7:
+            def f(x,y,z):
+                return 4.5*(3*y-1)*x*y
+            
+        if node == 8:
+            def f(x,y,z): 
+                return 4.5*(3*y-1)*y*z
+            
+        if node == 9:
+            def f(x,y,z):
+                return 4.5*(3*z-1)*y*z
+            
+        if node == 10:
+            def f(x,y,z):
+                return 4.5*(3*x-1)*x*(1-x-y-z)
+            
+        if node == 11:
+            def f(x,y,z):
+                return 4.5*(3*(1-x-y-z) -1)*x*(1-x-y-z)
+            
+        if node == 12:
+            def f(x,y,z):
+                return 4.5*(3*y-1)*y*(1-x-y-z)
+            
+        if node == 13:
+            def f(x,y,z):
+                return 4.5*(3*(1-x-y-z)-1)*y*(1-x-y-z)
+            
+        if node == 14:
+            def f(x,y,z):
+                return 4.5*(3*z-1)*z*(1-x-y-z)
+            
+        if node == 15:
+            def f(x,y,z):
+                return 4.5*(3*(1-x-y-z)-1)*z*(1-x-y-z)
+    
+        if node == 16:
+            def f(x,y,z):
+                return 27*y*z*(1-x-y-z) 
+            
+        if node == 17:
+            def f(x,y,z):
+                return 27*x*y*z
+            
+        if node == 18:
+            def f(x,y,z):
+                return 27*x*z*(1-x-y-z)
+            
+        if node == 19:
+            def f(x,y,z):
+                return 27*x*y*(1-x-y-z) 
+            
+
+"""
+
+
+    
 
 
 class FiniteElementMesh2D:
@@ -2114,7 +2316,7 @@ class FiniteElementMesh2D:
         mesh.refined(n) divides [0,1] into 2^n (2^(2n+1) finite elements)
 
 
-        ''''
+        '''
         if mth.log(M,2).is_integer() == True and  mth.log(L,2).is_integer() == True and L==M:
 
             p = int(mth.log(M,2)) # How many pieces to divide each interval in
@@ -2170,7 +2372,6 @@ class FiniteElementMesh2D:
             [integration_points,weights] = fem.quadrature.get_quadrature(element, 2)
             add_row = [integration_points[0][1], integration_points[0][0], integration_points[0][0]]
             integration_points = np.vstack([add_row,integration_points])
-        
          
          if K == 3:
             [integration_points,weights] = fem.quadrature.get_quadrature(element, 3)

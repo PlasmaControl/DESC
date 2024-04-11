@@ -165,7 +165,7 @@ def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         # Compute from analytic formula.
         r = func[c.shape[0]](*c[:-1], c[-1] - k, distinct)
         if keep_only_real:
-            r = tuple(map(partial(_filter_real, a_min=a_min, a_max=a_max), r))
+            r = [_filter_real(rr, a_min, a_max) for rr in r]
         r = jnp.stack(r, axis=-1)
         # We had ignored the case of double complex roots.
         distinct = distinct and c.shape[0] > 3 and not keep_only_real
@@ -615,7 +615,7 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
         approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
         Note that any arrays baked into the callable method should broadcast
         with arrays of shape(P, S, 1, 1).
-    f : list of Array, shape(P, S, knots.size, )
+    f : iterable of Array, shape(P, S, knots.size, )
         Arguments to the callable ``integrand``.
         These should be the functions in the integrand of the bounce integral
         evaluated at the knots. They should be computed on the returned desc
@@ -640,9 +640,6 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
     assert X.shape == (pitch.shape[0], B.shape[0], X.shape[2], w.size)
     assert knots.size == B.shape[-1]
     assert B_sup_z.shape == B.shape == B_z_ra.shape
-    for ff in f:
-        assert ff.ndim == 3 and ff.shape[0] == 1 or ff.shape[0] == pitch.shape[0]
-        assert ff.shape[1:] == B.shape
     # Spline the integrand so that we can evaluate it at quadrature points
     # without expensive coordinate mappings and root finding.
     # Spline each function separately so that the singularity near the bounce
@@ -798,6 +795,10 @@ def bounce_integral_map(
     """
     check = kwargs.pop("check", False)
     return_items = kwargs.pop("return_items", True)
+    normalize = kwargs.pop("normalize", 1)
+    x, w = quad(**kwargs)
+    # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
+    x = jnp.arcsin(x) / jnp.pi - 0.5
 
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
@@ -810,8 +811,8 @@ def bounce_integral_map(
     grid_fl, grid_desc, data = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
     data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc, data=data)
     B_sup_z = data["B^zeta"].reshape(S, knots.size)
-    B = data["|B|"].reshape(S, knots.size)
-    B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size)
+    B = data["|B|"].reshape(S, knots.size) / normalize
+    B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size) / normalize
     B_c = jnp.moveaxis(
         CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c,
         source=1,
@@ -820,10 +821,6 @@ def bounce_integral_map(
     assert B_c.shape == (4, S, knots.size - 1)
     B_z_ra_c = poly_der(B_c)
     assert B_z_ra_c.shape == (3, S, knots.size - 1)
-
-    x, w = quad(**kwargs)
-    # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
-    x = jnp.arcsin(x) / jnp.pi - 0.5
     original = _compute_bp_if_given_pitch(knots, B_c, B_z_ra_c, pitch, check, err=False)
 
     def _group_grid_data_by_field_line(f):
@@ -880,7 +877,7 @@ def bounce_integral_map(
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
         if not isinstance(f, (list, tuple)):
             f = [f]
-        f = tuple(map(_group_grid_data_by_field_line, f))
+        f = map(_group_grid_data_by_field_line, f)
         result = (
             _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method)
             / (bp2 - bp1)
@@ -894,6 +891,7 @@ def bounce_integral_map(
             "grid_fl": grid_fl,
             "grid_desc": grid_desc,
             "data": data,
+            "knots": knots,
             "B.c": B_c,
             "B_z_ra.c": B_z_ra_c,
         }

@@ -17,6 +17,7 @@ from desc.utils import (
     copy_coeffs,
     errorif,
     multinomial_coefficients,
+    warnif,
 )
 
 
@@ -697,6 +698,11 @@ class TwoPowerProfile(_Profile):
 
     f(x) = a[0]*(1 - x**a[1])**a[2]
 
+    Notes
+    -----
+    df/dx = inf at x = 0 if a[1] < 1
+    df/dx = inf at x = 1 if a[2] < dr
+
     Parameters
     ----------
     params: array-like
@@ -718,6 +724,16 @@ class TwoPowerProfile(_Profile):
 
         errorif(
             self._params.size != 3, ValueError, "params must be an array of size 3."
+        )
+        warnif(
+            self._params[1] < 1,
+            UserWarning,
+            "Derivatives of this profile will be infinite at rho=0!",
+        )
+        warnif(
+            self._params[2] < 1,
+            UserWarning,
+            "Derivatives of this profile will be infinite at rho=1!",
         )
 
     @property
@@ -760,8 +776,6 @@ class TwoPowerProfile(_Profile):
         r = grid.nodes[:, 0]
         if dr == 0:
             f = a * (1 - r**b) ** c
-        # df/dr = inf at rho = 0 if b < 1
-        # df/dr = inf at rho = 1 if b or c < dr
         elif dr == 1:
             f = r ** (b - 1) * self.compute(grid, params=[-a * b * c, b, c - 1])
         elif dr == 2:

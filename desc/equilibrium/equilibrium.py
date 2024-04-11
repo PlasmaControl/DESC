@@ -851,12 +851,16 @@ class Equilibrium(IOAble, Optimizable):
         dep1dr = [
             dep
             for dep in deps
-            if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
+            if (data_index[p][dep]["coordinates"] == "r")
+            and (dep not in data)
+            and dep != "rho"  # this does not need a special grid
         ]
         dep1dz = [
             dep
             for dep in deps
-            if (data_index[p][dep]["coordinates"] == "z") and (dep not in data)
+            if (data_index[p][dep]["coordinates"] == "z")
+            and (dep not in data)
+            and dep not in ["phi", "zeta"]  # these don't need a special grid
         ]
 
         # whether we need to calculate 0d or 1d quantities on a special grid

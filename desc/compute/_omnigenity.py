@@ -479,7 +479,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
     dim=1,
-    params=["t_1", "t_2"],
+    params=["t_1", "t_2", "w_1", "w_2", "c_1", "c_2", "B_min", "B_max"],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
@@ -489,11 +489,23 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     zeta_B = data["zeta_B"]
     theta_B = data["theta_B"]
-    exponent = (zeta_B - params["t_1"] * theta_B) ** params["t_2"]
-    B_min = jnp.min(data["|B|"])
-    B_max = jnp.max(data["|B|"])
-    data = B_min + (B_max - B_min) * jnp.exp(exponent)
+    c_1 = params["c_1"]
+    c_2 = params["c_2"]
+    t_1 = params["t_1"]
+    t_2 = params["t_2"]
+    w_1 = params["w_1"]
+    w_2 = params["w_2"]
+    B_min = params["B_min"]
+    B_max = params["B_max"]
+    iota = data["iota"]
+    w_1 = jnp.pi / data["NFP"] * (1 - t_1 * t_2) / (1 + t_2 / iota)
+    p = int(10)
+    exponent = -1 * (
+        ((zeta_B + t_1 * theta_B - c_1) / w_1) ** (2 * p)
+        + ((zeta_B + t_2 * theta_B - c_2) / w_2) ** (2 * p)
+    )
 
+    data = B_min + (B_max - B_min) * jnp.exp(exponent)
     return data
 
 

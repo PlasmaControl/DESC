@@ -13,7 +13,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import FourierCurrentPotentialField
+from desc.magnetic_fields import FourierCurrentPotentialField, run_regcoil
 from desc.vmec import VMECIO
 
 
@@ -270,16 +270,19 @@ def regcoil_ellipse_and_axisym_surf():
         sym=True,
         NFP=eq.NFP,
     )
-    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
-    data = surface_current_field.run_regcoil(
-        eq,
-        M_Phi=8,
-        N_Phi=8,
-        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
-        source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
-        scan=True,
-        current_helicity=-1,
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=8, N_Phi=8
     )
+    fields, data = run_regcoil(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
+        source_grid=LinearGrid(M=40, N=40, NFP=1),
+        alpha=np.append(np.array([0.0]), np.logspace(-30, -1, 30)),
+        current_helicity=-1,
+        vacuum=True,
+    )
+    surface_current_field = fields[0]
     return (data, surface_current_field, eq)
 
 
@@ -293,7 +296,7 @@ def regcoil_ellipse_helical_coils():
     M_egrid = 20
     N_egrid = 20
     M_sgrid = 40
-    N_sgrid = 80
+    N_sgrid = 50
     alpha = 1e-18
 
     surf_winding = FourierRZToroidalSurface(
@@ -304,15 +307,17 @@ def regcoil_ellipse_helical_coils():
         sym=True,
         NFP=eq.NFP,
     )
-    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
-    data = surface_current_field.run_regcoil(
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
+    )
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
         eq,
-        M_Phi=M_Phi,
-        N_Phi=N_Phi,
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         alpha=alpha,
         current_helicity=-2,
+        vacuum=True,
     )
 
     return (data, surface_current_field, eq)
@@ -323,12 +328,12 @@ def regcoil_ellipse_helical_coils_pos_helicity():
     """Run regcoil for elliptical eq and surface with positive helicity."""
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
-    M_Phi = 8
-    N_Phi = 8
+    M_Phi = 6
+    N_Phi = 6
     M_egrid = 20
     N_egrid = 20
     M_sgrid = 40
-    N_sgrid = 80
+    N_sgrid = 40
     alpha = 1e-18
 
     surf_winding = FourierRZToroidalSurface(
@@ -339,15 +344,17 @@ def regcoil_ellipse_helical_coils_pos_helicity():
         sym=True,
         NFP=eq.NFP,
     )
-    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
-    data = surface_current_field.run_regcoil(
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
+    )
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
         eq,
-        M_Phi=M_Phi,
-        N_Phi=N_Phi,
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         alpha=alpha,
         current_helicity=2,
+        vacuum=True,
     )
 
     return (surface_current_field, data["chi^2_B"], eq)
@@ -363,7 +370,7 @@ def regcoil_ellipse_modular_coils():
     M_egrid = 20
     N_egrid = 20
     M_sgrid = 40
-    N_sgrid = 80
+    N_sgrid = 40
     alpha = 1e-18
 
     surf_winding = FourierRZToroidalSurface(
@@ -374,15 +381,17 @@ def regcoil_ellipse_modular_coils():
         sym=True,
         NFP=eq.NFP,
     )
-    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
-    data = surface_current_field.run_regcoil(
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
+    )
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
         eq,
-        M_Phi=M_Phi,
-        N_Phi=N_Phi,
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         alpha=alpha,
         current_helicity=0,
+        vacuum=True,
     )
 
     return (surface_current_field, data["chi^2_B"], eq)

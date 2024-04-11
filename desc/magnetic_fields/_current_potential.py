@@ -15,7 +15,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.singularities import compute_B_plasma
-from desc.utils import Timer, copy_coeffs, errorif, setdefault, warnif
+from desc.utils import Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif
 
 from ._core import _MagneticField, biot_savart_general
 
@@ -612,405 +612,7 @@ class FourierCurrentPotentialField(
             check_orientation=False,
         )
 
-    def run_regcoil(  # noqa: C901 fxn too complex
-        self,
-        eq,
-        alpha=0.0,
-        M_Phi=8,
-        N_Phi=8,
-        source_grid=None,
-        eval_grid=None,
-        current_helicity=0,
-        external_field=None,
-        external_field_grid=None,
-        scan=False,
-        scan_alphas=None,
-        sym_Phi=None,
-        verbose=1,
-        normalize=True,
-        vacuum=False,
-    ):
-        """Runs regcoil algorithm to find the current potential for the surface.
-
-        NOTE: will set the FourierCurrentPotentialField's Phi_mn to
-        the lowest alpha value's solution, and will also set I and G
-        to the values corresponding to the input equilibrium, external_field,
-        and current_helicity.
-
-        Follows algorithm of [1] to find the current potential Phi on the surface,
-        given a surface current::
-
-            K = n x ∇ Φ
-            Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
-
-        The algorithm minimizes the quadratic flux on the plasma surface due to the
-        surface current (B_Phi_SV for field from the single valued part Φₛᵥ, and
-        B_GI for that from the secular terms I and G), plasma current, and external
-        fields::
-
-            Bn = ∫ ∫ (B . n)^2 dA
-            B = B_plasma + B_external + B_Phi_SV + B_GI
-
-        G is fixed by the equilibrium magnetic field strength, and I is determined
-        by the desired coil topology (given by ``current_helicity``), with zero
-        helicity corresponding to modular coils, and non-zero helicity corresponding
-        to helical coils. The algorithm then finds the single-valued part of Φ
-        by minimizing the quadratic flux on the plasma surface along with a
-        regularization term on the surface current magnitude::
-
-            min_Φₛᵥ  ∫ ∫ (B . n)^2 dA + α ∫ ∫ |K|^2 dA
-
-        where α is the regularization parameter, smaller alpha corresponds to no
-        regularization (consequently, lower Bn error but more complex and large surface
-        currents) and larger alpha corresponds to more regularization (consequently,
-        higher Bn error but simpler and smaller surface currents).
-
-        [1] Landreman, An improved current potential method for fast computation
-            of stellarator coil shapes, Nuclear Fusion (2017)
-
-        Parameters
-        ----------
-        eq : Equilibrium
-            Equilibrium to minimize the quadratic flux (plus regularization) on.
-        alpha : float, optional
-            regularization parameter, > 0, regularizes minimization of Bn
-            on plasma surface with minimization of current density mag K on winding
-            surface i.e. larger alpha, simpler coilset and smaller currents, but
-            worse Bn. by default 0
-        M_Phi : int, optional
-            Poloidal resolution of single-valued part of current potential,
-            by default 8
-        N_Phi : int, optional
-            Toroidal resolution of single-valued part of current potential,
-            by default 8
-        source_grid : Grid, optional
-            Source grid upon which to evaluate the surface current when calculating
-            the normal field on the plasma surface. Also used to evaluate the
-            virtual casing current, if the plasma has finite plasma currents.
-        eval_grid : _type_, optional
-            Grid upon which to evaluate the normal field on the plasma surface, and
-            at which the normal field is minimized.
-        external_field: _MagneticField,
-            DESC _MagneticField object giving the magnetic field
-            provided by any coils/fields external to the winding surface.
-            e.g. can provide a TF coilset to calculate the surface current
-            which is needed to minimize Bn given this external coilset providing
-            the bulk of the required net toroidal magnetic flux, by default None
-        external_field_grid : Grid, optional
-            Source grid with which to evaluate the external field when calculating
-            its contribution to the normal field on the plasma surface (if it is a type
-            that requires a source, like a CoilSet or a CurrentPotentialField).
-            By default None, which will use the default grid for the given
-            external field type.
-        current_helicity : int, optional
-            Ratio of used to determine if coils are modular (0) or helical (!=0)
-            defined as (G - G_ext) / (I * NFP)  = current_helicity
-            positive current_helicity corresponds to coils which rotate in the negative
-            poloidal direction as they rotate toroidally
-        scan : bool, optional
-            Whether to scan over the regularization parameter (alpha) values,
-            in range: np.concatenate([0, np.logspace(scan_lower, scan_upper, nscan)])
-            the returned data dictionary will contain a list for Phi_mn corresponding
-            to the alphas
-        scan_alphas : array, optional
-            Array of alpha values to scan over, if given when scan=True,
-            by default is `np.concatenate([np.array([0]),np.logspace(-30,-1,30)])`
-        sym_Phi :  {"cos","sin",False}
-            whether to enforce a given symmetry for the DoubleFourierSeries part of the
-            current potential. Defaults to ``"sin""`` if eq.sym is True else False.
-            If different than current ``sym_Phi``, non-symmetric modes are truncated.
-        verbose : int, optional
-            level of verbosity, if 0 will print nothing.
-            1 will display jacobian timing info
-            2 will display Bn max,min,average and chi^2 values for each alpha.
-        normalize : bool, optional
-            whether or not to normalize Bn when printing the Bnormal errors. If true,
-            will normalize by the average equilibrium field strength on the surface.
-        vacuum : bool, optional
-            if True, will not include the contribution to the normal field from the
-            plasma currents.
-
-
-        Returns
-        -------
-        data : dict
-            Dictionary with the following keys,::
-
-                alpha : regularization parameter the algorithm was ran with, a float
-                        if `scan=False`, or list of float of length `scan_alphas.size`
-                        if `scan=True`, corresponding to the list of `Phi_mn`.
-                Phi_mn : the single-valued current potential coefficients which
-                        minimize the Bn at the given eval_grid on the plasma, subject
-                        to regularization on the surface current magnitude governed by
-                        alpha.
-                        An array of length `self.Phi_basis.num_modes` if `scan=False`,
-                        or a list of arrays, with list length `scan_alphas.size` if
-                        `scan=True`, corresponding to the list of regularization
-                        parameters alpha.
-                I : float, net toroidal current (in Amperes) on the winding surface.
-                    Governed by the `current_helicity` parameter, and is zero for
-                    modular coils (`current_helicity=0`).
-                G : float, net poloidal current (in Amperes) on the winding surface.
-                    Determined by the equilibrium toroidal magnetic field, as well as
-                    the given external field.
-                chi^2_B : quadratic flux integrated over the plasma surface.
-                    a float if `scan=False`, or list of float of length
-                    `scan_alphas.size` if `scan=True`, corresponding to the list
-                    of `alpha`.
-                chi^2_K : Current density magnitude integrated over winding surface.
-                    a float if `scan=False`, or list of float of length
-                    `scan_alphas.size` if `scan=True`, corresponding to the list of
-                    `alpha`.
-                |K| : Current density magnitude on winding surface, evaluated at the
-                    given `source_grid`. An array of length `source_grid.num_nodes` if
-                    `scan=False`, or list of arrays, with list length
-                    `scan_alphas.size`, if `scan=True`, corresponding to the list of
-                    `alpha`.
-                eval_grid: Grid object that Bn was evaluated at.
-                source_grid: Grid object that Phi and K were evaluated at.
-
-
-        """
-        assert (
-            int(current_helicity) == current_helicity
-        ), "current_helicity must be an integer!"
-        # maybe it is an EquilibriaFamily
-        if hasattr(eq, "__len__"):
-            eq = eq[-1]
-
-        # ensure vacuum eq, as we don't yet support finite beta
-        pres = np.max(np.abs(eq.compute("p")["p"]))
-        curr = np.max(np.abs(eq.compute("current")["current"]))
-        warnif(
-            vacuum and pres > 1e-8,
-            UserWarning,
-            f"Pressure appears to be non-zero (max {pres} Pa), "
-            + "vacuum flag should probably be set to False.",
-        )
-        warnif(
-            vacuum and curr > 1e-8,
-            UserWarning,
-            f"Current appears to be non-zero (max {curr} A), "
-            + "vacuum flag should probably be set to False.",
-        )
-
-        data = {}
-        if external_field:  # ensure given field is an instance of _MagneticField
-            assert hasattr(external_field, "compute_magnetic_field"), (
-                "Expected"
-                + "MagneticField for argument external_field,"
-                + f" got type {type(external_field)} "
-            )
-            data["external_field"] = external_field
-            data["external_field_grid"] = external_field_grid
-
-        if source_grid is None:
-            source_grid = LinearGrid(
-                M=max(3 * self.M_Phi, 30), N=max(3 * self.N_Phi, 30), NFP=int(eq.NFP)
-            )
-        if eval_grid is None:
-            eval_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP), sym=eq.sym)
-        if normalize:
-            B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
-            # just need it for normalization, so do a simple mean
-            normalization_B = jnp.mean(B_eq_surf)
-        else:
-            normalization_B = 1
-
-        data["eval_grid"] = eval_grid
-        data["source_grid"] = source_grid
-
-        # plasma surface normal vector magnitude on eval grid
-        ne_mag = eq.compute(["|e_theta x e_zeta|"], eval_grid)["|e_theta x e_zeta|"]
-        # winding surface normal vector magnitude on source grid
-        ns_mag = self.compute(["|e_theta x e_zeta|"], source_grid)["|e_theta x e_zeta|"]
-        if sym_Phi is None:
-            # sin symmetry in current potential is appropriate with eq.sym=True
-            sym_Phi = "sin" if eq.sym else False
-        self.change_Phi_resolution(M=M_Phi, N=N_Phi, sym_Phi=sym_Phi)
-
-        # calculate net enclosed poloidal and toroidal currents
-        G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
-
-        if external_field:
-            # calculate the portion of G provided by external field
-            # by integrating external toroidal field along a curve of constant theta
-            try:
-                G_ext = external_field.G
-            except AttributeError:
-                curve_grid = LinearGrid(
-                    N=int(eq.NFP) * 1000,
-                    theta=jnp.array(jnp.pi),
-                    rho=jnp.array(1.0),
-                    endpoint=True,
-                )
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", UserWarning)
-                    # ignore warning from unequal NFP for grid and basis,
-                    # as we don't know a-priori if the external field
-                    # shares the same discrete symmetry as the equilibrium,
-                    # so we will use a grid with NFP=1 to be safe
-                    curve_data = eq.compute(
-                        ["R", "phi", "Z", "e_zeta"],
-                        grid=curve_grid,
-                    )
-                    curve_coords = jnp.vstack(
-                        (curve_data["R"], curve_data["phi"], curve_data["Z"])
-                    ).T
-                    ext_field_along_curve = external_field.compute_magnetic_field(
-                        curve_coords, basis="rpz", source_grid=external_field_grid
-                    )
-                # calculate covariant B_zeta = B dot e_zeta from external field
-                ext_field_B_zeta = jnp.sum(
-                    ext_field_along_curve * curve_data["e_zeta"], axis=-1
-                )
-                # negative sign here because with REGCOIL convention, negative G makes
-                # positive toroidal B
-                G_ext = -(
-                    jnp.trapz(
-                        y=ext_field_B_zeta,
-                        x=curve_grid.nodes[:, 2],
-                    )
-                    / mu_0
-                )
-        else:
-            G_ext = 0
-
-        # G needed by surface current is the total G minus the external contribution
-        G = G_tot - G_ext
-        # calclulate I, net toroidal current on winding surface
-        if current_helicity == 0:  # modular coils
-            I = 0
-        else:  # helical coils
-            I = G / current_helicity / eq.NFP  # toroidal
-
-        def B_from_K_SV(phi_mn):
-            """B from single value part of K from REGCOIL eqn 4."""
-            params = self.params_dict
-            params["Phi_mn"] = phi_mn
-            params["I"] = 0
-            params["G"] = 0
-            Bn, _ = self.compute_Bnormal(
-                eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
-            )
-            return Bn
-
-        def B_from_K_secular(I, G):
-            """B from secular part of K, i.e. B^GI_{normal} from REGCOIL eqn 4."""
-            params = self.params_dict
-            params["I"] = I
-            params["G"] = G
-            params["Phi_mn"] = jnp.zeros_like(params["Phi_mn"])
-
-            Bn, _ = self.compute_Bnormal(
-                eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
-            )
-            return Bn
-
-        timer = Timer()
-        # calculate the Jacobian matrix A for  Bn_SV = A*Phi_mn
-        timer.start("Jacobian Calculation")
-        A = Derivative(B_from_K_SV).compute(self.Phi_mn)
-        timer.stop("Jacobian Calculation")
-        if verbose > 0:
-            timer.disp("Jacobian Calculation")
-
-        self.I = float(I)
-        self.G = float(G)
-        # find the normal field from the secular part of the current potential
-        B_GI_normal = B_from_K_secular(I, G)
-        if not vacuum:
-            Bn_plasma = compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
-        else:
-            Bn_plasma = jnp.zeros_like(
-                B_GI_normal
-            )  # from plasma current, currently assume is 0
-        # find external field's Bnormal contribution
-        if external_field:
-            Bn_ext, _ = external_field.compute_Bnormal(
-                eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
-            )
-        else:
-            Bn_ext = jnp.zeros_like(B_GI_normal)
-
-        rhs = -(Bn_plasma + Bn_ext + B_GI_normal).T @ A
-
-        if scan:
-            scan_alphas = (
-                scan_alphas
-                if scan_alphas is not None
-                else jnp.concatenate((jnp.array([0.0]), jnp.logspace(-30, -1, 30)))
-            )
-        alphas = [alpha] if not scan else scan_alphas
-
-        chi2Bs = []
-        chi2Ks = []
-        K_mags = []
-        phi_mns = []
-        Bn_arrs = []
-
-        # calculate the Phi_mn which minimizes (chi^2_B + alpha*chi^2_K) for each alpha
-        for alpha in alphas:
-            printstring = f"Calculating Phi_SV for alpha = {alpha:1.5e}"
-            if verbose > 1:
-                print(
-                    "#" * len(printstring)
-                    + "\n"
-                    + printstring
-                    + "\n"
-                    + "#" * len(printstring)
-                )
-
-            # calculate Phi_mn
-            result = jnp.linalg.lstsq(
-                A.T @ A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
-            )
-            phi_mn_opt = result[0]
-            # TODO: do something with the residuals from lstsq?
-
-            phi_mns.append(phi_mn_opt)
-
-            Bn_SV = A @ phi_mn_opt
-            Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
-
-            chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
-            chi2Bs.append(chi_B)
-
-            self.Phi_mn = phi_mn_opt
-            K = self.compute(["K"], grid=source_grid)["K"]
-            K_mag = jnp.linalg.norm(K, axis=-1)
-            chi_K = jnp.sum(K_mag * K_mag * ns_mag * source_grid.weights)
-            chi2Ks.append(chi_K)
-            K_mags.append(K_mag)
-            Bn_print = Bn_tot / normalization_B
-            Bn_arrs.append(Bn_tot)
-            if verbose > 1:
-                units = " (T)" if not normalize else " (unitless)"
-                printstring = f"chi^2 B = {chi_B:1.5e}"
-                print(printstring)
-                printstring = f"min Bnormal = {jnp.min(np.abs(Bn_print)):1.5e}"
-                printstring += units
-                print(printstring)
-                printstring = f"Max Bnormal = {jnp.max(jnp.abs(Bn_print)):1.5e}"
-                printstring += units
-                print(printstring)
-                printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print)):1.5e}"
-                printstring += units
-                print(printstring)
-        data["alpha"] = alphas[0] if not scan else alphas
-        data["Phi_mn"] = phi_mns[0] if not scan else phi_mns
-        data["I"] = I
-        data["G"] = G
-        data["chi^2_B"] = chi2Bs[0] if not scan else chi2Bs
-        data["chi^2_K"] = chi2Ks[0] if not scan else chi2Ks
-        data["|K|"] = K_mags[0] if not scan else K_mags
-        data["Bn_total"] = Bn_arrs[0] if not scan else Bn_arrs
-
-        self.Phi_mn = phi_mns[0]
-
-        return data
-
-    def cut_surface_current_into_coils(  # noqa: C901 - FIXME: simplify this
+    def to_CoilSet(  # noqa: C901 - FIXME: simplify this
         self,
         desirednumcoils=10,  # TODO: make this coils_per_NFP for modular...
         step=2,
@@ -1022,7 +624,7 @@ class FourierCurrentPotentialField(
         Parameters
         ----------
         desirednumcoils : int, optional
-            number of coils to discretize the surface current with, by default 10
+            Total number of coils to discretize the surface current with, by default 10
         step : int, optional
             Amount of points to skip by when saving the coil geometry spline
             by default 2, meaning that every other point will be saved
@@ -1035,9 +637,11 @@ class FourierCurrentPotentialField(
 
         Returns
         -------
-        coils : CoilSet
-            DESC CoilSet object that is a discretization of the input
-            surface current on the given winding surface
+        coils : CoilSet or MixedCoilSet
+            DESC `CoilSet` of `SplineXYZCoil` coils that are a discretization of
+            the surface current on the given winding surface.
+            A `MixedCoilSet` is returned if the number of spline points per
+            coil are not uniform across the coils.
         """
         nfp = self.Phi_basis.NFP
 
@@ -1059,7 +663,7 @@ class FourierCurrentPotentialField(
         helicity = safediv(
             net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8
         )
-        npts = 128  # number of points in the zeta direction, and used
+        npts = 128  # number of points in the zeta direction
         dz = 2 * np.pi / nfp / npts
         if not jnp.isclose(helicity, 0):
             # helical coils
@@ -1285,7 +889,7 @@ class FourierCurrentPotentialField(
         # Create CoilSet object
         ################################################################
         # local imports to avoid circular imports
-        from desc.coils import MixedCoilSet, SplineXYZCoil
+        from desc.coils import CoilSet, MixedCoilSet, SplineXYZCoil
 
         coils = []
         for j in range(len(contour_X)):
@@ -1331,8 +935,11 @@ class FourierCurrentPotentialField(
                     method=spline_method,
                 )
             )
-
-        final_coilset = MixedCoilSet(*coils)
+        try:
+            final_coilset = CoilSet(*coils)
+        except ValueError:
+            # can't make a CoilSet so make a MixedCoilSet instead
+            final_coilset = MixedCoilSet(*coils)
         return final_coilset
 
 
@@ -1406,3 +1013,386 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     if basis == "rpz":
         B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
     return B
+
+
+# REGCOIL utilities
+
+
+def run_regcoil(  # noqa: C901 fxn too complex
+    current_potential_field,
+    eq,
+    alpha=0.0,
+    source_grid=None,
+    eval_grid=None,
+    current_helicity=0,
+    external_field=None,
+    external_field_grid=None,
+    verbose=1,
+    normalize=True,
+    vacuum=False,
+):
+    """Runs regcoil algorithm to find the current potential for the surface.
+
+    NOTE: will set the FourierCurrentPotentialField's Phi_mn to
+    the lowest alpha value's solution, and will also set I and G
+    to the values corresponding to the input equilibrium, external_field,
+    and current_helicity.
+
+    Follows algorithm of [1] to find the current potential Phi on the surface,
+    given a surface current::
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    The algorithm minimizes the quadratic flux on the plasma surface due to the
+    surface current (B_Phi_SV for field from the single valued part Φₛᵥ, and
+    B_GI for that from the secular terms I and G), plasma current, and external
+    fields::
+
+        Bn = ∫ ∫ (B . n)^2 dA
+        B = B_plasma + B_external + B_Phi_SV + B_GI
+
+    G is fixed by the equilibrium magnetic field strength, and I is determined
+    by the desired coil topology (given by ``current_helicity``), with zero
+    helicity corresponding to modular coils, and non-zero helicity corresponding
+    to helical coils. The algorithm then finds the single-valued part of Φ
+    by minimizing the quadratic flux on the plasma surface along with a
+    regularization term on the surface current magnitude::
+
+        min_Φₛᵥ  ∫ ∫ (B . n)^2 dA + α ∫ ∫ |K|^2 dA
+
+    where α is the regularization parameter, smaller alpha corresponds to no
+    regularization (consequently, lower Bn error but more complex and large surface
+    currents) and larger alpha corresponds to more regularization (consequently,
+    higher Bn error but simpler and smaller surface currents).
+
+    [1] Landreman, An improved current potential method for fast computation
+        of stellarator coil shapes, Nuclear Fusion (2017)
+
+    Parameters
+    ----------
+    current_potential_field : FourierCurrentPotentialField
+        `FourierCurrentPotentialField` to run REGCOIL with.
+    eq : Equilibrium
+        Equilibrium to minimize the quadratic flux (plus regularization) on.
+    alpha : float or ndarray, optional
+        regularization parameter, > 0, regularizes minimization of Bn
+        on plasma surface with minimization of current density mag K on winding
+        surface i.e. larger alpha, simpler coilset and smaller currents, but
+        worse Bn. If a float, only runs REGCOIL for that single value and returns
+        a single FourierCurrentPotentialField and the associated data. If an array
+        is passed, will run REGCOIL for each alpha in that array and return a list
+        of FourierCurrentPotentialFields, and the associated data.
+    source_grid : Grid, optional
+        Source grid upon which to evaluate the surface current when calculating
+        the normal field on the plasma surface. Also used to evaluate the
+        virtual casing current, if the plasma has finite plasma currents.
+        Defaults to
+        `LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
+         N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)`
+    eval_grid : _type_, optional
+        Grid upon which to evaluate the normal field on the plasma surface, and
+        at which the normal field is minimized.
+        Defaults to
+        `LinearGrid(M= 30, N= 30, NFP=eq.NFP)`
+    external_field: _MagneticField,
+        DESC `_MagneticField` object giving the magnetic field
+        provided by any coils/fields external to the winding surface.
+        e.g. can provide a TF coilset to calculate the surface current
+        which is needed to minimize Bn given this external coilset providing
+        the bulk of the required net toroidal magnetic flux, by default None
+    external_field_grid : Grid, optional
+        Source grid with which to evaluate the external field when calculating
+        its contribution to the normal field on the plasma surface (if it is a type
+        that requires a source, like a `CoilSet` or a `CurrentPotentialField`).
+        By default None, which will use the default grid for the given
+        external field type.
+    current_helicity : int, optional
+        Ratio of used to determine if coils are modular (0) or helical (!=0)
+        defined as (G - G_ext) / (I * NFP)  = current_helicity
+        positive current_helicity corresponds to coils which rotate in the negative
+        poloidal direction as they rotate toroidally
+    verbose : int, optional
+        level of verbosity, if 0 will print nothing.
+        1 will display jacobian timing info
+        2 will display Bn max,min,average and chi^2 values for each alpha.
+    normalize : bool, optional
+        whether or not to normalize Bn when printing the Bnormal errors. If true,
+        will normalize by the average equilibrium field strength on the surface.
+    vacuum : bool, optional
+        if True, will not include the contribution to the normal field from the
+        plasma currents.
+
+
+    Returns
+    -------
+    data : dict
+        Dictionary with the following keys,::
+
+            alpha : regularization parameter the algorithm was ran with, a float
+                    if passed-in alpha was a float, or an array if it was an array,
+                    corresponding to the list of `Phi_mn`.
+            Phi_mn : the single-valued current potential coefficients which
+                    minimize the Bn at the given eval_grid on the plasma, subject
+                    to regularization on the surface current magnitude governed by
+                    alpha.
+                    An array of length `self.Phi_basis.num_modes` if passed-in alpha,
+                    was a float, or a list of arrays, with list length `alpha.size` if
+                    `alpha` was an array, corresponding to the list of regularization
+                    parameters alpha.
+            I : float, net toroidal current (in Amperes) on the winding surface.
+                Governed by the `current_helicity` parameter, and is zero for
+                modular coils (`current_helicity=0`).
+            G : float, net poloidal current (in Amperes) on the winding surface.
+                Determined by the equilibrium toroidal magnetic field, as well as
+                the given external field.
+            chi^2_B : quadratic flux integrated over the plasma surface.
+                a float if `alpha` was a float, or list of float of length
+                `alpha.size` if `alpha` was an array, corresponding to the array
+                of `alpha` values.
+            chi^2_K : Current density magnitude integrated over winding surface.
+                a float if `alpha` was a float, or list of float of length
+                `alpha.size` if `alpha` was an array, corresponding to the array of
+                `alpha`.
+            |K| : Current density magnitude on winding surface, evaluated at the
+                given `source_grid`. An array of length `source_grid.num_nodes` if
+                `alpha` was a float, or list of arrays, with list length
+                `alpha.size`, if `alpha` was an array, corresponding to the array of
+                `alpha`.
+            eval_grid: Grid object that Bn was evaluated at.
+            source_grid: Grid object that Phi and K were evaluated at.
+
+
+    """
+    assert (
+        int(current_helicity) == current_helicity
+    ), "current_helicity must be an integer!"
+    # maybe it is an EquilibriaFamily
+    if hasattr(eq, "__len__"):
+        eq = eq[-1]
+
+    # check if vacuum flag should be True or not
+    pres = np.max(np.abs(eq.compute("p")["p"]))
+    curr = np.max(np.abs(eq.compute("current")["current"]))
+    warnif(
+        vacuum and pres > 1e-8,
+        UserWarning,
+        f"Pressure appears to be non-zero (max {pres} Pa), "
+        + "vacuum flag should probably be set to False.",
+    )
+    warnif(
+        vacuum and curr > 1e-8,
+        UserWarning,
+        f"Current appears to be non-zero (max {curr} A), "
+        + "vacuum flag should probably be set to False.",
+    )
+
+    data = {}
+    if external_field:  # ensure given field is an instance of _MagneticField
+        assert hasattr(external_field, "compute_magnetic_field"), (
+            "Expected"
+            + "MagneticField for argument external_field,"
+            + f" got type {type(external_field)} "
+        )
+        data["external_field"] = external_field
+        data["external_field_grid"] = external_field_grid
+
+    if source_grid is None:
+        source_grid = LinearGrid(
+            M=max(3 * current_potential_field.M_Phi, 30),
+            N=max(3 * current_potential_field.N_Phi, 30),
+            NFP=int(eq.NFP),
+        )
+    if eval_grid is None:
+        eval_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP))
+    if normalize:
+        B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
+        # just need it for normalization, so do a simple mean
+        normalization_B = jnp.mean(B_eq_surf)
+    else:
+        normalization_B = 1
+
+    data["eval_grid"] = eval_grid
+    data["source_grid"] = source_grid
+
+    # plasma surface normal vector magnitude on eval grid
+    ne_mag = eq.compute(["|e_theta x e_zeta|"], eval_grid)["|e_theta x e_zeta|"]
+    # winding surface normal vector magnitude on source grid
+    ns_mag = current_potential_field.compute(["|e_theta x e_zeta|"], source_grid)[
+        "|e_theta x e_zeta|"
+    ]
+
+    # calculate net enclosed poloidal and toroidal currents
+    G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
+
+    if external_field:
+        # calculate the portion of G provided by external field
+        # by integrating external toroidal field along a curve of constant theta
+        try:
+            G_ext = external_field.G
+        except AttributeError:
+            curve_grid = LinearGrid(
+                N=int(eq.NFP) * 1000,
+                theta=jnp.array(jnp.pi),
+                rho=jnp.array(1.0),
+                endpoint=True,
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                # ignore warning from unequal NFP for grid and basis,
+                # as we don't know a-priori if the external field
+                # shares the same discrete symmetry as the equilibrium,
+                # so we will use a grid with NFP=1 to be safe
+                curve_data = eq.compute(
+                    ["R", "phi", "Z", "e_zeta"],
+                    grid=curve_grid,
+                )
+                curve_coords = jnp.vstack(
+                    (curve_data["R"], curve_data["phi"], curve_data["Z"])
+                ).T
+                ext_field_along_curve = external_field.compute_magnetic_field(
+                    curve_coords, basis="rpz", source_grid=external_field_grid
+                )
+            # calculate covariant B_zeta = B dot e_zeta from external field
+            ext_field_B_zeta = jnp.sum(
+                ext_field_along_curve * curve_data["e_zeta"], axis=-1
+            )
+            # negative sign here because with REGCOIL convention, negative G makes
+            # positive toroidal B
+            G_ext = -(
+                np.trapz(
+                    y=ext_field_B_zeta,
+                    x=curve_grid.nodes[:, 2],
+                )
+                / mu_0
+            )
+    else:
+        G_ext = 0
+
+    # G needed by surface current is the total G minus the external contribution
+    G = G_tot - G_ext
+    # calclulate I, net toroidal current on winding surface
+    if current_helicity == 0:  # modular coils
+        I = 0
+    else:  # helical coils
+        I = G / current_helicity / eq.NFP
+
+    def B_from_K_SV(phi_mn):
+        """B from single value part of K from REGCOIL eqn 4."""
+        params = current_potential_field.params_dict
+        params["Phi_mn"] = phi_mn
+        params["I"] = 0
+        params["G"] = 0
+        Bn, _ = current_potential_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+        )
+        return Bn
+
+    def B_from_K_secular(I, G):
+        """B from secular part of K, i.e. B^GI_{normal} from REGCOIL eqn 4."""
+        params = current_potential_field.params_dict
+        params["I"] = I
+        params["G"] = G
+        params["Phi_mn"] = jnp.zeros_like(params["Phi_mn"])
+
+        Bn, _ = current_potential_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+        )
+        return Bn
+
+    timer = Timer()
+    # calculate the Jacobian matrix A for  Bn_SV = A*Phi_mn
+    timer.start("Jacobian Calculation")
+    A = Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn)
+    timer.stop("Jacobian Calculation")
+    if verbose > 0:
+        timer.disp("Jacobian Calculation")
+
+    current_potential_field.I = float(I)
+    current_potential_field.G = float(G)
+
+    # find the normal field from the secular part of the current potential
+    B_GI_normal = B_from_K_secular(I, G)
+    if not vacuum:
+        Bn_plasma = compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
+    else:
+        Bn_plasma = jnp.zeros_like(
+            B_GI_normal
+        )  # from plasma current, currently assume is 0
+    # find external field's Bnormal contribution
+    if external_field:
+        Bn_ext, _ = external_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
+        )
+    else:
+        Bn_ext = jnp.zeros_like(B_GI_normal)
+
+    rhs = -(Bn_plasma + Bn_ext + B_GI_normal).T @ A
+    alphas = np.atleast_1d(alpha)
+    scan = alphas.size > 1
+
+    chi2Bs = []
+    chi2Ks = []
+    K_mags = []
+    phi_mns = []
+    Bn_arrs = []
+    fields = []
+
+    # calculate the Phi_mn which minimizes (chi^2_B + alpha*chi^2_K) for each alpha
+    for alpha in alphas:
+        printstring = f"Calculating Phi_SV for alpha = {alpha:1.5e}"
+        if verbose > 1:
+            print(
+                "#" * len(printstring)
+                + "\n"
+                + printstring
+                + "\n"
+                + "#" * len(printstring)
+            )
+
+        # calculate Phi_mn with SVD
+        Ainv_full, _ = svd_inv_null(A.T @ A + alpha * jnp.eye(A.shape[1]))
+        phi_mn_opt = Ainv_full @ rhs
+
+        phi_mns.append(phi_mn_opt)
+
+        Bn_SV = A @ phi_mn_opt
+        Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
+
+        chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
+        chi2Bs.append(chi_B)
+
+        current_potential_field.Phi_mn = phi_mn_opt
+        fields.append(current_potential_field.copy())
+        K = current_potential_field.compute(["K"], grid=source_grid)["K"]
+        K_mag = jnp.linalg.norm(K, axis=-1)
+        chi_K = jnp.sum(K_mag * K_mag * ns_mag * source_grid.weights)
+        chi2Ks.append(chi_K)
+        K_mags.append(K_mag)
+        Bn_print = Bn_tot / normalization_B
+        Bn_arrs.append(Bn_tot)
+        if verbose > 1:
+            units = " (T)" if not normalize else " (unitless)"
+            printstring = f"chi^2 B = {chi_B:1.5e}"
+            print(printstring)
+            printstring = f"min Bnormal = {jnp.min(np.abs(Bn_print)):1.5e}"
+            printstring += units
+            print(printstring)
+            printstring = f"Max Bnormal = {jnp.max(jnp.abs(Bn_print)):1.5e}"
+            printstring += units
+            print(printstring)
+            printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print)):1.5e}"
+            printstring += units
+            print(printstring)
+    data["alpha"] = alphas[0] if not scan else alphas
+    data["Phi_mn"] = phi_mns[0] if not scan else phi_mns
+    data["I"] = I
+    data["G"] = G
+    data["chi^2_B"] = chi2Bs[0] if not scan else chi2Bs
+    data["chi^2_K"] = chi2Ks[0] if not scan else chi2Ks
+    data["|K|"] = K_mags[0] if not scan else K_mags
+    data["Bn_total"] = Bn_arrs[0] if not scan else Bn_arrs
+
+    if len(fields) == 1:
+        fields = fields[0]
+    return fields, data

@@ -613,8 +613,8 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
         It should accept the items in ``f`` as arguments as well as two additional
         keyword arguments: ``B``, and ``pitch``. A quadrature will be performed to
         approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
-        Note that any arrays backed into the callabe method should broadcast
-        with arrays of shape(X.shape).
+        Note that any arrays baked into the callable method should broadcast
+        with arrays of shape(P, S, 1, 1).
     f : list of Array, shape(P, S, knots.size, )
         Arguments to the callable ``integrand``.
         These should be the functions in the integrand of the bounce integral
@@ -840,11 +840,10 @@ def bounce_integral_map(
             It should accept the items in ``f`` as arguments as well as two additional
             keyword arguments: ``B``, and ``pitch``. A quadrature will be performed to
             approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
-            Note that any arrays backed into the callabe method should broadcast
-            with arrays of shape(P, S, (knots.size - 1) * 3, w.size) where
+            Note that any arrays baked into the callable method should broadcast
+            with arrays of shape(P, S, 1, 1) where
                 P is the batch axis size of pitch,
-                S is the number of field lines given by rho.size * alpha.size,
-                and w.size is the number of quadrature points (by default 7).
+                S is the number of field lines given by rho.size * alpha.size.
         f : list of Array, shape(P, items["grid"].num_nodes, )
             Arguments to the callable ``integrand``.
             These should be the functions in the integrand of the bounce integral

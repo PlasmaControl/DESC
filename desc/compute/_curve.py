@@ -1,6 +1,6 @@
 from interpax import interp1d
 
-from desc.backend import jnp
+from desc.backend import fori_loop, jnp
 
 from .data_index import register_compute_fun
 from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
@@ -661,6 +661,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         return arr_temp
 
     xq = data["s"]
+    transforms["intervals"] = jnp.asarray(transforms["intervals"])
 
     knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
     X = jnp.append(params["X"], params["X"][0])
@@ -670,10 +671,11 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     Xq = jnp.zeros(len(xq))
     Yq = jnp.zeros(len(xq))
     Zq = jnp.zeros(len(xq))
+    fq = jnp.array([Xq, Yq, Zq])
 
-    # TODO: generalize for when each coil has different intervals
-    for istart, istop in transforms["intervals"]:
-        istop = -1 if istop == 0 else istop
+    def body(i, fq):
+        istart, istop = transforms["intervals"][i]
+        istop = jnp.where(istop == 0, -1, istop)
 
         X_in_interval = get_arr_in_interval(X, knots, istart, istop)
         Y_in_interval = get_arr_in_interval(Y, knots, istart, istop)
@@ -703,11 +705,21 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             derivative=0,
         )
 
-        Xq = jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Xq_temp, Xq)
-        Yq = jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Yq_temp, Yq)
-        Zq = jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Zq_temp, Zq)
+        fq = fq.at[0].set(
+            jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Xq_temp, fq[0])
+        )
+        fq = fq.at[1].set(
+            jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Yq_temp, fq[1])
+        )
+        fq = fq.at[2].set(
+            jnp.where((xq >= knots[istart]) & (xq <= knots[istop]), Zq_temp, fq[2])
+        )
 
-    coords = jnp.stack(jnp.stack([Xq, Yq, Zq]), axis=1)
+        return fq
+
+    fq = fori_loop(0, len(transforms["intervals"]), body, fq)
+
+    coords = jnp.stack(fq, axis=1)
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
     )

@@ -1572,57 +1572,6 @@ def find_least_rational_surfaces(
     return rho, io
 
 
-def meshgrid_expand(x, a_size, b_size, c_size, order=0):
-    """Expand ``x`` by duplicating elements to match a meshgrid pattern.
-
-    It is common to construct a meshgrid in the following manner.
-        .. code-block:: python
-
-        a, b, c = jnp.meshgrid(a, b, c, indexing="ij")
-        a, b, c = map(jnp.ravel, (a, b, c))
-        nodes = jnp.column_stack([a, b, c])
-        grid = Grid(nodes, sort=False, jitable=True)
-
-    Since ``jitable=True`` was specified, the attribute ``grid.inverse_*_idx``
-    is not computed, which is needed for the method ``grid.expand(x)``.
-    On such grids, this method should be used instead.
-
-    Parameters
-    ----------
-    x : ndarray
-        Stores the values of a surface function (constant over a surface)
-        for all unique surfaces of the specified label on the grid.
-        The length of ``x`` should match the number of unique surfaces of
-        the corresponding label in this grid.
-    a_size : int
-        Size of the first argument to meshgrid.
-    b_size : int
-        Size of the second argument to meshgrid.
-    c_size : int
-        Size of the third argument to meshgrid.
-    order : int
-        0, 1, or 2. Corresponds to whether ``x`` is a surface function
-        of a, b, or c in the example code in the docstring.
-
-    Returns
-    -------
-    expand_x : ndarray
-        ``x`` expanded to match the meshgrid pattern.
-
-    """
-    order = int(order)
-    assert 0 <= order <= 2
-    if order == 0:
-        assert len(x) == a_size
-        return repeat(x, b_size * c_size, total_repeat_length=a_size * b_size * c_size)
-    if order == 1:
-        assert len(x) == b_size
-        return jnp.tile(repeat(x, c_size, total_repeat_length=b_size * c_size), a_size)
-    if order == 2:
-        assert len(x) == c_size
-        return jnp.tile(x, a_size * b_size)
-
-
 def meshgrid_inverse_idx(a_size, b_size, c_size):
     """Return inverse indices for meshgrid pattern.
 
@@ -1646,8 +1595,6 @@ def meshgrid_inverse_idx(a_size, b_size, c_size):
         Size of the second argument to meshgrid.
     c_size : int
         Size of the third argument to meshgrid.
-    order : int
-        0, 1, or 2. Whether to retrieve inverse indices for label a, b, or c.
 
     Returns
     -------
@@ -1655,16 +1602,15 @@ def meshgrid_inverse_idx(a_size, b_size, c_size):
         The inverse indices.
 
     """
-    a = jnp.arange(a_size)
     inverse_a_idx = repeat(
-        a, b_size * c_size, total_repeat_length=a_size * b_size * c_size
+        jnp.arange(a_size),
+        b_size * c_size,
+        total_repeat_length=a_size * b_size * c_size,
     )
-    b = jnp.arange(b_size)
     inverse_b_idx = jnp.tile(
-        repeat(b, c_size, total_repeat_length=b_size * c_size), a_size
+        repeat(jnp.arange(b_size), c_size, total_repeat_length=b_size * c_size), a_size
     )
-    c = jnp.arange(c_size)
-    inverse_c_idx = jnp.tile(c, a_size * b_size)
+    inverse_c_idx = jnp.tile(jnp.arange(c_size), a_size * b_size)
     return inverse_a_idx, inverse_b_idx, inverse_c_idx
 
 

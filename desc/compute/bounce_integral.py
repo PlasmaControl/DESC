@@ -378,11 +378,10 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c):
         c=B_z_ra_c,
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
-        sort=False,  # don't need to sort
-        # False will double weight orbits with B_z = B_zz = 0 at bounce points.
+        # False to double weight orbits with |B|_z_ra = |B|_zz_ra = 0 at bounce points.
         distinct=True,
     )
-    # Can detect at most degree of |B|_z spline extrema between each knot.
+    # Can detect at most degree of |B|_z_ra spline extrema between each knot.
     assert extrema.shape == (S, N, degree - 1)
     # Reshape so that last axis enumerates (unsorted) extrema along a field line.
     B_extrema = poly_val(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
@@ -591,7 +590,7 @@ def _interp1d_vec_with_df(
     return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
 
 
-def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, pitch, f, f_method):
+def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
     """Compute bounce quadrature for every pitch along every field line.
 
     Parameters
@@ -608,12 +607,26 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, pitch, f, f_method):
         Norm of magnetic field.
     B_z_ra : Array, shape(S, knots.size, )
         Norm of magnetic field derivative with respect to field-line following label.
+    integrand : callable
+        This callable is the composition operator on the set of functions in ``f``
+        that maps the functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ.
+        It should accept the items in ``f`` as arguments as well as two additional
+        keyword arguments: ``B``, and ``pitch``. A quadrature will be performed to
+        approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
+        Note that any arrays backed into the callabe method should broadcast
+        with arrays of shape(X.shape).
+    f : list of Array, shape(P, S, knots.size, )
+        Arguments to the callable ``integrand``.
+        These should be the functions in the integrand of the bounce integral
+        evaluated at the knots. The values will be interpolated to the quadrature
+        points. All items in the list should be two-dimensional. The first axis of
+        that item is interpreted as the batch axis, which enumerates the
+        evaluation of the function at particular pitch values.
     pitch : Array, shape(P, S)
         λ values.
-    f : Array, shape(P, S, knots.size, )
-        Function to compute bounce integral of, evaluated at knots.
-    f_method : str
-        Method of interpolation for f.
+    method : str
+        Method of interpolation for functions contained in ``f``.
+        See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
 
     Returns
     -------
@@ -625,48 +638,47 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, pitch, f, f_method):
     assert w.ndim == knots.ndim == 1
     assert X.shape == (pitch.shape[0], B.shape[0], X.shape[2], w.size)
     assert knots.size == B.shape[-1]
-    assert f.ndim == 3 and f.shape[0] == 1 or f.shape[0] == pitch.shape[0]
-    assert f.shape[1:] == B_sup_z.shape == B.shape == B_z_ra.shape
+    assert B_sup_z.shape == B.shape == B_z_ra.shape
+    for ff in f:
+        assert ff.ndim == 3 and ff.shape[0] == 1 or ff.shape[0] == pitch.shape[0]
+        assert ff.shape[1:] == B.shape
     # Spline the integrand so that we can evaluate it at quadrature points
     # without expensive coordinate mappings and root finding.
     # Spline each function separately so that the singularity near the bounce
     # points can be captured more accurately than can be by any polynomial.
     shape = X.shape
     X = X.reshape(X.shape[0], X.shape[1], -1)
-    if f_method == "constant":
-        f = f[..., 0, jnp.newaxis, jnp.newaxis]
-    else:
-        f = _interp1d_vec(X, knots, f, method=f_method).reshape(shape)
-    # Use akima spline to suppress oscillation.
-    B_sup_z = _interp1d_vec(X, knots, B_sup_z, method="akima").reshape(shape)
+    f = [_interp1d_vec(X, knots, ff, method=method).reshape(shape) for ff in f]
+    B_sup_z = _interp1d_vec(X, knots, B_sup_z, method=method).reshape(shape)
     # Specify derivative at knots for ≈ cubic hermite interpolation.
     B = _interp1d_vec_with_df(X, knots, B, B_z_ra, method="cubic").reshape(shape)
     pitch = pitch[..., jnp.newaxis, jnp.newaxis]
-    inner_product = jnp.dot(f / (B_sup_z * jnp.sqrt(1 - pitch * B)), w)
+    inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch) / B_sup_z, w)
     return inner_product
 
 
-def bounce_integral(
+def bounce_integral_map(
     eq,
-    pitch=None,
     rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
-    zeta=jnp.linspace(0, 6 * jnp.pi, 20),
+    knots=jnp.linspace(0, 6 * jnp.pi, 20),
     quad=tanh_sinh_quad,
+    pitch=None,
     **kwargs,
 ):
     """Returns a method to compute the bounce integral of any quantity.
 
-    The bounce integral is defined as F_ℓ(λ) = ∫ f(ℓ) / √(1 − λ |B|) dℓ, where
+    The bounce integral is defined as ∫ f(ℓ) dℓ, where
         dℓ parameterizes the distance along the field line,
         λ is a constant proportional to the magnetic moment over energy,
         |B| is the norm of the magnetic field,
         f(ℓ) is the quantity to integrate along the field line,
-        and the endpoints of the integration are at the bounce points.
+        and the boundaries of the integral are bounce points, ζ₁, ζ₂, such that
+        (λ |B|)(ζᵢ) = 1.
     Physically, the pitch angle λ is the magnetic moment over the energy
     of particle. For a particle with fixed λ, bounce points are defined to be
     the location on the field line such that the particle's velocity parallel
-    to the magnetic field is zero, i.e. λ |B| = 1.
+    to the magnetic field is zero.
 
     The bounce integral is defined up to a sign.
     We choose the sign that corresponds the particle's guiding center trajectory
@@ -676,6 +688,21 @@ def bounce_integral(
     ----------
     eq : Equilibrium
         Equilibrium on which the bounce integral is computed.
+    rho : Array
+        Unique flux surface label coordinates.
+    alpha : Array
+        Unique field line label coordinates over a constant rho surface.
+    knots : Array
+        Field line following coordinate values at which to compute a spline
+        of the integrand, for every field line in the meshgrid formed from
+        rho and alpha specified above.
+        The number of knots specifies a grid resolution as increasing the
+        number of knots increases the accuracy of representing the integrand
+        and the accuracy of the locations of the bounce points.
+    quad : callable
+        The quadrature scheme used to evaluate the integral.
+        Should return quadrature points and weights when called.
+        The returned points should be within the domain [-1, 1].
     pitch : Array, shape(P, S)
         λ values to evaluate the bounce integral at each field line.
         May be specified later.
@@ -684,33 +711,20 @@ def bounce_integral(
         where in the latter the labels (ρ, α) are interpreted as index into the
         last axis that corresponds to that field line.
         If two-dimensional, the first axis is the batch axis as usual.
-    rho : Array
-        Unique flux surface label coordinates.
-    alpha : Array
-        Unique field line label coordinates over a constant rho surface.
-    zeta : Array
-        A spline of the integrand is computed at these values of the field
-        line following coordinate, for every field line in the meshgrid formed from
-        rho and alpha specified above.
-        The number of knots specifies the grid resolution as increasing the
-        number of knots increases the accuracy of representing the integrand
-        and the accuracy of the locations of the bounce points.
-    quad : callable
-        The quadrature scheme used to evaluate the integral.
-        Should return quadrature points and weights when called.
-        The returned points should be within the domain [-1, 1].
     kwargs : dict
         Can specify additional arguments to the quadrature function with kwargs.
-        Can also specify whether to return items with ``return_items=True``.
+        Can also specify whether to not return items with ``return_items=False``.
 
     Returns
     -------
-    bi : callable
-        This callable method computes the bounce integral F_ℓ(λ) for every
+    bounce_integral : callable
+        This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
         specified field line ℓ (constant rho and alpha), for every λ value in ``pitch``.
     items : dict
         Dictionary of useful intermediate quantities.
-            grid : Grid
+            grid_fl : Grid
+                Clebsch-Type field-line coordinates grid.
+            grid_desc : Grid
                 DESC coordinate grid for the given field line coordinates.
             data : dict
                 Dictionary of Arrays of stuff evaluated on ``grid``.
@@ -729,56 +743,115 @@ def bounce_integral(
 
     Examples
     --------
+    Suppose we want to compute a bounce average of the function
+    f(ℓ) = (1 − λ |B|) * g_zz, where g_zz is the squared norm of the
+    toroidal basis vector on some set of field lines specified by (ρ, α)
+    coordinates. This is defined as
+        [∫ f(ℓ) / √(1 − λ |B|) dℓ] / [∫ 1 / √(1 − λ |B|) dℓ]
+
+
     .. code-block:: python
 
+        def integrand_num(g_zz, B, pitch):
+            # Integrand in integral in numerator of bounce average.
+            f = (1 - pitch * B) * g_zz  # something arbitrary
+            g = jnp.sqrt(1 - pitch * B)  # typical to have this in denominator
+            return safediv(f, g, fill=jnp.nan)
+
+        def integrand_den(B, pitch):
+            # Integrand in integral in denominator of bounce average.
+            g = jnp.nan(1 - pitch * B)  # typical to have this in denominator
+            return safediv(1, g, fill=jnp.nan)
+
+        eq = get("HELIOTRON")
         rho = jnp.linspace(1e-12, 1, 6)
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 5)
-        bi, items = bounce_integral(eq, rho=rho, alpha=alpha, return_items=True)
-        name = "g_zz"
-        f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-        B = items["data"]["B"].reshape(rho.size * alpha.size, -1)
-        pitch_res = 30
-        pitch = jnp.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), pitch_res)
-        result = bi(f, pitch).reshape(pitch_res, rho.size, alpha.size, -1)
+        knots = jnp.linspace(0, 6 * jnp.pi, 20)
+
+        bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots)
+
+        g_zz = eq.compute("g_zz", grid=items["grid_desc"], data=items["data"])["g_zz"]
+        pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
+        num = bounce_integral(integrand_num, g_zz, pitch)
+        den = bounce_integral(integrand_den, [], pitch)
+        average = num / den
+        assert jnp.isfinite(average).any()
+
+        # Now we can group the data by field line.
+        average = average.reshape(pitch.shape[0], rho.size, alpha.size, -1)
+        # The bounce averages stored at index i, j
+        i, j = 0, 0
+        print(average[:, i, j])
+        # are the bounce averages along the field line with nodes
+        nodes = items["grid_fl"].nodes.reshape(rho.size, alpha.size, -1, 3)
+        print(nodes[i, j])
+        # for the pitch values stored in
+        pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
+        print(pitch[:, i, j])
+        # Some of these bounce averages will evaluate as nan.
+        # You should filter out these nan values when computing stuff.
+        average_sum_per_field_lines = jnp.nansum(average, axis=-1)
+        print(average_sum_per_field_lines)
+        assert not jnp.allclose(average_sum_per_field_lines, 0)
 
     """
     check = kwargs.pop("check", False)
-    return_items = kwargs.pop("return_items", False)
+    return_items = kwargs.pop("return_items", True)
 
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
     rho = jnp.atleast_1d(rho)
     alpha = jnp.atleast_1d(alpha)
-    zeta = jnp.atleast_1d(zeta)
+    knots = jnp.atleast_1d(knots)
+    # number of field lines or splines
     S = rho.size * alpha.size
 
-    grid, data = desc_grid_from_field_line_coords(eq, rho, alpha, zeta)
-    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid, data=data)
-    B_sup_z = data["B^zeta"].reshape(S, -1)
-    B = data["|B|"].reshape(S, -1)
-    B_z_ra = data["|B|_z|r,a"].reshape(S, -1)
+    grid_fl, grid_desc, data = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc, data=data)
+    B_sup_z = data["B^zeta"].reshape(S, knots.size)
+    B = data["|B|"].reshape(S, knots.size)
+    B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size)
     B_c = jnp.moveaxis(
-        CubicHermiteSpline(zeta, B, B_z_ra, axis=-1, check=check).c, 1, -1
+        CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c,
+        source=1,
+        destination=-1,
     )
+    assert B_c.shape == (4, S, knots.size - 1)
     B_z_ra_c = poly_der(B_c)
-    assert B_c.shape == (4, S, zeta.size - 1)
-    assert B_z_ra_c.shape == (3, S, zeta.size - 1)
+    assert B_z_ra_c.shape == (3, S, knots.size - 1)
 
     x, w = quad(**kwargs)
     # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
     x = jnp.arcsin(x) / jnp.pi - 0.5
-    original = _compute_bp_if_given_pitch(zeta, B_c, B_z_ra_c, pitch, check, err=False)
+    original = _compute_bp_if_given_pitch(knots, B_c, B_z_ra_c, pitch, check, err=False)
 
-    def _bounce_integral(f, pitch=None, f_method="akima"):
-        """Compute the bounce integral of ``f``.
+    def _group_grid_data_by_field_line(f):
+        assert f.ndim <= 2, "See the docstring below."
+        return f.reshape(-1, S, knots.size)
+
+    def bounce_integral(integrand, f, pitch=None, method="akima"):
+        """Bounce integrate ∫ f(ℓ) dℓ.
 
         Parameters
         ----------
-        f : Array, shape(P, items["grid"].num_nodes, )
-            Quantity to compute the bounce integral of.
-            If two-dimensional, the first axis is interpreted as the batch axis,
-            which enumerates the evaluation of some function at particular pitch
-            values.
+        integrand : callable
+            This callable is the composition operator on the set of functions in ``f``
+            that maps the functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ.
+            It should accept the items in ``f`` as arguments as well as two additional
+            keyword arguments: ``B``, and ``pitch``. A quadrature will be performed to
+            approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
+            Note that any arrays backed into the callabe method should broadcast
+            with arrays of shape(P, S, (knots.size - 1) * 3, w.size) where
+                P is the batch axis size of pitch,
+                S is the number of field lines given by rho.size * alpha.size,
+                and w.size is the number of quadrature points (by default 7).
+        f : list of Array, shape(P, items["grid"].num_nodes, )
+            Arguments to the callable ``integrand``.
+            These should be the functions in the integrand of the bounce integral
+            evaluated at the knots. The values will be interpolated to the quadrature
+            points. If an item in the list is two-dimensional, the first axis of
+            that item is interpreted as the batch axis, which enumerates the
+            evaluation of the function at particular pitch values.
         pitch : Array, shape(P, S)
             λ values to evaluate the bounce integral at each field line.
             If None, uses the values given to the parent function.
@@ -787,8 +860,10 @@ def bounce_integral(
             where in the latter the labels (ρ, α) are interpreted as index into the
             last axis that corresponds to that field line.
             If two-dimensional, the first axis is the batch axis as usual.
-        f_method : str, optional
-            Method of interpolation for f.
+        method : str
+            Method of interpolation for functions contained in ``f``.
+            Defaults to akima spline to suppress oscillation.
+            See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
 
         Returns
         -------
@@ -799,163 +874,28 @@ def bounce_integral(
 
         """
         bp1, bp2, pitch = _compute_bp_if_given_pitch(
-            zeta, B_c, B_z_ra_c, pitch, check, *original, err=True
+            knots, B_c, B_z_ra_c, pitch, check, *original, err=True
         )
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
+        if not isinstance(f, (list, tuple)):
+            f = [f]
+        f = tuple(map(_group_grid_data_by_field_line, f))
         result = (
-            _bounce_quad(
-                X=X,
-                w=w,
-                knots=zeta,
-                B_sup_z=B_sup_z,
-                B=B,
-                B_z_ra=B_z_ra,
-                pitch=pitch,
-                f=f.reshape(-1, S, zeta.size),
-                f_method=f_method,
-            )
+            _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method)
             / (bp2 - bp1)
             * jnp.pi
         )
-        assert result.shape == (pitch.shape[0], S, (zeta.size - 1) * 3)
+        assert result.shape == (pitch.shape[0], S, (knots.size - 1) * 3)
         return result
 
     if return_items:
-        items = {"grid": grid, "data": data, "B.c": B_c, "B_z_ra.c": B_z_ra_c}
-        return _bounce_integral, items
+        items = {
+            "grid_fl": grid_fl,
+            "grid_desc": grid_desc,
+            "data": data,
+            "B.c": B_c,
+            "B_z_ra.c": B_z_ra_c,
+        }
+        return bounce_integral, items
     else:
-        return _bounce_integral
-
-
-def bounce_average(
-    eq,
-    pitch=None,
-    rho=jnp.linspace(1e-12, 1, 10),
-    alpha=None,
-    zeta=jnp.linspace(0, 6 * jnp.pi, 20),
-    quad=tanh_sinh_quad,
-    **kwargs,
-):
-    """Returns a method to compute the bounce average of any quantity.
-
-    The bounce average is defined as
-    F_ℓ(λ) = (∫ f(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ), where
-        dℓ parameterizes the distance along the field line,
-        λ is a constant proportional to the magnetic moment over energy,
-        |B| is the norm of the magnetic field,
-        f(ℓ) is the quantity to integrate along the field line,
-        and the endpoints of the integration are at the bounce points.
-    Physically, the pitch angle λ is the magnetic moment over the energy
-    of particle. For a particle with fixed λ, bounce points are defined to be
-    the location on the field line such that the particle's velocity parallel
-    to the magnetic field is zero, i.e. λ |B| = 1.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium on which the bounce average is computed.
-    pitch : Array, shape(P, S)
-        λ values to evaluate the bounce integral at each field line.
-        May be specified later.
-        Last axis enumerates the λ value for a particular field line parameterized
-        by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
-        where in the latter the labels (ρ, α) are interpreted as index into the
-        last axis that corresponds to that field line.
-        If two-dimensional, the first axis is the batch axis as usual.
-    rho : Array
-        Unique flux surface label coordinates.
-    alpha : Array
-        Unique field line label coordinates over a constant rho surface.
-    zeta : Array
-        A spline of the integrand is computed at these values of the field
-        line following coordinate, for every field line in the meshgrid formed from
-        rho and alpha specified above.
-        The number of knots specifies the grid resolution as increasing the
-        number of knots increases the accuracy of representing the integrand
-        and the accuracy of the locations of the bounce points.
-    quad : callable
-        The quadrature scheme used to evaluate the integral.
-        Should return quadrature points and weights when called.
-        The returned points should be within the domain [-1, 1].
-    kwargs : dict
-        Can specify additional arguments to the quadrature function with kwargs.
-        Can also specify whether to return items with ``return_items=True``.
-
-    Returns
-    -------
-    ba : callable
-        This callable method computes the bounce average F_ℓ(λ) for every
-        specified field line ℓ (constant rho and alpha), for every λ value in ``pitch``.
-    items : dict
-        Dictionary of useful intermediate quantities.
-            grid : Grid
-                DESC coordinate grid for the given field line coordinates.
-            data : dict
-                Dictionary of Arrays of stuff evaluated on ``grid``.
-            B.c : Array, shape(4, S, zeta.size - 1)
-                Polynomial coefficients of the spline of |B| in local power basis.
-                First axis enumerates the coefficients of power series.
-                Second axis enumerates the splines along the field lines.
-                Last axis enumerates the polynomials of the spline along a particular
-                field line.
-            B_z_ra.c : Array, shape(3, S, zeta.size - 1)
-                Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
-                First axis enumerates the coefficients of power series.
-                Second axis enumerates the splines along the field lines.
-                Last axis enumerates the polynomials of the spline along a particular
-                field line.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        rho = jnp.linspace(1e-12, 1, 6)
-        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 5)
-        ba, items = bounce_average(eq, rho=rho, alpha=alpha, return_items=True)
-        name = "g_zz"
-        f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-        B = items["data"]["B"].reshape(rho.size * alpha.size, -1)
-        pitch_res = 30
-        pitch = jnp.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), pitch_res)
-        result = ba(f, pitch).reshape(pitch_res, rho.size, alpha.size, -1)
-
-    """
-
-    def _bounce_average(f, pitch=None, f_method="akima"):
-        """Compute the bounce average of ``f``.
-
-        Parameters
-        ----------
-        f : Array, shape(P, items["grid"].num_nodes, )
-            Quantity to compute the bounce average of.
-            If two-dimensional, the first axis is interpreted as the batch axis,
-            which enumerates the evaluation of some function at particular pitch
-            values.
-        pitch : Array, shape(P, S)
-            λ values to evaluate the bounce average at each field line.
-            If None, uses the values given to the parent function.
-            Last axis enumerates the λ value for a particular field line parameterized
-            by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
-            where in the latter the labels (ρ, α) are interpreted as index into the
-            last axis that corresponds to that field line.
-            If two-dimensional, the first axis is the batch axis as usual.
-        f_method : str, optional
-            Method of interpolation for f.
-
-
-        Returns
-        -------
-        result : Array, shape(P, S, (zeta.size - 1) * 3)
-            First axis enumerates pitch values.
-            Second axis enumerates the field lines.
-            Last axis enumerates the bounce integrals.
-
-        """
-        return bi(f, pitch, f_method) / bi(jnp.ones_like(f), pitch, "constant")
-
-    bi = bounce_integral(eq, pitch, rho, alpha, zeta, quad, **kwargs)
-    if kwargs.get("return_items"):
-        bi, items = bi
-        return _bounce_average, items
-    else:
-        return _bounce_average
+        return bounce_integral

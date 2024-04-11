@@ -1,6 +1,7 @@
 """Test bounce integral methods."""
 
 import inspect
+from functools import partial
 
 import numpy as np
 import pytest
@@ -11,10 +12,9 @@ from matplotlib import pyplot as plt
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipk
 
-from desc.backend import flatnonzero, fori_loop, put, root_scalar
+from desc.backend import complex_sqrt, flatnonzero, fori_loop, put, root_scalar
 from desc.compute.bounce_integral import (
-    bounce_average,
-    bounce_integral,
+    bounce_integral_map,
     bounce_points,
     pitch_of_extrema,
     poly_der,
@@ -23,7 +23,7 @@ from desc.compute.bounce_integral import (
     poly_val,
     take_mask,
 )
-from desc.compute.utils import dot
+from desc.compute.utils import dot, safediv
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
@@ -40,7 +40,7 @@ from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
 
 
-@np.vectorize(signature="(m)->()")
+@partial(np.vectorize, signature="(m)->()")
 def _last_value(a):
     """Return the last non-nan value in ``a``."""
     a = np.ravel(a)[::-1]
@@ -104,9 +104,9 @@ def test_reshape_convention():
 
     err_msg = "The ordering conventions are required for correctness."
     assert "P, S, N" in inspect.getsource(bounce_points), err_msg
-    src = inspect.getsource(bounce_integral)
+    src = inspect.getsource(bounce_integral_map)
     assert "S, zeta.size" in src, err_msg
-    assert "pitch_res, rho.size, alpha.size" in src, err_msg
+    assert "pitch.shape[0], rho.size, alpha.size" in src, err_msg
     src = inspect.getsource(desc_grid_from_field_line_coords)
     assert 'indexing="ij"' in src, err_msg
     assert 'meshgrid(rho, alpha, zeta, indexing="ij")' in src, err_msg
@@ -402,28 +402,63 @@ def test_bounce_points():
 
 
 @pytest.mark.unit
-def test_pitch_and_hairy_ball():
-    """Test different ways of specifying pitch and ensure B does not vanish."""
+def test_example_code_and_hairy_ball():
+    """Test example code in bounce_integral docstring and ensure B does not vanish."""
+
+    def integrand_num(g_zz, B, pitch):
+        """Integrand in integral in numerator of bounce average."""
+        f = (1 - pitch * B) * g_zz  # something arbitrary
+        # When 1 - pitch * B is negative, we want g to evaluate as nan.
+        # jnp.sqrt() will do this as desired, but np.sqrt() will give a runtime error.
+        g = complex_sqrt(1 - pitch * B)  # typical to have this in denominator
+        g = np.where(np.isclose(np.imag(g), 0), np.real(g), np.nan)
+        return safediv(f, g, fill=np.nan)
+
+    def integrand_den(B, pitch):
+        """Integrand in integral in denominator of bounce average."""
+        # When 1 - pitch * B is negative, we want g to evaluate as nan.
+        # jnp.sqrt() will do this as desired, but np.sqrt() will give a runtime error.
+        g = complex_sqrt(1 - pitch * B)  # typical to have this in denominator
+        g = np.where(np.isclose(np.imag(g), 0), np.real(g), np.nan)
+        return safediv(1, g, fill=np.nan)
+
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
-    zeta = np.linspace(0, 6 * np.pi, 20)
-    ba, items = bounce_average(eq, rho=rho, alpha=alpha, zeta=zeta, return_items=True)
+    knots = np.linspace(0, 6 * np.pi, 20)
+
+    bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots)
+
+    # start hairy ball test
+    B = eq.compute("B", grid=items["grid_desc"], data=items["data"])["B"]
+    assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
     B = items["data"]["B"]
     assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
+    # end hairy ball test
 
-    name = "g_zz"
-    f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-    # specify pitch per field line
-    pitch_res = 30
-    B = B.reshape(rho.size * alpha.size, -1)
-    pitch = np.linspace(1 / B.max(axis=-1), 1 / B.min(axis=-1), pitch_res)
-    result = ba(f, pitch)
-    assert np.isfinite(result).any()
-    # specify pitch from extrema of |B|
-    pitch = pitch_of_extrema(zeta, items["B.c"], items["B_z_ra.c"])
-    result = ba(f, pitch)
-    assert np.isfinite(result).any()
+    g_zz = eq.compute("g_zz", grid=items["grid_desc"], data=items["data"])["g_zz"]
+    pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
+    num = bounce_integral(integrand_num, g_zz, pitch)
+    den = bounce_integral(integrand_den, [], pitch)
+    average = num / den
+    assert np.isfinite(average).any()
+
+    # Now we can group the data by field line.
+    average = average.reshape(pitch.shape[0], rho.size, alpha.size, -1)
+    # The bounce averages stored at index i, j
+    i, j = 0, 0
+    print(average[:, i, j])
+    # are the bounce averages along the field line with nodes
+    nodes = items["grid_fl"].nodes.reshape(rho.size, alpha.size, -1, 3)
+    print(nodes[i, j])
+    # for the pitch values stored in
+    pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
+    print(pitch[:, i, j])
+    # Some of these bounce averages will evaluate as nan.
+    # You should filter out these nan values when computing stuff.
+    average_sum_per_field_lines = np.nansum(average, axis=-1)
+    print(average_sum_per_field_lines)
+    assert not np.allclose(average_sum_per_field_lines, 0)
 
 
 # @pytest.mark.unit
@@ -445,7 +480,7 @@ def test_elliptic_integral_limit():
         (and not whether the bounce points were accurate).
 
     """
-    assert False
+    assert False, "Test not finished yet."
     L, M, N, NFP, sym = 6, 6, 6, 1, True
     surface = FourierRZToroidalSurface(
         R_lmn=[1.0, 0.1],
@@ -485,20 +520,11 @@ def test_elliptic_integral_limit():
 
     rho = np.array([0.5])
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 10)
-    zeta = np.linspace(0, 6 * np.pi, 20)
-    bi, items = bounce_integral(
-        eq, rho=rho, alpha=alpha, zeta=zeta, return_items=True, check=True
-    )
-    B = items["data"]["B"]
-    pitch_res = 15
-    pitch = np.linspace(1 / B.max(), 1 / B.min(), pitch_res)
-    name = "g_zz"
-    f = eq.compute(name, grid=items["grid"], data=items["data"])[name]
-    result = bi(f, pitch)
-    assert np.isfinite(result).any(), "tanh_sinh quadrature failed."
-
+    knots = np.linspace(0, 6 * np.pi, 20)
     # TODO now compare result to elliptic integral
-    bp1, bp2 = bounce_points(pitch, zeta, items["B.c"], items["B_z_ra.c"])
+    bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots, check=True)
+    pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
+    bp1, bp2 = bounce_points(knots, items["B.c"], items["B_z_ra.c"], pitch)
 
 
 @pytest.mark.unit
@@ -542,16 +568,11 @@ def test_bounce_averaged_drifts():
     #       Response: Currently the API is such that the method does all the
     #                 above preprocessing for you. Let's test it for correctness
     #                 first then do this later.
-    bi, items = bounce_integral(
-        eq,
-        rho=np.unique(coords1[:, 0]),
-        alpha=alpha,
-        zeta=zeta,
-        return_items=True,
-        check=True,
+    bounce_integral, items = bounce_integral_map(
+        eq, rho=np.unique(coords1[:, 0]), alpha=alpha, knots=zeta, check=True
     )
-    grid = items["grid"]
-    grid._unique_zeta_idx = np.unique(grid.nodes[:, 2], return_index=True)[1]
+    grid = items["grid_desc"]
+    # grid._unique_zeta_idx = np.unique(grid.nodes[:, 2], return_index=True)[1] # noqa: E800, E501
 
     data_keys = [
         "|grad(psi)|^2",
@@ -565,6 +586,7 @@ def test_bounce_averaged_drifts():
         "gbdrift",
     ]
 
+    # override_grid is required for test to pass
     data = eq.compute(data_keys, grid=grid, override_grid=False)
 
     psib = data_eq["psi"][-1]
@@ -633,15 +655,32 @@ def test_bounce_averaged_drifts():
         + dPdrho / bmag**2 * ellipe(k2)
     )
 
-    with pytest.warns(RuntimeWarning):
-        # The quantities are already calculated along a field line
-        bavg_drift_num = bi(
-            np.sqrt(1 - pitch * bmag) * 0.5 * cvdrift
-            + gbdrift * 1 / np.sqrt(1 - pitch * bmag)
-            + dPdrho / bmag**2 * np.sqrt(1 - pitch * bmag),
-            pitch,
-        )
-        # might need to use _filter_not_nan function from top.
+    def integrand(B, pitch):
+        # The quantities cvdrift, gbdrift, and dPdrho are already calculated
+        # along a field line. These are constants baked into this function
+        # and will not change value.
+        # The arguments to this function, B and pitch will be interpolated
+        # onto the quadrature points before these quantities are evaluated.
+
+        # When 1 - pitch * B is negative, we want g to evaluate as nan.
+        # jnp.sqrt() will do this as desired, but np.sqrt() will give a runtime error.
+        g = complex_sqrt(1 - pitch * B)
+        g = np.where(np.isclose(np.imag(g), 0), np.real(g), np.nan)
+        # just need to fix brodcasting of these to items["grid_desc"],
+        # maybe will use grid.copy_from_other method. Or recalculate
+        # these quantities along field line, see test_example_code_and_hairy_ball.
+        return g * 0.5 * cvdrift + gbdrift / g + dPdrho / B**2 * g
+
+    # the integrand doesn't have any additional arguments besides B and pitch
+    # since gbdrift etc. are baked into the integrand function, so we pass
+    # an empty list.
+    additional_things_to_interpolate_onto_quadrature_points_besides_B_and_pitch = []
+    bavg_drift_num = bounce_integral(
+        integrand,
+        additional_things_to_interpolate_onto_quadrature_points_besides_B_and_pitch,
+        pitch,
+    )
+    print(bavg_drift_num)
 
     np.testing.assert_allclose(bavg_drift_num, bavg_drift_an, atol=2e-2, rtol=1e-2)
 

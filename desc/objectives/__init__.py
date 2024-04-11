@@ -7,6 +7,7 @@ from ._coils import (
     CoilTorsion,
     QuadraticFlux,
     SurfaceCurrentRegularization,
+    ToroidalFlux,
 )
 from ._equilibrium import (
     CurrentDensity,

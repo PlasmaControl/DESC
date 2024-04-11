@@ -692,15 +692,15 @@ class PowerSeriesProfile(_Profile):
         return cls(params, sym=sym, name=name)
 
 
-class PowerLawProfile(_Profile):
-    """Profile represented by a power law.
+class TwoPowerProfile(_Profile):
+    """Profile represented by two powers.
 
     f(x) = a[0]*(1 - x**a[1])**a[2]
 
     Parameters
     ----------
     params: array-like
-        Coefficients of the power law series. Must be an array of size 3.
+        Coefficients of the two power formula. Must be an array of size 3.
         Assumed to be zero if not specified.
     name : str
         Name of the profile.
@@ -771,7 +771,7 @@ class PowerLawProfile(_Profile):
                 * self.compute(grid, params=[a * b * c, b, c - 2])
             )
         else:
-            raise NotImplementedError("dr > 2 not implemented for PowerLawProfile!")
+            raise NotImplementedError("dr > 2 not implemented for TwoPowerProfile!")
         return f
 
 

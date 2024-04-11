@@ -16,9 +16,9 @@ from desc.objectives import (
 from desc.profiles import (
     FourierZernikeProfile,
     MTanhProfile,
-    PowerLawProfile,
     PowerSeriesProfile,
     SplineProfile,
+    TwoPowerProfile,
 )
 
 from .utils import area_difference, compute_coords
@@ -91,12 +91,12 @@ class TestProfiles:
         np.testing.assert_allclose(mp(x, dz=1), 0)
 
         pp = PowerSeriesProfile([0.5, 0, -1, 0, 0.5])
-        lp = PowerLawProfile([0.5, 2, 2])
-        np.testing.assert_allclose(pp(x), lp(x))
-        np.testing.assert_allclose(pp(x, dr=1), lp(x, dr=1))
-        np.testing.assert_allclose(pp(x, dr=2), lp(x, dr=2))
+        tp = TwoPowerProfile([0.5, 2, 2])
+        np.testing.assert_allclose(pp(x), tp(x))
+        np.testing.assert_allclose(pp(x, dr=1), tp(x, dr=1))
+        np.testing.assert_allclose(pp(x, dr=2), tp(x, dr=2))
         np.testing.assert_allclose(
-            pp.params, lp.to_powerseries(order=4, sym=True).params
+            pp.params, tp.to_powerseries(order=4, sym=True).params
         )
 
     @pytest.mark.unit
@@ -175,12 +175,12 @@ class TestProfiles:
     def test_repr(self):
         """Test string representation of profile classes."""
         pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
-        lp = PowerLawProfile([1, 2, 1])
+        tp = TwoPowerProfile([1, 2, 1])
         sp = pp.to_spline()
         mp = pp.to_mtanh(order=4, ftol=1e-4, xtol=1e-4)
         zp = pp.to_fourierzernike()
         assert "PowerSeriesProfile" in str(pp)
-        assert "PowerLawProfile" in str(lp)
+        assert "TwoPowerProfile" in str(tp)
         assert "SplineProfile" in str(sp)
         assert "MTanhProfile" in str(mp)
         assert "FourierZernikeProfile" in str(zp)
@@ -207,10 +207,10 @@ class TestProfiles:
         sp.params = sp.params + 1
         np.testing.assert_allclose(sp.params, 1 + pp(sp._knots))
 
-        lp = PowerLawProfile([1, 2, 1 / 2])
-        np.testing.assert_allclose(lp.params, [1, 2, 1 / 2])
-        lp.params = [2, 1, 1 / 3]
-        np.testing.assert_allclose(lp.params, [2, 1, 1 / 3])
+        tp = TwoPowerProfile([1, 2, 1 / 2])
+        np.testing.assert_allclose(tp.params, [1, 2, 1 / 2])
+        tp.params = [2, 1, 1 / 3]
+        np.testing.assert_allclose(tp.params, [2, 1, 1 / 3])
 
         zp = FourierZernikeProfile([1 - 1 / 3 - 1 / 6, -1 / 2, 1 / 6])
         assert zp.get_params(2, 0, 0) == -1 / 2
@@ -374,20 +374,20 @@ class TestProfiles:
             a = sp * pp
             a.params = sp.params
         with pytest.raises(ValueError):
-            _ = PowerLawProfile([1, 2, 3, 4])
+            _ = TwoPowerProfile([1, 2, 3, 4])
 
     @pytest.mark.unit
     def test_default_profiles(self):
         """Test that default profiles are just zeros."""
         pp = PowerSeriesProfile()
-        lp = PowerLawProfile()
+        tp = TwoPowerProfile()
         sp = SplineProfile()
         mp = MTanhProfile()
         zp = FourierZernikeProfile()
 
         x = np.linspace(0, 1, 10)
         np.testing.assert_allclose(pp(x), 0)
-        np.testing.assert_allclose(lp(x), 0)
+        np.testing.assert_allclose(tp(x), 0)
         np.testing.assert_allclose(sp(x), 0)
         np.testing.assert_allclose(mp(x), 0)
         np.testing.assert_allclose(zp(x), 0)

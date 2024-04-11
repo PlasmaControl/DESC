@@ -29,7 +29,6 @@ from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid
 from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
@@ -456,9 +455,9 @@ def test_example_code_and_hairy_ball():
     print(pitch[:, i, j])
     # Some of these bounce averages will evaluate as nan.
     # You should filter out these nan values when computing stuff.
-    average_sum_per_field_lines = np.nansum(average, axis=-1)
-    print(average_sum_per_field_lines)
-    assert not np.allclose(average_sum_per_field_lines, 0)
+    average_sum_over_field_line = np.nansum(average, axis=-1)
+    print(average_sum_over_field_line)
+    assert not np.allclose(average_sum_over_field_line, 0)
 
 
 # @pytest.mark.unit
@@ -540,40 +539,32 @@ def test_bounce_averaged_drifts():
     """
     eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
 
-    psi = 0.25  # rho^2 (or normalized psi)
-    alpha = 0
+    psi = 0.25  # normalized psi
+    rho = np.sqrt(psi)
+    alpha = np.array([0])
+    data_eq = eq.compute(["iota", "iota_r", "a", "rho", "psi"])
 
-    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
-
-    data_eq = eq.compute(eq_keys)
-
-    iotas = np.interp(np.sqrt(psi), data_eq["rho"], data_eq["iota"])
-    shears = np.interp(np.sqrt(psi), data_eq["rho"], data_eq["iota_r"])
+    iotas = np.interp(rho, data_eq["rho"], data_eq["iota"])
+    shears = np.interp(rho, data_eq["rho"], data_eq["iota_r"])
 
     N = int((2 * eq.M_grid) * 4 + 1)
-
     zeta = np.linspace(-1.0 * np.pi / iotas, 1.0 * np.pi / iotas, N)
     theta_PEST = alpha * np.ones(N, dtype=int) + iotas * zeta
 
+    # Creating a grid along a field line
     coords1 = np.zeros((N, 3))
     coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
     coords1[:, 1] = theta_PEST
     coords1[:, 2] = zeta
-
-    # Creating a grid along a field line
-    c1 = eq.compute_theta_coords(coords1)
-    grid = Grid(c1, sort=False)
+    # c1 = eq.compute_theta_coords(coords1)  # noqa: E800
+    # grid = Grid(c1, sort=False)  # noqa: E800
 
     # TODO: Request: The bounce integral operator should be able to take a grid.
     #       Response: Currently the API is such that the method does all the
     #                 above preprocessing for you. Let's test it for correctness
     #                 first then do this later.
-    bounce_integral, items = bounce_integral_map(
-        eq, rho=np.unique(coords1[:, 0]), alpha=alpha, knots=zeta, check=True
-    )
+    bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots=zeta, check=True)
     grid = items["grid_desc"]
-    # grid._unique_zeta_idx = np.unique(grid.nodes[:, 2], return_index=True)[1] # noqa: E800, E501
-
     data_keys = [
         "|grad(psi)|^2",
         "grad(psi)",
@@ -585,10 +576,12 @@ def test_bounce_averaged_drifts():
         "cvdrift",
         "gbdrift",
     ]
-
-    # override_grid is required for test to pass
+    # FIXME (outside scope of the bounce integral pull request):
+    #  override_grid should not be required for the test to pass.
     data = eq.compute(data_keys, grid=grid, override_grid=False)
-
+    # If this is the toroidal flux at the boundary, the [-1] retrieval
+    # assumes that the grid which computed the data_eq["psi"] happens to have
+    # its last node at the last closed flux surface.
     psib = data_eq["psi"][-1]
 
     # signs
@@ -642,10 +635,8 @@ def test_bounce_averaged_drifts():
     np.testing.assert_allclose(cvdrift, cvdrift_an, atol=1.8e-2, rtol=5e-3)
 
     # Values of pitch angle for which to evaluate the bounce averages
-    pitch_res = 11
-    pitch = np.linspace(1 / np.max(bmag), 1 / np.min(bmag), pitch_res).reshape(
-        pitch_res, -1
-    )
+    pitch = np.linspace(1 / np.max(bmag), 1 / np.min(bmag), 11)
+    pitch = pitch.reshape(pitch.shape[0], -1)
 
     k2 = 0.5 * ((1 - pitch * B0) / epsilon + 1)
 
@@ -655,34 +646,33 @@ def test_bounce_averaged_drifts():
         + dPdrho / bmag**2 * ellipe(k2)
     )
 
-    def integrand(B, pitch):
-        # The quantities cvdrift, gbdrift, and dPdrho are already calculated
-        # along a field line. These are constants baked into this function
-        # and will not change value.
-        # The arguments to this function, B and pitch will be interpolated
+    def integrand(cvdrift, gbdrift, B, pitch):
+        # The arguments to this function will be interpolated
         # onto the quadrature points before these quantities are evaluated.
-
+        bmag = B / Bref
         # When 1 - pitch * B is negative, we want g to evaluate as nan.
         # jnp.sqrt() will do this as desired, but np.sqrt() will give a runtime error.
-        g = complex_sqrt(1 - pitch * B)
+        g = complex_sqrt(1 - pitch * bmag)
         g = np.where(np.isclose(np.imag(g), 0), np.real(g), np.nan)
-        # just need to fix brodcasting of these to items["grid_desc"],
-        # maybe will use grid.copy_from_other method. Or recalculate
-        # these quantities along field line, see test_example_code_and_hairy_ball.
-        return g * 0.5 * cvdrift + gbdrift / g + dPdrho / B**2 * g
+        return (g * 0.5 * cvdrift) + (gbdrift / g) + (dPdrho / bmag**2 * g)
 
-    # the integrand doesn't have any additional arguments besides B and pitch
-    # since gbdrift etc. are baked into the integrand function, so we pass
-    # an empty list.
-    additional_things_to_interpolate_onto_quadrature_points_besides_B_and_pitch = []
     bavg_drift_num = bounce_integral(
-        integrand,
-        additional_things_to_interpolate_onto_quadrature_points_besides_B_and_pitch,
-        pitch,
+        integrand=integrand,
+        # additional things to interpolate onto quadrature points besides B and pitch
+        f=[cvdrift, gbdrift],
+        pitch=pitch,
     )
-    print(bavg_drift_num)
-
-    np.testing.assert_allclose(bavg_drift_num, bavg_drift_an, atol=2e-2, rtol=1e-2)
+    assert np.isfinite(bavg_drift_num).any(), "Quadrature failed."
+    # there's only one field line on the grid, so squeeze out that axis
+    bavg_drift_num = np.squeeze(bavg_drift_num, axis=1)
+    for i in range(pitch.shape[0]):
+        np.testing.assert_allclose(
+            _filter_not_nan(bavg_drift_num[i]),
+            bavg_drift_an[i],
+            atol=2e-2,
+            rtol=1e-2,
+            err_msg=f"Failed on index {i} for pitch {pitch[i]}",
+        )
 
 
 # TODO: if deemed useful finish details using methods in desc.compute.bounce_integral

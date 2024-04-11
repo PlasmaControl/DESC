@@ -618,7 +618,8 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
     f : list of Array, shape(P, S, knots.size, )
         Arguments to the callable ``integrand``.
         These should be the functions in the integrand of the bounce integral
-        evaluated at the knots. The values will be interpolated to the quadrature
+        evaluated at the knots. They should be computed on the returned desc
+        coordinate grid. The values will be interpolated to the quadrature
         points. All items in the list should be two-dimensional. The first axis of
         that item is interpreted as the batch axis, which enumerates the
         evaluation of the function at particular pitch values.
@@ -711,7 +712,7 @@ def bounce_integral_map(
         where in the latter the labels (ρ, α) are interpreted as index into the
         last axis that corresponds to that field line.
         If two-dimensional, the first axis is the batch axis as usual.
-    kwargs : dict
+    kwargs
         Can specify additional arguments to the quadrature function with kwargs.
         Can also specify whether to not return items with ``return_items=False``.
 
@@ -760,7 +761,7 @@ def bounce_integral_map(
 
         def integrand_den(B, pitch):
             # Integrand in integral in denominator of bounce average.
-            g = jnp.nan(1 - pitch * B)  # typical to have this in denominator
+            g = jnp.sqrt(1 - pitch * B)  # typical to have this in denominator
             return safediv(1, g, fill=jnp.nan)
 
         eq = get("HELIOTRON")
@@ -790,9 +791,9 @@ def bounce_integral_map(
         print(pitch[:, i, j])
         # Some of these bounce averages will evaluate as nan.
         # You should filter out these nan values when computing stuff.
-        average_sum_per_field_lines = jnp.nansum(average, axis=-1)
-        print(average_sum_per_field_lines)
-        assert not jnp.allclose(average_sum_per_field_lines, 0)
+        average_sum_over_field_line = jnp.nansum(average, axis=-1)
+        print(average_sum_over_field_line)
+        assert not jnp.allclose(average_sum_over_field_line, 0)
 
     """
     check = kwargs.pop("check", False)
@@ -844,10 +845,11 @@ def bounce_integral_map(
             with arrays of shape(P, S, 1, 1) where
                 P is the batch axis size of pitch,
                 S is the number of field lines given by rho.size * alpha.size.
-        f : list of Array, shape(P, items["grid"].num_nodes, )
+        f : list of Array, shape(P, items["grid_desc"].num_nodes, )
             Arguments to the callable ``integrand``.
             These should be the functions in the integrand of the bounce integral
-            evaluated at the knots. The values will be interpolated to the quadrature
+            evaluated at the knots. They should be computed on the returned desc
+            coordinate grid. The values will be interpolated to the quadrature
             points. If an item in the list is two-dimensional, the first axis of
             that item is interpreted as the batch axis, which enumerates the
             evaluation of the function at particular pitch values.

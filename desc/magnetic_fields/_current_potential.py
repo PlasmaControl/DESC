@@ -805,7 +805,9 @@ class FourierCurrentPotentialField(
             data["external_field_grid"] = external_field_grid
 
         if source_grid is None:
-            source_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP))
+            source_grid = LinearGrid(
+                M=max(3 * self.M_Phi, 30), N=max(3 * self.N_Phi, 30), NFP=int(eq.NFP)
+            )
         if eval_grid is None:
             eval_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP), sym=eq.sym)
         if normalize:

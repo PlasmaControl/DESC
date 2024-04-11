@@ -3627,7 +3627,13 @@ def plot_regcoil_outputs(
     if source_grid is None:
         source_grid = data["source_grid"]
 
-    if "external_field" in data.keys():
+    # check if we can use existing quantities in data
+    # or re-evaluate based off of the new grids passed-in
+    recalc_eval_grid_quantites = not eval_grid.equiv(
+        data["eval_grid"]
+    ) or not source_grid.equiv(data["source_grid"])
+
+    if "external_field" in data.keys() and recalc_eval_grid_quantites:
         external_field = data["external_field"]
         external_field_grid = data["external_field_grid"]
         B_ext = external_field.compute_Bnormal(
@@ -3636,11 +3642,6 @@ def plot_regcoil_outputs(
 
     else:
         external_field = None
-    # check if we can use existing quantities in data
-    # or re-evaluate based off of the new grids passed-in
-    recalc_eval_grid_quantites = not eval_grid.equiv(
-        data["eval_grid"]
-    ) or not source_grid.equiv(data["source_grid"])
 
     # TODO: if recalculating do we replace the data in the dict?
 
@@ -3663,7 +3664,7 @@ def plot_regcoil_outputs(
                 eq if not vacuum else eq.surface, eval_grid, source_grid
             )[0]
         )
-        if external_field:
+        if external_field and recalc_eval_grid_quantites:
             Bn_tot += B_ext
         plt.rcParams.update({"font.size": 26})
         plt.figure(figsize=(8, 8))
@@ -3797,7 +3798,7 @@ def plot_regcoil_outputs(
                     eq if not vacuum else eq.surface, eval_grid, source_grid
                 )[0]
             )
-            if external_field:
+            if external_field and recalc_eval_grid_quantites:
                 Bn_tot += B_ext
 
             plt.rcParams.update({"font.size": 18})

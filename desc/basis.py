@@ -1,5 +1,6 @@
 """Classes for spectral bases and functions for evaluation."""
 import functools
+import math as mth
 import warnings
 from abc import ABC, abstractmethod
 from math import factorial
@@ -8,7 +9,6 @@ import mpmath
 import numpy as np
 import skfem as fem
 from matplotlib import pyplot as plt
-import math as mth
 
 from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
@@ -25,7 +25,7 @@ __all__ = [
     "FiniteElementMesh1D",
     "FiniteElementMesh1D_scikit",
     "FiniteElementMesh2D",
-    "FiniteElementMesh3D_scikit"
+    "FiniteElementMesh3D_scikit",
 ]
 
 
@@ -2073,8 +2073,7 @@ def zernike_norm(l, m):
 
 
 class FiniteElementMesh3D_scikit:
-    """ Class representing a 3D mesh in (rho, theta, zeta) using scikit-fem
-
+    """Class representing a 3D mesh in (rho, theta, zeta) using scikit-fem.
 
     Parameters
     ----------
@@ -2087,56 +2086,69 @@ class FiniteElementMesh3D_scikit:
     K: integer
         The order of the finite elements to use, which gives (K+1)(K+2)(K+3) / 6
         basis functions.
-"""
+    """
 
-    def __init__(self, L, M, N , K=1):
+    def __init__(self, L, M, N, K=1):
         self.M = M
         self.L = L
         self.N = N
-        self.I_6LMN = 6 * L * M * N # Considering how to incorporate n_p
-        self.Q = int((K + 1) * (K + 2)*(K + 3) / 6)
+        self.I_6LMN = 6 * L * M * N  # Considering how to incorporate n_p
+        self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
         self.K = K
 
-
-    # Constructing mesh:
-    # Refinement works similarly as in the 2D case, as in powers of 2
-
-     '''
-        # Still working on implementation for any L,M,N. For now, taking cases and taking advantage
-        of mesh.refined() in scikit. Starting with a unit square in (rho,theta,zeta):
-
-        mesh.refined(1) divides [0,1] in half on all three axes (40 finite elements)
-        mesh.refined(2) divides [0,1] in quarters on all three axes (320 finite elements)
-        mesh.refined(3) divides [0,1] in eighths on all three axes (2560 finite elements)
+        """ Still working on implementation for any L,M,N. For now, taking cases
+        and taking advantage of mesh.refined() in scikit. Starting with a unit square in
+        (rho,theta,zeta)
+        mesh.refined(1) divides [0,1] in half on all three axes (40 FEs)
+        mesh.refined(2) divides [0,1] in quarters on all three axes (320 FEs)
+        mesh.refined(3) divides [0,1] in eighths on all three axes (2560 FEs)
         mesh.refined(4) divides [0,1] in 1/16th on all three axes
-        .
-        .
-        .
-     
-     '''
 
 
+        """
+        # For now:mesh = fem.MeshTet2()
+
+        """
         if K == 1:
             e = fem.ElementTetP1()
         else:
             e = fem.ElementTetP2()
-        basis = fem.CellBasis(mesh, e)
 
-
-    #Visualization of mesh
+        """
 
     def visualize():
-        # Drawing the edges of the  mesh with draw_mesh3d
-        from skfem.visuals.matplotlib import draw_mesh3d, draw
+        """Visualize 3D Mesh."""
+        mesh = fem.MeshTet2()
+        from skfem.visuals.matplotlib import draw, draw_mesh3d
+
         ax = draw(mesh)
+        return draw_mesh3d(mesh, color="pink", ax=ax)  # visualize().show()
 
-        return draw_mesh3d(mesh, color = "pink", ax=ax)
+    def get_barycentric_coordinates(self, rho_theta_zeta):
+        """Gets the barycentric coordinates, given a mesh in rho, theta, zeta.
 
-    visualize().show()
+        Parameters
+        ----------
+        rho_theta_zeta : (will be) 3D ndarray
+            Coordinates of the original grid
+
+        Returns
+        -------
+        eta_u: 3D array
+            Barycentric coordinates evaluated
+            at the points (rho,theta, zeta).
+        """
+        # Beginning work for standard unit element
+
+        nodes = fem.ElementTetP1.doflocs
+
+        A = np.ones((4, 4))
+        for i in range(3):
+            for j in range(4):
+                A[i][j] = nodes[i][j]  # will need to confirm indexing
 
 
-
-    """
+"""
 Partial pseudo-code for incorporating basis functions
 
 
@@ -2153,8 +2165,8 @@ Partial pseudo-code for incorporating basis functions
         if node == 3:
             def f(x,y,z):
                 return (1-x-y-z)
-    
-    
+
+
     if K == 2:
         if node == 0:
             def f(x,y,z):
@@ -2186,94 +2198,91 @@ Partial pseudo-code for incorporating basis functions
         if node == 9:
              def f(x,y,z):
                  return 4*z*(1-x-y-z)
-             
-                
+
+
     if K == 3:
         if node == 0:
             def f(x,y,z):
                 return 0.5*(3*x-1)*(3*x-2)*x
-            
+
         if node == 1:
             def f(x,y,z):
                 return 0.5*(3*y-1)*(3*y-2)*y
-            
+
         if node == 2:
             def f(x,y,z):
                 return 0.5*(3*z-1)*(3*z-2)*z
-        
+
         if node == 3:
             def f(x,y,z):
                 return 0.5*(3*(1-x-y-z)-1)*(3*(1-x-y-z)-2)*(1-x-y-z)
-            
+
         if node == 4:
             def f(x,y,z):
                 return 4.5*x*z*(3*x-1)
-        
+
         if node == 5:
             def f(x,y,z):
                 return 4.5*(3*z-1)*x*z
-            
+
         if node == 6:
             def f(x,y,z):
                 return 4.5*(3*x-1)*x*y
-            
+
         if node == 7:
             def f(x,y,z):
                 return 4.5*(3*y-1)*x*y
-            
+
         if node == 8:
-            def f(x,y,z): 
+            def f(x,y,z):
                 return 4.5*(3*y-1)*y*z
-            
+
         if node == 9:
             def f(x,y,z):
                 return 4.5*(3*z-1)*y*z
-            
+
         if node == 10:
             def f(x,y,z):
                 return 4.5*(3*x-1)*x*(1-x-y-z)
-            
+
         if node == 11:
             def f(x,y,z):
                 return 4.5*(3*(1-x-y-z) -1)*x*(1-x-y-z)
-            
+
         if node == 12:
             def f(x,y,z):
                 return 4.5*(3*y-1)*y*(1-x-y-z)
-            
+
         if node == 13:
             def f(x,y,z):
                 return 4.5*(3*(1-x-y-z)-1)*y*(1-x-y-z)
-            
+
         if node == 14:
             def f(x,y,z):
                 return 4.5*(3*z-1)*z*(1-x-y-z)
-            
+
         if node == 15:
             def f(x,y,z):
                 return 4.5*(3*(1-x-y-z)-1)*z*(1-x-y-z)
-    
+
         if node == 16:
             def f(x,y,z):
-                return 27*y*z*(1-x-y-z) 
-            
+                return 27*y*z*(1-x-y-z)
+
         if node == 17:
             def f(x,y,z):
                 return 27*x*y*z
-            
+
         if node == 18:
             def f(x,y,z):
                 return 27*x*z*(1-x-y-z)
-            
+
         if node == 19:
             def f(x,y,z):
-                return 27*x*y*(1-x-y-z) 
-            
+                return 27*x*y*(1-x-y-z)
+
 
 """
-
-
-    
 
 
 class FiniteElementMesh2D:
@@ -2293,8 +2302,7 @@ class FiniteElementMesh2D:
     M : int
         Number of mesh points in the theta direction.
     K: integer
-        The order of the finite elements to use, which gives (K+1)(K+2) / 2
-        basis functions.
+        The order of the finite elements to use
     """
 
     def __init__(self, L, M, K=1):
@@ -2304,9 +2312,10 @@ class FiniteElementMesh2D:
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
 
-        '''
-        # Still working on implementation for any L,M. For now, taking cases and taking advantage
-        of mesh.refined() in scikit. Starting with a unit square in (rho,theta):
+        """
+        Still working on implementation for any L,M. For now, taking cases and
+        taking advantage of mesh.refined() in scikit. Starting with a unit square
+        in (rho,theta):
 
         mesh.refined(1) divides [0,1] in half on both axes (8 finite elements)
         mesh.refined(2) divides [0,1] in quarters on both axes (32 finite elements)
@@ -2316,26 +2325,26 @@ class FiniteElementMesh2D:
         mesh.refined(n) divides [0,1] into 2^n (2^(2n+1) finite elements)
 
 
-        '''
-        if mth.log(M,2).is_integer() == True and  mth.log(L,2).is_integer() == True and L==M:
+        """
+        if (
+            mth.log(M, 2).is_integer() is True
+            and mth.log(L, 2).is_integer() is True
+            and L == M
+        ):
 
-            p = int(mth.log(M,2)) # How many pieces to divide each interval in
-    
+            p = int(mth.log(M, 2))
+
             mesh = fem.MeshTri().refined(p)
 
-
+        vertices = mesh.doflocs
         # Rescale Theta axis by 2pi:
-        mesh.doflocs[1] = 2*np.pi*mesh.doflocs[1]
-
-
-        # mesh.doflocs[0] gives all of the x-coordinates, and mesh.doflocs[1] gives all of the y-coordinates 
+        mesh.doflocs[1] = 2 * np.pi * mesh.doflocs[1]
 
         if K == 1:
-            e = fem.ElementTriP1()
+            element = fem.ElementTriP1()
         else:
-            e = fem.ElementTriP2()
-        basis = fem.CellBasis(mesh, e)
-
+            element = fem.ElementTriP2()
+        # Will form basis later
 
         # Plotting the 2D Mesh
         from skfem.visuals.matplotlib import draw, draw_mesh2d
@@ -2343,7 +2352,6 @@ class FiniteElementMesh2D:
         ax = draw(mesh)
         p = draw_mesh2d(mesh, ax=ax)
         p.show()
-
 
         # Will fix this next section later
         # Compute the triangle elements for all 2ML triangles
@@ -2363,23 +2371,29 @@ class FiniteElementMesh2D:
         # Setup quadrature points and weights for numerical integration using scikit-fem
         # Will need to write a seperate one for linear:
 
+        if K == 1:
+            integration_points = np.array([1 / 3, 1 / 3, 1 / 3])
+            weights = 1
 
-         if K == 1:
-             integration_points = np.array([1/3,1/3,1/3])
-             weights = 1;
+        if K == 2:
+            [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
+            add_row = [
+                integration_points[0][1],
+                integration_points[0][0],
+                integration_points[0][0],
+            ]
+            integration_points = np.vstack([add_row, integration_points])
 
-         if K == 2:
-            [integration_points,weights] = fem.quadrature.get_quadrature(element, 2)
-            add_row = [integration_points[0][1], integration_points[0][0], integration_points[0][0]]
-            integration_points = np.vstack([add_row,integration_points])
-         
-         if K == 3:
-            [integration_points,weights] = fem.quadrature.get_quadrature(element, 3)
-            add_row = [integration_points[0][0], integration_points[0][1], integration_points[0][1], integration_points[0][2]]
-            integration_points= np.vstack([add_row,integration_points])
+        if K == 3:
+            [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
+            add_row = [
+                integration_points[0][0],
+                integration_points[0][1],
+                integration_points[0][1],
+                integration_points[0][2],
+            ]
+            integration_points = np.vstack([add_row, integration_points])
             integration_points = np.transpose(integration_points)
-            
-
 
         # Integration points, weights, and number of integration points
 
@@ -2387,12 +2401,8 @@ class FiniteElementMesh2D:
         self.weights = np.array(weights)
         self.nquad = len(self.integration_points)
 
-
-    def get_basis_function(slf)
-
     def get_basis_functions(self, theta_zeta, K=1):
-        """
-        Gets the barycentric basis functions.
+        """Gets the barycentric basis functions.
 
         Return the triangle basis functions, evaluated at the 2D rho
         and theta mesh points provided to the function.
@@ -2400,107 +2410,86 @@ class FiniteElementMesh2D:
         Parameters
         ----------
         theta_zeta : 2D ndarray, shape (nrho * ntheta, 2)
-            Coordinates of the original grid, lying inside this triangle.
+        Coordinates of the original grid, lying inside this triangle.
 
         Returns
         -------
         psi_q : (rho_theta, Q)
-
+        """
         """
 
-  # Below is a partial pseudo-code for the basis functions for the standard finite element, will adjust      
+            if K == 1:
+               if node == 0:
+                   def f(x,y,z):
+                       return x
+               if node == 1:
+                   def f(x,y,z):
+                       return y
+               if node == 2:
+                   def f(x,y,z):
+                       return z
+               if node == 3:
+                   def f(x,y,z):
+                       return (1-x-y-z)
+
+
+            if K == 2:
+                if node == 0:
+                    def f(x,y):
+                        return (2*x-1)*x
+                if node == 1:
+                    def f(x,y):
+                        return (2*y-1)*y
+                if node == 2:
+                    def f(x,y):
+                        return (2*(1-x-y)-1)*(1-x-y)
+                if node == 3:
+                    def f(x,y):
+                        return 4*x*y
+                if node == 4:
+                   def f(x,y):
+                        return 4*y*(1-x-y)
+                if node == 5:
+                    def f(x,y):
+                        return 4*x*(1-x-y)
+
+                return f
+
+
+            if K=2:
+                if node == 0:
+                    def f(x,y):
+                        return (1/2)*(3*x-1)*(3*x-2)*x
+                if node == 1:
+                    def f(x,y):
+                        return (1/2)*(3*y-1)*(3*y-2)*y
+                if node == 2:
+                     def f(x,y):
+                         return (1/2)*(3*(1-x-y)-1)*(3*(1-x-y)-2)*(1-x-y)
+                if node == 3:
+                     def f(x,y):
+                         return (9/2)*(x*y*(3*x-1))
+                if node == 4:
+                     def f(x,y):
+                         return (9/2)*(x*y*(3*y-1))
+                if node == 5:
+                    def f(x,y):
+                        return (9/2)*y*(1-x-y)*(3*y-1)
+                if node == 6:
+                    def f(x,y):
+                        return (9/2)*y*(1-x-y)*(3*(1-x-y)-1)
+                if node == 7:
+                    def f(x,y):
+                        return (9/2)*x*(1-x-y)*(3*x-1)
+                if node == 8:
+                    def f(x,y):
+                        return (9/2)*x*(1-x-y)*(3*(1-x-y)-1)
+                if node == 9:
+                    def f(x,y):
+                        return 27*x*y*(1-x-y)
+
+                return f
         """
-
-    if K == 1:
-       if node == 0:
-           def f(x,y,z):
-               return x
-       if node == 1:
-           def f(x,y,z):
-               return y
-       if node == 2:
-           def f(x,y,z):
-               return z
-       if node == 3:
-           def f(x,y,z):
-               return (1-x-y-z)
-   
-    
-    if K == 2:
-        if node == 0:
-            def f(x,y):
-                return (2*x-1)*x
-        if node == 1:
-            def f(x,y):
-                return (2*y-1)*y
-        if node == 2:
-            def f(x,y):
-                return (2*(1-x-y)-1)*(1-x-y)
-        if node == 3:
-            def f(x,y):
-                return 4*x*y
-        if node == 4:
-           def f(x,y):
-                return 4*y*(1-x-y)
-        if node == 5:
-            def f(x,y):
-                return 4*x*(1-x-y)
-            
-        return f
-            
-    
-    if K=2:
-        if node == 0:
-            def f(x,y):
-                return (1/2)*(3*x-1)*(3*x-2)*x
-        if node == 1:
-            def f(x,y):
-                return (1/2)*(3*y-1)*(3*y-2)*y
-        if node == 2:
-             def f(x,y):
-                 return (1/2)*(3*(1-x-y)-1)*(3*(1-x-y)-2)*(1-x-y)
-        if node == 3:
-             def f(x,y):
-                 return (9/2)*(x*y*(3*x-1))
-        if node == 4:
-             def f(x,y):
-                 return (9/2)*(x*y*(3*y-1))
-        if node == 5:
-            def f(x,y):
-                return (9/2)*y*(1-x-y)*(3*y-1)
-        if node == 6:
-            def f(x,y):
-                return (9/2)*y*(1-x-y)*(3*(1-x-y)-1)
-        if node == 7:
-            def f(x,y):
-                return (9/2)*x*(1-x-y)*(3*x-1)
-        if node == 8:
-            def f(x,y):
-                return (9/2)*x*(1-x-y)*(3*(1-x-y)-1)
-        if node == 9:
-            def f(x,y):
-                return 27*x*y*(1-x-y)
-            
-        return f
-"""
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""

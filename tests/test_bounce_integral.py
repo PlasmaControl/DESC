@@ -673,9 +673,11 @@ def test_bounce_averaged_drifts():
     #  For a fixed pitch at index i, what is difference bavg_drift_an[i, j]
     #  and bavg_drift_an[i, j+1]?
     bavg_drift_an = (
-        0.5 * cvdrift_an * ellipe(k2)
-        + gbdrift_an * ellipk(k2)
-        + dPdrho / bmag**2 * ellipe(k2)
+        ellipe(k2)
+        - 0.5 * ellipk(k2)
+        + 2 * s_hat * (ellipe(k2) + (k2 - 1) * ellipk(k2))
+        - dPdrho / B0 * ellipk(k2)
+        - dPdrho / B0 * 2 / 3 * (ellipe(k2) * (2 * k2 - 1) + ellipk(k2) * (1 - k2))
     )
 
     def integrand(cvdrift, gbdrift, B, pitch):

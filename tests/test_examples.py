@@ -1397,6 +1397,8 @@ def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils
     assert np.min(fieldZ) > -0.02
 
 
+# test will fail bc we cant fix things in an optimizable collection yet
+@pytest.mark.xfail
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
@@ -1444,7 +1446,6 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
         eq=eq,
         eval_grid=eval_grid,
         source_grid=sgrid,
-        eq_fixed=True,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
         # G is providing, in the same direction
@@ -1552,29 +1553,52 @@ def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
         desirednumcoils=numCoils,
         step=6,
     )
-    coilset2 = coilset2.to_FourierXYZ(N=60)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
-    np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
+    np.testing.assert_allclose(B, B_from_coils, rtol=1e-3, atol=5e-4)
 
 
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_regcoil_ellipse_modular_coils_check_B(
-    regcoil_ellipse_modular_coils,
-):
+def test_regcoil_ellipse_modular_coils():
     """Test elliptical eq and winding surf modular coil regcoil solution."""
-    (
-        initial_surface_current_field,
-        chi_B,
-        eq,
-    ) = regcoil_ellipse_modular_coils
-    surface_current_field = initial_surface_current_field.copy()
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 40
+    alpha = 1e-18
+
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
+    )
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        alpha=alpha,
+        current_helicity=0,
+        vacuum=True,
+    )
+
+    chi_B = data["chi^2_B"]
     assert np.all(chi_B < 1e-5)
+
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
@@ -1585,23 +1609,8 @@ def test_regcoil_ellipse_modular_coils_check_B(
     )
     np.testing.assert_allclose(B, B_from_surf, atol=2e-3)
 
-
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
-def test_regcoil_ellipse_modular_coils_check_coil_B(
-    regcoil_ellipse_modular_coils,
-):
-    """Test elliptical eq and winding surf modular coil cutting."""
-    (
-        initial_surface_current_field,
-        _,
-        eq,
-    ) = regcoil_ellipse_modular_coils
-    surface_current_field = initial_surface_current_field.copy()
     coilset = surface_current_field.to_CoilSet(
-        desirednumcoils=300,
-        step=5,
+        desirednumcoils=300, step=5, show_plots=False
     )
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]

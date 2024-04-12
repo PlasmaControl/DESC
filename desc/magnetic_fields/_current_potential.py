@@ -743,12 +743,16 @@ class FourierCurrentPotentialField(
         numCoils = 0
         plt.xlabel(r"$\zeta$")
         plt.ylabel(r"$\theta$")
+
         for j in range(N_trial_contours):
             try:
-                p = cdata.collections[j].get_paths()[0]
-            except Exception:
-                print("no path found for given contour")
-                continue
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=DeprecationWarning)
+                    p = cdata.collections[j].get_paths()[0]
+            except Exception as e:
+                print("failed to find a contour with error:")
+                print(e)
+
             v = p.vertices
 
             contour_zeta.append(v[:, 0])
@@ -785,7 +789,6 @@ class FourierCurrentPotentialField(
             if show_plots:
                 plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
                 plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
-
         if not jnp.isclose(helicity, 0):
             # right now these are only over 1 FP
             # so must tile them s.t. they are full coils, by repeating them

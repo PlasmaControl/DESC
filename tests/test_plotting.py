@@ -869,7 +869,7 @@ def test_plot_Bn_scan_regcoil(regcoil_ellipse_and_axisym_surf):
         surface_current,
         eq,
     ) = regcoil_ellipse_and_axisym_surf
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_scan_Bn"]
 
@@ -886,7 +886,7 @@ def test_plot_Phi_scan_regcoil(regcoil_ellipse_and_axisym_surf):
         surface_current,
         eq,
     ) = regcoil_ellipse_and_axisym_surf
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_scan_Phi"]
 
@@ -903,7 +903,7 @@ def test_plot_chi2B_alpha_scan_regcoil(regcoil_ellipse_and_axisym_surf):
         surface_current,
         eq,
     ) = regcoil_ellipse_and_axisym_surf
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_chi^2_B_vs_alpha"]
 
@@ -919,7 +919,7 @@ def test_plot_chi2B_chi2K_scan_regcoil(regcoil_ellipse_and_axisym_surf):
         surface_current,
         eq,
     ) = regcoil_ellipse_and_axisym_surf
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_chi^2_B_vs_chi^2_K"]
 
@@ -935,7 +935,7 @@ def test_plot_Bn_regcoil(regcoil_ellipse_helical_coils):
         surface_current,
         eq,
     ) = regcoil_ellipse_helical_coils
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_Bn"]
 
@@ -952,7 +952,7 @@ def test_plot_Phi_regcoil(regcoil_ellipse_helical_coils):
         surface_current,
         eq,
     ) = regcoil_ellipse_helical_coils
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq)
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_Phi"]
     return fig

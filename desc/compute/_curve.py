@@ -876,77 +876,110 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
         "method": [],
+        "intervals": [],
     },
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=["s", "x"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    def get_arr_in_interval(arr, knots, istart, istop):
+        arr_temp = jnp.where(knots > knots[istop], arr[istop], arr)
+        arr_temp = jnp.where(knots < knots[istart], arr[istart], arr_temp)
+
+        return arr_temp
+
     xq = data["s"]
+    transforms["intervals"] = jnp.asarray(transforms["intervals"])
 
-    d2Xq = interp1d(
-        xq,
-        params["knots"],
-        params["X"],
-        method=transforms["method"],
-        derivative=2,
-        period=2 * jnp.pi,
-    )
-    d2Yq = interp1d(
-        xq,
-        params["knots"],
-        params["Y"],
-        method=transforms["method"],
-        derivative=2,
-        period=2 * jnp.pi,
-    )
-    d2Zq = interp1d(
-        xq,
-        params["knots"],
-        params["Z"],
-        method=transforms["method"],
-        derivative=2,
-        period=2 * jnp.pi,
-    )
+    is_discontinuous = len(transforms["intervals"][0])
 
-    coords_ss = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
+    if is_discontinuous:
+        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
+        X = jnp.append(params["X"], params["X"][0])
+        Y = jnp.append(params["Y"], params["Y"][0])
+        Z = jnp.append(params["Z"], params["Z"][0])
+        period = None
+    else:
+        knots = params["knots"]
+        X = params["X"]
+        Y = params["Y"]
+        Z = params["Z"]
+        period = 2 * jnp.pi
+
+    d2Xq = jnp.zeros(len(xq))
+    d2Yq = jnp.zeros(len(xq))
+    d2Zq = jnp.zeros(len(xq))
+    d2fq = jnp.array([d2Xq, d2Yq, d2Zq])
+
+    def body(i, d2fq):
+        if is_discontinuous:
+            istart, istop = transforms["intervals"][i]
+            istop = jnp.where(istop == 0, -1, istop)
+        else:
+            # get the whole interval
+            istart, istop = [0, -1]
+
+        X_in_interval = get_arr_in_interval(X, knots, istart, istop)
+        Y_in_interval = get_arr_in_interval(Y, knots, istart, istop)
+        Z_in_interval = get_arr_in_interval(Z, knots, istart, istop)
+
+        d2Xq_temp = interp1d(
+            xq,
+            knots,
+            X_in_interval,
+            method=transforms["method"],
+            derivative=2,
+            period=period,
+        )
+        d2Yq_temp = interp1d(
+            xq,
+            knots,
+            Y_in_interval,
+            method=transforms["method"],
+            derivative=2,
+            period=period,
+        )
+        d2Zq_temp = interp1d(
+            xq,
+            knots,
+            Z_in_interval,
+            method=transforms["method"],
+            derivative=2,
+            period=period,
+        )
+
+        if is_discontinuous:
+            d2fq = d2fq.at[0].set(
+                jnp.where(
+                    (xq >= knots[istart]) & (xq <= knots[istop]), d2Xq_temp, d2fq[0]
+                )
+            )
+            d2fq = d2fq.at[1].set(
+                jnp.where(
+                    (xq >= knots[istart]) & (xq <= knots[istop]), d2Yq_temp, d2fq[1]
+                )
+            )
+            d2fq = d2fq.at[2].set(
+                jnp.where(
+                    (xq >= knots[istart]) & (xq <= knots[istop]), d2Zq_temp, d2fq[2]
+                )
+            )
+
+            return d2fq
+        else:
+            return jnp.array([d2Xq_temp, d2Yq_temp, d2Zq_temp])
+
+    d2fq = fori_loop(0, len(transforms["intervals"]), body, d2fq)
+
+    coords_ss = jnp.stack(d2fq, axis=1)
     coords_ss = coords_ss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
-        # calculate the xy coordinates to rotate to rpz
-        Xq = interp1d(
-            xq,
-            params["knots"],
-            params["X"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Yq = interp1d(
-            xq,
-            params["knots"],
-            params["Y"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Zq = interp1d(
-            xq,
-            params["knots"],
-            params["Z"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = (
-            coords @ params["rotmat"].reshape((3, 3)).T
-            + params["shift"][jnp.newaxis, :]
-        )
-
-        coords_ss = xyz2rpz_vec(coords_ss, x=coords[:, 0], y=coords[:, 1])
+        coords = data["x"]
+        coords_ss = xyz2rpz_vec(coords_ss, phi=coords[:, 1])
     data["x_ss"] = coords_ss
     return data
 
@@ -961,77 +994,110 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
         "method": [],
+        "intervals": [],
     },
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=["s", "x"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    def get_arr_in_interval(arr, knots, istart, istop):
+        arr_temp = jnp.where(knots > knots[istop], arr[istop], arr)
+        arr_temp = jnp.where(knots < knots[istart], arr[istart], arr_temp)
+
+        return arr_temp
+
     xq = data["s"]
+    transforms["intervals"] = jnp.asarray(transforms["intervals"])
 
-    d3Xq = interp1d(
-        xq,
-        params["knots"],
-        params["X"],
-        method=transforms["method"],
-        derivative=3,
-        period=2 * jnp.pi,
-    )
-    d3Yq = interp1d(
-        xq,
-        params["knots"],
-        params["Y"],
-        method=transforms["method"],
-        derivative=3,
-        period=2 * jnp.pi,
-    )
-    d3Zq = interp1d(
-        xq,
-        params["knots"],
-        params["Z"],
-        method=transforms["method"],
-        derivative=3,
-        period=2 * jnp.pi,
-    )
+    is_discontinuous = len(transforms["intervals"][0])
 
-    coords_sss = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
+    if is_discontinuous:
+        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
+        X = jnp.append(params["X"], params["X"][0])
+        Y = jnp.append(params["Y"], params["Y"][0])
+        Z = jnp.append(params["Z"], params["Z"][0])
+        period = None
+    else:
+        knots = params["knots"]
+        X = params["X"]
+        Y = params["Y"]
+        Z = params["Z"]
+        period = 2 * jnp.pi
+
+    d3Xq = jnp.zeros(len(xq))
+    d3Yq = jnp.zeros(len(xq))
+    d3Zq = jnp.zeros(len(xq))
+    d3fq = jnp.array([d3Xq, d3Yq, d3Zq])
+
+    def body(i, d3fq):
+        if is_discontinuous:
+            istart, istop = transforms["intervals"][i]
+            istop = jnp.where(istop == 0, -1, istop)
+        else:
+            # get the whole interval
+            istart, istop = [0, -1]
+
+        X_in_interval = get_arr_in_interval(X, knots, istart, istop)
+        Y_in_interval = get_arr_in_interval(Y, knots, istart, istop)
+        Z_in_interval = get_arr_in_interval(Z, knots, istart, istop)
+
+        d3Xq_temp = interp1d(
+            xq,
+            knots,
+            X_in_interval,
+            method=transforms["method"],
+            derivative=3,
+            period=period,
+        )
+        d3Yq_temp = interp1d(
+            xq,
+            knots,
+            Y_in_interval,
+            method=transforms["method"],
+            derivative=3,
+            period=period,
+        )
+        d3Zq_temp = interp1d(
+            xq,
+            knots,
+            Z_in_interval,
+            method=transforms["method"],
+            derivative=3,
+            period=period,
+        )
+
+        if is_discontinuous:
+            d3fq = d3fq.at[0].set(
+                jnp.where(
+                    (xq >= knots[istart]) & (xq <= knots[istop]), d3Xq_temp, d3fq[0]
+                )
+            )
+            d3fq = d3fq.at[1].set(
+                jnp.where(
+                    (xq >= knots[istart]) & (xq <= knots[istop]), d3Yq_temp, d3fq[1]
+                )
+            )
+            d3fq = d3fq.at[2].set(
+                jnp.where(
+                    (xq >= knots[istart]) & (xq <= knots[istop]), d3Zq_temp, d3fq[2]
+                )
+            )
+
+            return d3fq
+        else:
+            return jnp.array([d3Xq_temp, d3Yq_temp, d3Zq_temp])
+
+    d3fq = fori_loop(0, len(transforms["intervals"]), body, d3fq)
+
+    coords_sss = jnp.stack(d3fq, axis=1)
     coords_sss = coords_sss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
-        # calculate the xy coordinates to rotate to rpz
-        Xq = interp1d(
-            xq,
-            params["knots"],
-            params["X"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Yq = interp1d(
-            xq,
-            params["knots"],
-            params["Y"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Zq = interp1d(
-            xq,
-            params["knots"],
-            params["Z"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = (
-            coords @ params["rotmat"].reshape((3, 3)).T
-            + params["shift"][jnp.newaxis, :]
-        )
-
-        coords_sss = xyz2rpz_vec(coords_sss, x=coords[:, 0], y=coords[:, 1])
+        coords = data["x"]
+        coords_sss = xyz2rpz_vec(coords_sss, phi=coords[:, 1])
     data["x_sss"] = coords_sss
 
     return data

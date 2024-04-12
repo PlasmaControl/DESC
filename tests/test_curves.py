@@ -772,4 +772,6 @@ class TestSplineXYZCurve:
         )
         d.compute("x")
         d.compute("x_s")
+        d.compute("x_ss")
+        d.compute("x_sss")
         assert 1 == 1

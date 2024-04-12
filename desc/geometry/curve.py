@@ -707,7 +707,7 @@ class SplineXYZCurve(Curve):
             knots = knots[:-1] if closed_flag else knots
 
         if discontinuous_indices is None:
-            interval_indices = [[0, -1]]
+            interval_indices = [[]]
         else:
             interval_indices = [
                 [discontinuous_indices[i - 1], discontinuous_indices[i]]

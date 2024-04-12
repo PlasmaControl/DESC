@@ -14,7 +14,6 @@ from desc.grid import (
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
-    meshgrid_expand,
     meshgrid_inverse_idx,
     meshgrid_unique_idx,
 )
@@ -764,15 +763,6 @@ class TestGrid:
         T = np.linspace(0, 2 * np.pi, 2)
         Z = np.linspace(0, 10 * np.pi, 3)
         r, t, z = map(np.ravel, np.meshgrid(R, T, Z, indexing="ij"))
-        np.testing.assert_allclose(
-            r, meshgrid_expand(R, R.size, T.size, Z.size, order=0)
-        )
-        np.testing.assert_allclose(
-            t, meshgrid_expand(T, R.size, T.size, Z.size, order=1)
-        )
-        np.testing.assert_allclose(
-            z, meshgrid_expand(Z, R.size, T.size, Z.size, order=2)
-        )
         uR, uT, uZ = meshgrid_unique_idx(R.size, T.size, Z.size)
         iR, iT, iZ = meshgrid_inverse_idx(R.size, T.size, Z.size)
         _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)

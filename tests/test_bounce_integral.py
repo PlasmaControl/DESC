@@ -412,7 +412,6 @@ def test_bounce_points():
 def test_bounce_quad():
     """Test quadrature reduces to elliptic integrals."""
     knots = np.linspace(-np.pi / 2, np.pi / 2, 10)
-    B = np.sin(knots).reshape(1, -1)
     epsilon = 1e-2
     bp1, bp2 = knots[0] + epsilon, knots[-1] - epsilon
     x, w = np.polynomial.chebyshev.chebgauss(65)
@@ -428,7 +427,7 @@ def test_bounce_quad():
             w=w,
             knots=knots,
             B_sup_z=np.ones((1, knots.size)),
-            B=B,
+            B=np.sin(knots).reshape(1, -1),
             B_z_ra=np.cos(knots).reshape(1, -1),
             integrand=integrand,
             f=[],

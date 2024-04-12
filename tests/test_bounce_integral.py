@@ -14,6 +14,7 @@ from scipy.special import ellipe, ellipk
 
 from desc.backend import complex_sqrt, flatnonzero, fori_loop, put, root_scalar
 from desc.compute.bounce_integral import (
+    _bounce_quad,
     bounce_integral_map,
     bounce_points,
     pitch_of_extrema,
@@ -52,6 +53,13 @@ def _filter_not_nan(a):
     is_nan = np.isnan(a)
     assert np.array_equal(is_nan, np.sort(is_nan, axis=-1))
     return a[~is_nan]
+
+
+def _sqrt(x):
+    """Reproduces jnp.sqrt with np.sqrt."""
+    x = complex_sqrt(x)
+    x = np.where(np.isclose(np.imag(x), 0), np.real(x), np.nan)
+    return x
 
 
 @pytest.mark.unit
@@ -401,25 +409,46 @@ def test_bounce_points():
 
 
 @pytest.mark.unit
+def test_bounce_quad():
+    """Test quadrature reduces to elliptic integrals."""
+    knots = np.linspace(-np.pi / 2, np.pi / 2, 10)
+    B = np.sin(knots).reshape(1, -1)
+    epsilon = 1e-2
+    bp1, bp2 = knots[0] + epsilon, knots[-1] - epsilon
+    x, w = np.polynomial.chebyshev.chebgauss(65)
+    # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
+    x = (np.arcsin(x) / np.pi - 0.5) * (bp2 - bp1) + bp2
+
+    def integrand(B, pitch):
+        return 1 / _sqrt(1 - pitch * B**2)
+
+    bounce_quad = _bounce_quad(
+        X=x.reshape(1, 1, 1, -1),
+        w=w,
+        knots=knots,
+        B_sup_z=np.ones((1, knots.size)),
+        B=B,
+        B_z_ra=np.cos(knots).reshape(1, -1),
+        integrand=integrand,
+        f=[],
+        pitch=np.ones((1, 1)),
+        method="akima",
+    ).squeeze()
+    np.testing.assert_allclose(bounce_quad, 10.5966, atol=0.75)
+
+
+@pytest.mark.unit
 def test_example_code_and_hairy_ball():
     """Test example code in bounce_integral docstring and ensure B does not vanish."""
 
     def integrand_num(g_zz, B, pitch):
         """Integrand in integral in numerator of bounce average."""
         f = (1 - pitch * B) * g_zz  # something arbitrary
-        # When 1 - pitch * B is negative, we want g to evaluate as nan.
-        # jnp.sqrt() will do this as desired, but np.sqrt() will give a runtime error.
-        g = complex_sqrt(1 - pitch * B)  # typical to have this in denominator
-        g = np.where(np.isclose(np.imag(g), 0), np.real(g), np.nan)
-        return safediv(f, g, fill=np.nan)
+        return safediv(f, _sqrt(1 - pitch * B), fill=np.nan)
 
     def integrand_den(B, pitch):
         """Integrand in integral in denominator of bounce average."""
-        # When 1 - pitch * B is negative, we want g to evaluate as nan.
-        # jnp.sqrt() will do this as desired, but np.sqrt() will give a runtime error.
-        g = complex_sqrt(1 - pitch * B)  # typical to have this in denominator
-        g = np.where(np.isclose(np.imag(g), 0), np.real(g), np.nan)
-        return safediv(1, g, fill=np.nan)
+        return safediv(1, _sqrt(1 - pitch * B), fill=np.nan)
 
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
@@ -429,8 +458,6 @@ def test_example_code_and_hairy_ball():
     bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots)
 
     # start hairy ball test
-    B = eq.compute("B", grid=items["grid_desc"], data=items["data"])["B"]
-    assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
     B = items["data"]["B"]
     assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
     # end hairy ball test
@@ -448,6 +475,7 @@ def test_example_code_and_hairy_ball():
     i, j = 0, 0
     print(average[:, i, j])
     # are the bounce averages along the field line with nodes
+    # given in Clebsch-Type field-line coordinates ρ, α, ζ
     nodes = items["grid_fl"].nodes.reshape(rho.size, alpha.size, -1, 3)
     print(nodes[i, j])
     # for the pitch values stored in
@@ -649,11 +677,8 @@ def test_bounce_averaged_drifts():
     def integrand(cvdrift, gbdrift, B, pitch):
         # The arguments to this function will be interpolated
         # onto the quadrature points before these quantities are evaluated.
-        # When 1 - pitch * B is negative, we want g to evaluate as nan.
-        # jnp.sqrt() will do this as desired, but np.sqrt() will give a runtime error.
-        g = complex_sqrt(1 - pitch * B)
-        g = np.where(np.isclose(np.imag(g), 0), np.real(g), np.nan)
-        return (g * 0.5 * cvdrift) + (gbdrift / g) + (dPdrho / B**2 * g)
+        g = _sqrt(1 - pitch * B)
+        return (0.5 * cvdrift * g) + (gbdrift / g) + (dPdrho / B**2 * g)
 
     bavg_drift_num = bounce_integral(
         integrand=integrand,

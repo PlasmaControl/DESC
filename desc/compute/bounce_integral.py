@@ -618,9 +618,9 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
     f : iterable of Array, shape(P, S, knots.size, )
         Arguments to the callable ``integrand``.
         These should be the functions in the integrand of the bounce integral
-        evaluated at the knots. They should be computed on the returned desc
-        coordinate grid. The values will be interpolated to the quadrature
-        points. All items in the list should be two-dimensional. The first axis of
+        evaluated (or interpolated to) the nodes of the returned desc
+        coordinate grid.
+        All items in the list should be two-dimensional. The first axis of
         that item is interpreted as the batch axis, which enumerates the
         evaluation of the function at particular pitch values.
     pitch : Array, shape(P, S)
@@ -719,25 +719,24 @@ def bounce_integral_map(
         This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
         specified field line ℓ (constant rho and alpha), for every λ value in ``pitch``.
     items : dict
-        Dictionary of useful intermediate quantities.
-            grid_fl : Grid
-                Clebsch-Type field-line coordinates grid.
-            grid_desc : Grid
-                DESC coordinate grid for the given field line coordinates.
-            data : dict
-                Dictionary of Arrays of stuff evaluated on ``grid``.
-            B.c : Array, shape(4, S, zeta.size - 1)
-                Polynomial coefficients of the spline of |B| in local power basis.
-                First axis enumerates the coefficients of power series.
-                Second axis enumerates the splines along the field lines.
-                Last axis enumerates the polynomials of the spline along a particular
-                field line.
-            B_z_ra.c : Array, shape(3, S, zeta.size - 1)
-                Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
-                First axis enumerates the coefficients of power series.
-                Second axis enumerates the splines along the field lines.
-                Last axis enumerates the polynomials of the spline along a particular
-                field line.
+        grid_fl : Grid
+            Clebsch-Type field-line coordinate grid.
+        grid_desc : Grid
+            DESC coordinate grid for the given field line coordinates.
+        data : dict
+            Dictionary of Arrays of stuff evaluated on ``grid``.
+        B.c : Array, shape(4, S, zeta.size - 1)
+            Polynomial coefficients of the spline of |B| in local power basis.
+            First axis enumerates the coefficients of power series.
+            Second axis enumerates the splines along the field lines.
+            Last axis enumerates the polynomials of the spline along a particular
+            field line.
+        B_z_ra.c : Array, shape(3, S, zeta.size - 1)
+            Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
+            First axis enumerates the coefficients of power series.
+            Second axis enumerates the splines along the field lines.
+            Last axis enumerates the polynomials of the spline along a particular
+            field line.
 
     Examples
     --------
@@ -752,14 +751,12 @@ def bounce_integral_map(
 
         def integrand_num(g_zz, B, pitch):
             # Integrand in integral in numerator of bounce average.
-            f = (1 - pitch * B) * g_zz  # something arbitrary
-            g = jnp.sqrt(1 - pitch * B)  # typical to have this in denominator
-            return safediv(f, g, fill=jnp.nan)
+            f = (1 - pitch * B) * g_zz
+            return f / jnp.sqrt(1 - pitch * B)
 
         def integrand_den(B, pitch):
             # Integrand in integral in denominator of bounce average.
-            g = jnp.sqrt(1 - pitch * B)  # typical to have this in denominator
-            return safediv(1, g, fill=jnp.nan)
+            return 1 / jnp.sqrt(1 - pitch * B)
 
         eq = get("HELIOTRON")
         rho = jnp.linspace(1e-12, 1, 6)
@@ -781,6 +778,7 @@ def bounce_integral_map(
         i, j = 0, 0
         print(average[:, i, j])
         # are the bounce averages along the field line with nodes
+        # given in Clebsch-Type field-line coordinates ρ, α, ζ
         nodes = items["grid_fl"].nodes.reshape(rho.size, alpha.size, -1, 3)
         print(nodes[i, j])
         # for the pitch values stored in
@@ -845,10 +843,10 @@ def bounce_integral_map(
         f : list of Array, shape(P, items["grid_desc"].num_nodes, )
             Arguments to the callable ``integrand``.
             These should be the functions in the integrand of the bounce integral
-            evaluated at the knots. They should be computed on the returned desc
-            coordinate grid. The values will be interpolated to the quadrature
-            points. If an item in the list is two-dimensional, the first axis of
-            that item is interpreted as the batch axis, which enumerates the
+            evaluated (or interpolated to) the nodes of the returned desc
+            coordinate grid.
+            If an item in the list is two-dimensional, the first axis of that
+            item is interpreted as the batch axis, which enumerates the
             evaluation of the function at particular pitch values.
         pitch : Array, shape(P, S)
             λ values to evaluate the bounce integral at each field line.

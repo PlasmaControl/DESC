@@ -328,7 +328,7 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     Returns
     -------
     grid_fl : Grid
-        Clebsch-Type field-line coordinates grid.
+        Clebsch-Type field-line coordinate grid.
     grid_desc : Grid
         DESC coordinate grid for the given field line coordinates.
     data : dict

@@ -534,15 +534,10 @@ def _compute_bp_if_given_pitch(
 def tanh_sinh_cheby_quad(resolution=7):
     """Modified Tanh-Sinh quadrature.
 
-    This function outputs the quadrature points xₖ and weights wₖ
-    for a modified tanh-sinh quadrature.
+    Outputs the quadrature points xₖ and weights wₖ
+    to transform an integral following form to the weighted sum.
 
-    The generic tanh-sinh quadrature is
-    ∫₋₁¹ f(x) dx = ∑ₖ wₖ f(xₖ)
-
-    The weights returned by this function, ωₖ, mimic the Chebyshev–Gauss quadrature.
-
-    ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ wₖ f(xₖ) / √(1 − xₖ²) = ∑ₖ ωₖ f(xₖ)
+    ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ ωₖ f(xₖ) / √(1 − xₖ²) = ∑ₖ wₖ f(xₖ)
 
     Parameters
     ----------
@@ -566,9 +561,9 @@ def tanh_sinh_cheby_quad(resolution=7):
     kh = jnp.linspace(-t_max, t_max, resolution)
     h = 2 * t_max / (resolution - 1)
     x = jnp.tanh(0.5 * jnp.pi * jnp.sinh(kh))
+    # weights for ∫₋₁¹ f(x) dx = ∑ₖ ωₖ f(xₖ)
     w = 0.5 * jnp.pi * h * jnp.cosh(kh) / jnp.cosh(0.5 * jnp.pi * jnp.sinh(kh)) ** 2
-    # generic tanh-sinh integrates  ∫₋₁¹ f(x) dx = ∑ₖ wₖ f(xₖ)
-    # we want to integrate          ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ wₖ f(xₖ) / √(1 − xₖ²)
+    # weights for ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ wₖ f(xₖ)
     w = w / jnp.sqrt(1 - x**2)
     return x, w
 
@@ -707,8 +702,8 @@ def bounce_integral_map(
         and the accuracy of the locations of the bounce points.
     quad : callable
         The quadrature scheme used to evaluate the integral.
-        Should return quadrature points and weights when called.
-        The returned points should be within the domain [-1, 1].
+        The returned quadrature points xₖ and weights wₖ
+        should approximate ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ wₖ f(xₖ).
     pitch : Array, shape(P, S)
         λ values to evaluate the bounce integral at each field line.
         May be specified later.

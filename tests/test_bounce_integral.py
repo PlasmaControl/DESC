@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipk
 
-from desc.backend import complex_sqrt, flatnonzero, fori_loop, put, root_scalar
+from desc.backend import complex_sqrt, flatnonzero
 from desc.compute.bounce_integral import (
     _bounce_quad,
     bounce_integral_map,
@@ -707,64 +707,3 @@ def test_bounce_averaged_drifts():
             rtol=1e-2,
             err_msg=f"Failed on index {i} for pitch {pitch[i]}",
         )
-
-
-# TODO: if deemed useful finish details using methods in desc.compute.bounce_integral
-def _compute_bounce_points_with_root_finding(
-    eq, pitch, rho, alpha, resolution=20, zeta_max=6 * np.pi
-):
-    # TODO: avoid separate root finding routines in residual and jac
-    #       and use previous desc coords as initial guess for next iteration
-    def residual(zeta, i):
-        grid, data = desc_grid_from_field_line_coords(rho, alpha, zeta, eq)
-        data = eq.compute(["|B|"], grid=grid, data=data)
-        return data["|B|"] - pitch[i]
-
-    def jac(zeta):
-        grid, data = desc_grid_from_field_line_coords(rho, alpha, zeta, eq)
-        data = eq.compute(["|B|_z|r,a"], grid=grid, data=data)
-        return data["|B|_z|r,a"]
-
-    # Compute |B| - 1/pitch on a dense grid.
-    # For every field line, find the roots of this linear spline.
-    # These estimates for the true roots will serve as an initial guess, and
-    # let us form a boundary mesh around root estimates to limit search domain
-    # of the root finding algorithms.
-    zeta = np.linspace(0, zeta_max, 3 * resolution)
-    grid, data = desc_grid_from_field_line_coords(rho, alpha, zeta, eq)
-    data = eq.compute(["|B|"], grid=grid, data=data)
-    B_norm = data["|B|"].reshape(alpha.size, rho.size, -1)  # constant field line chunks
-
-    boundary_lt = np.zeros((pitch.size, resolution, alpha.size, rho.size))
-    boundary_rt = np.zeros((pitch.size, resolution, alpha.size, rho.size))
-    guess = np.zeros((pitch.size, resolution, alpha.size, rho.size))
-    # todo: scan over this
-    for i in range(pitch.size):
-        for j in range(alpha.size):
-            for k in range(rho.size):
-                # indices of zeta values observed prior to sign change
-                idx = np.nonzero(np.diff(np.sign(B_norm[j, k] - pitch[i])))[0]
-                guess[i, :, j, k] = grid.nodes[idx, 2]
-                boundary_lt[i, :, j, k] = np.append(zeta[0], guess[:-1])
-                boundary_rt[i, :, j, k] = np.append(guess[1:], zeta[-1])
-    guess = guess.reshape(pitch.size, resolution, alpha.size * rho.size)
-    boundary_lt = boundary_lt.reshape(pitch.size, resolution, alpha.size * rho.size)
-    boundary_rt = boundary_rt.reshape(pitch.size, resolution, alpha.size * rho.size)
-
-    def body_pitch(i, out):
-        def body_roots(j, out_i):
-            def fixup(z):
-                return np.clip(z, boundary_lt[i, j], boundary_rt[i, j])
-
-            # todo: call vmap to vectorize on guess[i, j] so that we solve
-            #  guess[i, j].size independent root finding problems
-            root = root_scalar(residual, guess[i, j], jac=jac, args=i, fixup=fixup)
-            out_i = put(out_i, j, root)
-            return out_i
-
-        out = put(out, i, fori_loop(0, resolution, body_roots, out[i]))
-        return out
-
-    bounce_points = np.zeros(shape=(pitch.size, alpha.size, rho.size, resolution))
-    bounce_points = fori_loop(0, pitch.size, body_pitch, bounce_points)
-    return bounce_points

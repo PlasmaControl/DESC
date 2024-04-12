@@ -247,9 +247,11 @@ class _MagneticField(IOAble, ABC):
         Returns
         -------
         Bnorm : ndarray
-            The normal magnetic field to the surface given, of size grid.num_nodes.
+            The normal magnetic field to the surface given, as an array of
+            size ``grid.num_nodes``.
         coords: ndarray
-            the locations (in specified basis) at which the Bnormal was calculated
+            the locations (in specified basis) at which the Bnormal was calculated,
+            given as an ``(grid.num_nodes , 3)`` shaped array.
 
         """
         calc_Bplasma = False
@@ -1402,6 +1404,7 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
+
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box.
         If supplied, the RHS of the field line equations will be
@@ -1421,7 +1424,6 @@ def field_line_integrate(
         the RHS is multiplied by exp(-r * decay_accel), this is to
         accelerate the decay of the RHS and stop the integration sooner
         after exiting the bounds. Defaults to 1e6
-
 
     Returns
     -------

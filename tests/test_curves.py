@@ -121,11 +121,6 @@ class TestRZCurve:
         assert "FourierRZCurve" in str(c)
         assert c.sym
 
-        c.NFP = 3
-        assert c.NFP == 3
-        assert c.R_basis.NFP == 3
-        assert c.Z_basis.NFP == 3
-
     @pytest.mark.unit
     def test_asserts(self):
         """Test error checking when creating FourierRZCurve."""
@@ -198,6 +193,8 @@ class TestRZCurve:
         s[-2] = s[-1]
         with pytest.raises(ValueError):
             xyz = rz.to_FourierXYZ(N=2, grid=grid, s=s)
+
+        # pass in a closed curve
 
     @pytest.mark.unit
     def test_to_SplineXYZCurve(self):

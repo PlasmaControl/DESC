@@ -11,12 +11,11 @@ import plotly.graph_objects as go
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pylatexenc.latex2text import LatexNodes2Text
-from scipy.integrate import solve_ivp
-from scipy.interpolate import Rbf
 from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
+from desc.coils import CoilSet
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
@@ -40,6 +39,7 @@ __all__ = [
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
+    "plot_regcoil_outputs",
     "plot_section",
     "plot_surfaces",
 ]
@@ -862,10 +862,14 @@ def plot_3d(
         * ``cmap``: string denoting colormap to use.
         * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
+        * ``showgrid``: bool of whether or not to show gridlines in the plot.
+        * ``zeroline``: bool of whether or not to show the zero gridline in the plot.
+        * ``showscale``: Bool, whether or not to show the colorbar. True by default
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
           from which to calculate Bn, by default None.
+
 
     Returns
     -------
@@ -904,6 +908,9 @@ def plot_3d(
     title = kwargs.pop("title", "")
     levels = kwargs.pop("levels", None)
     component = kwargs.pop("component", None)
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showscale = kwargs.pop("showscale", True)
 
     if name != "B*n":
         data, label = _compute(
@@ -1013,6 +1020,7 @@ def plot_3d(
         flatshading=True,
         name=LatexNodes2Text().latex_to_text(label),
         colorbar=cbar,
+        showscale=showscale,
     )
 
     if fig is None:
@@ -1030,18 +1038,24 @@ def plot_3d(
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
             ),
             yaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
             ),
             zaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
             ),
         ),
         width=figsize[0] * dpi,
@@ -2215,6 +2229,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
 
         Valid keyword arguments are:
 
+        * ``unique``: bool, only plots unique coils from a CoilSet if True
         * ``figsize``: tuple of length 2, the size of the figure in inches
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
@@ -2232,6 +2247,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     ls = kwargs.pop("ls", "solid")
     figsize = kwargs.pop("figsize", (10, 10))
     color = kwargs.pop("color", "black")
+    unique = kwargs.pop("unique", False)
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -2249,6 +2265,12 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
 
     def flatten_coils(coilset):
         if hasattr(coilset, "__len__"):
+            if hasattr(coilset, "_NFP") and hasattr(coilset, "_sym"):
+                if not unique and (coilset.NFP > 1 or coilset.sym):
+                    # plot all coils for symmetric coil sets
+                    coilset = CoilSet.from_symmetry(
+                        coilset, NFP=coilset.NFP, sym=coilset.sym
+                    )
             return [a for i in coilset for a in flatten_coils(i)]
         else:
             return [coilset]
@@ -3529,51 +3551,40 @@ def plot_logo(save_path=None, **kwargs):
     return fig, ax
 
 
-def plot_field_lines_sfl(
+def plot_regcoil_outputs(
+    field,
+    data,
     eq,
-    rho,
-    seed_thetas=0,
-    phi_start=0,
-    phi_end=2 * np.pi,
-    dphi=1e-2,
-    ax=None,
+    eval_grid=None,
+    source_grid=None,
     return_data=False,
+    vacuum=False,
     **kwargs,
 ):
-    r"""Plots field lines on specified flux surface.
-
-    Traces field lines at specified initial vartheta (:math:`\\vartheta`) seed
-    locations, then plots them.
-    Field lines traced by first finding the corresponding straight field line (SFL)
-    coordinates :math:`(\\rho,\\vartheta,\\phi)` for each field line, then
-    converting those to the computational :math:`(\\rho,\\theta,\\phi)` coordinates,
-    then finally computing from those the toroidal :math:`(R,\\phi,Z)` coordinates of
-    each field line.
-
-    The SFL angle coordinates are found with the SFL relation:
-
-        :math:`\\vartheta = \\iota \\phi + \\vartheta_0`
+    """Plot the output of REGCOIL.
 
     Parameters
     ----------
+    field : FourierCurrentPotentialField or list of FourierCurrentPotentialField
+        object(s) with which to plot the data from the REGCOIL output.
+        should have the correct resolutions and NFP to match the REGCOIL output.
+    data : dict
+        dictionary containing the output of a call to ``run_regcoil`` method
+        of ``FourierCurrentPotentiaField``
     eq : Equilibrium
-        Object from which to plot.
-    rho : float
-        Flux surface to trace field lines at.
-    seed_thetas : float or array-like of floats
-        Poloidal positions at which to seed magnetic field lines.
-        If array-like, will plot multiple field lines.
-    phi_start: float
-        Toroidal angle to integrate field line from, in radians. Default is 0.
-    phi_end: float
-        Toroidal angle to integrate field line until, in radians. Default is 2*pi.
-    dphi: float
-        spacing in phi to sample field lines along, in radians. Default is 1e-2.
-    ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        the equilibrium that the Bn error was evaluated on.
+    eval_grid : Grid, optional
+        grid to evaluate the magnetic field on, if not None, will plot the magnetic
+        field on the LinearGrid used by the `run_regcoil` method the data was made with
+    source_grid : Grid, optional
+        grid to evaluate the current potential on, if not None, will plot the current
+        potential on a default LinearGrid used by the `run_regcoil` method the data was
+        made with
+    return_data : bool, optional
         if True, return the data plotted as well as fig,ax
-    return_data : bool
-        if True, return the data plotted as well as fig,ax
+    vacuum : bool, optional
+        if True, will not calculate the contribution to the normal field from the
+        plasma currents.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -3584,424 +3595,295 @@ def plot_field_lines_sfl(
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
 
-    Returns
+
+
+    Outputs
     -------
-    fig : matplotlib.figure.Figure
-        Figure being plotted to.
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        Axes being plotted to.
+    fig : list of matplotlib.figure.Figure
+        list of figure being plotted to
+    ax : list of matplotlib.axes.Axes or list of ndarray of Axes
+        list of axes being plotted to
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
-
-    Examples
-    --------
-    .. image:: ../../_static/images/plotting/DSHAPE_field_lines_plot.png
-
-    .. code-block:: python
-
-        from desc.plotting import plot_field_lines_sfl
-        import desc.examples
-        import numpy as np
-        eq = desc.examples.get("DSHAPE")
-        seed_thetas=np.linspace(0, 2 * np.pi, 3,endpoint=False)
-        fig, ax, _ = plot_field_lines_sfl(
-            eq, rho=1,seed_thetas=seed_thetas , phi_end=2 * np.pi
-        )
-
+        This is the same as data_regcoil
     """
-    # TODO: can this be removed now?
-    if rho == 0:
-        raise NotImplementedError(
-            "Currently does not support field line tracing of the magnetic axis, "
-            + "please input 0 < rho <= 1"
+    try:
+        # if it is a list, just grab the first one
+        # as we change the attribute anyways so just need the correct
+        # geometry
+        field = field[0]
+    except TypeError:
+        # it was not a list, so proceed as usual
+        pass
+
+    field = (
+        field.copy()
+    )  # copy the field so that we are not changing the passed-in field
+    # TODO: check that field has correct NFP and resolutions?
+    scan = isinstance(data["Phi_mn"], list)
+    # TODO: add flags for each subplot, also add |K| plot
+    Bn_tot = data["Bn_total"]
+    alphas = data["alpha"]
+    chi2Bs = data["chi^2_B"]
+    chi2Ks = data["chi^2_K"]
+    phi_mns = data["Phi_mn"]
+    if eval_grid is None:
+        eval_grid = data["eval_grid"]
+        eval_grid = (
+            eval_grid
+            if not eval_grid.sym
+            else LinearGrid(M=eval_grid.M, N=eval_grid.N, sym=False, NFP=eval_grid.NFP)
         )
+    if source_grid is None:
+        source_grid = data["source_grid"]
 
-    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
+    # check if we can use existing quantities in data
+    # or re-evaluate based off of the new grids passed-in
+    recalc_eval_grid_quantites = not eval_grid.equiv(
+        data["eval_grid"]
+    ) or not source_grid.equiv(data["source_grid"])
 
-    # check how many field lines to plot
-    if seed_thetas is list:
-        n_lines = len(seed_thetas)
-    elif isinstance(seed_thetas, np.ndarray):
-        n_lines = seed_thetas.size
+    if "external_field" in data.keys() and recalc_eval_grid_quantites:
+        external_field = data["external_field"]
+        external_field_grid = data["external_field_grid"]
+        B_ext = external_field.compute_Bnormal(
+            eq.surface, eval_grid, external_field_grid
+        )[0]
+
     else:
-        n_lines = 1
+        external_field = None
 
-    phi0 = phi_start
-    N_pts = int((phi_end - phi0) / dphi)
+    # TODO: if recalculating do we replace the data in the dict?
 
-    grid_single_rho = Grid(
-        nodes=np.array([[rho, 0, 0]])
-    )  # grid to get the iota value at the specified rho surface
-    iota = eq.compute("iota", grid=grid_single_rho)["iota"][0]
-
-    varthetas = []
-    phi = np.linspace(phi0, phi_end, N_pts)
-    if n_lines > 1:
-        for i in range(n_lines):
-            varthetas.append(
-                seed_thetas[i] + iota * phi
-            )  # list of varthetas corresponding to the field line
-    else:
-        varthetas.append(
-            seed_thetas + iota * phi
-        )  # list of varthetas corresponding to the field line
-    theta_coords = (
-        []
-    )  # list of nodes in (rho,theta,phi) corresponding to each (rho,vartheta,phi)
-    print(
-        (
-            "Calculating field line (rho,theta,zeta) coordinates corresponding "
-            + "to sfl coordinates",
+    ncontours = kwargs.pop("ncontours", 20)
+    markersize = kwargs.pop("markersize", 12)
+    vacuum = kwargs.pop("vacuum", False)
+    figdata = {}
+    axdata = {}
+    if not scan:
+        field.Phi_mn = data["Phi_mn"]
+        field.I = data["I"]
+        field.G = data["G"]
+        # TODO: replace with plot_2d call
+        phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
+        # Bnormal plot
+        Bn_tot = (
+            Bn_tot
+            if not recalc_eval_grid_quantites
+            else field.compute_Bnormal(
+                eq if not vacuum else eq.surface, eval_grid, source_grid
+            )[0]
         )
-    )
-    for vartheta_list in varthetas:
-        rhos = rho * np.ones_like(vartheta_list)
-        sfl_coords = np.vstack((rhos, vartheta_list, phi)).T
-        theta_coords.append(eq.compute_theta_coords(sfl_coords))
-
-    # calculate R,phi,Z of nodes in grid
-    # only need to do this after finding the grid corresponding to
-    # desired rho, vartheta, phi
-    print(
-        "Calculating field line (R,phi,Z) coordinates corresponding to "
-        + "(rho,theta,zeta) coordinates"
-    )
-    field_line_coords = {"R": [], "Z": [], "phi": [], "seed_thetas": seed_thetas}
-    for coords in theta_coords:
-        grid = Grid(nodes=coords)
-        toroidal_coords = eq.compute(["R", "Z"], grid=grid)
-        field_line_coords["R"].append(toroidal_coords["R"])
-        field_line_coords["Z"].append(toroidal_coords["Z"])
-        field_line_coords["phi"].append(phi)
-
-    for i in range(n_lines):
-        xline = np.asarray(field_line_coords["R"][i]) * np.cos(
-            field_line_coords["phi"][i]
+        if external_field and recalc_eval_grid_quantites:
+            Bn_tot += B_ext
+        plt.rcParams.update({"font.size": 26})
+        plt.figure(figsize=(8, 8))
+        plt.contourf(
+            eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
+            eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+            (Bn_tot).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
         )
-        yline = np.asarray(field_line_coords["R"][i]) * np.sin(
-            field_line_coords["phi"][i]
+        plt.ylabel("theta")
+        plt.xlabel("zeta")
+        plt.title("Bnormal on plasma surface")
+        plt.colorbar()
+        plt.xlim([0, 2 * np.pi / field.NFP])
+        figdata["fig_Bn"] = plt.gcf()
+        axdata["ax_Bn"] = plt.gca()
+
+        # TODO: replace with plot_2d call
+        # current potential contour plot
+        plt.figure(figsize=(10, 10))
+        plt.rcParams.update({"font.size": 18})
+        plt.contour(
+            source_grid.nodes[source_grid.unique_zeta_idx, 2],
+            source_grid.nodes[source_grid.unique_theta_idx, 1],
+            (phi_tot).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
+            levels=ncontours,
         )
+        plt.colorbar()
+        plt.ylabel("theta")
+        plt.xlabel("zeta")
+        plt.title("Total Current Potential on winding surface")
 
-        ax.plot(xline, yline, field_line_coords["Z"][i], linewidth=2)
+        plt.xlim([0, 2 * np.pi / field.NFP])
+        figdata["fig_Phi"] = plt.gcf()
+        axdata["ax_Phi"] = plt.gca()
+        if return_data:
+            return figdata, axdata, data
+        return figdata, axdata
+    else:  # show composite scan over alpha plots
+        # strongly based off of Landreman's REGCOIL plotting routine:
+        # github.com/landreman/regcoil/blob/master/
+        plt.figure(figsize=(16, 12))
+        plt.rcParams.update({"font.size": 20})
+        plt.scatter(alphas, chi2Bs, s=markersize)
+        plt.xlabel(r"$\alpha$ (regularization parameter)")
+        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
+        plt.yscale("log")
+        plt.xscale("log")
+        figdata["fig_chi^2_B_vs_alpha"] = plt.gcf()
+        axdata["ax_chi^2_B_vs_alpha"] = plt.gca()
+        plt.figure(figsize=(16, 12))
+        plt.scatter(alphas, chi2Ks, s=markersize)
+        plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
+        plt.xlabel(r"$\alpha$ (regularization parameter)")
+        plt.yscale("log")
+        plt.xscale("log")
+        figdata["fig_chi^2_K_vs_alpha"] = plt.gcf()
+        axdata["ax_chi^2_K_vs_alpha"] = plt.gca()
+        plt.figure(figsize=(16, 12))
+        plt.scatter(chi2Ks, chi2Bs, s=markersize)
+        plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
+        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
+        plt.yscale("log")
+        plt.xscale("log")
+        figdata["fig_chi^2_B_vs_chi^2_K"] = plt.gcf()
+        axdata["ax_chi^2_B_vs_chi^2_K"] = plt.gca()
 
-    ax.set_xlabel(_AXIS_LABELS_XYZ[0])
-    ax.set_ylabel(_AXIS_LABELS_XYZ[1])
-    ax.set_zlabel(_AXIS_LABELS_XYZ[2])
-    ax.set_title(
-        "%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface" % (n_lines, rho)
-    )
-    _set_tight_layout(fig)
+        nalpha = len(chi2Bs)
+        max_nalpha_for_contour_plots = 16
+        numPlots = min(nalpha, max_nalpha_for_contour_plots)
+        ialpha_to_plot = np.sort(list(set(map(int, np.linspace(1, nalpha, numPlots)))))
+        numPlots = len(ialpha_to_plot)
 
-    # need this stuff to make all the axes equal, ax.axis('equal') doesn't work for 3d
-    x_limits = ax.get_xlim3d()
-    y_limits = ax.get_ylim3d()
-    z_limits = ax.get_zlim3d()
+        numCols = int(np.ceil(np.sqrt(numPlots)))
+        numRows = int(np.ceil(numPlots * 1.0 / numCols))
 
-    x_range = abs(x_limits[1] - x_limits[0])
-    x_middle = np.mean(x_limits)
-    y_range = abs(y_limits[1] - y_limits[0])
-    y_middle = np.mean(y_limits)
-    z_range = abs(z_limits[1] - z_limits[0])
-    z_middle = np.mean(z_limits)
+        ########################################################
+        # Plot total current potentials
+        ########################################################
+        plt.figure(figsize=(16, 12))
+        for whichPlot in range(numPlots):
+            plt.subplot(numRows, numCols, whichPlot + 1)
+            phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            # TODO replace these with plot 2d calls with the ax of each
+            # subplot passed in
+            field.Phi_mn = phi_mn_opt
+            field.I = data["I"]
+            field.G = data["G"]
+            phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
 
-    # The plot bounding box is a sphere in the sense of the infinity
-    # norm, hence I call half the max range the plot radius.
-    plot_radius = 0.5 * max([x_range, y_range, z_range])
+            plt.rcParams.update({"font.size": 18})
 
-    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
-
-    plot_data = field_line_coords
-
-    if return_data:
-        return fig, ax, plot_data
-
-    return fig, ax
-
-
-def plot_field_lines_real_space(
-    eq,
-    rho,
-    seed_thetas=0,
-    phi_end=2 * np.pi,
-    grid=None,
-    ax=None,
-    B_interp=None,
-    return_B_interp=False,
-    **kwargs,
-):
-    r"""Traces and plots field lines on a flux surface at specified seed locations.
-
-    Field lines integrated by first fitting the magnetic field with radial basis
-    functions (RBF) in R,Z,phi, then integrating the field line from phi=0 up to the
-    specified phi angle, by solving:
-
-    :math:`\\frac{dR}{d\\phi} = \\frac{RB_R}{B_{\\phi}}`
-
-    :math:`\\frac{dZ}{d\\phi} = \\frac{RB_Z}{B_{\\phi}}`
-
-    :math:`B_R = \\mathbf{B} \\cdot \\hat{\\mathbf{R}}`
-
-    :math:`B_Z = \\mathbf{B} \\cdot \\hat{\\mathbf{Z}}`
-
-    :math:`B_{\\phi} = \\mathbf{B} \\cdot \\hat{\\mathbf{\\phi}}`
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        object from which to plot
-    rho : float
-        flux surface to trace field lines at
-    seed_thetas : float or array-like of floats
-        theta positions at which to seed magnetic field lines, if array-like, will plot
-        multiple field lines
-    phi_end: float
-        phi to integrate field line until, in radians. Default is 2*pi
-    grid : Grid, optional
-        grid of rho, theta, zeta coordinates used to evaluate magnetic field at, which
-        is then interpolated with RBF
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
-    B_interp : dict of scipy.interpolate.rbf.Rbf or equivalent interpolators, optional
-        if not None, uses the passed-in interpolation objects instead of fitting the
-        magnetic field with Rbf's. Useful if have already ran plot_field_lines once and
-        want to change the seed thetas or how far to integrate in phi. Dict should have
-        the following keys: ['B_R'], ['B_Z'], and ['B_phi'], corresponding to the
-        interpolating object for each cylindrical component of the magnetic field.
-    return_B_interp: bool, default False
-        If true, in addition to returning the fig, axis and field line coordinates,
-        will also return the dictionary of interpolating radial basis functions
-        interpolating the magnetic field in (R,phi,Z)
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        figure being plotted to
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
-    field_line_coords : dict
-        dict containing the R,phi,Z coordinates of each field line traced. Dictionary
-        entries are lists corresponding to the field lines for each seed_theta given.
-        Also contains the scipy IVP solutions for info on how each line was integrated.
-    B_interp : dict, only returned if return_B_interp is True
-        dict of scipy.interpolate.rbf.Rbf or equivalent call signature interpolators,
-        which interpolate the cylindrical components of magnetic field in (R,phi,Z).
-        Dict has the following keys: ['B_R'], ['B_Z'], and ['B_phi'], corresponding to
-        the interpolating object for each cylindrical component of the magnetic field,
-        and the interpolators have call signature B(R,phi,Z) = interpolator(R,phi,Z)
-
-    Notes
-    -----
-    Use plot_field_lines_sfl if plotting from a solved equilibrium, as that is faster
-    and more accurate than real space interpolation
-
-    """
-    nfp = 1
-    if grid is None:
-        grid_kwargs = {"M": 30, "N": 30, "L": 20, "NFP": nfp, "axis": False}
-        grid = _get_grid(**grid_kwargs)
-
-    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
-
-    # check how many field lines to plot
-    if seed_thetas is list:
-        n_lines = len(seed_thetas)
-    elif isinstance(seed_thetas, np.ndarray):
-        n_lines = seed_thetas.size
-    else:
-        n_lines = 1
-    phi0 = kwargs.get("phi0", 0)
-
-    # calculate toroidal coordinates
-    toroidal_coords = eq.compute("phi", grid=grid)
-    Rs = toroidal_coords["R"]
-    Zs = toroidal_coords["Z"]
-    phis = toroidal_coords["phi"]
-
-    # calculate cylindrical B
-    magnetic_field = eq.compute("B", grid=grid)
-    BR = magnetic_field["B_R"]
-    BZ = magnetic_field["B_Z"]
-    Bphi = magnetic_field["B_phi"]
-
-    if B_interp is None:  # must fit RBfs to interpolate B field in R,phi,Z
-        print("Fitting magnetic field with radial basis functions in R,phi,Z")
-        BRi = Rbf(Rs, Zs, phis, BR)
-        BZi = Rbf(Rs, Zs, phis, BZ)
-        Bphii = Rbf(Rs, Zs, phis, Bphi)
-        B_interp = {"B_R": BRi, "B_Z": BZi, "B_phi": Bphii}
-
-    field_line_coords = {
-        "Rs": [],
-        "Zs": [],
-        "phis": [],
-        "IVP solutions": [],
-        "seed_thetas": seed_thetas,
-    }
-    if n_lines > 1:
-        for theta in seed_thetas:
-            field_line_Rs, field_line_phis, field_line_Zs, sol = _field_line_Rbf(
-                rho, theta, phi_end, grid, Rs, Zs, B_interp, phi0
+            plt.contour(
+                source_grid.nodes[source_grid.unique_zeta_idx, 2],
+                source_grid.nodes[source_grid.unique_theta_idx, 1],
+                (phi_tot).reshape(
+                    source_grid.num_theta, source_grid.num_zeta, order="F"
+                ),
+                levels=ncontours,
             )
-            field_line_coords["Rs"].append(field_line_Rs)
-            field_line_coords["Zs"].append(field_line_Zs)
-            field_line_coords["phis"].append(field_line_phis)
-            field_line_coords["IVP solutions"].append(sol)
-
-    else:
-        field_line_Rs, field_line_phis, field_line_Zs, sol = _field_line_Rbf(
-            rho, seed_thetas, phi_end, grid, Rs, Zs, B_interp, phi0
-        )
-        field_line_coords["Rs"].append(field_line_Rs)
-        field_line_coords["Zs"].append(field_line_Zs)
-        field_line_coords["phis"].append(field_line_phis)
-        field_line_coords["IVP solutions"].append(sol)
-
-    for i, solution in enumerate(field_line_coords["IVP solutions"]):
-        if not solution.success:
-            print(
-                "Integration from seed theta %1.2f radians was not successful!"
-                % seed_thetas[i]
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title(
+                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                fontsize="x-small",
             )
-
-    for i in range(n_lines):
-        xline = np.asarray(field_line_coords["Rs"][i]) * np.cos(
-            field_line_coords["phis"][i]
+            plt.colorbar()
+            plt.xlim([0, 2 * np.pi / field.NFP])
+        plt.tight_layout()
+        plt.figtext(
+            0.5,
+            0.995,
+            "Total Current Potential",
+            horizontalalignment="center",
+            verticalalignment="top",
+            fontsize="small",
         )
-        yline = np.asarray(field_line_coords["Rs"][i]) * np.sin(
-            field_line_coords["phis"][i]
+        figdata["fig_scan_Phi"] = plt.gcf()
+        axdata["ax_scan_Phi"] = plt.gca()
+        ########################################################
+        # Plot Bn
+        ########################################################
+        plt.figure(figsize=(16, 12))
+        for whichPlot in range(numPlots):
+            plt.subplot(numRows, numCols, whichPlot + 1)
+            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            Bn = (
+                Bn_tot[ialpha_to_plot[whichPlot] - 1]
+                if not recalc_eval_grid_quantites
+                else field.compute_Bnormal(
+                    eq if not vacuum else eq.surface, eval_grid, source_grid
+                )[0]
+            )
+            if external_field and recalc_eval_grid_quantites:
+                Bn_tot += B_ext
+
+            plt.rcParams.update({"font.size": 18})
+
+            plt.contourf(
+                eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
+                eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+                (Bn).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
+                levels=ncontours,
+            )
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title(
+                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                fontsize="x-small",
+            )
+            plt.colorbar()
+            plt.xlim([0, 2 * np.pi / field.NFP])
+        plt.tight_layout()
+        units = " (T)"
+        plt.figtext(
+            0.5,
+            0.995,
+            "Bnormal" + units,
+            horizontalalignment="center",
+            verticalalignment="top",
+            fontsize="small",
         )
+        figdata["fig_scan_Bn"] = plt.gcf()
+        axdata["ax_scan_Bn"] = plt.gca()
+        ########################################################
+        # Plot Surface Current |K|
+        ########################################################
+        plt.figure(figsize=(16, 12))
+        for whichPlot in range(numPlots):
+            plt.subplot(numRows, numCols, whichPlot + 1)
+            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            K = field.compute("K", grid=source_grid, basis="xyz")["K"]
+            K_mag = np.linalg.norm(K, axis=1)
 
-        ax.plot(xline, yline, field_line_coords["Zs"][i], linewidth=2)
+            plt.rcParams.update({"font.size": 18})
 
-    ax.set_xlabel(_AXIS_LABELS_XYZ[0])
-    ax.set_ylabel(_AXIS_LABELS_XYZ[1])
-    ax.set_zlabel(_AXIS_LABELS_XYZ[2])
-    ax.set_title(
-        "%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface" % (n_lines, rho)
-    )
-    _set_tight_layout(fig)
-
-    # need this stuff to make all the axes equal, ax.axis('equal') doesn't work for 3d
-    x_limits = ax.get_xlim3d()
-    y_limits = ax.get_ylim3d()
-    z_limits = ax.get_zlim3d()
-
-    x_range = abs(x_limits[1] - x_limits[0])
-    x_middle = np.mean(x_limits)
-    y_range = abs(y_limits[1] - y_limits[0])
-    y_middle = np.mean(y_limits)
-    z_range = abs(z_limits[1] - z_limits[0])
-    z_middle = np.mean(z_limits)
-
-    # The plot bounding box is a sphere in the sense of the infinity
-    # norm, hence I call half the max range the plot radius.
-    plot_radius = 0.5 * max([x_range, y_range, z_range])
-
-    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
-
-    if return_B_interp:
-        return (
-            fig,
-            ax,
-            field_line_coords,
-            B_interp,
+            plt.contourf(
+                source_grid.nodes[source_grid.unique_zeta_idx, 2],
+                source_grid.nodes[source_grid.unique_theta_idx, 1],
+                (K_mag).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
+                levels=ncontours,
+            )
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title(
+                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                fontsize="x-small",
+            )
+            plt.colorbar()
+            plt.xlim([0, 2 * np.pi / field.NFP])
+        plt.tight_layout()
+        units = " (A/m)"
+        plt.figtext(
+            0.5,
+            0.995,
+            "|K|" + units,
+            horizontalalignment="center",
+            verticalalignment="top",
+            fontsize="small",
         )
-    else:
-        return fig, ax
-
-
-def _find_idx(rho0, theta0, phi0, grid):
-    """Finds the index of the node closest to the given rho0, theta0, phi0.
-
-    Parameters
-    ----------
-    rho0 : float
-        rho to find closest grid point to.
-    theta0 : float
-        theta to find closest grid point to.
-    phi0 : float
-        phi to find closest grid point to.
-    grid : Grid
-        grid to find closest point on
-
-    Returns
-    -------
-    idx_pt : int
-        index of the grid node closest to the given point.
-
-    """
-    rhos = grid.nodes[:, 0]
-    thetas = grid.nodes[:, 1]
-    phis = grid.nodes[:, 2]
-
-    if theta0 < 0:
-        theta0 = 2 * np.pi + theta0
-    if theta0 > 2 * np.pi:
-        theta0 = np.mod(theta0, 2 * np.pi)
-    if phi0 < 0:
-        phi0 = 2 * np.pi + phi0
-    if phi0 > 2 * np.pi:
-        phi0 = np.mod(phi0, 2 * np.pi)
-
-    bool1 = np.logical_and(
-        np.abs(rhos - rho0) == np.min(np.abs(rhos - rho0)),
-        np.abs(thetas - theta0) == np.min(np.abs(thetas - theta0)),
-    )
-    bool2 = np.logical_and(bool1, np.abs(phis - phi0) == np.min(np.abs(phis - phi0)))
-    idx_pt = np.where(bool2)[0][0]
-    return idx_pt
-
-
-def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
-    """Integrate along interpolated field lines.
-
-    Takes the initial poloidal angle you want to seed a field line at (at phi=0),
-    and integrates along the field line to the specified phi_end. returns fR,fZ,fPhi,
-    the R,Z,Phi coordinates of the field line trajectory.
-
-    """
-    fR = []
-    fZ = []
-    fPhi = []
-    idx0 = _find_idx(rho, theta0, phi0, grid)
-    curr_R = Rs[idx0]
-    curr_Z = Zs[idx0]
-    fR.append(curr_R)
-    fZ.append(curr_Z)
-    fPhi.append(phi0)
-
-    # integrate field lines in Phi
-    print(
-        "Integrating Magnetic Field Line Equation from seed theta = %f radians" % theta0
-    )
-    y0 = [fR[0], fZ[0]]
-
-    def rhs(phi, y):
-        """RHS of magnetic field line equation."""
-        dRdphi = (
-            y[0]
-            * B_interp["B_R"](y[0], y[1], np.mod(phi, 2 * np.pi))
-            / B_interp["B_phi"](y[0], y[1], np.mod(phi, 2 * np.pi))
-        )
-        dZdphi = (
-            y[0]
-            * B_interp["B_Z"](y[0], y[1], np.mod(phi, 2 * np.pi))
-            / B_interp["B_phi"](y[0], y[1], np.mod(phi, 2 * np.pi))
-        )
-        return [dRdphi, dZdphi]
-
-    n_tries = 1
-    max_step = 0.01
-    sol = solve_ivp(rhs, [0, phi_end], y0, max_step=max_step)
-    while not sol.success and n_tries < 4:
-        max_step = 0.5 * max_step
-        n_tries += 1
-        sol = solve_ivp(rhs, [0, phi_end], y0, max_step=max_step)
-    fR = sol.y[0, :]
-    fZ = sol.y[1, :]
-    fPhi = sol.t
-    return fR, fPhi, fZ, sol
+        figdata["fig_scan_K"] = plt.gcf()
+        axdata["ax_scan_K"] = plt.gca()
+        if return_data:
+            return (
+                figdata,
+                axdata,
+                data,
+            )
+        else:
+            return figdata, axdata

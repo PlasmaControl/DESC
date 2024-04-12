@@ -1,4 +1,5 @@
 import numbers
+import warnings
 
 import numpy as np
 
@@ -10,9 +11,12 @@ from desc.backend import (
     tree_structure,
     tree_unflatten,
 )
-from desc.compute import get_transforms
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
-from desc.utils import Timer, errorif
+from desc.singularities import compute_B_plasma
+from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -46,7 +50,7 @@ class _CoilObjective(_Objective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -253,10 +257,11 @@ class CoilLength(_CoilObjective):
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs.
+        be flattened according to the number of inputs. Defaults to ``target=2*np.pi``.
     bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=2*np.pi``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -270,7 +275,7 @@ class CoilLength(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -278,6 +283,7 @@ class CoilLength(_CoilObjective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
     """
@@ -383,10 +389,11 @@ class CoilCurvature(_CoilObjective):
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs.
+        be flattened according to the number of inputs. Defaults to ``bounds=(0,1)``.
     bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``bounds=(0,1)``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -400,7 +407,7 @@ class CoilCurvature(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -408,6 +415,7 @@ class CoilCurvature(_CoilObjective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
     """
@@ -498,10 +506,11 @@ class CoilTorsion(_CoilObjective):
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs.
+        be flattened according to the number of inputs. Defaults to ``target=0``.
     bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -515,7 +524,7 @@ class CoilTorsion(_CoilObjective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
+        normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -523,6 +532,7 @@ class CoilTorsion(_CoilObjective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
     """
@@ -597,3 +607,600 @@ class CoilTorsion(_CoilObjective):
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
         out = jnp.concatenate([dat["torsion"] for dat in data])
         return out
+
+
+class QuadraticFlux(_Objective):
+    """Target B*n = 0 on LCFS.
+
+    Uses virtual casing to find plasma component of B and penalizes
+    (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
+    field is unfixed.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium upon whose surface the normal field error will be minimized.
+        The equilibrium is kept fixed during the optimization with this objective.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the normal field error on the provided equilibrium's surface.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f.
+        Default target is zero.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes for plasma source terms.
+        Default grid is detailed in the docs for ``compute_B_plasma``
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes on the plasma surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
+        Default grid is: LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
+            NFP=int(eq.NFP), sym=False)
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    vacuum : bool
+        If true, B_plasma (the contribution to the normal field on the boundary from the
+        plasma currents) is set to zero.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Boundary normal field error: {:10.3e} "
+    _units = "(T m^2)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        source_grid=None,
+        eval_grid=None,
+        field_grid=None,
+        vacuum=False,
+        name="Quadratic flux",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._source_grid = source_grid
+        self._eval_grid = eval_grid
+        self._eq = eq
+        self._field = field
+        self._field_grid = field_grid
+        self._vacuum = vacuum
+        things = [field]
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self._eq
+
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=int(eq.NFP),
+                sym=False,
+            )
+            self._eval_grid = eval_grid
+        else:
+            eval_grid = self._eval_grid
+
+        self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._dim_f = eval_grid.num_nodes
+
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
+
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=eq.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
+
+        # pre-compute B_plasma because we are assuming eq is fixed
+        if self._vacuum:
+            Bplasma = jnp.zeros(eval_grid.num_nodes)
+
+        else:
+            Bplasma = compute_B_plasma(
+                eq, eval_grid, self._source_grid, normal_only=True
+            )
+
+        self._constants = {
+            "field": self._field,
+            "field_grid": self._field_grid,
+            "quad_weights": w,
+            "eval_data": eval_data,
+            "B_plasma": Bplasma,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, field_params, constants=None):
+        """Compute boundary force error.
+
+        Parameters
+        ----------
+        field_params : dict
+            Dictionary of the external field's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Bnorm from B_ext and B_plasma
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        # B_plasma from equilibrium precomputed
+        eval_data = constants["eval_data"]
+        B_plasma = constants["B_plasma"]
+
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+
+        # B_ext is not pre-computed because field is not fixed
+        B_ext = constants["field"].compute_magnetic_field(
+            x, source_grid=constants["field_grid"], basis="rpz", params=field_params
+        )
+        B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+        f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]
+        return f
+
+
+class ToroidalFlux(_Objective):
+    """Target the toroidal flux in an equilibrium from a magnetic field.
+
+    This objective is needed when performing stage-two coil optimization on
+    a vacuum equilibrium, to avoid the trivial solution of minimizing Bn
+    by making the coil currents zero. Instead, this objective ensures
+    the coils create the necessary toroidal flux for the equilibrium field.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium for which the toroidal flux will be calculated.
+        The Equilibrium is assumed to be held fixed when using this
+        objective.
+    field : MagneticField
+        MagneticField object, the parameters of this will be optimized
+        to minimize the objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Defaults to eq.Psi. Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: has no effect for this objective
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    field_grid : Grid, optional
+        Grid containing the nodes to evaluate field source at on
+        the winding surface. (used if e.g. field is a CoilSet or
+        FourierCurrentPotentialField). Defaults to the default for the
+        given field, see the docstring of the field object for the specific default.
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate the normal magnetic field at
+        plasma geometry at. Defaults to a LinearGrid(L=eq.L_grid, M=eq.M_grid,
+        zeta=jnp.array(0.0), NFP=eq.NFP).
+    name : str, optional
+        Name of the objective function.
+    """
+
+    _coordinates = "rtz"
+    _units = "(Wb)"
+    _print_value_fmt = "Toroidal Flux: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        field_grid=None,
+        eval_grid=None,
+        name="toroidal-flux",
+    ):
+        if target is None and bounds is None:
+            target = eq.Psi
+        self._field = field
+        self._field_grid = field_grid
+        self._eval_grid = eval_grid
+        self._eq = eq
+
+        super().__init__(
+            things=[field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self._eq
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(
+                L=eq.L_grid, M=eq.M_grid, zeta=jnp.array(0.0), NFP=eq.NFP
+            )
+            self._eval_grid = eval_grid
+        eval_grid = self._eval_grid
+
+        errorif(
+            not np.allclose(eval_grid.nodes[:, 2], eval_grid.nodes[0, 2]),
+            ValueError,
+            "Evaluation grid should be at constant zeta",
+        )
+        if self._normalize:
+            self._normalization = eq.Psi
+
+        # ensure vacuum eq, as is unneeded for finite beta
+        pres = np.max(np.abs(eq.compute("p")["p"]))
+        curr = np.max(np.abs(eq.compute("current")["current"]))
+        warnif(
+            pres > 1e-8,
+            UserWarning,
+            f"Pressure appears to be non-zero (max {pres} Pa), "
+            + "this objective is unneeded at finite beta.",
+        )
+        warnif(
+            curr > 1e-8,
+            UserWarning,
+            f"Current appears to be non-zero (max {curr} A), "
+            + "this objective is unneeded at finite beta.",
+        )
+
+        # eval_grid.num_nodes for quad flux cost,
+        self._dim_f = 1
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        data = eq.compute(
+            ["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=eval_grid
+        )
+
+        plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
+
+        self._constants = {
+            "plasma_coords": plasma_coords,
+            "equil_data": data,
+            "quad_weights": 1.0,
+            "field": self._field,
+            "field_grid": self._field_grid,
+            "eval_grid": eval_grid,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, field_params=None, constants=None):
+        """Compute toroidal flux.
+
+        Parameters
+        ----------
+        field_params : dict
+            Dictionary of field degrees of freedom,
+            eg FourierCurrentPotential.params_dict or CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : float
+            Toroidal flux from coils and external field
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        data = constants["equil_data"]
+        plasma_coords = constants["plasma_coords"]
+
+        B = constants["field"].compute_magnetic_field(
+            plasma_coords,
+            basis="rpz",
+            source_grid=constants["field_grid"],
+            params=field_params,
+        )
+        grid = constants["eval_grid"]
+
+        B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
+
+        Psi = jnp.sum(
+            grid.spacing[:, 0]
+            * grid.spacing[:, 1]
+            * data["|e_rho x e_theta|"]
+            * B_dot_n_zeta
+        )
+
+        return Psi
+
+
+class SurfaceCurrentRegularization(_Objective):
+    """Target the surface current magnitude.
+
+    compute::
+
+        w*(|K|)^2
+
+    where K is the winding surface current density, and w is the
+    regularization parameter (the weight on this objective)
+
+    This is intended to be used with a surface current::
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    i.e. a FourierCurrentPotentialField
+
+    Intended to be used with a QuadraticFlux objective, to form
+    the REGCOIL algorithm described in [1]_.
+
+    [1] Landreman, An improved current potential method for fast computation
+        of stellarator coil shapes, Nuclear Fusion (2017)
+
+    Parameters
+    ----------
+    surface_current_field : FourierCurrentPotentialField
+        Surface current which is producing the magnetic field, the parameters
+        of this will be optimized to minimize the objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+        When used with QuadraticFlux objective, this acts as the regularization
+        parameter, with 0 corresponding to no regularization. The larger this
+        parameter is, the less complex the surface current will be, but the
+        worse the normal field.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect on this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect on this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: has no effect for this objective
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate current source at on
+        the winding surface. If used in conjunction with the QuadraticFlux objective,
+        with the same ``source_grid``, this replicates the REGCOIL algorithm described
+        in [1]_.
+    name : str, optional
+        Name of the objective function.
+    """
+
+    _coordinates = ""
+    _units = ""
+    _print_value_fmt = "Surface Current Regularization: {:10.3e} "
+
+    def __init__(
+        self,
+        surface_current_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        source_grid=None,
+        name="surface-current-regularization",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        assert hasattr(
+            surface_current_field, "Phi_mn"
+        ), "surface_current_field must be a FourierCurrentPotentialField"
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+
+        super().__init__(
+            things=[surface_current_field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface_current_field = self.things[0]
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=surface_current_field._M_Phi * 3 + 1,
+                N=surface_current_field._N_Phi * 3 + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ["K"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+
+        self._constants = {
+            "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, surface_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+            basis="xyz",
+        )
+
+        K_mag = safenorm(surface_data["K"], axis=-1)
+        return K_mag

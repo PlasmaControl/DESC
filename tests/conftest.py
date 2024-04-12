@@ -3,13 +3,24 @@
 import os
 
 import h5py
+import jax
 import numpy as np
 import pytest
 from netCDF4 import Dataset
 
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import LinearGrid
+from desc.io import load
+from desc.magnetic_fields import FourierCurrentPotentialField, run_regcoil
 from desc.vmec import VMECIO
+
+
+@pytest.fixture(scope="class", autouse=True)
+def clear_caches_before():
+    """Automatically run before each test to clear caches and reduce OOM issues."""
+    jax.clear_caches()
 
 
 @pytest.fixture(scope="session")
@@ -17,38 +28,6 @@ def TmpDir(tmpdir_factory):
     """Create a temporary directory to store testing files."""
     dir_path = tmpdir_factory.mktemp("test_results")
     return dir_path
-
-
-@pytest.fixture(scope="session")
-def SOLOVEV_vac(tmpdir_factory):
-    """Run SOLOVEV vacuum example."""
-    input_path = ".//tests//inputs//SOLOVEV_vac"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("SOLOVEV_vac_out.h5")
-    desc_nc_path = output_dir.join("SOLOVEV_vac_out.nc")
-    vmec_nc_path = ".//tests//inputs//wout_SOLOVEV_vac.nc"
-    booz_nc_path = output_dir.join("SOLOVEV_vac_bx.nc")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running SOLOVEV vacuum test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
-    with pytest.warns(UserWarning, match="Left handed coordinates"):
-        main(args)
-
-    SOLOVEV_vac_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "desc_nc_path": desc_nc_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return SOLOVEV_vac_out
 
 
 @pytest.fixture(scope="session")
@@ -176,24 +155,6 @@ def HELIOTRON(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def HELIOTRON_ex(tmpdir_factory):
-    """Saved HELIOTRON fixed rotational transform example."""
-    input_path = ".//tests//inputs//HELIOTRON"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = ".//desc//examples//HELIOTRON_output.h5"
-    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON.nc"
-    booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
-
-    HELIOTRON_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return HELIOTRON_out
-
-
-@pytest.fixture(scope="session")
 def HELIOTRON_vac(tmpdir_factory):
     """Run HELIOTRON vacuum (vacuum) example."""
     input_path = ".//tests//inputs//HELIOTRON_vacuum"
@@ -223,37 +184,6 @@ def HELIOTRON_vac(tmpdir_factory):
         "booz_nc_path": booz_nc_path,
     }
     return HELIOTRON_vacuum_out
-
-
-@pytest.fixture(scope="session")
-def HELIOTRON_vac2(tmpdir_factory):
-    """Run HELIOTRON vacuum (fixed current) example."""
-    input_path = ".//tests//inputs//HELIOTRON_vacuum2"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("HELIOTRON_vacuum2_out.h5")
-    desc_nc_path = output_dir.join("HELIOTRON_vacuum2_out.nc")
-    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON_vacuum2.nc"
-    booz_nc_path = output_dir.join("HELIOTRON_vacuum2_bx.nc")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running HELIOTRON vacuum (fixed current) test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
-
-    HELIOTRON_vacuum2_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "desc_nc_path": desc_nc_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return HELIOTRON_vacuum2_out
 
 
 @pytest.fixture(scope="session")
@@ -325,3 +255,106 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     )
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
     return vmec, desc
+
+
+@pytest.fixture(scope="session")
+def regcoil_ellipse_and_axisym_surf():
+    """Run regcoil for elliptical eq and axisymmetric surface."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=8, N_Phi=8
+    )
+    fields, data = run_regcoil(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
+        source_grid=LinearGrid(M=40, N=40, NFP=1),
+        alpha=np.append(np.array([0.0]), np.logspace(-30, -1, 30)),
+        current_helicity=-1,
+        vacuum=True,
+    )
+    surface_current_field = fields[0]
+    return (data, surface_current_field, eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_ellipse_helical_coils():
+    """Run regcoil for elliptical eq and surface."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 30
+    N_egrid = 30
+    M_sgrid = 40
+    N_sgrid = 50
+    alpha = 1e-18
+
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
+    )
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        alpha=alpha,
+        current_helicity=-2,
+        vacuum=True,
+    )
+
+    return (data, surface_current_field, eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_ellipse_helical_coils_pos_helicity():
+    """Run regcoil for elliptical eq and surface with positive helicity."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 30
+    N_egrid = 30
+    M_sgrid = 50
+    N_sgrid = 50
+    alpha = 1e-18
+
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
+    )
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        alpha=alpha,
+        current_helicity=2,
+        vacuum=True,
+    )
+
+    return (surface_current_field, data["chi^2_B"], eq)

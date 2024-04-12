@@ -588,6 +588,161 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_load_and_save_makegrid_coils_diff_length_of_knots(tmpdir_factory):
+    """Test loading and saving coils from MAKEGRID file that are not uniform length."""
+    Ncoils = 2
+    input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils_diff_lengths"
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    tmp_path = tmpdir.join(f"coils.MAKEGRID_format_{Ncoils}_coils")
+    shutil.copyfile(input_path, tmp_path)
+
+    with pytest.raises(ValueError, match="CoilSet"):
+        coilset = CoilSet.from_makegrid_coilfile(str(tmp_path))
+    coilset = MixedCoilSet.from_makegrid_coilfile(str(tmp_path), ignore_groups=True)
+    assert len(coilset) == Ncoils  # correct number of coils
+    # if the coils are not all the same number of knots, then making a CoilSet
+    # will fail (as each underyling coil must have same length knots),
+    # instead the function should make a MixedCoilSet
+    assert isinstance(coilset, MixedCoilSet)
+
+    path = tmpdir.join("coils.MAKEGRID_format_desc")
+    # save using the default grids
+    coilset.save_in_makegrid_format(str(path))
+
+    coilset2 = MixedCoilSet.from_makegrid_coilfile(str(path))
+    assert isinstance(coilset2, MixedCoilSet)
+
+    grid = LinearGrid(N=50, endpoint=False)
+
+    # check values, ensure they are close
+    for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
+
+        coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
+        X1 = coords1[:, 0]
+        Y1 = coords1[:, 1]
+        Z1 = coords1[:, 2]
+
+        coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
+        X2 = coords2[:, 0]
+        Y2 = coords2[:, 1]
+        Z2 = coords2[:, 2]
+        # knots are not the exact same, so these points will be close but not the
+        # same.
+        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(X1, X2, rtol=2e-5, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Y1, Y2, rtol=2e-5, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Z1, Z2, atol=2e-7, rtol=1e-3, err_msg=f"Coil {i}")
+
+    # check magnetic field from both, check that matches
+    grid = LinearGrid(N=200, endpoint=False)
+    B1 = coilset.compute_magnetic_field(
+        np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
+    )
+    B2 = coilset2.compute_magnetic_field(
+        np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
+    )
+
+    np.testing.assert_allclose(B1, B2, atol=1e-7)
+
+
+@pytest.mark.unit
+def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
+    """Test loading and saving CoilSets from MAKEGRID format files with coilgroups."""
+    Ncoils_per_group = 2
+    coilgroups = ["groupone", "grouptwo"]
+    input_path = "./tests/inputs/coils.MAKEGRID_format_two_groups"
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    tmp_path = tmpdir.join("coils.MAKEGRID_format_two_groups")
+    shutil.copyfile(input_path, tmp_path)
+
+    coilset = MixedCoilSet.from_makegrid_coilfile(str(tmp_path))
+    assert len(coilset) == len(coilgroups)  # correct number of coils
+    for i, (coils, groupname) in enumerate(zip(coilset, coilgroups)):
+        assert len(coils) == Ncoils_per_group
+        assert groupname in coils.name
+        assert str(i + 1) in coils.name  # make sure the correct number is in the name
+    path = tmpdir.join("coils.MAKEGRID_format_groups_desc")
+
+    coilset.save_in_makegrid_format(
+        str(path), grid=LinearGrid(zeta=coilset[0][0].knots, theta=0, endpoint=True)
+    )
+    coilset2 = MixedCoilSet.from_makegrid_coilfile(str(path), ignore_groups=False)
+    # also compare to flattened
+    coilset_flat = MixedCoilSet.from_makegrid_coilfile(str(path), ignore_groups=True)
+    assert len(coilset_flat) == Ncoils_per_group * len(coilgroups)
+
+    assert len(coilset2) == len(coilgroups)  # correct number of coils groups
+    for i, (coils, groupname) in enumerate(zip(coilset2, coilgroups)):
+        assert len(coils) == Ncoils_per_group
+        assert groupname in coils.name
+        assert str(i + 1) in coils.name  # make sure the correct number is in the name
+
+    grid = LinearGrid(zeta=coilset[0][0].knots, endpoint=False)
+
+    # check values at saved points, ensure they match
+    for i, (cs1, cs2) in enumerate(zip(coilset, coilset2)):
+        for j, (c1, c2) in enumerate(zip(cs1, cs2)):
+            c3 = coilset_flat[2 * i + j]
+            print(c1)
+            print(c2)
+            print(c3)
+            # make sure knots are exactly the same
+            np.testing.assert_allclose(
+                c1.knots, c2.knots, err_msg=f"CoilSet {i} Coil {j}"
+            )
+            np.testing.assert_allclose(
+                c3.knots, c2.knots, err_msg=f"CoilSet {i} Coil {j}"
+            )
+
+            coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
+            X1 = coords1[:, 0]
+            Y1 = coords1[:, 1]
+            Z1 = coords1[:, 2]
+
+            coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
+            X2 = coords2[:, 0]
+            Y2 = coords2[:, 1]
+            Z2 = coords2[:, 2]
+
+            coords3 = c3.compute("x", grid=grid, basis="xyz")["x"]
+            X3 = coords3[:, 0]
+            Y3 = coords3[:, 1]
+            Z3 = coords3[:, 2]
+
+            np.testing.assert_allclose(
+                c1.current, c2.current, err_msg=f"CoilSet {i} Coil {j}"
+            )
+            np.testing.assert_allclose(
+                c3.current, c2.current, err_msg=f"CoilSet {i} Coil {j}"
+            )
+            np.testing.assert_allclose(X1, X2, err_msg=f"CoilSet {i} Coil {j}")
+            np.testing.assert_allclose(X3, X2, err_msg=f"CoilSet {i} Coil {j}")
+            np.testing.assert_allclose(Y1, Y2, err_msg=f"CoilSet {i} Coil {j}")
+            np.testing.assert_allclose(Y3, Y2, err_msg=f"CoilSet {i} Coil {j}")
+            np.testing.assert_allclose(
+                Z1, Z2, atol=2e-7, err_msg=f"CoilSet {i} Coil {j}"
+            )
+            np.testing.assert_allclose(
+                Z3, Z2, atol=2e-7, err_msg=f"CoilSet {i} Coil {j}"
+            )
+
+    # check magnetic field from both, check that matches
+    grid = LinearGrid(N=200, endpoint=False)
+    B1 = coilset.compute_magnetic_field(
+        np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
+    )
+    B2 = coilset2.compute_magnetic_field(
+        np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
+    )
+    B3 = coilset_flat.compute_magnetic_field(
+        np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
+    )
+
+    np.testing.assert_allclose(B1, B2, atol=1e-7)
+    np.testing.assert_allclose(B3, B2, atol=1e-7)
+
+
+@pytest.mark.unit
 def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
     """Test saving and reloading CoilSet linspaced angular from MAKEGRID file."""
     tmpdir = tmpdir_factory.mktemp("coil_files")
@@ -789,3 +944,15 @@ def test_repr():
 
     coils.name = "MyCoils"
     assert "MyCoils" in str(coils)
+
+
+@pytest.mark.unit
+def test_compute_minimum_distance():
+    """Test minimum distance compuation for CoilSet objects."""
+    dist = 1
+    coil1 = FourierRZCoil()
+    coil2 = FourierRZCoil(Z_n=np.array([dist]), modes_Z=np.array([0]))
+
+    coils = MixedCoilSet(coil1, coil2)
+
+    np.testing.assert_allclose(coils.compute_minimum_distance(), dist)

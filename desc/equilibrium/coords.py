@@ -33,7 +33,7 @@ def map_coordinates(  # noqa: C901
     evaluates outbasis at those locations.
 
     Speed can often be significantly improved by providing a reasonable initial guess.
-    The default is a nearest neighbor search on a coarse grid.
+    The default is a nearest neighbor search on a grid.
 
     Parameters
     ----------
@@ -49,7 +49,7 @@ def map_coordinates(  # noqa: C901
     guess : None or ndarray, shape(k,3)
         Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
         corresponding to coords in inbasis. If None, heuristics are used based on
-        in basis and a nearest neighbor search on a coarse grid.
+        inbasis or a nearest neighbor search on a grid.
     params : dict
         Values of equilibrium parameters to use, eg eq.params_dict
     period : tuple of float
@@ -98,18 +98,23 @@ def map_coordinates(  # noqa: C901
     kwargs.setdefault("tol", tol)
     kwargs.setdefault("maxiter", maxiter)
     period = np.asarray(period)
-    coords = coords % period
+
+    def periodic(x):
+        return jnp.where(jnp.isfinite(period), x % period, x)
+
+    coords = periodic(coords)
 
     params = setdefault(params, eq.params_dict)
+
+    profiles = get_profiles(inbasis + basis_derivs, eq, None)
+    # do surface average to get iota once
+    if "iota" in profiles and profiles["iota"] is None:
+        profiles["iota"] = eq.get_profile("iota", params=params)
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
         grid = Grid(y, sort=False, jitable=True)
-        profiles = get_profiles(inbasis + basis_derivs, eq, grid, jitable=True)
-        # do surface average to get iota once
-        if "current" in profiles and profiles["current"] is not None:
-            profiles["iota"] = eq.get_profile("iota")
-        transforms = get_transforms(inbasis + basis_derivs, eq, grid, jitable=True)
+        transforms = get_transforms(basis, eq, grid, jitable=True)
         data = compute_fun(eq, basis, params, transforms, profiles)
         x = jnp.array([data[k] for k in basis]).T
         return x
@@ -117,8 +122,8 @@ def map_coordinates(  # noqa: C901
     @jit
     def residual(y, coords):
         xk = compute(y, inbasis)
-        r = xk % period - coords % period
-        return jnp.where(r > period / 2, -period + r, r)
+        r = periodic(xk) - periodic(coords)
+        return jnp.where((r > period / 2) & jnp.isfinite(period), -period + r, r)
 
     @jit
     def jac(y, coords):
@@ -138,34 +143,9 @@ def map_coordinates(  # noqa: C901
 
     yk = guess
     if yk is None:
-        # nearest neighbor search on coarse grid for initial guess
-        yg = ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP).nodes
-        xg = compute(yg, inbasis)
-        idx = jnp.zeros(len(coords)).astype(int)
-        coords = jnp.asarray(coords)
-
-        def _distance_body(i, idx):
-            d = (coords[i] % period) - (xg % period)
-            d = jnp.where(d > period / 2, period - d, d)
-            distance = jnp.linalg.norm(d, axis=-1)
-            k = jnp.argmin(distance)
-            idx = put(idx, i, k)
-            return idx
-
-        idx = fori_loop(0, len(coords), _distance_body, idx)
-        yk = yg[idx]
-
-        # apply some heuristics based on common patterns
-        if "rho" in inbasis:
-            yk = put(yk.T, 0, coords[:, inbasis.index("rho")]).T
-        if "theta" in inbasis:
-            yk = put(yk.T, 1, coords[:, inbasis.index("theta")]).T
-        elif "theta_PEST" in inbasis:  # lambda is usually small
-            yk = put(yk.T, 1, coords[:, inbasis.index("theta_PEST")]).T
-        if "zeta" in inbasis:
-            yk = put(yk.T, 2, coords[:, inbasis.index("zeta")]).T
-        elif "phi" in inbasis:
-            yk = put(yk.T, 2, coords[:, inbasis.index("phi")]).T
+        yk = _initial_guess_heuristic(yk, coords, inbasis, eq, profiles)
+    if yk is None:
+        yk = _initial_guess_nn_search(yk, coords, inbasis, eq, period, compute)
 
     yk = fixup(yk)
 
@@ -179,6 +159,66 @@ def map_coordinates(  # noqa: C901
     if full_output:
         return out, (res, niter)
     return out
+
+
+def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
+    # some qtys have obvious initial guess based on coords
+    # commonly, the desired coordinates are something like (radial, poloidal, toroidal)
+    radialish = {"rho", "psi"}
+    poloidalish = {"theta", "theta_PEST", "alpha"}
+    toroidalish = {"zeta", "phi"}
+
+    radial = list(set(inbasis).intersection(radialish))
+    poloidal = list(set(inbasis).intersection(poloidalish))
+    toroidal = list(set(inbasis).intersection(toroidalish))
+    if len(radial) != 1 or len(poloidal) != 1 or len(toroidal) != 1:
+        # no heuristics for other cases
+        return yk
+
+    rho = theta = zeta = None
+
+    radial = radial[0]
+    poloidal = poloidal[0]
+    toroidal = toroidal[0]
+    if radial == "rho":
+        rho = coords[:, inbasis.index("rho")]
+    elif radial == "psi":
+        rho = jnp.sqrt(coords[:, inbasis.index("psi")] / eq.Psi)
+
+    # omega usually small (zero for now)
+    zeta = coords[:, inbasis.index(toroidal)]
+
+    if poloidal == "theta" or poloidal == "theta_PEST":  # lambda usually small
+        theta = coords[:, inbasis.index(poloidal)]
+    elif poloidal == "alpha":
+        alpha = coords[:, inbasis.index("alpha")]
+        iota = profiles["iota"](rho)
+        theta = (alpha + iota * zeta) % (2 * jnp.pi)
+
+    yk = jnp.array([rho, theta, zeta]).T
+    return yk
+
+
+def _initial_guess_nn_search(yk, coords, inbasis, eq, period, compute):
+    # nearest neighbor search on dense grid
+    yg = ConcentricGrid(eq.L_grid, eq.M_grid, max(eq.N_grid, eq.M_grid)).nodes
+    xg = compute(yg, inbasis)
+    idx = jnp.zeros(len(coords)).astype(int)
+    coords = jnp.asarray(coords)
+
+    def periodic(x):
+        return jnp.where(jnp.isfinite(period), x % period, x)
+
+    def _distance_body(i, idx):
+        d = periodic(coords[i]) - periodic(xg)
+        d = jnp.where((d > period / 2) & jnp.isfinite(period), period - d, d)
+        distance = jnp.linalg.norm(d, axis=-1)
+        k = jnp.argmin(distance)
+        idx = put(idx, i, k)
+        return idx
+
+    idx = fori_loop(0, len(coords), _distance_body, idx)
+    return yg[idx]
 
 
 def compute_theta_coords(

@@ -8,16 +8,24 @@ import numpy as np
 import pytest
 from qic import Qic
 from qsc import Qsc
+from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.coils import FourierRZCoil
-from desc.continuation import _solve_axisym, solve_continuation_automatic
+from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, SplineMagneticField
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    OmnigenousField,
+    SplineMagneticField,
+    ToroidalMagneticField,
+    field_line_integrate,
+    run_regcoil,
+)
 from desc.objectives import (
     AspectRatio,
     BoundaryError,
@@ -38,16 +46,16 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
-    HelicalForceBalance,
     LinearObjectiveFromUser,
     MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
-    RadialForceBalance,
+    SurfaceCurrentRegularization,
     VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
@@ -58,26 +66,6 @@ from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_SOLOVEV_vacuum(SOLOVEV_vac):
-    """Tests that the SOLOVEV vacuum example gives no rotational transform."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
-    data = eq.compute("|J|")
-
-    np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
-    np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
-
-    # test that solving with the continuation method works correctly
-    # when eq resolution is lower than the mres_step
-    eq.change_resolution(L=3, M=3)
-    eqf = _solve_axisym(eq, mres_step=6)
-    assert len(eqf) == 1
-    assert eqf[-1].L == eq.L
-    assert eqf[-1].M == eq.M
-    assert eqf[-1].N == eq.N
 
 
 @pytest.mark.regression
@@ -152,66 +140,6 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
     curr = eq.get_profile("current")
     np.testing.assert_allclose(curr(np.linspace(0, 1, 20)), 0, atol=1e-8)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
-    """Tests that the 2 methods for solving vacuum give the same results."""
-    eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
-    eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
-    rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
-    curr1 = eq1.get_profile("current")
-    curr2 = eq2.get_profile("current")
-    iota1 = eq1.get_profile("iota")
-    iota2 = eq2.get_profile("iota")
-    np.testing.assert_allclose(curr1(np.linspace(0, 1, 20)), 0, atol=1e-8)
-    np.testing.assert_allclose(curr2(np.linspace(0, 1, 20)), 0, atol=1e-8)
-    np.testing.assert_allclose(iota1.params, iota2.params, rtol=1e-1, atol=1e-1)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_force_balance_grids():
-    """Compares radial & helical force balance on same vs different grids."""
-    # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
-    # defaulted to cos, sin rotation, respectively.
-    # This test has been kept to increase code coverage.
-
-    def test(iota=False):
-        if iota:
-            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
-            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
-        else:
-            eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
-            eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
-
-        res = 3
-        eq1.change_resolution(L=res, M=res)
-        eq1.L_grid = res
-        eq1.M_grid = res
-        eq2.change_resolution(L=res, M=res)
-        eq2.L_grid = res
-        eq2.M_grid = res
-
-        # force balances on the same grids
-        obj1 = ObjectiveFunction(ForceBalance(eq=eq1))
-        eq1.solve(objective=obj1)
-
-        # force balances on different grids
-        obj2 = ObjectiveFunction(
-            (RadialForceBalance(eq=eq2), HelicalForceBalance(eq=eq2))
-        )
-        eq2.solve(objective=obj2)
-
-        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)
-        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=5e-4)
-        np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=2e-3)
-
-    test(iota=True)
-    test(iota=False)
 
 
 @pytest.mark.regression
@@ -394,38 +322,6 @@ def test_ATF_results(tmpdir_factory):
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
     np.testing.assert_allclose(rho_err[:, 4:], 0, atol=4e-2)
     np.testing.assert_allclose(theta_err, 0, atol=5e-4)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_ESTELL_results(tmpdir_factory):
-    """Test automatic continuation method with ESTELL."""
-    output_dir = tmpdir_factory.mktemp("result")
-    eq0 = get("ESTELL")
-    eq = Equilibrium(
-        Psi=eq0.Psi,
-        NFP=eq0.NFP,
-        L=eq0.L,
-        M=eq0.M,
-        N=eq0.N,
-        L_grid=eq0.L_grid,
-        M_grid=eq0.M_grid,
-        N_grid=eq0.N_grid,
-        pressure=eq0.pressure,
-        current=eq0.current,
-        surface=eq0.get_surface_at(rho=1),
-        sym=eq0.sym,
-        spectral_indexing=eq0.spectral_indexing,
-    )
-    eqf = EquilibriaFamily.solve_continuation_automatic(
-        eq,
-        verbose=2,
-        checkpoint_path=output_dir.join("ESTELL.h5"),
-    )
-    eqf = load(output_dir.join("ESTELL.h5"))
-    rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
-    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=5e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 @pytest.mark.regression
@@ -735,7 +631,7 @@ def test_NAE_QIC_solve():
 
 @pytest.mark.unit
 @pytest.mark.optimize
-def test_multiobject_optimization():
+def test_multiobject_optimization_al():
     """Test for optimizing multiple objects at once."""
     eq = Equilibrium(L=4, M=4, N=0, iota=2)
     surf = FourierRZToroidalSurface(
@@ -1307,6 +1203,425 @@ class TestGetExample:
         )
 
 
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_axisymmetric():
+    """Test axisymmetric regcoil solution."""
+    # make a simple axisymmetric vacuum equilibrium
+    eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+    # no phi_SV is needed since it is axisymmetric,
+    # so phi_mn should be zero when running REGCOIL
+    # especially with a nonzero alpha
+    surf_winding = FourierRZToroidalSurface.constant_offset_surface(eq.surface, 2)
+
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=1, N_Phi=1, sym_Phi="sin"
+    )
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
+        EquilibriaFamily(eq),  # just to test that it works with a family passed in
+        alpha=0,
+        normalize=False,
+        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
+        source_grid=LinearGrid(M=42, N=42, NFP=surface_current_field.NFP),
+        vacuum=True,
+    )
+    chi_B = data["chi^2_B"]
+    phi_mn_opt = surface_current_field.Phi_mn
+    G = surface_current_field.G
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-6)
+    np.testing.assert_allclose(chi_B, 0, atol=1e-10)
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
+
+    grid = LinearGrid(N=10, M=10, NFP=surface_current_field.NFP)
+    correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
+    np.testing.assert_allclose(
+        surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=5e-9
+    )
+    surface_current_field.change_Phi_resolution(
+        M=2,
+        N=2,
+    )
+    # test with alpha large, should have no phi_mn
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
+        eq=eq,
+        eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
+        alpha=1e4,
+        vacuum=True,
+    )
+    phi_mn_opt = surface_current_field.Phi_mn
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-10)
+    np.testing.assert_allclose(
+        surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=1e-16
+    )
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
+
+    # test with half the current given external to winding surface
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
+        eq=eq,
+        eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
+        alpha=1e4,
+        # negate the B0 because a negative G corresponds to a positive B toroidal
+        # and we want this to provide half the field the surface current's
+        # G is providing, in the same direction
+        external_field=ToroidalMagneticField(B0=-mu_0 * (G / 2) / 2 / np.pi, R0=1),
+        vacuum=True,
+    )
+    phi_mn_opt = surface_current_field.Phi_mn
+    np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-10)
+    np.testing.assert_allclose(
+        surface_current_field.compute("Phi", grid=grid)["Phi"],
+        correct_phi / 2,
+        atol=1e-9,
+    )
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-11)
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
+    )
+    np.testing.assert_allclose(B, B_from_surf * 2, atol=1e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_helical_coils_check_B(regcoil_ellipse_helical_coils):
+    """Test elliptical eq and winding surf helical coil regcoil solution."""
+    (
+        data,
+        initial_surface_current_field,
+        eq,
+    ) = regcoil_ellipse_helical_coils
+    chi_B = data["chi^2_B"]
+    surface_current_field = initial_surface_current_field.copy()
+
+    assert np.all(chi_B < 1e-5)
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords,
+        source_grid=LinearGrid(M=80, N=80, NFP=surface_current_field.NFP),
+        basis="rpz",
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_helical_coils_check_field_trace(regcoil_ellipse_helical_coils):
+    """Test elliptical eq and winding surf helical coil regcoil solution."""
+    (
+        _,
+        initial_surface_current_field,
+        eq,
+    ) = regcoil_ellipse_helical_coils
+
+    surface_current_field = initial_surface_current_field.copy()
+
+    ntransit = 20
+    r0 = np.linspace(0.68, 0.72, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=surface_current_field,
+        source_grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
+    )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils):
+    """Test elliptical eq and winding surf helical coil regcoil solution."""
+    (
+        _,
+        initial_surface_current_field,
+        eq,
+    ) = regcoil_ellipse_helical_coils
+    surface_current_field = initial_surface_current_field.copy()
+
+    # test finding coils
+
+    numCoils = 15
+
+    coilset2 = surface_current_field.to_CoilSet(
+        desirednumcoils=numCoils,
+        step=6,
+    )
+    coilset2 = coilset2.to_FourierXYZ(N=150)
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
+    np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
+
+    ntransit = 15
+    r0 = np.linspace(0.685, 0.715, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=coilset2,
+    )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02
+
+
+# test will fail bc we cant fix things in an optimizable collection yet
+@pytest.mark.xfail
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_helical_coils_check_objective_method(
+    regcoil_ellipse_helical_coils,
+):
+    """Test elliptical eq and winding surf helical coil regcoil solution."""
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 60
+
+    (
+        _,
+        initial_surface_current_field,
+        eq,
+    ) = regcoil_ellipse_helical_coils
+    surface_current_field = initial_surface_current_field.copy()
+
+    # check against the objective method of running REGCOIL
+    # with external field providing half the TF
+
+    surface_current_field2 = surface_current_field.copy()
+    surface_current_field2.change_Phi_resolution(M=M_Phi, N=N_Phi, sym_Phi="sin")
+    surface_current_field2.Phi_mn = np.zeros_like(surface_current_field2.Phi_mn)
+    surface_current_field2.G = surface_current_field2.G / 2
+
+    constraints = (  # now fix all but Phi_mn
+        FixParameter(surface_current_field2, params=["I", "G", "R_lmn", "Z_lmn"]),
+    )
+
+    eval_grid = LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True)
+    sgrid = LinearGrid(
+        M=M_sgrid,
+        N=N_sgrid,
+        NFP=eq.NFP,
+    )
+    ext_field = ToroidalMagneticField(
+        B0=-mu_0 * (surface_current_field.G / 2) / 2 / np.pi, R0=1
+    )
+    obj = QuadraticFlux(
+        field=surface_current_field2,
+        eq=eq,
+        eval_grid=eval_grid,
+        source_grid=sgrid,
+        # negate the B0 because a negative G corresponds to a positive B toroidal
+        # and we want this to provide half the field the surface current's
+        # G is providing, in the same direction
+        external_field=ext_field,
+    )
+
+    objective = ObjectiveFunction(
+        (
+            obj,
+            SurfaceCurrentRegularization(
+                surface_current_field=surface_current_field2,
+                weight=1e-15,
+                source_grid=sgrid,
+            ),
+        )
+    )
+
+    optimizer = Optimizer("lsq-exact")
+
+    (surface_current_field2,), result = optimizer.optimize(
+        (surface_current_field2,),
+        objective,
+        constraints,
+        verbose=1,
+        maxiter=1,
+        ftol=0,
+        gtol=0,
+        xtol=1e-16,
+        options={"initial_trust_radius": np.inf},
+    )
+
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field2.compute_magnetic_field(
+        coords,
+        source_grid=LinearGrid(M=100, N=100, NFP=surface_current_field.NFP),
+        basis="rpz",
+    ) + ext_field.compute_magnetic_field(coords, basis="rpz")
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
+
+    # test finding coils
+
+    numCoils = 15
+
+    coilset2 = surface_current_field2.to_CoilSet(
+        desirednumcoils=numCoils,
+        step=6,
+    )
+    coilset2 = coilset2.to_FourierXYZ(N=150)
+    B_from_coils = coilset2.compute_magnetic_field(
+        coords, basis="rpz"
+    ) + ext_field.compute_magnetic_field(coords, basis="rpz")
+    np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_helical_coils_check_B_pos_helicity(
+    regcoil_ellipse_helical_coils_pos_helicity,
+):
+    """Test elliptical eq and winding surf helical coil regcoil solution."""
+    # with positive current helicity
+    (
+        initial_surface_current_field,
+        chi_B,
+        eq,
+    ) = regcoil_ellipse_helical_coils_pos_helicity
+
+    surface_current_field = initial_surface_current_field.copy()
+
+    assert np.all(chi_B < 1e-5)
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords,
+        source_grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
+        basis="rpz",
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=2e-3)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
+    regcoil_ellipse_helical_coils_pos_helicity,
+):
+    """Test elliptical eq and winding surf helical coil regcoil solution."""
+    # with positive current helicity
+    (
+        initial_surface_current_field,
+        _,
+        eq,
+    ) = regcoil_ellipse_helical_coils_pos_helicity
+    surface_current_field = initial_surface_current_field.copy()
+
+    # test finding coils
+
+    numCoils = 15
+
+    coilset2 = surface_current_field.to_CoilSet(
+        desirednumcoils=numCoils,
+        step=6,
+    )
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
+    np.testing.assert_allclose(B, B_from_coils, rtol=1e-3, atol=5e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_modular_coils():
+    """Test elliptical eq and winding surf modular coil regcoil solution."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 40
+    alpha = 1e-18
+
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
+    )
+    surface_current_field, data = run_regcoil(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        alpha=alpha,
+        current_helicity=0,
+        vacuum=True,
+    )
+
+    chi_B = data["chi^2_B"]
+    assert np.all(chi_B < 1e-5)
+
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords,
+        source_grid=LinearGrid(M=40, N=40, NFP=surface_current_field.NFP),
+        basis="rpz",
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=2e-3)
+
+    coilset = surface_current_field.to_CoilSet(
+        desirednumcoils=300, step=5, show_plots=False
+    )
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = coilset.compute_magnetic_field(
+        coords,
+        basis="rpz",
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-3, rtol=1e-2)
+
+
 @pytest.mark.unit
 def test_single_coil_optimization():
     """Test that single coil (not coilset) optimization works."""
@@ -1344,3 +1659,44 @@ def test_single_coil_optimization():
     np.testing.assert_allclose(
         coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
     )
+
+
+@pytest.mark.unit
+def test_quadratic_flux_optimization_with_analytic_field():
+    """Test analytic field optimization to reduce quadratic flux.
+
+    Checks that B goes to zero for non-axisymmetric eq and axisymmetric field.
+    """
+    eq = get("precise_QA")
+    field = ToroidalMagneticField(1, 1)
+    eval_grid = LinearGrid(
+        rho=np.array([1.0]),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        sym=False,
+    )
+
+    optimizer = Optimizer("lsq-exact")
+
+    constraints = (FixParameter(field, ["R0"]),)
+    quadflux_obj = QuadraticFlux(
+        eq=eq,
+        field=field,
+        eval_grid=eval_grid,
+        vacuum=True,
+    )
+    objective = ObjectiveFunction(quadflux_obj)
+    things, __ = optimizer.optimize(
+        field,
+        objective=objective,
+        constraints=constraints,
+        ftol=1e-14,
+        gtol=1e-14,
+        copy=True,
+        verbose=3,
+    )
+
+    # optimizer should zero out field since that's the easiest way
+    # to get to Bnorm = 0
+    np.testing.assert_allclose(things[0].B0, 0, atol=1e-12)

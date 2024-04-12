@@ -13,5 +13,9 @@ from ._core import (
     field_line_integrate,
     read_BNORM_file,
 )
-from ._current_potential import CurrentPotentialField, FourierCurrentPotentialField
+from ._current_potential import (
+    CurrentPotentialField,
+    FourierCurrentPotentialField,
+    run_regcoil,
+)
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential

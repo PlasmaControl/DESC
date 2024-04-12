@@ -427,6 +427,7 @@ class TestMagneticFields:
         with pytest.raises(ValueError):
             field.Phi_mn = np.ones((basis.num_modes + 1,))
 
+    @pytest.mark.unit
     def test_io_fourier_current_field(self, tmpdir_factory):
         """Test that i/o works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -519,6 +520,7 @@ class TestMagneticFields:
                 NFP=10,
             )
 
+    @pytest.mark.unit
     def test_change_Phi_basis_fourier_current_field(self):
         """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -575,6 +577,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
         assert field.Phi_basis.sym == "sin"
 
+    @pytest.mark.unit
     def test_init_Phi_mn_fourier_current_field(self):
         """Test initial Phi_mn size is correct for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -606,6 +609,26 @@ class TestMagneticFields:
         np.testing.assert_allclose(field.Phi_mn[inds_zero], 0)
         # ensure can compute field at a point without incompatible size error
         field.compute_magnetic_field([10.0, 0, 0])
+
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_coil_cut_warnings(self):
+        """Test Fourier current potential coil cut method warning."""
+        curr = 1e4
+        # with this choice of Phi_mn, the constant Phi contours
+        # move so much that they intersect the boundaries of where we
+        # plot them, that should return a warning
+        field = FourierCurrentPotentialField(
+            I=curr,
+            G=curr,
+            Phi_mn=np.array([-4 * curr / 13]),
+            modes_Phi=np.array([[-1, 0]]),
+        )
+
+        with pytest.warns(
+            UserWarning,
+            match="Detected",
+        ):
+            field.to_CoilSet(1)
 
     @pytest.mark.slow
     @pytest.mark.unit

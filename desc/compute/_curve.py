@@ -754,7 +754,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
+    params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
         "method": [],
         "intervals": [],
@@ -873,7 +873,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
+    params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
         "method": [],
         "intervals": [],
@@ -991,7 +991,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
+    params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
         "method": [],
         "intervals": [],

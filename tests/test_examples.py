@@ -1209,7 +1209,7 @@ class TestGetExample:
 def test_regcoil_axisymmetric():
     """Test axisymmetric regcoil solution."""
     # make a simple axisymmetric vacuum equilibrium
-    eq = load("/Users/dpanici/Research/DESC/tests/inputs/vacuum_circular_tokamak.h5")
+    eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
     # no phi_SV is needed since it is axisymmetric,
     # so phi_mn should be zero when running REGCOIL
     # especially with a nonzero alpha

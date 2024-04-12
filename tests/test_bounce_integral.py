@@ -422,18 +422,22 @@ def test_bounce_quad():
     def integrand(B, pitch):
         return 1 / _sqrt(1 - pitch * B**2)
 
-    bounce_quad = _bounce_quad(
-        X=x.reshape(1, 1, 1, -1),
-        w=w,
-        knots=knots,
-        B_sup_z=np.ones((1, knots.size)),
-        B=B,
-        B_z_ra=np.cos(knots).reshape(1, -1),
-        integrand=integrand,
-        f=[],
-        pitch=np.ones((1, 1)),
-        method="akima",
-    ).squeeze()
+    bounce_quad = (
+        _bounce_quad(
+            X=x.reshape(1, 1, 1, -1),
+            w=w,
+            knots=knots,
+            B_sup_z=np.ones((1, knots.size)),
+            B=B,
+            B_z_ra=np.cos(knots).reshape(1, -1),
+            integrand=integrand,
+            f=[],
+            pitch=np.ones((1, 1)),
+            method="akima",
+        )
+        / (bp2 - bp1)
+        * np.pi
+    )
     np.testing.assert_allclose(bounce_quad, 10.5966, atol=0.75)
 
 

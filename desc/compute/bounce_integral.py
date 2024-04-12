@@ -535,7 +535,7 @@ def tanh_sinh_cheby_quad(resolution=7):
     """Modified Tanh-Sinh quadrature.
 
     Outputs the quadrature points xₖ and weights wₖ
-    to transform an integral following form to the weighted sum.
+    to transform an integral of the following form to the weighted sum.
 
     ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ ωₖ f(xₖ) / √(1 − xₖ²) = ∑ₖ wₖ f(xₖ)
 

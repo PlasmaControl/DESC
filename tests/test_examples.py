@@ -1286,15 +1286,15 @@ def test_second_stage_optimization():
     # This also tests that FixCollectionParameters works properly when fixing a
     # parameter that does not exist for all things in the collection.
 
-    # TODO: change the objective to QuadraticFlux
     eq = get("DSHAPE")
     field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
-    objective = ObjectiveFunction(BoundaryError(eq=eq, field=field))
-    constraints = (FixParameter(eq), FixCollectionParameters(field, "R0"))
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field))
+    constraints = FixCollectionParameters(field, "R0")
     optimizer = Optimizer("lsq-exact")
-    (eq, field), _ = optimizer.optimize(
-        things=(eq, field), objective=objective, constraints=constraints
+    (field,), _ = optimizer.optimize(
+        things=field, objective=objective, constraints=constraints, verbose=2
     )
+    # TODO: could make this more robust instead of assuming only vertical field changes
     np.testing.assert_allclose(field[0].R0, 3.5)
-    np.testing.assert_allclose(field[0].B0, 0.218, rtol=1e-3)  # toroidal field
-    np.testing.assert_allclose(field[1].B0, -0.021, rtol=2e-2)  # vertical field
+    np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (does not change)
+    np.testing.assert_allclose(field[1].B0, -0.022, rtol=1e-2)  # vertical field

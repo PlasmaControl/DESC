@@ -23,6 +23,7 @@ from desc.compute.bounce_integral import (
     poly_root,
     poly_val,
     take_mask,
+    tanh_sinh_cheby_quad,
 )
 from desc.compute.utils import dot, safediv
 from desc.continuation import solve_continuation_automatic
@@ -414,7 +415,7 @@ def test_bounce_quad():
     knots = np.linspace(-np.pi / 2, np.pi / 2, 10)
     epsilon = 1e-2
     bp1, bp2 = knots[0] + epsilon, knots[-1] - epsilon
-    x, w = np.polynomial.chebyshev.chebgauss(65)
+    x, w = tanh_sinh_cheby_quad(10)
     # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
     x = (np.arcsin(x) / np.pi - 0.5) * (bp2 - bp1) + bp2
 
@@ -437,7 +438,7 @@ def test_bounce_quad():
         / (bp2 - bp1)
         * np.pi
     )
-    np.testing.assert_allclose(bounce_quad, 10.5966, atol=0.75)
+    np.testing.assert_allclose(bounce_quad, 10.5966, atol=0.15)
 
 
 @pytest.mark.unit

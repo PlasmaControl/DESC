@@ -531,13 +531,18 @@ def _compute_bp_if_given_pitch(
         return *bounce_points(knots, B_c, B_z_ra_c, pitch, check), pitch
 
 
-def tanh_sinh_quad(resolution=7):
-    """Tanh-Sinh quadrature.
+def tanh_sinh_cheby_quad(resolution=7):
+    """Modified Tanh-Sinh quadrature.
 
     This function outputs the quadrature points xₖ and weights wₖ
-    for a tanh-sinh quadrature.
+    for a modified tanh-sinh quadrature.
 
+    The generic tanh-sinh quadrature is
     ∫₋₁¹ f(x) dx = ∑ₖ wₖ f(xₖ)
+
+    The weights returned by this function, ωₖ, mimic the Chebyshev–Gauss quadrature.
+
+    ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ wₖ f(xₖ) / √(1 − xₖ²) = ∑ₖ ωₖ f(xₖ)
 
     Parameters
     ----------
@@ -562,6 +567,9 @@ def tanh_sinh_quad(resolution=7):
     h = 2 * t_max / (resolution - 1)
     x = jnp.tanh(0.5 * jnp.pi * jnp.sinh(kh))
     w = 0.5 * jnp.pi * h * jnp.cosh(kh) / jnp.cosh(0.5 * jnp.pi * jnp.sinh(kh)) ** 2
+    # generic tanh-sinh integrates  ∫₋₁¹ f(x) dx = ∑ₖ wₖ f(xₖ)
+    # we want to integrate          ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ wₖ f(xₖ) / √(1 − xₖ²)
+    w = w / jnp.sqrt(1 - x**2)
     return x, w
 
 
@@ -660,7 +668,7 @@ def bounce_integral_map(
     rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
     knots=jnp.linspace(0, 6 * jnp.pi, 20),
-    quad=tanh_sinh_quad,
+    quad=tanh_sinh_cheby_quad,
     pitch=None,
     **kwargs,
 ):

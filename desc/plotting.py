@@ -3565,9 +3565,9 @@ def plot_regcoil_outputs(
 
     Parameters
     ----------
-    field : FourierCurrentPotentialField
-        object with which to plot the data from the REGCOIL output.
-        should have the correct resolutions and NFP to match the REGCOIL output
+    field : FourierCurrentPotentialField or list of FourierCurrentPotentialField
+        object(s) with which to plot the data from the REGCOIL output.
+        should have the correct resolutions and NFP to match the REGCOIL output.
     data : dict
         dictionary containing the output of a call to ``run_regcoil`` method
         of ``FourierCurrentPotentiaField``
@@ -3575,10 +3575,11 @@ def plot_regcoil_outputs(
         the equilibrium that the Bn error was evaluated on.
     eval_grid : Grid, optional
         grid to evaluate the magnetic field on, if not None, will plot the magnetic
-        field on a default LinearGrid
+        field on the LinearGrid used by the `run_regcoil` method the data was made with
     source_grid : Grid, optional
         grid to evaluate the current potential on, if not None, will plot the current
-        potential on a default LinearGrid
+        potential on a default LinearGrid used by the `run_regcoil` method the data was
+        made with
     return_data : bool, optional
         if True, return the data plotted as well as fig,ax
     vacuum : bool, optional
@@ -3606,6 +3607,15 @@ def plot_regcoil_outputs(
         dictionary of the data plotted, only returned if ``return_data=True``
         This is the same as data_regcoil
     """
+    try:
+        # if it is a list, just grab the first one
+        # as we change the attribute anyways so just need the correct
+        # geometry
+        field = field[0]
+    except TypeError:
+        # it was not a list, so proceed as usual
+        pass
+
     field = (
         field.copy()
     )  # copy the field so that we are not changing the passed-in field

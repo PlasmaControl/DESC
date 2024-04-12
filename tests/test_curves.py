@@ -771,4 +771,5 @@ class TestSplineXYZCurve:
             discontinuous_indices=discontinuous_indices,
         )
         d.compute("x")
+        d.compute("x_s")
         assert 1 == 1

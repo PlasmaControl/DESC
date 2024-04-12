@@ -707,7 +707,7 @@ class TwoPowerProfile(_Profile):
     ----------
     params: array-like
         Coefficients of the two power formula. Must be an array of size 3.
-        Assumed to be zero if not specified.
+        Default if not specified is [0, 1, 1].
     name : str
         Name of the profile.
 
@@ -719,7 +719,7 @@ class TwoPowerProfile(_Profile):
         super().__init__(name)
 
         if params is None:
-            params = [0, 0, 0]
+            params = [0, 1, 1]
         self._params = np.atleast_1d(params)
 
         errorif(

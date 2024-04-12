@@ -207,10 +207,10 @@ class TestProfiles:
         sp.params = sp.params + 1
         np.testing.assert_allclose(sp.params, 1 + pp(sp._knots))
 
-        tp = TwoPowerProfile([1, 2, 1 / 2])
-        np.testing.assert_allclose(tp.params, [1, 2, 1 / 2])
-        tp.params = [2, 1, 1 / 3]
-        np.testing.assert_allclose(tp.params, [2, 1, 1 / 3])
+        tp = TwoPowerProfile([1, 2, 3])
+        np.testing.assert_allclose(tp.params, [1, 2, 3])
+        tp.params = [1 / 2, 3 / 2, 4 / 3]
+        np.testing.assert_allclose(tp.params, [1 / 2, 3 / 2, 4 / 3])
 
         zp = FourierZernikeProfile([1 - 1 / 3 - 1 / 6, -1 / 2, 1 / 6])
         assert zp.get_params(2, 0, 0) == -1 / 2

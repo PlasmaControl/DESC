@@ -611,28 +611,6 @@ class TestMagneticFields:
         field.compute_magnetic_field([10.0, 0, 0])
 
     @pytest.mark.unit
-    def test_fourier_current_potential_field_warnings(self):
-        """Test Fourier current potential run regcoil method warning."""
-        surface = FourierRZToroidalSurface(
-            R_lmn=jnp.array([3, 2]),
-            Z_lmn=jnp.array([0, -2]),
-            modes_R=jnp.array([[0, 0], [1, 0]]),
-            modes_Z=jnp.array([[0, 0], [-1, 0]]),
-            NFP=1,
-        )
-
-        field = FourierCurrentPotentialField.from_surface(
-            surface=surface,
-            I=0,
-            G=1000,
-        )
-        eq = get("DSHAPE")  # equilibrium with finite beta and current
-        with pytest.warns(UserWarning):
-            field.run_regcoil(
-                eq, source_grid=LinearGrid(M=1), eval_grid=LinearGrid(M=1), verbose=0
-            )
-
-    @pytest.mark.unit
     def test_fourier_current_potential_field_coil_cut_warnings(self):
         """Test Fourier current potential coil cut method warning."""
         curr = 1e4
@@ -650,7 +628,7 @@ class TestMagneticFields:
             UserWarning,
             match="Detected",
         ):
-            field.cut_surface_current_into_coils(1)
+            field.to_CoilSet(1)
 
     @pytest.mark.slow
     @pytest.mark.unit

@@ -2122,30 +2122,49 @@ class FiniteElementMesh3D_scikit:
         from skfem.visuals.matplotlib import draw, draw_mesh3d
 
         ax = draw(mesh)
-        return draw_mesh3d(mesh, color="pink", ax=ax)  # visualize().show()
+        return draw_mesh3d(mesh, color="pink", ax=ax)
 
-    def get_barycentric_coordinates(self, rho_theta_zeta):
+        # Add later visualize().show()
+
+    def get_barycentric_coordinates(self, K):
         """Gets the barycentric coordinates, given a mesh in rho, theta, zeta.
 
         Parameters
         ----------
-        rho_theta_zeta : (will be) 3D ndarray
-            Coordinates of the original grid
+        K : Order of the finite element
 
         Returns
         -------
-        eta_u: 3D array
-            Barycentric coordinates evaluated
-            at the points (rho,theta, zeta).
+        coordinate_matrix: Matrix of volume coordinates for mesh
         """
-        # Beginning work for standard unit element
+        if K == 1:
 
-        nodes = fem.ElementTetP1.doflocs
+            nodes = fem.MeshTet1.doflocs
+
+        if K == 2:
+            nodes = fem.MeshTet2.doflocs
+
+        # Rescale theta and zeta rows:
+
+        nodes[1] = 2 * np.pi * nodes[1]
+        nodes[2] = 2 * np.pi * nodes[2]
 
         A = np.ones((4, 4))
         for i in range(3):
             for j in range(4):
-                A[i][j] = nodes[i][j]  # will need to confirm indexing
+                A[i][j] = nodes[i][j]
+
+        num_nodes = len(nodes[0])
+        coordinate_matrix = np.zeros((num_nodes, 4))
+
+        for index in range(num_nodes):
+            X_vec = np.array(
+                [[nodes[0][index]], [nodes[1][index]], [nodes[2][index]], [1]]
+            )
+            L = np.dot((np.linalg.inv(A)), X_vec)
+            for j in range(4):
+                coordinate_matrix[index][j] = L[j]
+        return coordinate_matrix
 
 
 """

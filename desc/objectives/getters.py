@@ -1,6 +1,8 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from desc.utils import flatten_list, unique_list
+import numpy as np
+
+from desc.utils import flatten_list, is_any_instance, unique_list
 
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
@@ -22,6 +24,7 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixParameter,
     FixPressure,
     FixPsi,
 )
@@ -104,6 +107,9 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
                 constraints += (
                     con(eq=eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(eq, param, [])).size:
+            constraints += (FixParameter(eq, param),)
 
     return constraints
 
@@ -137,6 +143,9 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
                 constraints += (
                     con(eq=eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(eq, param, [])).size:
+            constraints += (FixParameter(eq, param),)
 
     return constraints
 
@@ -192,6 +201,9 @@ def get_NAE_constraints(
                 constraints += (
                     con(eq=desc_eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(desc_eq, param, [])).size:
+            constraints += (FixParameter(desc_eq, param),)
 
     if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(
@@ -210,23 +222,19 @@ def get_NAE_constraints(
 
 def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
-
-    def _is_any_instance(things, cls):
-        return any([isinstance(t, cls) for t in things])
-
     # Equilibrium
     if {"Rb_lmn", "Zb_lmn", "L_lmn", "Ra_n", "Za_n"} <= set(
         unique_list(flatten_list(thing.optimizable_params))[0]
     ):
-        if not _is_any_instance(constraints, BoundaryRSelfConsistency):
+        if not is_any_instance(constraints, BoundaryRSelfConsistency):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, BoundaryZSelfConsistency):
+        if not is_any_instance(constraints, BoundaryZSelfConsistency):
             constraints += (BoundaryZSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, FixLambdaGauge):
+        if not is_any_instance(constraints, FixLambdaGauge):
             constraints += (FixLambdaGauge(eq=thing),)
-        if not _is_any_instance(constraints, AxisRSelfConsistency):
+        if not is_any_instance(constraints, AxisRSelfConsistency):
             constraints += (AxisRSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, AxisZSelfConsistency):
+        if not is_any_instance(constraints, AxisZSelfConsistency):
             constraints += (AxisZSelfConsistency(eq=thing),)
 
     # Curve
@@ -234,9 +242,9 @@ def maybe_add_self_consistency(thing, constraints):
     elif not hasattr(thing, "__len__") and {"shift", "rotmat"} <= set(
         unique_list(flatten_list(thing.optimizable_params))[0]
     ):
-        if not _is_any_instance(constraints, FixCurveShift):
+        if not is_any_instance(constraints, FixCurveShift):
             constraints += (FixCurveShift(curve=thing),)
-        if not _is_any_instance(constraints, FixCurveRotation):
+        if not is_any_instance(constraints, FixCurveRotation):
             constraints += (FixCurveRotation(curve=thing),)
 
     return constraints

@@ -673,6 +673,9 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         period = None
     else:
         knots = params["knots"]
+        X = params["X"]
+        Y = params["Y"]
+        Z = params["Z"]
         period = 2 * jnp.pi
 
     Xq = jnp.zeros(len(xq))
@@ -684,14 +687,13 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         if is_discontinuous:
             istart, istop = transforms["intervals"][i]
             istop = jnp.where(istop == 0, -1, istop)
-
-            X_in_interval = get_arr_in_interval(X, knots, istart, istop)
-            Y_in_interval = get_arr_in_interval(Y, knots, istart, istop)
-            Z_in_interval = get_arr_in_interval(Z, knots, istart, istop)
         else:
-            X_in_interval = params["X"]
-            Y_in_interval = params["Y"]
-            Z_in_interval = params["Z"]
+            # get the whole interval
+            istart, istop = [0, -1]
+
+        X_in_interval = get_arr_in_interval(X, knots, istart, istop)
+        Y_in_interval = get_arr_in_interval(Y, knots, istart, istop)
+        Z_in_interval = get_arr_in_interval(Z, knots, istart, istop)
 
         Xq_temp = interp1d(
             xq,

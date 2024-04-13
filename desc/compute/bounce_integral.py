@@ -531,25 +531,25 @@ def _compute_bp_if_given_pitch(
         return *bounce_points(knots, B_c, B_z_ra_c, pitch, check), pitch
 
 
-def tanh_sinh_cheby_quad(resolution=7):
-    """Modified Tanh-Sinh quadrature.
+def tanh_sinh_quad(resolution, w=lambda x: 1):
+    """Tanh-Sinh quadrature.
 
-    Outputs the quadrature points xₖ and weights wₖ
-    to transform an integral of the following form to the weighted sum.
-
-    ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ ωₖ f(xₖ) / √(1 − xₖ²) = ∑ₖ wₖ f(xₖ)
+    Returns quadrature points xₖ and weights Wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ w(x) f(x) dx ≈ ∑ₖ Wₖ f(xₖ).
 
     Parameters
     ----------
     resolution: int
-        Number of quadrature points, preferably odd.
+        Number of quadrature points.
+    w : callable
+        Weight function defined, positive, and continuous on (-1, 1).
 
     Returns
     -------
-    x : numpy array
-        Quadrature points
-    w : numpy array
-        Quadrature weights
+    x : Array
+        Quadrature points.
+    W : Array
+        Quadrature weights.
 
     """
     # boundary of integral
@@ -560,12 +560,12 @@ def tanh_sinh_cheby_quad(resolution=7):
     t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
     kh = jnp.linspace(-t_max, t_max, resolution)
     h = 2 * t_max / (resolution - 1)
-    x = jnp.tanh(0.5 * jnp.pi * jnp.sinh(kh))
-    # weights for ∫₋₁¹ f(x) dx = ∑ₖ ωₖ f(xₖ)
-    w = 0.5 * jnp.pi * h * jnp.cosh(kh) / jnp.cosh(0.5 * jnp.pi * jnp.sinh(kh)) ** 2
-    # weights for ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ wₖ f(xₖ)
-    w = w / jnp.sqrt(1 - x**2)
-    return x, w
+    arg = 0.5 * jnp.pi * jnp.sinh(kh)
+    x = jnp.tanh(arg)
+    # weights for Tanh-Sinh quadrature ∫₋₁¹ f(x) dx ≈ ∑ₖ ωₖ f(xₖ)
+    W = 0.5 * jnp.pi * h * jnp.cosh(kh) / jnp.cosh(arg) ** 2
+    W = W * w(x)
+    return x, W
 
 
 _interp1d_vec = jnp.vectorize(
@@ -593,13 +593,13 @@ def _interp1d_vec_with_df(
     return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
 
 
-def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
+def _bounce_quad(Z, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
     """Compute bounce quadrature for every pitch along every field line.
 
     Parameters
     ----------
-    X : Array, shape(P, S, X.shape[2], w.size)
-        Quadrature points.
+    Z : Array, shape(P, S, Z.shape[2], w.size)
+        Quadrature points at field line-following ζ coordinates.
     w : Array, shape(w.size, )
         Quadrature weights.
     knots : Array, shape(knots.size, )
@@ -634,28 +634,119 @@ def _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
 
     Returns
     -------
-    inner_product : Array, shape(X.shape[:-1])
+    inner_product : Array, shape(Z.shape[:-1])
         Bounce quadrature for every pitch along every field line.
 
     """
     assert pitch.ndim == 2
     assert w.ndim == knots.ndim == 1
-    assert X.shape == (pitch.shape[0], B.shape[0], X.shape[2], w.size)
+    assert Z.shape == (pitch.shape[0], B.shape[0], Z.shape[2], w.size)
     assert knots.size == B.shape[-1]
     assert B_sup_z.shape == B.shape == B_z_ra.shape
     # Spline the integrand so that we can evaluate it at quadrature points
     # without expensive coordinate mappings and root finding.
     # Spline each function separately so that the singularity near the bounce
     # points can be captured more accurately than can be by any polynomial.
-    shape = X.shape
-    X = X.reshape(X.shape[0], X.shape[1], -1)
-    f = [_interp1d_vec(X, knots, ff, method=method).reshape(shape) for ff in f]
-    B_sup_z = _interp1d_vec(X, knots, B_sup_z, method=method).reshape(shape)
+    shape = Z.shape
+    Z = Z.reshape(Z.shape[0], Z.shape[1], -1)
+    f = [_interp1d_vec(Z, knots, ff, method=method).reshape(shape) for ff in f]
+    B_sup_z = _interp1d_vec(Z, knots, B_sup_z, method=method).reshape(shape)
     # Specify derivative at knots for ≈ cubic hermite interpolation.
-    B = _interp1d_vec_with_df(X, knots, B, B_z_ra, method="cubic").reshape(shape)
+    B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method="cubic").reshape(shape)
     pitch = pitch[..., jnp.newaxis, jnp.newaxis]
     inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch) / B_sup_z, w)
     return inner_product
+
+
+def _affine_bijection_forward(x, a, b):
+    """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
+    y = 2 * (x - a) / (b - a) - 1
+    return y
+
+
+def _affine_bijection_reverse(x, a, b):
+    """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
+    y = (x + 1) / 2 * (b - a) + a
+    return y
+
+
+def _grad_affine_bijection_reverse(a, b):
+    """Gradient of reverse affine bijection."""
+    dy_dx = (b - a) / 2
+    return dy_dx
+
+
+def automorphism_arcsin(x):
+    """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
+
+    The arcsin automorphism is an expansion, so it pushes the evaluation points
+    of the bounce integrand toward the singular region, which may induce
+    floating point error.
+
+    The gradient of the arcsin automorphism introduces a singularity that augments
+    the singularity in the bounce integral.
+    """
+    y = 2 * jnp.arcsin(x) / jnp.pi
+    return y
+
+
+def grad_automorphism_arcsin(x):
+    """Gradient of arcsin automorphism.
+
+    The arcsin automorphism is an expansion, so it pushes the evaluation points
+    of the bounce integrand toward the singular region, which may induce
+    floating point error.
+
+    The gradient of the arcsin automorphism introduces a singularity that augments
+    the singularity in the bounce integral.
+    """
+    dy_dx = 2 / (jnp.sqrt(1 - x**2) * jnp.pi)
+    return dy_dx
+
+
+def automorphism_sin(x):
+    """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
+
+    The sin automorphism is a contraction, so it pulls the evaluation points
+    of the bounce integrand away from the singular region, inducing less
+    floating point error.
+
+    The derivative of the sin automorphism is Lipschitz.
+    When this automorphism is used as the change of variable map for the bounce
+    integral, the Lipschitzness prevents generation of new singularities.
+    Furthermore, its derivative vanishes like the integrand of the elliptic
+    integral the second kind E(φ | 1), competing with the singularity in the
+    bounce integrand. Therefore, this automorphism pulls the mass of the bounce
+    integral away from the singularities, which should improve convergence of the
+    quadrature to the principal value of the true integral, so long as the
+    quadrature performs better on less singular integrands.
+    """
+    y = jnp.sin(jnp.pi * x / 2)
+    return y
+
+
+def grad_automorphism_sin(x):
+    """Gradient of sin automorphism.
+
+    The sin automorphism is a contraction, so it will pull the evaluation points
+    away from the singular region, inducing less floating point error.
+
+    The sin automorphism is a contraction, so it pulls the evaluation points
+    of the bounce integrand away from the singular region, inducing less
+    floating point error.
+
+    The derivative of the sin automorphism is Lipschitz.
+    When this automorphism is used as the change of variable map for the bounce
+    integral, the Lipschitzness prevents generation of new singularities.
+    Furthermore, its derivative vanishes like the integrand of the elliptic
+    integral the second kind E(φ | 1), competing with the singularity in the
+    bounce integrand. Therefore, this automorphism pulls the mass of the bounce
+    integral away from the singularities, which should improve convergence of the
+    quadrature to the principal value of the true integral, so long as the
+    quadrature performs better on less singular integrands.
+    """
+    dy_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
+    return dy_dx
 
 
 def bounce_integral_map(
@@ -663,13 +754,19 @@ def bounce_integral_map(
     rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
     knots=jnp.linspace(0, 6 * jnp.pi, 20),
-    quad=tanh_sinh_cheby_quad,
+    quad=tanh_sinh_quad,
+    # In theory, the sin automorphism should perform better, but in
+    # test_bounce_quad, it appears tanh_sinh performs better the more
+    # singular an integral is.
+    automorphism=automorphism_arcsin,
+    grad_automorphism=grad_automorphism_arcsin,
     pitch=None,
+    return_items=True,
     **kwargs,
 ):
     """Returns a method to compute the bounce integral of any quantity.
 
-    The bounce integral is defined as ∫ f(ℓ) dℓ, where
+    The bounce integral is defined as the principal value of ∫ f(ℓ) dℓ, where
         dℓ parameterizes the distance along the field line,
         λ is a constant proportional to the magnetic moment over energy,
         |B| is the norm of the magnetic field,
@@ -703,7 +800,16 @@ def bounce_integral_map(
     quad : callable
         The quadrature scheme used to evaluate the integral.
         The returned quadrature points xₖ and weights wₖ
-        should approximate ∫₋₁¹ f(x) / √(1 − x²) dx = ∑ₖ wₖ f(xₖ).
+        should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
+    automorphism : callable
+        The reverse automorphism of the real interval [-1, 1] defined below.
+        The forward automorphism is composed with the affine bijection
+        that maps the bounce points to [-1, 1]. The resulting forward map defines
+        a change of variable for the bounce integral.
+    grad_automorphism : callable
+        Derivative of the reverse automorphism, i.e. the derivative of the map
+        ``automorphism``. (Or 1 / derivative of the forward automorphism).
+        May be useful to use automatic differentiation.
     pitch : Array, shape(P, S)
         λ values to evaluate the bounce integral at each field line.
         May be specified later.
@@ -712,9 +818,10 @@ def bounce_integral_map(
         where in the latter the labels (ρ, α) are interpreted as index into the
         last axis that corresponds to that field line.
         If two-dimensional, the first axis is the batch axis as usual.
+    return_items : bool
+        Whether to return ``items`` as described below.
     kwargs
         Can specify additional arguments to the quadrature function with kwargs.
-        Can also specify whether to not return items with ``return_items=False``.
 
     Returns
     -------
@@ -795,11 +902,16 @@ def bounce_integral_map(
 
     """
     check = kwargs.pop("check", False)
-    return_items = kwargs.pop("return_items", True)
     normalize = kwargs.pop("normalize", 1)
+    if quad == tanh_sinh_quad:
+        kwargs.setdefault("resolution", 13)
     x, w = quad(**kwargs)
-    # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
-    x = jnp.arcsin(x) / jnp.pi - 0.5
+    # The gradient of the reverse transformation is the weight function w(x) of
+    # the quadrature. Apply weight function for the automorphism.
+    w = w * grad_automorphism(x)
+    # Apply reverse automorphism change of variable to quadrature points.
+    # Recall x = forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
+    x = automorphism(x)
 
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
@@ -875,15 +987,15 @@ def bounce_integral_map(
         bp1, bp2, pitch = _compute_bp_if_given_pitch(
             knots, B_c, B_z_ra_c, pitch, check, *original, err=True
         )
-        X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
+        # # Apply affine change of variable to quadrature points.
+        Z = _affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
         if not isinstance(f, (list, tuple)):
             f = [f]
         f = map(_group_grid_data_by_field_line, f)
-        result = (
-            _bounce_quad(X, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method)
-            / (bp2 - bp1)
-            * jnp.pi
-        )
+        # Integrate and complete the change of variable.
+        result = _bounce_quad(
+            Z, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method
+        ) * _grad_affine_bijection_reverse(bp1, bp2)
         assert result.shape == (pitch.shape[0], S, (knots.size - 1) * 3)
         return result
 

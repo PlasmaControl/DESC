@@ -10,20 +10,26 @@ from matplotlib import pyplot as plt
 
 # TODO: can use the one from interpax once .solve() is implemented
 from scipy.interpolate import CubicHermiteSpline
-from scipy.special import ellipe, ellipk
+from scipy.special import ellipe, ellipk, ellipkm1
 
 from desc.backend import complex_sqrt, flatnonzero
 from desc.compute.bounce_integral import (
+    _affine_bijection_forward,
+    _affine_bijection_reverse,
     _bounce_quad,
+    _grad_affine_bijection_reverse,
+    automorphism_arcsin,
+    automorphism_sin,
     bounce_integral_map,
     bounce_points,
+    grad_automorphism_arcsin,
     pitch_of_extrema,
     poly_der,
     poly_int,
     poly_root,
     poly_val,
     take_mask,
-    tanh_sinh_cheby_quad,
+    tanh_sinh_quad,
 )
 from desc.compute.utils import dot, safediv
 from desc.continuation import solve_continuation_automatic
@@ -410,35 +416,57 @@ def test_bounce_points():
 
 
 @pytest.mark.unit
+def test_automorphism():
+    """Test automorphisms."""
+    a, b = -312, 786
+    x = np.linspace(a, b, 10)
+    y = _affine_bijection_forward(x, a, b)
+    np.testing.assert_allclose(
+        _affine_bijection_reverse(_affine_bijection_forward(x, a, b), a, b), x
+    )
+    np.testing.assert_allclose(
+        _affine_bijection_forward(_affine_bijection_reverse(y, a, b), a, b), y
+    )
+    np.testing.assert_allclose(
+        _affine_bijection_reverse(_affine_bijection_forward(y, a, b), a, b), y
+    )
+    np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y)
+    np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y)
+
+
+@pytest.mark.unit
 def test_bounce_quad():
-    """Test quadrature reduces to elliptic integrals."""
+    """Test principal value of bounce integral matches elliptic integral."""
+
+    def reverse(x, bp1, bp2):
+        return _affine_bijection_reverse(automorphism_arcsin(x), bp1, bp2)
+
+    def grad_reverse(x, bp1, bp2):
+        return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_arcsin(x)
+
     knots = np.linspace(-np.pi / 2, np.pi / 2, 10)
-    epsilon = 1e-2
-    bp1, bp2 = knots[0] + epsilon, knots[-1] - epsilon
-    x, w = tanh_sinh_cheby_quad(10)
-    # change of variable, x = sin([0.5 + (ζ − ζ_b₂)/(ζ_b₂−ζ_b₁)] π)
-    x = (np.arcsin(x) / np.pi - 0.5) * (bp2 - bp1) + bp2
+    bp1, bp2 = knots[0], knots[-1]
+    x, w = tanh_sinh_quad(18, lambda x: grad_reverse(x, bp1, bp2))
+    z = reverse(x, bp1, bp2)
+    p = 1e-3
+    m = 1 - p
 
     def integrand(B, pitch):
-        return 1 / _sqrt(1 - pitch * B**2)
+        return 1 / _sqrt(1 - pitch * m * B**2)
 
-    bounce_quad = (
-        _bounce_quad(
-            X=x.reshape(1, 1, 1, -1),
-            w=w,
-            knots=knots,
-            B_sup_z=np.ones((1, knots.size)),
-            B=np.sin(knots).reshape(1, -1),
-            B_z_ra=np.cos(knots).reshape(1, -1),
-            integrand=integrand,
-            f=[],
-            pitch=np.ones((1, 1)),
-            method="akima",
-        )
-        / (bp2 - bp1)
-        * np.pi
+    bounce_quad = _bounce_quad(
+        Z=z.reshape(1, 1, 1, -1),
+        w=w,
+        knots=knots,
+        B_sup_z=np.ones((1, knots.size)),
+        B=np.sin(knots).reshape(1, -1),
+        B_z_ra=np.cos(knots).reshape(1, -1),
+        integrand=integrand,
+        f=[],
+        pitch=np.ones((1, 1)),
+        method="akima",
     )
-    np.testing.assert_allclose(bounce_quad, 10.5966, atol=0.15)
+    np.testing.assert_allclose(bounce_quad, 2 * ellipkm1(p), rtol=1e-3)
 
 
 @pytest.mark.unit
@@ -601,7 +629,7 @@ def test_bounce_averaged_drifts():
         # FIXME: Question
         #  add normalize to compute matching bounce points for the test
         #  below, but should everything related to B be normalized?
-        #  or just things relavant for computing bounce points?
+        #  or just things relevant for computing bounce points?
         #  e.g. should I normalize B dot e^zeta = B^zeta by Bref as well?
         eq,
         rho,

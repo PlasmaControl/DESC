@@ -684,7 +684,17 @@ def automorphism_arcsin(x):
     floating point error.
 
     The gradient of the arcsin automorphism introduces a singularity that augments
-    the singularity in the bounce integral.
+    the singularity in the bounce integral. Therefore, the quadrature scheme
+    used to evaluate the integral must work well on hypersingular integrals.
+
+    Parameters
+    ----------
+    x : Array
+
+    Returns
+    -------
+    y : Array
+
     """
     y = 2 * jnp.arcsin(x) / jnp.pi
     return y
@@ -698,7 +708,17 @@ def grad_automorphism_arcsin(x):
     floating point error.
 
     The gradient of the arcsin automorphism introduces a singularity that augments
-    the singularity in the bounce integral.
+    the singularity in the bounce integral. Therefore, the quadrature scheme
+    used to evaluate the integral must work well on hypersingular integrals.
+
+    Parameters
+    ----------
+    x : Array
+
+    Returns
+    -------
+    dy_dx : Array
+
     """
     dy_dx = 2 / (jnp.sqrt(1 - x**2) * jnp.pi)
     return dy_dx
@@ -715,11 +735,24 @@ def automorphism_sin(x):
     When this automorphism is used as the change of variable map for the bounce
     integral, the Lipschitzness prevents generation of new singularities.
     Furthermore, its derivative vanishes like the integrand of the elliptic
-    integral the second kind E(φ | 1), competing with the singularity in the
-    bounce integrand. Therefore, this automorphism pulls the mass of the bounce
-    integral away from the singularities, which should improve convergence of the
-    quadrature to the principal value of the true integral, so long as the
-    quadrature performs better on less singular integrands.
+    integral the second kind E(φ | 1), suppressing the singularity in the
+    bounce integrand.
+
+    Therefore, this automorphism pulls the mass of the bounce integral away
+    from the singularities, which should improve convergence of the quadrature
+    to the principal value of the true integral, so long as the quadrature
+    performs better on less singular integrands. If the integral was
+    hypersingular to begin with, Tanh-Sinh quadrature will still work well.
+    Otherwise, Gauss-Legendre quadrature can outperform Tanh-Sinh.
+
+    Parameters
+    ----------
+    x : Array
+
+    Returns
+    -------
+    y : Array
+
     """
     y = jnp.sin(jnp.pi * x / 2)
     return y
@@ -739,11 +772,24 @@ def grad_automorphism_sin(x):
     When this automorphism is used as the change of variable map for the bounce
     integral, the Lipschitzness prevents generation of new singularities.
     Furthermore, its derivative vanishes like the integrand of the elliptic
-    integral the second kind E(φ | 1), competing with the singularity in the
-    bounce integrand. Therefore, this automorphism pulls the mass of the bounce
-    integral away from the singularities, which should improve convergence of the
-    quadrature to the principal value of the true integral, so long as the
-    quadrature performs better on less singular integrands.
+    integral the second kind E(φ | 1), suppressing the singularity in the
+    bounce integrand.
+
+    Therefore, this automorphism pulls the mass of the bounce integral away
+    from the singularities, which should improve convergence of the quadrature
+    to the principal value of the true integral, so long as the quadrature
+    performs better on less singular integrands. If the integral was
+    hypersingular to begin with, Tanh-Sinh quadrature will still work well.
+    Otherwise, Gauss-Legendre quadrature can outperform Tanh-Sinh.
+
+    Parameters
+    ----------
+    x : Array
+
+    Returns
+    -------
+    dy_dx : Array
+
     """
     dy_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
     return dy_dx
@@ -755,11 +801,8 @@ def bounce_integral_map(
     alpha=None,
     knots=jnp.linspace(0, 6 * jnp.pi, 20),
     quad=tanh_sinh_quad,
-    # In theory, the sin automorphism should perform better, but in
-    # test_bounce_quad, it appears tanh_sinh performs better the more
-    # singular an integral is.
-    automorphism=automorphism_arcsin,
-    grad_automorphism=grad_automorphism_arcsin,
+    automorphism=automorphism_sin,
+    grad_automorphism=grad_automorphism_sin,
     pitch=None,
     return_items=True,
     **kwargs,
@@ -801,11 +844,16 @@ def bounce_integral_map(
         The quadrature scheme used to evaluate the integral.
         The returned quadrature points xₖ and weights wₖ
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
+        For the default choice of the automorphism below,
+        Tanh-Sinh quadrature works well if the integrand is hypersingular.
+        Otherwise, Gauss-Legendre quadrature can be more competitive.
     automorphism : callable
         The reverse automorphism of the real interval [-1, 1] defined below.
         The forward automorphism is composed with the affine bijection
         that maps the bounce points to [-1, 1]. The resulting forward map defines
-        a change of variable for the bounce integral.
+        a change of variable for the bounce integral. The choice made for
+        the automorphism can augment of suppress singularities.
+        Keep this in mind when choosing the quadrature method.
     grad_automorphism : callable
         Derivative of the reverse automorphism, i.e. the derivative of the map
         ``automorphism``. (Or 1 / derivative of the forward automorphism).
@@ -904,7 +952,7 @@ def bounce_integral_map(
     check = kwargs.pop("check", False)
     normalize = kwargs.pop("normalize", 1)
     if quad == tanh_sinh_quad:
-        kwargs.setdefault("resolution", 13)
+        kwargs.setdefault("resolution", 19)
     x, w = quad(**kwargs)
     # The gradient of the reverse transformation is the weight function w(x) of
     # the quadrature. Apply weight function for the automorphism.

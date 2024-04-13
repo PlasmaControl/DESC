@@ -23,6 +23,7 @@ from desc.compute.bounce_integral import (
     bounce_integral_map,
     bounce_points,
     grad_automorphism_arcsin,
+    grad_automorphism_sin,
     pitch_of_extrema,
     poly_der,
     poly_int,
@@ -437,36 +438,69 @@ def test_automorphism():
 @pytest.mark.unit
 def test_bounce_quad():
     """Test principal value of bounce integral matches elliptic integral."""
+    p = 1e-3
+    m = 1 - p
+    truth = 2 * ellipkm1(p)
+    rtol = 1e-3
 
-    def reverse(x, bp1, bp2):
+    def reverse_arcsin(x, bp1, bp2):
         return _affine_bijection_reverse(automorphism_arcsin(x), bp1, bp2)
 
-    def grad_reverse(x, bp1, bp2):
+    def grad_reverse_arcsin(x, bp1, bp2):
         return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_arcsin(x)
+
+    def reverse_sin(x, bp1, bp2):
+        return _affine_bijection_reverse(automorphism_sin(x), bp1, bp2)
+
+    def grad_reverse_sin(x, bp1, bp2):
+        return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_sin(x)
 
     knots = np.linspace(-np.pi / 2, np.pi / 2, 10)
     bp1, bp2 = knots[0], knots[-1]
-    x, w = tanh_sinh_quad(18, lambda x: grad_reverse(x, bp1, bp2))
-    z = reverse(x, bp1, bp2)
-    p = 1e-3
-    m = 1 - p
+    B_sup_z = np.ones((1, knots.size))
+    B = np.sin(knots).reshape(1, -1)
+    B_z_ra = np.cos(knots).reshape(1, -1)
+    pitch = np.ones((1, 1))
+    method = "akima"
+
+    # tanh sinh arcsin
+    x_t, w_t = tanh_sinh_quad(18)
+    w_t = w_t * grad_reverse_arcsin(x_t, bp1, bp2)
+    z_t = reverse_arcsin(x_t, bp1, bp2)
+    # gauss-legendre sin
+    x_g, w_g = np.polynomial.legendre.leggauss(16)
+    w_g = w_g * grad_reverse_sin(x_g, bp1, bp2)
+    z_g = reverse_sin(x_g, bp1, bp2)
 
     def integrand(B, pitch):
         return 1 / _sqrt(1 - pitch * m * B**2)
 
-    bounce_quad = _bounce_quad(
-        Z=z.reshape(1, 1, 1, -1),
-        w=w,
-        knots=knots,
-        B_sup_z=np.ones((1, knots.size)),
-        B=np.sin(knots).reshape(1, -1),
-        B_z_ra=np.cos(knots).reshape(1, -1),
-        integrand=integrand,
-        f=[],
-        pitch=np.ones((1, 1)),
-        method="akima",
+    tanh_sinh_arcsin = _bounce_quad(
+        z_t.reshape(1, 1, 1, -1),
+        w_t,
+        knots,
+        B_sup_z,
+        B,
+        B_z_ra,
+        integrand,
+        [],
+        pitch,
+        method,
     )
-    np.testing.assert_allclose(bounce_quad, 2 * ellipkm1(p), rtol=1e-3)
+    leg_gauss_sin = _bounce_quad(
+        z_g.reshape(1, 1, 1, -1),
+        w_g,
+        knots,
+        B_sup_z,
+        B,
+        B_z_ra,
+        integrand,
+        [],
+        pitch,
+        method,
+    )
+    np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
+    np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
 
 
 @pytest.mark.unit

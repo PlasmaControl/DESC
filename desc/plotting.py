@@ -3657,7 +3657,6 @@ def plot_regcoil_outputs(
 
     ncontours = kwargs.pop("ncontours", 20)
     markersize = kwargs.pop("markersize", 12)
-    vacuum = kwargs.pop("vacuum", False)
     figdata = {}
     axdata = {}
     if not scan:
@@ -3667,15 +3666,17 @@ def plot_regcoil_outputs(
         # TODO: replace with plot_2d call
         phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
         # Bnormal plot
+        thing_to_pass_to_Bnorm_compute = eq.surface if vacuum else eq
         Bn_tot = (
             Bn_tot
             if not recalc_eval_grid_quantites
             else field.compute_Bnormal(
-                eq if not vacuum else eq.surface, eval_grid, source_grid
+                thing_to_pass_to_Bnorm_compute, eval_grid, source_grid
             )[0]
         )
         if external_field and recalc_eval_grid_quantites:
             Bn_tot += B_ext
+            print("adding bext")
         plt.rcParams.update({"font.size": 26})
         plt.figure(figsize=(8, 8))
         plt.contourf(

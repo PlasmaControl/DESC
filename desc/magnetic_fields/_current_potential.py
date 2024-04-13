@@ -794,6 +794,8 @@ class FourierCurrentPotentialField(
             # so must tile them s.t. they are full coils, by repeating them
             #  with a 2pi/NFP shift in zeta
             # and a -2pi*helicity shift in theta
+            # we could alternatively wait until we are in real space and then
+            # rotate the coils there, but this also works
 
             for i_contour in range(len(contour_theta)):
                 # check if the contour is arranged with zeta=0 at the start

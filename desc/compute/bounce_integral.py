@@ -735,7 +735,7 @@ def automorphism_sin(x):
     When this automorphism is used as the change of variable map for the bounce
     integral, the Lipschitzness prevents generation of new singularities.
     Furthermore, its derivative vanishes like the integrand of the elliptic
-    integral the second kind E(φ | 1), suppressing the singularity in the
+    integral of the second kind E(φ | 1), suppressing the singularity in the
     bounce integrand.
 
     Therefore, this automorphism pulls the mass of the bounce integral away
@@ -772,7 +772,7 @@ def grad_automorphism_sin(x):
     When this automorphism is used as the change of variable map for the bounce
     integral, the Lipschitzness prevents generation of new singularities.
     Furthermore, its derivative vanishes like the integrand of the elliptic
-    integral the second kind E(φ | 1), suppressing the singularity in the
+    integral of the second kind E(φ | 1), suppressing the singularity in the
     bounce integrand.
 
     Therefore, this automorphism pulls the mass of the bounce integral away
@@ -852,7 +852,7 @@ def bounce_integral_map(
         The forward automorphism is composed with the affine bijection
         that maps the bounce points to [-1, 1]. The resulting forward map defines
         a change of variable for the bounce integral. The choice made for
-        the automorphism can augment of suppress singularities.
+        the automorphism can augment or suppress singularities.
         Keep this in mind when choosing the quadrature method.
     grad_automorphism : callable
         Derivative of the reverse automorphism, i.e. the derivative of the map

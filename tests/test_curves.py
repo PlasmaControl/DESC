@@ -763,15 +763,23 @@ class TestSplineXYZCurve:
         discontinuous_indices = [0, 500]
         R = 2
         phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
-        d = SplineXYZCurve(
+        discontinuous = SplineXYZCurve(
             X=R * np.cos(phi),
             Y=R * np.sin(phi),
             Z=np.zeros_like(phi),
             knots="arclength",
             discontinuous_indices=discontinuous_indices,
         )
-        d.compute("x")
-        d.compute("x_s")
-        d.compute("x_ss")
-        d.compute("x_sss")
-        assert 1 == 1
+
+        continuous = SplineXYZCurve(
+            X=R * np.cos(phi),
+            Y=R * np.sin(phi),
+            Z=np.zeros_like(phi),
+            knots="arclength",
+            discontinuous_indices=None,
+        )
+
+        discont_length = discontinuous.compute("torsion")["torsion"]
+        cont_length = continuous.compute("torsion")["torsion"]
+
+        np.testing.assert_allclose(discont_length, cont_length, rtol=1e-3)

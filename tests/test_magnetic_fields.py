@@ -78,7 +78,7 @@ class TestMagneticFields:
             B = jnp.array([brz, bp, brz]).T
             return B
 
-        ufield = MagneticFieldFromUser(fun)
+        ufield = MagneticFieldFromUser(fun, [tfield.R0, tfield.B0])
         np.testing.assert_allclose(
             tfield([1, 0, 0]), ufield([1, 0, 0], params=[tfield.R0, tfield.B0])
         )

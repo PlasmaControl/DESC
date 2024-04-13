@@ -562,7 +562,17 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
 
     def __init__(self, fun, params=None):
         errorif(not callable(fun), ValueError, "fun must be callable")
-        self._params = setdefault(params, jnp.array([]))
+        self._params = jnp.asarray(setdefault(params, jnp.array([])))
+
+        import jax
+
+        dummy_coords = np.empty((7, 3))
+        dummy_B = jax.eval_shape(fun, dummy_coords, self.params)
+        errorif(
+            dummy_B.shape != (7, 3),
+            ValueError,
+            "fun should return an array of the same shape as coords",
+        )
         self._fun = fun
 
     @optimizable_parameter

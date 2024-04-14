@@ -665,18 +665,10 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     is_discontinuous = len(transforms["intervals"][0])
 
-    if is_discontinuous:
-        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
-        X = jnp.append(params["X"], params["X"][0])
-        Y = jnp.append(params["Y"], params["Y"][0])
-        Z = jnp.append(params["Z"], params["Z"][0])
-        period = None
-    else:
-        knots = params["knots"]
-        X = params["X"]
-        Y = params["Y"]
-        Z = params["Z"]
-        period = 2 * jnp.pi
+    knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
+    X = jnp.append(params["X"], params["X"][0])
+    Y = jnp.append(params["Y"], params["Y"][0])
+    Z = jnp.append(params["Z"], params["Z"][0])
 
     # query points for Xq, Yq, Zq
     fq = jnp.zeros((3, len(xq)))
@@ -697,7 +689,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             X_in_interval,
             method=transforms["method"],
             derivative=0,
-            period=period,
+            period=None,
         )
         Yq_temp = interp1d(
             xq,
@@ -705,7 +697,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             Y_in_interval,
             method=transforms["method"],
             derivative=0,
-            period=period,
+            period=None,
         )
         Zq_temp = interp1d(
             xq,
@@ -713,18 +705,15 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             Z_in_interval,
             method=transforms["method"],
             derivative=0,
-            period=period,
+            period=None,
         )
 
-        if is_discontinuous:
-            xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
-            fq = fq.at[0].set(jnp.where(xq_range, Xq_temp, fq[0]))
-            fq = fq.at[1].set(jnp.where(xq_range, Yq_temp, fq[1]))
-            fq = fq.at[2].set(jnp.where(xq_range, Zq_temp, fq[2]))
+        xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
+        fq = fq.at[0].set(jnp.where(xq_range, Xq_temp, fq[0]))
+        fq = fq.at[1].set(jnp.where(xq_range, Yq_temp, fq[1]))
+        fq = fq.at[2].set(jnp.where(xq_range, Zq_temp, fq[2]))
 
-            return fq
-        else:
-            return jnp.array([Xq_temp, Yq_temp, Zq_temp])
+        return fq
 
     fq = fori_loop(0, len(transforms["intervals"]), body, fq)
 

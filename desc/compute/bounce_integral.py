@@ -888,7 +888,7 @@ def bounce_integral_map(
     auto, grad_auto = automorphism
     w = w * grad_auto(x)
     # Apply reverse automorphism change of variable to quadrature points.
-    # Recall x = forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
+    # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
     x = auto(x)
 
     if alpha is None:

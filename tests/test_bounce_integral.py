@@ -118,7 +118,7 @@ def test_reshape_convention():
     err_msg = "The ordering conventions are required for correctness."
     assert "P, S, N" in inspect.getsource(bounce_points), err_msg
     src = inspect.getsource(bounce_integral_map)
-    assert "S, zeta.size" in src, err_msg
+    assert "S, knots.size" in src, err_msg
     assert "pitch.shape[0], rho.size, alpha.size" in src, err_msg
     src = inspect.getsource(desc_grid_from_field_line_coords)
     assert 'indexing="ij"' in src, err_msg

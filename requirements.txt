@@ -1,6 +1,6 @@
 colorama
 h5py >= 3.0.0, < 4.0
-interpax
+interpax >= 0.3.1
 jax[cpu] >= 0.3.2, < 0.5.0
 matplotlib >= 3.5.0, < 4.0.0
 mpmath >= 1.0.0, < 2.0

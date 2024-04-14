@@ -13,7 +13,7 @@ dependencies:
   - termcolor
   - pip
   - pip:
-    - interpax
+    - interpax >= 0.3.1
     - jax[cpu] >= 0.3.2, < 0.5.0
     - nvgpu
     - plotly >= 5.16, < 6.0
@@ -23,7 +23,7 @@ dependencies:
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
 
   # building the docs
-  - nbsphinx > 0.8.5
+  - nbsphinx == 0.8.12
   - pandoc
   - sphinx > 3.0.0
   - sphinx-argparse

@@ -130,7 +130,7 @@ def _root_cubic(a, b, c, d, distinct=False):
 _roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
 
 
-def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
+def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
     """Roots of polynomial with given coefficients.
 
     Parameters
@@ -192,35 +192,7 @@ def poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
     return r
 
 
-def poly_int(c, k=None):
-    """Coefficients for the primitives of the given set of polynomials.
-
-    Parameters
-    ----------
-    c : Array
-        First axis should store coefficients of a polynomial.
-        For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0] - 1``,
-        coefficient cᵢ should be stored at ``c[n - i]``.
-    k : Array
-        Integration constants.
-        Should broadcast with arrays of shape(*coef.shape[1:]).
-
-    Returns
-    -------
-    poly : Array
-        Coefficients of polynomial primitive.
-        That is, ``poly[i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁺¹,
-        where n is ``c.shape[0] - 1``.
-
-    """
-    if k is None:
-        k = jnp.broadcast_to(0.0, c.shape[1:])
-    poly = (c.T / jnp.arange(c.shape[0], 0, -1)).T
-    poly = jnp.append(poly, k[jnp.newaxis], axis=0)
-    return poly
-
-
-def poly_der(c):
+def _poly_der(c):
     """Coefficients for the derivatives of the given set of polynomials.
 
     Parameters
@@ -242,7 +214,7 @@ def poly_der(c):
     return poly
 
 
-def poly_val(x, c):
+def _poly_val(x, c):
     """Evaluate the set of polynomials c at the points x.
 
     Note that this function does not perform the same operation as
@@ -374,7 +346,7 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c):
     """
     B_c, B_z_ra_c, _ = _check_shape(knots, B_c, B_z_ra_c)
     S, N, degree = B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
-    extrema = poly_root(
+    extrema = _poly_root(
         c=B_z_ra_c,
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
@@ -384,7 +356,7 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c):
     # Can detect at most degree of |B|_z_ra spline extrema between each knot.
     assert extrema.shape == (S, N, degree - 1)
     # Reshape so that last axis enumerates (unsorted) extrema along a field line.
-    B_extrema = poly_val(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
+    B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
     # Might be useful to pad all the nan at the end rather than interspersed.
     B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
@@ -442,7 +414,7 @@ def bounce_points(knots, B_c, B_z_ra_c, pitch, check=False):
     # In order to be JIT compilable, this must have a shape that accommodates the
     # case where each polynomial intersects 1 / λ degree times.
     # nan values in ``intersect`` denote a polynomial has less than degree intersects.
-    intersect = poly_root(
+    intersect = _poly_root(
         c=B_c,
         # Expand to use same pitches across polynomials of a particular spline.
         k=jnp.expand_dims(1 / pitch, axis=-1),
@@ -454,7 +426,7 @@ def bounce_points(knots, B_c, B_z_ra_c, pitch, check=False):
     assert intersect.shape == (P, S, N, degree)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
-    B_z_ra = poly_val(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
+    B_z_ra = _poly_val(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
     # Transform out of local power basis expansion.
     intersect = intersect + knots[:-1, jnp.newaxis]
     intersect = intersect.reshape(P, S, -1)
@@ -593,7 +565,7 @@ def _interp1d_vec_with_df(
     return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
 
 
-def _bounce_quad(Z, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method):
+def _bounce_quad(Z, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method="akima"):
     """Compute bounce quadrature for every pitch along every field line.
 
     Parameters
@@ -701,27 +673,12 @@ def automorphism_arcsin(x):
 
 
 def grad_automorphism_arcsin(x):
-    """Gradient of arcsin automorphism.
-
-    The arcsin automorphism is an expansion, so it pushes the evaluation points
-    of the bounce integrand toward the singular region, which may induce
-    floating point error.
-
-    The gradient of the arcsin automorphism introduces a singularity that augments
-    the singularity in the bounce integral. Therefore, the quadrature scheme
-    used to evaluate the integral must work well on hypersingular integrals.
-
-    Parameters
-    ----------
-    x : Array
-
-    Returns
-    -------
-    dy_dx : Array
-
-    """
+    """Gradient of arcsin automorphism."""
     dy_dx = 2 / (jnp.sqrt(1 - x**2) * jnp.pi)
     return dy_dx
+
+
+grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 
 
 def automorphism_sin(x):
@@ -759,40 +716,12 @@ def automorphism_sin(x):
 
 
 def grad_automorphism_sin(x):
-    """Gradient of sin automorphism.
-
-    The sin automorphism is a contraction, so it will pull the evaluation points
-    away from the singular region, inducing less floating point error.
-
-    The sin automorphism is a contraction, so it pulls the evaluation points
-    of the bounce integrand away from the singular region, inducing less
-    floating point error.
-
-    The derivative of the sin automorphism is Lipschitz.
-    When this automorphism is used as the change of variable map for the bounce
-    integral, the Lipschitzness prevents generation of new singularities.
-    Furthermore, its derivative vanishes like the integrand of the elliptic
-    integral of the second kind E(φ | 1), suppressing the singularity in the
-    bounce integrand.
-
-    Therefore, this automorphism pulls the mass of the bounce integral away
-    from the singularities, which should improve convergence of the quadrature
-    to the principal value of the true integral, so long as the quadrature
-    performs better on less singular integrands. If the integral was
-    hypersingular to begin with, Tanh-Sinh quadrature will still work well.
-    Otherwise, Gauss-Legendre quadrature can outperform Tanh-Sinh.
-
-    Parameters
-    ----------
-    x : Array
-
-    Returns
-    -------
-    dy_dx : Array
-
-    """
+    """Gradient of sin automorphism."""
     dy_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
     return dy_dx
+
+
+grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 
 
 def bounce_integral_map(
@@ -801,8 +730,7 @@ def bounce_integral_map(
     alpha=None,
     knots=jnp.linspace(0, 6 * jnp.pi, 20),
     quad=tanh_sinh_quad,
-    automorphism=automorphism_sin,
-    grad_automorphism=grad_automorphism_sin,
+    automorphism=(automorphism_sin, grad_automorphism_sin),
     pitch=None,
     return_items=True,
     **kwargs,
@@ -847,17 +775,16 @@ def bounce_integral_map(
         For the default choice of the automorphism below,
         Tanh-Sinh quadrature works well if the integrand is hypersingular.
         Otherwise, Gauss-Legendre quadrature can be more competitive.
-    automorphism : callable
-        The reverse automorphism of the real interval [-1, 1] defined below.
-        The forward automorphism is composed with the affine bijection
-        that maps the bounce points to [-1, 1]. The resulting forward map defines
-        a change of variable for the bounce integral. The choice made for
-        the automorphism can augment or suppress singularities.
+    automorphism : callable, callable
+        The first index should store the automorphism of the real interval
+        [-1, 1] defined below. The second index should store the derivative
+        of the map stored in the first index.
+
+        The inverse of the supplied automorphism is composed with the affine
+        bijection hat maps the bounce points to [-1, 1]. The resulting map
+        defines a change of variable for the bounce integral. The choice made
+        for the automorphism can augment or suppress singularities.
         Keep this in mind when choosing the quadrature method.
-    grad_automorphism : callable
-        Derivative of the reverse automorphism, i.e. the derivative of the map
-        ``automorphism``. (Or 1 / derivative of the forward automorphism).
-        May be useful to use automatic differentiation.
     pitch : Array, shape(P, S)
         λ values to evaluate the bounce integral at each field line.
         May be specified later.
@@ -869,7 +796,7 @@ def bounce_integral_map(
     return_items : bool
         Whether to return ``items`` as described below.
     kwargs
-        Can specify additional arguments to the quadrature function with kwargs.
+        Can specify additional arguments to the ``quad`` method with kwargs.
 
     Returns
     -------
@@ -883,13 +810,15 @@ def bounce_integral_map(
             DESC coordinate grid for the given field line coordinates.
         data : dict
             Dictionary of Arrays of stuff evaluated on ``grid``.
-        B.c : Array, shape(4, S, zeta.size - 1)
+        knots : Array,
+            Field line-following ζ coordinates of spline knots.
+        B.c : Array, shape(4, S, knots.size - 1)
             Polynomial coefficients of the spline of |B| in local power basis.
             First axis enumerates the coefficients of power series.
             Second axis enumerates the splines along the field lines.
             Last axis enumerates the polynomials of the spline along a particular
             field line.
-        B_z_ra.c : Array, shape(3, S, zeta.size - 1)
+        B_z_ra.c : Array, shape(3, S, knots.size - 1)
             Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
             First axis enumerates the coefficients of power series.
             Second axis enumerates the splines along the field lines.
@@ -956,10 +885,11 @@ def bounce_integral_map(
     x, w = quad(**kwargs)
     # The gradient of the reverse transformation is the weight function w(x) of
     # the quadrature. Apply weight function for the automorphism.
-    w = w * grad_automorphism(x)
+    auto, grad_auto = automorphism
+    w = w * grad_auto(x)
     # Apply reverse automorphism change of variable to quadrature points.
     # Recall x = forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
-    x = automorphism(x)
+    x = auto(x)
 
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
@@ -980,7 +910,7 @@ def bounce_integral_map(
         destination=-1,
     )
     assert B_c.shape == (4, S, knots.size - 1)
-    B_z_ra_c = poly_der(B_c)
+    B_z_ra_c = _poly_der(B_c)
     assert B_z_ra_c.shape == (3, S, knots.size - 1)
     original = _compute_bp_if_given_pitch(knots, B_c, B_z_ra_c, pitch, check, err=False)
 
@@ -1035,7 +965,7 @@ def bounce_integral_map(
         bp1, bp2, pitch = _compute_bp_if_given_pitch(
             knots, B_c, B_z_ra_c, pitch, check, *original, err=True
         )
-        # # Apply affine change of variable to quadrature points.
+        # Apply affine change of variable to quadrature points.
         Z = _affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
         if not isinstance(f, (list, tuple)):
             f = [f]

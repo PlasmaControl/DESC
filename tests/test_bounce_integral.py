@@ -5,7 +5,6 @@ from functools import partial
 
 import numpy as np
 import pytest
-from interpax import Akima1DInterpolator
 from matplotlib import pyplot as plt
 
 # TODO: can use the one from interpax once .solve() is implemented
@@ -18,6 +17,9 @@ from desc.compute.bounce_integral import (
     _affine_bijection_reverse,
     _bounce_quad,
     _grad_affine_bijection_reverse,
+    _poly_der,
+    _poly_root,
+    _poly_val,
     automorphism_arcsin,
     automorphism_sin,
     bounce_integral_map,
@@ -25,10 +27,6 @@ from desc.compute.bounce_integral import (
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     pitch_of_extrema,
-    poly_der,
-    poly_int,
-    poly_root,
-    poly_val,
     take_mask,
     tanh_sinh_quad,
 )
@@ -136,7 +134,7 @@ def test_poly_root():
     assert np.unique(c.shape).size == c.ndim
     constant = np.broadcast_to(np.arange(c.shape[-1]), c.shape[1:])
     constant = np.stack([constant, constant])
-    root = poly_root(c, constant, sort=True)
+    root = _poly_root(c, constant, sort=True)
 
     for i in range(constant.shape[0]):
         for j in range(c.shape[1]):
@@ -158,7 +156,7 @@ def test_poly_root():
             [0, -6, 11, -2],
         ]
     )
-    root = poly_root(c.T, sort=True, distinct=True)
+    root = _poly_root(c.T, sort=True, distinct=True)
     for j in range(c.shape[0]):
         unique_roots = np.unique(np.roots(c[j]))
         if j == 4:
@@ -171,27 +169,9 @@ def test_poly_root():
         )
     c = np.array([0, 1, -1, -8, 12])
     np.testing.assert_allclose(
-        actual=_filter_not_nan(poly_root(c, sort=True, distinct=True)),
+        actual=_filter_not_nan(_poly_root(c, sort=True, distinct=True)),
         desired=np.unique(np.roots(c)),
     )
-
-
-@pytest.mark.unit
-def test_poly_int():
-    """Test vectorized computation of polynomial primitive."""
-    quintic = 6
-    c = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(c.shape).size == c.ndim
-    constant = np.broadcast_to(np.arange(c.shape[-1]), c.shape[1:])
-    primitive = poly_int(c, k=constant)
-    for j in range(c.shape[1]):
-        for k in range(c.shape[2]):
-            np.testing.assert_allclose(
-                actual=primitive[:, j, k],
-                desired=np.polyint(c[:, j, k], k=constant[j, k]),
-            )
-    assert poly_int(c).shape == primitive.shape, "Failed broadcasting default k."
 
 
 @pytest.mark.unit
@@ -201,7 +181,7 @@ def test_poly_der():
     c = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
     # make sure broadcasting won't hide error in implementation
     assert np.unique(c.shape).size == c.ndim
-    derivative = poly_der(c)
+    derivative = _poly_der(c)
     for j in range(c.shape[1]):
         for k in range(c.shape[2]):
             np.testing.assert_allclose(
@@ -214,7 +194,7 @@ def test_poly_val():
     """Test vectorized computation of polynomial evaluation."""
 
     def test(x, c):
-        val = poly_val(x=x, c=c)
+        val = _poly_val(x=x, c=c)
         for index in np.ndindex(c.shape[1:]):
             idx = (..., *index)
             np.testing.assert_allclose(
@@ -237,21 +217,6 @@ def test_poly_val():
     assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
     assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
     test(x, c)
-
-    # integrate piecewise polynomial and set constants to preserve continuity
-    y = np.arange(2, 8)
-    y = np.arange(y.prod()).reshape(*y)
-    x = np.arange(y.shape[-1])
-    a1d = Akima1DInterpolator(x, y, axis=-1)
-    primitive = poly_int(a1d.c)
-    # choose evaluation points at d just to match choice made in a1d.antiderivative()
-    d = np.diff(x)
-    # evaluate every spline at d
-    k = poly_val(x=d, c=primitive)
-    # don't want to use jax.ndarray.at[].add() in case jax is not installed
-    primitive = np.array(primitive)
-    primitive[-1, 1:] += np.cumsum(k, axis=-1)[:-1]
-    np.testing.assert_allclose(primitive, a1d.antiderivative().c)
 
 
 @pytest.mark.unit
@@ -428,11 +393,23 @@ def test_automorphism():
     np.testing.assert_allclose(
         _affine_bijection_forward(_affine_bijection_reverse(y, a, b), a, b), y
     )
-    np.testing.assert_allclose(
-        _affine_bijection_reverse(_affine_bijection_forward(y, a, b), a, b), y
-    )
     np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y)
     np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y)
+
+    np.testing.assert_allclose(
+        _grad_affine_bijection_reverse(a, b),
+        1 / (2 / (b - a)),
+    )
+    np.testing.assert_allclose(
+        grad_automorphism_sin(y),
+        1 / grad_automorphism_arcsin(automorphism_sin(y)),
+        atol=1e-14,
+    )
+    np.testing.assert_allclose(
+        1 / grad_automorphism_arcsin(y),
+        grad_automorphism_sin(automorphism_arcsin(y)),
+        atol=1e-14,
+    )
 
 
 @pytest.mark.unit
@@ -443,63 +420,42 @@ def test_bounce_quad():
     truth = 2 * ellipkm1(p)
     rtol = 1e-3
 
-    def reverse_arcsin(x, bp1, bp2):
-        return _affine_bijection_reverse(automorphism_arcsin(x), bp1, bp2)
-
-    def grad_reverse_arcsin(x, bp1, bp2):
-        return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_arcsin(x)
-
-    def reverse_sin(x, bp1, bp2):
-        return _affine_bijection_reverse(automorphism_sin(x), bp1, bp2)
-
-    def grad_reverse_sin(x, bp1, bp2):
-        return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_sin(x)
-
-    knots = np.linspace(-np.pi / 2, np.pi / 2, 10)
-    bp1, bp2 = knots[0], knots[-1]
+    bp1 = -np.pi / 2
+    bp2 = -bp1
+    knots = np.linspace(bp1, bp2, 15)
     B_sup_z = np.ones((1, knots.size))
-    B = np.sin(knots).reshape(1, -1)
-    B_z_ra = np.cos(knots).reshape(1, -1)
+    B = np.reshape(np.sin(knots) ** 2, (1, -1))
+    B_z_ra = np.sin(2 * knots).reshape(1, -1)
     pitch = np.ones((1, 1))
-    method = "akima"
-
-    # tanh sinh arcsin
-    x_t, w_t = tanh_sinh_quad(18)
-    w_t = w_t * grad_reverse_arcsin(x_t, bp1, bp2)
-    z_t = reverse_arcsin(x_t, bp1, bp2)
-    # gauss-legendre sin
-    x_g, w_g = np.polynomial.legendre.leggauss(16)
-    w_g = w_g * grad_reverse_sin(x_g, bp1, bp2)
-    z_g = reverse_sin(x_g, bp1, bp2)
 
     def integrand(B, pitch):
-        return 1 / _sqrt(1 - pitch * m * B**2)
+        return 1 / _sqrt(1 - pitch * m * B)
 
+    def reverse_arcsin(x):
+        return _affine_bijection_reverse(automorphism_arcsin(x), bp1, bp2)
+
+    def grad_reverse_arcsin(x):
+        return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_arcsin(x)
+
+    def reverse_sin(x):
+        return _affine_bijection_reverse(automorphism_sin(x), bp1, bp2)
+
+    def grad_reverse_sin(x):
+        return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_sin(x)
+
+    x_t, w_t = tanh_sinh_quad(18, grad_reverse_arcsin)
+    z_t = reverse_arcsin(x_t).reshape(1, 1, 1, -1)
     tanh_sinh_arcsin = _bounce_quad(
-        z_t.reshape(1, 1, 1, -1),
-        w_t,
-        knots,
-        B_sup_z,
-        B,
-        B_z_ra,
-        integrand,
-        [],
-        pitch,
-        method,
-    )
-    leg_gauss_sin = _bounce_quad(
-        z_g.reshape(1, 1, 1, -1),
-        w_g,
-        knots,
-        B_sup_z,
-        B,
-        B_z_ra,
-        integrand,
-        [],
-        pitch,
-        method,
+        z_t, w_t, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
     )
     np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
+
+    x_g, w_g = np.polynomial.legendre.leggauss(16)
+    w_g = w_g * grad_reverse_sin(x_g)
+    z_g = reverse_sin(x_g).reshape(1, 1, 1, -1)
+    leg_gauss_sin = _bounce_quad(
+        z_g, w_g, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
+    )
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
 
 

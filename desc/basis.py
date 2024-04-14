@@ -2169,9 +2169,8 @@ class FiniteElementMesh3D_scikit:
                 coordinate_matrix[index][j] = L[j]
         return coordinate_matrix
 
-        """
-        Partial pseudo-code for incorporating basis functions
-
+    """ def get_basis_functions(self, rho_theta_zeta, K):
+        Partial pseudo-code for incorporating basis functions.
 
     if K == 1:
         if node == 0:
@@ -2532,8 +2531,12 @@ class FiniteElementMesh2D:
 
             return L_b
 
+    # Will reduce complexity by writing two separate functions
+    # for writing basis functions, then computing matrix.
+
+    """
     def get_basis_functions(self, rho_theta, K=1):
-        """Gets the barycentric basis functions.
+        Gets the barycentric basis functions.
 
         Return the triangle basis functions, evaluated at the 2D rho
         and theta mesh points provided to the function.
@@ -2548,137 +2551,80 @@ class FiniteElementMesh2D:
         Returns
         -------
         psi_q : (rho_theta, Q)
-        """
+
+
+        L_b = self.get_barycentric_coordinates(rho_theta, K)
+
         if K == 1:
 
-            # As a reminder, with this linear case,
-            # we have two finite elements: {(0,0), (1,0), (0,1)},
-            # and {(1,0), (0,1), (1,1)}
-            # We label (1,0) as node 0, (0,1) as node 1,
-            # (1,0) as node 2, and (1,1) as node 3
-
-            # Use mesh = fem.MeshTri1()
-            # We can use nodes = mesh.doflocs
-
-            # use barycentric coordinate transformation to get 4 x 3
-            # array of barycentric coordinates for the 4 nodes
-            # Use L_b = get_barycentric_coordinates(rho_theta, 1)
-
-            # Construct output matrix:
-            # Using this for now:
-
-            L_b = np.ones([4, 3])
+            As a reminder, with this linear case,
+                # we have two finite elements: {(0,0), (1,0), (0,1)},
+                # and {(1,0), (0,1), (1,1)}
+                # We label (1,0) as node 0, (0,1) as node 1,
+                # (1,0) as node 2, and (1,1) as node 3
 
             psi_q = np.zeros(4, 4)
 
             for i in range(4):
                 for j in range(4):
                     if i == 0:
-
                         def f(x, y):
                             return x
-
                         psi_q[i][j] = f(L_b[i][0], L_b[i][1])
-
                     if i == 1:
-
                         def f(x, y):
                             return y
-
                         psi_q[i][j] = f(L_b[i][0], L_b[i][1])
-
-                    if i == 2:
-
-                        def f(x, y, z):
+                    if i == 2 or i == 3:
+                        def f(x, y):
                             return 1 - x - y
-
                         psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+            return psi_q
 
-                    if i == 3:
 
-                        def f(x, y, z):
-                            return 1 - x - y
-
-                        psi_q[i][j] = f(L_b[i][0], L_b[i][1])
-
-                return psi_q
-
-            """
 
         if K == 2:
-            # Using this for now:
 
-            L_b = np.ones([10,3])
+            psi_q = np.zeros(9,9)
 
-            # Use mesh = fem.MeshTri2()
-            # Use nodes = mesh.doflocs
-
-            # use barycentric coordinate transformation to get
-            # 10 x 3 array of barycentric coordinates for the 4 nodes
-            # use L_b = get_barycentric_coordinates(rho_theta, 2)
-
-
-
-
-            # Construct output matrix:
-
-            psi_q = np.zeros(4,4)
-
-            for i in range(4):
-                for j in range(4):
-                    if i == 0:
+            for i in range(9):
+                for j in range(9):
+                    if i == 0 or i == 4:
                         def f(x,y):
-                            return x
+                            return (2*y-1)*y
 
                         psi_q[i][j] = f(L_b[i][0],L_b[i][1])
 
-
-                    if i == 1:
+                    if i == 1 or i == 3:
                         def f(x,y):
-                            return y
-
+                            return 4*x*y
 
                         psi_q[i][j] = f(L_b[i][0],L_b[i][1])
-
 
                     if i == 2:
-                        def f(x,y,z):
-                            return 1-x-y
+                        def f(x,y):
+                            return (2*x-1)*x
 
                         psi_q[i][j] = f(L_b[i][0],L_b[i][1])
 
+                    if i == 5 or i == 7:
 
-                    if i == 3:
-
-                        def f(x,y,z):
-                            return 1-x-y
+                        def f(x,y):
+                            return 4*y*(1-x-y)
 
                         psi_q[i][j] = f(L_b[i][0],L_b[i][1])
 
-                return psi_q
-        """
-        """
+                    if i == 6:
 
-        if K == 2:
-            if node == 0:
-                def f(x,y):
-                    return (2*x-1)*x
-            if node == 1:
-                def f(x,y):
-                    return (2*y-1)*y
-            if node == 2:
-                def f(x,y):
-                    return (2*(1-x-y)-1)*(1-x-y)
-            if node == 3:
-                def f(x,y):
-                    return 4*x*y
-            if node == 4:
-                def f(x,y):
-                    return 4*y*(1-x-y)
-            if node == 5:
-                def f(x,y):
-                    return 4*x*(1-x-y)
+                        def f(x,y):
+                            return (2*(1-x-y)-1)*(1-x-y)
 
+                    if i == 8:
+
+                        def f(x,y):
+                            return 4*x*(1-x-y)
+
+            return psi_q
 
         if K == 3:
             if node == 0:
@@ -2712,7 +2658,9 @@ class FiniteElementMesh2D:
                 def f(x,y):
                     return 27*x*y*(1-x-y)
 
-        """
+
+
+    """
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""

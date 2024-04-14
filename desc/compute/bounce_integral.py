@@ -616,7 +616,7 @@ def tanh_sinh_quad(resolution, w=lambda x: 1):
     return x, W
 
 
-bounce_docstring = """w : Array, shape(w.size, )
+_repeated_docstring = """w : Array, shape(w.size, )
         Quadrature weights.
     knots : Array, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
@@ -653,7 +653,7 @@ bounce_docstring = """w : Array, shape(w.size, )
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
 
     """
-delimiter = "Returns"
+_delimiter = "Returns"
 
 
 _interp1d_vec = jnp.vectorize(
@@ -694,7 +694,7 @@ def _interpolating_quadrature(
     Returns
     -------
     inner_product : Array, shape(Z.shape[:-1])
-        Bounce quadrature for every pitch along every field line.
+        Quadrature for every pitch along every field line.
 
     """
     assert pitch.ndim == 2
@@ -718,7 +718,7 @@ def _interpolating_quadrature(
 
 
 _interpolating_quadrature.__doc__ = _interpolating_quadrature.__doc__.replace(
-    delimiter, bounce_docstring + delimiter, 1
+    _delimiter, _repeated_docstring + _delimiter, 1
 )
 
 
@@ -774,7 +774,7 @@ def _bounce_quadrature(
 
 
 _bounce_quadrature.__doc__ = _bounce_quadrature.__doc__.replace(
-    delimiter, bounce_docstring + delimiter, 1
+    _delimiter, _repeated_docstring + _delimiter, 1
 )
 
 

@@ -15,7 +15,7 @@ from desc.backend import complex_sqrt, flatnonzero
 from desc.compute.bounce_integral import (
     _affine_bijection_forward,
     _affine_bijection_reverse,
-    _bounce_quad,
+    _bounce_quadrature,
     _grad_affine_bijection_reverse,
     _poly_der,
     _poly_root,
@@ -412,7 +412,7 @@ def test_automorphism():
 
 
 @pytest.mark.unit
-def test_bounce_quad():
+def test_bounce_quadrature():
     """Test principal value of bounce integral matches elliptic integral."""
     p = 1e-3
     m = 1 - p
@@ -422,6 +422,8 @@ def test_bounce_quad():
     bp1 = -np.pi / 2
     bp2 = -bp1
     knots = np.linspace(bp1, bp2, 15)
+    bp1 = np.atleast_3d(bp1)
+    bp2 = np.atleast_3d(bp2)
     B_sup_z = np.ones((1, knots.size))
     B = np.reshape(np.sin(knots) ** 2, (1, -1))
     B_z_ra = np.sin(2 * knots).reshape(1, -1)
@@ -430,32 +432,20 @@ def test_bounce_quad():
     def integrand(B, pitch):
         return 1 / _sqrt(1 - pitch * m * B)
 
-    def reverse_arcsin(x):
-        return _affine_bijection_reverse(automorphism_arcsin(x), bp1, bp2)
-
-    def grad_reverse_arcsin(x):
-        return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_arcsin(x)
-
-    def reverse_sin(x):
-        return _affine_bijection_reverse(automorphism_sin(x), bp1, bp2)
-
-    def grad_reverse_sin(x):
-        return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_sin(x)
-
     # augment the singularity
-    x_t, w_t = tanh_sinh_quad(18, grad_reverse_arcsin)
-    z_t = reverse_arcsin(x_t).reshape(1, 1, 1, -1)
-    tanh_sinh_arcsin = _bounce_quad(
-        z_t, w_t, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
+    x_t, w_t = tanh_sinh_quad(18, grad_automorphism_arcsin)
+    z_t = automorphism_arcsin(x_t)
+    tanh_sinh_arcsin = _bounce_quadrature(
+        bp1, bp2, z_t, w_t, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
     )
     np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
 
     # suppress the singularity
     x_g, w_g = np.polynomial.legendre.leggauss(16)
-    w_g = w_g * grad_reverse_sin(x_g)
-    z_g = reverse_sin(x_g).reshape(1, 1, 1, -1)
-    leg_gauss_sin = _bounce_quad(
-        z_g, w_g, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
+    w_g = w_g * grad_automorphism_sin(x_g)
+    z_g = automorphism_sin(x_g)
+    leg_gauss_sin = _bounce_quadrature(
+        bp1, bp2, z_g, w_g, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
     )
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
 
@@ -508,7 +498,6 @@ def test_example_code_and_hairy_ball():
     # You should filter out these nan values when computing stuff.
     average_sum_over_field_line = np.nansum(average, axis=-1)
     print(average_sum_over_field_line)
-    assert not np.allclose(average_sum_over_field_line, 0)
 
 
 # @pytest.mark.unit

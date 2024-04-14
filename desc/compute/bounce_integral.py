@@ -7,6 +7,7 @@ from interpax import CubicHermiteSpline, interp1d
 from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take
 from desc.compute.utils import safediv
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
+from desc.utils import errorif
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={2, 3})
@@ -288,23 +289,24 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
         If two-dimensional, the first axis is the batch axis as usual.
 
     """
+    errorif(knots.ndim != 1)
     if B_c.ndim == 2 and B_z_ra_c.ndim == 2:
         # Add axis which enumerates field lines.
         B_c = B_c[:, jnp.newaxis]
         B_z_ra_c = B_z_ra_c[:, jnp.newaxis]
-    err_msg = "Supplied invalid shape for splines."
-    assert B_c.ndim == B_z_ra_c.ndim == 3, err_msg
-    assert (
-        B_c.shape[0] - 1 == B_z_ra_c.shape[0] and B_c.shape[1:] == B_z_ra_c.shape[1:]
-    ), err_msg
-    assert (
-        B_c.shape[-1] == knots.size - 1
-    ), "Last axis fails to enumerate spline polynomials."
+    msg = "Supplied invalid shape for splines."
+    errorif(not (B_c.ndim == B_z_ra_c.ndim == 3), msg=msg)
+    errorif(B_c.shape[0] - 1 != B_z_ra_c.shape[0], msg=msg)
+    errorif(B_c.shape[1:] != B_z_ra_c.shape[1:], msg=msg)
+    errorif(
+        B_c.shape[-1] != knots.size - 1,
+        msg="Last axis fails to enumerate spline polynomials.",
+    )
     if pitch is not None:
         pitch = jnp.atleast_2d(pitch)
-        err_msg = "Supplied invalid shape for pitch angles."
-        assert pitch.ndim == 2, err_msg
-        assert pitch.shape[-1] == 1 or pitch.shape[-1] == B_c.shape[1], err_msg
+        msg = "Supplied invalid shape for pitch angles."
+        errorif(pitch.ndim != 2, msg=msg)
+        errorif(pitch.shape[-1] != 1 and pitch.shape[-1] != B_c.shape[1], msg=msg)
     return B_c, B_z_ra_c, pitch
 
 
@@ -455,13 +457,16 @@ def bounce_points(knots, B_c, B_z_ra_c, pitch, check=False):
     bp2 = take_mask(intersect, is_bp2)
 
     if check:
-        if jnp.any(bp1 > bp2):
-            raise AssertionError("Bounce points have an inversion.")
-        if jnp.any(bp1[..., 1:] < bp2[..., :-1]):
-            raise AssertionError(
-                "Discontinuity detected. Is B_z_ra the derivative of the spline of B?"
-            )
-
+        errorif(
+            jnp.any(bp1 > bp2),
+            AssertionError,
+            "Bounce points have an inversion. Maybe create an issue on GitHub.",
+        )
+        errorif(
+            jnp.any(bp1[..., 1:] < bp2[..., :-1]),
+            AssertionError,
+            "Discontinuity detected. Is B_z_ra the derivative of the spline of B?",
+        )
     return bp1, bp2
     # This is no longer implemented at the moment.
     #   If the first intersect is at a non-negative derivative, that particle
@@ -478,155 +483,6 @@ def bounce_points(knots, B_c, B_z_ra_c, pitch, check=False):
     #   |B|(knots[-1] < ζ < knots[-1] + knots[0]) is close to |B|(0 < ζ < knots[0]).
     #   We don't need to check conditions for the latter, because if they are not
     #   satisfied, the quadrature will evaluate √(1 − λ |B|) as nan automatically.
-
-
-def _compute_bp_if_given_pitch(
-    knots, B_c, B_z_ra_c, pitch, check, *original, err=False
-):
-    """Conditionally return the ingredients needed to compute bounce integrals.
-
-    Parameters
-    ----------
-    original : tuple
-        Whatever this method returned earlier.
-    err : bool
-        Whether to raise an error if ``pitch`` is None and ``original`` is empty.
-
-    """
-    if pitch is None:
-        if err and not original:
-            raise ValueError("No pitch values were given.")
-        return original
-    else:
-        pitch = jnp.atleast_2d(pitch)
-        return *bounce_points(knots, B_c, B_z_ra_c, pitch, check), pitch
-
-
-def tanh_sinh_quad(resolution, w=lambda x: 1):
-    """Tanh-Sinh quadrature.
-
-    Returns quadrature points xₖ and weights Wₖ for the approximate evaluation
-    of the integral ∫₋₁¹ w(x) f(x) dx ≈ ∑ₖ Wₖ f(xₖ).
-
-    Parameters
-    ----------
-    resolution: int
-        Number of quadrature points.
-    w : callable
-        Weight function defined, positive, and continuous on (-1, 1).
-
-    Returns
-    -------
-    x : Array
-        Quadrature points.
-    W : Array
-        Quadrature weights.
-
-    """
-    # boundary of integral
-    x_max = jnp.array(1.0)
-    # subtract machine epsilon with buffer for floating point error
-    x_max = x_max - 10 * jnp.finfo(x_max).eps
-    # inverse of tanh-sinh transformation
-    t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
-    kh = jnp.linspace(-t_max, t_max, resolution)
-    h = 2 * t_max / (resolution - 1)
-    arg = 0.5 * jnp.pi * jnp.sinh(kh)
-    x = jnp.tanh(arg)
-    # weights for Tanh-Sinh quadrature ∫₋₁¹ f(x) dx ≈ ∑ₖ ωₖ f(xₖ)
-    W = 0.5 * jnp.pi * h * jnp.cosh(kh) / jnp.cosh(arg) ** 2
-    W = W * w(x)
-    return x, W
-
-
-_interp1d_vec = jnp.vectorize(
-    interp1d,
-    signature="(m),(n),(n)->(m)",
-    excluded={"method", "derivative", "extrap", "period"},
-)
-
-
-@partial(
-    jnp.vectorize,
-    signature="(m),(n),(n),(n)->(m)",
-    excluded={"method", "derivative", "extrap", "period"},
-)
-def _interp1d_vec_with_df(
-    xq,
-    x,
-    f,
-    fx,
-    method="cubic",
-    derivative=0,
-    extrap=False,
-    period=None,
-):
-    return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
-
-
-def _bounce_quad(Z, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method="akima"):
-    """Compute bounce quadrature for every pitch along every field line.
-
-    Parameters
-    ----------
-    Z : Array, shape(P, S, Z.shape[2], w.size)
-        Quadrature points at field line-following ζ coordinates.
-    w : Array, shape(w.size, )
-        Quadrature weights.
-    knots : Array, shape(knots.size, )
-        Field line-following ζ coordinates of spline knots.
-    B_sup_z : Array, shape(S, knots.size, )
-        Contravariant field-line following toroidal component of magnetic field.
-    B : Array, shape(S, knots.size, )
-        Norm of magnetic field.
-    B_z_ra : Array, shape(S, knots.size, )
-        Norm of magnetic field derivative with respect to field-line following label.
-    integrand : callable
-        This callable is the composition operator on the set of functions in ``f``
-        that maps the functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ.
-        It should accept the items in ``f`` as arguments as well as two additional
-        keyword arguments: ``B``, and ``pitch``. A quadrature will be performed to
-        approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
-        Note that any arrays baked into the callable method should broadcast
-        with arrays of shape(P, S, 1, 1).
-    f : iterable of Array, shape(P, S, knots.size, )
-        Arguments to the callable ``integrand``.
-        These should be the functions in the integrand of the bounce integral
-        evaluated (or interpolated to) the nodes of the returned desc
-        coordinate grid.
-        All items in the list should be two-dimensional. The first axis of
-        that item is interpreted as the batch axis, which enumerates the
-        evaluation of the function at particular pitch values.
-    pitch : Array, shape(P, S)
-        λ values.
-    method : str
-        Method of interpolation for functions contained in ``f``.
-        See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
-
-    Returns
-    -------
-    inner_product : Array, shape(Z.shape[:-1])
-        Bounce quadrature for every pitch along every field line.
-
-    """
-    assert pitch.ndim == 2
-    assert w.ndim == knots.ndim == 1
-    assert Z.shape == (pitch.shape[0], B.shape[0], Z.shape[2], w.size)
-    assert knots.size == B.shape[-1]
-    assert B_sup_z.shape == B.shape == B_z_ra.shape
-    # Spline the integrand so that we can evaluate it at quadrature points
-    # without expensive coordinate mappings and root finding.
-    # Spline each function separately so that the singularity near the bounce
-    # points can be captured more accurately than can be by any polynomial.
-    shape = Z.shape
-    Z = Z.reshape(Z.shape[0], Z.shape[1], -1)
-    f = [_interp1d_vec(Z, knots, ff, method=method).reshape(shape) for ff in f]
-    B_sup_z = _interp1d_vec(Z, knots, B_sup_z, method=method).reshape(shape)
-    # Specify derivative at knots for ≈ cubic hermite interpolation.
-    B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method="cubic").reshape(shape)
-    pitch = pitch[..., jnp.newaxis, jnp.newaxis]
-    inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch) / B_sup_z, w)
-    return inner_product
 
 
 def _affine_bijection_forward(x, a, b):
@@ -723,6 +579,205 @@ def grad_automorphism_sin(x):
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 
 
+def tanh_sinh_quad(resolution, w=lambda x: 1):
+    """Tanh-Sinh quadrature.
+
+    Returns quadrature points xₖ and weights Wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ w(x) f(x) dx ≈ ∑ₖ Wₖ f(xₖ).
+
+    Parameters
+    ----------
+    resolution: int
+        Number of quadrature points.
+    w : callable
+        Weight function defined, positive, and continuous on (-1, 1).
+
+    Returns
+    -------
+    x : Array
+        Quadrature points.
+    W : Array
+        Quadrature weights.
+
+    """
+    # boundary of integral
+    x_max = jnp.array(1.0)
+    # subtract machine epsilon with buffer for floating point error
+    x_max = x_max - 10 * jnp.finfo(x_max).eps
+    # inverse of tanh-sinh transformation
+    t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
+    kh = jnp.linspace(-t_max, t_max, resolution)
+    h = 2 * t_max / (resolution - 1)
+    arg = 0.5 * jnp.pi * jnp.sinh(kh)
+    x = jnp.tanh(arg)
+    # weights for Tanh-Sinh quadrature ∫₋₁¹ f(x) dx ≈ ∑ₖ ωₖ f(xₖ)
+    W = 0.5 * jnp.pi * h * jnp.cosh(kh) / jnp.cosh(arg) ** 2
+    W = W * w(x)
+    return x, W
+
+
+bounce_docstring = """w : Array, shape(w.size, )
+        Quadrature weights.
+    knots : Array, shape(knots.size, )
+        Field line-following ζ coordinates of spline knots.
+    B_sup_z : Array, shape(S, knots.size, )
+        Contravariant field-line following toroidal component of magnetic field.
+    B : Array, shape(S, knots.size, )
+        Norm of magnetic field.
+    B_z_ra : Array, shape(S, knots.size, )
+        Norm of magnetic field derivative with respect to field-line following label.
+    integrand : callable
+        This callable is the composition operator on the set of functions in ``f``
+        that maps the functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ.
+        It should accept the items in ``f`` as arguments as well as two additional
+        keyword arguments: ``B``, and ``pitch``. A quadrature will be performed to
+        approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
+        Note that any arrays baked into the callable method should broadcast
+        with arrays of shape(P, S, 1, 1) where
+            P is the batch axis size of pitch.
+            S is the number of field lines.
+    f : iterable of Array, shape(P, S, knots.size, )
+        Arguments to the callable ``integrand``.
+        These should be the functions in the integrand of the bounce integral
+        evaluated (or interpolated to) the nodes of the returned desc
+        coordinate grid.
+    pitch : Array, shape(P, S)
+        λ values to evaluate the bounce integral at each field line.
+        Last axis enumerates the λ value for a particular field line parameterized
+        by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
+        where in the latter the labels (ρ, α) are interpreted as index into the
+        last axis that corresponds to that field line.
+        The first axis is the batch axis as usual.
+    method : str
+        Method of interpolation for functions contained in ``f``.
+        See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
+
+    """
+delimiter = "Returns"
+
+
+_interp1d_vec = jnp.vectorize(
+    interp1d,
+    signature="(m),(n),(n)->(m)",
+    excluded={"method", "derivative", "extrap", "period"},
+)
+
+
+@partial(
+    jnp.vectorize,
+    signature="(m),(n),(n),(n)->(m)",
+    excluded={"method", "derivative", "extrap", "period"},
+)
+def _interp1d_vec_with_df(
+    xq,
+    x,
+    f,
+    fx,
+    method="cubic",
+    derivative=0,
+    extrap=False,
+    period=None,
+):
+    return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
+
+
+def _interpolating_quadrature(
+    Z, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method
+):
+    """Interpolate given functions to points Z and perform quadrature.
+
+    Parameters
+    ----------
+    Z : Array, shape(P, S, Z.shape[2], w.size)
+        Quadrature points at field line-following ζ coordinates.
+
+    Returns
+    -------
+    inner_product : Array, shape(Z.shape[:-1])
+        Bounce quadrature for every pitch along every field line.
+
+    """
+    assert pitch.ndim == 2
+    assert w.ndim == knots.ndim == 1
+    assert Z.shape == (pitch.shape[0], B.shape[0], Z.shape[2], w.size)
+    assert knots.size == B.shape[-1]
+    assert B_sup_z.shape == B.shape == B_z_ra.shape
+    # Spline the integrand so that we can evaluate it at quadrature points
+    # without expensive coordinate mappings and root finding.
+    # Spline each function separately so that the singularity near the bounce
+    # points can be captured more accurately than can be by any polynomial.
+    shape = Z.shape
+    Z = Z.reshape(Z.shape[0], Z.shape[1], -1)
+    f = [_interp1d_vec(Z, knots, ff, method=method).reshape(shape) for ff in f]
+    B_sup_z = _interp1d_vec(Z, knots, B_sup_z, method=method).reshape(shape)
+    # Specify derivative at knots for ≈ cubic hermite interpolation.
+    B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method="cubic").reshape(shape)
+    pitch = pitch[..., jnp.newaxis, jnp.newaxis]
+    inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch) / B_sup_z, w)
+    return inner_product
+
+
+_interpolating_quadrature.__doc__ = _interpolating_quadrature.__doc__.replace(
+    delimiter, bounce_docstring + delimiter, 1
+)
+
+
+def _bounce_quadrature(
+    bp1, bp2, x, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch=None, method="akima"
+):
+    """Bounce integrate ∫ f(ℓ) dℓ.
+
+    Parameters
+    ----------
+    bp1, bp2 : Array, Array, shape(P, S, -1)
+        The field line-following ζ coordinates of bounce points for a given pitch
+        along a field line. The pairs bp1[i, j, k] and bp2[i, j, k] form left
+        and right integration boundaries, respectively, for the bounce integrals.
+    x : Array, shape(w.size, )
+        Quadrature points in [-1, 1].
+
+    Returns
+    -------
+    result : Array, shape(P, S, -1)
+        First axis enumerates pitch values. Second axis enumerates the field
+        lines. Last axis enumerates the bounce integrals.
+
+    """
+    errorif(x.ndim != 1 or x.shape != w.shape)
+    errorif(bp1.ndim != 3 or bp1.shape != bp2.shape)
+    pitch = jnp.atleast_2d(pitch)
+
+    S = B.shape[0]
+    if not isinstance(f, (list, tuple)):
+        f = [f]
+
+    def _group_grid_data_by_field_line(g):
+        errorif(
+            g.ndim > 2,
+            ValueError,
+            "Should have at most two dimensions, in which case the first axis"
+            " is interpreted as the batch axis, which enumerates the evaluation"
+            " of the function at particular pitch values.",
+        )
+        return g.reshape(-1, S, knots.size)
+
+    f = map(_group_grid_data_by_field_line, f)
+
+    # Apply affine transformation to quadrature points.
+    Z = _affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
+    # Integrate and complete the change of variable.
+    result = _interpolating_quadrature(
+        Z, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method
+    ) * _grad_affine_bijection_reverse(bp1, bp2)
+    assert result.shape == (pitch.shape[0], S, bp1.shape[-1])
+    return result
+
+
+_bounce_quadrature.__doc__ = _bounce_quadrature.__doc__.replace(
+    delimiter, bounce_docstring + delimiter, 1
+)
+
+
 def bounce_integral_map(
     eq,
     rho=jnp.linspace(1e-12, 1, 10),
@@ -730,7 +785,6 @@ def bounce_integral_map(
     knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 25),
     quad=tanh_sinh_quad,
     automorphism=(automorphism_sin, grad_automorphism_sin),
-    pitch=None,
     return_items=True,
     **kwargs,
 ):
@@ -775,23 +829,13 @@ def bounce_integral_map(
         Tanh-Sinh quadrature works well if the integrand is hypersingular.
         Otherwise, Gauss-Legendre quadrature can be more competitive.
     automorphism : callable, callable
-        The first index should store the automorphism of the real interval
-        [-1, 1] defined below. The second index should store the derivative
-        of the map stored in the first index.
-
+        The first callable should be an automorphism of the real interval [-1, 1].
+        The second callable should be the derivative of the first.
         The inverse of the supplied automorphism is composed with the affine
         bijection that maps the bounce points to [-1, 1]. The resulting map
         defines a change of variable for the bounce integral. The choice made
         for the automorphism can augment or suppress singularities.
         Keep this in mind when choosing the quadrature method.
-    pitch : Array, shape(P, S)
-        λ values to evaluate the bounce integral at each field line.
-        May be specified later.
-        Last axis enumerates the λ value for a particular field line parameterized
-        by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
-        where in the latter the labels (ρ, α) are interpreted as index into the
-        last axis that corresponds to that field line.
-        If two-dimensional, the first axis is the batch axis as usual.
     return_items : bool
         Whether to return ``items`` as described below.
     kwargs
@@ -801,7 +845,7 @@ def bounce_integral_map(
     -------
     bounce_integral : callable
         This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
-        specified field line ℓ (constant rho and alpha), for every λ value in ``pitch``.
+        specified field line ℓ (constant rho, alpha), for every λ value in ``pitch``.
     items : dict
         grid_fl : Grid
             Clebsch-Type field-line coordinate grid.
@@ -874,7 +918,6 @@ def bounce_integral_map(
         # You should filter out these nan values when computing stuff.
         average_sum_over_field_line = jnp.nansum(average, axis=-1)
         print(average_sum_over_field_line)
-        assert not jnp.allclose(average_sum_over_field_line, 0)
 
     """
     check = kwargs.pop("check", False)
@@ -882,8 +925,7 @@ def bounce_integral_map(
     if quad == tanh_sinh_quad:
         kwargs.setdefault("resolution", 19)
     x, w = quad(**kwargs)
-    # The gradient of the reverse transformation is the weight function w(x) of
-    # the quadrature.
+    # The gradient of the transformation is the weight function w(x) of the integral.
     auto, grad_auto = automorphism
     w = w * grad_auto(x)
     # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
@@ -898,11 +940,13 @@ def bounce_integral_map(
     # number of field lines or splines
     S = rho.size * alpha.size
 
+    # Compute |B| and group data along field lines.
     grid_fl, grid_desc, data = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
     data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc, data=data)
     B_sup_z = data["B^zeta"].reshape(S, knots.size)
     B = data["|B|"].reshape(S, knots.size) / normalize
     B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size) / normalize
+    # Compute spline of |B| along field lines.
     B_c = jnp.moveaxis(
         CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c,
         source=1,
@@ -911,13 +955,8 @@ def bounce_integral_map(
     assert B_c.shape == (4, S, knots.size - 1)
     B_z_ra_c = _poly_der(B_c)
     assert B_z_ra_c.shape == (3, S, knots.size - 1)
-    original = _compute_bp_if_given_pitch(knots, B_c, B_z_ra_c, pitch, check, err=False)
 
-    def _group_grid_data_by_field_line(f):
-        assert f.ndim <= 2, "See the docstring below."
-        return f.reshape(-1, S, knots.size)
-
-    def bounce_integral(integrand, f, pitch=None, method="akima"):
+    def bounce_integral(integrand, f, pitch, method="akima"):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
         Parameters
@@ -930,19 +969,18 @@ def bounce_integral_map(
             approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
             Note that any arrays baked into the callable method should broadcast
             with arrays of shape(P, S, 1, 1) where
-                P is the batch axis size of pitch,
-                S is the number of field lines given by ``rho.size * alpha.size``.
-        f : list of Array, shape(P, items["grid_desc"].num_nodes, )
+                P is the batch axis size of pitch.
+                S is the number of field lines.
+        f : iterable of Array, shape(P, items["grid_desc"].num_nodes, )
             Arguments to the callable ``integrand``.
             These should be the functions in the integrand of the bounce integral
             evaluated (or interpolated to) the nodes of the returned desc
             coordinate grid.
-            If an item in the list is two-dimensional, the first axis of that
-            item is interpreted as the batch axis, which enumerates the
-            evaluation of the function at particular pitch values.
+            Should have at most two dimensions, in which case the first axis
+            is interpreted as the batch axis, which enumerates the evaluation
+            of the function at particular pitch values.
         pitch : Array, shape(P, S)
             λ values to evaluate the bounce integral at each field line.
-            If None, uses the values given to the parent function.
             Last axis enumerates the λ value for a particular field line parameterized
             by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
             where in the latter the labels (ρ, α) are interpreted as index into the
@@ -955,25 +993,16 @@ def bounce_integral_map(
 
         Returns
         -------
-        result : Array, shape(P, S, (zeta.size - 1) * 3)
-            First axis enumerates pitch values.
-            Second axis enumerates the field lines.
-            Last axis enumerates the bounce integrals.
+        result : Array, shape(P, S, (knots.size - 1) * 3)
+            First axis enumerates pitch values. Second axis enumerates the field
+            lines. Last axis enumerates the bounce integrals.
 
         """
-        bp1, bp2, pitch = _compute_bp_if_given_pitch(
-            knots, B_c, B_z_ra_c, pitch, check, *original, err=True
+        bp1, bp2 = bounce_points(knots, B_c, B_z_ra_c, pitch, check)
+        result = _bounce_quadrature(
+            bp1, bp2, x, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method
         )
-        # Apply affine transformation to quadrature points.
-        Z = _affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
-        if not isinstance(f, (list, tuple)):
-            f = [f]
-        f = map(_group_grid_data_by_field_line, f)
-        # Integrate and complete the change of variable.
-        result = _bounce_quad(
-            Z, w, knots, B_sup_z, B, B_z_ra, integrand, f, pitch, method
-        ) * _grad_affine_bijection_reverse(bp1, bp2)
-        assert result.shape == (pitch.shape[0], S, (knots.size - 1) * 3)
+        assert result.shape[-1] == (knots.size - 1) * 3
         return result
 
     if return_items:

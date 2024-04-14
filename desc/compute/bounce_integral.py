@@ -254,7 +254,6 @@ def _poly_val(x, c):
     # because we expect to usually integrate up to quartic polynomials.
     X = x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1)
     val = jnp.einsum("...i,i...->...", X, c)
-    assert val.ndim == max(x.ndim, c.ndim - 1)
     return val
 
 
@@ -728,7 +727,7 @@ def bounce_integral_map(
     eq,
     rho=jnp.linspace(1e-12, 1, 10),
     alpha=None,
-    knots=jnp.linspace(0, 6 * jnp.pi, 20),
+    knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 25),
     quad=tanh_sinh_quad,
     automorphism=(automorphism_sin, grad_automorphism_sin),
     pitch=None,
@@ -781,7 +780,7 @@ def bounce_integral_map(
         of the map stored in the first index.
 
         The inverse of the supplied automorphism is composed with the affine
-        bijection hat maps the bounce points to [-1, 1]. The resulting map
+        bijection that maps the bounce points to [-1, 1]. The resulting map
         defines a change of variable for the bounce integral. The choice made
         for the automorphism can augment or suppress singularities.
         Keep this in mind when choosing the quadrature method.
@@ -809,7 +808,7 @@ def bounce_integral_map(
         grid_desc : Grid
             DESC coordinate grid for the given field line coordinates.
         data : dict
-            Dictionary of Arrays of stuff evaluated on ``grid``.
+            Dictionary of Arrays of stuff evaluated on ``grid_desc``.
         knots : Array,
             Field line-following ζ coordinates of spline knots.
         B.c : Array, shape(4, S, knots.size - 1)
@@ -884,11 +883,11 @@ def bounce_integral_map(
         kwargs.setdefault("resolution", 19)
     x, w = quad(**kwargs)
     # The gradient of the reverse transformation is the weight function w(x) of
-    # the quadrature. Apply weight function for the automorphism.
+    # the quadrature.
     auto, grad_auto = automorphism
     w = w * grad_auto(x)
-    # Apply reverse automorphism change of variable to quadrature points.
     # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
+    # Apply reverse automorphism to quadrature points.
     x = auto(x)
 
     if alpha is None:
@@ -932,7 +931,7 @@ def bounce_integral_map(
             Note that any arrays baked into the callable method should broadcast
             with arrays of shape(P, S, 1, 1) where
                 P is the batch axis size of pitch,
-                S is the number of field lines given by rho.size * alpha.size.
+                S is the number of field lines given by ``rho.size * alpha.size``.
         f : list of Array, shape(P, items["grid_desc"].num_nodes, )
             Arguments to the callable ``integrand``.
             These should be the functions in the integrand of the bounce integral
@@ -965,7 +964,7 @@ def bounce_integral_map(
         bp1, bp2, pitch = _compute_bp_if_given_pitch(
             knots, B_c, B_z_ra_c, pitch, check, *original, err=True
         )
-        # Apply affine change of variable to quadrature points.
+        # Apply affine transformation to quadrature points.
         Z = _affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
         if not isinstance(f, (list, tuple)):
             f = [f]

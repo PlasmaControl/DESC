@@ -195,6 +195,8 @@ def test_poly_val():
 
     def test(x, c):
         val = _poly_val(x=x, c=c)
+        if val.ndim != max(x.ndim, c.ndim - 1):
+            raise ValueError(f"Incompatible shapes {x.shape} and {c.shape}.")
         for index in np.ndindex(c.shape[1:]):
             idx = (..., *index)
             np.testing.assert_allclose(
@@ -387,12 +389,9 @@ def test_automorphism():
     a, b = -312, 786
     x = np.linspace(a, b, 10)
     y = _affine_bijection_forward(x, a, b)
-    np.testing.assert_allclose(
-        _affine_bijection_reverse(_affine_bijection_forward(x, a, b), a, b), x
-    )
-    np.testing.assert_allclose(
-        _affine_bijection_forward(_affine_bijection_reverse(y, a, b), a, b), y
-    )
+    x_1 = _affine_bijection_reverse(y, a, b)
+    np.testing.assert_allclose(x_1, x)
+    np.testing.assert_allclose(_affine_bijection_forward(x_1, a, b), y)
     np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y)
     np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y)
 
@@ -443,6 +442,7 @@ def test_bounce_quad():
     def grad_reverse_sin(x):
         return _grad_affine_bijection_reverse(bp1, bp2) * grad_automorphism_sin(x)
 
+    # augment the singularity
     x_t, w_t = tanh_sinh_quad(18, grad_reverse_arcsin)
     z_t = reverse_arcsin(x_t).reshape(1, 1, 1, -1)
     tanh_sinh_arcsin = _bounce_quad(
@@ -450,6 +450,7 @@ def test_bounce_quad():
     )
     np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
 
+    # suppress the singularity
     x_g, w_g = np.polynomial.legendre.leggauss(16)
     w_g = w_g * grad_reverse_sin(x_g)
     z_g = reverse_sin(x_g).reshape(1, 1, 1, -1)
@@ -650,6 +651,7 @@ def test_bounce_averaged_drifts():
     bmag_an = B0 * (1 - epsilon * np.cos(theta_PEST))
     np.testing.assert_allclose(bmag, bmag_an, atol=5e-3, rtol=5e-3)
 
+    # FIXME should x be same as epsilon?
     x = Lref * rho
     s_hat = -x / iota * shear / Lref
     gradpar = Lref * data_bounce["B^zeta"] / data_bounce["|B|"]

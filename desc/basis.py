@@ -2139,10 +2139,10 @@ class FiniteElementMesh3D_scikit:
         """
         if K == 1:
 
-            nodes = fem.MeshTet1.doflocs
+            nodes = fem.MeshTet1().doflocs
 
         if K == 2:
-            nodes = fem.MeshTet2.doflocs
+            nodes = fem.MeshTet2().doflocs
 
         # Rescale theta and zeta rows:
 
@@ -2154,10 +2154,13 @@ class FiniteElementMesh3D_scikit:
             for j in range(4):
                 A[i][j] = nodes[i][j]
 
-        num_nodes = len(nodes[0])
-        coordinate_matrix = np.zeros((num_nodes, 4))
+        # Find which element node is in:
 
-        for index in range(num_nodes):
+        # Standard element
+
+        coordinate_matrix = np.zeros((4, 4))
+
+        for index in range(4):
             X_vec = np.array(
                 [[nodes[0][index]], [nodes[1][index]], [nodes[2][index]], [1]]
             )
@@ -2166,9 +2169,8 @@ class FiniteElementMesh3D_scikit:
                 coordinate_matrix[index][j] = L[j]
         return coordinate_matrix
 
-
-"""
-Partial pseudo-code for incorporating basis functions
+        """
+        Partial pseudo-code for incorporating basis functions
 
 
     if K == 1:
@@ -2301,14 +2303,42 @@ Partial pseudo-code for incorporating basis functions
                 return 27*x*y*(1-x-y-z)
 
 
-"""
+        """
+
+    def integrate(self, f):
+        """Integrates a function over the 3D mesh in (rho, theta, zeta).
+
+        This function allows one to integrate any set of functions of rho, theta
+        zeta over the full 3D mesh. Uses numerical quadrature formula for tetrahedra
+        in the barycentric coordinates.
+
+        Parameters
+        ----------
+        f : 3D ndarray, shape ()
+
+        Returns
+        -------
+        integral: 1D ndarray, shape (num_functions)
+            Value of the integral over the mesh for each component of f
+        """
+        nquad = self.nquad
+        if f.shape[1] > 1:
+            integral = np.zeros(f.shape[1])
+        else:
+            integral = 0.0
+        for i, triangle in enumerate(self.triangles):
+            integral += np.dot(
+                triangle.area2 * self.weights,
+                f[i * nquad : (i + 1) * nquad, :],
+            )
+        return integral / 2.0
 
 
 class FiniteElementMesh2D:
     """Class representing a 2D mesh in (rho, theta).
 
-    This class represents a set of I_2MN = 2MN triangles obtained by tessellation
-    of a UNIFORM rectangular N x M mesh in the (rho, theta) plane.
+    This class represents a set of I_2ML = 2ML triangles obtained by tessellation
+    of a UNIFORM rectangular L x M mesh in the (rho, theta) plane.
     The point of this class is to pre-define all the triangles and their
     associated basis functions so that, given a new point (rho_i, theta_i),
     we can quickly return which triangle contains this point & its associated
@@ -2420,11 +2450,95 @@ class FiniteElementMesh2D:
         self.weights = np.array(weights)
         self.nquad = len(self.integration_points)
 
-    def get_basis_functions(self, theta_zeta, K=1):
+    def get_barycentric_coordinates(self, rho_theta, K=1):
+        """Gets the barycentric coordinates on rho_theta mesh.
+
+        Return the triangle basis functions,
+        evaluated at the 2D rho and theta mesh points.
+
+        Parameters
+        ----------
+        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
+        Coordinates of the original grid, lying inside this triangle.
+
+        Returns
+        -------
+        L_b : (rho_theta, Q)
+        """
+        # Will work on rescaling later
+
+        if K == 1:
+
+            L_b = np.zeros([4, 3])
+
+            mesh = fem.MeshTri1()
+            nodes = mesh.doflocs
+
+            # Left Triangle {(0,0), (1,0), (0,1)}
+
+            A = nodes[:, [0, 1, 2]]
+            O = np.array([1, 1, 1])
+            A = np.vstack((A, O))
+
+            for i in range(3):
+                x_vec = np.array([[nodes[0][i]], [nodes[1][i]], [1]])
+                L_b[i, :] = np.dot((np.linalg.inv(A)), x_vec)
+
+            # Right Triangle {(1,0), (0,1), (1,1)}
+
+            A = nodes[:, [1, 2, 3]]
+            O = np.array([1, 1, 1])
+            A = np.vstack((A, O))
+
+            for i in range(3):
+                x_vec = np.array([[nodes[0][i + 1]], [nodes[1][i + 1]], [1]])
+                L_b[i + 1, :] = np.dot((np.linalg.inv(A)), x_vec)
+
+            return L_b
+
+        if K == 2:
+
+            L_b = np.zeros([10, 3])
+
+            mesh = fem.MeshTri2()
+            nodes = mesh.doflocs
+
+            # Left Triangle {(0,0), (1,0), (0,1), (1/2,0), (0,1/2), (1/2,1/2)}
+
+            A = nodes[:, [0, 1, 2]]
+            O = np.array([1, 1, 1])
+            A = np.vstack((A, O))
+
+            for i in range(3):
+                x_vec = np.array([[nodes[0][i]], [nodes[1][i]], [1]])
+                L_b[i, :] = np.dot((np.linalg.inv(A)), x_vec)
+
+            for i in range(4):
+                x_vec = np.array([[nodes[0][i + 4]], [nodes[1][i + 4]], [1]])
+                L_b[i + 4, :] = np.dot((np.linalg.inv(A)), x_vec)
+
+            # Right Triangle {(1,0), (1/2,1/2), (0,1), (1/2,1), (1,1/2), (1,1)}
+
+            A = nodes[:, [1, 2, 3]]
+            O = np.array([1, 1, 1])
+            A = np.vstack((A, O))
+
+            for i in range(2):
+                x_vec = np.array([[nodes[0][i + 8]], [nodes[1][i + 8]], [1]])
+                L_b[i + 8, :] = np.dot((np.linalg.inv(A)), x_vec)
+
+            x_vec = np.array([[nodes[0][3]], [nodes[1][3]], [1]])
+            L_b[3, :] = np.dot((np.linalg.inv(A)), x_vec)
+
+            return L_b
+
+    def get_basis_functions(self, rho_theta, K=1):
         """Gets the barycentric basis functions.
 
         Return the triangle basis functions, evaluated at the 2D rho
         and theta mesh points provided to the function.
+        Note that the rho and theta
+        mesh points are stored in an array that is (2,)
 
         Parameters
         ----------
@@ -2435,79 +2549,169 @@ class FiniteElementMesh2D:
         -------
         psi_q : (rho_theta, Q)
         """
+        if K == 1:
+
+            # As a reminder, with this linear case,
+            # we have two finite elements: {(0,0), (1,0), (0,1)},
+            # and {(1,0), (0,1), (1,1)}
+            # We label (1,0) as node 0, (0,1) as node 1,
+            # (1,0) as node 2, and (1,1) as node 3
+
+            # Use mesh = fem.MeshTri1()
+            # We can use nodes = mesh.doflocs
+
+            # use barycentric coordinate transformation to get 4 x 3
+            # array of barycentric coordinates for the 4 nodes
+            # Use L_b = get_barycentric_coordinates(rho_theta, 1)
+
+            # Construct output matrix:
+            # Using this for now:
+
+            L_b = np.ones([4, 3])
+
+            psi_q = np.zeros(4, 4)
+
+            for i in range(4):
+                for j in range(4):
+                    if i == 0:
+
+                        def f(x, y):
+                            return x
+
+                        psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+
+                    if i == 1:
+
+                        def f(x, y):
+                            return y
+
+                        psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+
+                    if i == 2:
+
+                        def f(x, y, z):
+                            return 1 - x - y
+
+                        psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+
+                    if i == 3:
+
+                        def f(x, y, z):
+                            return 1 - x - y
+
+                        psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+
+                return psi_q
+
+            """
+
+        if K == 2:
+            # Using this for now:
+
+            L_b = np.ones([10,3])
+
+            # Use mesh = fem.MeshTri2()
+            # Use nodes = mesh.doflocs
+
+            # use barycentric coordinate transformation to get
+            # 10 x 3 array of barycentric coordinates for the 4 nodes
+            # use L_b = get_barycentric_coordinates(rho_theta, 2)
+
+
+
+
+            # Construct output matrix:
+
+            psi_q = np.zeros(4,4)
+
+            for i in range(4):
+                for j in range(4):
+                    if i == 0:
+                        def f(x,y):
+                            return x
+
+                        psi_q[i][j] = f(L_b[i][0],L_b[i][1])
+
+
+                    if i == 1:
+                        def f(x,y):
+                            return y
+
+
+                        psi_q[i][j] = f(L_b[i][0],L_b[i][1])
+
+
+                    if i == 2:
+                        def f(x,y,z):
+                            return 1-x-y
+
+                        psi_q[i][j] = f(L_b[i][0],L_b[i][1])
+
+
+                    if i == 3:
+
+                        def f(x,y,z):
+                            return 1-x-y
+
+                        psi_q[i][j] = f(L_b[i][0],L_b[i][1])
+
+                return psi_q
+        """
         """
 
-            if K == 1:
-               if node == 0:
-                   def f(x,y,z):
-                       return x
-               if node == 1:
-                   def f(x,y,z):
-                       return y
-               if node == 2:
-                   def f(x,y,z):
-                       return z
-               if node == 3:
-                   def f(x,y,z):
-                       return (1-x-y-z)
+        if K == 2:
+            if node == 0:
+                def f(x,y):
+                    return (2*x-1)*x
+            if node == 1:
+                def f(x,y):
+                    return (2*y-1)*y
+            if node == 2:
+                def f(x,y):
+                    return (2*(1-x-y)-1)*(1-x-y)
+            if node == 3:
+                def f(x,y):
+                    return 4*x*y
+            if node == 4:
+                def f(x,y):
+                    return 4*y*(1-x-y)
+            if node == 5:
+                def f(x,y):
+                    return 4*x*(1-x-y)
 
 
-            if K == 2:
-                if node == 0:
-                    def f(x,y):
-                        return (2*x-1)*x
-                if node == 1:
-                    def f(x,y):
-                        return (2*y-1)*y
-                if node == 2:
-                    def f(x,y):
-                        return (2*(1-x-y)-1)*(1-x-y)
-                if node == 3:
-                    def f(x,y):
-                        return 4*x*y
-                if node == 4:
-                   def f(x,y):
-                        return 4*y*(1-x-y)
-                if node == 5:
-                    def f(x,y):
-                        return 4*x*(1-x-y)
+        if K == 3:
+            if node == 0:
+                def f(x,y):
+                    return (1/2)*(3*x-1)*(3*x-2)*x
+            if node == 1:
+                def f(x,y):
+                    return (1/2)*(3*y-1)*(3*y-2)*y
+            if node == 2:
+                def f(x,y):
+                    return (1/2)*(3*(1-x-y)-1)*(3*(1-x-y)-2)*(1-x-y)
+            if node == 3:
+                def f(x,y):
+                    return (9/2)*(x*y*(3*x-1))
+            if node == 4:
+                def f(x,y):
+                    return (9/2)*(x*y*(3*y-1))
+            if node == 5:
+                def f(x,y):
+                    return (9/2)*y*(1-x-y)*(3*y-1)
+            if node == 6:
+                def f(x,y):
+                    return (9/2)*y*(1-x-y)*(3*(1-x-y)-1)
+            if node == 7:
+                def f(x,y):
+                    return (9/2)*x*(1-x-y)*(3*x-1)
+            if node == 8:
+                def f(x,y):
+                    return (9/2)*x*(1-x-y)*(3*(1-x-y)-1)
+            if node == 9:
+                def f(x,y):
+                    return 27*x*y*(1-x-y)
 
-                return f
-
-
-            if K=2:
-                if node == 0:
-                    def f(x,y):
-                        return (1/2)*(3*x-1)*(3*x-2)*x
-                if node == 1:
-                    def f(x,y):
-                        return (1/2)*(3*y-1)*(3*y-2)*y
-                if node == 2:
-                     def f(x,y):
-                         return (1/2)*(3*(1-x-y)-1)*(3*(1-x-y)-2)*(1-x-y)
-                if node == 3:
-                     def f(x,y):
-                         return (9/2)*(x*y*(3*x-1))
-                if node == 4:
-                     def f(x,y):
-                         return (9/2)*(x*y*(3*y-1))
-                if node == 5:
-                    def f(x,y):
-                        return (9/2)*y*(1-x-y)*(3*y-1)
-                if node == 6:
-                    def f(x,y):
-                        return (9/2)*y*(1-x-y)*(3*(1-x-y)-1)
-                if node == 7:
-                    def f(x,y):
-                        return (9/2)*x*(1-x-y)*(3*x-1)
-                if node == 8:
-                    def f(x,y):
-                        return (9/2)*x*(1-x-y)*(3*(1-x-y)-1)
-                if node == 9:
-                    def f(x,y):
-                        return 27*x*y*(1-x-y)
-
-                return f
         """
 
     def plot_triangles(self, plot_quadrature_points=False):

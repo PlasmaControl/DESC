@@ -728,12 +728,14 @@ class TwoPowerProfile(_Profile):
         warnif(
             self._params[1] < 1,
             UserWarning,
-            "Derivatives of this profile will be infinite at rho=0!",
+            "Derivatives of this profile will be infinite at rho=0 "
+            + "because params[1] < 1.",
         )
         warnif(
             self._params[2] < 1,
             UserWarning,
-            "Derivatives of this profile will be infinite at rho=1!",
+            "Derivatives of this profile will be infinite at rho=1 "
+            + "because params[2] < 1.",
         )
 
     @property
@@ -1019,6 +1021,8 @@ class MTanhProfile(_Profile):
         """
         if params is None:
             params = self.params
+        if dr > 2:
+            raise NotImplementedError("dr > 2 not implemented for MTanhProfile!")
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
 

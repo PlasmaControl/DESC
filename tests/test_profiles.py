@@ -354,6 +354,8 @@ class TestProfiles:
         sp = pp.to_spline()
         zp = pp.to_fourierzernike()
         mp = pp.to_mtanh(order=4, ftol=1e-4, xtol=1e-4)
+        tp = TwoPowerProfile(params=np.array([0.5, 2, 1.5]))
+        grid = LinearGrid(L=9)
 
         with pytest.raises(ValueError):
             zp.params = 4
@@ -375,6 +377,10 @@ class TestProfiles:
             a.params = sp.params
         with pytest.raises(ValueError):
             _ = TwoPowerProfile([1, 2, 3, 4])
+        with pytest.raises(NotImplementedError):
+            tp.compute(grid, dr=3)
+        with pytest.raises(NotImplementedError):
+            mp.compute(grid, dr=3)
 
     @pytest.mark.unit
     def test_default_profiles(self):

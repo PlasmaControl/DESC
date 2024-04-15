@@ -608,11 +608,10 @@ class CoilTorsion(_CoilObjective):
 
 
 class CoilCurrentLength(CoilLength):
-    """Coil torsion.
+    """Coil current length.
 
-    Targets the local torsion value per grid node for each coil. Indicative
-    of how much the coil goes out of the poloidal plane. e.g. a torsion
-    value of 0 means the coil is completely planar.
+    Targets the coil current length, i.e. current * length for each coil.
+    Useful for approximating HTS cost.
 
     Parameters
     ----------
@@ -654,7 +653,7 @@ class CoilCurrentLength(CoilLength):
 
     _scalar = False
     _units = "(m^-1)"
-    _print_value_fmt = "Coil torsion: {:10.3e} "
+    _print_value_fmt = "Coil current length: {:10.3e} "
 
     def __init__(
         self,
@@ -667,7 +666,7 @@ class CoilCurrentLength(CoilLength):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="coil current-length",
+        name="coil current length",
     ):
         if target is None and bounds is None:
             target = 0
@@ -702,7 +701,7 @@ class CoilCurrentLength(CoilLength):
             self._normalization = 1 / self._scales["a"]
 
     def compute(self, params, constants=None):
-        """Compute coil torsion.
+        """Compute coil current length (current * length).
 
         Parameters
         ----------
@@ -716,6 +715,7 @@ class CoilCurrentLength(CoilLength):
         -------
         f : float or array of floats
         """
+        # computes length
         data = super().compute(params, constants=constants)
         currents = tree_flatten(
             self.things[0].current, is_leaf=lambda x: isinstance(x, float)

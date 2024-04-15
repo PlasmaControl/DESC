@@ -33,6 +33,7 @@ from desc.objectives import (
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
+    CoilCurrentLength,
     CoilCurvature,
     CoilLength,
     CoilTorsion,
@@ -756,6 +757,31 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=1)
+        coils = CoilSet.linspaced_linear(coil, n=2)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
+        nested_coils = MixedCoilSet(coils, coils)
+
+        nested_grids = [
+            [LinearGrid(N=5), LinearGrid(N=5)],
+            [LinearGrid(N=5), LinearGrid(N=5)],
+        ]
+        test(coil, grid=LinearGrid(N=5))
+        test(coils)
+        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
+        test(nested_coils, grid=nested_grids)
+
+    @pytest.mark.unit
+    def test_coil_current_length(self):
+        """Tests coil current length."""
+
+        def test(coil, grid=None):
+            obj = CoilCurrentLength(coil, grid=grid)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, 4 * np.pi, rtol=1e-8)
+            assert len(f) == obj.dim_f
+
+        coil = FourierPlanarCoil(r_n=1, current=2)
         coils = CoilSet.linspaced_linear(coil, n=2)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
         nested_coils = MixedCoilSet(coils, coils)

@@ -715,12 +715,11 @@ class CoilCurrentLength(CoilLength):
         -------
         f : float or array of floats
         """
-        # computes length
-        data = super().compute(params, constants=constants)
+        lengths = super().compute(params, constants=constants)
         currents = tree_flatten(
             self.things[0].current, is_leaf=lambda x: isinstance(x, float)
         )[0]
-        out = jnp.asarray(data) * jnp.asarray(currents)
+        out = jnp.asarray(lengths) * jnp.asarray(currents)
         return out
 
 

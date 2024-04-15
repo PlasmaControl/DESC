@@ -2206,7 +2206,9 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), str(objective)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("objective", [CoilLength, CoilTorsion, CoilCurvature])
+    @pytest.mark.parametrize(
+        "objective", [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength]
+    )
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()

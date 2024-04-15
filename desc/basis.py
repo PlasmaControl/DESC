@@ -2531,17 +2531,14 @@ class FiniteElementMesh2D:
 
             return L_b
 
-    # Will reduce complexity by writing two separate functions
-    # for writing basis functions, then computing matrix.
-
-    """
-    def get_basis_functions(self, rho_theta, K=1):
-        Gets the barycentric basis functions.
+    def get_basis_functions(
+        self, rho_theta, i, j, a, b, K=1
+    ):  # i,j are indexes, a,b are inputs
+        """Gets the barycentric basis functions.
 
         Return the triangle basis functions, evaluated at the 2D rho
         and theta mesh points provided to the function.
-        Note that the rho and theta
-        mesh points are stored in an array that is (2,)
+
 
         Parameters
         ----------
@@ -2550,36 +2547,25 @@ class FiniteElementMesh2D:
 
         Returns
         -------
-        psi_q : (rho_theta, Q)
-
-
-        L_b = self.get_barycentric_coordinates(rho_theta, K)
+        basis_function
+        """
+        """
 
         if K == 1:
-
-            As a reminder, with this linear case,
-                # we have two finite elements: {(0,0), (1,0), (0,1)},
-                # and {(1,0), (0,1), (1,1)}
-                # We label (1,0) as node 0, (0,1) as node 1,
-                # (1,0) as node 2, and (1,1) as node 3
-
-            psi_q = np.zeros(4, 4)
 
             for i in range(4):
                 for j in range(4):
                     if i == 0:
                         def f(x, y):
                             return x
-                        psi_q[i][j] = f(L_b[i][0], L_b[i][1])
                     if i == 1:
                         def f(x, y):
                             return y
-                        psi_q[i][j] = f(L_b[i][0], L_b[i][1])
                     if i == 2 or i == 3:
                         def f(x, y):
                             return 1 - x - y
-                        psi_q[i][j] = f(L_b[i][0], L_b[i][1])
-            return psi_q
+
+                return f(a,b)
 
 
 
@@ -2593,26 +2579,17 @@ class FiniteElementMesh2D:
                         def f(x,y):
                             return (2*y-1)*y
 
-                        psi_q[i][j] = f(L_b[i][0],L_b[i][1])
-
                     if i == 1 or i == 3:
                         def f(x,y):
                             return 4*x*y
-
-                        psi_q[i][j] = f(L_b[i][0],L_b[i][1])
-
                     if i == 2:
                         def f(x,y):
                             return (2*x-1)*x
-
-                        psi_q[i][j] = f(L_b[i][0],L_b[i][1])
 
                     if i == 5 or i == 7:
 
                         def f(x,y):
                             return 4*y*(1-x-y)
-
-                        psi_q[i][j] = f(L_b[i][0],L_b[i][1])
 
                     if i == 6:
 
@@ -2624,7 +2601,7 @@ class FiniteElementMesh2D:
                         def f(x,y):
                             return 4*x*(1-x-y)
 
-            return psi_q
+            return f(a,b)
 
         if K == 3:
             if node == 0:
@@ -2659,8 +2636,62 @@ class FiniteElementMesh2D:
                     return 27*x*y*(1-x-y)
 
 
+            return f(a,b)`
+        """
 
-    """
+    def evaluate_basis_at_nodes(
+        self, rho_theta, f, K=1
+    ):  # i,j are indices, adding f for now
+        """Evaluate basis function at nodes.
+
+        Return the triangle basis functions evaluated at the 2D rho
+        and theta mesh points provided to the function.
+
+        Parameters
+        ----------
+        theta_zeta : 2D ndarray, shape (nrho * ntheta, 2)
+        Coordinates of the original grid, lying inside this triangle.
+
+        Returns
+        -------
+        psi_q : (rho_theta, Q)
+        """
+        L_b = self.get_barycentric_coordinates(rho_theta, K)
+        if K == 1:
+
+            # As a reminder, with this linear case,
+            # we have two finite elements: {(0,0), (1,0), (0,1)},
+            # and {(1,0), (0,1), (1,1)}
+            # We label (1,0) as node 0, (0,1) as node 1,
+            # (1,0) as node 2, and (1,1) as node 3
+
+            # Will be replacing f with get_basis_functions
+
+            psi_q = np.zeros(4, 4)
+
+            for i in range(4):
+                for j in range(4):
+                    psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+
+            return psi_q
+
+        if K == 2:
+
+            psi_q = np.zeros(9, 9)
+
+            for i in range(9):
+                for j in range(9):
+                    psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+            return psi_q
+
+        if K == 3:
+
+            psi_q = np.zeros(16, 16)
+
+            for i in range(16):
+                for j in range(16):
+                    psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+            return psi_q
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""

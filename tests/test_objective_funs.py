@@ -2068,6 +2068,7 @@ class TestObjectiveNaNGrad:
         VacuumBoundaryError,
         CoilLength,
         CoilCurvature,
+        CoilCurrentLength,
         CoilTorsion,
         QuadraticFlux,
         ToroidalFlux,

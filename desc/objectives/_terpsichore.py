@@ -51,8 +51,7 @@ class TERPSICHORE(_Objective):
 
 
     # Need to sure up the paths
-
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", path=os.getenv['terps_dir'],path_in=os.getenv['terps_dir'],bounds=None,normalize=False,normalize_target=False, awall=1.5, deltajp=4.e-2, modelk=0, al0=-5.e-2, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, max_moden=8):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", path=None, bounds=None,normalize=False,normalize_target=False, awall=1.3, deltajp=4.e-2, modelk=0, al0=-5.e-2, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, max_moden=8):
         
         if target is None and bounds is None:
             target = 0
@@ -84,12 +83,14 @@ class TERPSICHORE(_Objective):
         units = ""
         self._callback_fmt = "Growth rate: {:10.3e} " + units
         self._print_value_fmt = "Growth rate: {:10.3e} " + units
-        
+
+
+        wout_filename = "wout_C640.nc"
         self.path = path
-        self.path_in = path_in
         self.wout_file = os.path.join(self.path, wout_filename)
         self.vmec2terps_app = os.path.join(self.path, "thea-vmec2terps.x")
         self.terps_app = os.path.join(self.path, "tpr_ap.x")
+
         self.terps_compute = core.Primitive("terps")
         self.terps_compute.def_impl(self.compute_impl)
         # What are the following two lines?
@@ -111,7 +112,9 @@ class TERPSICHORE(_Objective):
 
         """
         eq = self.things[0]
+            
         if self.grid is None:
+            '''
             self.grid_eq = QuadratureGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
@@ -119,7 +122,26 @@ class TERPSICHORE(_Objective):
                 NFP=eq.NFP,
             )
 
-        self._dim_f = 1 # Presumbaly this should be 1? just a growth rate
+            #Construct flux-tube geometry
+            data = eq.compute('iota')
+            rhoa = eq.compute('rho')
+            iotad = data['iota']
+            fi = interp1d(rhoa['rho'],iotad)
+            
+            rho = np.sqrt(self.psi)
+            iota = fi(rho)
+            zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iota),(np.pi*self.npol-self.alpha)/np.abs(iota),2*self.nzgrid+1)
+            theta_sfl = iota/np.abs(iota)*self.alpha*np.ones(len(zeta)) + iota*zeta
+            
+            zeta_center = zeta[self.nzgrid]
+            rhoa = rho*np.ones(len(zeta))
+            c = np.vstack([rhoa,theta_sfl,zeta]).T
+            coords = eq.compute_theta_coords(c,tol=1e-10,maxiter=50)
+            self.grid = Grid(coords,sort=False)
+
+            '''
+            
+        self._dim_f = 1
 
         timer = Timer()
 
@@ -130,6 +152,7 @@ class TERPSICHORE(_Objective):
             "rho",
             "psi",
         ]
+        '''
         self._field_line_keys = [
         "|B|", "|grad(psi)|^2", "grad(|B|)", "grad(alpha)", "grad(psi)",
         "B", "grad(|B|)", "kappa", "B^theta", "B^zeta", "lambda_t", "lambda_z",'p_r',
@@ -142,17 +165,17 @@ class TERPSICHORE(_Objective):
             obj="desc.equilibrium.equilibrium.Equilibrium",
             has_axis=self.grid_eq.axis.size,
         )
-
+        '''
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
         
         #Need separate transforms and profiles for the equilibrium and flux-tube
         self.eq = eq
-        self._profiles = get_profiles(self._field_line_keys, obj=eq, grid=self.grid)
-        self._profiles_eq = get_profiles(self._eq_keys, obj=eq, grid=self.grid_eq)
-        self._transforms = get_transforms(self._field_line_keys, obj=eq, grid=self.grid)
-        self._transforms_eq = get_transforms(self._eq_keys, obj=eq, grid=self.grid_eq)
+        #self._profiles = get_profiles(self._field_line_keys, obj=eq, grid=self.grid)
+        self._profiles_eq = get_profiles(self._eq_keys, obj=eq, grid=self.grid)
+        #self._transforms = get_transforms(self._field_line_keys, obj=eq, grid=self.grid)
+        self._transforms_eq = get_transforms(self._eq_keys, obj=eq, grid=self.grid)
 
         self._constants = {
             "transforms": self._transforms_eq,
@@ -172,6 +195,9 @@ class TERPSICHORE(_Objective):
 #        self._set_dimensions(eq)
         super().build(use_jit=use_jit, verbose=verbose)
 
+    def compute(self, params, constants=None):
+
+        return self.terps_compute.bind(params,constants)
         
     def compute_impl(self, params, constants):
 
@@ -187,7 +213,7 @@ class TERPSICHORE(_Objective):
         self.write_terps_io()
         self.run_terps()
 
-        self.terps_outfile = os.path.join(self.path_in,'fort.16') # Let's change the name of this at some point
+        self.terps_outfile = os.path.join(self.path,'fort.16') # Let's change the name of this at some point
         self.parse_terps_outfile()
 
 
@@ -201,32 +227,24 @@ class TERPSICHORE(_Objective):
         return jnp.atleast_1d(qflux_avg)
         
 
-    def write_terps_io(self):
-        t = str(self.t) # t is a time indicator here (could change to something stability-relevant
-        path_in_old = self.path_in + '.in' # I'm not sure which INPUT FILE changes would be made between calls, wouldn't most be fort.18 related?
-        path_in_new = self.path_in + '_' + t + '.in'
-        self.write_input(path_in_old,path_geo_old,path_in_new,path_geo_new)
-
-
     def compute_fort18(self):
 
         print("Figure out how to do this directly from DESC equilibrium quantities!!")
         
-        stdout = 'stdout.out_' + str(self.t) # Again, replace 't' with something stability-related
-        stderr = 'stderr.out_' + str(self.t)
-        fs = open('stdout.out_' + str(self.t),'w')
-        path_in = self.path_in + "_" + str(self.t) + '.in'
+        #stdout = 'stdout.out_' + str(self.t) # Again, replace 't' with something stability-related
+        #stderr = 'stderr.out_' + str(self.t)
+        #fs = open('stdout.out_' + str(self.t),'w')
+        fs = open('stdout.vmec2terps','w')
         cmd = [self.vmec2terps_app, self.wout_file]
         subprocess.run(cmd,stdout=fs)
         fs.close()
         # Need to ensure that the output file is in the correct directory
         
     def run_terps(self):
-        stdout = 'stdout.out_' + str(self.t) # Again, replace 't' with something stability-related
-        stderr = 'stderr.out_' + str(self.t)
-        fs = open('stdout.out_' + str(self.t),'w')
-        path_in = self.path_in + "_" + str(self.t) + '.in'
-        cmd = ['srun', '-N', '1', '-t', '00:45:00', '--ntasks-per-node=1', '--mem-per-cpu=100G', self.terps_app, '<', path_in]
+        #stdout = 'stdout.out_' + str(self.t) # Again, replace 't' with something stability-related
+        #stderr = 'stderr.out_' + str(self.t)
+        fs = open('stdout.terps','w')
+        cmd = ['srun', '-N', '1', '-t', '00:45:00', '--ntasks-per-node=1', '--mem-per-cpu=100G', self.terps_app, '<', self.terps_infile]
         subprocess.run(cmd,stdout=fs)
         fs.close()
 
@@ -258,7 +276,9 @@ class TERPSICHORE(_Objective):
 
         n = len(values) 
         argnum = np.arange(0,n,1)
-        
+
+        print(argnum)
+        exit()
         jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-2)
         
         return (primal_out, jvp)
@@ -283,12 +303,12 @@ class TERPSICHORE(_Objective):
         return res, axis[0]
 
     
+    def write_terps_io(self):
 
-    def write_input(self,path_in_temp,geo_temp,path_in,geo):
-        copyfile(path_in_temp,path_in) # Need a standard TERPS input
-
-        terps_infile = os.path.join(path_in, "{}_N{}_family".format(eq_identifier, mode_family))
-        f = open(terps_infile,"w")
+        eq_identifier = "C624"
+        
+        self.terps_infile = os.path.join(self.path, "{}_N{}_family".format(eq_identifier, self.mode_family))
+        f = open(self.terps_infile,"w")
 
         f.write("               {}\n".format(eq_identifier))
         f.write("C\n")
@@ -374,9 +394,9 @@ class TERPSICHORE(_Objective):
             mode_str += "{:>3}\n".format(_in)
             f.write(mode_str)
 
-      f.write("C\n")
-      f.write("C   NEV NITMAX         AL0     EPSPAM IGREEN MPINIT\n")
-      f.write("      {}   4500  {:10.3e}  1.000E-04      0      0\n".format(nev,al0))
-      f.write("C\n")
+        f.write("C\n")
+        f.write("C   NEV NITMAX         AL0     EPSPAM IGREEN MPINIT\n")
+        f.write("      {}   4500  {:10.3e}  1.000E-04      0      0\n".format(nev,al0))
+        f.write("C\n")
         
-      f.close()
+        f.close()

@@ -523,9 +523,9 @@ class FourierRZToroidalSurface(Surface):
     def from_shape_parameters(
         cls,
         major_radius=10.0,
-        minor_radius=1.0,
+        aspect_ratio=10.0,
         elongation=1.0,
-        triangularity=0.3,
+        triangularity=0.0,
         squareness=0.0,
         eccentricity=0.0,
         torsion=0.0,
@@ -538,23 +538,32 @@ class FourierRZToroidalSurface(Surface):
         Parameters
         ----------
         major_radius : float > 0
-            Average major radius. Constant term in the R coordinate.
-        minor_radius : float > 0
-            Average minor radius of the cross section.
+            Average major radius.
+        aspect_ratio : float > 0
+            Ratio of major radius / minor radius.
         elongation : float > 0
-            Elongation of the elliptical surface = major axis / minor axis.
+            Elongation of the cross section = major axis / minor axis. Value of 1 gives
+            a circular cross section. Value > 1 gives vertical elongated cross section,
+            value < 1 gives horizontally elongated section.
         triangularity : float
-            Positive triangularity makes a "D" like cross section, negative
-            triangularity makes a backwards "D".
+            Positive triangularity makes a "▷" like cross section, negative
+            triangularity makes a "◁" like cross section. Surface may self-intersect
+            if abs(triangularity) > 1
         squareness : float
             Positive squareness makes a "□" type cross section. Negative squareness
-            makes a "+" like cross section.
+            makes a "+" like cross section. Surface may self-intersect if
+            abs(squareness) > 0.5
         eccentricity : float in [0, 1)
-            Eccentricity of the magnetic axis.
+            Eccentricity of the magnetic axis. Value of 0 gives circular axis, value of
+            1 gives infinitely elongated axis.
         torsion : float
             How non-planar the magnetic axis is.
         twist : float
-            How much the cross section twists you go toroidally around.
+            How many times the cross section rotates per field period. For integer
+            values it is a rigid rotation in phi, for non-integer values it also deforms
+            as it goes around toroidally. Values > 0 give a CCW rotation,
+            values < 0 give CW rotation. Cross section has zero volume if
+            abs(twist)%1 == 1/2.
         NFP : int
             Number of field periods.
         sym : bool (optional)
@@ -567,34 +576,51 @@ class FourierRZToroidalSurface(Surface):
 
         """
         errorif(major_radius <= 0, ValueError, "major_radius must be positive")
-        errorif(minor_radius <= 0, ValueError, "minor_radius must be positive")
+        errorif(aspect_ratio <= 0, ValueError, "aspect_ratio must be positive")
+        errorif(elongation <= 0, ValueError, "elongation should be positive")
         errorif(eccentricity < 0, ValueError, "eccentricity must be in [0,1)")
         errorif(eccentricity >= 1, ValueError, "eccentricity must be in [0,1)")
-        errorif(elongation <= 0, ValueError, "elongation should be positive")
+        errorif(
+            abs(twist) % 1 == 0.5,
+            ValueError,
+            "surface has no volume for abs(twist)%1 == 0.5",
+        )
         grid = LinearGrid(L=0, M=30, N=30, NFP=NFP, endpoint=True)
         theta = grid.nodes[:, 1]
         zeta = grid.nodes[:, 2]
 
+        # area = pi*a*b = pi*r^2
+        # r ~ sqrt(a*b) -> a = r^2/b
+        # elongation = a/b = r^2/b^2 -> b = r/sqrt(elongation)
+        r = major_radius / aspect_ratio
+        b = r / np.sqrt(elongation)
+        a = r * np.sqrt(elongation)
+
         # create cross section shape using miller parameterization
-        Rp = minor_radius * np.cos(
+        Rp = b * np.cos(
             theta + triangularity * np.sin(theta) - squareness * np.sin(2 * theta)
         )
-        Zp = -elongation * minor_radius * np.sin(theta + squareness * np.sin(2 * theta))
+        Zp = -a * np.sin(theta + squareness * np.sin(2 * theta))
 
         # create axis shape using ellipse + torsion
         a = 2 * major_radius / (1 + np.sqrt(1 - eccentricity**2))
         b = a * np.sqrt(1 - eccentricity**2)
-        Ra = (
-            a
-            * b
-            / np.sqrt(b**2 * np.cos(NFP * zeta) ** 2 + a**2 * np.sin(NFP * zeta) ** 2)
+        Ra = (a * b) / np.sqrt(
+            b**2 * np.cos(NFP * zeta) ** 2 + a**2 * np.sin(NFP * zeta) ** 2
         )
-        Za = 0.0 + torsion * np.sin(NFP * zeta)
+        # max(2, NFP) ensures that nonzero torsion gives nonplanar axis even for NFP=1
+        # otherwise it just tilts the whole axis.
+        Za = torsion * np.sin(max(2, NFP) * zeta)
         # combine axis + cross section with twist
-        R = Ra + Rp - twist * Zp * np.sin(NFP * zeta)
-        Z = Za + Zp + twist * Rp * np.cos(NFP * zeta)
+        R = Ra + Rp * np.cos(twist * NFP * zeta) - Zp * np.sin(twist * NFP * zeta)
+        Z = Za + Zp * np.cos(twist * NFP * zeta) + Rp * np.sin(twist * NFP * zeta)
 
-        return cls.from_values(np.array([R, zeta, Z]).T, theta, NFP=NFP, sym=sym)
+        # self._compute_orientation falsely returns -1 when twist = 1 since there is
+        # no m=1, n=0 mode, but by construction this should be right handed
+        # so we can skip that check.
+        return cls.from_values(
+            np.array([R, zeta, Z]).T, theta, NFP=NFP, sym=sym, check_orientation=False
+        )
 
     def constant_offset_surface(
         self, offset, grid=None, M=None, N=None, full_output=False

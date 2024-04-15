@@ -1747,6 +1747,7 @@ class TestComputeScalarResolution:
         Omnigenity,
         CoilLength,
         CoilTorsion,
+        CoilCurrentLength,
         CoilCurvature,
         QuadraticFlux,
         ToroidalFlux,

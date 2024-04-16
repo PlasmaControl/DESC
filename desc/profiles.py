@@ -5,12 +5,12 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import scipy.optimize
+from interpax import interp1d
 
 from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries, polyder_vec, polyval_vec
 from desc.derivatives import Derivative
 from desc.grid import Grid, _Grid
-from desc.interpolate import interp1d
 from desc.io import IOAble
 from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
 
@@ -194,7 +194,7 @@ class _Profile(IOAble, ABC):
     def __call__(self, grid, params=None, dr=0, dt=0, dz=0):
         """Evaluate the profile at a given set of points."""
         if not isinstance(grid, _Grid):
-            grid = jnp.atleast_1d(grid)
+            grid = jnp.atleast_1d(jnp.asarray(grid))
             if grid.ndim == 1:
                 grid = jnp.array([grid, jnp.zeros_like(grid), jnp.zeros_like(grid)]).T
             grid = Grid(grid, sort=False)
@@ -585,7 +585,7 @@ class PowerSeriesProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == self._basis.num_modes:
             self._params = jnp.asarray(new)
         else:
@@ -733,6 +733,11 @@ class SplineProfile(_Profile):
         return s
 
     @property
+    def knots(self):
+        """ndarray: Knot locations."""
+        return self._knots
+
+    @property
     def params(self):
         """ndarray: Parameters for computation."""
         return self._params
@@ -771,7 +776,7 @@ class SplineProfile(_Profile):
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
         xq = grid.nodes[grid.unique_rho_idx, 0]
-        x = self._knots
+        x = self.knots
         f = params
         fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
         return fq[grid.inverse_rho_idx]
@@ -823,7 +828,7 @@ class MTanhProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size >= 5:
             self._params = jnp.asarray(new)
         else:
@@ -1090,7 +1095,7 @@ class FourierZernikeProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == self._basis.num_modes:
             self._params = jnp.asarray(new)
         else:

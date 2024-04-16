@@ -148,9 +148,7 @@ class _Grid(IOAble, ABC):
         temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
         # scale weights sum to full volume
         if temp_spacing.prod(axis=1).sum():
-            temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (
-                1 / 3
-            )
+            temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.
@@ -422,12 +420,12 @@ class Grid(_Grid):
             r = jnp.where(r == 0, 1e-12, r)
             self._nodes = jnp.array([r, t, z]).T
             self._axis = np.array([], dtype=int)
-            self._unique_rho_idx = np.arange(self._nodes.shape[0])
-            self._unique_theta_idx = np.arange(self._nodes.shape[0])
-            self._unique_zeta_idx = np.arange(self._nodes.shape[0])
-            self._inverse_rho_idx = np.arange(self._nodes.shape[0])
-            self._inverse_theta_idx = np.arange(self._nodes.shape[0])
-            self._inverse_zeta_idx = np.arange(self._nodes.shape[0])
+            self._unique_rho_idx = jnp.argsort(self._nodes[:, 0])
+            self._unique_theta_idx = jnp.argsort(self._nodes[:, 1])
+            self._unique_zeta_idx = jnp.argsort(self._nodes[:, 2])
+            self._inverse_rho_idx = jnp.argsort(self._unique_rho_idx)
+            self._inverse_theta_idx = jnp.argsort(self._unique_theta_idx)
+            self._inverse_zeta_idx = jnp.argsort(self._unique_zeta_idx)
             # don't do anything fancy with weights
             self._weights = self._spacing.prod(axis=1)
         else:
@@ -463,14 +461,16 @@ class Grid(_Grid):
             Node spacing, in (rho,theta,zeta).
 
         """
-        nodes = jnp.atleast_2d(nodes).reshape((-1, 3)).astype(float)
+        nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
         # Do not alter nodes given by the user for custom grids.
         # In particular, do not modulo nodes by 2pi or 2pi/NFP.
         # This may cause the surface_integrals() function to fail recognizing
         # surfaces outside the interval [0, 2pi] as duplicates. However, most
         # surface integral computations are done with LinearGrid anyway.
         spacing = (  # make weights sum to 4pi^2
-            jnp.ones_like(nodes) * jnp.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
+            jnp.ones_like(nodes)
+            * jnp.array([1, 2 * np.pi, 2 * np.pi])
+            / nodes.shape[0] ** (1 / 3)
         )
         return nodes, spacing
 
@@ -499,16 +499,18 @@ class LinearGrid(_Grid):
         If True, theta=0 and zeta=0 are duplicated after a full period.
         Should be False for use with FFT. (Default = False).
         This boolean is ignored if an array is given for theta or zeta.
-    rho : ndarray of float, optional
-        Radial coordinates (Default = 1.0). Note that if supplied the values may be
-        reordered in the resulting grid.
-    theta : ndarray of float, optional
-        Poloidal coordinates (Default = 0.0). Note that if supplied the values may be
-        reordered in the resulting grid.
-    zeta : ndarray of float, optional
-        Toroidal coordinates (Default = 0.0). Note that if supplied the values may be
-        reordered in the resulting grid.
-
+    rho : int or ndarray of float, optional
+        Radial coordinates (Default = 1.0).
+        Alternatively, the number of radial coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
+    theta : int or ndarray of float, optional
+        Poloidal coordinates (Default = 0.0).
+        Alternatively, the number of poloidal coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
+    zeta : int or ndarray of float, optional
+        Toroidal coordinates (Default = 0.0).
+        Alternatively, the number of toroidal coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
     """
 
     def __init__(

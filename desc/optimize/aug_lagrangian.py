@@ -310,8 +310,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         _g = grad_wrapped(z, *args)
         y = jnp.linalg.lstsq(_J.T, _g)[0]
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
-    mu = jnp.atleast_1d(mu)
-    y = jnp.atleast_1d(y)
+    y, mu, c = jnp.broadcast_arrays(y, mu, c)
 
     # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
     omega = options.pop("omega", 1.0)
@@ -363,9 +362,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         "scipy": jnp.linalg.norm(z * scale_inv / v**0.5),
         "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
         "mix": jnp.sqrt(
-            (g_h @ g_h)
-            / abs(g_h @ H_h @ g_h)
-            * jnp.linalg.norm(z * scale_inv / v**0.5)
+            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * jnp.linalg.norm(z * scale_inv / v**0.5)
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "conngould")

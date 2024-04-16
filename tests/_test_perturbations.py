@@ -75,7 +75,7 @@ def test_perturbation_orders(SOLOVEV):
 
     # solve for "true" high-beta solution
     eqS = eq3.copy()
-    eqS.solve(objective=objective, ftol=1e-2, verbose=3)
+    eqS.solve(ftol=1e-2, verbose=3)
 
     # evaluate equilibrium force balance
     grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")
@@ -106,7 +106,7 @@ def test_perturb_with_float_without_error():
     # np.concatenate cannot concatenate 0-D arrays. This test exercises the fix.
     eq = Equilibrium()
     objective = get_equilibrium_objective(eq=eq)
-    constraints = get_fixed_boundary_constraints(eq=eq, iota=False)
+    constraints = get_fixed_boundary_constraints(eq=eq)
 
     # perturb Psi with a float
     deltas = {"Psi": float(eq.Psi)}
@@ -174,9 +174,9 @@ def test_optimal_perturb():
 
     assert eq2.is_nested()
     # recompute surface from R_lmn etc.
-    surf1 = eq1.get_surface_at(1)
+    surf1 = eq2.get_surface_at(1)
     # this is the surface from perturbed coefficients
-    surf2 = eq1.surface
+    surf2 = eq2.surface
 
     np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-12, rtol=1e-12)

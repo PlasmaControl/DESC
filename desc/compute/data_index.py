@@ -1,5 +1,55 @@
 """data_index contains all the quantities calculated by the compute functions."""
 
+import functools
+from collections import deque
+
+import numpy as np
+
+
+def find_permutations(primary, separator="_"):
+    """Finds permutations of quantity names for aliases."""
+    split_name = primary.split(separator)
+    primary_permutation = split_name[-1]
+    primary_permutation = deque(primary_permutation)
+
+    new_permutations = []
+    for i in range(len(primary_permutation)):
+        primary_permutation.rotate(1)
+        new_permutations.append(list(primary_permutation))
+
+    # join new permutation to form alias keys
+    aliases = [
+        "".join(split_name[:-1]) + separator + "".join(perm)
+        for perm in new_permutations
+    ]
+    aliases = np.unique(aliases)
+    aliases = np.delete(aliases, np.where(aliases == primary))
+
+    return aliases
+
+
+def assign_alias_data(
+    alias, primary, fun, params, profiles, transforms, data, **kwargs
+):
+    """Assigns primary data to alias.
+
+    Parameters
+    ----------
+    alias : `str`
+        data_index key for alias of primary
+    primary : `str`
+        key defined in compute function
+
+    Returns
+    -------
+    data : `dict`
+        computed data dictionary (includes both alias and primary)
+
+    """
+    data = fun(params, transforms, profiles, data, **kwargs)
+    data[alias] = data[primary].copy()
+    return data
+
 
 def register_compute_fun(
     name,
@@ -13,7 +63,9 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
+    aliases=[],
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
+    grid_type=None,
     axis_limit_data=None,
     **kwargs,
 ):
@@ -46,9 +98,14 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
-    parameterization: str or list of str
-        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
-        or `desc.equilibrium.Equilibrium`.
+    aliases : list
+        Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
+        data.
+    parameterization : str or list of str
+        Name of desc types the method is valid for. eg `'desc.geometry.FourierXYZCurve'`
+        or `'desc.equilibrium.Equilibrium'`.
+    grid_type : str
+        Name of grid type the quantity must be computed with. eg `'quad'`.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
 
@@ -69,6 +126,10 @@ def register_compute_fun(
         "kwargs": list(kwargs.values()),
     }
 
+    permutable_names = ["R_", "Z_", "phi_", "lambda_", "omega_"]
+    if not aliases and "".join(name.split("_")[:-1]) + "_" in permutable_names:
+        aliases = find_permutations(name)
+
     def _decorator(func):
         d = {
             "label": label,
@@ -79,6 +140,8 @@ def register_compute_fun(
             "dim": dim,
             "coordinates": coordinates,
             "dependencies": deps,
+            "aliases": aliases,
+            "grid_type": grid_type,
         }
         for p in parameterization:
             flag = False
@@ -89,6 +152,16 @@ def register_compute_fun(
                             f"Already registered function with parameterization {p} and name {name}."
                         )
                     data_index[base_class][name] = d.copy()
+                    for alias in aliases:
+                        data_index[base_class][alias] = d.copy()
+                        # assigns alias compute func to generator to be used later
+                        data_index[base_class][alias]["fun"] = functools.partial(
+                            assign_alias_data,
+                            alias=alias,
+                            primary=name,
+                            fun=data_index[base_class][name]["fun"],
+                        )
+
                     flag = True
             if not flag:
                 raise ValueError(
@@ -136,10 +209,21 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.magnetic_fields._current_potential.CurrentPotentialField": [
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
+        "desc.magnetic_fields._core.MagneticField",
+    ],
+    "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": [
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
+        "desc.magnetic_fields._core.MagneticField",
+    ],
     "desc.coils.SplineXYZCoil": [
         "desc.geometry.curve.SplineXYZCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.magnetic_fields._core.OmnigenousField": [],
 }
 
 data_index = {p: {} for p in _class_inheritance.keys()}

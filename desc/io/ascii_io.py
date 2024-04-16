@@ -128,6 +128,7 @@ def read_ascii(filename):
     eq = {}
     f = open(filename)
     lines = list(f)
+    f.close()
     eq["NFP"] = int(lines[0].strip("\n").split()[-1])
     eq["Psi"] = float(lines[1].strip("\n").split()[-1])
     lines = lines[2:]

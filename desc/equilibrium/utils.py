@@ -95,6 +95,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi", mirror=Fal
                 surface[:, 1:3].astype(int),
                 NFP,
                 sym,
+                check_orientation=False,
                 mirror=mirror,
             )
         elif np.all(surface[:, 2] == 0):

@@ -7,8 +7,10 @@ import warnings
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from pylatexenc.latex2text import LatexNodes2Text
 from scipy.integrate import solve_ivp
 from scipy.interpolate import Rbf
 from termcolor import colored
@@ -16,9 +18,10 @@ from termcolor import colored
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
-from desc.compute.utils import surface_averages_map
+from desc.compute.utils import _parse_parameterization, surface_averages_map
+from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
-from desc.utils import flatten_list, parse_argname_change
+from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -271,8 +274,12 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
-    if name not in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
-        raise ValueError("Unrecognized value '{}'.".format(name))
+    parameterization = _parse_parameterization(eq)
+    if name not in data_index[parameterization]:
+        raise ValueError(
+            f"Unrecognized value '{name}' for "
+            + f"parameterization {parameterization}."
+        )
     assert component in [
         None,
         "R",
@@ -282,13 +289,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     components = {"R": 0, "phi": 1, "Z": 2}
 
-    label = data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
+    label = data_index[parameterization][name]["label"]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute(name, grid=grid)[name]
 
-    if data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["dim"] > 1:
+    if data_index[parameterization][name]["dim"] > 1:
         if component is None:
             data = np.linalg.norm(data, axis=-1)
             label = "|" + label + "|"
@@ -300,13 +307,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
             else:
                 label += r"\phi"
 
-    label = (
-        r"$"
-        + label
-        + "~("
-        + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
-        + ")$"
-    )
+    label = r"$" + label + "~(" + data_index[parameterization][name]["units"] + ")$"
 
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -339,6 +340,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_fontsize: integer, font size of the title
         xlabel_fontsize: integer, font size of the x axis label
+        color: str or tuple, color to use for scatter plot
+        marker: str, marker to use for scatter plot
+
 
     Returns
     -------
@@ -376,19 +380,33 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    marker = kwargs.pop("marker", "o")
+    color = kwargs.pop("color", "b")
 
     assert (
         len(kwargs) == 0
     ), f"plot_coefficients got unexpected keyword argument: {kwargs.keys()}"
 
     ax[0, 0].semilogy(
-        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
+        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.R_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 1].semilogy(
-        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1), np.abs(eq.Z_lmn), "bo"
+        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.Z_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 2].semilogy(
-        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
+        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.L_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
 
     ax[0, 0].set_xlabel(xlabel, fontsize=xlabel_fontsize)
@@ -408,7 +426,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface, Curve
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -462,11 +480,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     # surface average. Surface averages should be computed over a 2-D grid to
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
+    parameterization = _parse_parameterization(eq)
     default_L = 100
-    if (
-        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
-        == "r"
-    ):
+    default_N = 0
+    if data_index[parameterization][name]["coordinates"] == "r":
         if grid is None:
             return plot_fsa(
                 eq,
@@ -484,14 +501,19 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 eq, name, rho=rho, log=log, ax=ax, return_data=return_data, **kwargs
             )
 
+    elif data_index[parameterization][name]["coordinates"] == "s":  # curve qtys
+        default_L = 0
+        default_N = 100
+    NFP = getattr(eq, "NFP", 1)
     if grid is None:
-        grid_kwargs = {"L": default_L, "NFP": eq.NFP}
+        grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    data, ylabel = _compute(eq, name, grid, kwargs.pop("component", None))
+    label = kwargs.pop("label", None)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
@@ -505,7 +527,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         ax.semilogy(
             grid.nodes[:, plot_axes[0]],
             data,
-            label=kwargs.pop("label", None),
+            label=label,
             color=linecolor,
             ls=ls,
             lw=lw,
@@ -514,7 +536,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         ax.plot(
             grid.nodes[:, plot_axes[0]],
             data,
-            label=kwargs.pop("label", None),
+            label=label,
             color=linecolor,
             ls=ls,
             lw=lw,
@@ -525,9 +547,12 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     assert len(kwargs) == 0, f"plot_1d got unexpected keyword argument: {kwargs.keys()}"
     xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
-    ax.set_ylabel(label, fontsize=ylabel_fontsize)
+    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     _set_tight_layout(fig)
     plot_data = {xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]], name: data}
+
+    if label is not None:
+        ax.legend()
 
     if return_data:
         return fig, ax, plot_data
@@ -542,7 +567,7 @@ def plot_2d(
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -594,6 +619,7 @@ def plot_2d(
         plot_2d(eq, 'sqrt(g)')
 
     """
+    parameterization = _parse_parameterization(eq)
     if grid is None:
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(**grid_kwargs)
@@ -672,14 +698,8 @@ def plot_2d(
         ax.set_title(
             "%s / %s"
             % (
-                "$"
-                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
-                + "$",
-                "$"
-                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
-                    "label"
-                ]
-                + "$",
+                "$" + data_index[parameterization][name]["label"] + "$",
+                "$" + data_index[parameterization][norm_name]["label"] + "$",
             )
         )
     _set_tight_layout(fig)
@@ -700,13 +720,68 @@ def plot_2d(
     return fig, ax
 
 
+def _trimesh_idx(n1, n2, periodic1=True, periodic2=True):
+    # suppose grid is something like this (n1=3, n2=4):
+    # 0  1  2  3
+    # 4  5  6  7
+    # 8  9 10 11
+
+    # first set of triangles are (0,1,4), (1,2,5), (2,3,6), (3,0,7), ... (8,9,0) etc
+    # second set are (1,5,4), (2,6,5), (3,7,6), (0,4,7) etc.
+    # for the first set, i1 is the linear index, j1 = i1+1, k1=i1+n2
+    # for second set, i2 from the second set is j1 from the first, and j2 = k1,
+    # k2 = i1 + 1 + n2 with some other tricks to handle wrapping or out of bounds
+    n = n1 * n2
+    c, r = np.meshgrid(np.arange(n1), np.arange(n2), indexing="ij")
+
+    def clip_or_mod(x, p, flag):
+        if flag:
+            return x % p
+        else:
+            return np.clip(x, 0, p - 1)
+
+    i1 = c * n2 + r
+    j1 = c * n2 + clip_or_mod((r + 1), n2, periodic2)
+    k1 = clip_or_mod((c + 1), n1, periodic1) * n2 + r
+
+    i2 = c * n2 + clip_or_mod((r + 1), n2, periodic2)
+    j2 = clip_or_mod((c + 1), n1, periodic1) * n2 + r
+    k2 = clip_or_mod((c + 1), n1, periodic1) * n2 + clip_or_mod((r + 1), n2, periodic2)
+
+    i = np.concatenate([i1.flatten(), i2.flatten()])
+    j = np.concatenate([j1.flatten(), j2.flatten()])
+    k = np.concatenate([k1.flatten(), k2.flatten()])
+
+    # remove degenerate triangles, ie with the same vertex twice
+    degens = (i == j) | (j == k) | (i == k)
+    ijk = np.array([i, j, k])[:, ~degens]
+    # remove out of bounds indices
+    ijk = ijk[:, np.all(ijk < n, axis=0)]
+    # remove duplicates
+    ijk = np.unique(np.sort(ijk, axis=0), axis=1)
+
+    # expected number of triangles
+    # start with 2 per square
+    exnum = (n1 - 1) * (n2 - 1) * 2
+    # if periodic, add extra "ghost" cells to connect ends
+    if periodic1:
+        exnum += (n2 - 1) * 2
+    if periodic2:
+        exnum += (n1 - 1) * 2
+    # if doubly periodic, there's also 2 at the corner
+    if periodic1 and periodic2:
+        exnum += 2
+
+    assert ijk.shape[1] == exnum
+    return ijk
+
+
 def plot_3d(
     eq,
     name,
     grid=None,
     log=False,
-    all_field_periods=True,
-    ax=None,
+    fig=None,
     return_data=False,
     **kwargs,
 ):
@@ -714,7 +789,7 @@ def plot_3d(
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -722,38 +797,29 @@ def plot_3d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
-    all_field_periods : bool, optional
-        Whether to plot full torus or one field period. Ignored if grid is specified.
-    ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on
     return_data : bool
         if True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
-            plot_X(figsize=(4,6),cmap="plasma")
+            plot_X(figsize=(4,6), cmap="RdBu")
 
         Valid keyword arguments are:
 
-        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
-          matplotlib)
+        * ``figsize``: tuple of length 2, the size of the figure in inches
         * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
           which element to plot. Default is the norm of the vector.
-        * ``title_fontsize``: integer, font size of the title
-        * ``xlabel_fontsize``: float, fontsize of the xlabel
-        * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``zlabel_fontsize``: float, fontsize of the zlabel
+        * ``title``: title to add to the figure.
+        * ``cmap``: string denoting colormap to use.
+        * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
-        * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
-        * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
-        * ``dist``: float, distance from the camera to the center point of the plot
 
     Returns
     -------
-    fig : matplotlib.figure.Figure
-        Figure being plotted to.
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        Axes being plotted to.
+    fig : plotly.graph_objs._figure.Figure
+        Figure being plotted to
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
 
@@ -771,19 +837,35 @@ def plot_3d(
                 zeta=np.linspace(0, 2 * np.pi, 100),
                 axis=True,
             )
-        fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
+        fig = plot_3d(eq, "|F|", log=True, grid=grid)
 
     """
-    nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
-        grid_kwargs = {"M": 33, "N": int(33 * eq.NFP), "NFP": nfp}
+        grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
         grid = _get_grid(**grid_kwargs)
-    plot_axes = _get_plot_axes(grid)
-    if len(plot_axes) != 2:
-        return ValueError(colored("Grid must be 2D", "red"))
+    assert isinstance(grid, LinearGrid), "grid must be LinearGrid for 3d plotting"
+    assert only1(
+        grid.num_rho == 1, grid.num_theta == 1, grid.num_zeta == 1
+    ), "Grid must be 2D"
+    figsize = kwargs.pop("figsize", (10, 10))
+    alpha = kwargs.pop("alpha", 1.0)
+    cmap = kwargs.pop("cmap", "RdBu_r")
+    title = kwargs.pop("title", "")
+    levels = kwargs.pop("levels", None)
+    component = kwargs.pop("component", None)
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
-    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.pop("figsize", None))
+    errorif(
+        len(kwargs) != 0,
+        ValueError,
+        f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
+    )
+
+    data, label = _compute(
+        eq,
+        name,
+        grid,
+        component=component,
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute(["X", "Y", "Z"], grid=grid)
@@ -791,99 +873,101 @@ def plot_3d(
     Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
-    if 0 in plot_axes:
-        if 1 in plot_axes:  # rho & theta
-            data = data[:, :, 0]
-            X = X[:, :, 0]
-            Y = Y[:, :, 0]
-            Z = Z[:, :, 0]
-        else:  # rho & zeta
-            data = data[0, :, :].T
-            X = X[0, :, :].T
-            Y = Y[0, :, :].T
-            Z = Z[0, :, :].T
-    else:  # theta & zeta
-        data = data[:, 0, :].T
-        X = X[:, 0, :].T
-        Y = Y[:, 0, :].T
-        Z = Z[:, 0, :].T
+    if grid.num_rho == 1:
+        n1, n2 = grid.num_theta, grid.num_zeta
+        if not grid.nodes[-1][2] == 2 * np.pi:
+            p1, p2 = True, False
+        else:
+            p1, p2 = True, True
+    elif grid.num_theta == 1:
+        n1, n2 = grid.num_rho, grid.num_zeta
+        p1, p2 = False, True
+    elif grid.num_zeta == 1:
+        n1, n2 = grid.num_theta, grid.num_rho
+        p1, p2 = True, False
+    ijk = _trimesh_idx(n1, n2, p1, p2)
 
     if log:
-        data = np.abs(data)  # ensure data is positive for log plot
-        minn, maxx = data.min().min(), data.max().max()
-        norm = matplotlib.colors.LogNorm(vmin=minn, vmax=maxx)
+        data = np.log10(np.abs(data))  # ensure data is positive for log plot
+        cmin = np.floor(np.nanmin(data)).astype(int)
+        cmax = np.ceil(np.nanmax(data)).astype(int)
+        levels = setdefault(levels, np.logspace(cmin, cmax, cmax - cmin + 1))
+        ticks = np.log10(levels)
+        cbar = dict(
+            title=LatexNodes2Text().latex_to_text(label),
+            ticktext=[f"{l:.0e}" for l in levels],
+            tickvals=ticks,
+        )
+
     else:
-        minn, maxx = data.min().min(), data.max().max()
-        norm = matplotlib.colors.Normalize(vmin=minn, vmax=maxx)
-    m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
-    m.set_array([])
-    alpha = kwargs.pop("alpha", 1)
-    title_fontsize = kwargs.pop("title_fontsize", None)
+        cbar = dict(
+            title=LatexNodes2Text().latex_to_text(label),
+            ticktext=levels,
+            tickvals=levels,
+        )
+        cmin = None
+        cmax = None
 
-    elev = kwargs.pop("elev", None)
-    azim = kwargs.pop("azim", None)
-    dist = kwargs.pop("dist", None)
-
-    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
-    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-    zlabel_fontsize = kwargs.pop("zlabel_fontsize", None)
-
-    assert len(kwargs) == 0, f"plot_3d got unexpected keyword argument: {kwargs.keys()}"
-
-    ax.plot_surface(
-        X,
-        Y,
-        Z,
-        cmap="jet",
-        facecolors=plt.cm.jet(norm(data)),
-        vmin=minn,
-        vmax=maxx,
-        rstride=1,
-        cstride=1,
-        alpha=alpha,
+    meshdata = go.Mesh3d(
+        x=X.flatten(),
+        y=Y.flatten(),
+        z=Z.flatten(),
+        intensity=data.flatten(),
+        opacity=alpha,
+        cmin=cmin,
+        cmax=cmax,
+        i=ijk[0],
+        j=ijk[1],
+        k=ijk[2],
+        colorscale=cmap,
+        flatshading=True,
+        name=LatexNodes2Text().latex_to_text(label),
+        colorbar=cbar,
     )
-    fig.colorbar(m, ax=ax)
 
-    ax.set_xlabel(_AXIS_LABELS_XYZ[0], fontsize=xlabel_fontsize)
-    ax.set_ylabel(_AXIS_LABELS_XYZ[1], fontsize=ylabel_fontsize)
-    ax.set_zlabel(_AXIS_LABELS_XYZ[2], fontsize=zlabel_fontsize)
-    ax.set_title(label, fontsize=title_fontsize)
-    _set_tight_layout(fig)
+    if fig is None:
+        fig = go.Figure()
+    fig.add_trace(meshdata)
 
-    # need this stuff to make all the axes equal, ax.axis('equal') doesn't work for 3d
-    x_limits = ax.get_xlim3d()
-    y_limits = ax.get_ylim3d()
-    z_limits = ax.get_zlim3d()
-
-    x_range = abs(x_limits[1] - x_limits[0])
-    x_middle = np.mean(x_limits)
-    y_range = abs(y_limits[1] - y_limits[0])
-    y_middle = np.mean(y_limits)
-    z_range = abs(z_limits[1] - z_limits[0])
-    z_middle = np.mean(z_limits)
-
-    if elev is not None or azim is not None:
-        ax.view_init(elev=elev, azim=azim)
-    if dist is not None:
-        ax.dist = dist
-
-    # The plot bounding box is a sphere in the sense of the infinity
-    # norm, hence I call half the max range the plot radius.
-    plot_radius = 0.5 * max([x_range, y_range, z_range])
-
-    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
-
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]),
+            yaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]),
+            zaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]),
+            aspectmode="data",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
+        font=dict(family="Times"),
+    )
     plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
 
     if return_data:
-        return fig, ax, plot_data
+        return fig, plot_data
 
-    return fig, ax
+    return fig
 
 
-def plot_fsa(
+def plot_fsa(  # noqa: C901
     eq,
     name,
     with_sqrt_g=True,
@@ -981,6 +1065,8 @@ def plot_fsa(
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
+    label = kwargs.pop("label", None)
+
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
@@ -996,18 +1082,18 @@ def plot_fsa(
             # surface average we have the recipe to compute in data_index is the
             # desired surface average.
             name = "<" + name + ">"
-    values, label = _compute(
+    values, ylabel = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
-    label = label.split("~")
+    ylabel = ylabel.split("~")
     if (
         data_index[p][name]["coordinates"] == "r"
         or data_index[p][name]["coordinates"] == ""
     ):
         # If the quantity is a surface function, averaging it again has no
         # effect, regardless of whether sqrt(g) is used.
-        # So we avoid surface averaging it and forgo the <> around the label.
-        label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
+        # So we avoid surface averaging it and forgo the <> around the ylabel.
+        ylabel = r"$ " + ylabel[0][1:] + r" ~" + "~".join(ylabel[1:])
         plot_data_ylabel_key = f"{name}"
         if data_index[p][name]["coordinates"] == "r":
             values = grid.compress(values)
@@ -1037,14 +1123,14 @@ def plot_fsa(
                     sqrt_g, _compute(eq, "sqrt(g)_r", grid, reshape=False)[0], copy=True
                 )
             averages = compute_surface_averages(values, sqrt_g=sqrt_g)
-            label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+            ylabel = r"$\langle " + ylabel[0][1:] + r" \rangle~" + "~".join(ylabel[1:])
         else:  # theta average
             averages = compute_surface_averages(values)
-            label = (
+            ylabel = (
                 r"$\langle "
-                + label[0][1:]
+                + ylabel[0][1:]
                 + r" \rangle_{\theta}~"
-                + "~".join(label[1:])
+                + "~".join(ylabel[1:])
             )
         # True if values has nan on a given surface.
         is_nan = compute_surface_averages(np.isnan(values)).astype(bool)
@@ -1060,13 +1146,9 @@ def plot_fsa(
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
-        ax.semilogy(
-            rho, values, label=kwargs.pop("label", None), color=linecolor, ls=ls, lw=lw
-        )
+        ax.semilogy(rho, values, label=label, color=linecolor, ls=ls, lw=lw)
     else:
-        ax.plot(
-            rho, values, label=kwargs.pop("label", None), color=linecolor, ls=ls, lw=lw
-        )
+        ax.plot(rho, values, label=label, color=linecolor, ls=ls, lw=lw)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
@@ -1074,7 +1156,7 @@ def plot_fsa(
     ), f"plot_fsa got unexpected keyword argument: {kwargs.keys()}"
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
-    ax.set_ylabel(label, fontsize=ylabel_fontsize)
+    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     if norm_F:
         ax.set_ylabel(
             "%s / %s"
@@ -1085,6 +1167,9 @@ def plot_fsa(
             fontsize=ylabel_fontsize,
         )
     _set_tight_layout(fig)
+
+    if label is not None:
+        ax.legend()
 
     plot_data = {"rho": rho, plot_data_ylabel_key: values}
     if norm_F:
@@ -1179,7 +1264,8 @@ def plot_section(
         }
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = eq.map_coordinates(
+        coords = map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1192,7 +1278,8 @@ def plot_section(
         phi = np.unique(grid.nodes[:, 2])
         nphi = phi.size
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = eq.map_coordinates(
+        coords = map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1362,6 +1449,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``legend``: bool, whether to show legend or not, False by default
 
     Returns
     -------
@@ -1433,7 +1521,8 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     r_grid = _get_grid(**grid_kwargs)
     rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
     r_grid = Grid(
-        eq.map_coordinates(
+        map_coordinates(
+            eq,
             r_grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1454,7 +1543,8 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         t_grid = _get_grid(**grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
         v_grid = Grid(
-            eq.map_coordinates(
+            map_coordinates(
+                eq,
                 t_grid.nodes,
                 ["rho", "theta_PEST", "phi"],
                 ["rho", "theta", "zeta"],
@@ -1528,6 +1618,9 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
+        if label is not None and i == 0 and kwargs.pop("legend", False):
+            ax[i].legend()
+
     _set_tight_layout(fig)
 
     plot_data["rho_R_coords"] = Rr
@@ -1543,7 +1636,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     phi : float, int or array-like or None
         Values of phi to plot boundary surface at.
@@ -1612,17 +1705,19 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
     nphi = len(phi)
-
+    # don't plot axis for FourierRZToroidalSurface, since it's not defined.
+    plot_axis = plot_axis and eq.L > 0
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
     grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
-        eq.map_coordinates(
+        map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1633,15 +1728,15 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     )
 
     if colors is None:
-        colors = _get_cmap(cmap, nz)(np.linspace(0, 1, nz))
+        colors = _get_cmap(cmap)((phi * eq.NFP / (2 * np.pi)) % 1)
     if lw is None:
         lw = 1
     if isinstance(lw, int):
-        lw = [lw for i in range(nz - 1)]
+        lw = [lw for _ in range(nz)]
     if ls is None:
         ls = "-"
     if isinstance(ls, str):
-        ls = [ls for i in range(nz - 1)]
+        ls = [ls for _ in range(nz)]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -1651,7 +1746,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     fig, ax = _format_ax(ax, figsize=figsize, equal=True)
 
-    for i in range(nphi - 1):
+    for i in range(nphi):
         ax.plot(
             R[:, -1, i],
             Z[:, -1, i],
@@ -1682,12 +1777,14 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     return fig, ax
 
 
-def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kwargs):
+def plot_boundaries(
+    eqs, labels=None, phi=None, plot_axis=True, ax=None, return_data=False, **kwargs
+):
     """Plot stellarator boundaries at multiple toroidal coordinates.
 
     Parameters
     ----------
-    eqs : array-like of Equilibrium or EquilibriaFamily
+    eqs : array-like of Equilibrium, Surface or EquilibriaFamily
         Equilibria to plot.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
@@ -1695,6 +1792,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         Values of phi to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
+    plot_axis : bool
+        Whether to plot the magnetic axis locations. Default is True.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1716,6 +1815,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         * ``color``: list of colors to use for each Equilibrium
         * ``ls``: list of str, line styles to use for each Equilibrium
         * ``lw``: list of floats, line widths to use for each Equilibrium
+        * ``marker``: str, marker style to use for the axis plotted points
+        * ``size``: float, marker size to use for the axis plotted points
 
     Returns
     -------
@@ -1745,6 +1846,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     lw = kwargs.pop("lw", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    marker = kwargs.pop("marker", "x")
+    size = kwargs.pop("size", 36)
 
     phi = (1 if eqs[-1].N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
@@ -1774,11 +1877,16 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     plot_data["Z"] = []
 
     for i in range(neq):
-        grid_kwargs = {"NFP": eqs[i].NFP, "theta": 100, "zeta": phi}
+        # don't plot axis for FourierRZToroidalSurface, since it's not defined.
+        plot_axis_i = plot_axis and eqs[i].L > 0
+        rho = np.array([0.0, 1.0]) if plot_axis_i else np.array([1.0])
+
+        grid_kwargs = {"NFP": eqs[i].NFP, "theta": 100, "zeta": phi, "rho": rho}
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
-            eqs[i].map_coordinates(
+            map_coordinates(
+                eqs[i],
                 grid.nodes,
                 ["rho", "theta", "phi"],
                 ["rho", "theta", "zeta"],
@@ -1800,6 +1908,11 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
             (line,) = ax.plot(
                 R[:, -1, j], Z[:, -1, j], color=colors[i], linestyle=ls[i], lw=lw[i]
             )
+            if rho[0] == 0:
+                ax.scatter(
+                    R[0, 0, j], Z[0, 0, j], color=colors[i], marker=marker, s=size
+                )
+
             if j == 0:
                 line.set_label(labels[i])
 
@@ -1992,69 +2105,57 @@ def plot_comparison(
     return fig, ax
 
 
-def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
+def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     """Create 3D plot of coil geometry.
 
     Parameters
     ----------
-    coils : Coil, CoilSet
+    coils : Coil, CoilSet, Curve, or iterable
         Coil or coils to plot
     grid : Grid, optional
         Grid to use for evaluating geometry
-    ax : matplotlib AxesSubplot, optional
-        Axis to plot on    return_data : bool
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on
     return_data : bool
         if True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
-            plot_X(figsize=(4,6),label="your_label")
+            plot_X(figsize=(4,6), color="darkgrey")
 
         Valid keyword arguments are:
 
-        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
-          matplotlib)
+        * ``figsize``: tuple of length 2, the size of the figure in inches
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
         * ``color``: str, color of plotted coils
-        * ``cmap``: str, name of colormap
 
     Returns
     -------
-    fig : matplotlib.figure.Figure
+    fig : plotly.graph_objs._figure.Figure
         Figure being plotted to
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        Axes being plotted to
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
 
     """
-    figsize = kwargs.pop("figsize", None)
-    lw = kwargs.pop("lw", 2)
-    ls = kwargs.pop("ls", "-")
-    color = kwargs.pop("color", "current")
-    color = kwargs.pop("c", color)
-    cbar = False
-    if color == "current":
-        cbar = True
-        cmap = _get_cmap(kwargs.pop("cmap", "Spectral"))
-        currents = flatten_list(coils.current)
-        norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        color = [cmap(norm(cur)) for cur in currents]
-    assert (
-        len(kwargs) == 0
-    ), f"plot_coils got unexpected keyword argument: {kwargs.keys()}"
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
+    figsize = kwargs.pop("figsize", (10, 10))
+    color = kwargs.pop("color", "black")
+    errorif(
+        len(kwargs) != 0,
+        ValueError,
+        f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+    )
+
     if not isinstance(lw, (list, tuple)):
         lw = [lw]
     if not isinstance(ls, (list, tuple)):
         ls = [ls]
     if not isinstance(color, (list, tuple)):
         color = [color]
-    fig, ax = _format_ax(ax, True, figsize=figsize)
     if grid is None:
-        grid_kwargs = {"zeta": np.linspace(0, 2 * np.pi, 50)}
-        grid = _get_grid(**grid_kwargs)
+        grid = LinearGrid(N=400, endpoint=True)
 
     def flatten_coils(coilset):
         if hasattr(coilset, "__len__"):
@@ -2067,44 +2168,67 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     plot_data["X"] = []
     plot_data["Y"] = []
     plot_data["Z"] = []
+
+    if fig is None:
+        fig = go.Figure()
+
     for i, coil in enumerate(coils_list):
         x, y, z = coil.compute("x", grid=grid, basis="xyz")["x"].T
+        current = getattr(coil, "current", np.nan)
         plot_data["X"].append(x)
         plot_data["Y"].append(y)
         plot_data["Z"].append(z)
-        ax.plot(
-            x, y, z, lw=lw[i % len(lw)], ls=ls[i % len(ls)], c=color[i % len(color)]
+
+        trace = go.Scatter3d(
+            x=x,
+            y=y,
+            z=z,
+            marker=dict(
+                size=0,
+                opacity=0,
+            ),
+            line=dict(
+                color=color[i % len(color)],
+                width=lw[i % len(lw)],
+                dash=ls[i % len(ls)],
+            ),
+            showlegend=False,
+            name=coil.name or f"CoilSet[{i}]",
+            hovertext=f"Current = {current} (A)",
         )
 
-    if cbar:
-        cbar = fig.colorbar(sm, ax=ax)
-        cbar.set_label(r"$\mathrm{Current} ~(\mathrm{A})$")
-    x_limits = ax.get_xlim3d()
-    y_limits = ax.get_ylim3d()
-    z_limits = ax.get_zlim3d()
-
-    x_range = abs(x_limits[1] - x_limits[0])
-    x_middle = np.mean(x_limits)
-    y_range = abs(y_limits[1] - y_limits[0])
-    y_middle = np.mean(y_limits)
-    z_range = abs(z_limits[1] - z_limits[0])
-    z_middle = np.mean(z_limits)
-
-    # The plot bounding box is a sphere in the sense of the infinity
-    # norm, hence we call half the max range the plot radius.
-    plot_radius = 0.5 * max([x_range, y_range, z_range])
-
-    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
-    ax.set_xlabel(_AXIS_LABELS_XYZ[0])
-    ax.set_ylabel(_AXIS_LABELS_XYZ[1])
-    ax.set_zlabel(_AXIS_LABELS_XYZ[2])
-
+        fig.add_trace(trace)
+    fig.update_layout(
+        scene=dict(
+            xaxis_title="X (m)",
+            yaxis_title="Y (m)",
+            zaxis_title="Z (m)",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            aspectmode="data",
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+    )
     if return_data:
-        return fig, ax, plot_data
-
-    return fig, ax
+        return fig, plot_data
+    return fig
 
 
 def plot_boozer_modes(  # noqa: C901
@@ -2298,7 +2422,7 @@ def plot_boozer_modes(  # noqa: C901
 
 
 def plot_boozer_surface(
-    eq,
+    thing,
     grid_compute=None,
     grid_plot=None,
     rho=1,
@@ -2313,7 +2437,7 @@ def plot_boozer_surface(
 
     Parameters
     ----------
-    eq : Equilibrium
+    thing : Equilibrium or OmnigenousField
         Object from which to plot.
     grid_compute : Grid, optional
         grid to use for computing boozer spectrum
@@ -2338,6 +2462,7 @@ def plot_boozer_surface(
 
         Valid keyword arguments are:
 
+        * ``iota``: rotational transform, used when `thing` is an OmnigenousField
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
@@ -2364,44 +2489,87 @@ def plot_boozer_surface(
         from desc.plotting import plot_boozer_surface
         fig, ax = plot_boozer_surface(eq)
 
+    .. image:: ../../_static/images/plotting/plot_omnigenous_field.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boozer_surface
+        fig, ax = plot_boozer_surface(field, iota=0.32)
+
     """
+    eq_switch = True
+    if hasattr(thing, "_x_lmn"):
+        eq_switch = False  # thing is an OmnigenousField, not an Equilibrium
+
+    # default grids
     if grid_compute is None:
-        grid_kwargs = {
-            "rho": rho,
-            "M": 4 * eq.M,
-            "N": 4 * eq.N,
-            "NFP": eq.NFP,
-            "endpoint": False,
-        }
+        if eq_switch:
+            grid_kwargs = {
+                "rho": rho,
+                "M": 4 * thing.M,
+                "N": 4 * thing.N,
+                "NFP": thing.NFP,
+                "endpoint": False,
+            }
+        else:
+            grid_kwargs = {
+                "rho": rho,
+                "M": 50,
+                "N": 50,
+                "NFP": thing.NFP,
+                "endpoint": False,
+            }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {
             "rho": rho,
             "theta": 91,
             "zeta": 91,
-            "NFP": eq.NFP,
+            "NFP": thing.NFP,
             "endpoint": True,
         }
         grid_plot = _get_grid(**grid_kwargs)
 
-    M_booz = kwargs.pop("M_booz", 2 * eq.M)
-    N_booz = kwargs.pop("N_booz", 2 * eq.N)
-    title_fontsize = kwargs.pop("title_fontsize", None)
-    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
-    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-
-    transforms_compute = get_transforms(
-        "|B|_mn", obj=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
-    )
-    transforms_plot = get_transforms(
-        "|B|_mn", obj=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
-    )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
-    iota = grid_compute.compress(data["iota"])
-    data = transforms_plot["B"].transform(data["|B|_mn"])
-    data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+    # compute
+    if eq_switch:  # Equilibrium
+        M_booz = kwargs.pop("M_booz", 2 * thing.M)
+        N_booz = kwargs.pop("N_booz", 2 * thing.N)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data = thing.compute(
+                "|B|_mn", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+            )
+        B_transform = get_transforms(
+            "|B|_mn", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+        )["B"]
+        B = B_transform.transform(data["|B|_mn"]).reshape(
+            (grid_plot.num_theta, grid_plot.num_zeta), order="F"
+        )
+        theta_B = (
+            grid_plot.nodes[:, 1]
+            .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+            .squeeze()
+        )
+        zeta_B = (
+            grid_plot.nodes[:, 2]
+            .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+            .squeeze()
+        )
+        iota = grid_compute.compress(data["iota"])
+    else:  # OmnigenousField
+        iota = kwargs.pop("iota", None)
+        errorif(iota is None, ValueError, "iota must be supplied for OmnigenousField")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data = thing.compute(
+                ["theta_B", "zeta_B", "|B|"],
+                grid=grid_compute,
+                helicity=thing.helicity,
+                iota=iota,
+            )
+        B = data["|B|"]
+        theta_B = np.mod(data["theta_B"], 2 * np.pi)
+        zeta_B = np.mod(data["zeta_B"], 2 * np.pi / thing.NFP)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
@@ -2409,33 +2577,25 @@ def plot_boozer_surface(
     contourf_kwargs = {
         "norm": matplotlib.colors.Normalize(),
         "levels": kwargs.pop(
-            "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
+            "levels", np.linspace(np.nanmin(B), np.nanmax(B), ncontours)
         ),
         "cmap": kwargs.pop("cmap", "jet"),
         "extend": "both",
     }
 
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
     assert (
         len(kwargs) == 0
     ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
 
+    # plot
+    op = ("" if eq_switch else "tri") + "contour" + ("f" if fill else "")
+    im = getattr(ax, op)(zeta_B, theta_B, B, **contourf_kwargs)
+
     cax_kwargs = {"size": "5%", "pad": 0.05}
-
-    zz = (
-        grid_plot.nodes[:, 2]
-        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
-        .squeeze()
-    )
-    tt = (
-        grid_plot.nodes[:, 1]
-        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
-        .squeeze()
-    )
-
-    if fill:
-        im = ax.contourf(zz, tt, data, **contourf_kwargs)
-    else:
-        im = ax.contour(zz, tt, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -2453,14 +2613,17 @@ def plot_boozer_surface(
         alphas = np.hstack((alpha1, alpha2))
         ax.plot(zeta, alphas, color="k", ls="-", lw=2)
 
+    ax.set_xlim([0, 2 * np.pi / thing.NFP])
+    ax.set_ylim([0, 2 * np.pi])
+
     ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
     ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
 
     _set_tight_layout(fig)
-    plot_data = {"zeta_Boozer": zz, "theta_Boozer": tt, "|B|": data}
 
     if return_data:
+        plot_data = {"theta_B": theta_B, "zeta_B": zeta_B, "|B|": B}
         return fig, ax, plot_data
 
     return fig, ax
@@ -2856,6 +3019,7 @@ def plot_basis(basis, return_data=False, **kwargs):
     """
     title_fontsize = kwargs.pop("title_fontsize", None)
 
+    # TODO: add all other Basis classes
     if basis.__class__.__name__ == "PowerSeries":
         grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]

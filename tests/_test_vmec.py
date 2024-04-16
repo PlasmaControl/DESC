@@ -6,7 +6,10 @@ from netCDF4 import Dataset
 
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
+from desc.input_reader import InputReader
+from desc.io import load
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     fourier_to_zernike,
@@ -16,6 +19,8 @@ from desc.vmec_utils import (
     vmec_boundary_subspace,
     zernike_to_fourier,
 )
+
+from .utils import area_difference_desc
 
 
 class TestVMECIO:
@@ -370,6 +375,22 @@ def test_vmec_save_asym(TmpDir):
     VMECIO.save(eq, output_path)
 
 
+@pytest.mark.unit
+def test_vmec_save_kinetic(TmpDir):
+    """Tests that saving an equilibrium with kinetic profiles runs without errors."""
+    output_path = str(TmpDir.join("output.nc"))
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        NFP=3,
+        electron_density=np.array([[0, 1], [2, -1]]),
+        electron_temperature=np.array([[0, 1], [2, -1]]),
+        sym=True,
+    )
+    VMECIO.save(eq, output_path)
+
+
 @pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_1(VMEC_save):
@@ -409,6 +430,7 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(vmec.variables["xn_nyq"][:], desc.variables["xn_nyq"][:])
     assert vmec.variables["signgs"][:] == desc.variables["signgs"][:]
     assert vmec.variables["gamma"][:] == desc.variables["gamma"][:]
+    assert vmec.variables["nextcur"][:] == desc.variables["nextcur"][:]
     assert np.all(
         np.char.compare_chararrays(
             vmec.variables["pmass_type"][:],
@@ -494,34 +516,25 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["bdotb"][20:100]),
-        np.abs(desc.variables["bdotb"][20:100]),
-        rtol=1e-6,
+        vmec.variables["buco"][20:100], desc.variables["buco"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["buco"][20:100]),
-        np.abs(desc.variables["buco"][20:100]),
-        rtol=3e-2,
+        vmec.variables["bvco"][20:100], desc.variables["bvco"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["bvco"][20:100]),
-        np.abs(desc.variables["bvco"][20:100]),
-        rtol=3e-2,
+        vmec.variables["vp"][20:100], desc.variables["vp"][20:100], rtol=1e-6
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jdotb"][20:100]),
-        np.abs(desc.variables["jdotb"][20:100]),
-        rtol=1e-5,
+        vmec.variables["bdotb"][20:100], desc.variables["bdotb"][20:100], rtol=1e-6
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jcuru"][20:100]),
-        np.abs(desc.variables["jcuru"][20:100]),
-        rtol=1e-2,
+        vmec.variables["jdotb"][20:100], desc.variables["jdotb"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jcurv"][20:100]),
-        np.abs(desc.variables["jcurv"][20:100]),
-        rtol=3e-2,
+        vmec.variables["jcuru"][20:100], desc.variables["jcuru"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=3e-2
     )
     np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2
@@ -552,6 +565,12 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(
         vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["beta_vol"][:], desc.variables["beta_vol"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betaxis"][:], desc.variables["betaxis"][:], rtol=5e-5
     )
 
 
@@ -867,9 +886,7 @@ def test_plot_vmec_comparison(SOLOVEV):
 @pytest.mark.unit
 def test_vmec_boundary_subspace(DummyStellarator):
     """Test VMEC boundary subspace is enforced properly."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     RBC = np.array([[1, 2], [-1, 2], [1, 0], [2, 2]])
     ZBS = np.array([[2, 1], [-2, 1], [0, 2], [-1, 1]])
@@ -892,3 +909,50 @@ def test_vmec_boundary_subspace(DummyStellarator):
     zbs_ref = np.atleast_2d(np.array([0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0]))
     np.testing.assert_allclose(rbc_ref, np.abs(rbc) > tol)
     np.testing.assert_allclose(zbs_ref, np.abs(zbs) > tol)
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_write_vmec_input(TmpDir):
+    """Test generated VMEC input file gives the original equilibrium when solved."""
+    # write VMEC input file
+    fname = str(TmpDir.join("input.SOLOVEV"))
+    eq0 = get("SOLOVEV")
+    W0 = eq0.compute("W")["W"]
+    VMECIO.write_vmec_input(eq0, fname)
+
+    # read VMEC input file and override defaults to match desc/examples/SOLOVEV
+    ir = InputReader()
+    inputs = ir.parse_inputs(fname)
+    inputs[0]["spectral_indexing"] = "fringe"
+    inputs[0]["L"] = 24
+
+    # solve from VMEC input file
+    fam = EquilibriaFamily(inputs)
+    fam.solve_continuation(
+        objective=inputs[0]["objective"],
+        optimizer=inputs[0]["optimizer"],
+        pert_order=[inp["pert_order"] for inp in inputs],
+        ftol=[inp["ftol"] for inp in inputs],
+        xtol=[inp["xtol"] for inp in inputs],
+        gtol=[inp["gtol"] for inp in inputs],
+        maxiter=[inp["maxiter"] for inp in inputs],
+        verbose=2,
+    )
+    eq1 = fam[-1]
+    W1 = eq1.compute("W")["W"]
+
+    # check that solution matches original equilibrium
+    rho_err, theta_err = area_difference_desc(eq0, eq1)
+    np.testing.assert_allclose(eq0.L, eq1.L)
+    np.testing.assert_allclose(eq0.M, eq1.M)
+    np.testing.assert_allclose(eq0.N, eq1.N)
+    np.testing.assert_allclose(eq0.NFP, eq1.NFP)
+    np.testing.assert_allclose(eq0.Psi, eq1.Psi)
+    np.testing.assert_allclose(eq0.p_l, eq1.p_l)
+    np.testing.assert_allclose(eq0.i_l, eq1.i_l)
+    np.testing.assert_allclose(eq0.Rb_lmn, eq1.Rb_lmn)
+    np.testing.assert_allclose(eq0.Zb_lmn, eq1.Zb_lmn)
+    np.testing.assert_allclose(W0, W1)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)

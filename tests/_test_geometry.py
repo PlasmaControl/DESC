@@ -29,7 +29,7 @@ def test_xyz2rpz():
 
     xyz = np.array([0, 1, 1])
     rpz = xyz2rpz_vec(xyz, x=0, y=1)
-    np.testing.assert_allclose(rpz, np.array([[1, 0, 1]]), atol=1e-10)
+    np.testing.assert_allclose(rpz, np.array([1, 0, 1]), atol=1e-10)
 
 
 @pytest.mark.unit

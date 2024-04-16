@@ -1,6 +1,10 @@
 """Functions for converting between coordinate systems."""
 
+import functools
+
 from desc.backend import jnp
+
+from .utils import safenorm, safenormalize
 
 
 def reflection_matrix(normal):
@@ -33,17 +37,20 @@ def rotation_matrix(axis, angle=None):
 
     Returns
     -------
-    rot : ndarray, shape(3,3)
-        Matrix to rotate points in cartesian (X,Y,Z) coordinates
+    rotmat : ndarray, shape(3,3)
+        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
+
     """
     axis = jnp.asarray(axis)
+    norm = safenorm(axis)
+    axis = safenormalize(axis)
     if angle is None:
-        angle = jnp.linalg.norm(axis)
-    axis = axis / jnp.linalg.norm(axis)
+        angle = norm
+    eps = 1e2 * jnp.finfo(axis.dtype).eps
     R1 = jnp.cos(angle) * jnp.eye(3)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
-    return R1 + R2 + R3
+    return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
 
 
 def xyz2rpz(pts):
@@ -51,13 +58,14 @@ def xyz2rpz(pts):
 
     Parameters
     ----------
-    pts : ndarray, shape(n,3)
+    pts : ndarray, shape(...,3)
         points in cartesian (X,Y,Z) coordinates
 
     Returns
     -------
-    pts : ndarray, shape(n,3)
+    pts : ndarray, shape(...,3)
         points in polar (R,phi,Z) coordinates
+
     """
     x, y, z = pts.T
     # r = jnp.sqrt(x**2 + y**2)
@@ -72,13 +80,14 @@ def rpz2xyz(pts):
 
     Parameters
     ----------
-    pts : ndarray, shape(n,3)
+    pts : ndarray, shape(...,3)
         points in polar (R,phi,Z) coordinates
 
     Returns
     -------
-    pts : ndarray, shape(n,3)
+    pts : ndarray, shape(...,3)
         points in cartesian (X,Y,Z) coordinates
+
     """
     r, p, z = pts.T
     x = r
@@ -93,15 +102,16 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
 
     Parameters
     ----------
-    vec : ndarray, shape(n,3)
+    vec : ndarray, shape(...,3)
         vectors, in cartesian (X,Y,Z) form
-    x, y, phi : ndarray, shape(n,)
+    x, y, phi : ndarray, shape(...,)
         anchor points for vectors. Either x and y, or phi must be supplied
 
     Returns
     -------
-    vec : ndarray, shape(n,3)
+    vec : ndarray, shape(...,3)
         vectors, in polar (R,phi,Z) form
+
     """
     return vec
     # if x is not None and y is not None:
@@ -132,6 +142,7 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
     -------
     vec : ndarray, shape(n,3)
         vectors, in cartesian (X,Y,Z) form
+
     """
     # if x is not None and y is not None:
     #     phi = jnp.arctan2(y, x)

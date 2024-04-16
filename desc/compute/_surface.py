@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz, rpz2xyz_vec
+from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 
 @register_compute_fun(
@@ -31,6 +31,193 @@ def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     if kwargs.get("basis", "rpz").lower() == "xyz":
         coords = rpz2xyz(coords)
     data["x"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="X",
+    label="X",
+    units="m",
+    units_long="meters",
+    description="Cartesian X coordinate.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["x"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _X_Surface(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # if basis is rpz, then "x" is rpz and we must convert to xyz
+        coords = rpz2xyz(coords)
+    data["X"] = coords[:, 0]
+    return data
+
+
+@register_compute_fun(
+    name="Y",
+    label="Y",
+    units="m",
+    units_long="meters",
+    description="Cartesian Y coordinate.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["x"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _Y_Surface(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # if basis is rpz, then "x" is rpz and we must convert to xyz
+        coords = rpz2xyz(coords)
+    data["Y"] = coords[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="R",
+    label="R",
+    units="m",
+    units_long="meters",
+    description="Cylindrical radial position along surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["x"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _R_Surface(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords = xyz2rpz(coords)
+    data["R"] = coords[:, 0]
+    return data
+
+
+@register_compute_fun(
+    name="phi",
+    label="\\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal phi position along surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["x"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_Surface(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords = xyz2rpz(coords)
+    data["phi"] = coords[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="phi_r",
+    label="\\partial_{\\rho} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
+    coords_r = data["e_rho"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords_r = xyz2rpz_vec(coords_r, phi=data["phi"])
+    data["phi_r"] = coords_r[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="phi_t",
+    label="\\partial_{\\theta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
+    coords_t = data["e_theta"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords_t = xyz2rpz_vec(coords_t, phi=data["phi"])
+    data["phi_t"] = coords_t[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="phi_z",
+    label="\\partial_{\\zeta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
+    coords_z = data["e_zeta"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords_z = xyz2rpz_vec(coords_z, phi=data["phi"])
+    data["phi_z"] = coords_z[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="Z",
+    label="Z",
+    units="m",
+    units_long="meters",
+    description="Cylindrical vertical position along surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["x"],
+    parameterization="desc.geometry.core.Surface",
+)
+def _Z_Surface(params, transforms, profiles, data, **kwargs):
+    data["Z"] = data["x"][:, 2]
     return data
 
 
@@ -424,6 +611,171 @@ def _e_zeta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     if kwargs.get("basis", "rpz").lower() == "xyz":
         coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["e_zeta_z"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="Phi",
+    label="\\Phi",
+    units="A",
+    units_long="Amperes",
+    description="Surface current potential",
+    dim=1,
+    params=["I", "G", "Phi_mn"],
+    transforms={"Phi": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def _Phi_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi"] = (
+        transforms["Phi"].transform(params["Phi_mn"])
+        + params["G"] * transforms["Phi"].nodes[:, 2].flatten(order="F") / 2 / jnp.pi
+        + params["I"] * transforms["Phi"].nodes[:, 1].flatten(order="F") / 2 / jnp.pi
+    )
+    return data
+
+
+@register_compute_fun(
+    name="Phi_t",
+    label="\\partial_{\\theta}\\Phi",
+    units="A",
+    units_long="Amperes",
+    description="Surface current potential, poloidal derivative",
+    dim=1,
+    params=["I", "Phi_mn"],
+    transforms={"Phi": [[0, 1, 0]]},
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def _Phi_t_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi_t"] = (
+        transforms["Phi"].transform(params["Phi_mn"], dt=1) + params["I"] / 2 / jnp.pi
+    )
+    return data
+
+
+@register_compute_fun(
+    name="Phi_z",
+    label="\\partial_{\\zeta}\\Phi",
+    units="A",
+    units_long="Amperes",
+    description="Surface current potential, toroidal derivative",
+    dim=1,
+    params=["G", "Phi_mn"],
+    transforms={"Phi": [[0, 0, 1]]},
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def _Phi_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi_z"] = (
+        transforms["Phi"].transform(params["Phi_mn"], dz=1) + params["G"] / 2 / jnp.pi
+    )
+    return data
+
+
+@register_compute_fun(
+    name="Phi",
+    label="\\Phi",
+    units="A",
+    units_long="Amperes",
+    description="Surface current potential",
+    dim=1,
+    params=["params"],
+    transforms={"grid": [], "potential": []},
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.magnetic_fields._current_potential.CurrentPotentialField",
+)
+def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi"] = transforms["potential"](
+        transforms["grid"].nodes[:, 1],
+        transforms["grid"].nodes[:, 2],
+        **params["params"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="Phi_t",
+    label="\\partial_{\\theta}\\Phi",
+    units="A",
+    units_long="Amperes",
+    description="Surface current potential, poloidal derivative",
+    dim=1,
+    params=["params"],
+    transforms={"grid": [], "potential_dtheta": []},
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.magnetic_fields._current_potential.CurrentPotentialField",
+)
+def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi_t"] = transforms["potential_dtheta"](
+        transforms["grid"].nodes[:, 1],
+        transforms["grid"].nodes[:, 2],
+        **params["params"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="Phi_z",
+    label="\\partial_{\\zeta}\\Phi",
+    units="A",
+    units_long="Amperes",
+    description="Surface current potential, toroidal derivative",
+    dim=1,
+    params=["params"],
+    transforms={"grid": [], "potential_dzeta": []},
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.magnetic_fields._current_potential.CurrentPotentialField",
+)
+def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi_z"] = transforms["potential_dzeta"](
+        transforms["grid"].nodes[:, 1],
+        transforms["grid"].nodes[:, 2],
+        **params["params"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="K",
+    label="\\mathbf{K}",
+    units="A/m",
+    units_long="Amperes per meter",
+    description="Surface current density, defined as the"
+    "surface normal vector cross the gradient of the current potential.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["Phi_t", "Phi_z", "e_theta", "e_zeta", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.CurrentPotentialField",
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+    ],
+)
+def _K_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["K"] = (
+        data["Phi_t"] * (1 / data["|e_theta x e_zeta|"]) * data["e_zeta"].T
+    ).T - (data["Phi_z"] * (1 / data["|e_theta x e_zeta|"]) * data["e_theta"].T).T
     return data
 
 

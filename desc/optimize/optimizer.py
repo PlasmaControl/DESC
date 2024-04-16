@@ -13,7 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
-from desc.utils import Timer
+from desc.utils import Timer, flatten_list, get_instance, unique_list, warnif
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
@@ -40,7 +40,6 @@ class Optimizer(IOAble):
     _wrappers = [None, "prox", "proximal"]
 
     def __init__(self, method):
-
         self.method = method
 
     def __repr__(self):
@@ -59,7 +58,7 @@ class Optimizer(IOAble):
 
     @method.setter
     def method(self, method):
-        wrapper, submethod = _parse_method(method)
+        _, submethod = _parse_method(method)
         if submethod not in optimizers:
             raise NotImplementedError(
                 colored(
@@ -69,10 +68,9 @@ class Optimizer(IOAble):
             )
         self._method = method
 
-    # TODO: add copy argument and return the equilibrium?
     def optimize(  # noqa: C901 - FIXME: simplify this
         self,
-        eq,
+        things,
         objective,
         constraints=(),
         ftol=None,
@@ -83,13 +81,14 @@ class Optimizer(IOAble):
         verbose=1,
         maxiter=None,
         options=None,
+        copy=False,
     ):
         """Optimize an objective function.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Initial equilibrium.
+        things : Optimizable or tuple/list of Optimizable
+            Things to optimize, eg Equilibrium.
         objective : ObjectiveFunction
             Objective function to optimize.
         constraints : tuple of Objective, optional
@@ -130,9 +129,14 @@ class Optimizer(IOAble):
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
             settings. See the code for more details.
+        copy : bool
+            Whether to return the current things or a copy (leaving the original
+            unchanged).
 
         Returns
         -------
+        things : list,
+            list of optimized things
         res : OptimizeResult
             The optimization result represented as a ``OptimizeResult`` object.
             Important attributes are: ``x`` the solution array, ``success`` a
@@ -141,35 +145,81 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
+        if not isinstance(constraints, (tuple, list)):
+            constraints = (constraints,)
+
+        # get unique things
+        things, indices = unique_list(flatten_list(things, flatten_tuple=True))
+        counts = np.unique(indices, return_counts=True)[1]
+        duplicate_idx = np.where(counts > 1)[0]
+        warnif(
+            len(duplicate_idx),
+            UserWarning,
+            f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
+        )
+        things0 = [t.copy() for t in things]
+
+        # need local import to avoid circular dependencies
+        from desc.equilibrium import Equilibrium
+
+        # eq may be None
+        eq = get_instance(things, Equilibrium)
+        if eq is not None:
+            # save these for later
+            eq_params_init = eq.params_dict.copy()
+
         options = {} if options is None else options
         # TODO: document options
         timer = Timer()
         options = {} if options is None else options
-        wrapper, method = _parse_method(self.method)
+        _, method = _parse_method(self.method)
 
-        linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
-        objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
-            eq, objective, nonlinear_constraint, self.method, options
+        # parse and combine constraints into linear & nonlinear objective functions
+        linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
+        objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
+            eq, objective, nonlinear_constraints, self.method, options
         )
-
-        if not isinstance(objective, ProximalProjection):
-            # need to include self consistency constraints
+        if not isinstance(objective, ProximalProjection) and eq is not None:
             linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
-        if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints, eq=eq)
-            if nonlinear_constraint is not None:
-                nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints, eq=eq
-                )
-        if not objective.built:
-            objective.build(eq, verbose=verbose)
+        linear_constraint = _combine_constraints(linear_constraints)
+        nonlinear_constraint = _combine_constraints(nonlinear_constraints)
+
+        # make sure everything is built
+        if objective is not None and not objective.built:
+            objective.build(verbose=verbose)
+        if linear_constraint is not None and not linear_constraint.built:
+            linear_constraint.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
-            nonlinear_constraint.build(eq, verbose=verbose)
-        if nonlinear_constraint is not None:
+            nonlinear_constraint.build(verbose=verbose)
+
+        # combine arguments from all three objective functions
+        if linear_constraint is not None and nonlinear_constraint is not None:
+            objective, linear_constraint, nonlinear_constraint = combine_args(
+                objective, linear_constraint, nonlinear_constraint
+            )
+            assert set(objective.things) == set(linear_constraint.things)
+            assert set(objective.things) == set(nonlinear_constraint.things)
+        elif linear_constraint is not None:
+            objective, linear_constraint = combine_args(objective, linear_constraint)
+            assert set(objective.things) == set(linear_constraint.things)
+        elif nonlinear_constraint is not None:
             objective, nonlinear_constraint = combine_args(
                 objective, nonlinear_constraint
             )
-        if len(linear_constraints) and not isinstance(x_scale, str):
+            assert set(objective.things) == set(nonlinear_constraint.things)
+        assert set(objective.things) == set(things)
+
+        # wrap to handle linear constraints
+        if linear_constraint is not None:
+            objective = LinearConstraintProjection(objective, linear_constraint)
+            objective.build(verbose=verbose)
+            if nonlinear_constraint is not None:
+                nonlinear_constraint = LinearConstraintProjection(
+                    nonlinear_constraint, linear_constraint
+                )
+                nonlinear_constraint.build(verbose=verbose)
+
+        if linear_constraint is not None and not isinstance(x_scale, str):
             # need to project x_scale down to correct size
             Z = objective._Z
             x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
@@ -177,25 +227,6 @@ class Optimizer(IOAble):
                 np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z)
             )
             x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
-
-        if not objective.compiled:
-            if optimizers[method]["scalar"] and optimizers[method]["hessian"]:
-                mode = "scalar"
-            elif optimizers[method]["scalar"]:
-                mode = "bfgs"
-            else:
-                mode = "lsq"
-            try:
-                objective.compile(mode, verbose)
-            except ValueError:
-                objective.build(eq, verbose=verbose)
-                objective.compile(mode, verbose=verbose)
-        if nonlinear_constraint is not None and not nonlinear_constraint.compiled:
-            try:
-                nonlinear_constraint.compile("lsq", verbose)
-            except ValueError:
-                nonlinear_constraint.build(eq, verbose=verbose)
-                nonlinear_constraint.compile("lsq", verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(
@@ -206,8 +237,11 @@ class Optimizer(IOAble):
                     "yellow",
                 )
             )
-
-        x0 = objective.x(eq)
+        # we have to use this cumbersome indexing in this method when passing things
+        # to objective to guard against the passed-in things having an ordering
+        # different from objective.things, to ensure the correct order is passed
+        # to the objective
+        x0 = objective.x(*[things[things.index(t)] for t in objective.things])
 
         stoptol = _get_default_tols(
             method,
@@ -257,15 +291,15 @@ class Optimizer(IOAble):
             objective = objective._objective
 
         if isinstance(objective, ProximalProjection):
+            # reset eq params to initial
+            if eq is not None:
+                eq.params_dict = eq_params_init
             result["history"] = objective.history
+            objective = objective._objective
         else:
-            result["history"] = {}
-            for arg in objective.args:
-                result["history"][arg] = []
-            for x in result["allx"]:
-                kwargs = objective.unpack_state(x)
-                for arg in kwargs:
-                    result["history"][arg].append(kwargs[arg])
+            result["history"] = [
+                objective.unpack_state(xi, False) for xi in result["allx"]
+            ]
 
         timer.stop("Solution time")
 
@@ -278,7 +312,48 @@ class Optimizer(IOAble):
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 
-        return result
+        # temporarily assign new stuff for printing, might get replaced later
+        for thing, params in zip(objective.things, result["history"][-1]):
+            # more indexing here to ensure the correct params are assigned to the
+            # correct thing, as the order of things and objective.things might differ
+            ind = things.index(thing)
+            things[ind].params_dict = params
+
+        if verbose > 0:
+            print("Start of solver")
+            # need to check index of things bc things0 contains copies of
+            # things, so they are not the same exact Python objects
+            objective.print_value(
+                objective.x(*[things0[things.index(t)] for t in objective.things])
+            )
+            for con in constraints:
+                arg_inds_for_this_con = [
+                    things.index(t) for t in things if t in con.things
+                ]
+                args_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+                con.print_value(*con.xs(*args_for_this_con))
+
+            print("End of solver")
+            objective.print_value(
+                objective.x(*[things[things.index(t)] for t in objective.things])
+            )
+            for con in constraints:
+                arg_inds_for_this_con = [
+                    things.index(t) for t in things if t in con.things
+                ]
+                args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
+                con.print_value(*con.xs(*args_for_this_con))
+
+        if copy:
+            # need to swap things and things0, since things should be unchanged
+            for t, t0 in zip(things, things0):
+                init_params = t0.params_dict.copy()
+                final_params = t.params_dict.copy()
+                t.params_dict = init_params
+                t0.params_dict = final_params
+            return things0, result
+
+        return things, result
 
 
 def _parse_method(method):
@@ -292,29 +367,55 @@ def _parse_method(method):
     return wrapper, submethod
 
 
-def _parse_constraints(constraints):
-    """Break constraints into linear and nonlinear, and combine nonlinear constraints.
+def _combine_constraints(constraints):
+    """Combine constraints into a single ObjectiveFunction.
 
     Parameters
     ----------
     constraints : tuple of Objective
-        constraints to parse
+        Constraints to combine.
+
+    Returns
+    -------
+    objective : ObjectiveFunction or None
+        If constraints are present, they are combined into a single ObjectiveFunction.
+        Otherwise returns None.
+
+    """
+    if len(constraints):
+        objective = ObjectiveFunction(constraints)
+    else:
+        objective = None
+    return objective
+
+
+def _parse_constraints(constraints):
+    """Break constraints into linear and nonlinear.
+
+    Parameters
+    ----------
+    constraints : tuple of Objective
+        Constraints to parse.
 
     Returns
     -------
     linear_constraints : tuple of Objective
-        Individual linear constraints
-    nonlinear_constraints : ObjectiveFunction or None
-        if any nonlinear constraints are present, they are combined into a single
-        ObjectiveFunction, otherwise returns None
+        Individual linear constraints.
+    nonlinear_constraints : tuple of Objective
+        Individual nonlinear constraints.
+
     """
     if not isinstance(constraints, (tuple, list)):
         constraints = (constraints,)
+    # we treat linear bound constraints as nonlinear since they can't be easily
+    # factorized like linear equality constraints
     linear_constraints = tuple(
-        constraint for constraint in constraints if constraint.linear
+        constraint
+        for constraint in constraints
+        if (constraint.linear and (constraint.bounds is None))
     )
     nonlinear_constraints = tuple(
-        constraint for constraint in constraints if not constraint.linear
+        constraint for constraint in constraints if constraint not in linear_constraints
     )
     # check for incompatible constraints
     if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
@@ -324,25 +425,22 @@ def _parse_constraints(constraints):
             "Toroidal current and rotational transform cannot be "
             + "constrained simultaneously."
         )
-    # make sure any nonlinear constraints are combined into a single ObjectiveFunction
-    if len(nonlinear_constraints):
-        nonlinear_constraints = ObjectiveFunction(nonlinear_constraints)
-    else:
-        nonlinear_constraints = None
     return linear_constraints, nonlinear_constraints
 
 
 def _maybe_wrap_nonlinear_constraints(
-    eq, objective, nonlinear_constraint, method, options
+    eq, objective, nonlinear_constraints, method, options
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
+    if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
+        return objective, nonlinear_constraints
     wrapper, method = _parse_method(method)
-    if nonlinear_constraint is None:
+    if not len(nonlinear_constraints):
         if wrapper is not None:
             warnings.warn(
-                f"No nonlinear constraints detected, ignoring wrapper method {wrapper}"
+                f"No nonlinear constraints detected, ignoring wrapper method {wrapper}."
             )
-        return objective, nonlinear_constraint
+        return objective, nonlinear_constraints
     if wrapper is None and not optimizers[method]["equality_constraints"]:
         warnings.warn(
             FutureWarning(
@@ -361,13 +459,13 @@ def _maybe_wrap_nonlinear_constraints(
         solve_options = options.pop("solve_options", {})
         objective = ProximalProjection(
             objective,
-            constraint=nonlinear_constraint,
+            constraint=_combine_constraints(nonlinear_constraints),
             perturb_options=perturb_options,
             solve_options=solve_options,
             eq=eq,
         )
-        nonlinear_constraint = None
-    return objective, nonlinear_constraint
+        nonlinear_constraints = ()
+    return objective, nonlinear_constraints
 
 
 def _get_default_tols(
@@ -524,7 +622,6 @@ def register_optimizer(
     )
 
     def _decorator(func):
-
         for i, nm in enumerate(name):
             d = {
                 "description": description[i % len(name)],

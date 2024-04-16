@@ -1,5 +1,7 @@
 """Tests for optimizers and Optimizer class."""
 
+import warnings
+
 import numpy as np
 import pytest
 from numpy.random import default_rng
@@ -16,6 +18,7 @@ import desc.examples
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
@@ -24,6 +27,7 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixParameter,
     FixPressure,
     FixPsi,
     ForceBalance,
@@ -31,7 +35,10 @@ from desc.objectives import (
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
+    PlasmaVesselDistance,
+    QuasisymmetryTripleProduct,
     Volume,
+    get_fixed_boundary_constraints,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -314,6 +321,7 @@ def test_no_iterations():
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.optimize
 def test_overstepping():
     """Test that equilibrium is NOT updated when final function value is worse.
 
@@ -325,48 +333,31 @@ def test_overstepping():
     """
 
     class DummyObjective(_Objective):
-
         name = "Dummy"
         _print_value_fmt = "Dummy: {:.3e}"
         _units = "(Foo)"
 
-        def build(self, eq, *args, **kwargs):
-
+        def build(self, *args, **kwargs):
+            eq = self.things[0]
             # objective = just shift x by a lil bit
-            self._args = ["R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi"]
-            self._x0 = (
-                np.concatenate(
-                    [
-                        eq.R_lmn,
-                        eq.Z_lmn,
-                        eq.L_lmn,
-                        eq.p_l,
-                        eq.i_l,
-                        eq.c_l,
-                        np.atleast_1d(eq.Psi),
-                    ]
-                )
-                + 1e-6
-            )
-            self._dim_f = self._x0.size
-            self._check_dimensions()
-            self._set_dimensions(eq)
-            self._set_derivatives()
-            self._built = True
+            self._x0 = {key: val + 1e-6 for key, val in eq.params_dict.items()}
+            self._dim_f = sum(np.asarray(x).size for x in self._x0.values())
+            super().build()
 
-        def compute(self, *args, **kwargs):
-            params, _ = self._parse_args(*args, **kwargs)
-            x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
-            return x - self._x0
+        def compute(self, params, constants=None):
+            x = jnp.concatenate(
+                [jnp.atleast_1d(params[arg] - self._x0[arg]) for arg in params]
+            )
+            return x
 
     eq = desc.examples.get("DSHAPE")
 
     np.random.seed(0)
-    objective = ObjectiveFunction(DummyObjective(eq=eq), use_jit=False)
+    objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac_scaled = lambda x, *args: objective._jac_scaled(x) + 1e2 * (
-        np.random.random((objective._dim_f, x.size)) - 0.5
-    )
+    objective.jac_scaled_error = lambda x, *args: objective._jac_scaled_error(
+        x
+    ) + 1e2 * (np.random.random((objective._dim_f, x.size)) - 0.5)
 
     n = 10
     R_modes = np.vstack(
@@ -416,6 +407,7 @@ def test_overstepping():
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.solve
 def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
@@ -443,6 +435,7 @@ def test_maxiter_1_and_0_solve():
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.solve
 def test_scipy_fail_message():
     """Test that scipy fail message does not cause an error (see PR #434)."""
     eq = Equilibrium(M=3)
@@ -469,7 +462,6 @@ def test_scipy_fail_message():
             gtol=1e-12,
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
-    eq._node_pattern = "quad"
     eq.set_initial_guess()
     objectives = Energy(eq=eq)
     obj = ObjectiveFunction(objectives)
@@ -507,11 +499,11 @@ def test_wrappers():
     )
     con_nl = (ForceBalance(eq=eq),)
     obj = ForceBalance(eq=eq)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
-    ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), ObjectiveFunction(con))
     ob.build()
     assert ob.built
 
@@ -536,14 +528,16 @@ def test_wrappers():
     con_nl = (ForceBalance(eq=eq),)
     obj = ForceBalance(eq=eq)
     with pytest.raises(AssertionError):
-        _ = ProximalProjection(obj, con[0])
+        _ = ProximalProjection(obj, con[0], eq=eq)
     with pytest.raises(AssertionError):
-        _ = ProximalProjection(ObjectiveFunction(con[0]), con[1])
-    with pytest.raises(ValueError):
-        _ = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con[1]))
+        _ = ProximalProjection(ObjectiveFunction(con[0]), con[1], eq=eq)
     with pytest.raises(ValueError):
         _ = ProximalProjection(
-            ObjectiveFunction(con[0]), ObjectiveFunction(con + con_nl)
+            ObjectiveFunction(con[0]), ObjectiveFunction(con[1]), eq=eq
+        )
+    with pytest.raises(ValueError):
+        _ = ProximalProjection(
+            ObjectiveFunction(con[0]), ObjectiveFunction(con + con_nl), eq=eq
         )
     ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
     ob.build()
@@ -571,39 +565,38 @@ def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
     eqf = desc.examples.get("SOLOVEV")
     eqe = eqf.copy()
-    eqe._node_pattern = "quad"
     fobj = ObjectiveFunction(ForceBalance(eq=eqf))
     eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
     eobj.build()
-    constraints = (
-        FixBoundaryR(eq=eqe),
-        FixBoundaryZ(eq=eqe),
-        FixIota(eq=eqe),
-        FixPressure(eq=eqe),
-        FixPsi(eq=eqe),
-    )
+    econ = get_fixed_boundary_constraints(eq=eqe)
+    fcon = get_fixed_boundary_constraints(eq=eqf)
+    options = {"sgd": {"alpha": 1e-4}}
 
     for opt in optimizers:
         print("TESTING ", opt)
         if optimizers[opt]["scalar"]:
             obj = eobj
             eq = eqe
+            con = econ
         else:
             obj = fobj
             eq = eqf
+            con = fcon
         eq.solve(
             objective=obj,
-            constraints=constraints,
+            constraints=con,
             optimizer=opt,
-            verbose=3,
             copy=True,
+            verbose=3,
             maxiter=5,
+            options=options.get(opt, None),
         )
 
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_scipy_constrained_solve():
     """Tests that the scipy constrained optimizer does something.
 
@@ -614,7 +607,6 @@ def test_scipy_constrained_solve():
     eq = desc.examples.get("DSHAPE")
     # increase pressure so no longer in force balance
     eq.p_l *= 1.1
-    eq._node_pattern = "quad"
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
@@ -639,20 +631,22 @@ def test_scipy_constrained_solve():
         MeanCurvature(eq=eq, bounds=Hbounds),
     )
     obj = ObjectiveFunction(ForceBalance(eq=eq))
-    eq2, result = eq.optimize(
-        objective=obj,
-        constraints=constraints,
-        optimizer="scipy-trust-constr",
-        maxiter=50,
-        verbose=1,
-        x_scale="auto",
-        copy=True,
-        options={
-            "disp": 1,
-            "verbose": 3,
-            "initial_barrier_parameter": 1e-4,
-        },
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="delta_grad == 0.0")
+        eq2, result = eq.optimize(
+            objective=obj,
+            constraints=constraints,
+            optimizer="scipy-trust-constr",
+            maxiter=50,
+            verbose=1,
+            x_scale="auto",
+            copy=True,
+            options={
+                "disp": 1,
+                "verbose": 3,
+                "initial_barrier_parameter": 1e-4,
+            },
+        )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     H2 = eq2.compute(
@@ -668,6 +662,7 @@ def test_scipy_constrained_solve():
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_solve_with_x_scale():
     """Make sure we can manually specify x_scale when solving/optimizing."""
     # basically just tests that it runs without error
@@ -877,6 +872,7 @@ def test_auglag():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_constrained_AL_lsq():
     """Tests that the least squares augmented Lagrangian optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -884,8 +880,10 @@ def test_constrained_AL_lsq():
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
         FixPressure(eq=eq),  # fix pressure profile
-        FixIota(eq=eq),  # fix rotational transform profile
-        FixPsi(eq=eq),  # fix total toroidal magnetic flux
+        FixParameter(
+            eq, "i_l", bounds=(eq.i_l * 0.9, eq.i_l * 1.1)
+        ),  # linear inequality
+        FixPsi(eq=eq, bounds=(eq.Psi * 0.99, eq.Psi * 1.01)),  # linear inequality
     )
     # some random constraints to keep the shape from getting wacky
     V = eq.compute("V")["V"]
@@ -920,12 +918,16 @@ def test_constrained_AL_lsq():
     Dwell = constraints[-2].compute_scaled(*constraints[-2].xs(eq2))
     assert (ARbounds[0] - ctol) < AR2 < (ARbounds[1] + ctol)
     assert (Vbounds[0] - ctol) < V2 < (Vbounds[1] + ctol)
+    assert (0.99 * eq.Psi - ctol) <= eq2.Psi <= (1.01 * eq.Psi + ctol)
+    np.testing.assert_array_less((0.9 * eq.i_l - ctol), eq2.i_l)
+    np.testing.assert_array_less(eq2.i_l, (1.1 * eq.i_l + ctol))
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)
 
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_constrained_AL_scalar():
     """Tests that the augmented Lagrangian constrained optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -966,3 +968,363 @@ def test_constrained_AL_scalar():
     np.testing.assert_allclose(V, V2, atol=ctol, rtol=ctol)
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_proximal_with_PlasmaVesselDistance():
+    """Tests that the proximal projection works with fixed surface distance obj."""
+    eq = desc.examples.get("SOLOVEV")
+
+    constraints = (
+        ForceBalance(eq=eq),
+        FixPressure(eq=eq),  # fix pressure profile
+        FixIota(eq=eq),  # fix rotational transform profile
+        FixPsi(eq=eq),  # fix total toroidal magnetic flux
+    )
+    # circular surface
+    a = 2
+    R0 = 4
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+
+    grid = LinearGrid(M=eq.M, N=0, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=True
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("proximal-lsq-exact")
+    eq, result = optimizer.optimize(
+        eq,
+        objective,
+        constraints,
+        verbose=3,
+        maxiter=3,
+    )
+
+    # make sure it also works if proximal is given multiple objects in things
+    obj = PlasmaVesselDistance(
+        surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=False
+    )
+    objective = ObjectiveFunction((obj,))
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf),
+        objective,
+        constraints,
+        verbose=3,
+        maxiter=3,
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_optimize_multiple_things_different_order():
+    """Tests that optimizing multiple things works regardless of order of things."""
+    # tests fix for GH issue #828
+    # optimize a circular surface to be a certain distance from a circular eq
+
+    eq = Equilibrium()
+    a_eq = 1  # eq minor radius
+
+    # circular surface
+    a = 3
+    R0 = 10
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    constraints = (
+        # don't let eq vary
+        FixParameter(eq),
+        # only let the minor radius of the surface vary
+        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+    )
+
+    target_dist = 1
+
+    grid = LinearGrid(M=10, N=0, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        plasma_grid=grid,
+        surface_grid=grid,
+        surface_fixed=False,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+
+    # ensure it runs when (eq,surf) are passed
+    (eq1, surf1), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=15, copy=True
+    )
+    # ensure surface changed correctly
+    np.testing.assert_allclose(
+        surf1.R_lmn[surf1.R_basis.get_idx(M=1, N=0)], a_eq + target_dist
+    )
+    np.testing.assert_allclose(
+        surf1.Z_lmn[surf1.Z_basis.get_idx(M=-1, N=0)], -a_eq - target_dist
+    )
+
+    np.testing.assert_allclose(surf1.R_lmn[surf1.R_basis.get_idx(M=0, N=0)], R0)
+    # ensure eq did not change
+    for key in eq.params_dict.keys():
+        np.testing.assert_allclose(eq1.params_dict[key], eq.params_dict[key])
+
+    # fresh start
+    constraints = (
+        # don't let eq vary
+        FixParameter(eq),
+        # only let the minor radius of the surface vary
+        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+    )
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        plasma_grid=grid,
+        surface_grid=grid,
+        surface_fixed=False,
+    )
+    objective = ObjectiveFunction((obj,))
+    # ensure it runs when (surf,eq) are passed which is opposite
+    # the order of objective.things
+    (surf2, eq2), result = optimizer.optimize(
+        (surf, eq), objective, constraints, verbose=3, maxiter=15, copy=True
+    )
+
+    # ensure surface changed correctly
+    np.testing.assert_allclose(
+        surf2.R_lmn[surf2.R_basis.get_idx(M=1, N=0)], a_eq + target_dist
+    )
+    np.testing.assert_allclose(
+        surf2.Z_lmn[surf2.Z_basis.get_idx(M=-1, N=0)], -a_eq - target_dist
+    )
+    np.testing.assert_allclose(surf2.R_lmn[surf2.R_basis.get_idx(M=0, N=0)], R0)
+    # ensure eq did not change
+    for key in eq.params_dict.keys():
+        np.testing.assert_allclose(eq2.params_dict[key], eq.params_dict[key])
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_optimize_with_single_constraint():
+    """Tests that Optimizer.optimize prints afterwards with a single constraint."""
+    eq = Equilibrium()
+    optimizer = Optimizer("lsq-exact")
+    objectective = ObjectiveFunction(GenericObjective("|B|", eq))
+    constraints = FixParameter(  # Psi is not constrained
+        eq, ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "c_l"]
+    )
+
+    # test depends on verbose > 0
+    optimizer.optimize(eq, objective=objectective, constraints=constraints, verbose=2)
+
+
+@pytest.mark.unit
+def test_proximal_jacobian():
+    """Test that JVPs and manual concatenation give the same result as full jac."""
+    eq = desc.examples.get("HELIOTRON")
+    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+    con1 = ObjectiveFunction(ForceBalance(eq1))
+    con2 = ObjectiveFunction(ForceBalance(eq2))
+    con3 = ObjectiveFunction(ForceBalance(eq3))
+    obj1 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq1, deriv_mode="fwd"),
+            AspectRatio(eq1, deriv_mode="fwd"),
+            Volume(eq1, deriv_mode="fwd"),
+        ),
+        deriv_mode="batched",
+    )
+    obj2 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+            AspectRatio(eq2, deriv_mode="fwd"),
+            Volume(eq2, deriv_mode="fwd"),
+        ),
+        deriv_mode="looped",
+    )
+    obj3 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
+            AspectRatio(eq3, deriv_mode="rev"),
+            Volume(eq3, deriv_mode="rev"),
+        ),
+        deriv_mode="blocked",
+    )
+    prox1 = ProximalProjection(obj1, con1, eq1)
+    prox2 = ProximalProjection(obj2, con2, eq2)
+    prox3 = ProximalProjection(obj3, con3, eq3)
+    prox1.build()
+    prox2.build()
+    prox3.build()
+
+    x = prox1.x(eq)
+    v = np.random.default_rng(1138).random(x.shape)
+
+    # this is basically the old method we're benchmarking against
+    xf = con1.x(eq1)
+    xg = obj1.x(eq1)
+    # for scaled jacobian
+    Fx = con1.jac_scaled(xf)
+    Gx = obj1.jac_scaled(xg)
+    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
+    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fc = Fx @ prox1._dxdc
+    Gc = Gx @ prox1._dxdc
+    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+    jac_scaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+    # for unscaled jacobian
+    Fx = con1.jac_unscaled(xf)
+    Gx = obj1.jac_unscaled(xg)
+    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
+    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fc = Fx @ prox1._dxdc
+    Gc = Gx @ prox1._dxdc
+    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+    jac_unscaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+
+    jvp0 = jac_scaled @ v
+    jvp1 = prox1.jvp_scaled(v, x)
+    jvp2 = prox2.jvp_scaled(v, x)
+    jvp3 = prox3.jvp_scaled(v, x)
+
+    np.testing.assert_allclose(jvp0, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp3, rtol=1e-12, atol=1e-12)
+
+    jvp0 = jac_unscaled @ v
+    jvp1 = prox1.jvp_unscaled(v, x)
+    jvp2 = prox2.jvp_unscaled(v, x)
+    jvp3 = prox3.jvp_unscaled(v, x)
+
+    np.testing.assert_allclose(jvp0, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp3, rtol=1e-12, atol=1e-12)
+
+    jac1 = prox1.jac_scaled(x)
+    jac2 = prox2.jac_scaled(x)
+    jac3 = prox3.jac_scaled(x)
+
+    np.testing.assert_allclose(jac_scaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jac1 = prox1.jac_unscaled(x)
+    jac2 = prox2.jac_unscaled(x)
+    jac3 = prox3.jac_unscaled(x)
+
+    np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_LinearConstraint_jacobian():
+    """Test that JVPs and manual concatenation give the same result as full jac."""
+    eq = desc.examples.get("HELIOTRON")
+    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+
+    obj1 = ObjectiveFunction(ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched")
+    obj2 = ObjectiveFunction(ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped")
+    obj3 = ObjectiveFunction(ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked")
+
+    con1 = ObjectiveFunction(get_fixed_boundary_constraints(eq1))
+    con2 = ObjectiveFunction(get_fixed_boundary_constraints(eq2))
+    con3 = ObjectiveFunction(get_fixed_boundary_constraints(eq3))
+
+    lc1 = LinearConstraintProjection(obj1, con1)
+    lc2 = LinearConstraintProjection(obj2, con2)
+    lc3 = LinearConstraintProjection(obj3, con3)
+
+    lc1.build()
+    lc2.build()
+    lc3.build()
+
+    vl = np.random.default_rng(1729).random(lc1._dim_x_reduced)
+    vr = np.random.default_rng(1729).random(lc1.dim_f)
+
+    x = obj1.x()
+    x_reduced = lc1.x()
+    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    jvp_scaled = jac_scaled @ vl
+    jvp_unscaled = jac_unscaled @ vl
+    vjp_scaled = jac_scaled.T @ vr
+    vjp_unscaled = jac_unscaled.T @ vr
+
+    jac1 = lc1.jac_scaled(x_reduced)
+    jac2 = lc2.jac_scaled(x_reduced)
+    jac3 = lc3.jac_scaled(x_reduced)
+
+    np.testing.assert_allclose(jac_scaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jac1 = lc1.jac_unscaled(x_reduced)
+    jac2 = lc2.jac_unscaled(x_reduced)
+    jac3 = lc3.jac_unscaled(x_reduced)
+
+    np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jvp1 = lc1.jvp_scaled(vl, x_reduced)
+    jvp2 = lc2.jvp_scaled(vl, x_reduced)
+    jvp3 = lc3.jvp_scaled(vl, x_reduced)
+
+    np.testing.assert_allclose(jvp_scaled, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_scaled, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_scaled, jvp3, rtol=1e-12, atol=1e-12)
+
+    jvp1 = lc1.jvp_unscaled(vl, x_reduced)
+    jvp2 = lc2.jvp_unscaled(vl, x_reduced)
+    jvp3 = lc3.jvp_unscaled(vl, x_reduced)
+
+    np.testing.assert_allclose(jvp_unscaled, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_unscaled, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_unscaled, jvp3, rtol=1e-12, atol=1e-12)
+
+    vjp1 = lc1.vjp_scaled(vr, x_reduced)
+    vjp2 = lc2.vjp_scaled(vr, x_reduced)
+    vjp3 = lc3.vjp_scaled(vr, x_reduced)
+
+    np.testing.assert_allclose(vjp_scaled, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_scaled, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_scaled, vjp3, rtol=1e-12, atol=1e-12)
+
+    vjp1 = lc1.vjp_unscaled(vr, x_reduced)
+    vjp2 = lc2.vjp_unscaled(vr, x_reduced)
+    vjp3 = lc3.vjp_unscaled(vr, x_reduced)
+
+    np.testing.assert_allclose(vjp_unscaled, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_unscaled, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_unscaled, vjp3, rtol=1e-12, atol=1e-12)

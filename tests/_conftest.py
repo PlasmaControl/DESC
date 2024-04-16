@@ -212,7 +212,7 @@ def HELIOTRON_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    with pytest.warns(UserWarning, match="Vacuum objective does not use any profiles"):
+    with pytest.warns(UserWarning, match="Vacuum objective assumes 0 pressure"):
         main(args)
 
     HELIOTRON_vacuum_out = {
@@ -283,8 +283,6 @@ def DummyStellarator(tmpdir_factory):
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
-        "objective": "force",
-        "optimizer": "lsq-exact",
     }
     eq = Equilibrium(**inputs)
     eq.save(output_path)

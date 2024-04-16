@@ -28,11 +28,10 @@ maxiter = 50
 optimizer         = lsq-exact
 objective         = force
 spectral_indexing = fringe
-node_pattern      = jacobi
 
 # pressure and rotational transform profiles
-l:   0	p =   5.00000000E+05	i =   3.50000000E-01
-l:   2	p =  -1.00000000E+06	i =   6.50000000E-01
+l:   0	p =   5.00000000E+05	i =   -3.50000000E-01
+l:   2	p =  -1.00000000E+06	i =   -6.50000000E-01
 l:   4	p =   5.00000000E+05	i =   0.00000000E+00
 
 # magnetic axis initial guess

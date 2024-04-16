@@ -1,4 +1,12 @@
-"""Tests for compute functions evaluated at limits."""
+"""Tests for compute functions evaluated at limits.
+
+If a new quantity is added to the compute functions whose limit is not finite
+(or does not exist), simply add it to the ``not_finite_limits`` set below.
+If the limit has yet to be derived, add it to the ``not_implemented_limits`` set.
+"""
+
+import functools
+import inspect
 
 import numpy as np
 import pytest
@@ -8,6 +16,7 @@ from desc.compute.utils import dot, surface_integrals_map
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
+from desc.objectives import GenericObjective, ObjectiveFunction
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -15,6 +24,9 @@ from desc.grid import LinearGrid
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
 zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
+# "current Redl" needs special treatment because it is generally not defined for all
+# configurations (giving NaN values), except it is always 0 at the magnetic axis
+not_continuous_limits = {"current Redl"}
 not_finite_limits = {
     "D_Mercier",
     "D_geodesic",
@@ -52,9 +64,9 @@ not_finite_limits = {
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
-    "iota_num_rrr",
-    "iota_den_rrr",
     "D_current",
+    "n_rho_z",
+    "|e_theta x e_zeta|_z",
     "e^rho_rr",
     "e^theta_rr",
     "e^zeta_rr",
@@ -73,7 +85,30 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "K_vc",  # only defined on surface
+    "iota_num_rrr",
+    "iota_den_rrr",
 }
+
+
+def add_all_aliases(names):
+    """Add aliases to limits."""
+    all_aliases = []
+    for name in names:
+        for base_class in data_index.keys():
+            if name in data_index[base_class].keys():
+                all_aliases.append(data_index[base_class][name]["aliases"])
+
+    # flatten
+    all_aliases = [name for sublist in all_aliases for name in sublist]
+    names.update(all_aliases)
+
+    return names
+
+
+zero_limits = add_all_aliases(zero_limits)
+not_finite_limits = add_all_aliases(not_finite_limits)
+not_implemented_limits = add_all_aliases(not_implemented_limits)
 
 
 def grow_seeds(
@@ -109,7 +144,6 @@ not_implemented_limits = grow_seeds(
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
 )
-not_implemented_limits.discard("D_Mercier")
 
 
 def _skip_this(eq, name):
@@ -119,8 +153,9 @@ def _skip_this(eq, name):
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
-        or (eq.current is None and ("iota_num" in name or "iota_den" in name))
+        or (eq.current is None and "iota_num" in name)
     )
 
 
@@ -189,13 +224,18 @@ def assert_is_continuous(
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
-        if name in not_finite_limits:
+        if name in not_continuous_limits:
+            continue
+        elif name in not_finite_limits:
             assert (np.isfinite(data[name]).T != axis).all(), name
             continue
         else:
             assert np.isfinite(data[name]).all(), name
-        if data_index[p][name]["coordinates"] == "":
-            # can't check continuity of global scalar
+        if (
+            data_index[p][name]["coordinates"] == ""
+            or data_index[p][name]["coordinates"] == "z"
+        ):
+            # can't check continuity of global scalar or function of toroidal angle
             continue
         # make single variable function of rho
         if data_index[p][name]["coordinates"] == "r":
@@ -267,7 +307,7 @@ class TestAxisLimits:
         # fixed iota
         assert_is_continuous(get("W7-X"), kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("QAS"), kwargs=kwargs)
+        assert_is_continuous(get("NCSX"), kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -301,4 +341,58 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
         test(get("W7-X"))
-        test(get("QAS"))
+        test(get("NCSX"))
+
+
+def _reverse_mode_unsafe_names():
+    names = data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
+    eq = get("ESTELL")
+
+    def isalias(name):
+        return isinstance(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"],
+            functools.partial,
+        )
+
+    def get_source(name):
+        return "".join(
+            inspect.getsource(
+                data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"]
+            ).split("def ")[1:]
+        )
+
+    names = [
+        name
+        for name in names
+        if not (
+            "Boozer" in name
+            or "_mn" in name
+            or name == "B modes"
+            or _skip_this(eq, name)
+            or name in not_finite_limits
+            or isalias(name)
+        )
+    ]
+
+    unsafe_names = []  # things that might have nan gradient but shouldn't
+    for name in names:
+        source = get_source(name)
+        if "replace_at_axis" in source:
+            unsafe_names.append(name)
+
+    unsafe_names = sorted(unsafe_names)
+    print("Unsafe names: ", unsafe_names)
+    return unsafe_names
+
+
+@pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
+def test_reverse_mode_ad_axis(name):
+    """Asserts that the rho=0 axis limits are reverse mode differentiable."""
+    eq = get("ESTELL")
+    grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
+    eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid))
+    obj.build(verbose=0)
+    g = obj.grad(obj.x())
+    assert not np.any(np.isnan(g))

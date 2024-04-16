@@ -5,12 +5,13 @@ from abc import ABC, abstractmethod
 import numpy as np
 import scipy
 from interpax import fft_interp2d
+from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.compute.utils import safediv, safenorm
-from desc.grid import LinearGrid
+from desc.compute.utils import cross, safediv, safenorm
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
 
@@ -776,7 +777,7 @@ def virtual_casing_biot_savart(eval_data, source_data, interpolator, loop=True):
     )
 
 
-def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
+def compute_B_plasma_lcfs(eq, eval_grid, source_grid=None, normal_only=False):
     """Evaluate magnetic field on surface due to enclosed plasma currents.
 
     The magnetic field due to the plasma current can be written as a Biot-Savart
@@ -857,3 +858,51 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     if normal_only:
         Bplasma = jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
     return Bplasma
+
+
+def compute_B_plasma_vol(eq, eval_grid, source_grid=None):
+    """Evaluate magnetic field in a volume due to enclosed plasma currents.
+
+    The magnetic field due to the plasma current can be written as a Biot-Savart
+    integral over the plasma volume:
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫') × (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d³𝐫'
+
+    Where 𝐉 is the plasma current density, 𝐫 is the evaluation point, and 𝐫' is a point
+    in the plasma volume.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that is the source of the plasma current.
+    eval_grid : ndarray, shape(num_nodes, 3)
+        Evaluation points for the magnetic field in (R,phi,Z) coordinates.
+    source_grid : Grid, optional
+        Source points for integral. Defaults to the equilibrium QuadratureGrid.
+
+    Returns
+    -------
+    f : ndarray, shape(eval_grid.num_nodes, 3) or shape(eval_grid.num_nodes,)
+        Magnetic field evaluated at eval_grid in (R,phi,Z) components.
+
+    """
+    eval_grid = np.atleast_2d(eval_grid)
+    assert eval_grid.shape[1] == 3
+    if source_grid is None:
+        # TODO: N resolution should also be dependent on NFP
+        source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+
+    data_keys = ["J", "sqrt(g)", "x"]
+    data = eq.compute(data_keys, grid=source_grid)
+
+    B = np.zeros_like(eval_grid)
+    for k, x in enumerate(eval_grid):
+        dx = x - data["x"]
+        B[k, :] = np.sum(
+            cross(data["J"], dx)
+            / np.linalg.norm(dx).T ** 3
+            * np.atleast_2d(data["sqrt(g)"]).T
+            * np.atleast_2d(source_grid.weights).T,
+            axis=0,
+        )
+    return mu_0 / (4 * np.pi) * B

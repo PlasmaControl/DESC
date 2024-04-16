@@ -22,7 +22,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.singularities import compute_B_plasma
+from desc.singularities import compute_B_plasma_lcfs
 from desc.transform import Transform
 from desc.utils import copy_coeffs, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
@@ -273,7 +273,9 @@ class _MagneticField(IOAble, ABC):
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
 
         if calc_Bplasma:
-            Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
+            Bplasma = compute_B_plasma_lcfs(
+                eq, eval_grid, vc_source_grid, normal_only=True
+            )
             Bnorm += Bplasma
 
         if basis.lower() == "xyz":

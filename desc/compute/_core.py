@@ -3,6 +3,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
+from .geom_utils import rpz2xyz
 
 
 @register_compute_fun(
@@ -2880,4 +2881,34 @@ def _zeta_t(params, transforms, profiles, data, **kwargs):
 )
 def _zeta_z(params, transforms, profiles, data, **kwargs):
     data["zeta_z"] = jnp.ones_like(data["0"])
+    return data
+
+
+@register_compute_fun(
+    name="x",
+    label="\\mathbf{r}",
+    units="m",
+    units_long="meters",
+    description="Position vector in plasma volume",
+    dim=3,
+    params=["R_lmn", "Z_lmn"],
+    transforms={
+        "R": [[0, 0, 0]],
+        "Z": [[0, 0, 0]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="rt",
+    data=[],
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
+    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+)
+def _x_Equilibrium(params, transforms, profiles, data, **kwargs):
+    R = transforms["R"].transform(params["R_lmn"])
+    Z = transforms["Z"].transform(params["Z_lmn"])
+    phi = transforms["grid"].nodes[:, 2]
+    coords = jnp.stack([R, phi, Z], axis=1)
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        coords = rpz2xyz(coords)
+    data["x"] = coords
     return data

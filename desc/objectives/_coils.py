@@ -13,7 +13,7 @@ from desc.backend import (
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid, _Grid
-from desc.singularities import compute_B_plasma
+from desc.singularities import compute_B_plasma_lcfs
 from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
@@ -640,7 +640,7 @@ class QuadraticFlux(_Objective):
         this should also be set to True.
     source_grid : Grid, optional
         Collocation grid containing the nodes for plasma source terms.
-        Default grid is detailed in the docs for ``compute_B_plasma``
+        Default grid is detailed in the docs for ``compute_B_plasma_lcfs``
     eval_grid : Grid, optional
         Collocation grid containing the nodes on the plasma surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
@@ -750,7 +750,7 @@ class QuadraticFlux(_Objective):
             Bplasma = jnp.zeros(eval_grid.num_nodes)
 
         else:
-            Bplasma = compute_B_plasma(
+            Bplasma = compute_B_plasma_lcfs(
                 eq, eval_grid, self._source_grid, normal_only=True
             )
 

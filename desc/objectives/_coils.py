@@ -1023,7 +1023,7 @@ class CoilsetMinDistance(_CoilObjective):
 
     Parameters
     ----------
-    coil : CoilSet or Coil
+    coils : CoilSet
         Coil(s) that are to be optimized
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -1063,7 +1063,7 @@ class CoilsetMinDistance(_CoilObjective):
 
     def __init__(
         self,
-        coil,
+        coils,
         target=None,
         bounds=None,
         weight=1,
@@ -1074,12 +1074,12 @@ class CoilsetMinDistance(_CoilObjective):
         grid=None,
         name="coilset minimum distance",
     ):
-        self._coils = coil
         if target is None and bounds is None:
             target = 0
+        self._coils = coils
 
         super().__init__(
-            coil,
+            coils,
             ["x"],
             target=target,
             bounds=bounds,
@@ -1136,23 +1136,28 @@ class CoilsetMinDistance(_CoilObjective):
 
         Returns
         -------
-        f : float or array of floats
-            Coilset minimum distance.
+        f : array of floats
+            Distance to nearest coil for each coil in the coilset.
         """
         data = super().compute(params, constants=constants, basis="xyz")
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        # FIXME: what if coilset has NFP or stell symmetry?
+        # we want to compare distances across all coils...
         min_dists = []
-        for whichCoil1 in range(len(data) - 1):
+        for whichCoil1 in range(len(data)):
             coords1 = data[whichCoil1]["x"]
             mindist = 1e4
-            for whichCoil2 in range(whichCoil1 + 1, len(data)):
+            for whichCoil2 in range(len(data)):
+                if whichCoil1 == whichCoil2:
+                    continue
                 coords2 = data[whichCoil2]["x"]
 
                 d = jnp.linalg.norm(
                     coords1[:, None, :] - coords2[None, :, :],
                     axis=-1,
                 )
+                mindist = jnp.min(jnp.array([jnp.min(d), mindist]))
 
-                min_dists.append(jnp.min(jnp.array([jnp.min(d), mindist])))
+            min_dists.append(mindist)
 
         return jnp.array(min_dists)

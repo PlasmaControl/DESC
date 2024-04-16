@@ -365,7 +365,7 @@ class CoilLength(_CoilObjective):
 
         Returns
         -------
-        f : float or array of floats
+        f : array of floats
             Coil length.
         """
         data = super().compute(params, constants=constants)
@@ -598,7 +598,7 @@ class CoilTorsion(_CoilObjective):
 
         Returns
         -------
-        f : float or array of floats
+        f : array of floats
             Coil torsion.
         """
         data = super().compute(params, constants=constants)
@@ -652,7 +652,7 @@ class CoilCurrentLength(CoilLength):
     """
 
     _scalar = False
-    _units = "(m^-1)"
+    _units = "(A)"
     _print_value_fmt = "Coil current length: {:10.3e} "
 
     def __init__(
@@ -713,7 +713,7 @@ class CoilCurrentLength(CoilLength):
 
         Returns
         -------
-        f : float or array of floats
+        f : array of floats
         """
         lengths = super().compute(params, constants=constants)
         params = tree_flatten(params, is_leaf=lambda x: isinstance(x, dict))[0]

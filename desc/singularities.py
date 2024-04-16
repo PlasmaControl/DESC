@@ -892,17 +892,17 @@ def compute_B_plasma_vol(eq, eval_grid, source_grid=None):
         # TODO: N resolution should also be dependent on NFP
         source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
 
-    data_keys = ["J", "sqrt(g)", "x"]
+    data_keys = ["J", "phi", "sqrt(g)", "x"]
     data = eq.compute(data_keys, grid=source_grid)
 
     B = np.zeros_like(eval_grid)
-    for k, x in enumerate(eval_grid):
-        dx = x - data["x"]
+    for k, x in enumerate(rpz2xyz(eval_grid)):
+        dx = x - rpz2xyz(data["x"])
         B[k, :] = np.sum(
-            cross(data["J"], dx)
+            cross(rpz2xyz_vec(data["J"], phi=data["phi"]), dx)
             / np.linalg.norm(dx).T ** 3
             * np.atleast_2d(data["sqrt(g)"]).T
             * np.atleast_2d(source_grid.weights).T,
             axis=0,
         )
-    return mu_0 / (4 * np.pi) * B
+    return mu_0 / (4 * np.pi) * xyz2rpz_vec(B, phi=eval_grid[:, 1])

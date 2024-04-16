@@ -21,6 +21,7 @@ from desc.magnetic_fields import (
     OmnigenousField,
     SplineMagneticField,
     ToroidalMagneticField,
+    VerticalMagneticField,
 )
 from desc.objectives import (
     AspectRatio,
@@ -31,6 +32,7 @@ from desc.objectives import (
     CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCollectionParameters,
     FixCurrent,
     FixIota,
     FixOmniBmax,
@@ -504,7 +506,7 @@ def test_NAE_QSC_solve():
         np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
         np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
-        ### check lambda to match near axis
+        # check lambda to match near axis
         # Evaluate lambda near the axis
         data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
         lam_nae = data_nae["lambda"]
@@ -1276,3 +1278,23 @@ def test_quadratic_flux_optimization_with_analytic_field():
     # optimizer should zero out field since that's the easiest way
     # to get to Bnorm = 0
     np.testing.assert_allclose(things[0].B0, 0, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_second_stage_optimization():
+    """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
+    # This also tests that FixCollectionParameters works properly when fixing a
+    # parameter that does not exist for all things in the collection.
+
+    eq = get("DSHAPE")
+    field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field))
+    constraints = FixCollectionParameters(field, "R0")
+    optimizer = Optimizer("lsq-exact")
+    (field,), _ = optimizer.optimize(
+        things=field, objective=objective, constraints=constraints, verbose=2
+    )
+    # TODO: could make this more robust instead of assuming only vertical field changes
+    np.testing.assert_allclose(field[0].R0, 3.5)
+    np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (does not change)
+    np.testing.assert_allclose(field[1].B0, -0.022, rtol=1e-2)  # vertical field

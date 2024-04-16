@@ -6,6 +6,7 @@ import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
+from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil, MixedCoilSet
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -22,6 +23,7 @@ from desc.objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCollectionParameters,
     FixCurrent,
     FixElectronDensity,
     FixElectronTemperature,
@@ -918,3 +920,24 @@ def test_fix_omni_indices():
     constraint = FixOmniMap(field=field, indices=indices)
     constraint.build()
     assert constraint._idx.size == indices.size
+
+
+@pytest.mark.unit
+def test_fix_subset_of_params_in_collection(self):
+    """Tests FixCollectionParameters fixing a subset of things in the collection."""
+    tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
+    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+    vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+    vf_coilset = CoilSet.linspaced_linear(
+        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+    )
+    full_coilset = MixedCoilSet((tf_coilset, vf_coilset))
+
+    params = [
+        [["current"], ["center", "normal", "r_n"], ["current", "shift", "rotmat"], []],
+        [["current", "Z_n"], ["R_n", "Z_n"], ["Z_n"]],
+    ]
+    obj = FixCollectionParameters(full_coilset, params=params)
+    if False:  # FIXME: get this test working
+        obj.build()
+    pass

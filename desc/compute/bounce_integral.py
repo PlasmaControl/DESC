@@ -762,8 +762,6 @@ def _bounce_quadrature(
         return g.reshape(-1, S, knots.size)
 
     f = map(_group_grid_data_by_field_line, f)
-
-    # Apply affine transformation to quadrature points.
     Z = _affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
     # Integrate and complete the change of variable.
     result = _interpolating_quadrature(
@@ -780,7 +778,7 @@ _bounce_quadrature.__doc__ = _bounce_quadrature.__doc__.replace(
 
 def bounce_integral_map(
     eq,
-    rho=jnp.linspace(1e-12, 1, 10),
+    rho=jnp.linspace(1e-12, 1, 5),
     alpha=None,
     knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 25),
     quad=tanh_sinh_quad,
@@ -847,12 +845,10 @@ def bounce_integral_map(
         This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
         specified field line ℓ (constant rho, alpha), for every λ value in ``pitch``.
     items : dict
-        grid_fl : Grid
-            Clebsch-Type field-line coordinate grid.
         grid_desc : Grid
             DESC coordinate grid for the given field line coordinates.
-        data : dict
-            Dictionary of Arrays of stuff evaluated on ``grid_desc``.
+        grid_fl : Grid
+            Clebsch-Type field-line coordinate grid.
         knots : Array,
             Field line-following ζ coordinates of spline knots.
         B.c : Array, shape(4, S, knots.size - 1)
@@ -895,7 +891,7 @@ def bounce_integral_map(
 
         bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots)
 
-        g_zz = eq.compute("g_zz", grid=items["grid_desc"], data=items["data"])["g_zz"]
+        g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
         pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
         num = bounce_integral(integrand_num, g_zz, pitch)
         den = bounce_integral(integrand_den, [], pitch)
@@ -941,8 +937,8 @@ def bounce_integral_map(
     S = rho.size * alpha.size
 
     # Compute |B| and group data along field lines.
-    grid_fl, grid_desc, data = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
-    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc, data=data)
+    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc)
     B_sup_z = data["B^zeta"].reshape(S, knots.size)
     B = data["|B|"].reshape(S, knots.size) / normalize
     B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size) / normalize
@@ -971,7 +967,7 @@ def bounce_integral_map(
             with arrays of shape(P, S, 1, 1) where
                 P is the batch axis size of pitch.
                 S is the number of field lines.
-        f : iterable of Array, shape(P, items["grid_desc"].num_nodes, )
+        f : list of Array, shape(P, items["grid_desc"].num_nodes, )
             Arguments to the callable ``integrand``.
             These should be the functions in the integrand of the bounce integral
             evaluated (or interpolated to) the nodes of the returned desc
@@ -1007,9 +1003,8 @@ def bounce_integral_map(
 
     if return_items:
         items = {
-            "grid_fl": grid_fl,
             "grid_desc": grid_desc,
-            "data": data,
+            "grid_fl": grid_fl,
             "knots": knots,
             "B.c": B_c,
             "B_z_ra.c": B_z_ra_c,

@@ -416,17 +416,22 @@ def test_bounce_quadrature():
     """Test principal value of bounce integral matches elliptic integral."""
     p = 1e-3
     m = 1 - p
-    truth = 2 * ellipkm1(p)
+    # Some prime number that doesn't appear anywhere in calculation.
+    # Ensures no lucky cancellation occurs from this test case since otherwise
+    # (bp2 - bp1) / pi = pi / (bp2 - bp1) which could mask errors since pi
+    # appears often in transformations.
+    v = 7
+    truth = v * 2 * ellipkm1(p)
     rtol = 1e-3
 
-    bp1 = -np.pi / 2
+    bp1 = -np.pi / 2 * v
     bp2 = -bp1
     knots = np.linspace(bp1, bp2, 15)
     bp1 = np.atleast_3d(bp1)
     bp2 = np.atleast_3d(bp2)
     B_sup_z = np.ones((1, knots.size))
-    B = np.reshape(np.sin(knots) ** 2, (1, -1))
-    B_z_ra = np.sin(2 * knots).reshape(1, -1)
+    B = (np.sin(knots / v) ** 2).reshape(1, -1)
+    B_z_ra = (np.sin(2 * knots / v) / v).reshape(1, -1)
     pitch = np.ones((1, 1))
 
     def integrand(B, pitch):
@@ -434,18 +439,18 @@ def test_bounce_quadrature():
 
     # augment the singularity
     x_t, w_t = tanh_sinh_quad(18, grad_automorphism_arcsin)
-    z_t = automorphism_arcsin(x_t)
+    x_t = automorphism_arcsin(x_t)
     tanh_sinh_arcsin = _bounce_quadrature(
-        bp1, bp2, z_t, w_t, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
+        bp1, bp2, x_t, w_t, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
     )
     np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
 
     # suppress the singularity
     x_g, w_g = np.polynomial.legendre.leggauss(16)
     w_g = w_g * grad_automorphism_sin(x_g)
-    z_g = automorphism_sin(x_g)
+    x_g = automorphism_sin(x_g)
     leg_gauss_sin = _bounce_quadrature(
-        bp1, bp2, z_g, w_g, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
+        bp1, bp2, x_g, w_g, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
     )
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
 
@@ -471,11 +476,11 @@ def test_example_code_and_hairy_ball():
     bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots)
 
     # start hairy ball test
-    B = items["data"]["B"]
+    B = eq.compute("|B|", grid=items["grid_desc"])["|B|"]
     assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
     # end hairy ball test
 
-    g_zz = eq.compute("g_zz", grid=items["grid_desc"], data=items["data"])["g_zz"]
+    g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
     pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
     num = bounce_integral(integrand_num, g_zz, pitch)
     den = bounce_integral(integrand_den, [], pitch)

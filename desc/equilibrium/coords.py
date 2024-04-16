@@ -199,6 +199,7 @@ def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
     elif poloidal == "alpha":
         alpha = coords[:, inbasis.index("alpha")]
         iota = profiles["iota"](rho)
+        # why not alpha % (2 * jnp.pi) + iota * zeta % (user supplied period)?
         theta = (alpha + iota * zeta) % (2 * jnp.pi)
 
     yk = jnp.array([rho, theta, zeta]).T
@@ -300,7 +301,7 @@ def compute_theta_coords(
     )
     theta_DESC, (res, niter) = vecroot(theta_star, theta_star, rho, zeta)
 
-    nodes = jnp.array([rho, theta_DESC.squeeze(), zeta]).T
+    nodes = jnp.array([rho, jnp.atleast_1d(theta_DESC.squeeze()), zeta]).T
 
     out = nodes
     if full_output:
@@ -312,7 +313,7 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
 
     Create a meshgrid from the given field line coordinates,
-    and transform this to a meshgrid in DESC coordinates.
+    and return the equivalent DESC coordinate grid.
 
     Parameters
     ----------
@@ -323,90 +324,42 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
     zeta : ndarray
-        Unique Field line-following ζ coordinates.
+        Unique field line-following ζ coordinates.
 
     Returns
     -------
-    grid_fl : Grid
-        Clebsch-Type field-line coordinate grid.
     grid_desc : Grid
         DESC coordinate grid for the given field line coordinates.
-    data : dict
-        Some flux surface quantities that may be more accurate than what
-        can be computed on the returned grid.
+    grid_fl : Grid
+        Clebsch-Type field-line coordinate grid.
 
     """
-
-    def unique_idx(a_size, b_size, c_size):
-        labels = ["rho", "theta", "zeta"]
-        return {
-            f"_unique_{label}_idx": idx
-            for label, idx in zip(labels, meshgrid_unique_idx(a_size, b_size, c_size))
-        }
-
-    def inverse_idx(a_size, b_size, c_size):
-        labels = ["rho", "theta", "zeta"]
-        return {
-            f"_inverse_{label}_idx": idx
-            for label, idx in zip(labels, meshgrid_inverse_idx(a_size, b_size, c_size))
-        }
-
     r, a, z_fl = map(jnp.ravel, jnp.meshgrid(rho, alpha, zeta, indexing="ij"))
+    coords_fl = jnp.column_stack([r, a, z_fl])
+    _unique_rho_idx = meshgrid_unique_idx(rho.size, alpha.size, zeta.size)[0]
+    _inverse_rho_idx = meshgrid_inverse_idx(rho.size, alpha.size, zeta.size)[0]
     grid_fl = Grid(
-        nodes=jnp.column_stack([r, a, z_fl]),
+        nodes=coords_fl,
         sort=False,
         jitable=True,
-        **unique_idx(rho.size, alpha.size, zeta.size),
-        **inverse_idx(rho.size, alpha.size, zeta.size),
+        _unique_rho_idx=_unique_rho_idx,
+        _inverse_rho_idx=_inverse_rho_idx,
     )
-    # The rotational transform can be computed apriori to the coordinate
-    # transformation because it is a single variable function of the flux surface
-    # label rho, and the coordinate mapping does not change rho. Once it is known,
-    # we can compute the straight field-line poloidal angle theta_PEST from the
-    # field-line label alpha. Then we transform from straight field-line coordinates
-    # to DESC coordinates with the root-finding method ``compute_theta_coords``.
-
-    # Choose nodes such that even spacing will yield correct flux surface integrals.
-    t = jnp.linspace(0, 2 * jnp.pi, 2 * eq.M_grid + 1, endpoint=False)
-    z = jnp.linspace(0, 2 * jnp.pi / eq.NFP, 2 * eq.N_grid + 1, endpoint=False)
-    nodes = jnp.column_stack(
-        tuple(map(jnp.ravel, jnp.meshgrid(rho, t, z, indexing="ij")))
+    coords_desc = map_coordinates(
+        eq,
+        coords_fl,
+        inbasis=("rho", "alpha", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(np.inf, 2 * np.pi, np.inf),
     )
-    spacing = jnp.ones(rho.size * t.size * z.size)[:, jnp.newaxis] * jnp.array(
-        [1 / rho.size, 2 * jnp.pi / t.size, 2 * jnp.pi / z.size]
-    )
-    grid_iota = Grid(
-        nodes,
-        spacing=spacing,
-        sort=False,
-        jitable=True,
-        **unique_idx(rho.size, t.size, z.size),
-        **inverse_idx(rho.size, t.size, z.size),
-    )
-    # We only need to compute the rotational transform to transform to straight
-    # field-line coordinates. However, it is a good idea to compute other flux
-    # surface quantities on this grid because the DESC coordinates corresponding
-    # to the given field line coordinates may not be uniformly distributed over
-    # flux surfaces. This would make quadratures performed over flux surfaces
-    # on the returned DESC grid inaccurate.
-    data_iota = eq.compute(names=["iota", "iota_r"], grid=grid_iota)
-    data = {
-        d: grid_fl.expand(grid_iota.compress(data_iota[d]))
-        for d in data_iota
-        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
-        == "r"
-    }
-    # don't modulo field line zeta by 2pi
-    coords_sfl = jnp.column_stack([r, a + data["iota"] * z_fl, z_fl])
-    coords_desc = eq.compute_theta_coords(coords_sfl)
     grid_desc = Grid(
         nodes=coords_desc,
         sort=False,
         jitable=True,
-        _unique_rho_idx=meshgrid_unique_idx(rho.size, alpha.size, zeta.size)[0],
-        _inverse_rho_idx=meshgrid_inverse_idx(rho.size, alpha.size, zeta.size)[0],
+        _unique_rho_idx=_unique_rho_idx,
+        _inverse_rho_idx=_inverse_rho_idx,
     )
-    return grid_fl, grid_desc, data
+    return grid_desc, grid_fl
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

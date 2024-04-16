@@ -251,7 +251,7 @@ class VacuumBoundaryError(_Objective):
         bsq_in = jnp.sum(Bin_total * Bin_total, axis=-1)
 
         g = data["|e_theta x e_zeta|"]
-        Bn_err = Bn * g
+        Bn_err = Bn * g / jnp.sqrt(bsq_in)
         Bsq_err = (bsq_in - bsq_out) * g
         return jnp.concatenate([Bn_err, Bsq_err])
 

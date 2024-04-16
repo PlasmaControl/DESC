@@ -215,7 +215,7 @@ class _CoilObjective(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params, constants=None, **kwargs):
         """Compute data of coil for given data key.
 
         Parameters
@@ -240,6 +240,7 @@ class _CoilObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             grid=self._grid,
+            basis=kwargs.get("basis", None),
         )
 
         return data
@@ -1071,8 +1072,9 @@ class CoilsetMinDistance(_CoilObjective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="coil torsion",
+        name="coilset minimum distance",
     ):
+        self._coils = coil
         if target is None and bounds is None:
             target = 0
 
@@ -1101,10 +1103,25 @@ class CoilsetMinDistance(_CoilObjective):
             Level of output.
 
         """
+        from desc.coils import CoilSet, _Coil
+
         super().build(use_jit=use_jit, verbose=verbose)
 
         if self._normalize:
-            self._normalization = 1 / self._scales["a"]
+            self._normalization = self._scales["a"]
+
+        # TODO: repeated code but maybe it's fine
+        flattened_coils = tree_flatten(
+            self._coils,
+            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
+        )[0]
+        flattened_coils = (
+            [flattened_coils[0]]
+            if not isinstance(self._coils, CoilSet)
+            else flattened_coils
+        )
+        self._dim_f = len(flattened_coils)
+        self._constants["quad_weights"] = 1
 
     def compute(self, params, constants=None):
         """Compute coil torsion.
@@ -1120,15 +1137,15 @@ class CoilsetMinDistance(_CoilObjective):
         Returns
         -------
         f : float or array of floats
-            Coil torsion.
+            Coilset minimum distance.
         """
         data = super().compute(params, constants=constants, basis="xyz")
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
         min_dists = []
-        for whichCoil1 in range(len(data)):
+        for whichCoil1 in range(len(data) - 1):
             coords1 = data[whichCoil1]["x"]
             mindist = 1e4
-            for whichCoil2 in range(len(data)):
+            for whichCoil2 in range(whichCoil1 + 1, len(data)):
                 coords2 = data[whichCoil2]["x"]
 
                 d = jnp.linalg.norm(
@@ -1136,9 +1153,6 @@ class CoilsetMinDistance(_CoilObjective):
                     axis=-1,
                 )
 
-                min_dists.append = jnp.min(jnp.array([jnp.min(d), mindist]))
+                min_dists.append(jnp.min(jnp.array([jnp.min(d), mindist])))
 
-        return jnp.concatenate(min_dists)
-
-        out = jnp.concatenate([dat["torsion"] for dat in data])
-        return out
+        return jnp.array(min_dists)

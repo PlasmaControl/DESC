@@ -661,10 +661,11 @@ class TestObjectiveFunction:
         ncoils = 4
         displacement = [0, 0, 10]
 
-        def test(coil, grid=None):
-            obj = CoilsetMinDistance(coil, grid=grid)
+        def test(coils, grid=None):
+            obj = CoilsetMinDistance(coils, grid=grid)
             obj.build()
-            f = obj.compute(coil_params=coil.params_dict)
+            f = obj.compute(params=coils.params_dict)
+            assert f.size == len(coils)
             np.testing.assert_allclose(f, displacement[-1] / (ncoils), rtol=1e-8)
 
         coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])

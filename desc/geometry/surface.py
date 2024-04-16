@@ -6,10 +6,9 @@ import warnings
 
 import numpy as np
 from scipy.sparse.linalg import splu
-from scipy.special import roots_sh_jacobi
 
 from desc.backend import jnp, put, sign
-from desc.basis import DoubleFiniteElementBasis, DoubleFourierSeries, ZernikePolynomial
+from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.utils import copy_coeffs, isposint
@@ -20,7 +19,7 @@ __all__ = [
     "FourierRZToroidalSurface",
     "ZernikeRZToroidalSection",
     "convert_spectral_to_FE",
-    "FiniteElementRZToroidalSurface",
+    # "FiniteElementRZToroidalSurface",
 ]
 
 
@@ -77,25 +76,27 @@ def convert_spectral_to_FE(
     I = Rprime_basis.I_2MN
     Q = Rprime_basis.Q
     L = Rprime_basis.L
-    lmodes = (L + 3) // 2
-    nmodes = lmodes * I * Q
+    nmodes = I * Q
     mesh = Rprime_basis.mesh
     nquad = mesh.nquad
 
-    # Get the angular quadrature points
+    # Get the quadrature points and reshape things to always be
+    # a set of 3D points that can be used with FiniteElementBasis.evaluate()
     quadpoints_mesh = np.array(mesh.return_quadrature_points())
-    if N == 0:
+    if L == 0 and N == 0:
         quadpoints = (
             np.array(
                 np.meshgrid(np.ones(1), quadpoints_mesh, np.zeros(1), indexing="ij")
             ).reshape(3, I * nquad)
         ).T
-    else:
+    elif N == 0:
         quadpoints = (
-            np.array(np.meshgrid(np.ones(1), quadpoints_mesh, indexing="ij")).reshape(
+            np.array(np.meshgrid(quadpoints_mesh, np.zeros(1), indexing="ij")).reshape(
                 3, I * nquad
             )
         ).T
+    else:
+        quadpoints = quadpoints_mesh  # transpose here?
 
     # Compute the A matrix in Ax = b, should be exactly the same
     # as in the 2D case.
@@ -122,34 +123,12 @@ def convert_spectral_to_FE(
             * Lprime_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
     ).reshape(I, Q, I, Q)
-    # Commented out line k_plus1 = np.arange(0, L + 1, 2) + 1
 
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)
 
     t1 = time.time()
 
-    # quadrature using the roots of the shifted jacobi polynomials
-    # Integrate 2*Nrho - 1 order polynomial exactly
-    Nrho = 2 * (L + 3)
-
-    # weights for integral rho * R_l * R_k
-    rho, rho_weights = roots_sh_jacobi(Nrho, 2, 2)
-
-    # Get the angular quadrature points
-    quadpoints_mesh = np.array(mesh.return_quadrature_points())
-    if N == 0:
-        quadpoints = (
-            np.array(
-                np.meshgrid(rho, quadpoints_mesh, np.zeros(1), indexing="ij")
-            ).reshape(3, I * nquad * Nrho)
-        ).T
-    else:
-        quadpoints = (
-            np.array(np.meshgrid(rho, quadpoints_mesh, indexing="ij")).reshape(
-                3, I * nquad * Nrho
-            )
-        ).T
     R_pre_evaluated = R_basis.evaluate(nodes=quadpoints)
     Z_pre_evaluated = Z_basis.evaluate(nodes=quadpoints)
     L_pre_evaluated = L_basis.evaluate(nodes=quadpoints)
@@ -168,23 +147,13 @@ def convert_spectral_to_FE(
 
     # Note integral rho R_k(rho) = 0 unless k = 0 by orthogonality
     Aj_Z = mesh.integrate(
-        # Integrate rho * basis functions over the rho direction
-        np.sum(
-            rho_weights[:, np.newaxis, np.newaxis] * (ZZ).reshape(Nrho, I * nquad, -1),
-            axis=0,
-        )
+        (ZZ).reshape(I * nquad, -1),
     )
     Aj_R = mesh.integrate(
-        np.sum(
-            rho_weights[:, np.newaxis, np.newaxis] * (RR).reshape(Nrho, I * nquad, -1),
-            axis=0,
-        )
+        (RR).reshape(I * nquad, -1),
     )
     Aj_L = mesh.integrate(
-        np.sum(
-            rho_weights[:, np.newaxis, np.newaxis] * (LL).reshape(Nrho, I * nquad, -1),
-            axis=0,
-        )
+        (LL).reshape(I * nquad, -1),
     )
     t2 = time.time()
     print("Time to construct vector b = ", t2 - t1)
@@ -203,303 +172,6 @@ def convert_spectral_to_FE(
     t2 = time.time()
     print("Time to solve Ax = b, ", t2 - t1)
     return Rprime_lmn, Zprime_lmn, Lprime_lmn
-
-
-class FiniteElementRZToroidalSurface(Surface):
-    """Toroidal surface represented by finite elements in poloidal and toroidal angles.
-
-    Parameters
-    ----------
-    R_lmn, Z_lmn : array-like, shape(k,)
-        Finite Element coefficients for R and Z in cylindrical coordinates
-    modes_R : array-like, shape(k,2)
-        poloidal and toroidal mode numbers [m,n] for R_lmn
-    modes_Z : array-like, shape(k,2)
-        mode numbers associated with Z_lmn, defaults to modes_R
-    rho : float [0,1]
-        flux surface label for the toroidal surface
-    name : str
-        name for this surface
-    check_orientation : bool
-        ensure that this surface has a right handed orientation. Do not set to False
-        unless you are sure the parameterization you have given is right handed
-        (ie, e_theta x e_zeta points outward from the surface).
-
-    """
-
-    _io_attrs_ = Surface._io_attrs_ + [
-        "_R_lmn",
-        "_Z_lmn",
-        "_R_basis",
-        "_Z_basis",
-        "rho",
-        "_NFP",
-    ]
-
-    def __init__(
-        self,
-        R_lmn=None,
-        Z_lmn=None,
-        modes_R=None,
-        modes_Z=None,
-        K=1,
-        NFP=1,
-        sym="auto",
-        rho=1,
-        name="",
-        check_orientation=True,
-    ):
-        # Initialize a FourierRZToroidalSurface
-        self.fs = FourierRZToroidalSurface(
-            R_lmn=R_lmn,
-            Z_lmn=Z_lmn,
-            modes_R=modes_R,
-            modes_Z=modes_Z,
-            NFP=NFP,
-            sym=sym,
-            rho=rho,
-            name=name,
-            check_orientation=check_orientation,
-        )
-        # Convert coefficients to a FE representation
-        self._R_basis = DoubleFiniteElementBasis(M=self.fs._M, N=self.fs._N)
-        self._Z_basis = DoubleFiniteElementBasis(M=self.fs._M, N=self.fs._N)
-        R_lmn, Z_lmn = convert_spectral_to_FE(
-            self.fs.R_lmn,
-            self.fs.Z_lmn,
-            self.fs.R_basis,
-            self.fs.Z_basis,
-            self.fs.L_basis,
-            self._R_basis,
-            self._Z_basis,
-            self._L_basis,
-        )
-        I = 2 * self.fs._M * self.fs._N
-        self.K = K
-        Q = int((K + 1) * (K + 2) / 2.0)
-        modes_R, modes_Z = np.meshgrid(I, Q, indexing="ij")
-        modes_R = modes_R.reshape(-1, 2)
-        modes_Z = modes_Z.reshape(-1, 2)
-        self.R_lmn = R_lmn
-        self.Z_lmn = Z_lmn
-        self.rho = rho
-        self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
-        self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
-
-    @property
-    def NFP(self):
-        """int: Number of (toroidal) field periods."""
-        return self.fs._NFP
-
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.fs.change_resolution(NFP=new)
-
-    @property
-    def R_basis(self):
-        """Double finite element basis for R."""
-        return self._R_basis
-
-    @property
-    def Z_basis(self):
-        """Double finite element basis for Z."""
-        return self._Z_basis
-
-    def change_resolution(self, *args, **kwargs):
-        """Change the maximum poloidal and toroidal resolution."""
-        assert (
-            ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
-            or (len(args) == 0)
-        ), (
-            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
-            + "positional arguments or only keyword arguments."
-        )
-        L = kwargs.pop("L", None)
-        M = kwargs.pop("M", None)
-        N = kwargs.pop("N", None)
-        NFP = kwargs.pop("NFP", None)
-        sym = kwargs.pop("sym", None)
-        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        self._NFP = NFP if NFP is not None else self.NFP
-        self._sym = sym if sym is not None else self.sym
-        if L is not None:
-            warnings.warn(
-                "FourierRZToroidalSurface does not have radial resolution, ignoring L"
-            )
-        if len(args) == 2:
-            M, N = args
-        elif len(args) == 3:
-            L, M, N = args
-
-        if (
-            ((N is not None) and (N != self.N))
-            or ((M is not None) and (M != self.M))
-            or (NFP is not None)
-        ):
-            M = M if M is not None else self.M
-            N = N if N is not None else self.N
-            R_modes_old = self.R_basis.modes
-            Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(I=M, J=N)
-            self.Z_basis.change_resolution(I=M, J=N)
-            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
-            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
-            self._M = M
-            self._N = N
-
-    @property
-    def R_lmn(self):
-        """ndarray: Spectral coefficients for R."""
-        return self._R_lmn
-
-    @R_lmn.setter
-    def R_lmn(self, new):
-        if len(new) == self.R_basis.num_modes:
-            self._R_lmn = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"R_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
-            )
-
-    @property
-    def Z_lmn(self):
-        """ndarray: Spectral coefficients for Z."""
-        return self._Z_lmn
-
-    @Z_lmn.setter
-    def Z_lmn(self, new):
-        if len(new) == self.Z_basis.num_modes:
-            self._Z_lmn = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
-            )
-
-    def get_coeffs(self, m, n=0):
-        """Get finite element coefficients for given mode number(s)."""
-        n = np.atleast_1d(n).astype(int)
-        m = np.atleast_1d(m).astype(int)
-
-        m, n = np.broadcast_arrays(m, n)
-        R = np.zeros_like(m).astype(float)
-        Z = np.zeros_like(m).astype(float)
-
-        mn = np.array([m, n]).T
-        idxR = np.where(
-            (mn[:, np.newaxis, :] == self.R_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
-        )
-        idxZ = np.where(
-            (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
-        )
-
-        R[idxR[0]] = self.R_lmn[idxR[1]]
-        Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
-        return R, Z
-
-    def set_coeffs(self, m, n=0, R=None, Z=None):
-        """Set specific finite element coefficients."""
-        m, n, R, Z = (
-            np.atleast_1d(m),
-            np.atleast_1d(n),
-            np.atleast_1d(R),
-            np.atleast_1d(Z),
-        )
-        m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
-        for mm, nn, RR, ZZ in zip(m, n, R, Z):
-            if RR is not None:
-                idxR = self.R_basis.get_idx(0, mm, nn)
-                self.R_lmn = put(self.R_lmn, idxR, RR)
-            if ZZ is not None:
-                idxZ = self.Z_basis.get_idx(0, mm, nn)
-                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
-
-    @classmethod
-    def from_input_file(cls, path):
-        """Create a finite element surface from Fourier coefficients in a file.
-
-        Parameters
-        ----------
-        path : Path-like or str
-            Path to DESC or VMEC input file.
-
-        Returns
-        -------
-        surface : FiniteElementRZToroidalSurface
-            Surface with given finite element coefficients.
-
-        """
-        surf = cls()
-        fs = surf.fs.from_input_file(path=path)
-        R_lmn, Z_lmn = convert_spectral_to_FE(
-            fs.R_lmn,
-            fs.Z_lmn,
-            fs.L_lmn,
-            fs.R_basis,
-            fs.Z_basis,
-            fs.L_basis,
-            surf._R_basis,
-            surf._Z_basis,
-            surf._L_basis,
-        )
-        I = fs._M * 2
-        J = fs._N * 2
-        modes_R, modes_Z = np.meshgrid(I, J, indexing="ij")
-        modes_R = modes_R.reshape(-1, 2)
-        modes_Z = modes_Z.reshape(-1, 2)
-        surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z)
-        return surf
-
-    @classmethod
-    def from_near_axis(cls, aspect_ratio, elongation, mirror_ratio, axis_Z, NFP=1):
-        """Create a surface from a near-axis model for quasi-poloidal/quasi-isodynamic.
-
-        Parameters
-        ----------
-        aspect_ratio : float
-            Aspect ratio of the geometry = major radius / average cross-sectional area.
-        elongation : float
-            Elongation of the elliptical surface = major axis / minor axis.
-        mirror_ratio : float
-            Mirror ratio generated by toroidal variation of the cross-sectional area.
-            Must be < 2.
-        axis_Z : float
-            Vertical extent of the magnetic axis Z coordinate.
-            Coefficient of sin(2*phi).
-        NFP : int
-            Number of field periods.
-
-        Returns
-        -------
-        surface : FourierRZToroidalSurface
-            Surface with given geometric properties.
-
-        """
-        surf = cls()
-        fs = surf.fs.from_near_axis(aspect_ratio, elongation, mirror_ratio, axis_Z, NFP)
-        R_lmn, Z_lmn = convert_spectral_to_FE(
-            fs.R_lmn,
-            fs.Z_lmn,
-            fs.L_lmn,
-            fs.R_basis,
-            fs.Z_basis,
-            fs.L_basis,
-            surf._R_basis,
-            surf._Z_basis,
-            surf._L_basis,
-        )
-        I = fs._M * 2
-        J = fs._N * 2
-        modes_R, modes_Z = np.meshgrid(I, J, indexing="ij")
-        modes_R = modes_R.reshape(-1, 2)
-        modes_Z = modes_Z.reshape(-1, 2)
-        surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z)
-        return surf
 
 
 class FourierRZToroidalSurface(Surface):

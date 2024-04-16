@@ -247,7 +247,6 @@ class _FE_Basis(IOAble, ABC):
     """Basis is an abstract base class for finite-element basis sets."""
 
     _io_attrs_ = [
-        "_L",
         "_I_2MN",
         "_Q",
         "_NFP",
@@ -269,20 +268,15 @@ class _FE_Basis(IOAble, ABC):
     def _create_idx(self):
         """Create index for use with self.get_idx()."""
         self._idx = {}
-        for idx, (L, I_2MN, Q) in enumerate(self.modes):
-            if L not in self._idx:
-                self._idx[L] = {}
-            if I_2MN not in self._idx[L]:
-                self._idx[L][I_2MN] = {}
-            self._idx[L][I_2MN][Q] = idx
+        for idx, (I_2MN, Q) in enumerate(self.modes):
+            self._idx[I_2MN] = {}
+            self._idx[I_2MN][Q] = idx
 
-    def get_idx(self, L=0, I_2MN=0, Q=0, error=True):
+    def get_idx(self, I_2MN=0, Q=0, error=True):
         """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
         Parameters
         ----------
-        L : int
-            Radial mode number.
         I_2MN : int
             Maximum number of triangles in a 2D tesselation in the (theta, zeta)
             plane. If have (M x N) points in the grid, I_2MN = 2NM.
@@ -299,13 +293,11 @@ class _FE_Basis(IOAble, ABC):
 
         """
         try:
-            return self._idx[L][I_2MN][Q]
+            return self._idx[I_2MN][Q]
         except KeyError as e:
             if error:
                 raise ValueError(
-                    "mode ({}, {}, {}) is not in basis {}".format(
-                        L, I_2MN, Q, str(self)
-                    )
+                    "mode ({}, {}) is not in basis {}".format(I_2MN, Q, str(self))
                 ) from e
             else:
                 return np.array([]).astype(int)
@@ -326,7 +318,7 @@ class _FE_Basis(IOAble, ABC):
             node coordinates, in (rho,theta,zeta)
         derivatives : ndarray of int, shape(3,)
             order of derivatives to compute in (rho,theta,zeta)
-        modes : ndarray of in, shape(num_modes,3), optional
+        modes : ndarray of in, shape(num_modes,2), optional
             basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
             whether to workload by only calculating for unique values of nodes, modes
@@ -353,7 +345,7 @@ class _FE_Basis(IOAble, ABC):
 
     @L.setter
     def L(self, L):
-        assert int(L) == L, "Basis Resolution must be an integer!"
+        assert int(L) == L, "Radial Resolution must be an integer!"
         self._L = int(L)
 
     @property
@@ -1139,19 +1131,21 @@ class ChebyshevDoubleFourierBasis(_Basis):
 class FiniteElementBasis(_FE_Basis):
     """3D finite element basis set for analytic functions in a toroidal volume.
 
-    Jacobi polynomials in the radial coordinate (same as Zernike, with m = 0)
-    and B-spline finite element basis in the toroidal & poloidal coordinates
+    Class for making a 1D, 2D, or 3D set of finite elements on the
+    (rho, theta, zeta) grid. 1D finite elements are made on a pure
+    theta grid, and 2D finite elements are made in a toroidal cross-section,
+    i.e. a grid in (rho, theta).
 
     Parameters
     ----------
     L : int
-        Maximum radial resolution. Use L=-1 for default based on M.
+        Number of grid points radially
     M : int
-        Number of grid points poloidally (= number of poloidal basis functions)
+        Number of grid points poloidally
     N : int
-        Number of grid points toroidally ( =number of toroidal basis functions)
+        Number of grid points toroidally
     K : int
-        Order of the finite elements in each triangle.
+        Order of the finite elements in each interval/triangle/tetrahedron.
     NFP : int
         Number of field periods.
     sym : {``'cos'``, ``'sin'``, ``False``}
@@ -1161,57 +1155,45 @@ class FiniteElementBasis(_FE_Basis):
     """
 
     def __init__(self, L, M, N, K=1, NFP=1, sym=False):
-        self.L = max(2, L)
-        if L % 2 != 0:
-            raise ValueError(
-                "L must be an even number for the Zernike polynomials with"
-                "m = 0 to be well-defined at the rho=0 axis"
-            )
+        self.L = L
         self.M = M
         self.N = N
         self.K = K
         self._NFP = NFP
         self._sym = sym
-        if N == 0:
+        if L == 0 and N == 0:
             self.mesh = FiniteElementMesh1D(M, K=K)
             self.I_2MN = M - 1
-            self.Q = K + 1  # + 1 here if want the constant basis function
-        else:
-            self.mesh = FiniteElementMesh2D(M, N, K=K)
-            self.I_2MN = 2 * (M - 1) * N
+            self.Q = K + 1
+        elif N == 0:
+            self.mesh = FiniteElementMesh2D(L, M, K=K)
+            self.I_2MN = 2 * (M - 1) * L
             self.Q = int((K + 1) * (K + 2) / 2.0)
-        self.nmodes = (self.L + 3) // 2 * self.I_2MN * self.Q
+        else:
+            # Repalce with FiniteElementMesh3D once we are ready to tackle
+            self.mesh = FiniteElementMesh2D(L, M, N, K=K)
+            self.I_2MN = 6 * (M - 1) * N * L
+            self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
+        self.nmodes = self.I_2MN * self.Q
         self._modes = self._get_modes()
         super().__init__()
 
     def _get_modes(self):
-        """Get mode numbers for mixed spectral-FE basis functions.
-
-        Parameters
-        ----------
-        L : int
-            Maximum radial resolution.
-        I_2MN : int
-            Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-            plane. If have (M x N) points in the grid, I_2MN = 2NM.
-        Q : int
-            Number of basis functions. For order K triangle FE, should be
-            q = (K + 1)(K + 2) / 2.
+        """Get mode numbers for a pure finite element basis.
 
         Returns
         -------
-        modes : ndarray of int, shape(num_modes,3)
-            Array of mode numbers [l,i,j].
-            Each row is one basis function with modes (l,i,j).
+        modes : ndarray of int, shape(num_modes, 2)
+            Array of mode numbers [i, q].
+            Each row is one basis function with modes (i, q).
 
         """
         lij_mesh = np.meshgrid(
-            np.arange(0, self.L + 1, 2),
             np.arange(self.I_2MN),
             np.arange(self.Q),
             indexing="ij",
         )
-        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (3, self.nmodes)).T
+        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (2, self.nmodes)).T
         return np.unique(lij_mesh, axis=0)
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None, n=-1):
@@ -1223,7 +1205,7 @@ class FiniteElementBasis(_FE_Basis):
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
-        modes : ndarray of int, shape(num_modes,3), optional
+        modes : ndarray of int, shape(num_modes,2), optional
             Basis modes to evaluate (if None, full basis is used).
 
         Returns
@@ -1239,40 +1221,39 @@ class FiniteElementBasis(_FE_Basis):
 
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
-        l, i, j = modes.T
-        lm = np.array([l, np.zeros(modes.shape[0])]).T
+        i, q = modes.T
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        # Rescale all the radial basis functions by r ** (n + 1)?
-
-        if self.N > 0:
-            # Tessellate the domain and find the basis functions for theta, zeta
-            Theta, Zeta = np.meshgrid(t, z, indexing="ij")
-            Theta_Zeta = np.array([np.ravel(Theta), np.ravel(Zeta)]).T
-            FE_mesh = FiniteElementMesh2D(M=self.M, N=self.N, K=self.K)
-
-            # Get the q = 0, 1, ..., Q basis functions from each of the points
-            # (theta_i, zeta_i) from t, z arrays
-            intervals, basis_functions = FE_mesh.find_triangles_corresponding_to_points(
-                Theta_Zeta
-            )
-
-            # Sum the basis functions from each triangle node
-            poloidal_toroidal = basis_functions.reshape(
-                Theta.shape[0] * Theta.shape[1], self.Q
-            )[i, j]
-        else:
+        if self.L == 0 and self.N == 0:
             # Get all IQ basis functions from each of the points,
             # and most will be zeros at a given point because of local support.
-            poloidal_toroidal = self.mesh.full_basis_functions_corresponding_to_points(
-                t
-            )
-            print(poloidal_toroidal.shape)
-            poloidal_toroidal = np.reshape(poloidal_toroidal, (len(t), -1))
-            poloidal_toroidal = np.tile(poloidal_toroidal, (self.L + 3) // 2)
-            inds = (l + 1) // 2 * (self.M - 1) * self.Q + i * self.Q + j
+            basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
+            print(basis_functions.shape)
+            basis_functions = np.reshape(basis_functions, (len(t), -1))
+            inds = i * self.Q + q
+        elif self.N == 0:
+            # Tessellate the domain and find the basis functions for theta, zeta
+            Rho, Theta = np.meshgrid(r, t, indexing="ij")
+            Rho_Theta = np.array([np.ravel(Rho), np.ravel(Theta)]).T
+            (
+                intervals,
+                basis_functions,
+            ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
 
-        return (radial * poloidal_toroidal)[:, inds]
+            # Sum the basis functions from each triangle node
+            basis_functions = np.reshape(basis_functions, (len(t), -1))
+            inds = i * self.Q + q
+        else:
+            Rho, Theta, Zeta = np.meshgrid(r, t, z, indexing="ij")
+            Rho_Theta_Zeta = np.array(
+                [np.ravel(Rho), np.ravel(Theta), np.ravel(Zeta)]
+            ).T
+            (
+                intervals,
+                basis_functions,
+            ) = self.mesh.find_tetrahedron_corresponding_to_points(Rho_Theta_Zeta)
+            inds = i * self.Q + q
+
+        return basis_functions[:, inds]
 
     def change_resolution(self, L, M, N):
         """Change resolution of the basis to the given resolutions.

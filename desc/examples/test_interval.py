@@ -93,7 +93,7 @@ print("R_lmn, Z_lmn = ", R_lmn, Z_lmn)
 r0 = 0
 z0 = 0
 q = 1
-for L in [8, 14]:
+for L in [0]:
     plt.subplot(2, 2, q)
     plt.plot(R_fourier, Z_fourier, "ro")
     print(L, M, N, K)

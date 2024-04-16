@@ -4,12 +4,11 @@ import pickle
 
 import numpy as np
 import pytest
-from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, rpz2xyz_vec
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
@@ -18,9 +17,13 @@ from desc.geometry import (
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import CurrentPotentialField, FourierCurrentPotentialField
+from desc.magnetic_fields import (
+    CurrentPotentialField,
+    FourierCurrentPotentialField,
+    OmnigenousField,
+)
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -185,8 +188,7 @@ def test_elongation():
     eq1 = Equilibrium()  # elongation = 1
     eq2 = Equilibrium(surface=surf2)  # elongation = 2
     eq3 = Equilibrium(surface=surf3)  # elongation = 3
-    rho = np.linspace(0, 1, 128)
-    grid = LinearGrid(M=eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym, rho=rho)
+    grid = LinearGrid(L=5, M=2 * eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym)
     data1 = eq1.compute(["a_major/a_minor"], grid=grid)
     data2 = eq2.compute(["a_major/a_minor"], grid=grid)
     data3 = eq3.compute(["a_major/a_minor"], grid=grid)
@@ -1082,25 +1084,6 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
 
-@pytest.mark.unit
-@pytest.mark.solve
-def test_currents(DSHAPE_current):
-    """Test that different methods for computing I and G agree."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
-    grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
-
-    data_booz = eq.compute("|B|_mn", grid=grid_full, M_booz=eq.M, N_booz=eq.N)
-    data_full = eq.compute(["I", "G"], grid=grid_full)
-    data_sym = eq.compute(["I", "G"], grid=grid_sym)
-
-    np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_full["G"].mean(), data_booz["G"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["G"].mean(), data_booz["G"], atol=1e-16)
-
-
 @pytest.mark.slow
 @pytest.mark.unit
 def test_BdotgradB(DummyStellarator):
@@ -1131,10 +1114,10 @@ def test_BdotgradB(DummyStellarator):
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_boozer_transform(DSHAPE_current):
+def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
     # TODO: add test with stellarator example
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
@@ -1161,47 +1144,6 @@ def test_boozer_transform(DSHAPE_current):
         rtol=1e-3,
         atol=1e-4,
     )
-
-
-@pytest.mark.unit
-def test_compute_grad_p_volume_avg():
-    """Test calculation of volume averaged pressure gradient."""
-    eq = Equilibrium()  # default pressure profile is 0 pressure
-    pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
-    np.testing.assert_allclose(pres_grad_vol_avg, 0)
-
-
-@pytest.mark.unit
-def test_compare_quantities_to_vmec():
-    """Compare several computed quantities to vmec."""
-    wout_file = ".//tests//inputs//wout_DSHAPE.nc"
-    desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
-
-    fid = netcdf_file(wout_file, mmap=False)
-    ns = fid.variables["ns"][()]
-    J_dot_B_vmec = fid.variables["jdotb"][()]
-    volavgB = fid.variables["volavgB"][()]
-    betatotal = fid.variables["betatotal"][()]
-    fid.close()
-
-    with pytest.warns(RuntimeWarning, match="Save attribute '_current'"):
-        eq = EquilibriaFamily.load(desc_file)[-1]
-
-    # Compare 0D quantities:
-    grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<beta>_vol", grid=grid)
-    data = eq.compute("<|B|>_rms", grid=grid, data=data)
-
-    np.testing.assert_allclose(volavgB, data["<|B|>_rms"], rtol=1e-7)
-    np.testing.assert_allclose(betatotal, data["<beta>_vol"], rtol=1e-5)
-
-    # Compare radial profile quantities:
-    s = np.linspace(0, 1, ns)
-    rho = np.sqrt(s)
-    grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<J*B>", grid=grid)
-    J_dot_B_desc = grid.compress(data["<J*B>"])
-    np.testing.assert_allclose(J_dot_B_desc, J_dot_B_vmec, rtol=0.005)
 
 
 @pytest.mark.unit
@@ -1240,17 +1182,28 @@ def test_compute_everything():
             **elliptic_cross_section_with_torsion
         ),
         # magnetic fields
-        "desc.magnetic_fields.CurrentPotentialField": CurrentPotentialField(
+        "desc.magnetic_fields._current_potential.CurrentPotentialField": CurrentPotentialField(  # noqa:E501
             **elliptic_cross_section_with_torsion,
             potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
             potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
             potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
             params={"G": 1e7},
         ),
-        "desc.magnetic_fields.FourierCurrentPotentialField": (
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": (
             FourierCurrentPotentialField(
                 **elliptic_cross_section_with_torsion, I=0, G=1e7
             )
+        ),
+        "desc.magnetic_fields._core.OmnigenousField": OmnigenousField(
+            L_B=0,
+            M_B=4,
+            L_x=0,
+            M_x=1,
+            N_x=1,
+            NFP=2,
+            helicity=(0, 2),
+            B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
+            x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
         ),
         # coils
         "desc.coils.FourierRZCoil": FourierRZCoil(
@@ -1271,26 +1224,35 @@ def test_compute_everything():
         ),
     }
     assert things.keys() == data_index.keys(), (
-        f"Missing the parameterizations {data_index.keys() - things.keys()}"
+        f"Missing the parameterization {data_index.keys() - things.keys()}"
         f" to test against master."
     )
     # use this low resolution grid for equilibria to reduce file size
     eqgrid = LinearGrid(
-        # include magnetic axis
-        rho=np.linspace(0, 1, 10),
+        L=9,
         M=5,
         N=5,
         NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
         sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
+        axis=True,
     )
     curvegrid1 = LinearGrid(N=10)
     curvegrid2 = LinearGrid(N=10, NFP=2)
+    fieldgrid = LinearGrid(
+        L=2,
+        M=4,
+        N=5,
+        NFP=things["desc.magnetic_fields._core.OmnigenousField"].NFP,
+        sym=False,
+        axis=True,
+    )
     grid = {
         "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
         "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
         "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
+        "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:
@@ -1634,8 +1596,7 @@ def test_contravariant_basis_vectors():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_iota_components(HELIOTRON_vac):
+def test_iota_components():
     """Test that iota components are computed correctly."""
     # axisymmetric, so all rotational transform should be from the current
     eq_i = get("DSHAPE")  # iota profile assigned
@@ -1649,8 +1610,25 @@ def test_iota_components(HELIOTRON_vac):
     np.testing.assert_allclose(data_c["iota vacuum"], 0)
 
     # vacuum stellarator, so all rotational transform should be from the external field
-    eq = load(load_from=str(HELIOTRON_vac["desc_h5_path"]), file_format="hdf5")[-1]
+    eq = get("ESTELL")
     grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
     np.testing.assert_allclose(data["iota"], data["iota vacuum"])
     np.testing.assert_allclose(data["iota current"], 0)
+
+
+@pytest.mark.unit
+def test_surface_equilibrium_geometry():
+    """Test that computing stuff from surface gives same result as equilibrium."""
+    names = ["DSHAPE", "HELIOTRON", "NCSX"]
+    data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
+    for name in names:
+        eq = get(name)
+        for key in data:
+            x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
+            y = eq.surface.compute(key)[key].max()
+            if key == "a_major/a_minor":
+                rtol, atol = 1e-2, 0  # need looser tol here bc of different grids
+            else:
+                rtol, atol = 1e-8, 0
+            np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)

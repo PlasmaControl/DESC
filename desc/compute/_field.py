@@ -17,6 +17,7 @@ from .data_index import register_compute_fun
 from .utils import (
     cross,
     dot,
+    safediv,
     safenorm,
     surface_averages,
     surface_integrals_map,
@@ -41,8 +42,8 @@ from .utils import (
 )
 def _B0(params, transforms, profiles, data, **kwargs):
     data["B0"] = transforms["grid"].replace_at_axis(
-        data["psi_r"] / data["sqrt(g)"],
-        lambda: data["psi_rr"] / data["sqrt(g)_r"],
+        safediv(data["psi_r"], data["sqrt(g)"]),
+        lambda: safediv(data["psi_rr"], data["sqrt(g)_r"]),
     )
     return data
 
@@ -107,7 +108,7 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B",
-    label="B",
+    label="\\mathbf{B}",
     units="T",
     units_long="Tesla",
     description="Magnetic field",
@@ -195,12 +196,14 @@ def _B_Z(params, transforms, profiles, data, **kwargs):
 )
 def _B0_r(params, transforms, profiles, data, **kwargs):
     data["B0_r"] = transforms["grid"].replace_at_axis(
-        (data["psi_rr"] * data["sqrt(g)"] - data["psi_r"] * data["sqrt(g)_r"])
-        / data["sqrt(g)"] ** 2,
-        lambda: (
-            data["psi_rrr"] * data["sqrt(g)_r"] - data["psi_rr"] * data["sqrt(g)_rr"]
-        )
-        / (2 * data["sqrt(g)_r"] ** 2),
+        safediv(
+            data["psi_rr"] * data["sqrt(g)"] - data["psi_r"] * data["sqrt(g)_r"],
+            data["sqrt(g)"] ** 2,
+        ),
+        lambda: safediv(
+            data["psi_rrr"] * data["sqrt(g)_r"] - data["psi_rr"] * data["sqrt(g)_rr"],
+            (2 * data["sqrt(g)_r"] ** 2),
+        ),
     )
     return data
 
@@ -324,8 +327,8 @@ def _B_r(params, transforms, profiles, data, **kwargs):
 )
 def _B0_t(params, transforms, profiles, data, **kwargs):
     data["B0_t"] = transforms["grid"].replace_at_axis(
-        -data["psi_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 2,
-        lambda: -data["psi_rr"] * data["sqrt(g)_rt"] / data["sqrt(g)_r"] ** 2,
+        safediv(-data["psi_r"] * data["sqrt(g)_t"], data["sqrt(g)"] ** 2),
+        lambda: safediv(-data["psi_rr"] * data["sqrt(g)_rt"], data["sqrt(g)_r"] ** 2),
     )
     return data
 
@@ -426,8 +429,8 @@ def _B_t(params, transforms, profiles, data, **kwargs):
 )
 def _B0_z(params, transforms, profiles, data, **kwargs):
     data["B0_z"] = transforms["grid"].replace_at_axis(
-        -data["psi_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2,
-        lambda: -data["psi_rr"] * data["sqrt(g)_rz"] / data["sqrt(g)_r"] ** 2,
+        safediv(-data["psi_r"] * data["sqrt(g)_z"], data["sqrt(g)"] ** 2),
+        lambda: safediv(-data["psi_rr"] * data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2),
     )
     return data
 
@@ -528,19 +531,19 @@ def _B_z(params, transforms, profiles, data, **kwargs):
 )
 def _B0_rr(params, transforms, profiles, data, **kwargs):
     data["B0_rr"] = transforms["grid"].replace_at_axis(
-        (
+        safediv(
             data["psi_rrr"] * data["sqrt(g)"] ** 2
             - 2 * data["psi_rr"] * data["sqrt(g)_r"] * data["sqrt(g)"]
             - data["psi_r"] * data["sqrt(g)_rr"] * data["sqrt(g)"]
-            + 2 * data["psi_r"] * data["sqrt(g)_r"] ** 2
-        )
-        / data["sqrt(g)"] ** 3,
-        lambda: (
+            + 2 * data["psi_r"] * data["sqrt(g)_r"] ** 2,
+            data["sqrt(g)"] ** 3,
+        ),
+        lambda: safediv(
             3 * data["sqrt(g)_rr"] ** 2 * data["psi_rr"]
             - 2 * data["sqrt(g)_rrr"] * data["sqrt(g)_r"] * data["psi_rr"]
-            - 3 * data["psi_rrr"] * data["sqrt(g)_r"] * data["sqrt(g)_rr"]
-        )
-        / (6 * data["sqrt(g)_r"] ** 3),
+            - 3 * data["psi_rrr"] * data["sqrt(g)_r"] * data["sqrt(g)_rr"],
+            (6 * data["sqrt(g)_r"] ** 3),
+        ),
     )
     return data
 
@@ -702,12 +705,16 @@ def _B_rr(params, transforms, profiles, data, **kwargs):
 )
 def _B0_tt(params, transforms, profiles, data, **kwargs):
     data["B0_tt"] = transforms["grid"].replace_at_axis(
-        data["psi_r"]
-        * (2 * data["sqrt(g)_t"] ** 2 - data["sqrt(g)"] * data["sqrt(g)_tt"])
-        / data["sqrt(g)"] ** 3,
-        lambda: data["psi_rr"]
-        * (2 * data["sqrt(g)_rt"] ** 2 - data["sqrt(g)_r"] * data["sqrt(g)_rtt"])
-        / data["sqrt(g)_r"] ** 3,
+        safediv(
+            data["psi_r"]
+            * (2 * data["sqrt(g)_t"] ** 2 - data["sqrt(g)"] * data["sqrt(g)_tt"]),
+            data["sqrt(g)"] ** 3,
+        ),
+        lambda: safediv(
+            data["psi_rr"]
+            * (2 * data["sqrt(g)_rt"] ** 2 - data["sqrt(g)_r"] * data["sqrt(g)_rtt"]),
+            data["sqrt(g)_r"] ** 3,
+        ),
     )
     return data
 
@@ -839,12 +846,16 @@ def _B_tt(params, transforms, profiles, data, **kwargs):
 )
 def _B0_zz(params, transforms, profiles, data, **kwargs):
     data["B0_zz"] = transforms["grid"].replace_at_axis(
-        data["psi_r"]
-        * (2 * data["sqrt(g)_z"] ** 2 - data["sqrt(g)"] * data["sqrt(g)_zz"])
-        / data["sqrt(g)"] ** 3,
-        lambda: data["psi_rr"]
-        * (2 * data["sqrt(g)_rz"] ** 2 - data["sqrt(g)_r"] * data["sqrt(g)_rzz"])
-        / data["sqrt(g)_r"] ** 3,
+        safediv(
+            data["psi_r"]
+            * (2 * data["sqrt(g)_z"] ** 2 - data["sqrt(g)"] * data["sqrt(g)_zz"]),
+            data["sqrt(g)"] ** 3,
+        ),
+        lambda: safediv(
+            data["psi_rr"]
+            * (2 * data["sqrt(g)_rz"] ** 2 - data["sqrt(g)_r"] * data["sqrt(g)_rzz"]),
+            data["sqrt(g)_r"] ** 3,
+        ),
     )
     return data
 
@@ -976,21 +987,21 @@ def _B_zz(params, transforms, profiles, data, **kwargs):
 )
 def _B0_rt(params, transforms, profiles, data, **kwargs):
     data["B0_rt"] = transforms["grid"].replace_at_axis(
-        (
+        safediv(
             -data["sqrt(g)"]
             * (data["psi_rr"] * data["sqrt(g)_t"] + data["psi_r"] * data["sqrt(g)_rt"])
-            + 2 * data["psi_r"] * data["sqrt(g)_r"] * data["sqrt(g)_t"]
-        )
-        / data["sqrt(g)"] ** 3,
-        lambda: (
+            + 2 * data["psi_r"] * data["sqrt(g)_r"] * data["sqrt(g)_t"],
+            data["sqrt(g)"] ** 3,
+        ),
+        lambda: safediv(
             -data["sqrt(g)_r"]
             * (
                 data["psi_rrr"] * data["sqrt(g)_rt"]
                 + data["psi_rr"] * data["sqrt(g)_rrt"]
             )
-            + 2 * data["psi_rr"] * data["sqrt(g)_rr"] * data["sqrt(g)_rt"]
-        )
-        / (2 * data["sqrt(g)_r"] ** 3),
+            + 2 * data["psi_rr"] * data["sqrt(g)_rr"] * data["sqrt(g)_rt"],
+            (2 * data["sqrt(g)_r"] ** 3),
+        ),
     )
     return data
 
@@ -1160,18 +1171,22 @@ def _B_rt(params, transforms, profiles, data, **kwargs):
 )
 def _B0_tz(params, transforms, profiles, data, **kwargs):
     data["B0_tz"] = transforms["grid"].replace_at_axis(
-        data["psi_r"]
-        * (
-            2 * data["sqrt(g)_t"] * data["sqrt(g)_z"]
-            - data["sqrt(g)_tz"] * data["sqrt(g)"]
-        )
-        / data["sqrt(g)"] ** 3,
-        lambda: data["psi_rr"]
-        * (
-            2 * data["sqrt(g)_rt"] * data["sqrt(g)_rz"]
-            - data["sqrt(g)_rtz"] * data["sqrt(g)_r"]
-        )
-        / data["sqrt(g)_r"] ** 3,
+        safediv(
+            data["psi_r"]
+            * (
+                2 * data["sqrt(g)_t"] * data["sqrt(g)_z"]
+                - data["sqrt(g)_tz"] * data["sqrt(g)"]
+            ),
+            data["sqrt(g)"] ** 3,
+        ),
+        lambda: safediv(
+            data["psi_rr"]
+            * (
+                2 * data["sqrt(g)_rt"] * data["sqrt(g)_rz"]
+                - data["sqrt(g)_rtz"] * data["sqrt(g)_r"]
+            ),
+            data["sqrt(g)_r"] ** 3,
+        ),
     )
     return data
 
@@ -1317,21 +1332,21 @@ def _B_tz(params, transforms, profiles, data, **kwargs):
 )
 def _B0_rz(params, transforms, profiles, data, **kwargs):
     data["B0_rz"] = transforms["grid"].replace_at_axis(
-        (
+        safediv(
             -data["sqrt(g)"]
             * (data["psi_rr"] * data["sqrt(g)_z"] + data["psi_r"] * data["sqrt(g)_rz"])
-            + 2 * data["psi_r"] * data["sqrt(g)_r"] * data["sqrt(g)_z"]
-        )
-        / data["sqrt(g)"] ** 3,
-        lambda: (
+            + 2 * data["psi_r"] * data["sqrt(g)_r"] * data["sqrt(g)_z"],
+            data["sqrt(g)"] ** 3,
+        ),
+        lambda: safediv(
             -data["sqrt(g)_r"]
             * (
                 data["psi_rrr"] * data["sqrt(g)_rz"]
                 + data["psi_rr"] * data["sqrt(g)_rrz"]
             )
-            + 2 * data["psi_rr"] * data["sqrt(g)_rr"] * data["sqrt(g)_rz"]
-        )
-        / (2 * data["sqrt(g)_r"] ** 3),
+            + 2 * data["psi_rr"] * data["sqrt(g)_rr"] * data["sqrt(g)_rz"],
+            (2 * data["sqrt(g)_r"] ** 3),
+        ),
     )
     return data
 
@@ -2562,7 +2577,8 @@ def _grad_B(params, transforms, profiles, data, **kwargs):
     data["grad(|B|)"] = (
         data["|B|_r"] * data["e^rho"].T
         + transforms["grid"].replace_at_axis(
-            data["|B|_t"] / data["sqrt(g)"], lambda: data["|B|_rt"] / data["sqrt(g)_r"]
+            safediv(data["|B|_t"], data["sqrt(g)"]),
+            lambda: safediv(data["|B|_rt"], data["sqrt(g)_r"]),
         )
         * data["e^theta*sqrt(g)"].T
         + data["|B|_z"] * data["e^zeta"].T
@@ -2706,13 +2722,13 @@ def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
     num = integrate(data["sqrt(g)"] * data["|B|^2"])
     num_r = integrate(data["sqrt(g)_r"] * data["|B|^2"] + data["sqrt(g)"] * B2_r)
     data["<|B|^2>_r"] = transforms["grid"].replace_at_axis(
-        (num_r * data["V_r(r)"] - num * data["V_rr(r)"]) / data["V_r(r)"] ** 2,
-        lambda: (
+        safediv(num_r * data["V_r(r)"] - num * data["V_rr(r)"], data["V_r(r)"] ** 2),
+        lambda: safediv(
             integrate(data["sqrt(g)_rr"] * data["|B|^2"] + 2 * data["sqrt(g)_r"] * B2_r)
             * data["V_rr(r)"]
-            - num_r * data["V_rrr(r)"]
-        )
-        / (2 * data["V_rr(r)"] ** 2),
+            - num_r * data["V_rrr(r)"],
+            (2 * data["V_rr(r)"] ** 2),
+        ),
     )
     return data
 
@@ -3187,8 +3203,26 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="min_tz |B|",
+    label="\\min_{\\theta \\zeta} |\\mathbf{B}|",
+    units="T",
+    units_long="Tesla",
+    description="Minimum field strength on each flux surface",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B|"],
+)
+def _min_tz_modB(params, transforms, profiles, data, **kwargs):
+    data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
+    return data
+
+
+@register_compute_fun(
     name="max_tz |B|",
-    label="\\max_{\\theta \\zeta} |B|",
+    label="\\max_{\\theta \\zeta} |\\mathbf{B}|",
     units="T",
     units_long="Tesla",
     description="Maximum field strength on each flux surface",
@@ -3205,20 +3239,22 @@ def _max_tz_modB(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="min_tz |B|",
-    label="\\min_{\\theta \\zeta} |B|",
-    units="T",
-    units_long="Tesla",
-    description="Minimum field strength on each flux surface",
+    name="mirror ratio",
+    label="(B_{max} - B_{min}) / (B_{min} + B_{max})",
+    units="~",
+    units_long="None",
+    description="Mirror ratio on each flux surface",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="r",
-    data=["|B|"],
+    data=["min_tz |B|", "max_tz |B|"],
 )
-def _min_tz_modB(params, transforms, profiles, data, **kwargs):
-    data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
+def _mirror_ratio(params, transforms, profiles, data, **kwargs):
+    data["mirror ratio"] = (data["max_tz |B|"] - data["min_tz |B|"]) / (
+        data["min_tz |B|"] + data["max_tz |B|"]
+    )
     return data
 
 
@@ -3323,8 +3359,8 @@ def _kappa_g(params, transforms, profiles, data, **kwargs):
 )
 def _grad_B_vec(params, transforms, profiles, data, **kwargs):
     B_t_over_sqrt_g = transforms["grid"].replace_at_axis(
-        (data["B_t"].T / data["sqrt(g)"]).T,
-        lambda: (data["B_rt"].T / data["sqrt(g)_r"]).T,
+        safediv(data["B_t"].T, data["sqrt(g)"]).T,
+        lambda: safediv(data["B_rt"].T, data["sqrt(g)_r"]).T,
     )
     data["grad(B)"] = (
         (data["B_r"][:, jnp.newaxis, :] * data["e^rho"][:, :, jnp.newaxis])
@@ -3371,4 +3407,22 @@ def _grad_B_vec_fro(params, transforms, profiles, data, **kwargs):
 )
 def _L_grad_B(params, transforms, profiles, data, **kwargs):
     data["L_grad(B)"] = jnp.sqrt(2) * data["|B|"] / data["|grad(B)|"]
+    return data
+
+
+@register_compute_fun(
+    name="K_vc",
+    label="\\mathbf{K}_{VC} = \\frac{1}{\\mu_0}\\mathbf{n} \\times \\mathbf{B}",
+    units="A \\cdot m^{-1}",
+    units_long="Amps / meter",
+    description="Virtual casing sheet current",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B", "n_rho"],
+)
+def _K_vc(params, transforms, profiles, data, **kwargs):
+    data["K_vc"] = cross(data["n_rho"], data["B"]) / mu_0
     return data

@@ -54,18 +54,20 @@ def load(load_from, file_format=None):
         with open(load_from, "rb") as f:
             obj = pickle.load(f)
     elif file_format == "hdf5":
-        f = h5py.File(load_from, "r")
-        if "__class__" in f.keys():
-            cls_name = f["__class__"][()].decode("utf-8")
-            cls = pydoc.locate(cls_name)
-            obj = cls.__new__(cls)
-            f.close()
-            reader = reader_factory(load_from, file_format)
-            reader.read_obj(obj)
-        else:
-            raise ValueError(
-                "Could not load from {}, no __class__ attribute found".format(load_from)
-            )
+        with h5py.File(load_from, "r") as f:
+            if "__class__" in f.keys():
+                cls_name = f["__class__"][()].decode("utf-8")
+                cls = pydoc.locate(cls_name)
+                obj = cls.__new__(cls)
+                reader = reader_factory(load_from, file_format)
+                reader.read_obj(obj)
+                reader.close()
+            else:
+                raise ValueError(
+                    "Could not load from {}, no __class__ attribute found".format(
+                        load_from
+                    )
+                )
     else:
         raise ValueError("Unknown file format: {}".format(file_format))
     # to set other secondary stuff that wasn't saved possibly:
@@ -87,7 +89,7 @@ def _unjittable(x):
 
 
 def _make_hashable(x):
-    # turn unhashable ndarray of ints nto a hashable tuple
+    # turn unhashable ndarray of ints into a hashable tuple
     if hasattr(x, "shape"):
         return ("ndarray", x.shape, tuple(x.flatten()))
     return x
@@ -112,16 +114,29 @@ class _AutoRegisterPytree(type):
                 # use subclass method
                 return obj.tree_flatten()
 
-            children = {
-                key: val for key, val in obj.__dict__.items() if not _unjittable(val)
-            }
-            aux_data = tuple(
-                [
-                    (key, _make_hashable(val))
-                    for key, val in obj.__dict__.items()
-                    if _unjittable(val)
-                ]
-            )
+            # in jax parlance, "children" of a pytree are things like arrays etc
+            # that get traced and can change. "aux_data" is metadata that is assumed
+            # static and must be hashable. By default we assume floating point arrays
+            # are children, and int/bool arrays are metadata that should be static
+            children = {}
+            aux_data = []
+
+            # this allows classes to override the default static/dynamic stuff
+            # if they need certain floats to be static or ints to by dynamic etc.
+            static_attrs = getattr(obj, "_static_attrs", [])
+            dynamic_attrs = getattr(obj, "_dynamic_attrs", [])
+            assert set(static_attrs).isdisjoint(set(dynamic_attrs))
+
+            for key, val in obj.__dict__.items():
+                if key in static_attrs:
+                    aux_data += [(key, _make_hashable(val))]
+                elif key in dynamic_attrs:
+                    children[key] = val
+                elif _unjittable(val):
+                    aux_data += [(key, _make_hashable(val))]
+                else:
+                    children[key] = val
+
             return ((children,), aux_data)
 
         def _generic_tree_unflatten(aux_data, children):
@@ -249,7 +264,7 @@ class IOAble(ABC, metaclass=_CombinedMeta):
         if hasattr(self, "_set_up"):
             self._set_up()
 
-    def eq(self, other):
+    def equiv(self, other):
         """Compare equivalence between DESC objects.
 
         Two objects are considered equivalent if they will be saved and loaded
@@ -263,7 +278,7 @@ class IOAble(ABC, metaclass=_CombinedMeta):
 
         Returns
         -------
-        eq : bool
+        equiv : bool
             whether this and other are equivalent
         """
         if self.__class__ != other.__class__:

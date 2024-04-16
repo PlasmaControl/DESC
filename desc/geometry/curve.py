@@ -1,7 +1,5 @@
 """Classes for parameterized 3D space curves."""
 
-import numbers
-
 import numpy as np
 
 from desc.backend import jnp, put
@@ -11,7 +9,7 @@ from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, isposint
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif
 
 from .core import Curve
 
@@ -72,9 +70,11 @@ class FourierRZCurve(Curve):
 
         modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
 
+        assert R_n.size == modes_R.size, "R_n size and modes_R must be the same size"
+        assert Z_n.size == modes_Z.size, "Z_n size and modes_Z must be the same size"
+
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-        assert isposint(NFP)
 
         if sym == "auto":
             if np.all(R_n[modes_R < 0] == 0) and np.all(Z_n[modes_Z >= 0] == 0):
@@ -85,7 +85,7 @@ class FourierRZCurve(Curve):
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
-        self._NFP = int(NFP)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
         self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
 
@@ -112,13 +112,6 @@ class FourierRZCurve(Curve):
         """Number of field periods."""
         return self._NFP
 
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
-
     @property
     def N(self):
         """Maximum mode number."""
@@ -126,6 +119,8 @@ class FourierRZCurve(Curve):
 
     def change_resolution(self, N=None, NFP=None, sym=None):
         """Change the maximum toroidal resolution."""
+        N = check_nonnegint(N, "N")
+        NFP = check_posint(NFP, "NFP")
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))
@@ -219,11 +214,7 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
-        f = open(path)
-        if "&INDATA" in f.readlines()[0].upper():  # vmec input, convert to desc
-            inputs = InputReader.parse_vmec_inputs(f)[-1]
-        else:
-            inputs = InputReader().parse_inputs(f)[-1]
+        inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],
@@ -290,6 +281,10 @@ class FourierXYZCurve(Curve):
 
         assert issubclass(modes.dtype.type, np.integer)
 
+        assert X_n.size == modes.size, "X_n and modes must be the same size"
+        assert Y_n.size == modes.size, "Y_n and modes must be the same size"
+        assert Z_n.size == modes.size, "Z_n and modes must be the same size"
+
         N = np.max(abs(modes))
         self._X_basis = FourierSeries(N, NFP=1, sym=False)
         self._Y_basis = FourierSeries(N, NFP=1, sym=False)
@@ -320,6 +315,7 @@ class FourierXYZCurve(Curve):
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
+        N = check_nonnegint(N, "N")
         if (N is not None) and (N != self.N):
             N = int(N)
             Xmodes_old = self.X_basis.modes
@@ -454,7 +450,9 @@ class FourierXYZCurve(Curve):
         Y = coords_xyz[:, 1]
         Z = coords_xyz[:, 2]
 
-        X, Y, Z, closedX, closedY, closedZ, _ = _unclose_curve(X, Y, Z)
+        X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
+            X, Y, Z
+        )
 
         if isinstance(s, str):
             assert s == "arclength", f"got unknown specification for s {s}"
@@ -470,10 +468,11 @@ class FourierXYZCurve(Curve):
             s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
         else:
             s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
             errorif(
                 not np.all(np.diff(s) > 0),
                 ValueError,
-                "supplied s must be monotonically increasing!",
+                "supplied s must be monotonically increasing",
             )
             errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
             errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
@@ -481,9 +480,9 @@ class FourierXYZCurve(Curve):
         grid = LinearGrid(zeta=s, NFP=1, sym=False)
         basis = FourierSeries(N=N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
-        X_n = transform.fit(coords_xyz[:, 0])
-        Y_n = transform.fit(coords_xyz[:, 1])
-        Z_n = transform.fit(coords_xyz[:, 2])
+        X_n = transform.fit(X)
+        Y_n = transform.fit(Y)
+        Z_n = transform.fit(Z)
         return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
 
 
@@ -533,6 +532,7 @@ class FourierPlanarCurve(Curve):
         else:
             modes = np.asarray(modes)
         assert issubclass(modes.dtype.type, np.integer)
+        assert r_n.size == modes.size, "r_n size and modes must be the same size"
 
         N = np.max(abs(modes))
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
@@ -553,6 +553,7 @@ class FourierPlanarCurve(Curve):
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
+        N = check_nonnegint(N, "N")
         if (N is not None) and (N != self.N):
             N = int(N)
             modes_old = self.r_basis.modes
@@ -698,7 +699,7 @@ class SplineXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
-                "supplied knots must be monotonically increasing!",
+                "supplied knots must be monotonically increasing",
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
@@ -707,6 +708,7 @@ class SplineXYZCurve(Curve):
         self._knots = knots
         self.method = method
 
+    @optimizable_parameter
     @property
     def X(self):
         """Coordinates for X."""
@@ -722,6 +724,7 @@ class SplineXYZCurve(Curve):
                 + f"got {len(new)} X values for {len(self.knots)} knots"
             )
 
+    @optimizable_parameter
     @property
     def Y(self):
         """Coordinates for Y."""
@@ -737,6 +740,7 @@ class SplineXYZCurve(Curve):
                 + f"got {len(new)} Y values for {len(self.knots)} knots"
             )
 
+    @optimizable_parameter
     @property
     def Z(self):
         """Coordinates for Z."""
@@ -760,11 +764,11 @@ class SplineXYZCurve(Curve):
     @knots.setter
     def knots(self, new):
         if len(new) == len(self.knots):
-            knots = jnp.atleast_1d(new)
+            knots = jnp.atleast_1d(jnp.asarray(new))
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
-                "supplied knots must be monotonically increasing!",
+                "supplied knots must be monotonically increasing",
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")

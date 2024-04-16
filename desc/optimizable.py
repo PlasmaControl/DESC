@@ -40,7 +40,7 @@ class Optimizable(ABC):
     def params_dict(self):
         """dict: dictionary of arrays of optimizable parameters."""
         return {
-            key: jnp.atleast_1d(getattr(self, key)).copy()
+            key: jnp.atleast_1d(jnp.asarray(getattr(self, key))).copy()
             for key in self.optimizable_params
         }
 
@@ -88,7 +88,7 @@ class Optimizable(ABC):
             given by ``x_idx``
         """
         return jnp.concatenate(
-            [jnp.atleast_1d(p[key]) for key in self.optimizable_params]
+            [jnp.atleast_1d(jnp.asarray(p[key])) for key in self.optimizable_params]
         )
 
     def unpack_params(self, x):
@@ -108,7 +108,7 @@ class Optimizable(ABC):
         x_idx = self.x_idx
         params = {}
         for arg in self.optimizable_params:
-            params[arg] = jnp.atleast_1d(x[x_idx[arg]])
+            params[arg] = jnp.atleast_1d(jnp.asarray(x[x_idx[arg]]))
         return params
 
     def _sort_args(self, args):
@@ -118,6 +118,86 @@ class Optimizable(ABC):
         may override this method to enforce a specific ordering
         """
         return sorted(set(list(args)))
+
+
+class OptimizableCollection(Optimizable):
+    """Base class for collections of multiple optimizable objects (coilsets, etc).
+
+    Subclasses should be iterable, where each member is itself Optimizable.
+    """
+
+    @property
+    def optimizable_params(self):
+        """list: string names of parameters that have been declared optimizable."""
+        return [s.optimizable_params for s in self]
+
+    @property
+    def params_dict(self):
+        """list: list of dictionary of arrays of optimizable parameters."""
+        return [s.params_dict for s in self]
+
+    @params_dict.setter
+    def params_dict(self, d):
+        for s, p in zip(self, d):
+            s.params_dict = p
+
+    @property
+    def dimensions(self):
+        """list: list of dictionary of integers of sizes of each parameter."""
+        return [s.dimensions for s in self]
+
+    @property
+    def x_idx(self):
+        """list: list of dict of arrays of idx for each param in concatenated array."""
+        x_idx = [s.x_idx for s in self]
+        offset = jnp.concatenate(
+            [jnp.array([0]), jnp.cumsum(jnp.array([s.dim_x for s in self]))[:-1]]
+        )
+        for d, idx in zip(offset, x_idx):
+            # offset subsequent indices by length of priors
+            for key in idx:
+                idx[key] += d
+        return x_idx
+
+    @property
+    def dim_x(self):
+        """int: total number of optimizable parameters."""
+        return sum(s.dim_x for s in self)
+
+    def pack_params(self, params):
+        """Convert a list of dictionary of parameters into a single array.
+
+        Parameters
+        ----------
+        params : list of dict
+            list of dictionary of ndarray of optimizable parameters.
+
+        Returns
+        -------
+        x : ndarray
+            optimizable parameters concatenated into a single array, with indices
+            given by ``x_idx``
+        """
+        return jnp.concatenate([s.pack_params(p) for s, p in zip(self, params)])
+
+    def unpack_params(self, x):
+        """Convert a single array of concatenated parameters into a dictionary.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimizable parameters concatenated into a single array, with indices
+            given by ``x_idx``
+
+        Returns
+        -------
+        p : list dict
+            list of dictionary of ndarray of optimizable parameters.
+        """
+        split_idx = jnp.cumsum(jnp.array([s.dim_x for s in self]))
+        xs = jnp.split(x, split_idx)
+        params = [s.unpack_params(xi) for s, xi in zip(self, xs)]
+        return params
 
 
 def optimizable_parameter(f):

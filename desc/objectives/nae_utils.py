@@ -114,6 +114,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
     """
     phi = qsc.phi
+    dphi = phi[1] - phi[0]
 
     R0 = qsc.R0_func(phi)
     dR0_dphi = qsc.R0p
@@ -159,8 +160,14 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
         k_dot_Z - k_dot_phi * dZ0_dphi / R0
     )
 
-    L_1_1 = X1c * (-k_dot_phi / R0) + Y1c * (-tau_dot_phi / R0)
-    L_1_neg1 = Y1s * (-tau_dot_phi / R0) + X1s * (-k_dot_phi / R0)
+    # from integrating eqn A20 in
+    # Constructing stellarators with quasisymmetry to high order 2019
+    #  Landreman and Sengupta
+    # take derivative of that form d(nu0)_dphi
+    nu_0 = np.cumsum(qsc.B0 / qsc.G0 * qsc.d_l_d_phi - 1) * np.ones_like(phi) * dphi
+    nu0p = np.diff(np.append(nu_0, nu_0[0])) / dphi
+    L_1_1 = qsc.iota * (X1c * (k_dot_phi) + Y1c * (tau_dot_phi)) / R0 * (nu0p + 1)
+    L_1_neg1 = qsc.iota * (X1s * (k_dot_phi) + Y1s * (tau_dot_phi)) / R0 * (nu0p + 1)
 
     nfp = qsc.nfp
     if desc_eq.sym:
@@ -271,7 +278,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Rcon = FixSumModesR(
@@ -285,7 +292,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Zcon = FixSumModesZ(
@@ -300,7 +307,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             target = NAEcoeff * r
             for k in range(1, int((desc_eq.L + 1) / 2) + 1):
                 modes.append([2 * k - 1, -1, n])
-                sum_weights.append([(-1) ** k * k])
+                sum_weights.append((-1) ** k * k)
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
             Lcon = FixSumModesLambda(
@@ -314,7 +321,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Rcon = FixSumModesR(
@@ -328,7 +335,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Zcon = FixSumModesZ(
@@ -343,7 +350,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             target = NAEcoeff * r
             for k in range(1, int((desc_eq.L + 1) / 2) + 1):
                 modes.append([2 * k - 1, 1, n])
-                sum_weights.append([(-1) ** k * k])
+                sum_weights.append((-1) ** k * k)
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
             Lcon = FixSumModesLambda(

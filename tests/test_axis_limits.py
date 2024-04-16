@@ -5,6 +5,9 @@ If a new quantity is added to the compute functions whose limit is not finite
 If the limit has yet to be derived, add it to the ``not_implemented_limits`` set.
 """
 
+import functools
+import inspect
+
 import numpy as np
 import pytest
 
@@ -13,6 +16,7 @@ from desc.compute.utils import dot, surface_integrals_map
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
+from desc.objectives import GenericObjective, ObjectiveFunction
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -53,7 +57,10 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
+    "gbdrift",
+    "cvdrift",
     "grad(alpha)",
+    "cvdrift0",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -61,6 +68,8 @@ not_finite_limits = {
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
     "D_current",
+    "n_rho_z",
+    "|e_theta x e_zeta|_z",
     "e^rho_rr",
     "e^theta_rr",
     "e^zeta_rr",
@@ -79,8 +88,10 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
+    "cvdrift0",
 }
 
 
@@ -224,8 +235,11 @@ def assert_is_continuous(
             continue
         else:
             assert np.isfinite(data[name]).all(), name
-        if data_index[p][name]["coordinates"] == "":
-            # can't check continuity of global scalar
+        if (
+            data_index[p][name]["coordinates"] == ""
+            or data_index[p][name]["coordinates"] == "z"
+        ):
+            # can't check continuity of global scalar or function of toroidal angle
             continue
         # make single variable function of rho
         if data_index[p][name]["coordinates"] == "r":
@@ -295,9 +309,13 @@ class TestAxisLimits:
         # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)
         kwargs = dict(weaker_tolerance, **zero_map)
         # fixed iota
-        assert_is_continuous(get("W7-X"), kwargs=kwargs)
+        eq = get("W7-X")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("NCSX"), kwargs=kwargs)
+        eq = get("NCSX")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -330,5 +348,63 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 1], B[0, 1])
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
-        test(get("W7-X"))
-        test(get("NCSX"))
+        eq = get("W7-X")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
+        eq = get("NCSX")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
+
+
+def _reverse_mode_unsafe_names():
+    names = data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
+    eq = get("ESTELL")
+
+    def isalias(name):
+        return isinstance(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"],
+            functools.partial,
+        )
+
+    def get_source(name):
+        return "".join(
+            inspect.getsource(
+                data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"]
+            ).split("def ")[1:]
+        )
+
+    names = [
+        name
+        for name in names
+        if not (
+            "Boozer" in name
+            or "_mn" in name
+            or name == "B modes"
+            or _skip_this(eq, name)
+            or name in not_finite_limits
+            or isalias(name)
+        )
+    ]
+
+    unsafe_names = []  # things that might have nan gradient but shouldn't
+    for name in names:
+        source = get_source(name)
+        if "replace_at_axis" in source:
+            unsafe_names.append(name)
+
+    unsafe_names = sorted(unsafe_names)
+    return unsafe_names
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
+def test_reverse_mode_ad_axis(name):
+    """Asserts that the rho=0 axis limits are reverse mode differentiable."""
+    eq = get("ESTELL")
+    grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
+    eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), use_jit=False)
+    obj.build(verbose=0)
+    g = obj.grad(obj.x())
+    assert not np.any(np.isnan(g))

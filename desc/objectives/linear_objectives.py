@@ -25,16 +25,19 @@ class _FixedObjective(_Objective):
     _linear = True
     _scalar = False
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium.
+    def update_target(self, thing):
+        """Update target values using an Optimizable object.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
+        thing : Optimizable
+            Optimizable object that will be optimized to satisfy the Objective.
 
         """
-        self.target = np.atleast_1d(getattr(eq, self._target_arg, self.target))
+        new_target = self.compute(thing.params_dict)
+        assert len(new_target) == len(self.target)
+        self.target = new_target
+        self._target_from_user = self.target  # in case the Objective is re-built
         if self._use_jit:
             self.jit()
 
@@ -58,7 +61,6 @@ class _FixedObjective(_Objective):
         return target, bounds
 
 
-# TODO: make this work with above, but for multiple target args?
 class FixParameter(_FixedObjective):
     """Fix specific degrees of freedom associated with a given Optimizable object.
 
@@ -72,10 +74,12 @@ class FixParameter(_FixedObjective):
         Indices to fix for each parameter in params. Use True to fix all indices.
     target : dict of {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Should have the same tree structure as thing.params. Defaults to things.params.
+        Should have the same tree structure as thing.params.
+        Defaults to ``target=thing.params``.
     bounds : tuple of dict {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Should have the same tree structure as thing.params.
+        Defaults to ``target=thing.params``.
     weight : dict of {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Should be a scalar or have the same tree structure as thing.params.
@@ -107,11 +111,15 @@ class FixParameter(_FixedObjective):
         weight=1,
         normalize=False,
         normalize_target=False,
-        name="Fixed parameter",
+        name=None,
     ):
         self._target_from_user = target
-        self._params = params
+        self._params = params = setdefault(params, thing.optimizable_params)
         self._indices = indices
+        self._print_value_fmt = (
+            f"Fixed parameter ({self._params}) error: " + "{:10.3e} "
+        )
+        name = setdefault(name, f"Fixed parameter ({self._params})")
         super().__init__(
             things=thing,
             target=target,
@@ -266,20 +274,22 @@ class BoundaryRSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        Js = np.array(Js)
+        # Broadcasting at once is faster. We need to use np.arange to avoid
+        # setting the value to the whole row.
+        self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
+            surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -364,20 +374,22 @@ class BoundaryZSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.Z_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        Js = np.array(Js)
+        # Broadcasting at once is faster. We need to use np.arange to avoid
+        # setting the value to the whole row.
+        self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
+            surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -428,7 +440,6 @@ class AxisRSelfConsistency(_Objective):
         eq,
         name="axis R self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -515,7 +526,6 @@ class AxisZSelfConsistency(_Objective):
         eq,
         name="axis Z self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -586,10 +596,11 @@ class FixBoundaryR(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Rb_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -608,7 +619,6 @@ class FixBoundaryR(_FixedObjective):
     name : str, optional
         Name of the objective function.
 
-
     Notes
     -----
     If specifying particular modes to fix, the rows of the resulting constraint `A`
@@ -616,7 +626,6 @@ class FixBoundaryR(_FixedObjective):
     `basis.modes` which may be different from the order that was passed in.
     """
 
-    _target_arg = "Rb_lmn"
     _units = "(m)"
     _print_value_fmt = "R boundary error: {:10.3e} "
 
@@ -733,10 +742,11 @@ class FixBoundaryZ(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Zb_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Zb_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -755,7 +765,6 @@ class FixBoundaryZ(_FixedObjective):
     name : str, optional
         Name of the objective function.
 
-
     Notes
     -----
     If specifying particular modes to fix, the rows of the resulting constraint `A`
@@ -763,7 +772,6 @@ class FixBoundaryZ(_FixedObjective):
     `basis.modes` which may be different from the order that was passed in.
     """
 
-    _target_arg = "Zb_lmn"
     _units = "(m)"
     _print_value_fmt = "Z boundary error: {:10.3e} "
 
@@ -889,7 +897,7 @@ class FixLambdaGauge(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _units = "(radians)"
+    _units = "(rad)"
     _print_value_fmt = "lambda gauge error: {:10.3e} "
 
     def __init__(
@@ -983,11 +991,10 @@ class FixThetaSFL(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
-    _units = "(radians)"
+    _units = "(rad)"
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq, name="Theta SFL"):
-
         super().__init__(things=eq, target=0, weight=1, name=name)
 
     def build(self, use_jit=False, verbose=1):
@@ -1042,10 +1049,11 @@ class FixAxisR(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Ra_n``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Ra_n``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1064,7 +1072,6 @@ class FixAxisR(_FixedObjective):
 
     """
 
-    _target_arg = "Ra_n"
     _units = "(m)"
     _print_value_fmt = "R axis error: {:10.3e} "
 
@@ -1123,8 +1130,7 @@ class FixAxisR(_FixedObjective):
                 modes.view(dtype),
                 return_indices=True,
             )
-            # rearrange modes to match order of eq.axis.R_basis.modes
-            # and eq.axis.R_n,
+            # rearrange modes to match order of eq.axis.R_basis.modes and eq.axis.R_n,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.axis.R_basis.modes[idx, :])
 
@@ -1181,10 +1187,11 @@ class FixAxisZ(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Za_n``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Za_n``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1203,7 +1210,6 @@ class FixAxisZ(_FixedObjective):
 
     """
 
-    _target_arg = "Za_n"
     _units = "(m)"
     _print_value_fmt = "Z axis error: {:10.3e} "
 
@@ -1262,8 +1268,7 @@ class FixAxisZ(_FixedObjective):
                 modes.view(dtype),
                 return_indices=True,
             )
-            # rearrange modes to match order of eq.axis.Z_basis.modes
-            # and eq.axis.Z_n,
+            # rearrange modes to match order of eq.axis.Z_basis.modes and eq.axis.Z_n,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.axis.Z_basis.modes[idx, :])
 
@@ -1320,10 +1325,11 @@ class FixModeR(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.R_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.R_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1343,7 +1349,6 @@ class FixModeR(_FixedObjective):
 
     """
 
-    _target_arg = "R_lmn"
     _units = "(m)"
     _print_value_fmt = "Fixed-R modes error: {:10.3e} "
 
@@ -1388,21 +1393,20 @@ class FixModeR(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
-            idx = np.arange(eq.R_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.R_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.R_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1414,7 +1418,7 @@ class FixModeR(_FixedObjective):
         self._dim_f = modes_idx.size
 
         self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.R_lmn[idx], None, modes_idx
+            self._target_from_user, eq.R_lmn[self._idx], None, modes_idx
         )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -1449,10 +1453,11 @@ class FixModeZ(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Z_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Z_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1472,7 +1477,6 @@ class FixModeZ(_FixedObjective):
 
     """
 
-    _target_arg = "Z_lmn"
     _units = "(m)"
     _print_value_fmt = "Fixed-Z modes error: {:10.3e} "
 
@@ -1517,21 +1521,20 @@ class FixModeZ(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
-            idx = np.arange(eq.Z_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.Z_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.Z_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1543,7 +1546,7 @@ class FixModeZ(_FixedObjective):
         self._dim_f = modes_idx.size
 
         self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.Z_lmn[idx], None, modes_idx
+            self._target_from_user, eq.Z_lmn[self._idx], None, modes_idx
         )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -1577,14 +1580,16 @@ class FixModeLambda(_FixedObjective):
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Fourier-Zernike lambda coefficient target values. If None,
-         uses Equilibrium's lambda coefficients.
+        Fourier-Zernike lambda coefficient target values.
+        Must be broadcastable to Objective.dim_f.
+        Defaults to ``target=eq.L_lmn``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.L_lmn``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -1601,8 +1606,7 @@ class FixModeLambda(_FixedObjective):
 
     """
 
-    _target_arg = "L_lmn"
-    _units = "(dimensionless)"
+    _units = "(rad)"
     _print_value_fmt = "Fixed-lambda modes error: {:10.3e} "
 
     def __init__(
@@ -1647,21 +1651,20 @@ class FixModeLambda(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
-            idx = np.arange(eq.L_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.L_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.L_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1673,7 +1676,7 @@ class FixModeLambda(_FixedObjective):
         self._dim_f = modes_idx.size
 
         self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.L_lmn[idx], None, modes_idx
+            self._target_from_user, eq.L_lmn[self._idx], None, modes_idx
         )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -1708,10 +1711,11 @@ class FixSumModesR(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.R_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.R_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1721,7 +1725,7 @@ class FixSumModesR(_FixedObjective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    sum_weight : float, ndarray, optional
+    sum_weights : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
     modes : ndarray, optional
@@ -1734,7 +1738,6 @@ class FixSumModesR(_FixedObjective):
 
     """
 
-    _target_arg = "R_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
     _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
@@ -1751,7 +1754,6 @@ class FixSumModesR(_FixedObjective):
         modes=True,
         name="Fix Sum Modes R",
     ):
-
         errorif(
             modes is None or modes is False,
             ValueError,
@@ -1811,8 +1813,7 @@ class FixSumModesR(_FixedObjective):
                 return_indices=True,
             )
             self._idx = idx
-            # rearrange modes and weights to match order of eq.R_basis.modes
-            # and eq.R_lmn,
+            # rearrange modes & weights to match order of eq.R_basis.modes and eq.R_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.R_basis.modes[idx, :])
             if self._sum_weights is not None:
@@ -1876,10 +1877,11 @@ class FixSumModesZ(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Z_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Z_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1889,7 +1891,7 @@ class FixSumModesZ(_FixedObjective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    sum_weight : float, ndarray, optional
+    sum_weights : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
     modes : ndarray, optional
@@ -1902,7 +1904,6 @@ class FixSumModesZ(_FixedObjective):
 
     """
 
-    _target_arg = "Z_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
     _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
@@ -1978,8 +1979,7 @@ class FixSumModesZ(_FixedObjective):
                 return_indices=True,
             )
             self._idx = idx
-            # rearrange modes and weights to match order of eq.Z_basis.modes
-            # and eq.Z_lmn,
+            # rearrange modes & weights to match order of eq.Z_basis.modes and eq.Z_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
             if self._sum_weights is not None:
@@ -2041,16 +2041,16 @@ class FixSumModesLambda(_FixedObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Fourier-Zernike Lambda coefficient target sum. If None,
-        uses current sum of Equilibrium's lambda coefficients.
-        len(target)=1
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.L_lmn``.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.L_lmn``.
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        Must be broadcastable to to Objective.dim_f.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -2073,8 +2073,7 @@ class FixSumModesLambda(_FixedObjective):
     """
 
     _fixed = False  # not "diagonal", since its fixing a sum
-    _target_arg = "L_lmn"
-    _units = "(dimensionless)"
+    _units = "(rad)"
     _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
 
     def __init__(
@@ -2233,7 +2232,7 @@ class _FixProfile(_FixedObjective, ABC):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2312,10 +2311,11 @@ class FixPressure(_FixProfile):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.p_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.p_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2331,14 +2331,13 @@ class FixPressure(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _target_arg = "p_l"
     _units = "(Pa)"
     _print_value_fmt = "Fixed-pressure profile error: {:10.3e} "
 
@@ -2416,15 +2415,16 @@ class FixAnisotropy(_FixProfile):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.a_lmn``.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.a_lmn``.
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
+        Must be broadcastable to to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -2437,14 +2437,13 @@ class FixAnisotropy(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
 
     """
 
-    _target_arg = "a_lmn"
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-anisotropy profile error: {:10.3e} "
 
@@ -2521,10 +2520,11 @@ class FixIota(_FixProfile):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.i_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.i_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2541,14 +2541,13 @@ class FixIota(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices.
         corresponding to knots for a SplineProfile).
-        Must len(target) = len(weight) = len(modes).
+        Must len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _target_arg = "i_l"
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-iota profile error: {:10.3e} "
 
@@ -2625,10 +2624,11 @@ class FixCurrent(_FixProfile):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.c_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.c_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2644,14 +2644,13 @@ class FixCurrent(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _target_arg = "c_l"
     _units = "(A)"
     _print_value_fmt = "Fixed-current profile error: {:10.3e} "
 
@@ -2731,10 +2730,11 @@ class FixElectronTemperature(_FixProfile):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Te_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Te_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2750,14 +2750,13 @@ class FixElectronTemperature(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _target_arg = "Te_l"
     _units = "(eV)"
     _print_value_fmt = "Fixed-electron-temperature profile error: {:10.3e} "
 
@@ -2837,10 +2836,11 @@ class FixElectronDensity(_FixProfile):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.ne_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.ne_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2856,14 +2856,13 @@ class FixElectronDensity(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _target_arg = "ne_l"
     _units = "(m^-3)"
     _print_value_fmt = "Fixed-electron-density profile error: {:10.3e} "
 
@@ -2943,10 +2942,11 @@ class FixIonTemperature(_FixProfile):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Ti_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Ti_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2962,14 +2962,13 @@ class FixIonTemperature(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _target_arg = "Ti_l"
     _units = "(eV)"
     _print_value_fmt = "Fixed-ion-temperature profile error: {:10.3e} "
 
@@ -3049,10 +3048,11 @@ class FixAtomicNumber(_FixProfile):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Zeff_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Zeff_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -3069,14 +3069,13 @@ class FixAtomicNumber(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _target_arg = "Zeff_l"
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-atomic-number profile error: {:10.3e} "
 
@@ -3153,10 +3152,11 @@ class FixPsi(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Default is ``target=eq.Psi``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Default is ``target=eq.Psi``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -3171,7 +3171,6 @@ class FixPsi(_FixedObjective):
 
     """
 
-    _target_arg = "Psi"
     _units = "(Wb)"
     _print_value_fmt = "Fixed-Psi error: {:10.3e} "
 
@@ -3238,3 +3237,505 @@ class FixPsi(_FixedObjective):
 
         """
         return params["Psi"]
+
+
+class FixCurveShift(_FixedObjective):
+    """Fixes Curve.shift attribute, which is redundant with other Curve params.
+
+    Parameters
+    ----------
+    curve : Curve
+        Curve that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(m)"
+    _print_value_fmt = "Fixed-shift error: {:10.3e} "
+
+    def __init__(
+        self,
+        curve,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed-shift",
+    ):
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=curve,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        curve = self.things[0]
+        self._dim_f = curve.shift.size
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, curve.shift, None, np.arange(self._dim_f)
+        )
+
+        if self._normalize:
+            self._normalization = 1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed-shift error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of curve degrees of freedom, eg Curve.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Curve shift (m).
+
+        """
+        return params["shift"]
+
+
+class FixCurveRotation(_FixedObjective):
+    """Fixes Curve.rotmat attribute, which is redundant with other Curve params.
+
+    Parameters
+    ----------
+    curve : Curve
+        Curve that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(rad)"
+    _print_value_fmt = "Fixed-rotation error: {:10.3e} "
+
+    def __init__(
+        self,
+        curve,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed-rotation",
+    ):
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=curve,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        curve = self.things[0]
+        self._dim_f = curve.rotmat.size
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, curve.rotmat, None, np.arange(self._dim_f)
+        )
+
+        if self._normalize:
+            self._normalization = 1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed-rotation error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of curve degrees of freedom, eg Curve.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Curve rotation matrix (rad).
+
+        """
+        return params["rotmat"]
+
+
+class FixOmniWell(_FixedObjective):
+    """Fixes OmnigenousField.B_lm coefficients.
+
+    Parameters
+    ----------
+    field : OmnigenousField
+        Field that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses field value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    indices : ndarray or bool, optional
+        indices of the field.B_lm array to fix.
+        Must have len(target) = len(weight) = len(indices).
+        If True/False uses all/none of the field.B_lm indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _units = "(T)"
+    _print_value_fmt = "Fixed omnigenity well error: {:10.3e} "
+
+    def __init__(
+        self,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        indices=True,
+        name="fixed omnigenity well",
+    ):
+        self._field = field
+        self._indices = indices
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=field,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        field = self.things[0]
+
+        # find indices to fix
+        if self._indices is False or self._indices is None:  # no indices to fix
+            self._idx = np.array([], dtype=int)
+        elif self._indices is True:  # all indices
+            self._idx = np.arange(np.size(self._field.B_lm))
+        else:  # specified indices
+            self._idx = np.atleast_1d(self._indices)
+
+        self._dim_f = self._idx.size
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, field.B_lm[self._idx], None, self._idx
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed omnigenity well error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed well shape error.
+
+        """
+        return params["B_lm"][self._idx]
+
+
+class FixOmniMap(_FixedObjective):
+    """Fixes OmnigenousField.x_lmn coefficients.
+
+    Parameters
+    ----------
+    field : OmnigenousField
+        Field that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses field value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    indices : ndarray or bool, optional
+        indices of the field.x_lmn array to fix.
+        Must have len(target) = len(weight) = len(indices).
+        If True/False uses all/none of the field.x_lmn indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _units = "(rad)"
+    _print_value_fmt = "Fixed omnigenity map error: {:10.3e} "
+
+    def __init__(
+        self,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        indices=True,
+        name="fixed omnigenity map",
+    ):
+        self._field = field
+        self._indices = indices
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=field,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        field = self.things[0]
+
+        # find indices to fix
+        if self._indices is False or self._indices is None:  # no indices to fix
+            self._idx = np.array([], dtype=int)
+        elif self._indices is True:  # all indices
+            self._idx = np.arange(np.size(self._field.x_lmn))
+        else:  # specified indices
+            self._idx = np.atleast_1d(self._indices)
+
+        self._dim_f = self._idx.size
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, field.x_lmn[self._idx], None, self._idx
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed omnigenity map error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed omnigenity map error.
+
+        """
+        return params["x_lmn"][self._idx]
+
+
+class FixOmniBmax(_FixedObjective):
+    """Ensures the B_max contour is straight in Boozer coordinates.
+
+    Parameters
+    ----------
+    field : OmnigenousField
+        Field that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses field value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _fixed = False  # not "diagonal", since it is fixing a sum
+    _units = "(rad)"
+    _print_value_fmt = "Fixed omnigenity B_max error: {:10.3e} "
+
+    def __init__(
+        self,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name="fixed omnigenity B_max",
+    ):
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=field,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        field = self.things[0]
+
+        basis = field.x_basis
+        self._dim_f = int(basis.num_modes / (basis.M + 1))
+
+        self._A = np.zeros((self._dim_f, basis.num_modes))
+        m0_modes = basis.modes[np.nonzero(basis.modes[:, 1] == 0)[0]]
+        for i, (l, m, n) in enumerate(m0_modes):
+            idx_0 = np.nonzero((basis.modes == [l, m, n]).all(axis=1))[0]
+            idx_m = np.nonzero(
+                np.logical_and(
+                    (basis.modes[:, (0, 2)] == [l, n]).all(axis=1),
+                    np.logical_and((basis.modes[:, 1] % 2 == 0), basis.modes[:, 1] > 0),
+                )
+            )[0]
+            mm = basis.modes[idx_m, 2]
+            self._A[i, idx_0] = 1
+            self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, 0, None, np.array([0])
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed omnigenity B_max error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed omnigenity B_max error.
+
+        """
+        f = jnp.dot(self._A, params["x_lmn"])
+        return f

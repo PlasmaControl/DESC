@@ -1,9 +1,12 @@
 """Tests compute utilities."""
 
+import jax
 import numpy as np
 import pytest
 
+from desc.backend import jnp
 from desc.basis import FourierZernikeBasis
+from desc.compute.geom_utils import rotation_matrix
 from desc.compute.utils import (
     _get_grid_surface,
     line_integrals,
@@ -105,6 +108,7 @@ class TestComputeUtils:
             )
 
         eq = get("W7-X")
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
         lg = LinearGrid(L=L, M=M, N=N, NFP=eq.NFP, endpoint=False)
         lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=eq.NFP, endpoint=True)
         cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=True)
@@ -114,6 +118,27 @@ class TestComputeUtils:
             if label != "theta":
                 # theta integrals are poorly defined on concentric grids
                 test_b_theta(label, cg_sym, eq)
+
+    @pytest.mark.unit
+    def test_unknown_unique_grid_integral(self):
+        """Test that averages are invariant to whether grids have unique_idx."""
+        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, endpoint=False)
+        q = jnp.arange(lg.num_nodes) ** 2
+        result = surface_integrals(lg, q, surface_label="rho")
+        del lg._unique_rho_idx
+        np.testing.assert_allclose(
+            surface_integrals(lg, q, surface_label="rho"), result
+        )
+        result = surface_averages(lg, q, surface_label="theta")
+        del lg._unique_theta_idx
+        np.testing.assert_allclose(
+            surface_averages(lg, q, surface_label="theta"), result
+        )
+        result = surface_variance(lg, q, surface_label="zeta")
+        del lg._unique_zeta_idx
+        np.testing.assert_allclose(
+            surface_variance(lg, q, surface_label="zeta"), result
+        )
 
     @pytest.mark.unit
     def test_surface_integrals_transform(self):
@@ -297,6 +322,7 @@ class TestComputeUtils:
     def test_surface_averages_identity_op(self):
         """Test flux surface averages of surface functions are identity operations."""
         eq = get("W7-X")
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["p", "sqrt(g)"], grid=grid)
         pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
@@ -309,6 +335,7 @@ class TestComputeUtils:
         Meaning average(a + b) = average(a) + average(b).
         """
         eq = get("W7-X")
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["|B|", "|B|_t", "sqrt(g)"], grid=grid)
         a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
@@ -364,6 +391,7 @@ class TestComputeUtils:
 
         # test on grids with a single rho surface
         eq = get("W7-X")
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
         rho = np.array((1 - 1e-4) * np.random.default_rng().random() + 1e-4)
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["|B|", "sqrt(g)"], grid=grid)
@@ -568,3 +596,15 @@ class TestComputeUtils:
                 Bmin_alt[j] = np.min(B[mask])
             np.testing.assert_allclose(Bmax_alt, grid.compress(surface_max(grid, B)))
             np.testing.assert_allclose(Bmin_alt, grid.compress(surface_min(grid, B)))
+
+
+@pytest.mark.unit
+def test_rotation_matrix():
+    """Test that rotation_matrix works with fwd & rev AD for axis=[0, 0, 0]."""
+    dfdx_fwd = jax.jacfwd(rotation_matrix)
+    dfdx_rev = jax.jacrev(rotation_matrix)
+    x0 = jnp.array([0.0, 0.0, 0.0])
+
+    np.testing.assert_allclose(rotation_matrix(x0), np.eye(3))
+    np.testing.assert_allclose(dfdx_fwd(x0), np.zeros((3, 3, 3)))
+    np.testing.assert_allclose(dfdx_rev(x0), np.zeros((3, 3, 3)))

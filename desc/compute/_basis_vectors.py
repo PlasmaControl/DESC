@@ -12,7 +12,7 @@ expensive computations.
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross
+from .utils import cross, safediv
 
 
 @register_compute_fun(
@@ -71,18 +71,19 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
     a = cross(data["e_theta_r"], data["e_zeta"])
     data["e^rho_r"] = transforms["grid"].replace_at_axis(
         (
-            (a + cross(data["e_theta"], data["e_zeta_r"])).T / data["sqrt(g)"]
+            safediv((a + cross(data["e_theta"], data["e_zeta_r"])).T, data["sqrt(g)"])
             - cross(data["e_theta"], data["e_zeta"]).T
-            * data["sqrt(g)_r"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_r"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                cross(data["e_theta_rr"], data["e_zeta"])
-                + 2 * cross(data["e_theta_r"], data["e_zeta_r"])
-            ).T
-            / (2 * data["sqrt(g)_r"])
-            - a.T * data["sqrt(g)_rr"] / (2 * data["sqrt(g)_r"] ** 2)
+            safediv(
+                (
+                    cross(data["e_theta_rr"], data["e_zeta"])
+                    + 2 * cross(data["e_theta_r"], data["e_zeta_r"])
+                ).T,
+                (2 * data["sqrt(g)_r"]),
+            )
+            - a.T * safediv(data["sqrt(g)_rr"], (2 * data["sqrt(g)_r"] ** 2))
         ).T,
     )
     return data
@@ -265,20 +266,24 @@ def _e_sup_rho_rz(params, transforms, profiles, data, **kwargs):
 def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
     data["e^rho_t"] = transforms["grid"].replace_at_axis(
         (
-            (
-                cross(data["e_theta_t"], data["e_zeta"])
-                + cross(data["e_theta"], data["e_zeta_t"])
-            ).T
-            / data["sqrt(g)"]
-            - cross(data["e_theta"], data["e_zeta"]).T
-            * data["sqrt(g)_t"]
-            / data["sqrt(g)"] ** 2
+            safediv(
+                (
+                    cross(data["e_theta_t"], data["e_zeta"])
+                    + cross(data["e_theta"], data["e_zeta_t"])
+                ).T,
+                data["sqrt(g)"],
+            )
+            - safediv(
+                cross(data["e_theta"], data["e_zeta"]).T * data["sqrt(g)_t"],
+                data["sqrt(g)"] ** 2,
+            )
         ).T,
         lambda: (
-            cross(data["e_theta_rt"], data["e_zeta"]).T / data["sqrt(g)_r"]
-            - cross(data["e_theta_r"], data["e_zeta"]).T
-            * data["sqrt(g)_rt"]
-            / data["sqrt(g)_r"] ** 2
+            safediv(cross(data["e_theta_rt"], data["e_zeta"]).T, data["sqrt(g)_r"])
+            - safediv(
+                cross(data["e_theta_r"], data["e_zeta"]).T * data["sqrt(g)_rt"],
+                data["sqrt(g)_r"] ** 2,
+            )
         ).T,
     )
     return data
@@ -406,24 +411,26 @@ def _e_sup_rho_tz(params, transforms, profiles, data, **kwargs):
 def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
     data["e^rho_z"] = transforms["grid"].replace_at_axis(
         (
-            (
-                cross(data["e_theta_z"], data["e_zeta"])
-                + cross(data["e_theta"], data["e_zeta_z"])
-            ).T
-            / data["sqrt(g)"]
+            safediv(
+                (
+                    cross(data["e_theta_z"], data["e_zeta"])
+                    + cross(data["e_theta"], data["e_zeta_z"])
+                ).T,
+                data["sqrt(g)"],
+            )
             - cross(data["e_theta"], data["e_zeta"]).T
-            * data["sqrt(g)_z"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_z"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                cross(data["e_theta_r"], data["e_zeta_z"])
-                + cross(data["e_theta_rz"], data["e_zeta"])
-            ).T
-            / data["sqrt(g)_r"]
+            safediv(
+                (
+                    cross(data["e_theta_r"], data["e_zeta_z"])
+                    + cross(data["e_theta_rz"], data["e_zeta"])
+                ).T,
+                data["sqrt(g)_r"],
+            )
             - cross(data["e_theta_r"], data["e_zeta"]).T
-            * data["sqrt(g)_rz"]
-            / data["sqrt(g)_r"] ** 2
+            * safediv(data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
     return data
@@ -958,18 +965,19 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
     b = cross(data["e_rho"], data["e_theta_r"])
     data["e^zeta_r"] = transforms["grid"].replace_at_axis(
         (
-            (cross(data["e_rho_r"], data["e_theta"]) + b).T / data["sqrt(g)"]
+            safediv((cross(data["e_rho_r"], data["e_theta"]) + b).T, data["sqrt(g)"])
             - cross(data["e_rho"], data["e_theta"]).T
-            * data["sqrt(g)_r"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_r"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                2 * cross(data["e_rho_r"], data["e_theta_r"])
-                + cross(data["e_rho"], data["e_theta_rr"])
-            ).T
-            / (2 * data["sqrt(g)_r"])
-            - b.T * data["sqrt(g)_rr"] / (2 * data["sqrt(g)_r"] ** 2)
+            safediv(
+                (
+                    2 * cross(data["e_rho_r"], data["e_theta_r"])
+                    + cross(data["e_rho"], data["e_theta_rr"])
+                ).T,
+                (2 * data["sqrt(g)_r"]),
+            )
+            - b.T * safediv(data["sqrt(g)_rr"], (2 * data["sqrt(g)_r"] ** 2))
         ).T,
     )
     return data
@@ -1153,24 +1161,26 @@ def _e_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
 def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     data["e^zeta_t"] = transforms["grid"].replace_at_axis(
         (
-            (
-                cross(data["e_rho_t"], data["e_theta"])
-                + cross(data["e_rho"], data["e_theta_t"])
-            ).T
-            / data["sqrt(g)"]
+            safediv(
+                (
+                    cross(data["e_rho_t"], data["e_theta"])
+                    + cross(data["e_rho"], data["e_theta_t"])
+                ).T,
+                data["sqrt(g)"],
+            )
             - cross(data["e_rho"], data["e_theta"]).T
-            * data["sqrt(g)_t"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_t"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                cross(data["e_rho_t"], data["e_theta_r"])
-                + cross(data["e_rho"], data["e_theta_rt"])
-            ).T
-            / data["sqrt(g)_r"]
+            safediv(
+                (
+                    cross(data["e_rho_t"], data["e_theta_r"])
+                    + cross(data["e_rho"], data["e_theta_rt"])
+                ).T,
+                data["sqrt(g)_r"],
+            )
             - cross(data["e_rho"], data["e_theta_r"]).T
-            * data["sqrt(g)_rt"]
-            / data["sqrt(g)_r"] ** 2
+            * safediv(data["sqrt(g)_rt"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
     return data
@@ -1299,24 +1309,26 @@ def _e_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
 def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     data["e^zeta_z"] = transforms["grid"].replace_at_axis(
         (
-            (
-                cross(data["e_rho_z"], data["e_theta"])
-                + cross(data["e_rho"], data["e_theta_z"])
-            ).T
-            / data["sqrt(g)"]
+            safediv(
+                (
+                    cross(data["e_rho_z"], data["e_theta"])
+                    + cross(data["e_rho"], data["e_theta_z"])
+                ).T,
+                data["sqrt(g)"],
+            )
             - cross(data["e_rho"], data["e_theta"]).T
-            * data["sqrt(g)_z"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_z"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                cross(data["e_rho_z"], data["e_theta_r"])
-                + cross(data["e_rho"], data["e_theta_rz"])
-            ).T
-            / data["sqrt(g)_r"]
+            safediv(
+                (
+                    cross(data["e_rho_z"], data["e_theta_r"])
+                    + cross(data["e_rho"], data["e_theta_rz"])
+                ).T,
+                data["sqrt(g)_r"],
+            )
             - cross(data["e_rho"], data["e_theta_r"]).T
-            * data["sqrt(g)_rz"]
-            / data["sqrt(g)_r"] ** 2
+            * safediv(data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
     return data
@@ -2345,8 +2357,8 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞_θ / √g | ρ=0 }.
     data["e_theta/sqrt(g)"] = transforms["grid"].replace_at_axis(
-        (data["e_theta"].T / data["sqrt(g)"]).T,
-        lambda: (data["e_theta_r"].T / data["sqrt(g)_r"]).T,
+        safediv(data["e_theta"].T, data["sqrt(g)"]).T,
+        lambda: safediv(data["e_theta_r"].T, data["sqrt(g)_r"]).T,
     )
     return data
 
@@ -4398,12 +4410,50 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     # Equal to 𝐞^ρ / ‖𝐞^ρ‖ but works correctly for surfaces as well that don't
     # have contravariant basis defined.
     data["n_rho"] = transforms["grid"].replace_at_axis(
-        (cross(data["e_theta"], data["e_zeta"]).T / data["|e_theta x e_zeta|"]).T,
+        safediv(cross(data["e_theta"], data["e_zeta"]).T, data["|e_theta x e_zeta|"]).T,
         # At the magnetic axis, this function returns the multivalued map whose
         # image is the set { 𝐞^ρ / ‖𝐞^ρ‖ | ρ=0 }.
-        lambda: (
-            cross(data["e_theta_r"], data["e_zeta"]).T / data["|e_theta x e_zeta|_r"]
+        lambda: safediv(
+            cross(data["e_theta_r"], data["e_zeta"]).T, data["|e_theta x e_zeta|_r"]
         ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="n_rho_z",
+    label="\\partial_{\\zeta}\\hat{\\mathbf{n}}_{\\rho}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to constant rho surface (direction of e^rho),"
+    " derivative wrt toroidal angle",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_z",
+        "e_zeta",
+        "e_zeta_z",
+        "|e_theta x e_zeta|",
+        "|e_theta x e_zeta|_z",
+        "n_rho",
+    ],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _n_rho_z(params, transforms, profiles, data, **kwargs):
+    data["n_rho_z"] = (
+        cross(data["e_theta_z"], data["e_zeta"])
+        + cross(data["e_theta"], data["e_zeta_z"])
+    ) / data["|e_theta x e_zeta|"][:, None] - data["n_rho"] / (
+        data["|e_theta x e_zeta|"][:, None]
+    ) * (
+        data["|e_theta x e_zeta|_z"][:, None]
     )
     return data
 
@@ -4456,11 +4506,11 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
     # Equal to 𝐞^ζ / ‖𝐞^ζ‖ but works correctly for surfaces as well that don't
     # have contravariant basis defined.
     data["n_zeta"] = transforms["grid"].replace_at_axis(
-        (cross(data["e_rho"], data["e_theta"]).T / data["|e_rho x e_theta|"]).T,
+        safediv(cross(data["e_rho"], data["e_theta"]).T, data["|e_rho x e_theta|"]).T,
         # At the magnetic axis, this function returns the multivalued map whose
         # image is the set { 𝐞^ζ / ‖𝐞^ζ‖ | ρ=0 }.
-        lambda: (
-            cross(data["e_rho"], data["e_theta_r"]).T / data["|e_rho x e_theta|_r"]
+        lambda: safediv(
+            cross(data["e_rho"], data["e_theta_r"]).T, data["|e_rho x e_theta|_r"]
         ).T,
     )
     return data

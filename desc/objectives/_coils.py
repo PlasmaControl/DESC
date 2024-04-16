@@ -240,7 +240,7 @@ class _CoilObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             grid=self._grid,
-            basis=kwargs.get("basis", None),
+            basis=kwargs.get("basis", "xyz"),
         )
 
         return data

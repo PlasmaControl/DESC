@@ -288,7 +288,7 @@ class BoundaryRSelfConsistency(_Objective):
         # Broadcasting at once is faster. We need to use np.arange to avoid
         # setting the value to the whole row.
         self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
-            surf[:, np.newaxis], eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
+            surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -388,7 +388,7 @@ class BoundaryZSelfConsistency(_Objective):
         # Broadcasting at once is faster. We need to use np.arange to avoid
         # setting the value to the whole row.
         self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
-            surf[:, np.newaxis], eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
+            surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
         )
         super().build(use_jit=use_jit, verbose=verbose)
 

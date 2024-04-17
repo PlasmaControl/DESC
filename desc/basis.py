@@ -1761,7 +1761,7 @@ class ChebyshevZernikeBasis(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r, lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         axial = chebyshev_z(z[:, np.newaxis], n, dr=derivatives[2])
         if unique:

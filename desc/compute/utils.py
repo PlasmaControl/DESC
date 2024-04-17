@@ -335,7 +335,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     from desc.basis import DoubleFourierSeries
     from desc.transform import Transform
 
-    method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
+    method = "jitable" if jitable or kwargs.get("method") == "jitable" else "direct1"
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}

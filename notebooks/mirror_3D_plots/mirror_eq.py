@@ -74,12 +74,11 @@ eq = Equilibrium(
     pressure=p,
     iota=iota,
     sym=False,
-    method="jitable",
 )
 
 constraints = (
     # FixEndCapLambda(0, eq=eq),
-    # FixEndCapR(0, eq.eq),
+    # FixEndCapR(0, eq=eq),
     # FixEndCapZ(0, eq=eq),
     # FixEndCapLambda(2*np.pi, eq=eq),
     # FixEndCapR(2*np.pi, eq=eq),

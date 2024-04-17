@@ -644,7 +644,6 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
-        "method": [],
         "intervals": [],
     },
     profiles=[],
@@ -652,6 +651,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    # TODO: how do I get the method inputted to SplineXYZCurve into here?
 )
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     def get_f_in_interval(arr, knots, istart, istop):
@@ -662,6 +662,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    method = "cubic"
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -670,7 +671,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             x,
-            method=transforms["method"],
+            method=method,
             derivative=0,
             period=period,
         )
@@ -678,7 +679,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             y,
-            method=transforms["method"],
+            method=method,
             derivative=0,
             period=period,
         )
@@ -686,7 +687,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             z,
-            method=transforms["method"],
+            method=method,
             derivative=0,
             period=period,
         )
@@ -748,7 +749,6 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
-        "method": [],
         "intervals": [],
     },
     profiles=[],
@@ -766,6 +766,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    method = "cubic"
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -803,7 +804,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             X_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=1,
             period=period,
         )
@@ -811,7 +812,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             Y_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=1,
             period=period,
         )
@@ -819,7 +820,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             Z_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=1,
             period=period,
         )
@@ -867,7 +868,6 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
-        "method": [],
         "intervals": [],
     },
     profiles=[],
@@ -885,6 +885,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    method = "cubic"
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -922,7 +923,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             X_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=2,
             period=period,
         )
@@ -930,7 +931,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             Y_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=2,
             period=period,
         )
@@ -938,7 +939,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             Z_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=2,
             period=period,
         )
@@ -985,7 +986,6 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
-        "method": [],
         "intervals": [],
     },
     profiles=[],
@@ -1003,6 +1003,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    method = "cubic"
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -1040,7 +1041,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             X_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=3,
             period=period,
         )
@@ -1048,7 +1049,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             Y_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=3,
             period=period,
         )
@@ -1056,7 +1057,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             knots,
             Z_in_interval,
-            method=transforms["method"],
+            method=method,
             derivative=3,
             period=period,
         )

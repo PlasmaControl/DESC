@@ -715,7 +715,7 @@ class SplineXYZCurve(Curve):
             ]
 
         self._knots = knots
-        self.method = method
+        self.method = None
         self.intervals = interval_indices
 
     @optimizable_parameter
@@ -766,6 +766,7 @@ class SplineXYZCurve(Curve):
                 + f"got {len(new)} Z values for {len(self.knots)} knots"
             )
 
+    @optimizable_parameter
     @property
     def knots(self):
         """Knots for spline."""
@@ -810,6 +811,7 @@ class SplineXYZCurve(Curve):
             "monotonic",
             "monotonic-0",
             "cardinal",
+            None,
         ]
         if new in possible_methods:
             self._method = new

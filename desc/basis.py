@@ -22,6 +22,7 @@ __all__ = [
     "ChebyshevFourierSeries",
     "ChebyshevSeries",
     "ChebyshevPolynomial",
+    "sinbasis",
 ]
 
 
@@ -2267,33 +2268,58 @@ def chebyshev_z(z, l, dr=0):
         return jnp.cos(l * jnp.arccos(z_shift))
     elif dr in [1, 2, 3, 4]:
         if dr == 1:
-            diff = (-l * z_shift * chebyshev_z(z, l, dr - 1) + l *
-                chebyshev_z(z, l - 1, dr - 1)) / (1 - z_shift ** 2) / np.pi
+            diff = (
+                (
+                    -l * z_shift * chebyshev_z(z, l, dr - 1)
+                    + l * chebyshev_z(z, l - 1, dr - 1)
+                )
+                / (1 - z_shift**2)
+                / np.pi
+            )
         elif dr == 2:
-            diff = (-(l ** 2 * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) + \
-                    (l * z_shift * jnp.sin(l * jnp.arccos(z_shift))) / \
-                        (jnp.sqrt(1 - z_shift ** 2) * (1 - z_shift ** 2)))/ np.pi**2
+            diff = (
+                -(l**2 * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift**2)
+                + (l * z_shift * jnp.sin(l * jnp.arccos(z_shift)))
+                / (jnp.sqrt(1 - z_shift**2) * (1 - z_shift**2))
+            ) / np.pi**2
         elif dr == 3:
-            diff = (-(3 * l ** 2 * z_shift * jnp.cos(l * jnp.arccos(z_shift))) \
-                / (1 - z_shift ** 2) ** 2 + (3 * l * z_shift ** 2 * jnp.sin(l *
-                jnp.arccos(z_shift))) / (1 - z_shift ** 2) ** (5 / 2) + \
-                (l * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) \
-                ** (3 / 2) - (l ** 3 * jnp.sin(l * jnp.arccos(z_shift))) / \
-                    (1 - z_shift ** 2) ** (3 / 2) )/ np.pi**3
+            diff = (
+                -(3 * l**2 * z_shift * jnp.cos(l * jnp.arccos(z_shift)))
+                / (1 - z_shift**2) ** 2
+                + (3 * l * z_shift**2 * jnp.sin(l * jnp.arccos(z_shift)))
+                / (1 - z_shift**2) ** (5 / 2)
+                + (l * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift**2) ** (3 / 2)
+                - (l**3 * jnp.sin(l * jnp.arccos(z_shift)))
+                / (1 - z_shift**2) ** (3 / 2)
+            ) / np.pi**3
         elif dr == 4:
-            diff = (l * ((l * (4 + 11 * z_shift ** 2 + l ** 2 * (-1 + z_shift ** 2))
-                * jnp.cos(l * jnp.arccos(z_shift))) / (-1 + z_shift ** 2) ** 3 +
-                (3 * z_shift * (3 + 2 * z_shift ** 2 + 2 * l ** 2 * (-1 + z_shift ** 2))
-                * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) ** (7 / 2)) )/ np.pi**4
+            diff = (
+                l
+                * (
+                    (
+                        l
+                        * (4 + 11 * z_shift**2 + l**2 * (-1 + z_shift**2))
+                        * jnp.cos(l * jnp.arccos(z_shift))
+                    )
+                    / (-1 + z_shift**2) ** 3
+                    + (
+                        3
+                        * z_shift
+                        * (3 + 2 * z_shift**2 + 2 * l**2 * (-1 + z_shift**2))
+                        * jnp.sin(l * jnp.arccos(z_shift))
+                    )
+                    / (1 - z_shift**2) ** (7 / 2)
+                )
+            ) / np.pi**4
         prod = 1
         for k in range(int(dr)):
-            prod *= (l**2 - k**2)/(2*k+1)
+            prod *= (l**2 - k**2) / (2 * k + 1)
             # print("K", k, "prod", prod)
-        sign = (-1)**(l+dr)
-        left_val = sign*prod / np.pi**dr
+        sign = (-1) ** (l + dr)
+        left_val = sign * prod / np.pi**dr
         right_val = prod / np.pi**dr
-        diff = jnp.where(z_shift==-1, left_val, diff)
-        diff = jnp.where(z_shift==1, right_val, diff)
+        diff = jnp.where(z_shift == -1, left_val, diff)
+        diff = jnp.where(z_shift == 1, right_val, diff)
         return diff
     else:
         raise NotImplementedError(
@@ -2328,6 +2354,40 @@ def fourier(theta, m, NFP=1, dt=0):
     m_abs = jnp.abs(m) * NFP
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
     return m_abs**dt * jnp.sin(m_abs * theta + shift)
+
+
+@jit
+def sinbasis(zeta, m, dz=0):
+    """Sin series for closed domain [0,2pi].
+        m = -1: cos(zeta/2)
+        m = 0 : 1
+        m = positive int: sin(m*zeta/2)
+
+    Parameters
+    ----------
+    theta : ndarray, shape(N,)
+        poloidal/toroidal coordinates to evaluate basis
+    m : ndarray of int, shape(K,)
+        poloidal/toroidal mode number(s)
+    NFP : int
+        number of field periods (Default = 1)
+    dt : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    zeta, m, dz = map(jnp.asarray, (zeta, m, dz))
+    m = m.astype(int)
+    dz = dz.astype(int)
+    m_neg = (m <= 0).astype(int)
+    m_abs = jnp.abs(m)
+    shift = 0.5 * dz * jnp.pi + m_neg * jnp.pi * 0.5
+    out = jnp.sin(0.5 * m_abs * zeta + shift) * (m_abs * 0.5) ** dz
+    return out
 
 
 def zernike_norm(l, m):

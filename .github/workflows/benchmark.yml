@@ -11,7 +11,7 @@ on:
     inputs:
       debug_enabled:
         type: boolean
-        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        description: '(https://github.com/marketplace/actions/debugging-with-tmate)'
         required: false
         default: false
 
@@ -28,11 +28,11 @@ jobs:
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up Python 3.9
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.9
       - name: Install dependencies
@@ -44,9 +44,12 @@ jobs:
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='Latest_Commit' -vv --durations=0 --benchmark-save-data
+          python -m pytest benchmark_cpu_small.py -vv \
+            --benchmark-save='Latest_Commit' \
+            --durations=0 \
+            --benchmark-save-data
       - name: Checkout current master
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: master
           clean: false
@@ -57,7 +60,10 @@ jobs:
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='master' -vv --durations=0 --benchmark-save-data
+          python -m pytest benchmark_cpu_small.py -vv \
+            --benchmark-save='master' \
+            --durations=0 \
+            --benchmark-save-data
       - name: put benchmark results in same folder
         run: |
           pwd
@@ -84,10 +90,7 @@ jobs:
           comment_tag: benchmark
       - name: Upload benchmark data
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: benchmark_artifact
           path: tests/benchmarks/.benchmarks
-      - name: Setup tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3

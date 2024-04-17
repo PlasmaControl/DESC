@@ -156,7 +156,7 @@ def test_rescale():
             "R0/a": data_quad["R0/a"],
             "V": data_quad["V"],
             "B0": np.mean(data_axis["|B|"]),
-            "<|B|>_vol": data_quad["<|B|>_vol"],
+            "<B>": data_quad["<|B|>_vol"],
             "B_max": np.max(data_lcfs["|B|"]),
             "err": data_quad["|F|"] / data_quad["|grad(|B|^2)|/2mu0"],
         }
@@ -181,12 +181,12 @@ def test_rescale():
     np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"])
     np.testing.assert_allclose(new_vals["err"], old_vals["err"], atol=1e-10)
 
-    # scale a and <|B|>_vol
+    # scale a and <B>
     eq = eq0.copy()
-    eq = rescale(eq, L=("a", 0.5), B=("<|B|>_vol", 1))
+    eq = rescale(eq, L=("a", 0.5), B=("<B>", 1))
     new_vals = fun(eq)
     np.testing.assert_allclose(new_vals["a"], 0.5)
-    np.testing.assert_allclose(new_vals["<|B|>_vol"], 1)
+    np.testing.assert_allclose(new_vals["<B>"], 1)
     np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"])
     np.testing.assert_allclose(new_vals["err"], old_vals["err"], atol=1e-10)
 

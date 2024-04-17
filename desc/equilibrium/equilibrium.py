@@ -851,9 +851,7 @@ class Equilibrium(IOAble, Optimizable):
         dep1dr = [
             dep
             for dep in deps
-            if (data_index[p][dep]["coordinates"] == "r")
-            and (dep not in data)
-            and dep != "rho"  # this does not need a special grid
+            if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
         ]
         dep1dz = [
             dep

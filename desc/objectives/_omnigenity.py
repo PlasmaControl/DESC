@@ -753,7 +753,7 @@ class Omnigenity(_Objective):
             field_grid = self._field_grid
 
         self._dim_f = field_grid.num_nodes
-        self._eq_data_keys = ["|B|_mn"]
+        self._eq_data_keys = ["|B|_mn_B"]
         self._field_data_keys = ["|B|", "theta_B", "zeta_B"]
 
         errorif(
@@ -925,7 +925,7 @@ class Omnigenity(_Objective):
             )
         ).T
         B_eta_alpha = jnp.matmul(
-            constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
+            constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn_B"]
         )
         omnigenity_error = B_eta_alpha - field_data["|B|"]
         weights = (self.eta_weight + 1) / 2 + (self.eta_weight - 1) / 2 * jnp.cos(

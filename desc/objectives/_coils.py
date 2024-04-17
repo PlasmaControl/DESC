@@ -3,6 +3,7 @@ import numbers
 import numpy as np
 
 from desc.backend import (
+    fori_loop,
     jnp,
     tree_flatten,
     tree_leaves,
@@ -657,7 +658,7 @@ class CoilsetMinDistance(_CoilObjective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="coil torsion",
+        name="coilset minimum distance",
     ):
         if target is None and bounds is None:
             target = 0
@@ -728,21 +729,20 @@ class CoilsetMinDistance(_CoilObjective):
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
         # FIXME: what if coilset has NFP or stell symmetry?
         # we want to compare distances across all coils...
-        min_dists = []
-        for whichCoil1 in range(len(data)):
-            coords1 = data[whichCoil1]["x"]
-            mindist = 1e4
-            for whichCoil2 in range(len(data)):
-                if whichCoil1 == whichCoil2:
-                    continue
-                coords2 = data[whichCoil2]["x"]
 
-                d = jnp.linalg.norm(
-                    coords1[:, None, :] - coords2[None, :, :],
-                    axis=-1,
-                )
-                mindist = jnp.min(jnp.array([jnp.min(d), mindist]))
+        pts = jnp.dstack([d["x"].T for d in data]).T  # shape (ncoil, npts, 3)
+        ncoil = pts.shape[0]
 
-            min_dists.append(mindist)
+        def body(i):
+            dx = pts[i] - pts
+            dist = jnp.linalg.norm(dx, axis=-1)
+            # ignore distance to pts within each coil
+            mask = jnp.ones(ncoil)
+            mask = mask.at[i].set(0)[:, None]
+            return jnp.min(dist, where=mask, initial=jnp.inf)
 
-        return jnp.array(min_dists)
+        min_dist_per_coil = fori_loop(
+            0, ncoil, lambda i, mind: mind.at[i].set(body(i)), jnp.zeros(ncoil)
+        )
+
+        return min_dist_per_coil

@@ -2063,6 +2063,7 @@ class TestObjectiveNaNGrad:
         CoilCurvature,
         CoilTorsion,
         QuadraticFlux,
+        SurfaceCurrentRegularization,
         ToroidalFlux,
         # we don't test these since they depend too much on what exactly the user wants
         GenericObjective,

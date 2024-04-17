@@ -79,7 +79,7 @@ class FixEndCapR(_FixedObjective):
         self._target_from_user = target
         self._target_idx_from_user = target_idx
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -113,7 +113,7 @@ class FixEndCapR(_FixedObjective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = eq or self.things[0]
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -181,9 +181,9 @@ class FixEndCapR(_FixedObjective):
             for i, (l, m) in enumerate(self._target_idx_from_user):
                 self.target[idx_LM[l][m]] = self._target_from_user[i]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute Sum mode R errors.
 
         Parameters
@@ -197,7 +197,7 @@ class FixEndCapR(_FixedObjective):
             Fixed sum mode R errors.
 
         """
-        f = jnp.dot(self._A, R_lmn)
+        f = jnp.dot(self._A, params["R_lmn"])
         return f
 
 
@@ -263,7 +263,7 @@ class FixEndCapZ(_FixedObjective):
         self._target_from_user = target
         self._target_idx_from_user = target_idx
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -297,7 +297,7 @@ class FixEndCapZ(_FixedObjective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = eq or self.things[0]
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -368,9 +368,9 @@ class FixEndCapZ(_FixedObjective):
             for i, (l, m) in enumerate(self._target_idx_from_user):
                 self.target[idx_LM[l][m]] = self._target_from_user[i]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, Z_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute Sum mode Z errors.
 
         Parameters
@@ -384,7 +384,7 @@ class FixEndCapZ(_FixedObjective):
             Fixed sum mode Z errors.
 
         """
-        f = jnp.dot(self._A, Z_lmn)
+        f = jnp.dot(self._A, params["Z_lmn"])
         return f
 
 
@@ -450,7 +450,7 @@ class FixEndCapLambda(_FixedObjective):
         self._target_from_user = target
         self._target_idx_from_user = target_idx
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -484,7 +484,7 @@ class FixEndCapLambda(_FixedObjective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = eq or self.things[0]
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
             idx = np.arange(eq.L_basis.num_modes)
@@ -555,11 +555,9 @@ class FixEndCapLambda(_FixedObjective):
             for i, (l, m) in enumerate(self._target_idx_from_user):
                 self.target[idx_LM[l][m]] = self._target_from_user[i]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-        
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, L_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute Sum mode L errors.
 
         Parameters
@@ -573,5 +571,5 @@ class FixEndCapLambda(_FixedObjective):
             Fixed sum mode L errors.
 
         """
-        f = jnp.dot(self._A, L_lmn)
+        f = jnp.dot(self._A, params["L_lmn"])
         return f

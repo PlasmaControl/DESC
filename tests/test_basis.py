@@ -6,6 +6,7 @@ import pytest
 
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernike_to_FourierZernike_no_N_modes,
@@ -395,45 +396,46 @@ class TestBasis:
     @pytest.mark.unit
     def test_basis_resolutions_assert_integers(self):
         """Test that basis modes are asserted as integers."""
-        L = 3.0
-        M = 3.0
-        N = 3.0
+        with pytest.raises(ValueError):
+            _ = PowerSeries(L=3.0)
 
-        basis = PowerSeries(L=L)
-        assert isinstance(basis.L, int)
-        assert basis.L == 3
+        with pytest.raises(ValueError):
+            _ = FourierSeries(N=3.0)
+        with pytest.raises(ValueError):
+            _ = FourierSeries(N=3, NFP=1.0)
 
-        basis = FourierSeries(N=N)
-        assert isinstance(basis.N, int)
-        assert basis.N == 3
+        with pytest.raises(ValueError):
+            _ = DoubleFourierSeries(M=3.0, N=2)
+        with pytest.raises(ValueError):
+            _ = DoubleFourierSeries(M=3, N=2.0)
+        with pytest.raises(ValueError):
+            _ = DoubleFourierSeries(M=3, N=2, NFP=1.0)
 
-        basis = DoubleFourierSeries(M=M, N=N)
-        assert isinstance(basis.M, int)
-        assert isinstance(basis.N, int)
-        assert basis.M == 3
-        assert basis.N == 3
+        with pytest.raises(ValueError):
+            _ = ZernikePolynomial(L=3.0, M=1)
+        with pytest.raises(ValueError):
+            _ = ZernikePolynomial(L=3, M=1.0)
 
-        basis = ZernikePolynomial(L=L, M=M)
-        assert isinstance(basis.M, int)
-        assert isinstance(basis.L, int)
-        assert basis.M == 3
-        assert basis.L == 3
+        with pytest.raises(ValueError):
+            _ = ChebyshevPolynomial(L=3.0)
 
-        L = 3.1
-        M = 3.1
-        N = 3.1
+        with pytest.raises(ValueError):
+            _ = FourierZernikeBasis(L=3.0, M=1, N=1)
+        with pytest.raises(ValueError):
+            _ = FourierZernikeBasis(L=3, M=1.0, N=1)
+        with pytest.raises(ValueError):
+            _ = FourierZernikeBasis(L=3, M=1, N=1.0)
+        with pytest.raises(ValueError):
+            _ = FourierZernikeBasis(L=3, M=1, N=1, NFP=1.0)
 
-        with pytest.raises(AssertionError):
-            PowerSeries(L=L)
-
-        with pytest.raises(AssertionError):
-            FourierSeries(N=N)
-
-        with pytest.raises(AssertionError):
-            DoubleFourierSeries(M=M, N=N)
-
-        with pytest.raises(AssertionError):
-            ZernikePolynomial(L=L, M=M)
+        with pytest.raises(ValueError):
+            _ = ChebyshevDoubleFourierBasis(L=3.0, M=1, N=1)
+        with pytest.raises(ValueError):
+            _ = ChebyshevDoubleFourierBasis(L=3, M=1.0, N=1)
+        with pytest.raises(ValueError):
+            _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1.0)
+        with pytest.raises(ValueError):
+            _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
 
 
 @pytest.mark.unit

@@ -1,6 +1,6 @@
 """Utility functions, independent of the rest of DESC."""
 
-import numbers
+import operator
 import warnings
 from itertools import combinations_with_replacement, permutations
 
@@ -513,12 +513,16 @@ def setdefault(val, default, cond=None):
 
 def isnonnegint(x):
     """Determine if x is a non-negative integer."""
-    return isinstance(x, numbers.Real) and (x == int(x)) and (x >= 0)
+    try:
+        _ = operator.index(x)
+    except TypeError:
+        return False
+    return x >= 0
 
 
 def isposint(x):
     """Determine if x is a strictly positive integer."""
-    return isinstance(x, numbers.Real) and (x == int(x)) and (x > 0)
+    return isnonnegint(x) and (x > 0)
 
 
 def errorif(cond, err=ValueError, msg=""):
@@ -535,6 +539,38 @@ def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
         warnings.warn(msg, err)
+
+
+def check_nonnegint(x, name="", allow_none=True):
+    """Throw an error if x is not a non-negative integer."""
+    if allow_none:
+        errorif(
+            not ((x is None) or isnonnegint(x)),
+            ValueError,
+            f"{name} should be a non-negative integer or None, got {x}",
+        )
+    else:
+        errorif(
+            not isnonnegint(x),
+            ValueError,
+            f"{name} should be a non-negative integer, got {x}",
+        )
+    return x
+
+
+def check_posint(x, name="", allow_none=True):
+    """Throw an error if x is not a positive integer."""
+    if allow_none:
+        errorif(
+            not ((x is None) or isposint(x)),
+            ValueError,
+            f"{name} should be a positive integer or None, got {x}",
+        )
+    else:
+        errorif(
+            not isposint(x), ValueError, f"{name} should be a positive integer, got {x}"
+        )
+    return x
 
 
 def only1(*args):
@@ -611,3 +647,8 @@ def print_modes_coefs(thing, coord):
                 "l = ", row[0], "m = ", row[1], "n = ", row[2], name, row[3], w=4, w2=12
             )
         )
+
+
+def is_any_instance(things, cls):
+    """Check if any of things is an instance of cls."""
+    return any([isinstance(t, cls) for t in things])

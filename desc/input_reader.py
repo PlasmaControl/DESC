@@ -276,9 +276,8 @@ class InputReader:
                 flag = True
             match = re.search(r"NFP", argument, re.IGNORECASE)
             if match:
-                inputs["NFP"] = numbers[0]
-                if len(numbers) > 1:
-                    inputs["NFP"] /= numbers[1]
+                assert numbers[0] == int(numbers[0]), "NFP should be an integer"
+                inputs["NFP"] = int(numbers[0])
                 flag = True
             match = re.search(r"Psi", argument, re.IGNORECASE)
             if match:

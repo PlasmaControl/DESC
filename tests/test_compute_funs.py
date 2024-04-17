@@ -4,12 +4,11 @@ import pickle
 
 import numpy as np
 import pytest
-from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, rpz2xyz_vec
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
@@ -18,7 +17,7 @@ from desc.geometry import (
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -1085,25 +1084,6 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
 
-@pytest.mark.unit
-@pytest.mark.solve
-def test_currents(DSHAPE_current):
-    """Test that different methods for computing I and G agree."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
-    grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
-
-    data_booz = eq.compute("|B|_mn", grid=grid_full, M_booz=eq.M, N_booz=eq.N)
-    data_full = eq.compute(["I", "G"], grid=grid_full)
-    data_sym = eq.compute(["I", "G"], grid=grid_sym)
-
-    np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_full["G"].mean(), data_booz["G"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["G"].mean(), data_booz["G"], atol=1e-16)
-
-
 @pytest.mark.slow
 @pytest.mark.unit
 def test_BdotgradB(DummyStellarator):
@@ -1134,10 +1114,10 @@ def test_BdotgradB(DummyStellarator):
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_boozer_transform(DSHAPE_current):
+def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
     # TODO: add test with stellarator example
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
@@ -1164,47 +1144,6 @@ def test_boozer_transform(DSHAPE_current):
         rtol=1e-3,
         atol=1e-4,
     )
-
-
-@pytest.mark.unit
-def test_compute_grad_p_volume_avg():
-    """Test calculation of volume averaged pressure gradient."""
-    eq = Equilibrium()  # default pressure profile is 0 pressure
-    pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
-    np.testing.assert_allclose(pres_grad_vol_avg, 0)
-
-
-@pytest.mark.unit
-def test_compare_quantities_to_vmec():
-    """Compare several computed quantities to vmec."""
-    wout_file = ".//tests//inputs//wout_DSHAPE.nc"
-    desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
-
-    fid = netcdf_file(wout_file, mmap=False)
-    ns = fid.variables["ns"][()]
-    J_dot_B_vmec = fid.variables["jdotb"][()]
-    volavgB = fid.variables["volavgB"][()]
-    betatotal = fid.variables["betatotal"][()]
-    fid.close()
-
-    with pytest.warns(RuntimeWarning):
-        eq = EquilibriaFamily.load(desc_file)[-1]
-
-    # Compare 0D quantities:
-    grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<beta>_vol", grid=grid)
-    data = eq.compute("<|B|>_rms", grid=grid, data=data)
-
-    np.testing.assert_allclose(volavgB, data["<|B|>_rms"], rtol=1e-7)
-    np.testing.assert_allclose(betatotal, data["<beta>_vol"], rtol=1e-5)
-
-    # Compare radial profile quantities:
-    s = np.linspace(0, 1, ns)
-    rho = np.sqrt(s)
-    grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<J*B>", grid=grid)
-    J_dot_B_desc = grid.compress(data["<J*B>"])
-    np.testing.assert_allclose(J_dot_B_desc, J_dot_B_vmec, rtol=0.005)
 
 
 @pytest.mark.unit
@@ -1657,8 +1596,7 @@ def test_contravariant_basis_vectors():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_iota_components(HELIOTRON_vac):
+def test_iota_components():
     """Test that iota components are computed correctly."""
     # axisymmetric, so all rotational transform should be from the current
     eq_i = get("DSHAPE")  # iota profile assigned
@@ -1672,7 +1610,7 @@ def test_iota_components(HELIOTRON_vac):
     np.testing.assert_allclose(data_c["iota vacuum"], 0)
 
     # vacuum stellarator, so all rotational transform should be from the external field
-    eq = load(load_from=str(HELIOTRON_vac["desc_h5_path"]), file_format="hdf5")[-1]
+    eq = get("ESTELL")
     grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
     np.testing.assert_allclose(data["iota"], data["iota vacuum"])

@@ -9,7 +9,7 @@ import numpy as np
 
 from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign, switch
 from desc.io import IOAble
-from desc.utils import copy_coeffs, flatten_list
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, flatten_list
 
 __all__ = [
     "PowerSeries",
@@ -170,30 +170,15 @@ class _Basis(IOAble, ABC):
         """int: Maximum radial resolution."""
         return self.__dict__.setdefault("_L", 0)
 
-    @L.setter
-    def L(self, L):
-        assert int(L) == L, "Basis Resolution must be an integer!"
-        self._L = int(L)
-
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
         return self.__dict__.setdefault("_M", 0)
 
-    @M.setter
-    def M(self, M):
-        assert int(M) == M, "Basis Resolution must be an integer!"
-        self._M = int(M)
-
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
         return self.__dict__.setdefault("_N", 0)
-
-    @N.setter
-    def N(self, N):
-        assert int(N) == N, "Basis Resolution must be an integer!"
-        self._N = int(N)
 
     @property
     def NFP(self):
@@ -209,10 +194,6 @@ class _Basis(IOAble, ABC):
     def modes(self):
         """ndarray: Mode numbers [l,m,n]."""
         return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
-
-    @modes.setter
-    def modes(self, modes):
-        self._modes = modes
 
     @property
     def num_modes(self):
@@ -252,9 +233,9 @@ class PowerSeries(_Basis):
     """
 
     def __init__(self, L, sym="even"):
-        self.L = L
-        self.M = 0
-        self.N = 0
+        self._L = check_nonnegint(L, "L", False)
+        self._M = 0
+        self._N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -263,7 +244,7 @@ class PowerSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L):
         """Get mode numbers for power series.
 
         Parameters
@@ -341,7 +322,7 @@ class PowerSeries(_Basis):
 
         """
         if L != self.L:
-            self.L = L
+            self._L = check_nonnegint(L, "L", False)
             self._modes = self._get_modes(self.L)
             self._set_up()
 
@@ -365,10 +346,10 @@ class FourierSeries(_Basis):
     """
 
     def __init__(self, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = 0
-        self.N = N
-        self._NFP = NFP
+        self._L = 0
+        self._M = 0
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -376,7 +357,7 @@ class FourierSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, N=0):
+    def _get_modes(self, N):
         """Get mode numbers for Fourier series.
 
         Parameters
@@ -458,9 +439,10 @@ class FourierSeries(_Basis):
             Whether to enforce stellarator symmetry.
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
-            self.N = N
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
@@ -487,10 +469,10 @@ class DoubleFourierSeries(_Basis):
     """
 
     def __init__(self, M, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = 0
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -498,7 +480,7 @@ class DoubleFourierSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, M=0, N=0):
+    def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
 
         Parameters
@@ -604,10 +586,11 @@ class DoubleFourierSeries(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if M != self.M or N != self.N or sym != self.sym:
-            self.M = M
-            self.N = N
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
@@ -647,9 +630,9 @@ class ZernikePolynomial(_Basis):
     """
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = 0
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = spectral_indexing
@@ -660,7 +643,7 @@ class ZernikePolynomial(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -698,9 +681,6 @@ class ZernikePolynomial(_Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -814,8 +794,8 @@ class ZernikePolynomial(_Basis):
 
         """
         if L != self.L or M != self.M or sym != self.sym:
-            self.L = L
-            self.M = M
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
@@ -846,10 +826,10 @@ class ChebyshevDoubleFourierBasis(_Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False):
-        self.L = L
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -857,7 +837,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0, M=0, N=0):
+    def _get_modes(self, L, M, N):
         """Get mode numbers for Chebyshev-Fourier series.
 
         Parameters
@@ -946,11 +926,12 @@ class ChebyshevDoubleFourierBasis(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self._L = L
-            self._M = M
-            self._N = N
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
@@ -997,10 +978,10 @@ class FourierZernikeBasis(_Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
@@ -1010,7 +991,7 @@ class FourierZernikeBasis(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, N, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -1050,9 +1031,6 @@ class FourierZernikeBasis(_Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -1182,11 +1160,12 @@ class FourierZernikeBasis(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self.L = L
-            self.M = M
-            self.N = N
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
@@ -1205,7 +1184,7 @@ class ChebyshevPolynomial(_Basis):
     """
 
     def __init__(self, L):
-        self._L = L
+        self._L = check_nonnegint(L, "L", False)
         self._M = 0
         self._N = 0
         self._NFP = 1
@@ -1216,7 +1195,7 @@ class ChebyshevPolynomial(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L):
         """Get mode numbers for shifted Chebyshev polynomials of the first kind.
 
         Parameters
@@ -1281,7 +1260,7 @@ class ChebyshevPolynomial(_Basis):
 
         """
         if L != self.L:
-            self._L = L
+            self._L = check_nonnegint(L, "L", False)
             self._modes = self._get_modes(self.L)
             self._set_up()
 

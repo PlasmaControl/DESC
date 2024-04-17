@@ -1,6 +1,5 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
-import numbers
 import warnings
 
 import numpy as np
@@ -12,7 +11,7 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, isposint, setdefault
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, setdefault
 
 from .core import Surface
 
@@ -93,15 +92,19 @@ class FourierRZToroidalSurface(Surface):
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-        assert isposint(NFP)
-        NFP = int(NFP)
+
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
         MZ = np.max(abs(modes_Z[:, 0]))
         NZ = np.max(abs(modes_Z[:, 1]))
         self._L = 0
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        NFP = check_posint(NFP, "NFP", False)
         self._M = setdefault(M, max(MR, MZ))
         self._N = setdefault(N, max(NR, NZ))
+        self._NFP = NFP
+
         if sym == "auto":
             if np.all(
                 R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
@@ -121,7 +124,6 @@ class FourierRZToroidalSurface(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
-        self._NFP = NFP
         self._sym = sym
         self._rho = rho
 
@@ -141,13 +143,6 @@ class FourierRZToroidalSurface(Surface):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
-
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
 
     @property
     def R_basis(self):
@@ -186,8 +181,6 @@ class FourierRZToroidalSurface(Surface):
         NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        self._NFP = int(NFP if NFP is not None else self.NFP)
-        self._sym = sym if sym is not None else self.sym
         if L is not None:
             warnings.warn(
                 "FourierRZToroidalSurface does not have radial resolution, ignoring L"
@@ -195,7 +188,13 @@ class FourierRZToroidalSurface(Surface):
         if len(args) == 2:
             M, N = args
         elif len(args) == 3:
-            L, M, N = args
+            _, M, N = args
+
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        NFP = check_posint(NFP, "NFP")
+        self._NFP = int(NFP if NFP is not None else self.NFP)
+        self._sym = sym if sym is not None else self.sym
 
         if (
             ((N is not None) and (N != self.N))
@@ -453,6 +452,9 @@ class FourierRZToroidalSurface(Surface):
             Surface with Fourier coefficients fitted from input coords.
 
         """
+        M = check_nonnegint(M, "M", False)
+        N = check_nonnegint(N, "N", False)
+        NFP = check_posint(NFP, "NFP", False)
         theta = np.asarray(theta)
         assert (
             coords.shape[0] == theta.size
@@ -576,6 +578,9 @@ class FourierRZToroidalSurface(Surface):
             for each point. Only returned if ``full_output`` is True
 
         """
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+
         base_surface = self
         if grid is None:
             grid = LinearGrid(
@@ -731,6 +736,8 @@ class ZernikeRZToroidalSection(Surface):
         MR = np.max(abs(modes_R[:, 1]))
         LZ = np.max(abs(modes_Z[:, 0]))
         MZ = np.max(abs(modes_Z[:, 1]))
+        L = check_nonnegint(L, "L")
+        M = check_nonnegint(M, "M")
         self._L = setdefault(L, max(LR, LZ))
         self._M = setdefault(M, max(MR, MZ))
         self._N = 0
@@ -818,7 +825,6 @@ class ZernikeRZToroidalSection(Surface):
         )  # NFP is not used but need to pop to avoid unexpected kwarg
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        self._sym = sym if sym is not None else self.sym
         if N is not None:
             warnings.warn(
                 "ZernikeRZToroidalSection does not have toroidal resolution, ignoring N"
@@ -826,7 +832,11 @@ class ZernikeRZToroidalSection(Surface):
         if len(args) == 2:
             L, M = args
         elif len(args) == 3:
-            L, M, N = args
+            L, M, _ = args
+
+        L = check_nonnegint(L, "L")
+        M = check_nonnegint(M, "M")
+        self._sym = sym if sym is not None else self.sym
 
         if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
             L = int(L if L is not None else self.L)

@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import pytest
 
+import desc.examples
 from desc.backend import put
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.initial_guess import _initial_guess_surface
@@ -179,11 +180,11 @@ class TestConstructor:
     @pytest.mark.unit
     def test_asserts(self):
         """Test error checking in equilibrium creation."""
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(L=3.4)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(M=3.4)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(N=3.4)
         with pytest.raises(ValueError):
             eq = Equilibrium(NFP=3.4j)
@@ -397,11 +398,10 @@ class TestInitialGuess:
             _ = Equilibrium(surface=surface3, axis=axis, NFP=2)
 
     @pytest.mark.unit
-    @pytest.mark.solve
-    def test_guess_from_file(self, DSHAPE_current):
+    def test_guess_from_file(self):
         """Test setting initial guess from saved equilibrium file."""
-        path = DSHAPE_current["desc_h5_path"]
-        eq1 = Equilibrium(M=13, sym=True, spectral_indexing="fringe")
+        path = "tests//inputs//iotest_HELIOTRON.h5"
+        eq1 = Equilibrium(L=9, M=14, N=3, sym=True, spectral_indexing="ansi")
         eq1.set_initial_guess(path)
         eq2 = EquilibriaFamily.load(path)[-1]
 
@@ -478,10 +478,9 @@ class TestGetSurfaces:
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_magnetic_axis(HELIOTRON_vac):
+def test_magnetic_axis():
     """Test that Configuration.axis returns the true axis location."""
-    eq = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
+    eq = desc.examples.get("HELIOTRON")
     axis = eq.axis
     grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
 
@@ -533,10 +532,9 @@ def test_is_nested_theta():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_get_profile(DSHAPE_current):
+def test_get_profile():
     """Test getting/setting iota and current profiles."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = desc.examples.get("DSHAPE_CURRENT")
     current0 = eq.current
     current1 = eq.get_profile("current", kind="power_series")
     current2 = eq.get_profile("current", kind="spline")

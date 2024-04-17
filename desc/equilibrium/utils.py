@@ -12,7 +12,6 @@ from desc.geometry import (
     Surface,
 )
 from desc.profiles import PowerSeriesProfile, _Profile
-from desc.utils import isnonnegint
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -204,9 +203,3 @@ def parse_section(xsection=None, sym=True):
     else:
         _xsection = PoincareSurface(sym=sym)
     return _xsection
-
-
-def _assert_nonnegint(x, name=""):
-    assert (x is None) or isnonnegint(
-        x
-    ), f"{name} should be a non-negative integer or None, got {x}"

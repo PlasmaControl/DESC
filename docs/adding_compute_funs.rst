@@ -100,8 +100,9 @@ metadata about the quantity. The necessary fields are detailed below:
   will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.Curve``,
   or specific types eg ``desc.geometry.FourierRZCurve``.
 * ``kwargs``: If the compute function requires any additional arguments they should
-  be specified like ``kwarg="thing"`` where the value is the name of the keyword argument
-  that will be passed to the compute function. Most quantities do not take kwargs.
+  be specified like ``kwarg="description"`` where ``kwarg`` is replaced by the actual
+  keyword argument, and ``"description"`` is a string describing what it is.
+  Most quantities do not take kwargs.
 
 
 The function itself should have a signature of the form
@@ -119,7 +120,7 @@ return it. The key in the ``data`` dictionary should match the ``name`` of the q
 
 Once a new quantity is added to the ``desc.compute`` module, there are two final steps involving the testing suite which must be checked.
 The first step is implementing the correct axis limit, or marking it as not finite or not implemented.
-We can check whether the axis limit currently evalutates as finite by computing the quantity on a grid with nodes at the axis.
+We can check whether the axis limit currently evaluates as finite by computing the quantity on a grid with nodes at the axis.
 ::
 
     from desc.examples import get

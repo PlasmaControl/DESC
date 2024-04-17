@@ -36,17 +36,19 @@ from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
-from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
+from desc.utils import (
+    Timer,
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    only1,
+    setdefault,
+)
 
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
-from .utils import (
-    _assert_nonnegint,
-    parse_axis,
-    parse_profile,
-    parse_section,
-    parse_surface,
-)
+from .utils import parse_axis, parse_profile, parse_section, parse_surface
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -204,11 +206,7 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing, getattr(surface, "spectral_indexing", "ansi")
         )
 
-        errorif(
-            (NFP is not None) and not isposint(NFP),
-            ValueError,
-            f"NFP should be a positive integer, got {NFP}",
-        )
+        NFP = check_posint(NFP, "NFP")
         self._NFP = int(
             setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
         )
@@ -253,12 +251,12 @@ class Equilibrium(IOAble, Optimizable):
             self._xsection = parse_section(sym=self.sym)
 
         # resolution
-        _assert_nonnegint(L, "L")
-        _assert_nonnegint(M, "M")
-        _assert_nonnegint(N, "N")
-        _assert_nonnegint(L_grid, "L_grid")
-        _assert_nonnegint(M_grid, "M_grid")
-        _assert_nonnegint(N_grid, "N_grid")
+        L = check_nonnegint(L, "L")
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        L_grid = check_nonnegint(L_grid, "L_grid")
+        M_grid = check_nonnegint(M_grid, "M_grid")
+        N_grid = check_nonnegint(N_grid, "N_grid")
 
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, setdefault(self.surface.M, self.xsection.M)))
@@ -439,6 +437,15 @@ class Equilibrium(IOAble, Optimizable):
         if self._xsection is None:
             # eq.xsection property was added with Poincare BC support
             self._xsection = self.get_poincare_xsection_at()
+
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+        self._L_grid = int(self._L_grid)
+        self._M_grid = int(self._M_grid)
+        self._N_grid = int(self._N_grid)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -1372,42 +1379,20 @@ class Equilibrium(IOAble, Optimizable):
         """int: Number of (toroidal) field periods."""
         return self._NFP
 
-    @NFP.setter
-    def NFP(self, NFP):
-        assert (
-            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
-        ), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFP=NFP)
-
     @property
     def L(self):
         """int: Maximum radial mode number."""
         return self._L
-
-    @L.setter
-    def L(self, L):
-        _assert_nonnegint(L, "L")
-        self.change_resolution(L=L)
 
     @property
     def M(self):
         """int: Maximum poloidal fourier mode number."""
         return self._M
 
-    @M.setter
-    def M(self, M):
-        _assert_nonnegint(M, "M")
-        self.change_resolution(M=M)
-
     @property
     def N(self):
         """int: Maximum toroidal fourier mode number."""
         return self._N
-
-    @N.setter
-    def N(self, N):
-        _assert_nonnegint(N, "N")
-        self.change_resolution(N=N)
 
     @optimizable_parameter
     @property

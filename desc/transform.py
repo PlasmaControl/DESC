@@ -9,6 +9,7 @@ from termcolor import colored
 from desc.backend import jnp, put
 from desc.io import IOAble
 from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
+from desc.basis import ChebyshevZernikeBasis, ChebyshevFourierSeries, ChebyshevSeries
 
 
 class Transform(IOAble):
@@ -794,7 +795,12 @@ class Transform(IOAble):
     @method.setter
     def method(self, method):
         old_method = self.method
-        if method == "auto" and self.basis.N == 0:
+        if method == "auto" and (
+            self.basis.N == 0
+            or isinstance(self.basis, ChebyshevSeries)
+            or isinstance(self.basis, ChebyshevFourierSeries)
+            or isinstance(self.basis, ChebyshevZernikeBasis)
+        ):
             self.method = "direct1"
         elif method == "auto":
             with warnings.catch_warnings():

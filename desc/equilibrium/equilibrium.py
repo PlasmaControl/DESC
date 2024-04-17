@@ -641,7 +641,7 @@ class Equilibrium(IOAble, Optimizable):
 
             Js = []
             zernikeR = zernike_radial(
-                rho, self.R_basis.modes[:, 0], self.R_basis.modes[:, 1]
+                rho[:, np.newaxis], self.R_basis.modes[:, 0], self.R_basis.modes[:, 1]
             )
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
@@ -658,7 +658,7 @@ class Equilibrium(IOAble, Optimizable):
 
             Js = []
             zernikeZ = zernike_radial(
-                rho, self.Z_basis.modes[:, 0], self.Z_basis.modes[:, 1]
+                rho[:, np.newaxis], self.Z_basis.modes[:, 0], self.Z_basis.modes[:, 1]
             )
             for i, (l, m, n) in enumerate(self.Z_basis.modes):
                 j = np.argwhere(

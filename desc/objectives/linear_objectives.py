@@ -150,7 +150,7 @@ class FixParameter(_FixedObjective):
             errorif(
                 par not in thing.optimizable_params,
                 ValueError,
-                f"parameter {par} not found in optimizable_parameters: "
+                f"couldn't find parameter {par} in optimizable_parameters: "
                 + f"{thing.optimizable_params}",
             )
         self._params = params
@@ -288,7 +288,7 @@ class BoundaryRSelfConsistency(_Objective):
         # Broadcasting at once is faster. We need to use np.arange to avoid
         # setting the value to the whole row.
         self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
-            surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
+            surf[:, np.newaxis], eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -388,7 +388,7 @@ class BoundaryZSelfConsistency(_Objective):
         # Broadcasting at once is faster. We need to use np.arange to avoid
         # setting the value to the whole row.
         self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
-            surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
+            surf[:, np.newaxis], eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
         )
         super().build(use_jit=use_jit, verbose=verbose)
 

@@ -35,15 +35,14 @@ from . import (
     _field,
     _geometry,
     _metric,
+    _omnigenity,
     _profiles,
-    _qs,
     _stability,
     _surface,
 )
 from .data_index import data_index
 from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from .utils import (
-    arg_order,
     compute,
     get_data_deps,
     get_derivs,

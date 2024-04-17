@@ -1,6 +1,8 @@
 Adding new physics quantities
 -----------------------------
 
+.. role:: console(code)
+   :language: console
 
 All calculation of physics quantities takes place in ``desc.compute``
 
@@ -114,3 +116,34 @@ as long as it is registered.
 dependencies specified by the decorator. The function itself should do any calculation
 needed using these dependencies and then add the output to the ``data`` dictionary and
 return it. The key in the ``data`` dictionary should match the ``name`` of the quantity.
+
+Once a new quantity is added to the ``desc.compute`` module, there are two final steps involving the testing suite which must be checked.
+The first step is implementing the correct axis limit, or marking it as not finite or not implemented.
+We can check whether the axis limit currently evalutates as finite by computing the quantity on a grid with nodes at the axis.
+::
+
+    from desc.examples import get
+    from desc.grid import LinearGrid
+    import numpy as np
+
+    eq = get("HELIOTRON")
+    grid = LinearGrid(rho=np.array([0.0]), M=4, N=8, axis=True)
+    new_quantity = eq.compute(name="new_quantity_name", grid=grid)["new_quantity_name"]
+    print(np.isfinite(new_quantity).all())
+
+if ``False`` is printed, then the limit of the quantity does not evaluate as finite which can be due to 3 reasons:
+
+
+* The limit is actually not finite, in which case please add the new quantity to the ``not_finite_limits`` set in ``tests/test_axis_limits.py``.
+* The new quantity has an indeterminate expression at the magnetic axis, in which case you should try to implement the correct limit as done in the example for ``J^rho`` above.
+  If you wish to skip implementing the limit at the magnetic axis, please add the new quantity to the ``not_implemented_limits`` set in ``tests/test_axis_limits.py``.
+* The new quantity includes a dependency whose limit at the magnetic axis has not been implemented.
+  The tests automatically detect this, so no further action is needed from developers in this case.
+
+
+The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_funs.py`` file.
+This can be done with the command :console:`pytest -k test_compute_everything tests/test_compute_funs.py`.
+This test is a regression test to ensure that compute quantities in each new update of DESC do not differ significantly
+from previous versions of DESC.
+Since the new quantity did not exist in previous versions of DESC, one must run this test
+and commit the outputted ``tests/inputs/master_compute_data.pkl`` file which is updated automatically when a new quantity is detected.

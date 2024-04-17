@@ -19,24 +19,29 @@ def _escape(line):
 
 def write_csv(parameterization):
     with open(parameterization + ".csv", "w", newline="") as f:
-        fieldnames = ["Name", "Label", "Units", "Description", "Module"]
+        fieldnames = ["Name", "Label", "Units", "Description", "Module", "Aliases"]
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
 
         datidx = data_index[parameterization]
         keys = datidx.keys()
         for key in keys:
-            d = {
-                "Name": "``" + key + "``",
-                "Label": ":math:`" + datidx[key]["label"].replace("$", "") + "`",
-                "Units": datidx[key]["units_long"],
-                "Description": datidx[key]["description"],
-                "Module": "``" + datidx[key]["fun"].__module__ + "``",
-            }
-
-            # stuff like |x| is interpreted as a substitution by rst, need to escape
-            d["Description"] = _escape(d["Description"])
-            writer.writerow(d)
+            if key not in data_index[parameterization][key]["aliases"]:
+                d = {
+                    "Name": "``" + key + "``",
+                    "Label": ":math:`" + datidx[key]["label"].replace("$", "") + "`",
+                    "Units": datidx[key]["units_long"],
+                    "Description": datidx[key]["description"],
+                    "Module": "``" + datidx[key]["fun"].__module__ + "``",
+                    "Aliases": f"{['``' + alias + '``' for alias in datidx[key]['aliases']]}".strip(
+                        "[]"
+                    ).replace(
+                        "'", ""
+                    ),
+                }
+                # stuff like |x| is interpreted as a substitution by rst, need to escape
+                d["Description"] = _escape(d["Description"])
+                writer.writerow(d)
 
 
 header = """
@@ -53,6 +58,8 @@ available for plotting / analysis.
   * **Units** : physical units for the variable
   * **Description** : description of the variable
   * **Module** : where in the code the source is defined (mostly for developers)
+  * **Aliases** : alternative names of a variable that can be used in the same way as
+    the primary name
 
 
 """
@@ -64,7 +71,7 @@ block = """
 
 .. csv-table:: List of Variables: {}
    :file: {}.csv
-   :widths: 15, 15, 15, 60, 30
+   :widths: 15, 15, 15, 60, 30, 15
    :header-rows: 1
 
 """

@@ -1,6 +1,6 @@
-=================
-API Documentation
-=================
+====================
+Alphabetical Listing
+====================
 
 Basis
 *****
@@ -25,11 +25,23 @@ Coils
     :recursive:
     :template: class.rst
 
+    desc.coils.CoilSet
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
+    desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
-    desc.coils.CoilSet
+
+Compatibility
+*************
+
+.. autosummary::
+    :toctree: _api/compat
+    :recursive:
+
+    desc.compat.ensure_positive_jacobian
+    desc.compat.flip_helicity
+    desc.compat.rescale
 
 Continuation
 ************
@@ -39,7 +51,6 @@ Continuation
 
     desc.continuation.solve_continuation
     desc.continuation.solve_continuation_automatic
-
 
 Derivatives
 ***********
@@ -53,7 +64,6 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     desc.derivatives.AutoDiffDerivative
     desc.derivatives.FiniteDiffDerivative
 
-
 Equilibrium
 ***********
 
@@ -65,7 +75,6 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
-
 Examples
 ********
 
@@ -75,7 +84,6 @@ Examples
 
     desc.examples.get
     desc.examples.listall
-
 
 Geometry
 ********
@@ -115,9 +123,7 @@ IO
     :recursive:
     :template: class.rst
 
-    desc.io.InputReader
     desc.io.load
-
 
 Magnetic Fields
 ***************
@@ -127,16 +133,19 @@ Magnetic Fields
     :recursive:
     :template: class.rst
 
+    desc.magnetic_fields.CurrentPotentialField
+    desc.magnetic_fields.FourierCurrentPotentialField
+    desc.magnetic_fields.DommaschkPotentialField
+    desc.magnetic_fields.OmnigenousField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
     desc.magnetic_fields.VerticalMagneticField
-    desc.magnetic_fields.PoloidalMagneticField
-    desc.magnetic_fields.SplineMagneticField
-    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
-    desc.magnetic_fields.biot_savart
 
 Objective Functions
 *******************
@@ -148,6 +157,7 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.BootstrapRedlConsistency
+    desc.objectives.BoundaryError
     desc.objectives.BScaleLength
     desc.objectives.CurrentDensity
     desc.objectives.Elongation
@@ -164,24 +174,32 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixOmniBmax
+    desc.objectives.FixOmniMap
+    desc.objectives.FixOmniWell
+    desc.objectives.FixParameter
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
+    desc.objectives.ForceBalanceAnisotropic
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints
     desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_NAE_constraints
+    desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
+    desc.objectives.LinearObjectiveFromUser
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
+    desc.objectives.Omnigenity
     desc.objectives.PlasmaVesselDistance
     desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
@@ -190,10 +208,10 @@ Objective Functions
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.Shear
     desc.objectives.ToroidalCurrent
+    desc.objectives.VacuumBoundaryError
     desc.objectives.Volume
-
-
 
 Optimize
 ********
@@ -210,7 +228,6 @@ Optimize
    desc.optimize.lsqtr
    desc.optimize.register_optimizer
    desc.optimize.sgd
-
 
 Perturbations
 *************

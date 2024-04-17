@@ -8,9 +8,20 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from .data_index import data_index
+
+# map from profile name to equilibrium parameter name
+profile_names = {
+    "pressure": "p_l",
+    "iota": "i_l",
+    "current": "c_l",
+    "electron_temperature": "Te_l",
+    "electron_density": "ne_l",
+    "ion_temperature": "Ti_l",
+    "atomic_number": "Zeff_l",
+}
 
 
 def _parse_parameterization(p):
@@ -21,10 +32,6 @@ def _parse_parameterization(p):
     if module == "builtins":
         return klass.__qualname__  # avoid outputs like 'builtins.str'
     return module + "." + klass.__qualname__
-
-
-def _sort_args(args):
-    return [arg for arg in arg_order if arg in args]
 
 
 def compute(parameterization, names, params, transforms, profiles, data=None, **kwargs):
@@ -59,7 +66,15 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     for name in names:
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
-    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis"}
+    allowed_kwargs = {
+        "basis",
+        "gamma",
+        "helicity",
+        "iota",
+        "M_booz",
+        "N_booz",
+        "method",
+    }
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -123,8 +138,9 @@ def _compute(
                 )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
-            params, transforms, profiles, data, **kwargs
+            params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+
     return data
 
 
@@ -283,14 +299,16 @@ def get_params(keys, obj, has_axis=False, **kwargs):
     params = []
     for key in deps:
         params += data_index[p][key]["dependencies"]["params"]
-    if p == "desc.equilibrium.equilibrium.Equilibrium":
-        # probably need some way to distinguish between params from different instances
-        # of the same class?
-        params = _sort_args(list(set(params)))
     if isinstance(obj, str) or inspect.isclass(obj):
         return params
-    params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}
-    return params
+    temp_params = {}
+    for name in params:
+        p = getattr(obj, name)
+        if isinstance(p, dict):
+            temp_params[name] = p.copy()
+        else:
+            temp_params[name] = jnp.atleast_1d(p)
+    return temp_params
 
 
 def get_transforms(keys, obj, grid, jitable=False, **kwargs):
@@ -317,20 +335,33 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     from desc.basis import DoubleFourierSeries
     from desc.transform import Transform
 
-    method = "jitable" if jitable else "direct1"
+    method = "jitable" if jitable or kwargs.get("method") == "jitable" else "direct1"
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}
     for c in derivs.keys():
-        if hasattr(obj, c + "_basis"):
-            transforms[c] = Transform(
-                grid,
-                getattr(obj, c + "_basis"),
-                derivs=derivs[c],
-                build=True,
-                method=method,
-            )
-        elif c == "B":
+        if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
+            basis = getattr(obj, c + "_basis")
+            # first check if we already have a transform with a compatible basis
+            for transform in transforms.values():
+                if basis.equiv(getattr(transform, "basis", None)):
+                    ders = np.unique(
+                        np.vstack([derivs[c], transform.derivatives]), axis=0
+                    ).astype(int)
+                    # don't build until we know all the derivs we need
+                    transform.change_derivatives(ders, build=False)
+                    c_transform = transform
+                    break
+            else:  # if we didn't exit the loop early
+                c_transform = Transform(
+                    grid,
+                    basis,
+                    derivs=derivs[c],
+                    build=False,
+                    method=method,
+                )
+            transforms[c] = c_transform
+        elif c == "B":  # used for Boozer transform
             transforms["B"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -340,11 +371,11 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.R_basis.sym,
                 ),
                 derivs=derivs["B"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
-        elif c == "w":
+        elif c == "w":  # used for Boozer transfrom
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -354,14 +385,30 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.Z_basis.sym,
                 ),
                 derivs=derivs["w"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
-        elif c == "rotmat":
-            transforms["rotmat"] = obj.rotmat
-        elif c == "shift":
-            transforms["shift"] = obj.shift
+        elif c == "h":  # used for omnigenity
+            rho = grid.nodes[:, 0]
+            eta = (grid.nodes[:, 1] - np.pi) / 2
+            alpha = grid.nodes[:, 2] * grid.NFP
+            nodes = jnp.array([rho, eta, alpha]).T
+            transforms["h"] = Transform(
+                Grid(nodes, jitable=jitable),
+                obj.x_basis,
+                derivs=derivs["h"],
+                build=True,
+                build_pinv=False,
+                method=method,
+            )
+        elif c not in transforms:  # possible other stuff lumped in with transforms
+            transforms[c] = getattr(obj, c)
+
+    # now build them
+    for t in transforms.values():
+        if hasattr(t, "build"):
+            t.build()
 
     return transforms
 
@@ -479,6 +526,72 @@ def cross(a, b, axis=-1):
 
     """
     return jnp.cross(a, b, axis=axis)
+
+
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(y, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
+
+
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
+    """Normalize a vector to unit length, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    # return unit vector with equal components if norm <= threshold
+    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
+
+
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
 
 
 def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
@@ -1273,34 +1386,3 @@ def surface_min(grid, x, surface_label="rho"):
     # The above implementation was benchmarked to be more efficient than
     # alternatives without explicit loops in GitHub pull request #501.
     return grid.expand(mins, surface_label)
-
-
-# defines the order in which objective arguments get concatenated into the state vector
-arg_order = (
-    "R_lmn",
-    "Z_lmn",
-    "L_lmn",
-    "p_l",
-    "i_l",
-    "c_l",
-    "Psi",
-    "Te_l",
-    "ne_l",
-    "Ti_l",
-    "Zeff_l",
-    "Ra_n",
-    "Za_n",
-    "Rb_lmn",
-    "Zb_lmn",
-)
-
-# map from profile name to equilibrium parameter name
-profile_names = {
-    "pressure": "p_l",
-    "iota": "i_l",
-    "current": "c_l",
-    "electron_temperature": "Te_l",
-    "electron_density": "ne_l",
-    "ion_temperature": "Ti_l",
-    "atomic_number": "Zeff_l",
-}

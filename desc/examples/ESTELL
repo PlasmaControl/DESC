@@ -26,7 +26,6 @@ maxiter = 50
 optimizer         = lsq-exact
 objective         = force
 spectral_indexing = ansi
-node_pattern      = jacobi
 
 # pressure and rotational transform profiles
 l:   0	p =   0.0	c =   0.0

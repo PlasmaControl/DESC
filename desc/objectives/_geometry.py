@@ -6,7 +6,8 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms, rpz2xyz
+from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -20,8 +21,9 @@ class AspectRatio(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -37,7 +39,16 @@ class AspectRatio(_Objective):
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
+        this should also be set to True. Note: Has no effect for this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -51,12 +62,14 @@ class AspectRatio(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="aspect ratio",
     ):
@@ -64,41 +77,52 @@ class AspectRatio(_Objective):
             target = 2
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                # if not an Equilibrium, is a Surface,
+                # has no radial resolution so just need
+                # the surface points
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 2,
+                    N=eq.N * 2,
+                    NFP=eq.NFP,
+                )
         else:
             grid = self._grid
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -116,17 +140,19 @@ class AspectRatio(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute aspect ratio.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom, eg
+            Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -134,11 +160,10 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -148,12 +173,16 @@ class AspectRatio(_Objective):
 
 
 class Elongation(_Objective):
-    """Elongation = semi-major radius / semi-minor radius. Max of all toroidal angles.
+    """Elongation = semi-major radius / semi-minor radius.
+
+    Elongation is a function of the toroidal angle.
+    Default ``loss_function="max"`` returns the maximum of all toroidal angles.
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -169,7 +198,16 @@ class Elongation(_Objective):
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
+        this should also be set to True. Note: Has no effect for this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -183,12 +221,14 @@ class Elongation(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function="max",
+        deriv_mode="auto",
         grid=None,
         name="elongation",
     ):
@@ -196,41 +236,52 @@ class Elongation(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                # if not an Equilibrium, is a Surface,
+                # has no radial resolution so just need
+                # the surface points
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 2,
+                    N=eq.N * 2,
+                    NFP=eq.NFP,
+                )
         else:
             grid = self._grid
 
-        self._dim_f = 1
+        self._dim_f = grid.num_zeta
         self._data_keys = ["a_major/a_minor"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -248,17 +299,19 @@ class Elongation(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute elongation.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -266,17 +319,18 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["a_major/a_minor"]
+        return self._constants["transforms"]["grid"].compress(
+            data["a_major/a_minor"], surface_label="zeta"
+        )
 
 
 class Volume(_Objective):
@@ -284,8 +338,9 @@ class Volume(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -301,6 +356,16 @@ class Volume(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -314,12 +379,14 @@ class Volume(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="volume",
     ):
@@ -327,41 +394,52 @@ class Volume(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                # if not an Equilibrium, is a Surface,
+                # has no radial resolution so just need
+                # the surface points
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 2,
+                    N=eq.N * 2,
+                    NFP=eq.NFP,
+                )
         else:
             grid = self._grid
 
         self._dim_f = 1
         self._data_keys = ["V"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -383,17 +461,19 @@ class Volume(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["V"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute plasma volume.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -401,11 +481,10 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -422,6 +501,12 @@ class PlasmaVesselDistance(_Objective):
     will only be an upper bound on the minimum separation between the plasma and the
     surrounding surface.
 
+    NOTE: By default, assumes the surface is not fixed and its coordinates are computed
+    at every iteration, for example if the winding surface you compare to is part of the
+    optimization and thus changing.
+    If the bounding surface is fixed, set surface_fixed=True to precompute the surface
+    coordinates and improve the efficiency of the calculation
+
     NOTE: for best results, use this objective in combination with either MeanCurvature
     or PrincipalCurvature, to penalize the tendency for the optimizer to only move the
     points on surface corresponding to the grid that the plasma-vessel distance
@@ -436,12 +521,10 @@ class PlasmaVesselDistance(_Objective):
 
     Parameters
     ----------
-    surface : Surface
-        Bounding surface to penalize distance to.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    surface : Surface
+        Bounding surface to penalize distance to.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -453,16 +536,32 @@ class PlasmaVesselDistance(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
     use_softmin: bool, optional
         Use softmin or hard min.
+    surface_fixed: bool, optional
+        Whether the surface the distance from the plasma is computed to
+        is fixed or not. If True, the surface is fixed and its coordinates are
+        precomputed, which saves on computation time during optimization, and
+        self.things = [eq] only.
+        If False, the surface coordinates are computed at every iteration.
+        False by default, so that self.things = [eq, surface]
     alpha: float, optional
         Parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
@@ -480,16 +579,19 @@ class PlasmaVesselDistance(_Objective):
 
     def __init__(
         self,
+        eq,
         surface,
-        eq=None,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
+        surface_fixed=False,
         alpha=1.0,
         name="plasma-vessel distance",
     ):
@@ -499,31 +601,36 @@ class PlasmaVesselDistance(_Objective):
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
         self._use_softmin = use_softmin
+        self._surface_fixed = surface_fixed
         self._alpha = alpha
         super().__init__(
-            eq=eq,
+            things=[eq, self._surface] if not surface_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
+        surface = self._surface if self._surface_fixed else self.things[1]
+        # if things[1] is different than self._surface, update self._surface
+        if surface != self._surface:
+            self._surface = surface
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -538,38 +645,59 @@ class PlasmaVesselDistance(_Objective):
             warnings.warn("Plasma grid includes interior points, should be rho=1")
 
         self._dim_f = surface_grid.num_nodes
-        self._data_keys = ["R", "phi", "Z"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
-        )
+        self._equil_data_keys = ["R", "phi", "Z"]
+        self._surface_data_keys = ["x"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute(
-            "x", grid=surface_grid, basis="xyz"
-        )["x"]
-        profiles = get_profiles(
-            self._data_keys,
+        equil_profiles = get_profiles(
+            self._equil_data_keys,
             obj=eq,
             grid=plasma_grid,
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            has_axis=plasma_grid.axis.size,
         )
-        transforms = get_transforms(
-            self._data_keys,
+        equil_transforms = get_transforms(
+            self._equil_data_keys,
             obj=eq,
             grid=plasma_grid,
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            has_axis=plasma_grid.axis.size,
         )
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface,
+            grid=surface_grid,
+            has_axis=surface_grid.axis.size,
+        )
+
+        # compute returns points on the grid of the surface
+        # (dim_f = surface_grid.num_nodes)
+        # so set quad_weights to the surface grid
+        # to avoid it being incorrectly set in the super build
+        w = surface_grid.weights
+        w *= jnp.sqrt(surface_grid.num_nodes)
+
         self._constants = {
-            "transforms": transforms,
-            "profiles": profiles,
-            "surface_coords": self._surface_coords,
+            "equil_transforms": equil_transforms,
+            "equil_profiles": equil_profiles,
+            "surface_transforms": surface_transforms,
+            "quad_weights": w,
         }
+
+        if self._surface_fixed:
+            # precompute the surface coordinates
+            # as the surface is fixed during the optimization
+            surface_coords = compute_fun(
+                self._surface,
+                self._surface_data_keys,
+                params=self._surface.params_dict,
+                transforms=surface_transforms,
+                profiles={},
+                basis="xyz",
+            )["x"]
+            self._constants["surface_coords"] = surface_coords
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -579,17 +707,21 @@ class PlasmaVesselDistance(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, equil_params, surface_params=None, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        equil_params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        surface_params : dict
+            Dictionary of surface degrees of freedom, eg Surface.params_dict
+            Only needed if self._surface_fixed = False
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -597,20 +729,29 @@ class PlasmaVesselDistance(_Objective):
             For each point in the surface grid, approximate distance to plasma.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
+            self._equil_data_keys,
+            params=equil_params,
+            transforms=constants["equil_transforms"],
+            profiles=constants["equil_profiles"],
         )
         plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
-        d = jnp.linalg.norm(
-            plasma_coords[:, None, :] - constants["surface_coords"][None, :, :], axis=-1
-        )
+        if self._surface_fixed:
+            surface_coords = constants["surface_coords"]
+        else:
+            surface_coords = compute_fun(
+                self._surface,
+                self._surface_data_keys,
+                params=surface_params,
+                transforms=constants["surface_transforms"],
+                profiles={},
+                basis="xyz",
+            )["x"]
+        d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
+
         if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(softmin, 0, d, self._alpha)
         else:  # do hardmin
@@ -628,8 +769,9 @@ class MeanCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -641,10 +783,19 @@ class MeanCurvature(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -658,12 +809,14 @@ class MeanCurvature(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="mean curvature",
     ):
@@ -671,41 +824,41 @@ class MeanCurvature(_Objective):
             bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq, "M_grid", eq.M * 2),
+                N=getattr(eq, "N_grid", eq.N * 2),
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
         else:
             grid = self._grid
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H_rho"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -727,17 +880,19 @@ class MeanCurvature(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute mean curvature.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -745,11 +900,10 @@ class MeanCurvature(_Objective):
             Mean curvature at each point (m^-1).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -772,8 +926,9 @@ class PrincipalCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -785,10 +940,19 @@ class PrincipalCurvature(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -802,12 +966,14 @@ class PrincipalCurvature(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="principal-curvature",
     ):
@@ -815,41 +981,41 @@ class PrincipalCurvature(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq, "M_grid", eq.M * 2),
+                N=getattr(eq, "N_grid", eq.N * 2),
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
         else:
             grid = self._grid
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -871,17 +1037,19 @@ class PrincipalCurvature(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute max absolute principal curvature.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -889,11 +1057,10 @@ class PrincipalCurvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -926,10 +1093,19 @@ class BScaleLength(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -943,12 +1119,14 @@ class BScaleLength(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="B-scale-length",
     ):
@@ -956,29 +1134,29 @@ class BScaleLength(_Objective):
             bounds = (1, np.inf)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -986,11 +1164,6 @@ class BScaleLength(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -1012,25 +1185,18 @@ class BScaleLength(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["R0"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute magnetic field scale length.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1038,7 +1204,6 @@ class BScaleLength(_Objective):
             Magnetic field scale length at each point (m).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -1049,3 +1214,161 @@ class BScaleLength(_Objective):
             profiles=constants["profiles"],
         )
         return data["L_grad(B)"]
+
+
+class GoodCoordinates(_Objective):
+    """Target "good" coordinates, meaning non self-intersecting curves.
+
+    Uses a method by Z. Tecchiolli et al, minimizing
+
+    1/ρ² ||√g||² + σ ||𝐞ᵨ||²
+
+    where √g is the jacobian of the coordinate system and 𝐞ᵨ is the covariant radial
+    basis vector.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    sigma : float
+        Relative weight between the Jacobian and radial terms.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Coordinate goodness : {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        sigma=1,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="coordinate goodness",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self._sigma = sigma
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
+
+        self._dim_f = 2 * grid.num_nodes
+        self._data_keys = ["sqrt(g)", "g_rr", "rho"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "quad_weights": np.sqrt(np.concatenate([grid.weights, grid.weights])),
+            "sigma": self._sigma,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["V"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute coordinate goodness error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        err : ndarray
+            coordinate goodness error, (m^6)
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+
+        g = jnp.where(data["rho"] == 0, 0, data["sqrt(g)"] ** 2 / data["rho"] ** 2)
+        f = data["g_rr"]
+
+        return jnp.concatenate([g, constants["sigma"] * f])

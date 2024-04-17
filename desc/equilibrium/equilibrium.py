@@ -18,13 +18,13 @@ from desc.basis import (
     ChebyshevZernikeBasis,
     chebyshev_z,
 )
+from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
-    Surface,
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
@@ -36,24 +36,19 @@ from desc.objectives import (
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
 )
+from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
 
-from .coords import (
-    compute_flux_coords,
-    compute_theta_coords,
-    is_nested,
-    map_coordinates,
-    to_sfl,
-)
+from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
 
-class Equilibrium(IOAble):
+class Equilibrium(IOAble, Optimizable):
     """Equilibrium is an object that represents a plasma equilibrium.
 
     It contains information about a plasma state, including the shapes of flux surfaces
@@ -79,8 +74,6 @@ class Equilibrium(IOAble):
         resolution of real space nodes in poloidal direction
     N_grid : int (optional)
         resolution of real space nodes in toroidal direction
-    node_pattern : str (optional)
-        pattern of nodes in real space. Default is ``'jacobi'``
     pressure : Profile or ndarray shape(k,2) (optional)
         Pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure
@@ -103,6 +96,9 @@ class Equilibrium(IOAble):
     atomic_number : Profile or ndarray shape(k,2) (optional)
         Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
         coefficients. Default is 1
+    anisotropy : Profile or ndarray
+        Anisotropic pressure profile or array of mode numbers and spectral coefficients.
+        Default is a PowerSeriesProfile with zero anisotropic pressure.
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -115,6 +111,15 @@ class Equilibrium(IOAble):
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
+    check_orientation : bool
+        ensure that this equilibrium has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+    ensure_nested : bool
+        If True, and the default initial guess does not produce nested surfaces,
+        run a small optimization problem to attempt to refine initial guess to improve
+        coordinate mapping.
+
     """
 
     _io_attrs_ = [
@@ -141,12 +146,12 @@ class Equilibrium(IOAble):
         "_electron_density",
         "_ion_temperature",
         "_atomic_number",
+        "_anisotropy",
         "_spectral_indexing",
         "_bdry_mode",
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_node_pattern",
         "_mirror",
         "_length",
     ]
@@ -161,7 +166,6 @@ class Equilibrium(IOAble):
         L_grid=None,
         M_grid=None,
         N_grid=None,
-        node_pattern=None,
         pressure=None,
         iota=None,
         current=None,
@@ -169,12 +173,15 @@ class Equilibrium(IOAble):
         electron_density=None,
         ion_temperature=None,
         atomic_number=None,
+        anisotropy=None,
         surface=None,
         axis=None,
         sym=None,
         spectral_indexing=None,
         mirror=False,
         length=None,
+        check_orientation=True,
+        ensure_nested=True,
         **kwargs,
     ):
         errorif(
@@ -204,7 +211,9 @@ class Equilibrium(IOAble):
             ValueError,
             f"NFP should be a positive integer, got {NFP}",
         )
-        self._NFP = setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
+        self._NFP = int(
+            setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
+        )
 
         # stellarator symmetry for bases
         errorif(
@@ -251,7 +260,6 @@ class Equilibrium(IOAble):
         self._L_grid = setdefault(L_grid, 2 * self.L)
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
-        self._node_pattern = setdefault(node_pattern, "jacobi")
 
         self._surface.change_resolution(self.L, self.M, self.N)
         self._axis.change_resolution(self.N)
@@ -325,7 +333,7 @@ class Equilibrium(IOAble):
             "Cannot specify both iota and current profiles.",
         )
         errorif(
-            pressure is not None and use_kinetic,
+            ((pressure is not None) or (anisotropy is not None)) and use_kinetic,
             ValueError,
             "Cannot specify both pressure and kinetic profiles.",
         )
@@ -349,6 +357,7 @@ class Equilibrium(IOAble):
         self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
         self._atomic_number = parse_profile(atomic_number, "atomic number")
         self._pressure = parse_profile(pressure, "pressure")
+        self._anisotropy = parse_profile(anisotropy, "anisotropy")
         self._iota = parse_profile(iota, "iota")
         self._current = parse_profile(current, "current")
 
@@ -361,6 +370,7 @@ class Equilibrium(IOAble):
             "electron_density",
             "ion_temperature",
             "atomic_number",
+            "anisotropy",
         ]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
@@ -390,13 +400,22 @@ class Equilibrium(IOAble):
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
-        self.set_initial_guess()
-        if "R_lmn" in kwargs:
+
+        if ("R_lmn" in kwargs) or ("Z_lmn" in kwargs):
+            assert ("R_lmn" in kwargs) and ("Z_lmn" in kwargs), "Must give both R and Z"
             self.R_lmn = kwargs.pop("R_lmn")
-        if "Z_lmn" in kwargs:
             self.Z_lmn = kwargs.pop("Z_lmn")
-        if "L_lmn" in kwargs:
-            self.L_lmn = kwargs.pop("L_lmn")
+            self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
+        else:
+            self.set_initial_guess(ensure_nested=ensure_nested)
+        if check_orientation:
+            ensure_positive_jacobian(self)
+        if kwargs.get("check_kwargs", True):
+            errorif(
+                len(kwargs),
+                TypeError,
+                f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
+            )
         if self.mirror:
             if length == None:
                 self.length = (
@@ -417,10 +436,41 @@ class Equilibrium(IOAble):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
+
+    def _sort_args(self, args):
+        """Put arguments in a canonical order. Returns unique sorted elements.
+
+        For Equilibrium, alphabetical order seems to lead to some numerical instability
+        so we enforce a particular order that has worked well.
+        """
+        arg_order = (
+            "R_lmn",
+            "Z_lmn",
+            "L_lmn",
+            "p_l",
+            "i_l",
+            "c_l",
+            "Psi",
+            "Te_l",
+            "ne_l",
+            "Ti_l",
+            "Zeff_l",
+            "a_lmn",
+            "Ra_n",
+            "Za_n",
+            "Rb_lmn",
+            "Zb_lmn",
+            "I",
+            "G",
+            "Phi_mn",
+        )
+        assert sorted(args) == sorted(arg_order)
+        return [arg for arg in arg_order if arg in args]
 
     def __repr__(self):
         """String form of the object."""
@@ -433,7 +483,7 @@ class Equilibrium(IOAble):
             )
         )
 
-    def set_initial_guess(self, *args):
+    def set_initial_guess(self, *args, ensure_nested=True):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -451,6 +501,10 @@ class Equilibrium(IOAble):
                 optionally lambda) at fixed flux coordinates. All arrays should have the
                 same length. Optionally, an ndarray of shape(k,3) may be passed instead
                 of a grid.
+        ensure_nested : bool
+            If True, and the default initial guess does not produce nested surfaces,
+            run a small optimization problem to attempt to refine initial guess to
+            improve coordinate mapping.
 
         Examples
         --------
@@ -490,7 +544,7 @@ class Equilibrium(IOAble):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        set_initial_guess(self, *args)
+        set_initial_guess(self, *args, ensure_nested=ensure_nested)
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
@@ -533,13 +587,13 @@ class Equilibrium(IOAble):
             Whether to enforce stellarator symmetry.
 
         """
-        self._L = setdefault(L, self.L)
-        self._M = setdefault(M, self.M)
-        self._N = setdefault(N, self.N)
-        self._L_grid = setdefault(L_grid, self.L_grid)
-        self._M_grid = setdefault(M_grid, self.M_grid)
-        self._N_grid = setdefault(N_grid, self.N_grid)
-        self._NFP = setdefault(NFP, self.NFP)
+        self._L = int(setdefault(L, self.L))
+        self._M = int(setdefault(M, self.M))
+        self._N = int(setdefault(N, self.N))
+        self._L_grid = int(setdefault(L_grid, self.L_grid))
+        self._M_grid = int(setdefault(M_grid, self.M_grid))
+        self._N_grid = int(setdefault(N_grid, self.N_grid))
+        self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = setdefault(sym, self.sym)
 
         old_modes_R = self.R_basis.modes
@@ -564,6 +618,7 @@ class Equilibrium(IOAble):
             "electron_density",
             "ion_temperature",
             "atomic_number",
+            "anisotropy",
         ]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
@@ -613,6 +668,10 @@ class Equilibrium(IOAble):
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
+            Js = []
+            zernikeR = zernike_radial(
+                rho, self.R_basis.modes[:, 0], self.R_basis.modes[:, 1]
+            )
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -620,8 +679,16 @@ class Equilibrium(IOAble):
                         surface.R_basis.modes[:, 2] == n,
                     )
                 )
-                AR[j, i] = zernike_radial(rho, l, m)
+                Js.append(j.flatten())
+            Js = np.array(Js)
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            AR[Js[:, 0], np.arange(self.R_basis.num_modes)] = zernikeR
 
+            Js = []
+            zernikeZ = zernike_radial(
+                rho, self.Z_basis.modes[:, 0], self.Z_basis.modes[:, 1]
+            )
             for i, (l, m, n) in enumerate(self.Z_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -629,14 +696,16 @@ class Equilibrium(IOAble):
                         surface.Z_basis.modes[:, 2] == n,
                     )
                 )
-                AZ[j, i] = zernike_radial(rho, l, m)
+                Js.append(j.flatten())
+            Js = np.array(Js)
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            AZ[Js[:, 0], np.arange(self.Z_basis.num_modes)] = zernikeZ
+
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
-            )
             return surface
 
         if zeta is not None:
@@ -668,15 +737,9 @@ class Equilibrium(IOAble):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                L=2 * surface.L,
-                M=2 * surface.M,
-                zeta=zeta,
-                endpoint=True,
-            )
             return surface
 
-    def get_profile(self, name, grid=None, **kwargs):
+    def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
 
         Parameters
@@ -686,6 +749,8 @@ class Equilibrium(IOAble):
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
+        kind : {"power_series", "spline", "fourier_zernike"}
+            Type of returned profile.
 
         Returns
         -------
@@ -693,12 +758,19 @@ class Equilibrium(IOAble):
             Radial profile of the desired quantity.
 
         """
+        assert kind in {"power_series", "spline", "fourier_zernike"}
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
-        x = data[name]
-        x = grid.compress(x, surface_label="rho")
-        return SplineProfile(x, grid.nodes[grid.unique_rho_idx, 0], name=name)
+        f = data[name]
+        f = grid.compress(f, surface_label="rho")
+        x = grid.nodes[grid.unique_rho_idx, 0]
+        p = SplineProfile(f, x, name=name)
+        if kind == "power_series":
+            p = p.to_powerseries(order=min(self.L, len(x)), xs=x, sym=True)
+        if kind == "fourier_zernike":
+            p = p.to_fourierzernike(L=min(self.L, len(x)), xs=x)
+        return p
 
     def get_axis(self):
         """Return a representation for the magnetic axis.
@@ -742,6 +814,7 @@ class Equilibrium(IOAble):
         transforms=None,
         profiles=None,
         data=None,
+        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -762,6 +835,11 @@ class Equilibrium(IOAble):
             of self
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -793,31 +871,38 @@ class Equilibrium(IOAble):
         # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
         deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
+        # TODO: replace this logic with `grid_type` from data_index
         dep0d = [
             dep
             for dep in deps
             if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
         ]
-        dep1d = [
+        dep1dr = [
             dep
             for dep in deps
             if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
         ]
+        dep1dz = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "z") and (dep not in data)
+        ]
 
         # whether we need to calculate 0d or 1d quantities on a special grid
         calc0d = bool(len(dep0d))
-        calc1d = bool(len(dep1d))
+        calc1dr = bool(len(dep1dr))
+        calc1dz = bool(len(dep1dz))
         if (  # see if the grid we're already using will work for desired qtys
             (grid.L >= self.L_grid)
             and (grid.M >= self.M_grid)
             and (grid.N >= self.N_grid)
         ):
             if isinstance(grid, QuadratureGrid):
-                calc0d = calc1d = False
+                calc0d = calc1dr = calc1dz = False
             if isinstance(grid, LinearGrid):
-                calc1d = False
+                calc1dr = calc1dz = False
 
-        if calc0d:
+        if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 self,
@@ -832,32 +917,63 @@ class Equilibrium(IOAble):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if calc1d:
-            grid1d = LinearGrid(
+        if calc1dr and override_grid:
+            grid1dr = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
                 sym=self.sym,
             )
-            # Todo: Pass in data0d as a seed once there are 1d quantities that
-            #  depend on 0d quantities in data_index.
-            data1d = compute_fun(
+            # TODO: Pass in data0d as a seed once there are 1d quantities that
+            # depend on 0d quantities in data_index.
+            data1dr = compute_fun(
                 self,
-                dep1d,
+                dep1dr,
                 params=params,
-                transforms=get_transforms(dep1d, obj=self, grid=grid1d, **kwargs),
-                profiles=get_profiles(dep1d, obj=self, grid=grid1d),
+                transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
+                profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
                 data=None,
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid
-            data1d = {
-                key: grid.expand(grid1d.compress(val))
-                for key, val in data1d.items()
-                if key in dep1d
+            data1dr = {
+                key: grid.expand(
+                    grid1dr.compress(val, surface_label="rho"), surface_label="rho"
+                )
+                for key, val in data1dr.items()
+                if key in dep1dr
             }
-            data.update(data1d)
+            data.update(data1dr)
+
+        if calc1dz and override_grid:
+            grid1dz = LinearGrid(
+                zeta=grid.nodes[grid.unique_zeta_idx, 2],
+                L=self.L_grid,
+                M=self.M_grid,
+                NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
+                sym=self.sym,
+            )
+            # TODO: Pass in data0d as a seed once there are 1d quantities that
+            # depend on 0d quantities in data_index.
+            data1dz = compute_fun(
+                self,
+                dep1dz,
+                params=params,
+                transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
+                profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
+                data=None,
+                **kwargs,
+            )
+            # need to make this data broadcast with the data on the original grid
+            data1dz = {
+                key: grid.expand(
+                    grid1dz.compress(val, surface_label="zeta"), surface_label="zeta"
+                )
+                for key, val in data1dz.items()
+                if key in dep1dz
+            }
+            data.update(data1dz)
 
         # TODO: we can probably reduce the number of deps computed here if some are only
         #   needed as inputs for 0d and 1d qtys, unless the user asks for them
@@ -879,17 +995,17 @@ class Equilibrium(IOAble):
         inbasis,
         outbasis=("rho", "theta", "zeta"),
         guess=None,
+        params=None,
         period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
+        full_output=False,
         **kwargs,
     ):
         """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
 
         First solves for the computational coordinates that correspond to inbasis, then
         evaluates outbasis at those locations.
-
-        NOTE: this function cannot be JIT compiled or differentiated with AD.
 
         Parameters
         ----------
@@ -904,6 +1020,8 @@ class Equilibrium(IOAble):
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
             corresponding to coords in inbasis. If None, heuristics are used based on
             in basis and a nearest neighbor search on a coarse grid.
+        params : dict
+            Values of equilibrium parameters to use, eg eq.params_dict
         period : tuple of float
             Assumed periodicity for each quantity in inbasis.
             Use np.inf to denote no periodicity.
@@ -911,24 +1029,49 @@ class Equilibrium(IOAble):
             Stopping tolerance.
         maxiter : int > 0
             Maximum number of Newton iterations
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
+            ``alpha``.
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
-            for coordinates where root finding did not succeed, possibly because the
-            coordinate is not in the plasma volume.
+            Coordinates mapped from inbasis to outbasis.
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
+
+        Notes
+        -----
+        ``guess`` must be given for this function to be compatible with ``jit``.
 
         """
         return map_coordinates(
-            self, coords, inbasis, outbasis, guess, period, tol, maxiter, **kwargs
+            self,
+            coords,
+            inbasis,
+            outbasis,
+            guess,
+            params,
+            period,
+            tol,
+            maxiter,
+            full_output,
+            **kwargs,
         )
 
-    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
-        """Find geometric theta for given straight field line theta.
+    def compute_theta_coords(
+        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    ):
+        """Find theta_DESC for given straight field line theta_PEST.
 
         Parameters
         ----------
+        eq : Equilibrium
+            Equilibrium to use
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
             point in space.
@@ -938,45 +1081,29 @@ class Equilibrium(IOAble):
             Stopping tolerance.
         maxiter : int > 0
             maximum number of Newton iterations
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root_scalar`` such as
+            ``maxiter_ls``, ``alpha``.
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate nan will be returned for those values
-
+            coordinates [rho,theta,zeta].
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
         """
-        return compute_theta_coords(self, flux_coords, L_lmn, tol, maxiter)
-
-    def compute_flux_coords(
-        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
-    ):
-        """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
-
-        Parameters
-        ----------
-        real_coords : ndarray, shape(k,3)
-            2D array of real space coordinates [R,phi,Z]. Each row is a different
-            point in space.
-        R_lmn, Z_lmn : ndarray
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
-        tol : float
-            Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
-        maxiter : int > 0
-            maximum number of Newton iterations
-        rhomin : float
-            minimum allowable value of rho (to avoid singularity at rho=0)
-
-        Returns
-        -------
-        flux_coords : ndarray, shape(k,3)
-            flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate (often because it is outside the plasma boundary),
-            nan will be returned for those values
-
-        """
-        return compute_flux_coords(
-            self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
+        return compute_theta_coords(
+            self,
+            flux_coords,
+            L_lmn=L_lmn,
+            maxiter=maxiter,
+            tol=tol,
+            full_output=full_output,
+            **kwargs,
         )
 
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -1063,14 +1190,12 @@ class Equilibrium(IOAble):
     @surface.setter
     def surface(self, new):
         assert isinstance(
-            new, Surface
-        ), f"surfaces should be of type Surface or a subclass, got {new}"
+            new, FourierRZToroidalSurface
+        ), f"surface should be of type FourierRZToroidalSurface or subclass, got {new}"
         assert (
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
-        assert self.NFP == getattr(
-            new, "NFP", self.NFP
-        ), "Surface and Equilibrium must have the same NFP"
+        assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
         new.change_resolution(self.L, self.M, self.N)
         self._surface = new
 
@@ -1105,6 +1230,7 @@ class Equilibrium(IOAble):
         """str: Method for specifying boundary condition."""
         return self._bdry_mode
 
+    @optimizable_parameter
     @property
     def Psi(self):
         """float: Total toroidal flux within the last closed flux surface in Webers."""
@@ -1112,7 +1238,7 @@ class Equilibrium(IOAble):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(Psi)
+        self._Psi = float(np.squeeze(Psi))
 
     @property
     def NFP(self):
@@ -1156,6 +1282,7 @@ class Equilibrium(IOAble):
         _assert_nonnegint(N, "N")
         self.change_resolution(N=N)
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients of R."""
@@ -1163,7 +1290,7 @@ class Equilibrium(IOAble):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        R_lmn = jnp.atleast_1d(R_lmn)
+        R_lmn = jnp.atleast_1d(jnp.asarray(R_lmn))
         errorif(
             R_lmn.size != self._R_lmn.size,
             ValueError,
@@ -1172,6 +1299,7 @@ class Equilibrium(IOAble):
         )
         self._R_lmn = R_lmn
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients of Z."""
@@ -1179,7 +1307,7 @@ class Equilibrium(IOAble):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        Z_lmn = jnp.atleast_1d(Z_lmn)
+        Z_lmn = jnp.atleast_1d(jnp.asarray(Z_lmn))
         errorif(
             Z_lmn.size != self._Z_lmn.size,
             ValueError,
@@ -1188,6 +1316,7 @@ class Equilibrium(IOAble):
         )
         self._Z_lmn = Z_lmn
 
+    @optimizable_parameter
     @property
     def L_lmn(self):
         """ndarray: Spectral coefficients of lambda."""
@@ -1195,7 +1324,7 @@ class Equilibrium(IOAble):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        L_lmn = jnp.atleast_1d(L_lmn)
+        L_lmn = jnp.atleast_1d(jnp.asarray(L_lmn))
         errorif(
             L_lmn.size != self._L_lmn.size,
             ValueError,
@@ -1204,6 +1333,7 @@ class Equilibrium(IOAble):
         )
         self._L_lmn = L_lmn
 
+    @optimizable_parameter
     @property
     def Rb_lmn(self):
         """ndarray: Spectral coefficients of R at the boundary."""
@@ -1213,6 +1343,7 @@ class Equilibrium(IOAble):
     def Rb_lmn(self, Rb_lmn):
         self.surface.R_lmn = Rb_lmn
 
+    @optimizable_parameter
     @property
     def Zb_lmn(self):
         """ndarray: Spectral coefficients of Z at the boundary."""
@@ -1222,6 +1353,52 @@ class Equilibrium(IOAble):
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
 
+    @optimizable_parameter
+    @property
+    def I(self):  # noqa: E743
+        """float: Net toroidal current on the sheet current at the LCFS."""
+        return self.surface.I if hasattr(self.surface, "I") else np.empty(0)
+
+    @I.setter
+    def I(self, new):  # noqa: E743
+        errorif(
+            not hasattr(self.surface, "I"),
+            ValueError,
+            "Attempt to set I on an equilibrium without sheet current",
+        )
+        self.surface.I = new
+
+    @optimizable_parameter
+    @property
+    def G(self):
+        """float: Net poloidal current on the sheet current at the LCFS."""
+        return self.surface.G if hasattr(self.surface, "G") else np.empty(0)
+
+    @G.setter
+    def G(self, new):
+        errorif(
+            not hasattr(self.surface, "G"),
+            ValueError,
+            "Attempt to set G on an equilibrium without sheet current",
+        )
+        self.surface.G = new
+
+    @optimizable_parameter
+    @property
+    def Phi_mn(self):
+        """ndarray: coeffs of single-valued part of surface current potential."""
+        return self.surface.Phi_mn if hasattr(self.surface, "Phi_mn") else np.empty(0)
+
+    @Phi_mn.setter
+    def Phi_mn(self, new):
+        errorif(
+            not hasattr(self.surface, "Phi_mn"),
+            ValueError,
+            "Attempt to set Phi_mn on an equilibrium without sheet current",
+        )
+        self.surface.Phi_mn = new
+
+    @optimizable_parameter
     @property
     def Ra_n(self):
         """ndarray: R coefficients for axis Fourier series."""
@@ -1231,6 +1408,7 @@ class Equilibrium(IOAble):
     def Ra_n(self, Ra_n):
         self.axis.R_n = Ra_n
 
+    @optimizable_parameter
     @property
     def Za_n(self):
         """ndarray: Z coefficients for axis Fourier series."""
@@ -1249,6 +1427,7 @@ class Equilibrium(IOAble):
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
 
+    @optimizable_parameter
     @property
     def p_l(self):
         """ndarray: Coefficients of pressure profile."""
@@ -1264,6 +1443,30 @@ class Equilibrium(IOAble):
         self.pressure.params = p_l
 
     @property
+    def anisotropy(self):
+        """Profile: Anisotropy profile."""
+        return self._anisotropy
+
+    @anisotropy.setter
+    def anisotropy(self, new):
+        self._anisotropy = parse_profile(new, "anisotropy")
+
+    @optimizable_parameter
+    @property
+    def a_lmn(self):
+        """ndarray: Coefficients of anisotropy profile."""
+        return np.empty(0) if self.anisotropy is None else self.anisotropy.params
+
+    @a_lmn.setter
+    def a_lmn(self, a_lmn):
+        errorif(
+            self.anisotropy is None,
+            ValueError,
+            "Attempt to set anisotropy on an equilibrium without anisotropy profile",
+        )
+        self.anisotropy.params = a_lmn
+
+    @property
     def electron_temperature(self):
         """Profile: Electron temperature (eV) profile."""
         return self._electron_temperature
@@ -1272,6 +1475,7 @@ class Equilibrium(IOAble):
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
 
+    @optimizable_parameter
     @property
     def Te_l(self):
         """ndarray: Coefficients of electron temperature profile."""
@@ -1299,6 +1503,7 @@ class Equilibrium(IOAble):
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
 
+    @optimizable_parameter
     @property
     def ne_l(self):
         """ndarray: Coefficients of electron density profile."""
@@ -1326,6 +1531,7 @@ class Equilibrium(IOAble):
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
 
+    @optimizable_parameter
     @property
     def Ti_l(self):
         """ndarray: Coefficients of ion temperature profile."""
@@ -1351,6 +1557,7 @@ class Equilibrium(IOAble):
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
 
+    @optimizable_parameter
     @property
     def Zeff_l(self):
         """ndarray: Coefficients of effective atomic number profile."""
@@ -1374,6 +1581,7 @@ class Equilibrium(IOAble):
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
 
+    @optimizable_parameter
     @property
     def i_l(self):
         """ndarray: Coefficients of iota profile."""
@@ -1398,6 +1606,7 @@ class Equilibrium(IOAble):
     def current(self, new):
         self._current = parse_profile(new, "current")
 
+    @optimizable_parameter
     @property
     def c_l(self):
         """ndarray: Coefficients of current profile."""
@@ -1459,11 +1668,6 @@ class Equilibrium(IOAble):
             self._N_grid = N_grid
 
     @property
-    def node_pattern(self):
-        """str: Pattern for placement of nodes in curvilinear coordinates."""
-        return self._node_pattern
-
-    @property
     def resolution(self):
         """dict: Spectral and real space resolution parameters of the Equilibrium."""
         return {
@@ -1493,7 +1697,6 @@ class Equilibrium(IOAble):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        print("Node pattern: {}".format(self.node_pattern))
         print(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid
@@ -1502,7 +1705,15 @@ class Equilibrium(IOAble):
 
     @classmethod
     def from_near_axis(
-        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi"
+        cls,
+        na_eq,
+        r=0.1,
+        L=None,
+        M=8,
+        N=None,
+        ntheta=None,
+        spectral_indexing="ansi",
+        w=2,
     ):
         """Initialize an Equilibrium from a near-axis solution.
 
@@ -1523,6 +1734,10 @@ class Equilibrium(IOAble):
             Number of poloidal grid points used in the conversion. Default 2*M+1
         spectral_indexing : str (optional)
             Type of Zernike indexing scheme to use. Default ``'ansi'``
+        w : float
+            Weight exponent for fit. Surfaces are fit using a weighted least squares
+            using weight = 1/rho**w, so that points near axis are captured more
+            accurately.
 
         Returns
         -------
@@ -1552,7 +1767,7 @@ class Equilibrium(IOAble):
                 "M": M,
                 "N": N,
                 "sym": not na_eq.lasym,
-                "spectral_indexing ": spectral_indexing,
+                "spectral_indexing": spectral_indexing,
                 "pressure": np.array([[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]),
                 "iota": None,
                 "current": np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]]),
@@ -1595,9 +1810,17 @@ class Equilibrium(IOAble):
             spectral_indexing=spectral_indexing,
         )
 
-        transform_R = Transform(grid, basis_R, build_pinv=True)
-        transform_Z = Transform(grid, basis_Z, build_pinv=True)
-        transform_L = Transform(grid, basis_L, build_pinv=True)
+        transform_R = Transform(grid, basis_R, method="direct1")
+        transform_Z = Transform(grid, basis_Z, method="direct1")
+        transform_L = Transform(grid, basis_L, method="direct1")
+        A_R = transform_R.matrices["direct1"][0][0][0]
+        A_Z = transform_Z.matrices["direct1"][0][0][0]
+        A_L = transform_L.matrices["direct1"][0][0][0]
+
+        W = 1 / grid.nodes[:, 0].flatten() ** w
+        A_Rw = A_R * W[:, None]
+        A_Zw = A_Z * W[:, None]
+        A_Lw = A_L * W[:, None]
 
         R_1D = np.zeros((grid.num_nodes,))
         Z_1D = np.zeros((grid.num_nodes,))
@@ -1615,9 +1838,9 @@ class Equilibrium(IOAble):
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
 
-        inputs["R_lmn"] = transform_R.fit(R_1D)
-        inputs["Z_lmn"] = transform_Z.fit(Z_1D)
-        inputs["L_lmn"] = transform_L.fit(L_1D)
+        inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
+        inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
+        inputs["L_lmn"] = np.linalg.lstsq(A_Lw, L_1D * W, rcond=None)[0]
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
@@ -1642,7 +1865,7 @@ class Equilibrium(IOAble):
 
         Parameters
         ----------
-        objective : {"force", "forces", "energy", "vacuum"}
+        objective : {"force", "forces", "energy"}
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
@@ -1682,22 +1905,15 @@ class Equilibrium(IOAble):
 
         """
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(
-                eq=self,
-                iota=objective != "vacuum" and self.iota is not None,
-                kinetic=self.electron_temperature is not None,
-            )
+            constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
+        if not isinstance(constraints, (list, tuple)):
+            constraints = tuple([constraints])
 
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
-        if eq.N > eq.N_grid or eq.M > eq.M_grid or eq.L > eq.L_grid:
+        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
@@ -1708,14 +1924,14 @@ class Equilibrium(IOAble):
                     "yellow",
                 )
             )
-        if eq.bdry_mode == "poincare":
+        if self.bdry_mode == "poincare":
             raise NotImplementedError(
                 "Solving equilibrium with poincare XS as BC is not supported yet "
                 + "on master branch."
             )
 
-        result = optimizer.optimize(
-            eq,
+        things, result = optimizer.optimize(
+            self,
             objective,
             constraints,
             ftol=ftol,
@@ -1725,21 +1941,10 @@ class Equilibrium(IOAble):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(eq))
-        for key, value in result["history"].items():
-            # don't set nonexistent profile (values are empty ndarrays)
-            if value[-1].size:
-                setattr(eq, key, value[-1])
-
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
-
-        return eq, result
+        return things[0], result
 
     def optimize(
         self,
@@ -1802,20 +2007,13 @@ class Equilibrium(IOAble):
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(
-                eq=self,
-                iota=self.iota is not None,
-                kinetic=self.electron_temperature is not None,
-            )
+            constraints = get_fixed_boundary_constraints(eq=self)
             constraints = (ForceBalance(eq=self), *constraints)
+        if not isinstance(constraints, (list, tuple)):
+            constraints = tuple([constraints])
 
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
-        result = optimizer.optimize(
-            eq,
+        things, result = optimizer.optimize(
+            self,
             objective,
             constraints,
             ftol=ftol,
@@ -1826,24 +2024,10 @@ class Equilibrium(IOAble):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(eq))
-            for con in constraints:
-                con.print_value(*con.xs(eq))
-        for key, value in result["history"].items():
-            # don't set nonexistent profile (values are empty ndarrays)
-            if value[-1].size:
-                setattr(eq, key, value[-1])
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
-            for con in constraints:
-                con.print_value(*con.xs(eq))
-
-        return eq, result
+        return things[0], result
 
     def _optimize(  # noqa: C901
         self,
@@ -1902,13 +2086,12 @@ class Equilibrium(IOAble):
         timer = Timer()
         timer.start("Total time")
 
-        eq = self
         if not objective.built:
-            objective.build(eq)
+            objective.build()
         if not constraint.built:
-            constraint.build(eq)
+            constraint.build()
 
-        cost = objective.compute_scalar(objective.x(eq))
+        cost = objective.compute_scalar(objective.x(self))
         perturb_options = deepcopy(perturb_options)
         tr_ratio = perturb_options.get(
             "tr_ratio",
@@ -1916,7 +2099,9 @@ class Equilibrium(IOAble):
         )
 
         if verbose > 0:
-            objective.print_value(objective.x(eq))
+            objective.print_value(objective.x(self))
+
+        params = orig_params = self.params_dict.copy()
 
         iteration = 1
         success = None
@@ -1929,24 +2114,17 @@ class Equilibrium(IOAble):
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
-            (
-                eq_new,
-                predicted_reduction,
-                dc_opt,
-                dc,
-                c_norm,
-                bound_hit,
-            ) = optimal_perturb(
-                eq,
+            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit) = optimal_perturb(
+                self,
                 constraint,
                 objective,
-                copy=True,
+                copy=False,
                 **perturb_options,
             )
-            eq_new.solve(objective=constraint, **solve_options)
+            self.solve(objective=constraint, **solve_options)
 
             # update trust region radius
-            cost_new = objective.compute_scalar(objective.x(eq_new))
+            cost_new = objective.compute_scalar(objective.x(self))
             actual_reduction = cost - cost_new
             trust_radius, ratio = update_tr_radius(
                 tr_ratio[0] * c_norm,
@@ -1960,7 +2138,7 @@ class Equilibrium(IOAble):
 
             timer.stop("Step {} time".format(iteration))
             if verbose > 0:
-                objective.print_value(objective.x(eq_new))
+                objective.print_value(objective.x(self))
                 print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:
@@ -1983,8 +2161,11 @@ class Equilibrium(IOAble):
                 np.inf,
             )
             if actual_reduction > 0:
-                eq = eq_new
+                params = self.params_dict.copy()
                 cost = cost_new
+            else:
+                # reset equilibrium to last good params
+                self.params_dict = params
             if success is not None:
                 break
 
@@ -1999,12 +2180,11 @@ class Equilibrium(IOAble):
             timer.disp("Total time")
 
         if copy:
-            return eq
+            eq = self.copy()
+            self.params = orig_params
         else:
-            for attr in self._io_attrs_:
-                val = getattr(eq, attr)
-                setattr(self, attr, val)
-            return self
+            eq = self
+        return eq
 
     def perturb(
         self,
@@ -2061,17 +2241,9 @@ class Equilibrium(IOAble):
             objective = get_equilibrium_objective(eq=self)
         if constraints is None:
             if "Ra_n" in deltas or "Za_n" in deltas:
-                constraints = get_fixed_axis_constraints(
-                    eq=self,
-                    iota=self.iota is not None,
-                    kinetic=self.electron_temperature is not None,
-                )
+                constraints = get_fixed_axis_constraints(eq=self)
             else:
-                constraints = get_fixed_boundary_constraints(
-                    eq=self,
-                    iota=self.iota is not None,
-                    kinetic=self.electron_temperature is not None,
-                )
+                constraints = get_fixed_boundary_constraints(eq=self)
 
         eq = perturb(
             self,
@@ -2110,16 +2282,32 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _io_attrs_ = ["_equilibria"]
 
     def __init__(self, *args):
+        # we use ensure_nested=False here for all but the first iteration
+        # because it is assumed the family
+        # will be solved with a continuation method, so there's no need for the
+        # fancy coordinate mapping stuff since it will just be overwritten during
+        # solve_continuation
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
-            for inp in args[0]:
-                self.equilibria.append(Equilibrium(**inp))
+            for i, inp in enumerate(args[0]):
+                # ensure that first step is nested
+                ensure_nested_bool = True if i == 0 else False
+                self.equilibria.append(
+                    Equilibrium(
+                        **inp, ensure_nested=ensure_nested_bool, check_kwargs=False
+                    )
+                )
         else:
-            for arg in args:
+            for i, arg in enumerate(args):
                 if isinstance(arg, Equilibrium):
                     self.equilibria.append(arg)
                 elif isinstance(arg, dict):
-                    self.equilibria.append(Equilibrium(**arg))
+                    ensure_nested_bool = True if i == 0 else False
+                    self.equilibria.append(
+                        Equilibrium(
+                            **arg, ensure_nested=ensure_nested_bool, check_kwargs=False
+                        )
+                    )
                 else:
                     raise TypeError(
                         "Args to create EquilibriaFamily should either be "

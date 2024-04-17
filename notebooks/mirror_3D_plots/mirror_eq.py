@@ -74,7 +74,6 @@ eq = Equilibrium(
     pressure=p,
     iota=iota,
     sym=False,
-    method="jitable",
 )
 
 constraints = (

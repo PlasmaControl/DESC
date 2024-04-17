@@ -1,5 +1,6 @@
 """Benchmarks for timing comparison on gpu (that are small enough to run on CI)."""
 
+import jax
 import numpy as np
 import pytest
 
@@ -9,25 +10,32 @@ desc.set_device("gpu")
 import desc.examples
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
-from desc.grid import ConcentricGrid
-from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
+from desc.grid import ConcentricGrid, LinearGrid
+from desc.magnetic_fields import ToroidalMagneticField
+from desc.objectives import (
+    BoundaryError,
+    FixCurrent,
+    FixPressure,
+    FixPsi,
+    ForceBalance,
+    ObjectiveFunction,
+    QuasisymmetryTwoTerm,
+    get_equilibrium_objective,
+    get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
+)
+from desc.optimize import LinearConstraintProjection, ProximalProjection
 from desc.perturbations import perturb
 from desc.transform import Transform
 
 
-@pytest.fixture(scope="session")
-def TmpDir(tmpdir_factory):
-    """Create a temporary directory to store testing files."""
-    dir_path = tmpdir_factory.mktemp("test_results")
-    return dir_path
-
-
-@pytest.mark.benchmark(
-    min_rounds=1, max_time=50, disable_gc=False, warmup=True, warmup_iterations=50
-)
+@pytest.mark.benchmark()
 def test_build_transform_fft_lowres(benchmark):
     """Test time to build a transform (after compilation) for low resolution."""
 
+    def setup():
+        jax.clear_caches()
+
     def build():
         L = 5
         M = 5
@@ -37,13 +45,16 @@ def test_build_transform_fft_lowres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark(build)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_build_transform_fft_midres(benchmark):
     """Test time to build a transform (after compilation) for mid resolution."""
 
+    def setup():
+        jax.clear_caches()
+
     def build():
         L = 15
         M = 15
@@ -53,12 +64,15 @@ def test_build_transform_fft_midres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=50)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_build_transform_fft_highres(benchmark):
     """Test time to build a transform (after compilation) for high resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 25
@@ -69,12 +83,15 @@ def test_build_transform_fft_highres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_equilibrium_init_lowres(benchmark):
     """Test time to create an equilibrium for low resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 5
@@ -82,12 +99,15 @@ def test_equilibrium_init_lowres(benchmark):
         N = 5
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_equilibrium_init_medres(benchmark):
     """Test time to create an equilibrium for medium resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 15
@@ -95,12 +115,15 @@ def test_equilibrium_init_medres(benchmark):
         N = 15
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_equilibrium_init_highres(benchmark):
     """Test time to create an equilibrium for high resolution."""
+
+    def setup():
+        jax.clear_caches()
 
     def build():
         L = 25
@@ -108,30 +131,7 @@ def test_equilibrium_init_highres(benchmark):
         N = 25
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
-
-
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_compile_heliotron(benchmark):
-    """Benchmark compiling objective."""
-
-    def setup():
-        eq = desc.examples.get("HELIOTRON")
-        objective = get_equilibrium_objective(eq)
-        objective.build(eq)
-        args = (
-            objective,
-            eq,
-        )
-        kwargs = {}
-        return args, kwargs
-
-    def run(objective, eq):
-        objective.compile()
-
-    benchmark.pedantic(run, setup=setup, rounds=5, iterations=1)
-    return None
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=50)
 
 
 @pytest.mark.slow
@@ -140,8 +140,14 @@ def test_objective_compile_dshape_current(benchmark):
     """Benchmark compiling objective."""
 
     def setup():
+        jax.clear_caches()
         eq = desc.examples.get("DSHAPE_current")
-        objective = get_equilibrium_objective(eq)
+        objective = LinearConstraintProjection(
+            get_equilibrium_objective(eq),
+            ObjectiveFunction(
+                maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+            ),
+        )
         objective.build(eq)
         args = (
             objective,
@@ -153,8 +159,7 @@ def test_objective_compile_dshape_current(benchmark):
     def run(objective, eq):
         objective.compile()
 
-    benchmark.pedantic(run, setup=setup, rounds=5, iterations=1)
-    return None
+    benchmark.pedantic(run, setup=setup, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
@@ -163,97 +168,81 @@ def test_objective_compile_atf(benchmark):
     """Benchmark compiling objective."""
 
     def setup():
+        jax.clear_caches()
         eq = desc.examples.get("ATF")
-        objective = get_equilibrium_objective(eq)
-        objective.build(eq)
-        args = (
-            objective,
-            eq,
+        objective = LinearConstraintProjection(
+            get_equilibrium_objective(eq),
+            ObjectiveFunction(
+                maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+            ),
         )
+        objective.build(eq)
+        args = (objective, eq)
         kwargs = {}
         return args, kwargs
 
     def run(objective, eq):
         objective.compile()
 
-    benchmark.pedantic(run, setup=setup, rounds=5, iterations=1)
-    return None
-
-
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_compute_heliotron(benchmark):
-    """Benchmark computing objective."""
-    eq = desc.examples.get("HELIOTRON")
-    objective = get_equilibrium_objective(eq)
-    objective.build(eq)
-    objective.compile()
-    x = objective.x(eq)
-
-    def run(x):
-        objective.compute_scaled_error(x, objective.constants).block_until_ready()
-
-    benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
-    return None
+    benchmark.pedantic(run, setup=setup, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_compute_dshape_current(benchmark):
     """Benchmark computing objective."""
+    jax.clear_caches()
     eq = desc.examples.get("DSHAPE_current")
-    objective = get_equilibrium_objective(eq)
+    objective = LinearConstraintProjection(
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
+    )
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
-    def run(x):
+    def run(x, objective):
         objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
-    return None
+    benchmark.pedantic(run, args=(x, objective), rounds=50, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_compute_atf(benchmark):
     """Benchmark computing objective."""
+    jax.clear_caches()
     eq = desc.examples.get("ATF")
-    objective = get_equilibrium_objective(eq)
+    objective = LinearConstraintProjection(
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
+    )
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
-    def run(x):
+    def run(x, objective):
         objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
-    return None
-
-
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_jac_heliotron(benchmark):
-    """Benchmark computing jacobian."""
-    eq = desc.examples.get("HELIOTRON")
-    objective = get_equilibrium_objective(eq)
-    objective.build(eq)
-    objective.compile()
-    x = objective.x(eq)
-
-    def run(x):
-        objective.jac_scaled(x, objective.constants).block_until_ready()
-
-    benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
-    return None
+    benchmark.pedantic(run, args=(x, objective), rounds=50, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_jac_dshape_current(benchmark):
     """Benchmark computing jacobian."""
+    jax.clear_caches()
     eq = desc.examples.get("DSHAPE_current")
-    objective = get_equilibrium_objective(eq)
+    objective = LinearConstraintProjection(
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
+    )
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
@@ -261,16 +250,21 @@ def test_objective_jac_dshape_current(benchmark):
     def run(x):
         objective.jac_scaled(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
-    return None
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_jac_atf(benchmark):
     """Benchmark computing jacobian."""
+    jax.clear_caches()
     eq = desc.examples.get("ATF")
-    objective = get_equilibrium_objective(eq)
+    objective = LinearConstraintProjection(
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(
+            maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq)),
+        ),
+    )
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
@@ -278,8 +272,7 @@ def test_objective_jac_atf(benchmark):
     def run(x):
         objective.jac_scaled(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
-    return None
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)
 
 
 @pytest.mark.slow
@@ -288,6 +281,7 @@ def test_perturb_1(benchmark):
     """Benchmark 1st order perturbations."""
 
     def setup():
+        jax.clear_caches()
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
@@ -311,8 +305,7 @@ def test_perturb_1(benchmark):
         }
         return args, kwargs
 
-    benchmark.pedantic(perturb, setup=setup, rounds=5, iterations=1)
-    return None
+    benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
@@ -321,6 +314,7 @@ def test_perturb_2(benchmark):
     """Benchmark 2nd order perturbations."""
 
     def setup():
+        jax.clear_caches()
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
@@ -344,5 +338,72 @@ def test_perturb_2(benchmark):
         }
         return args, kwargs
 
-    benchmark.pedantic(perturb, setup=setup, rounds=5, iterations=1)
-    return None
+    benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_proximal_jac_atf(benchmark):
+    """Benchmark computing jacobian of constrained proximal projection."""
+    jax.clear_caches()
+    eq = desc.examples.get("ATF")
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    prox.build()
+    prox.compile()
+    x = prox.x(eq)
+
+    def run(x):
+        prox.jac_scaled(x, prox.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_proximal_freeb_compute(benchmark):
+    """Benchmark computing free boundary objective with proximal constraint."""
+    jax.clear_caches()
+    eq = desc.examples.get("ESTELL")
+    eq.change_resolution(6, 6, 6, 12, 12, 12)
+    field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
+    objective = ObjectiveFunction(BoundaryError(eq, field=field))
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    obj = LinearConstraintProjection(
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
+    )
+    obj.build()
+    obj.compile()
+    x = obj.x(eq)
+
+    def run(x):
+        obj.compute_scaled_error(x, obj.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x,), rounds=50, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_proximal_freeb_jac(benchmark):
+    """Benchmark computing free boundary jacobian with proximal constraint."""
+    jax.clear_caches()
+    eq = desc.examples.get("ESTELL")
+    eq.change_resolution(6, 6, 6, 12, 12, 12)
+    field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
+    objective = ObjectiveFunction(BoundaryError(eq, field=field))
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    obj = LinearConstraintProjection(
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
+    )
+    obj.build()
+    obj.compile()
+    x = obj.x(eq)
+
+    def run(x):
+        obj.jac_scaled(x, prox.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)

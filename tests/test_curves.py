@@ -309,7 +309,7 @@ class TestRZCurve:
             ).T,
             sort=False,
         )
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             xyz.to_FourierRZ(N=1, grid=grid)
 
 

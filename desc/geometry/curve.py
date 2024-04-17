@@ -267,10 +267,16 @@ class FourierRZCurve(Curve):
             R = R[0:-1]
             phi = phi[0:-1]
             Z = coords_rpz[0:-1, 2]
+        # check if any phi are negative, and make them positive instead
+        # so we can more easily check if it is monotonic
+        inds_negative = np.where(phi < 0)
+        phi = phi.at[inds_negative].set(phi[inds_negative] + 2 * np.pi)
 
-        # assert the curve is not doubling back on itself in ph,
+        # assert the curve is not doubling back on itself in phi,
         # which can't be represented with a curve parameterized by phi
-        assert np.all(np.diff(phi) > 0), "Supplied phi must be monotonic"
+        errorif(
+            not np.all(np.diff(phi) > 0), ValueError, "Supplied phi must be monotonic"
+        )
 
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)

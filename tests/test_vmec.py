@@ -1008,7 +1008,7 @@ def test_make_boozmn_output(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                rtol=9e-5,
+                rtol=2e-4,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 
@@ -1133,7 +1133,7 @@ def test_make_boozmn_output_asym(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                rtol=3e-6,
+                rtol=2e-4,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 

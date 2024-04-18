@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 
 # TODO: can use the one from interpax once .solve() is implemented
 from scipy.interpolate import CubicHermiteSpline
-from scipy.special import ellipe, ellipk, ellipkm1
+from scipy.special import ellipeinc, ellipkinc, ellipkm1
 
 from desc.backend import complex_sqrt, flatnonzero
 from desc.compute.bounce_integral import (
@@ -664,41 +664,73 @@ def test_bounce_averaged_drifts():
         * s_hat
         / Bref
     )
+
+    gds21_an = (
+        -1 * s_hat * (s_hat * theta_PEST - alpha_MHD / bmag**4 * np.sin(theta_PEST))
+    )
+    np.testing.assert_allclose(gds21, gds21_an, atol=1.7e-2, rtol=5e-4)
+
     fudge_factor2 = 0.19
     gbdrift_an = fudge_factor2 * (
-        -s_hat + (np.cos(theta_PEST) - gds21 / s_hat * np.sin(theta_PEST))
+        -s_hat + (np.cos(theta_PEST) - gds21_an / s_hat * np.sin(theta_PEST))
     )
 
     fudge_factor3 = 0.07
     cvdrift_an = gbdrift_an + fudge_factor3 * alpha_MHD / bmag**2
     # Comparing coefficients with their analytical expressions
-    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.5e-2, rtol=5e-3)
+    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.2e-2, rtol=5e-3)
     np.testing.assert_allclose(cvdrift, cvdrift_an, atol=1.8e-2, rtol=5e-3)
 
     # Values of pitch angle lambda for which to evaluate the bounce averages.
     pitch = np.linspace(1 / np.max(bmag), 1 / np.min(bmag), 11)
     pitch = pitch.reshape(pitch.shape[0], -1)
 
-    k2 = 0.5 * ((1 - pitch * B0) / epsilon + 1)
+    k2 = 0.5 * ((1 - pitch * B0) / (pitch * B0 * epsilon) + 1)
+    k = np.sqrt(k2)
     # Fixme: What exactly is this a function of?
-    #  cvdrift, gbdrift is a grid quantity, so grid.num_nodes length
-    #  on a single field line grid -> so it has length number of zeta points
-    #  So bavg_drift_an has shape shape (number of pitch, number of zeta points).
-    #  For a fixed pitch at index i, what is difference bavg_drift_an[i, j]
-    #  and bavg_drift_an[i, j+1]?
-    bavg_drift_an = (
-        ellipe(k2)
-        - 0.5 * ellipk(k2)
-        + 2 * s_hat * (ellipe(k2) + (k2 - 1) * ellipk(k2))
-        - dPdrho / B0 * ellipk(k2)
-        - dPdrho / B0 * 2 / 3 * (ellipe(k2) * (2 * k2 - 1) + ellipk(k2) * (1 - k2))
+    # cvdrift, gbdrift is a grid quantity, so grid.num_nodes length
+    # on a single field line grid -> so it has length number of zeta points
+    # So bavg_drift_an has shape shape (number of pitch, number of zeta points).
+    # For a fixed pitch at index i, what is difference bavg_drift_an[i, j]
+    # and bavg_drift_an[i, j+1]?
+    # RG : Here are the notes that explain these integrals
+    # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf
+    integral_0 = 4 / k * ellipkinc(np.arcsin(k), 1 / k2)  # ∫ dx sqrt(k2-sin(x/2)^2)
+    integral_1 = 4 * k * ellipeinc(np.arcsin(k), 1 / k2)  # ∫ dx/sqrt(k2-sin(x/2)^2)
+    integral_2 = 16 * k * integral_0
+
+    integral_3 = (
+        4 / 9 * (8 * k * (-1 + 2 * k2) * integral_1 - 4 * k * (-1 + k2) * integral_0)
+    )
+
+    integral_4 = (
+        2
+        * np.sqrt(2)
+        / 3
+        * (4 * np.sqrt(2) * k * (-1 + 2 * k2) * integral_0 - 2 * (-1 + k2) * integral_1)
+    )
+    integral_5 = (
+        2
+        / 30
+        * (
+            32 * k * (1 - k2 + k2**2) * integral_0
+            - 16 * k * (1 - 3 * k2 + 2 * k2**2) * integral_1
+        )
+    )
+    integral_6 = 2 / 3 * (k * (-2 + 4 * k2) * integral_0 - 4 * (-1 + k2) * integral_1)
+    integral_7 = 4 / k * (2 * k2 * integral_0 + (1 - 2 * k2) * integral_1)
+
+    bavg_drift_an = fudge_factor3 * dPdrho / B0**2 - 0.5 * fudge_factor2 * (
+        s_hat * (integral_0 + integral_1 + integral_2 + integral_3)
+        + alpha_MHD / B0**4 * (integral_4 + integral_5)
+        + (integral_6 + integral_7)
     )
 
     def integrand(cvdrift, gbdrift, B, pitch):
         # The arguments to this function will be interpolated
         # onto the quadrature points before these quantities are evaluated.
         g = _sqrt(1 - pitch * B)
-        return (0.5 * cvdrift * g) + (gbdrift / g) + (dPdrho / B**2 * g)
+        return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
     bavg_drift_num = bounce_integral(
         integrand=integrand,

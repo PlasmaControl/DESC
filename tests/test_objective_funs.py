@@ -2032,7 +2032,9 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
-    @pytest.mark.parametrize("objective", [CoilLength, CoilTorsion, CoilCurvature])
+    @pytest.mark.parametrize(
+        "objective", [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength]
+    )
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()

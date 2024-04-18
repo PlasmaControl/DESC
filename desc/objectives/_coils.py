@@ -652,7 +652,7 @@ class CoilCurrentLength(CoilLength):
     """
 
     _scalar = False
-    _units = "(A)"
+    _units = "(A*m)"
     _print_value_fmt = "Coil current length: {:10.3e} "
 
     def __init__(
@@ -698,7 +698,12 @@ class CoilCurrentLength(CoilLength):
         super().build(use_jit=use_jit, verbose=verbose)
 
         if self._normalize:
-            self._normalization = 1 / self._scales["a"]
+            coils = self.things[0]
+            params = tree_flatten(
+                coils.params_dict, is_leaf=lambda x: isinstance(x, dict)
+            )[0]
+            average_current = np.mean([param["current"] for param in params])
+            self._normalization = 1 / (average_current * self._scales["a"])
 
     def compute(self, params, constants=None):
         """Compute coil current length (current * length).

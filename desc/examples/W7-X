@@ -13,7 +13,7 @@ M_grid =  16
 N_grid =   16
 
 # continuation parameters
-# none are provided, so automatic continuation will be used
+# because we specify these and a sequence for L_rad, it will not use the automatic continuation
 bdry_ratio=1.0
 pert_order = 2
 

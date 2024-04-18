@@ -1683,6 +1683,42 @@ def zernike_norm(l, m):
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
 
 
+@jit
+@jnp.vectorize
+def _binom(n, k):
+    """Binomial coefficient.
+
+    Implementation is only correct for positive integer n,k and n>=k
+
+    Parameters
+    ----------
+    n : int, array-like
+        number of things to choose from
+    k : int, array-like
+        number of things chosen
+
+    Returns
+    -------
+    val : int, float, array-like
+        number of possible combinations
+    """
+    # adapted from scipy:
+    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
+    # scipy/special/orthogonal_eval.pxd#L68
+
+    n, k = map(jnp.asarray, (n, k))
+
+    def _binom_body_fun(i, b_n):
+        b, n = b_n
+        num = n + 1 - i
+        den = i
+        return (b * num / den, n)
+
+    kx = k.astype(int)
+    b, n = fori_loop(1, 1 + kx, _binom_body_fun, (1.0, n))
+    return b
+
+
 @custom_jvp
 @jit
 @jnp.vectorize
@@ -1748,42 +1784,6 @@ def _jacobi(n, alpha, beta, x, dx=0):
     out = jnp.where(n == 0, 1.0, out)
     out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
     return c * out
-
-
-@jit
-@jnp.vectorize
-def _binom(n, k):
-    """Binomial coefficient.
-
-    Implementation is only correct for positive integer n,k and n>=k
-
-    Parameters
-    ----------
-    n : int, array-like
-        number of things to choose from
-    k : int, array-like
-        number of things chosen
-
-    Returns
-    -------
-    val : int, float, array-like
-        number of possible combinations
-    """
-    # adapted from scipy:
-    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
-    # scipy/special/orthogonal_eval.pxd#L68
-
-    n, k = map(jnp.asarray, (n, k))
-
-    def _binom_body_fun(i, b_n):
-        b, n = b_n
-        num = n + 1 - i
-        den = i
-        return (b * num / den, n)
-
-    kx = k.astype(int)
-    b, n = fori_loop(1, 1 + kx, _binom_body_fun, (1.0, n))
-    return b
 
 
 @_jacobi.defjvp

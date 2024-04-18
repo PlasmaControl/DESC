@@ -76,7 +76,7 @@ def convert_spectral_to_FE(
     I = Rprime_basis.I_2MN
     Q = Rprime_basis.Q
     L = Rprime_basis.L
-    nmodes = I * Q
+    nmodes = I * Q  # Number of total basis functions
     mesh = Rprime_basis.mesh
     nquad = mesh.nquad
 

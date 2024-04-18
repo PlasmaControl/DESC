@@ -2107,7 +2107,7 @@ class FiniteElementMesh3D_scikit:
 
         # Add later visualize().show()
 
-    def get_barycentric_coordinates(self, K):
+    def get_barycentric_coordinates(self, rho_theta_zeta, K):
         """Gets the barycentric coordinates, given a mesh in rho, theta, zeta.
 
         Parameters
@@ -2118,26 +2118,12 @@ class FiniteElementMesh3D_scikit:
         -------
         coordinate_matrix: Matrix of volume coordinates for mesh
         """
-        if K == 1:
-
-            nodes = fem.MeshTet1().doflocs
-
-        if K == 2:
-            nodes = fem.MeshTet2().doflocs
-
-        # Rescale theta and zeta rows:
-
-        nodes[1] = 2 * np.pi * nodes[1]
-        nodes[2] = 2 * np.pi * nodes[2]
+        nodes = self.find_tetrahedra_corresponding_to_points(rho_theta_zeta)
 
         A = np.ones((4, 4))
         for i in range(3):
             for j in range(4):
                 A[i][j] = nodes[i][j]
-
-        # Find which element node is in:
-
-        # Standard element
 
         coordinate_matrix = np.zeros((4, 4))
 
@@ -2150,140 +2136,7 @@ class FiniteElementMesh3D_scikit:
                 coordinate_matrix[index][j] = L[j]
         return coordinate_matrix
 
-    """ def get_basis_functions(self, rho_theta_zeta, K):
-        Partial pseudo-code for incorporating basis functions.
-
-    if K == 1:
-        if node == 0:
-            def f(x,y,z):
-                return x
-        if node == 1:
-            def f(x,y,z):
-                return y
-        if node == 2:
-            def f(x,y,z):
-                return z
-        if node == 3:
-            def f(x,y,z):
-                return (1-x-y-z)
-
-
-    if K == 2:
-        if node == 0:
-            def f(x,y,z):
-                return (2*x-1)*x
-        if node == 1:
-            def f(x,y,z):
-                return (2*y-1)*y
-        if node == 2:
-            def f(x,y,z):
-                return (2*z-1)*z
-        if node == 3:
-            def f(x,y,z):
-                return (2*(1-x-y-z)-1)*(1-x-y-z)
-        if node == 4:
-            def f(x,y,z):
-                return  4*x*y
-        if node == 5:
-            def f(x,y,z):
-                return 4*y*z
-        if node == 6:
-            def f(x,y,z):
-                return 4*x*z
-        if node == 7:
-            def f(x,y,z):
-                return 4*x*(1-x-y-z)
-        if node == 8:
-             def f(x,y,z):
-                 return 4*y*(1-x-y-z)
-        if node == 9:
-             def f(x,y,z):
-                 return 4*z*(1-x-y-z)
-
-
-    if K == 3:
-        if node == 0:
-            def f(x,y,z):
-                return 0.5*(3*x-1)*(3*x-2)*x
-
-        if node == 1:
-            def f(x,y,z):
-                return 0.5*(3*y-1)*(3*y-2)*y
-
-        if node == 2:
-            def f(x,y,z):
-                return 0.5*(3*z-1)*(3*z-2)*z
-
-        if node == 3:
-            def f(x,y,z):
-                return 0.5*(3*(1-x-y-z)-1)*(3*(1-x-y-z)-2)*(1-x-y-z)
-
-        if node == 4:
-            def f(x,y,z):
-                return 4.5*x*z*(3*x-1)
-
-        if node == 5:
-            def f(x,y,z):
-                return 4.5*(3*z-1)*x*z
-
-        if node == 6:
-            def f(x,y,z):
-                return 4.5*(3*x-1)*x*y
-
-        if node == 7:
-            def f(x,y,z):
-                return 4.5*(3*y-1)*x*y
-
-        if node == 8:
-            def f(x,y,z):
-                return 4.5*(3*y-1)*y*z
-
-        if node == 9:
-            def f(x,y,z):
-                return 4.5*(3*z-1)*y*z
-
-        if node == 10:
-            def f(x,y,z):
-                return 4.5*(3*x-1)*x*(1-x-y-z)
-
-        if node == 11:
-            def f(x,y,z):
-                return 4.5*(3*(1-x-y-z) -1)*x*(1-x-y-z)
-
-        if node == 12:
-            def f(x,y,z):
-                return 4.5*(3*y-1)*y*(1-x-y-z)
-
-        if node == 13:
-            def f(x,y,z):
-                return 4.5*(3*(1-x-y-z)-1)*y*(1-x-y-z)
-
-        if node == 14:
-            def f(x,y,z):
-                return 4.5*(3*z-1)*z*(1-x-y-z)
-
-        if node == 15:
-            def f(x,y,z):
-                return 4.5*(3*(1-x-y-z)-1)*z*(1-x-y-z)
-
-        if node == 16:
-            def f(x,y,z):
-                return 27*y*z*(1-x-y-z)
-
-        if node == 17:
-            def f(x,y,z):
-                return 27*x*y*z
-
-        if node == 18:
-            def f(x,y,z):
-                return 27*x*z*(1-x-y-z)
-
-        if node == 19:
-            def f(x,y,z):
-                return 27*x*y*(1-x-y-z)
-
-
-        """
+    # Working on basis functions in separate document
 
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
@@ -2312,6 +2165,64 @@ class FiniteElementMesh3D_scikit:
                 f[i * nquad : (i + 1) * nquad, :],
             )
         return integral / 2.0
+
+
+"""
+
+    def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta):
+        Given a point on the mesh, find which tetrahedron it lies inside.
+
+        Parameters
+        ----------
+        rho_theta_zeta : 3D ndarray, shape (num_points, 3)
+            Set of points for which we want to find the tetrahedra that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        tetrahedra_indices : 1D ndarray, shape (num_points)
+            Set of indices that specify the tetrahedra where each point lies.
+        basis_functions : 2D ndarray, shape (num_points, Q)
+            The basis functions corresponding to the tetrahedra in
+            tetrahedra_indices.
+
+
+        tetrahedra_triangle_indices = np.zeros(rho_theta_zeta.shape[0])
+        basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
+        for i in range(rho_theta_zeta.shape[0]):
+            v = rho_theta_zeta[i, :]
+            for j, tetrahedron in enumerate(self.tetrahedra):
+                v1 = tetrahedra.vertices[0, :]
+                v2 = tetrahedra.vertices[1, :]
+                v3 = tetrahedra.vertices[2, :]
+                v4 = tetrahedra.vertices[3, :]
+                P = tetrahedra_indices[i]
+                D0 = np.array([[v1[0], v1[1], v1[2],1],[v2[0], v2[1], v2[2], 1],
+                               [v3[0], v3[1], v3[2], 1],[v4[0], v4[1], v4[2], 1]])
+                D1 = np.array([[P[0], P[1], P[2],1],[v2[0], v2[1], v2[2], 1],
+                               [v3[0], v3[1], v3[2], 1],[v4[0], v4[1], v4[2], 1]])
+                D2 = np.array([[v1[0], v1[1], v1[2],1],[P[0], P[1], P[2],1],
+                               [v3[0], v3[1], v3[2], 1],[v4[0], v4[1], v4[2], 1]])
+                D3 =  np.array([[v1[0], v1[1], v1[2],1],[v2[0], v2[1], v2[2], 1],
+                                [P[0], P[1], P[2],1],[v4[0], v4[1], v4[2], 1]])
+                D4 = np.array([[v1[0], v1[1], v1[2],1],[v2[0], v2[1], v2[2], 1],
+                                [v3[0], v3[1], v3[2], 1],[P[0], P[1], P[2],1]])
+
+                Det0 = np.linalg.det(D0)
+                Det1 = np.linalg.det(D1)
+                Det2 = np.linalg.det(D2)
+                Det3 = np.linal.det(D3)
+                Det4 = np.linalg.det(D4)
+
+                #Check whether point lies inside tetrahedra:
+
+                if sign(Det0) == sign(Det1) and sign(Det0) == sign(Det2) and
+                sign(Det0) == sign(Det3) and sign(Det0) == sign(Det4):
+                    tetrahedra_indices[i] = j
+                    basis_functions[i, :], _ = tetrahedra.get_basis_functions(v)
+        return tetrahedra_indices, basis_functions
+
+        """
 
 
 class FiniteElementMesh2D:
@@ -2398,7 +2309,6 @@ class FiniteElementMesh2D:
         self.triangles = triangles
 
         # Setup quadrature points and weights for numerical integration using scikit-fem
-        # Will need to write a seperate one for linear:
 
         if K == 1:
             integration_points = np.array([1 / 3, 1 / 3, 1 / 3])
@@ -2445,15 +2355,11 @@ class FiniteElementMesh2D:
         -------
         L_b : (rho_theta, Q)
         """
-        # Will work on rescaling later
-
         if K == 1:
 
             L_b = np.zeros([4, 3])
 
-            mesh = fem.MeshTri1()
-            nodes = mesh.doflocs
-
+            nodes = rho_theta
             # Left Triangle {(0,0), (1,0), (0,1)}
 
             A = nodes[:, [0, 1, 2]]
@@ -2480,8 +2386,7 @@ class FiniteElementMesh2D:
 
             L_b = np.zeros([10, 3])
 
-            mesh = fem.MeshTri2()
-            nodes = mesh.doflocs
+            nodes = rho_theta
 
             # Left Triangle {(0,0), (1,0), (0,1), (1/2,0), (0,1/2), (1/2,1/2)}
 
@@ -2512,116 +2417,65 @@ class FiniteElementMesh2D:
 
             return L_b
 
-    def get_basis_functions(
-        self, rho_theta, i, j, a, b, K=1
-    ):  # i,j are indexes, a,b are inputs
-        """Gets the barycentric basis functions.
+        # Need K == 3
 
-        Return the triangle basis functions, evaluated at the 2D rho
-        and theta mesh points provided to the function.
+    # working on basis functions, writing something for now
 
+    def get_basis_functions(self, rho_theta, i, a, b, K=1):
+        """Retrieve basis functions on entire mesh.
+
+        Return the triangle basis functions, used for evaluation.
 
         Parameters
         ----------
-        theta_zeta : 2D ndarray, shape (nrho * ntheta, 2)
+        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
         Coordinates of the original grid, lying inside this triangle.
+        i: node corresponding to basis functions
+        a,b: function inputs
 
         Returns
         -------
-        basis_function
+        function in terms of a and b
         """
-        """
-
         if K == 1:
 
-            for i in range(4):
-                for j in range(4):
-                    if i == 0:
-                        def f(x, y):
-                            return x
-                    if i == 1:
-                        def f(x, y):
-                            return y
-                    if i == 2 or i == 3:
-                        def f(x, y):
-                            return 1 - x - y
+            if np.all(rho_theta[i, :]) == np.all([0, 0]) or np.all(
+                rho_theta[i, :]
+            ) == np.all([1, 2 * np.pi]):
+                return 1 - a - b
 
-                return f(a,b)
+            if np.all(rho_theta[i, :]) == np.all([0, 2 * np.pi]):
+                return a
 
-
+            if np.all(rho_theta[i, :]) == np.all([1, 0]):
+                return b
 
         if K == 2:
 
-            psi_q = np.zeros(9,9)
+            if np.all(rho_theta[i, :]) == np.all([0, 0]) or np.all(
+                rho_theta[i, :]
+            ) == np.all([1, 2 * np.pi]):
+                return (2 * (1 - a - b) - 1) * (1 - a - b)
 
-            for i in range(9):
-                for j in range(9):
-                    if i == 0 or i == 4:
-                        def f(x,y):
-                            return (2*y-1)*y
+            if np.all(rho_theta[i, :]) == np.all([0, 2 * np.pi]):
+                return (2 * (a) - 1) * (a)
 
-                    if i == 1 or i == 3:
-                        def f(x,y):
-                            return 4*x*y
-                    if i == 2:
-                        def f(x,y):
-                            return (2*x-1)*x
+            if np.all(rho_theta[i, :]) == np.all([1, 0]):
+                return (2 * (b) - 1) * (b)
 
-                    if i == 5 or i == 7:
+            if np.all(rho_theta[i, :]) == np.all([0.5, np.pi]):
+                return 4 * a * b
 
-                        def f(x,y):
-                            return 4*y*(1-x-y)
+            if np.all(rho_theta[i, :]) == np.all([0, np.pi]):
+                return 4 * a * (1 - a - b)
 
-                    if i == 6:
+            if np.all(rho_theta[i, :]) == np.all([0.5, 0]):
+                return 4 * b * (1 - a - b)
 
-                        def f(x,y):
-                            return (2*(1-x-y)-1)*(1-x-y)
-
-                    if i == 8:
-
-                        def f(x,y):
-                            return 4*x*(1-x-y)
-
-            return f(a,b)
-
-        if K == 3:
-            if node == 0:
-                def f(x,y):
-                    return (1/2)*(3*x-1)*(3*x-2)*x
-            if node == 1:
-                def f(x,y):
-                    return (1/2)*(3*y-1)*(3*y-2)*y
-            if node == 2:
-                def f(x,y):
-                    return (1/2)*(3*(1-x-y)-1)*(3*(1-x-y)-2)*(1-x-y)
-            if node == 3:
-                def f(x,y):
-                    return (9/2)*(x*y*(3*x-1))
-            if node == 4:
-                def f(x,y):
-                    return (9/2)*(x*y*(3*y-1))
-            if node == 5:
-                def f(x,y):
-                    return (9/2)*y*(1-x-y)*(3*y-1)
-            if node == 6:
-                def f(x,y):
-                    return (9/2)*y*(1-x-y)*(3*(1-x-y)-1)
-            if node == 7:
-                def f(x,y):
-                    return (9/2)*x*(1-x-y)*(3*x-1)
-            if node == 8:
-                def f(x,y):
-                    return (9/2)*x*(1-x-y)*(3*(1-x-y)-1)
-            if node == 9:
-                def f(x,y):
-                    return 27*x*y*(1-x-y)
-
-
-            return f(a,b)`
-        """
+            # Need K==3
 
     def evaluate_basis_at_nodes(
-        self, rho_theta, f, K=1
+        self, rho_theta, K=1
     ):  # i,j are indices, adding f for now
         """Evaluate basis function at nodes.
 
@@ -2630,7 +2484,7 @@ class FiniteElementMesh2D:
 
         Parameters
         ----------
-        theta_zeta : 2D ndarray, shape (nrho * ntheta, 2)
+        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
         Coordinates of the original grid, lying inside this triangle.
 
         Returns
@@ -2643,16 +2497,16 @@ class FiniteElementMesh2D:
             # As a reminder, with this linear case,
             # we have two finite elements: {(0,0), (1,0), (0,1)},
             # and {(1,0), (0,1), (1,1)}
-            # We label (1,0) as node 0, (0,1) as node 1,
+            # We label (0,0) as node 0, (0,1) as node 1,
             # (1,0) as node 2, and (1,1) as node 3
-
-            # Will be replacing f with get_basis_functions
 
             psi_q = np.zeros(4, 4)
 
             for i in range(4):
                 for j in range(4):
-                    psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+                    psi_q[i][j] = self.get_basis_functions(
+                        rho_theta, i, L_b[i][0], L_b[i][1], K
+                    )
 
             return psi_q
 
@@ -2662,17 +2516,21 @@ class FiniteElementMesh2D:
 
             for i in range(9):
                 for j in range(9):
-                    psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+                    psi_q[i][j] = self.get_basis_functions(
+                        rho_theta, i, L_b[i][0], L_b[i][1], K
+                    )
             return psi_q
-
+            """
         if K == 3:
 
             psi_q = np.zeros(16, 16)
 
             for i in range(16):
                 for j in range(16):
-                    psi_q[i][j] = f(L_b[i][0], L_b[i][1])
+                    psi_q[i][j] = get_basis_functions(
+                    rho_theta, i, L_b[i][0], L_b[i][1], K)
             return psi_q
+            """
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""

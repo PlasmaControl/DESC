@@ -1162,7 +1162,7 @@ class FiniteElementBasis(_FE_Basis):
         self._NFP = NFP
         self._sym = sym
         if L == 0 and N == 0:
-            self.mesh = FiniteElementMesh1D(M, K=K)
+            self.mesh = FiniteElementMesh1D_scikit(M, K=K)
             self.I_2MN = M - 1
             self.Q = K + 1
         elif N == 0:
@@ -2269,14 +2269,17 @@ class FiniteElementMesh2D:
         if (
             mth.log(M, 2).is_integer() is True
             and mth.log(L, 2).is_integer() is True
-            and L == M
+            # and L == M
         ):
 
-            p = int(mth.log(M, 2))
-
-            mesh = fem.MeshTri().refined(p)
+            p = 0  # int(mth.log(M, 2))
+            mesh = fem.MeshLine(np.linspace(0, 1, L)) * fem.MeshLine(
+                np.linspace(0, 2 * np.pi, M, endpoint=True)
+            )  # .to_meshtri().refined(p)
 
         vertices = mesh.doflocs
+        print(vertices, vertices.shape)
+
         # Rescale Theta axis by 2pi:
         mesh.doflocs[1] = 2 * np.pi * mesh.doflocs[1]
 
@@ -2659,13 +2662,13 @@ class FiniteElementMesh1D:
         basis functions.
     """
 
-    def __init__(self, M, K=1, nquad=2):
+    def __init__(self, M, K=1):
         self.M = M
         self.Q = K + 1
         self.K = K
 
         # can exactly integrate 2 * nquad - 1 degree polynomials
-        self.nquad = max(nquad, K + 1)
+        self.nquad = K + 1
 
         theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
         self.Theta = theta

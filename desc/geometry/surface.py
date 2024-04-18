@@ -97,6 +97,7 @@ def convert_spectral_to_FE(
         ).T
     else:
         quadpoints = quadpoints_mesh  # transpose here?
+    print("quadpoints_shape = ", quadpoints.shape)
 
     # Compute the A matrix in Ax = b, should be exactly the same
     # as in the 2D case.
@@ -110,19 +111,19 @@ def convert_spectral_to_FE(
             Zprime_pre_evaluated[:, np.newaxis, :IQ]
             * Zprime_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
-    ).reshape(I, Q, I, Q)
+    ).reshape(IQ, IQ)
     Bjb_R = mesh.integrate(
         (
             Rprime_pre_evaluated[:, np.newaxis, :IQ]
             * Rprime_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
-    ).reshape(I, Q, I, Q)
+    ).reshape(IQ, IQ)
     Bjb_L = mesh.integrate(
         (
             Lprime_pre_evaluated[:, np.newaxis, :IQ]
             * Lprime_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
-    ).reshape(I, Q, I, Q)
+    ).reshape(IQ, IQ)
 
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)
@@ -133,19 +134,19 @@ def convert_spectral_to_FE(
     Z_pre_evaluated = Z_basis.evaluate(nodes=quadpoints)
     L_pre_evaluated = L_basis.evaluate(nodes=quadpoints)
 
-    # Evaluated FE basis functions but using the usual R_k(rho) basis
-    # functions without any rho factors.
+    # Evaluated FE basis functions
     Rprime_pre_evaluated = Rprime_basis.evaluate(nodes=quadpoints)
     Zprime_pre_evaluated = Zprime_basis.evaluate(nodes=quadpoints)
     Lprime_pre_evaluated = Lprime_basis.evaluate(nodes=quadpoints)
+    # Evaluate sum_lmn R_lmn * FourierZernike_lmn
     R_sum_pre_evaluated = R_pre_evaluated @ R_lmn
     Z_sum_pre_evaluated = Z_pre_evaluated @ Z_lmn
     L_sum_pre_evaluated = L_pre_evaluated @ L_lmn
+    # Multiply FE and summed FourierZernike basis elements
     ZZ = Z_sum_pre_evaluated[:, np.newaxis] * Zprime_pre_evaluated
     RR = R_sum_pre_evaluated[:, np.newaxis] * Rprime_pre_evaluated
     LL = L_sum_pre_evaluated[:, np.newaxis] * Lprime_pre_evaluated
 
-    # Note integral rho R_k(rho) = 0 unless k = 0 by orthogonality
     Aj_Z = mesh.integrate(
         (ZZ).reshape(I * nquad, -1),
     )
@@ -159,16 +160,20 @@ def convert_spectral_to_FE(
     print("Time to construct vector b = ", t2 - t1)
 
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
-    # this linear system of equations. Use an LU
-    lu = splu(Bjb_R)  # [:nmodes - (L + 3) // 2, :nmodes - (L + 3) // 2])
-    Rprime = lu.solve(Aj_R)  # [:nmodes - (L + 3) // 2])
-    Rprime_lmn = Rprime.reshape(nmodes)  # - (L + 3) // 2)
-    lu = splu(Bjb_Z)  # [:nmodes - (L + 3) // 2, :nmodes - (L + 3) // 2])
-    Zprime = lu.solve(Aj_Z)  # [:nmodes - (L + 3) // 2])
-    Zprime_lmn = Zprime.reshape(nmodes)  # - (L + 3) // 2)
-    lu = splu(Bjb_L)  # [:nmodes - (L + 3) // 2, :nmodes - (L + 3) // 2])
-    Lprime = lu.solve(Aj_L)  # [:nmodes - (L + 3) // 2])
-    Lprime_lmn = Lprime.reshape(nmodes)  # - (L + 3) // 2)
+    # this linear system of equations. Use a sparse LU because Bjb is
+    # generally very sparse because of finite element local support.
+    Aj_R = np.array(Aj_R)
+    Aj_Z = np.array(Aj_Z)
+    Aj_L = np.array(Aj_L)
+    lu = splu(Bjb_R)
+    Rprime = lu.solve(Aj_R)
+    Rprime_lmn = Rprime.reshape(nmodes)
+    lu = splu(Bjb_Z)
+    Zprime = lu.solve(Aj_Z)
+    Zprime_lmn = Zprime.reshape(nmodes)
+    lu = splu(Bjb_L)
+    Lprime = lu.solve(Aj_L)
+    Lprime_lmn = Lprime.reshape(nmodes)
     t2 = time.time()
     print("Time to solve Ax = b, ", t2 - t1)
     return Rprime_lmn, Zprime_lmn, Lprime_lmn

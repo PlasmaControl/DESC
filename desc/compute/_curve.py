@@ -1065,9 +1065,7 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["ds", "x_s"],
     parameterization=[
-        "desc.geometry.curve.FourierRZCurve",
-        "desc.geometry.curve.FourierXYZCurve",
-        "desc.geometry.curve.FourierPlanarCurve",
+        "desc.geometry.core.Curve",
     ],
 )
 def _length(params, transforms, profiles, data, **kwargs):

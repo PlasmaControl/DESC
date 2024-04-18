@@ -129,7 +129,7 @@ class FourierRZToroidalSurface(Surface):
         self._R_basis = Basis(
             M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
         )
-        self._Z_basis = DoubleFourierSeries(
+        self._Z_basis = Basis(
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
 

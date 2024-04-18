@@ -703,6 +703,8 @@ class CoilCurrentLength(CoilLength):
                 coils.params_dict, is_leaf=lambda x: isinstance(x, dict)
             )[0]
             average_current = np.mean([param["current"] for param in params])
+            if not average_current:
+                average_current = 1
             self._normalization = 1 / (average_current * self._scales["a"])
 
     def compute(self, params, constants=None):

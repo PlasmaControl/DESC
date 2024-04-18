@@ -148,10 +148,30 @@ def register_compute_fun(
             flag = False
             for base_class, superclasses in _class_inheritance.items():
                 if p in superclasses or p == base_class:
-                    if name in data_index[base_class]:
+                    if p != base_class:
+                        # track if the compute definition was from using
+                        # a superclass
+                        defined_from_superclass = True
+                    else:
+                        #
+                        defined_from_superclass = False
+                    if (
+                        name in data_index[base_class]
+                        and not data_index[base_class][name]["defined_from_superclass"]
+                    ):
+                        # only throw an error if we are trying to redefine the same thing twice
+                        # but do not throw error if the definition was through the superclass,
+                        # as this means we defined a second compute function for the subclass
+                        # specifically, so we want to allow that to overwrite the previous
+                        # definition.
                         raise ValueError(
                             f"Already registered function with parameterization {p} and name {name}."
+                            "If you were attempting to register a function for a subclass of "
+                            "a parameterization with an already existing function, you must move"
+                            "your function to be after the already existing function."
                         )
+                    #
+                    d["defined_from_superclass"] = defined_from_superclass
                     data_index[base_class][name] = d.copy()
                     all_kwargs[base_class][name] = kwargs
                     for alias in aliases:

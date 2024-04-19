@@ -148,7 +148,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         self._current = float(np.squeeze(new))
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -569,7 +569,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -855,7 +855,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1475,7 +1475,7 @@ class MixedCoilSet(CoilSet):
         ]
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 

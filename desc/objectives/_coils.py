@@ -753,6 +753,18 @@ class QuadraticFlux(_Objective):
             Bplasma = compute_B_plasma(
                 eq, eval_grid, self._source_grid, normal_only=True
             )
+        field = self._field
+        if hasattr(field, "Phi_mn"):
+            # make the transform for the FourierCurrentPotentialField
+            if self._field_grid is None:
+                self._field_grid = LinearGrid(
+                    M=30 + 2 * max(field.M, field.M_Phi),
+                    N=30 + 2 * max(field.N, field.N_Phi),
+                    NFP=field.NFP,
+                )
+            field_transforms = get_transforms(
+                ["K", "x"], obj=field, grid=self._field_grid
+            )
 
         self._constants = {
             "field": self._field,
@@ -760,6 +772,7 @@ class QuadraticFlux(_Objective):
             "quad_weights": w,
             "eval_data": eval_data,
             "B_plasma": Bplasma,
+            "field_transforms": field_transforms,
         }
 
         timer.stop("Precomputing transforms")
@@ -800,7 +813,11 @@ class QuadraticFlux(_Objective):
 
         # B_ext is not pre-computed because field is not fixed
         B_ext = constants["field"].compute_magnetic_field(
-            x, source_grid=constants["field_grid"], basis="rpz", params=field_params
+            x,
+            source_grid=constants["field_grid"],
+            basis="rpz",
+            params=field_params,
+            transforms=constants["field_transforms"],
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
         f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]

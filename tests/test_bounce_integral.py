@@ -663,6 +663,11 @@ def test_bounce_averaged_drifts():
         #  below, but should everything related to B be normalized?
         #  or just things relevant for computing bounce points?
         #  e.g. should I normalize B dot e^zeta = B^zeta by Bref as well?
+        #  Response (R.G.): Yes, it would be better to normalize everything
+        #  All the quantities can be normalized using combinations of Lref
+        #  and Bref. To see what normalizations I use see below.
+        #  For B^zeta the normalization should be Lref/Bref. Since we only
+        #  use b dot grad zeta, we need B^zeta/|B| * Lref
         eq,
         rho,
         alpha,

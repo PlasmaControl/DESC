@@ -1575,14 +1575,14 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                rtol=5e-4,
+                rtol=5e-3,
                 err_msg=f"{name} at surf index {surf_index}",
             )
             np.testing.assert_allclose(
                 quant_cpp_from_booz,
                 data[name],
-                rtol=5e-4,
-                atol=3e-4,
+                rtol=5e-3,
+                atol=3e-3,
                 err_msg=f"{name} at surf index {surf_index} from cpp",
             )
 

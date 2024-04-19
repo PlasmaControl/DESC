@@ -773,9 +773,9 @@ def test_bounce_averaged_drifts():
         * (
             s_hat * (integral_0 + integral_1 + integral_2 + integral_3)
             + alpha_MHD / B0**4 * (integral_4 + integral_5)
-            + (integral_6 + integral_7)
-        )[:, 0]
-    )
+            - (integral_6 + integral_7)
+        )
+    )[:, 0]
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
         # The arguments to this function will be interpolated

@@ -8,7 +8,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import fori_loop, jit, jnp
+from desc.backend import fori_loop, jit, jnp, tree_structure, treedef_is_leaf
 
 
 class Timer:
@@ -608,3 +608,47 @@ def unique_list(thelist):
 def is_any_instance(things, cls):
     """Check if any of things is an instance of cls."""
     return any([isinstance(t, cls) for t in things])
+
+
+def broadcast_tree(tree_in, tree_out):
+    """Broadcast tree_in to the same pytree structure as tree_out."""
+    errorif(
+        isinstance(tree_in, (tuple, dict)),
+        ValueError,
+        "tree_in must be a pytree of nested lists, not tuples or dicts",
+    )
+    errorif(
+        isinstance(tree_out, (tuple, dict)),
+        ValueError,
+        "tree_out must be a pytree of nested lists, not tuples or dicts",
+    )
+    if not isinstance(tree_in, list):
+        tree_in = [tree_in]
+    if not isinstance(tree_out, list):
+        tree_out = [tree_out]
+    where_leaves_in = [treedef_is_leaf(tree_structure(branch)) for branch in tree_in]
+    where_leaves_out = [treedef_is_leaf(tree_structure(branch)) for branch in tree_out]
+    all_leaves_in = all(where_leaves_in)
+    all_leaves_out = all(where_leaves_out)
+    if any(where_leaves_in) and not all_leaves_in:
+        raise ValueError("base layer of tree_in must be all leaves and no branches")
+    if any(where_leaves_out) and not all_leaves_out:
+        raise ValueError("base layer of tree_out must be all leaves and no branches")
+    if all_leaves_in and all_leaves_out:  # both trees at leaf layer
+        if len(tree_in) <= len(tree_out):
+            return tree_in + [[] for _ in range(len(tree_out) - len(tree_in))]
+        else:
+            raise ValueError("tree_in cannot have more leaves than tree_out")
+    elif all_leaves_in and not all_leaves_out:  # tree_out is deeper than tree_in
+        return [broadcast_tree(tree_in, branch) for branch in tree_out]
+    elif all_leaves_out and not all_leaves_in:
+        raise ValueError("tree_in cannot have a deeper structure than tree_out")
+    else:  # both trees at branch layers
+        if len(tree_in) == len(tree_out):
+            return [
+                broadcast_tree(tree_in[k], tree_out[k]) for k in range(len(tree_out))
+            ]
+        else:
+            raise ValueError(
+                "tree_in must have the same number of branches as tree_out"
+            )

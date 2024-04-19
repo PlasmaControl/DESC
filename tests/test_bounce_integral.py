@@ -707,7 +707,7 @@ def test_bounce_averaged_drifts():
     cvdrift = -2 * np.sign(psi_boundary) * Bref * Lref**2 * rho * data_bounce["cvdrift"]
     gbdrift = -2 * np.sign(psi_boundary) * Bref * Lref**2 * rho * data_bounce["gbdrift"]
     dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * data_bounce["|B|"] ** 2)
-    alpha_MHD = -dPdrho * 1 / data_bounce["iota"] ** 2 * 0.5
+    alpha_MHD = -np.mean(dPdrho * 1 / data_bounce["iota"] ** 2 * 0.5)
 
     gds21 = (
         -np.sign(iota)
@@ -780,7 +780,7 @@ def test_bounce_averaged_drifts():
             + alpha_MHD / B0**4 * (integral_4 + integral_5)
             - (integral_6 + integral_7)
         )
-    )[:, 0]
+    )
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
         # The arguments to this function will be interpolated

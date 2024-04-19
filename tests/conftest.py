@@ -10,9 +10,8 @@ from netCDF4 import Dataset
 
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry import FourierRZToroidalSurface
+from desc.examples import get
 from desc.grid import LinearGrid
-from desc.io import load
 from desc.magnetic_fields import FourierCurrentPotentialField, run_regcoil
 from desc.vmec import VMECIO
 
@@ -258,18 +257,11 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def regcoil_ellipse_and_axisym_surf():
-    """Run regcoil for elliptical eq and axisymmetric surface."""
-    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+def regcoil_helical_coils_scan():
+    """Run regcoil for precise eq and surface, scan over alpha."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(offset=0.1)
 
-    surf_winding = FourierRZToroidalSurface(
-        R_lmn=np.array([0.7035, 0.0365]),
-        Z_lmn=np.array([-0.0365]),
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[-1, 0]]),
-        sym=True,
-        NFP=eq.NFP,
-    )
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=8, N_Phi=8
     )
@@ -277,7 +269,7 @@ def regcoil_ellipse_and_axisym_surf():
         surface_current_field,
         eq,
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
-        source_grid=LinearGrid(M=40, N=40, NFP=1),
+        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         alpha=np.append(np.array([0.0]), np.logspace(-30, -1, 30)),
         current_helicity=-1,
         vacuum=True,
@@ -287,26 +279,18 @@ def regcoil_ellipse_and_axisym_surf():
 
 
 @pytest.fixture(scope="session")
-def regcoil_ellipse_helical_coils():
-    """Run regcoil for elliptical eq and surface."""
-    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
-
+def regcoil_modular_coils():
+    """Run regcoil for precise QA eq and surface with modular coils."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(offset=0.2)
     M_Phi = 8
     N_Phi = 8
     M_egrid = 30
     N_egrid = 30
-    M_sgrid = 40
+    M_sgrid = 50
     N_sgrid = 50
     alpha = 1e-18
 
-    surf_winding = FourierRZToroidalSurface(
-        R_lmn=np.array([0.7035, 0.0365]),
-        Z_lmn=np.array([-0.0365]),
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[-1, 0]]),
-        sym=True,
-        NFP=eq.NFP,
-    )
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
     )
@@ -316,7 +300,7 @@ def regcoil_ellipse_helical_coils():
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         alpha=alpha,
-        current_helicity=-2,
+        current_helicity=0,
         vacuum=True,
     )
 
@@ -324,9 +308,10 @@ def regcoil_ellipse_helical_coils():
 
 
 @pytest.fixture(scope="session")
-def regcoil_ellipse_helical_coils_pos_helicity():
-    """Run regcoil for elliptical eq and surface with positive helicity."""
-    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+def regcoil_helical_coils_pos_helicity():
+    """Run regcoil for precise QA eq and surface with positive helicity."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(offset=0.1)
 
     M_Phi = 8
     N_Phi = 8
@@ -336,14 +321,6 @@ def regcoil_ellipse_helical_coils_pos_helicity():
     N_sgrid = 50
     alpha = 1e-18
 
-    surf_winding = FourierRZToroidalSurface(
-        R_lmn=np.array([0.7035, 0.0365]),
-        Z_lmn=np.array([-0.0365]),
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[-1, 0]]),
-        sym=True,
-        NFP=eq.NFP,
-    )
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
     )

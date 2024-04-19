@@ -35,6 +35,7 @@ from desc.objectives import (
     BScaleLength,
     CoilCurvature,
     CoilLength,
+    CoilsetMinDistance,
     CoilTorsion,
     Elongation,
     Energy,
@@ -878,6 +879,28 @@ class TestObjectiveFunction:
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
+
+    @pytest.mark.unit
+    def test_coil_min_distance(self):
+        """Tests coilset minimum distance between coils."""
+        ncoils = 4
+        displacement = [0, 0, 10]
+
+        def test(coils, grid=None):
+            obj = CoilsetMinDistance(coils, grid=grid)
+            obj.build()
+            f = obj.compute(params=coils.params_dict)
+            assert f.size == len(coils)
+            np.testing.assert_allclose(f, displacement[-1] / (ncoils), rtol=1e-8)
+
+        coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
+        coils = CoilSet.linspaced_linear(coil, n=ncoils, displacement=displacement)
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=ncoils, displacement=displacement
+        )
+
+        test(coils)
+        test(mixed_coils, grid=LinearGrid(N=5))
 
     @pytest.mark.unit
     def test_toroidal_flux(self):

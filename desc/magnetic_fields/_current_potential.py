@@ -500,7 +500,7 @@ class FourierCurrentPotentialField(
         )  # make sure surface and Phi basis NFP are the same
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -532,6 +532,7 @@ class FourierCurrentPotentialField(
             params=params,
             basis=basis,
             source_grid=source_grid,
+            transforms=transforms,
         )
 
     @classmethod
@@ -949,11 +950,7 @@ class FourierCurrentPotentialField(
 
 
 def _compute_magnetic_field_from_CurrentPotentialField(
-    field,
-    coords,
-    source_grid,
-    params=None,
-    basis="rpz",
+    field, coords, source_grid, params=None, basis="rpz", transforms=None
 ):
     """Compute magnetic field at a set of points.
 
@@ -986,7 +983,9 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     # compute surface current, and store grid quantities
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = field.compute(["K", "x"], grid=source_grid, basis="xyz", params=params)
+    data = field.compute(
+        ["K", "x"], grid=source_grid, basis="xyz", params=params, transforms=transforms
+    )
 
     _rs = xyz2rpz(data["x"])
     _K = xyz2rpz_vec(data["K"], phi=source_grid.nodes[:, 2])

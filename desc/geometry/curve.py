@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.compute import rpz2xyz
+from desc.compute import rpz2xyz, xyz2rpz
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -225,6 +225,66 @@ class FourierRZCurve(Curve):
         )
         return curve
 
+    @classmethod
+    def from_values(cls, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+        """Fit coordinates to FourierRZCurve representation.
+
+        Parameters
+        ----------
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierRZCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new R,Z representation.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "rpz"
+
+        Returns
+        -------
+        curve : FourierRZCurve
+            New representation of the curve parameterized by Fourier series for R,Z.
+
+        """
+        if basis == "rpz":
+            coords_rpz = coords
+            coords_xyz = rpz2xyz(coords)
+        else:
+            coords_rpz = xyz2rpz(coords)
+            coords_xyz = coords
+        R = coords_rpz[:, 0]
+        phi = coords_rpz[:, 1]
+
+        X = coords_xyz[:, 0]
+        Y = coords_xyz[:, 1]
+        Z = coords_rpz[:, 2]
+
+        # easiest to check closure in XYZ coordinates
+        X, Y, Z, _, _, _, input_curve_was_closed = _unclose_curve(X, Y, Z)
+        if input_curve_was_closed:
+            R = R[0:-1]
+            phi = phi[0:-1]
+            Z = coords_rpz[0:-1, 2]
+        # check if any phi are negative, and make them positive instead
+        # so we can more easily check if it is monotonic
+        inds_negative = np.where(phi < 0)
+        phi = phi.at[inds_negative].set(phi[inds_negative] + 2 * np.pi)
+
+        # assert the curve is not doubling back on itself in phi,
+        # which can't be represented with a curve parameterized by phi
+        errorif(
+            not np.all(np.diff(phi) > 0), ValueError, "Supplied phi must be monotonic"
+        )
+
+        grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
+        basis = FourierSeries(N=N, NFP=NFP, sym=sym)
+        transform = Transform(grid, basis, build_pinv=True)
+        R_n = transform.fit(R)
+        Z_n = transform.fit(Z)
+        return FourierRZCurve(R_n=R_n, Z_n=Z_n, NFP=NFP, name=name, sym=sym)
+
 
 def _unclose_curve(X, Y, Z):
     if np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14):
@@ -424,11 +484,11 @@ class FourierXYZCurve(Curve):
 
         Parameters
         ----------
-        coords: ndarray
-            coordinates to fit a FourierXYZCurve object with.
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierXYZCurve object, with each column
+            corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new X,Y,Z representation.
-            default is 10
         s : ndarray or "arclength"
             arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
@@ -825,9 +885,11 @@ class SplineXYZCurve(Curve):
 
         Parameters
         ----------
-        coords: ndarray
-            Points for X, Y, Z describing the curve. If the endpoint is included
-            (ie, X[0] == X[-1]), then the final point will be dropped.
+        coords: ndarray, shape (num_coords,3)
+            Points for X, Y, Z (or R, phi, Z) describing the curve with each column
+            corresponding to xyz or rpz depending on the basis argument. If the
+            endpoint is included (ie, X[0] == X[-1]), then the final point will be
+            dropped.
         knots : ndarray
             arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.

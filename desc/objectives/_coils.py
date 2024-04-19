@@ -765,6 +765,8 @@ class QuadraticFlux(_Objective):
             field_transforms = get_transforms(
                 ["K", "x"], obj=field, grid=self._field_grid
             )
+        else:
+            field_transforms = None
 
         self._constants = {
             "field": self._field,
@@ -972,6 +974,22 @@ class ToroidalFlux(_Objective):
 
         plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
+        field = self._field
+
+        if hasattr(field, "Phi_mn"):
+            # make the transform for the FourierCurrentPotentialField
+            if self._field_grid is None:
+                self._field_grid = LinearGrid(
+                    M=30 + 2 * max(field.M, field.M_Phi),
+                    N=30 + 2 * max(field.N, field.N_Phi),
+                    NFP=field.NFP,
+                )
+            field_transforms = get_transforms(
+                ["K", "x"], obj=field, grid=self._field_grid
+            )
+        else:
+            field_transforms = None
+
         self._constants = {
             "plasma_coords": plasma_coords,
             "equil_data": data,
@@ -979,6 +997,7 @@ class ToroidalFlux(_Objective):
             "field": self._field,
             "field_grid": self._field_grid,
             "eval_grid": eval_grid,
+            "field_transforms": field_transforms,
         }
 
         timer.stop("Precomputing transforms")
@@ -1016,6 +1035,7 @@ class ToroidalFlux(_Objective):
             basis="rpz",
             source_grid=constants["field_grid"],
             params=field_params,
+            transforms=constants["field_transforms"],
         )
         grid = constants["eval_grid"]
 

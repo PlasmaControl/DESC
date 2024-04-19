@@ -20,6 +20,8 @@ from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
+from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
     AspectRatio,
     Energy,
@@ -36,7 +38,9 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    QuadraticFlux,
     QuasisymmetryTripleProduct,
+    ToroidalFlux,
     Volume,
     get_fixed_boundary_constraints,
 )
@@ -1304,3 +1308,55 @@ def test_LinearConstraint_jacobian():
     np.testing.assert_allclose(vjp_unscaled, vjp1, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(vjp_unscaled, vjp2, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(vjp_unscaled, vjp3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_quad_flux_with_surface_current_field():
+    """Test that QuadraticFlux does not throw an error when field has transforms."""
+    # this happens because in QuadraticFlux.compute, field.compute_magnetic_field
+    # is called. If the field needs transforms to evaluate, then these transforms
+    # will be created on the fly if they are not provided, resulting in an error
+    # This tests the fix where the transforms are precomputed and passed in
+    # for the FourierCurrentPotentialField class specifically.
+    eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+    field = FourierCurrentPotentialField.from_surface(
+        eq.surface, Phi_mn=[1, 0], modes_Phi=[[0, 0], [1, 1]], M_Phi=1, N_Phi=1
+    )
+    obj = ObjectiveFunction(
+        QuadraticFlux(
+            eq=eq,
+            field=field,
+            vacuum=True,
+            eval_grid=LinearGrid(M=2, N=2, sym=True),
+            field_grid=LinearGrid(M=2, N=2),
+        ),
+    )
+    constraints = FixParameter(field, ["I", "G"])
+    opt = Optimizer("lsq-exact")
+    # this should run without an error
+    (field_modular_opt,), result = opt.optimize(
+        field, objective=obj, constraints=constraints, maxiter=1, copy=True
+    )
+
+
+@pytest.mark.unit
+def test_tor_flux_with_surface_current_field():
+    """Test that ToroidalFlux does not throw an error when field has transforms."""
+    eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+    field = FourierCurrentPotentialField.from_surface(
+        eq.surface, Phi_mn=[1, 0], modes_Phi=[[0, 0], [1, 1]], M_Phi=1, N_Phi=1
+    )
+    obj = ObjectiveFunction(
+        ToroidalFlux(
+            eq=eq,
+            field=field,
+            eval_grid=LinearGrid(L=2, M=2, sym=True),
+            field_grid=LinearGrid(M=2, N=2),
+        ),
+    )
+    constraints = FixParameter(field, ["I", "G"])
+    opt = Optimizer("fmintr")
+    # this should run without an error
+    (field_modular_opt,), result = opt.optimize(
+        field, objective=obj, constraints=constraints, maxiter=1, copy=True
+    )

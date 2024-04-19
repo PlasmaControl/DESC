@@ -184,7 +184,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         )
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -198,6 +198,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------
@@ -216,6 +218,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             params=params,
             basis=basis,
             source_grid=source_grid,
+            transforms=transforms,
         )
 
     @classmethod
@@ -514,6 +517,8 @@ class FourierCurrentPotentialField(
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------

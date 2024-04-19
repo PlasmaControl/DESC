@@ -241,7 +241,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, s=s, basis="xyz", name=name
         )
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+    def to_SplineXYZ(
+        self, knots=None, grid=None, method="cubic", name="", discontinuous_indices=None
+    ):
         """Convert coil to SplineXYZCoil.
 
         Parameters
@@ -278,7 +280,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCoil.from_values(
-            self.current, coords, knots=knots, method=method, name=name, basis="xyz"
+            self.current,
+            coords,
+            knots=knots,
+            method=method,
+            name=name,
+            basis="xyz",
+            discontinuous_indices=discontinuous_indices,
         )
 
 
@@ -565,8 +573,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         knots=None,
         method="cubic",
         name="",
+        discontinuous_indices=None,
     ):
-        super().__init__(current, X, Y, Z, knots, method, name)
+        super().__init__(current, X, Y, Z, knots, method, name, discontinuous_indices)
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -628,7 +637,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     @classmethod
     def from_values(
-        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
+        cls,
+        current,
+        coords,
+        knots=None,
+        method="cubic",
+        name="",
+        basis="xyz",
+        discontinuous_indices=None,
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -676,6 +692,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             knots=curve.knots,
             method=curve.method,
             name=name,
+            discontinuous_indices=discontinuous_indices,
         )
 
 
@@ -1328,7 +1345,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+    def to_SplineXYZ(
+        self, knots=None, grid=None, method="cubic", name="", discontinuous_indices=None
+    ):
         """Convert all coils to SplineXYZCoil.
 
         Parameters
@@ -1360,7 +1379,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             New representation of the coilset parameterized by a spline for X,Y,Z.
 
         """
-        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        coils = [
+            coil.to_SplineXYZ(
+                knots, grid, method, discontinuous_indices=discontinuous_indices
+            )
+            for coil in self
+        ]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def __add__(self, other):

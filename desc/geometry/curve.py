@@ -880,7 +880,15 @@ class SplineXYZCurve(Curve):
             )
 
     @classmethod
-    def from_values(cls, coords, knots=None, method="cubic", name="", basis="xyz"):
+    def from_values(
+        cls,
+        coords,
+        knots=None,
+        method="cubic",
+        name="",
+        basis="xyz",
+        discontinuous_indices=None,
+    ):
         """Create SplineXYZCurve from coordinate values.
 
         Parameters
@@ -921,5 +929,11 @@ class SplineXYZCurve(Curve):
         if basis == "rpz":
             coords = rpz2xyz(coords)
         return SplineXYZCurve(
-            coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name
+            coords[:, 0],
+            coords[:, 1],
+            coords[:, 2],
+            knots,
+            method,
+            name,
+            discontinuous_indices,
         )

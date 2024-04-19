@@ -893,6 +893,7 @@ def test_plot_Phi_scan_regcoil(regcoil_helical_coils_scan):
     return fig
 
 
+# TODO: close any figs that are not being used in testing
 @pytest.mark.unit
 @pytest.mark.xfail
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)

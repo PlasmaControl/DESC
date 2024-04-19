@@ -766,10 +766,15 @@ def test_bounce_averaged_drifts():
     integral_6 = 2 / 3 * (k * (-2 + 4 * k2) * integral_0 - 4 * (-1 + k2) * integral_1)
     integral_7 = 4 / k * (2 * k2 * integral_0 + (1 - 2 * k2) * integral_1)
 
-    bavg_drift_an = fudge_factor3 * dPdrho / B0**2 - 0.5 * fudge_factor2 * (
-        s_hat * (integral_0 + integral_1 + integral_2 + integral_3)
-        + alpha_MHD / B0**4 * (integral_4 + integral_5)
-        + (integral_6 + integral_7)
+    bavg_drift_an = (
+        fudge_factor3 * dPdrho / B0**2 * integral_1
+        - 0.5
+        * fudge_factor2
+        * (
+            s_hat * (integral_0 + integral_1 + integral_2 + integral_3)
+            + alpha_MHD / B0**4 * (integral_4 + integral_5)
+            + (integral_6 + integral_7)
+        )[:, 0]
     )
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):

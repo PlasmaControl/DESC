@@ -6,10 +6,11 @@ from functools import partial
 import numpy as np
 import pytest
 from matplotlib import pyplot as plt
+from scipy import integrate
 
 # TODO: can use the one from interpax once .solve() is implemented
 from scipy.interpolate import CubicHermiteSpline
-from scipy.special import ellipeinc, ellipkinc, ellipkm1
+from scipy.special import ellipkm1
 
 from desc.backend import complex_sqrt, flatnonzero
 from desc.compute.bounce_integral import (
@@ -85,7 +86,9 @@ def test_mask_operations():
             np.pad(desired, (0, cols - desired.size), constant_values=np.nan),
             equal_nan=True,
         ), "take_mask has bugs."
-        assert np.array_equal(last[i], desired[-1]), "flatnonzero has bugs."
+        assert np.array_equal(
+            last[i], desired[-1] if desired.size else np.nan
+        ), "flatnonzero has bugs."
 
 
 @pytest.mark.unit
@@ -262,7 +265,7 @@ def test_bounce_points():
         pitch = 2
         if plot:
             plot_field_line(B, pitch, start, end)
-        bp1, bp2 = bounce_points(knots, B.c, B.derivative().c, pitch, check=True)
+        bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[0::2])
@@ -276,7 +279,7 @@ def test_bounce_points():
         pitch = 2
         if plot:
             plot_field_line(B, pitch, start, end)
-        bp1, bp2 = bounce_points(k, B.c, B.derivative().c, pitch, check=True)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[1::2])
@@ -294,7 +297,7 @@ def test_bounce_points():
         if plot:
             plot_field_line(B, pitch, start, end)
 
-        bp1, bp2 = bounce_points(k, B.c, B_z_ra.c, pitch, check=True)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -317,7 +320,7 @@ def test_bounce_points():
         if plot:
             plot_field_line(B, pitch, start, end)
 
-        bp1, bp2 = bounce_points(k, B.c, B_z_ra.c, pitch, check=True)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
@@ -337,7 +340,7 @@ def test_bounce_points():
         if plot:
             plot_field_line(B, pitch, k[2], end)
 
-        bp1, bp2 = bounce_points(k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], pitch, check=True)
+        bp1, bp2 = bounce_points(pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -361,7 +364,7 @@ def test_bounce_points():
         if plot:
             plot_field_line(B, pitch, start, end)
 
-        bp1, bp2 = bounce_points(k, B.c, B_z_ra.c, pitch, check=True)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -413,8 +416,8 @@ def test_automorphism():
 
 @pytest.mark.unit
 def test_bounce_quadrature():
-    """Test principal value of bounce integral matches elliptic integral."""
-    p = 1e-3
+    """Test bounce integral matches elliptic integral."""
+    p = 1e-4
     m = 1 - p
     # Some prime number that doesn't appear anywhere in calculation.
     # Ensures no lucky cancellation occurs from this test case since otherwise
@@ -434,14 +437,14 @@ def test_bounce_quadrature():
     B_z_ra = (np.sin(2 * knots / v) / v).reshape(1, -1)
     pitch = np.ones((1, 1))
 
-    def integrand(B, pitch):
-        return 1 / _sqrt(1 - pitch * m * B)
+    def integrand(B, pitch, Z):
+        return 1 / np.sqrt(1 - pitch * m * B)
 
     # augment the singularity
     x_t, w_t = tanh_sinh_quad(18, grad_automorphism_arcsin)
     x_t = automorphism_arcsin(x_t)
     tanh_sinh_arcsin = _bounce_quadrature(
-        bp1, bp2, x_t, w_t, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
+        bp1, bp2, x_t, w_t, integrand, [], B_sup_z, B, B_z_ra, pitch, knots
     )
     np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
 
@@ -450,7 +453,7 @@ def test_bounce_quadrature():
     w_g = w_g * grad_automorphism_sin(x_g)
     x_g = automorphism_sin(x_g)
     leg_gauss_sin = _bounce_quadrature(
-        bp1, bp2, x_g, w_g, knots, B_sup_z, B, B_z_ra, integrand, [], pitch
+        bp1, bp2, x_g, w_g, integrand, [], B_sup_z, B, B_z_ra, pitch, knots
     )
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
 
@@ -459,14 +462,14 @@ def test_bounce_quadrature():
 def test_example_code_and_hairy_ball():
     """Test example code in bounce_integral docstring and ensure B does not vanish."""
 
-    def integrand_num(g_zz, B, pitch):
+    def integrand_num(g_zz, B, pitch, Z):
         """Integrand in integral in numerator of bounce average."""
         f = (1 - pitch * B) * g_zz  # something arbitrary
-        return safediv(f, _sqrt(1 - pitch * B), fill=np.nan)
+        return safediv(f, _sqrt(1 - pitch * B))
 
-    def integrand_den(B, pitch):
+    def integrand_den(B, pitch, Z):
         """Integrand in integral in denominator of bounce average."""
-        return safediv(1, _sqrt(1 - pitch * B), fill=np.nan)
+        return safediv(1, _sqrt(1 - pitch * B))
 
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
@@ -476,7 +479,7 @@ def test_example_code_and_hairy_ball():
     bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots)
 
     # start hairy ball test
-    B = eq.compute("|B|", grid=items["grid_desc"])["|B|"]
+    B = eq.compute("|B|", grid=items["grid_desc"], override_grid=False)["|B|"]
     assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
     # end hairy ball test
 
@@ -568,7 +571,51 @@ def test_elliptic_integral_limit():
     # TODO now compare result to elliptic integral
     bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots, check=True)
     pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
-    bp1, bp2 = bounce_points(knots, items["B.c"], items["B_z_ra.c"], pitch)
+    bp1, bp2 = bounce_points(pitch, knots, items["B.c"], items["B_z_ra.c"])
+
+
+@pytest.mark.unit
+def test_integral_0(k=0.9, resolution=10):
+    """4 / k * ellipkinc(np.arcsin(k), 1 / k**2)."""
+    k = np.atleast_1d(k)
+    bp1 = np.zeros_like(k)
+    bp2 = np.arcsin(k)
+    x, w = tanh_sinh_quad(resolution, grad_automorphism_arcsin)
+    Z = _affine_bijection_reverse(
+        automorphism_arcsin(x), bp1[..., np.newaxis], bp2[..., np.newaxis]
+    )
+    k = k[..., np.newaxis]
+
+    def integrand(Z, k):
+        return safediv(4 / k, np.sqrt(1 - 1 / k**2 * np.sin(Z) ** 2))
+
+    quad = np.dot(integrand(Z, k), w) * _grad_affine_bijection_reverse(bp1, bp2)
+    if k.size == 1:
+        q = integrate.quad(integrand, bp1.item(), bp2.item(), args=(k.item(),))[0]
+        np.testing.assert_allclose(quad, q, rtol=1e-5)
+    return quad
+
+
+@pytest.mark.unit
+def test_integral_1(k=0.9, resolution=10):
+    """4 * k * ellipeinc(np.arcsin(k), 1 / k**2)."""
+    k = np.atleast_1d(k)
+    bp1 = np.zeros_like(k)
+    bp2 = np.arcsin(k)
+    x, w = tanh_sinh_quad(resolution, grad_automorphism_arcsin)
+    Z = _affine_bijection_reverse(
+        automorphism_arcsin(x), bp1[..., np.newaxis], bp2[..., np.newaxis]
+    )
+    k = k[..., np.newaxis]
+
+    def integrand(Z, k):
+        return 4 * k * np.sqrt(1 - 1 / k**2 * np.sin(Z) ** 2)
+
+    quad = np.dot(integrand(Z, k), w) * _grad_affine_bijection_reverse(bp1, bp2)
+    if k.size == 1:
+        q = integrate.quad(integrand, bp1.item(), bp2.item(), args=(k.item(),))[0]
+        np.testing.assert_allclose(quad, q, rtol=1e-4)
+    return quad
 
 
 @pytest.mark.unit
@@ -645,7 +692,6 @@ def test_bounce_averaged_drifts():
     bmag_an = B0 * (1 - epsilon * np.cos(theta_PEST))
     np.testing.assert_allclose(bmag, bmag_an, atol=5e-3, rtol=5e-3)
 
-    # FIXME should x be same as epsilon?
     x = Lref * rho
     s_hat = -x / iota * shear / Lref
     gradpar = Lref * data_bounce["B^zeta"] / data_bounce["|B|"]
@@ -695,10 +741,10 @@ def test_bounce_averaged_drifts():
     # and bavg_drift_an[i, j+1]?
     # RG : Here are the notes that explain these integrals
     # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf
-    integral_0 = 4 / k * ellipkinc(np.arcsin(k), 1 / k2)  # ∫ dx sqrt(k2-sin(x/2)^2)
-    integral_1 = 4 * k * ellipeinc(np.arcsin(k), 1 / k2)  # ∫ dx/sqrt(k2-sin(x/2)^2)
-    integral_2 = 16 * k * integral_0
 
+    integral_0 = test_integral_0(k)
+    integral_1 = test_integral_1(k)
+    integral_2 = 16 * k * integral_0
     integral_3 = (
         4 / 9 * (8 * k * (-1 + 2 * k2) * integral_1 - 4 * k * (-1 + k2) * integral_0)
     )
@@ -726,7 +772,7 @@ def test_bounce_averaged_drifts():
         + (integral_6 + integral_7)
     )
 
-    def integrand(cvdrift, gbdrift, B, pitch):
+    def integrand(cvdrift, gbdrift, B, pitch, Z):
         # The arguments to this function will be interpolated
         # onto the quadrature points before these quantities are evaluated.
         g = _sqrt(1 - pitch * B)

@@ -1131,6 +1131,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     Returns
     -------
+    surface_current_field : FourierCurrentPotentialField or list of
+        A FourierCurrentPotentialField with the Phi_mn set to the
+        optimized current potential. If multiple alpha were passed in,
+        this is a list of length alpha.size with the optimized fields
+        for each parameter value alpha.
     data : dict
         Dictionary with the following keys,::
 

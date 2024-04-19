@@ -4,6 +4,7 @@ import os
 
 import h5py
 import jax
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from netCDF4 import Dataset
@@ -14,6 +15,8 @@ from desc.examples import get
 from desc.grid import LinearGrid
 from desc.magnetic_fields import FourierCurrentPotentialField, run_regcoil
 from desc.vmec import VMECIO
+
+plt.rcParams.update({"figure.max_open_warning": 0})
 
 
 @pytest.fixture(scope="class", autouse=True)
@@ -260,8 +263,12 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
 def regcoil_helical_coils_scan():
     """Run regcoil for precise eq and surface, scan over alpha."""
     eq = get("precise_QA")
-    surf_winding = eq.surface.constant_offset_surface(offset=0.1)
-
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=8, N_Phi=8
     )
@@ -282,7 +289,12 @@ def regcoil_helical_coils_scan():
 def regcoil_modular_coils():
     """Run regcoil for precise QA eq and surface with modular coils."""
     eq = get("precise_QA")
-    surf_winding = eq.surface.constant_offset_surface(offset=0.2)
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
     M_Phi = 8
     N_Phi = 8
     M_egrid = 30
@@ -311,8 +323,12 @@ def regcoil_modular_coils():
 def regcoil_helical_coils_pos_helicity():
     """Run regcoil for precise QA eq and surface with positive helicity."""
     eq = get("precise_QA")
-    surf_winding = eq.surface.constant_offset_surface(offset=0.1)
-
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
     M_Phi = 8
     N_Phi = 8
     M_egrid = 30

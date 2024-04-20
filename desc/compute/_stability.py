@@ -1,4 +1,4 @@
-"""Compute functions for Mercier stability objectives.
+"""Compute functions for stability objectives.
 
 Notes
 -----
@@ -9,10 +9,17 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from orthax import legendre
 from scipy.constants import mu_0
 
 from desc.backend import jnp
 
+from .bounce_integral import (
+    affine_bijection_reverse,
+    bounce_integral_map,
+    grad_affine_bijection_reverse,
+    pitch_of_extrema,
+)
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals_map
 
@@ -227,4 +234,73 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         / (data["V_r(r)"] * data["<|B|^2>"]),
         0,  # coefficient of limit is V_r / V_rr, rest is finite
     )
+    return data
+
+
+@register_compute_fun(
+    name="effective ripple",
+    label="\\epsilon_{\\text{eff}}",
+    units="~",
+    units_long="None",
+    description="Effective ripple modulation amplitude",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["rho", "|grad(psi)|", "kappa_g", "sqrt(g)", "psi_r", "S(r)", "R"],
+)
+def _effective_ripple(params, transforms, profiles, data, **kwargs):
+    # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    # Evaluation of 1/ν neoclassical transport in stellarators.
+    # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    # https://doi.org/10.1063/1.873749.
+    raise NotImplementedError("Effective ripple requires GitHub PR #854.")
+
+    rho = transforms["grid"].compress(data["rho"])
+    # TODO: Choose grid with a better API.
+    #  Should be handled when resolving GitHub issue #719.
+    x, w = legendre.leggauss(transforms["grid"].num_theta)
+    alpha_max = (2 - transforms["grid"].sym) * jnp.pi
+    alpha = affine_bijection_reverse(x, 0, alpha_max)
+    w = w * grad_affine_bijection_reverse(0, alpha_max)
+    knots = jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, transforms["grid"].num_zeta)
+    bounce_integral, items = bounce_integral_map(rho, alpha, knots)
+
+    def integrand_H(grad_psi_norm, kappa_g, B, pitch, Z):
+        return (
+            pitch
+            * jnp.sqrt(1 / pitch - B)
+            * (4 / B - pitch)
+            * grad_psi_norm
+            * kappa_g
+            / B
+        )
+
+    def integrand_I(B, pitch, Z):
+        return jnp.sqrt(1 - pitch * B) / B
+
+    # TODO: Intersperse linearly spaced pitch between each 1/pitch for trapezoidal
+    #  integration within each class of particles (i.e. between local min and max).
+    pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
+    H = bounce_integral(integrand_H, [data["|grad(psi)|"], data["kappa_g"]], pitch)
+    I = bounce_integral(integrand_I, [], pitch)
+    H = H.reshape(H.shape[0], rho.size, alpha.size, -1)
+    I = I.reshape(I.shape[0], rho.size, alpha.size, -1)
+    pitch = pitch.reshape(-1, rho.size, alpha.size)
+
+    # TODO: Simple fix, composite trapezoidal integration between each
+    #  1/pitch value in pitch.
+    db = -jnp.diff(1 / pitch, prepend=0, axis=0)
+    E = jnp.sum(db * jnp.nansum(H**2 / I, axis=-1), axis=0)
+    assert E.shape == (rho.size, alpha.size)
+    # E = ∫ db ∑ⱼ Hⱼ² / Iⱼ
+    E = jnp.dot(E, w)
+
+    surface_integrate = surface_integrals_map(transforms["grid"], expand_out=False)
+    s1 = surface_integrate(data["sqrt(g)"] / data["psi_r"])
+    s2 = transforms["grid"].compress(data["S(r)"])
+    # Nemov et al., equation 29.
+    epsilon = (jnp.pi * data["R"] ** 2 / (8 * 2**0.5) * s1 / s2**2 * E) ** (2 / 3)
+    data["effective ripple"] = transforms["grid"].expand(epsilon)
     return data

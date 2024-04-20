@@ -103,4 +103,4 @@ def test_broadcast_tree():
 
     # TODO: add test for sort=True
     # TODO: add test for value
-    # TODO: add test with empy branches
+    # TODO: add test with empty branches

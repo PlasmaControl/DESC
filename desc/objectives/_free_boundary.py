@@ -489,7 +489,7 @@ class BoundaryError(_Objective):
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
-                NFP=int(eq.NFP) if eq.N > 0 else 64,
+                NFP=eq.NFP if eq.N > 0 else 64,
                 sym=False,
             )
         else:

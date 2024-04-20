@@ -32,7 +32,6 @@ from desc.objectives import (
     CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
-    FixCollectionParameters,
     FixCurrent,
     FixIota,
     FixOmniBmax,
@@ -641,7 +640,7 @@ def test_multiobject_optimization_al():
     constraints = (
         ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
         FixPressure(eq=eq),
-        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(surf, ["R_lmn", "Z_lmn"], [np.array([0]), np.array([-1])]),
         FixParameter(eq, ["Psi", "i_l"]),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
@@ -680,7 +679,7 @@ def test_multiobject_optimization_prox():
     constraints = (
         ForceBalance(eq=eq),
         FixPressure(eq=eq),
-        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(surf, ["R_lmn", "Z_lmn"], [np.array([0]), np.array([-1])]),
         FixParameter(eq, ["Psi", "i_l"]),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
     )
@@ -1257,7 +1256,7 @@ def test_quadratic_flux_optimization_with_analytic_field():
 
     optimizer = Optimizer("lsq-exact")
 
-    constraints = (FixParameter(field, ["R0"]),)
+    constraints = (FixParameter(field, "R0"),)
     quadflux_obj = QuadraticFlux(
         eq=eq,
         field=field,
@@ -1283,13 +1282,10 @@ def test_quadratic_flux_optimization_with_analytic_field():
 @pytest.mark.unit
 def test_second_stage_optimization():
     """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
-    # This also tests that FixCollectionParameters works properly when fixing a
-    # parameter that does not exist for all things in the collection.
-
     eq = get("DSHAPE")
     field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field))
-    constraints = FixCollectionParameters(field, [["R0"], []])
+    constraints = FixParameter(field, [["R0"], []])
     optimizer = Optimizer("lsq-exact")
     (field,), _ = optimizer.optimize(
         things=field, objective=objective, constraints=constraints, verbose=2

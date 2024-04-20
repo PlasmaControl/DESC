@@ -29,7 +29,6 @@ from desc.objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
-    FixCollectionParameters,
     FixCurrent,
     FixElectronDensity,
     FixElectronTemperature,
@@ -414,7 +413,7 @@ def test_kinetic_constraints():
 
 @pytest.mark.unit
 def test_correct_indexing_passed_modes():
-    """Test Indexing when passing in specified modes, related to gh issue #380."""
+    """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
@@ -467,7 +466,7 @@ def test_correct_indexing_passed_modes():
 
 @pytest.mark.unit
 def test_correct_indexing_passed_modes_and_passed_target():
-    """Test Indexing when passing in specified modes, related to gh issue #380."""
+    """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
@@ -529,7 +528,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
 
 @pytest.mark.unit
 def test_correct_indexing_passed_modes_axis():
-    """Test Indexing when passing in specified axis modes, related to gh issue #380."""
+    """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
@@ -588,7 +587,7 @@ def test_correct_indexing_passed_modes_axis():
 
 @pytest.mark.unit
 def test_correct_indexing_passed_modes_and_passed_target_axis():
-    """Test Indexing when passing in specified axis modes, related to gh issue #380."""
+    """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
 
     eq = desc.examples.get("W7-X")
@@ -930,7 +929,7 @@ def test_fix_omni_indices():
 
 @pytest.mark.unit
 def test_fix_subset_of_params_in_collection():
-    """Tests FixCollectionParameters fixing a subset of things in the collection."""
+    """Tests FixParameter fixing a subset of things in the collection."""
     tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
     vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
@@ -940,11 +939,12 @@ def test_fix_subset_of_params_in_collection():
     xy_coil = FourierXYZCoil()
     full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xy_coil))
 
+    # TODO: use a better example to test broadcasting for a whole coilset
     params = [
         [["current"], ["center", "normal", "r_n"], ["current", "shift", "rotmat"], []],
         [["current", "Z_n"], ["R_n", "Z_n"], ["Z_n"]],
         ["Z_n", "shift", "rotmat"],
     ]
-    obj = FixCollectionParameters(full_coilset, params=params)
+    obj = FixParameter(full_coilset, params)
     obj.build()
     assert obj.dim_f == 41

@@ -89,14 +89,18 @@ def test_broadcast_tree():
     # broadcast single leaf to full tree
     tree_in = 0
     tree = broadcast_tree(tree_in, tree_out)
-    assert tree == [[0, [], []], [[0], [[0, []], [0]]]]
+    assert tree == [[0, False, False], [[0], [[0, False], [0]]]]
 
     # broadcast from only major branches
     tree_in = [[1, 2], [3]]
     tree = broadcast_tree(tree_in, tree_out)
-    assert tree == [[1, 2, []], [[3], [[3, []], [3]]]]
+    assert tree == [[1, 2, False], [[3], [[3, False], [3]]]]
 
     # more complicated example
     tree_in = [[1, 2], [[3], [4]]]
     tree = broadcast_tree(tree_in, tree_out)
-    assert tree == [[1, 2, []], [[3], [[4, []], [4]]]]
+    assert tree == [[1, 2, False], [[3], [[4, False], [4]]]]
+
+    # TODO: add test for sort=True
+    # TODO: add test for value
+    # TODO: add test with empy branches

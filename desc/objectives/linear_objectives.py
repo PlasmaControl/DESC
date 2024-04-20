@@ -12,9 +12,16 @@ from abc import ABC
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, tree_leaves, tree_map, tree_structure, tree_unflatten
+from desc.backend import (
+    jnp,
+    tree_leaves,
+    tree_map,
+    tree_structure,
+    tree_unflatten,
+    treedef_is_leaf,
+)
 from desc.basis import zernike_radial, zernike_radial_coeffs
-from desc.utils import broadcast_tree, errorif, setdefault
+from desc.utils import broadcast_tree, errorif, flatten_list, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -141,11 +148,44 @@ class FixParameter(_Objective):
         thing = self.things[0]
         structure = tree_structure(thing.optimizable_params)
 
+        def leaves_per_branch(tree_tuple):
+            """Get the number of leaves per branch in a pytree, in flattened order."""
+            tree, lengths = tree_tuple
+            if all([treedef_is_leaf(tree_structure(x)) for x in tree]):
+                lengths.append(len(tree))
+                return [], lengths
+            else:
+                return (
+                    [leaves_per_branch((branch, lengths)) for branch in tree],
+                    lengths,
+                )
+
+        # indices of flattened tree leaves
+        _, lengths = leaves_per_branch((thing.optimizable_params, []))
+        starts = np.insert(np.cumsum(lengths), 0, 0)
+        leaf_indices = [
+            np.arange(start, start + length, dtype=int)
+            for start, length in zip(starts, lengths)
+        ]
+
         # set params
         self._params = setdefault(self._params, thing.optimizable_params)
         self._params = broadcast_tree(self._params, thing.optimizable_params, sort=True)
         assert tree_structure(self._params) == structure
         params_leaves = tree_leaves(self._params)
+
+        # sort params to the same flattend order as indices
+        # this is necessary because of JAX GitHub Issue #4085
+        params_leaves = flatten_list(
+            [
+                list(
+                    np.array(params_leaves)[idx][
+                        np.argsort(np.array(thing.optimizable_params)[idx])
+                    ]
+                )
+                for idx in leaf_indices
+            ]
+        )
 
         # set indices
         if isinstance(self._indices, bool) and self._indices:  # default to all params
@@ -155,8 +195,9 @@ class FixParameter(_Objective):
                 for idx, param in zip(tree_leaves(indices), params_leaves)
             ]
             self._indices = tree_unflatten(structure, indices_leaves)
-        # caution: cannot sort the indices!
-        self._indices = broadcast_tree(self._indices, thing.optimizable_params)
+        self._indices = broadcast_tree(  # indices cannot be sorted like the params!
+            self._indices, thing.optimizable_params, sort=False
+        )
         assert tree_structure(self._indices) == structure
         self._indices_leaves = tree_leaves(self._indices)
         self._indices_leaves = [  # replace False leaves with empy arrays

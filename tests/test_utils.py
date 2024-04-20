@@ -72,7 +72,7 @@ def test_broadcast_tree():
         _ = broadcast_tree(tree_in, tree_out)
 
     # tree with a mix of leaves and branches at the same layer
-    tree_in = [[0, 1], 2, [3]]
+    tree_in = [[1, 2], 3, [4]]
     with pytest.raises(ValueError):
         _ = broadcast_tree(tree_in, tree_out)
 
@@ -80,6 +80,11 @@ def test_broadcast_tree():
     tree_in = [[[1], [2, 3]], [[4], [[[5], [6]], [7]]]]
     with pytest.raises(ValueError):
         _ = broadcast_tree(tree_in, tree_out)
+
+    # tree_in leaves not in tree_out
+    tree_in = [[1, 2], [[3], [4]]]
+    with pytest.raises(ValueError):
+        tree = broadcast_tree(tree_in, tree_out, sort=True)
 
     # tree with proper structure already does not change
     tree_in = tree_map(lambda x: x * 2, tree_out)
@@ -96,11 +101,22 @@ def test_broadcast_tree():
     tree = broadcast_tree(tree_in, tree_out)
     assert tree == [[1, 2, False], [[3], [[3, False], [3]]]]
 
-    # more complicated example
+    # broadcast from minor branches
     tree_in = [[1, 2], [[3], [4]]]
     tree = broadcast_tree(tree_in, tree_out)
     assert tree == [[1, 2, False], [[3], [[4, False], [4]]]]
 
-    # TODO: add test for sort=True
-    # TODO: add test for value
-    # TODO: add test with empty branches
+    # sort order of leaves
+    tree_in = [[3, 1], [[4], [[6], []]]]
+    tree = broadcast_tree(tree_in, tree_out, sort=True)
+    assert tree == [[1, False, 3], [[4], [[False, 6], [False]]]]
+
+    # tree_in with empty branches
+    tree_in = [[], [[1], [[2], []]]]
+    tree = broadcast_tree(tree_in, tree_out)
+    assert tree == [[False, False, False], [[1], [[2, False], [False]]]]
+
+    # custom fill value
+    tree_in = [[1, 2], [[3], [4]]]
+    tree = broadcast_tree(tree_in, tree_out, value=0)
+    assert tree == [[1, 2, 0], [[3], [[4, 0], [4]]]]

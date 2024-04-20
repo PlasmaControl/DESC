@@ -1289,7 +1289,7 @@ def test_second_stage_optimization():
     eq = get("DSHAPE")
     field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field))
-    constraints = FixCollectionParameters(field, "R0")
+    constraints = FixCollectionParameters(field, [["R0"], []])
     optimizer = Optimizer("lsq-exact")
     (field,), _ = optimizer.optimize(
         things=field, objective=objective, constraints=constraints, verbose=2

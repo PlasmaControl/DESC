@@ -499,19 +499,6 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):
     # Get ζ values of bounce points from the masks.
     bp1 = take_mask(intersect, is_bp1)
     bp2 = take_mask(intersect, is_bp2)
-
-    if check:
-        errorif(
-            jnp.any(bp1 > bp2),
-            AssertionError,
-            "Bounce points have an inversion. Maybe create an issue on GitHub.",
-        )
-        errorif(
-            jnp.any(bp1[..., 1:] < bp2[..., :-1]),
-            AssertionError,
-            "Discontinuity detected. Is B_z_ra the derivative of the spline of B?",
-        )
-    return bp1, bp2
     # Consistent with (in particular the discussion on page 3 and 5 of)
     # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     # Evaluation of 1/ν neoclassical transport in stellarators.
@@ -525,6 +512,14 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):
     # Don't think it's necessary to stitch together the field lines using
     # rotational transform to potentially capture the bounce point outside
     # this snapshot of the field line.
+
+    if check:
+        msg = "Bounce points have an inversion. Maybe create an issue on GitHub."
+        assert not jnp.any(bp1 > bp2), msg
+        msg = "Discontinuity detected. Is B_z_ra the derivative of the spline of B?"
+        assert not jnp.any(bp1[..., 1:] < bp2[..., :-1]), msg
+
+    return bp1, bp2
 
 
 def _affine_bijection_forward(x, a, b):
@@ -722,7 +717,7 @@ def _interp1d_vec_with_df(
 
 
 def _interpolatory_quadrature(
-    Z, w, integrand, f, B_sup_z, B, B_z_ra, pitch, knots, method
+    Z, w, integrand, f, B_sup_z, B, B_z_ra, pitch, knots, method, check=False
 ):
     """Interpolate given functions to points Z and perform quadrature.
 
@@ -754,6 +749,8 @@ def _interpolatory_quadrature(
     B = _interp1d_vec_with_df(Z_ps, knots, B, B_z_ra, method="cubic").reshape(shape)
     pitch = pitch[..., jnp.newaxis, jnp.newaxis]
     inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch, Z=Z) / B_sup_z, w)
+    if check:
+        _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product)
     return inner_product
 
 
@@ -762,8 +759,45 @@ _interpolatory_quadrature.__doc__ = _interpolatory_quadrature.__doc__.replace(
 )
 
 
+def _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product):
+    """Check that no integrals were lost and the hairy ball theorem is upheld."""
+    is_not_quad_point = jnp.isnan(Z)
+    # We want quantities to evaluate as finite only at quadrature points
+    # for the integrals with boundaries at valid bounce points.
+    msg = "Interpolation failed."
+    assert jnp.all(jnp.isfinite(B_sup_z) ^ is_not_quad_point), msg
+    assert jnp.all(jnp.isfinite(B) ^ is_not_quad_point), msg
+    assert jnp.all(jnp.isfinite(B_z_ra)), msg
+    for ff in f:
+        assert jnp.all(jnp.isfinite(ff) ^ is_not_quad_point), msg
+
+    msg = "|B| has vanished."
+    assert not jnp.isclose(B, 0).any(), msg
+    assert not jnp.isclose(B_sup_z, 0).any(), msg
+
+    quad_resolution = Z.shape[-1]
+    # Number of integrals that we should be computing.
+    goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
+    # Number of integrals that were actually computed.
+    actual = jnp.isfinite(inner_product).sum()
+    assert goal == actual, f"Lost {goal - actual} integrals."
+    assert jnp.all(jnp.isfinite(inner_product) ^ is_not_quad_point[..., 0])
+
+
 def _bounce_quadrature(
-    bp1, bp2, x, w, integrand, f, B_sup_z, B, B_z_ra, pitch, knots, method="akima"
+    bp1,
+    bp2,
+    x,
+    w,
+    integrand,
+    f,
+    B_sup_z,
+    B,
+    B_z_ra,
+    pitch,
+    knots,
+    method="akima",
+    check=False,
 ):
     """Bounce integrate ∫ f(ℓ) dℓ.
 
@@ -798,14 +832,14 @@ def _bounce_quadrature(
             "is interpreted as the batch axis, which enumerates the evaluation "
             "of the function at particular pitch values."
         )
-        errorif(g.ndim > 2, ValueError, msg)
+        errorif(g.ndim > 2, msg=msg)
         return g.reshape(-1, S, knots.size)
 
     f = map(_group_grid_data_by_field_line, f)
     Z = affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
     # Integrate and complete the change of variable.
     result = _interpolatory_quadrature(
-        Z, w, integrand, f, B_sup_z, B, B_z_ra, pitch, knots, method
+        Z, w, integrand, f, B_sup_z, B, B_z_ra, pitch, knots, method, check
     ) * grad_affine_bijection_reverse(bp1, bp2)
     assert result.shape == (pitch.shape[0], S, bp1.shape[-1])
     return result
@@ -816,7 +850,7 @@ _bounce_quadrature.__doc__ = _bounce_quadrature.__doc__.replace(
 )
 
 
-def bounce_integral_map(
+def bounce_integral(
     eq,
     rho=jnp.linspace(1e-12, 1, 5),
     alpha=None,
@@ -881,7 +915,7 @@ def bounce_integral_map(
 
     Returns
     -------
-    bounce_integral : callable
+    bounce_integrate : callable
         This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
         specified field line ℓ (constant rho, alpha), for every λ value in ``pitch``.
     items : dict
@@ -927,14 +961,12 @@ def bounce_integral_map(
         eq = get("HELIOTRON")
         rho = jnp.linspace(1e-12, 1, 6)
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 5)
-        knots = jnp.linspace(0, 6 * jnp.pi, 20)
-
-        bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots)
+        bounce_integrate, items = bounce_integral(eq, rho, alpha)
 
         g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
-        pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
-        num = bounce_integral(integrand_num, g_zz, pitch)
-        den = bounce_integral(integrand_den, [], pitch)
+        pitch = pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])
+        num = bounce_integrate(integrand_num, g_zz, pitch)
+        den = bounce_integrate(integrand_den, [], pitch)
         average = num / den
         assert jnp.isfinite(average).any()
 
@@ -978,7 +1010,12 @@ def bounce_integral_map(
 
     # Compute |B| and group data along field lines.
     grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
-    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc)
+    data = eq.compute(
+        ["B^zeta", "|B|", "|B|_z|r,a"],
+        grid=grid_desc,
+        # TODO: look into override grid in different PR
+        override_grid=False,
+    )
     B_sup_z = data["B^zeta"].reshape(S, knots.size)
     B = data["|B|"].reshape(S, knots.size) / normalize
     B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size) / normalize
@@ -992,7 +1029,7 @@ def bounce_integral_map(
     B_z_ra_c = _poly_der(B_c)
     assert B_z_ra_c.shape == (3, S, knots.size - 1)
 
-    def bounce_integral(integrand, f, pitch, method="akima"):
+    def bounce_integrate(integrand, f, pitch, method="akima"):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
         Parameters
@@ -1034,7 +1071,19 @@ def bounce_integral_map(
         """
         bp1, bp2 = bounce_points(pitch, knots, B_c, B_z_ra_c, check)
         result = _bounce_quadrature(
-            bp1, bp2, x, w, integrand, f, B_sup_z, B, B_z_ra, pitch, knots, method
+            bp1,
+            bp2,
+            x,
+            w,
+            integrand,
+            f,
+            B_sup_z,
+            B,
+            B_z_ra,
+            pitch,
+            knots,
+            method,
+            check,
         )
         assert result.shape[-1] == (knots.size - 1) * 3
         return result
@@ -1047,6 +1096,6 @@ def bounce_integral_map(
             "B.c": B_c,
             "B_z_ra.c": B_z_ra_c,
         }
-        return bounce_integral, items
+        return bounce_integrate, items
     else:
-        return bounce_integral
+        return bounce_integrate

@@ -13,16 +13,20 @@ dependencies:
   - termcolor
   - pip
   - pip:
+    # Conda only parses a single list of pip requirements.
+    # If two pip lists are given, all but the last list is skipped.
     - interpax >= 0.3.1
     - jax[cpu] >= 0.3.2, < 0.5.0
     - nvgpu
     - orthax
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
+    # building the docs
+    - sphinx-github-style >= 1.0, < 2.0
     # testing and benchmarking
     - qsc
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
-    - quadax
+    # - quadax
 
   # building the docs
   - nbsphinx == 0.8.12
@@ -31,8 +35,6 @@ dependencies:
   - sphinx-argparse
   - sphinx-copybutton
   - sphinx_rtd_theme >= 1.0, < 2.0
-  - pip:
-    - sphinx-github-style >= 1.0, < 2.0
 
   # linting
   - black = 24.3.0

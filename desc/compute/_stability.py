@@ -10,7 +10,6 @@ expensive computations.
 """
 
 from orthax import legendre
-from quadax import simpson
 from scipy.constants import mu_0
 
 from desc.backend import jnp, trapezoid
@@ -330,7 +329,8 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
             ∫ db ∑ⱼ Hⱼ² / Iⱼ.
 
         """
-        is_Newton_Cotes = quad == trapezoid or quad == simpson
+        # FIXME: dependency conflict with DESC and quadax.
+        is_Newton_Cotes = quad == trapezoid  # or quad == quadax.simpson
         if is_Newton_Cotes:
             b = composite_linspace(b_knot, kwargs.get("db quad resolution", 19))
             ripple_sum = integrand(b)

@@ -1002,7 +1002,9 @@ def test_only_non_eq_optimization():
 
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(surf, params="R_lmn", indices=surf.R_basis.get_idx(0, 0, 0)),
+        FixParameter(
+            surf, params="R_lmn", indices=np.array(surf.R_basis.get_idx(0, 0, 0))
+        ),
     )
 
     obj = PrincipalCurvature(surf, target=1)

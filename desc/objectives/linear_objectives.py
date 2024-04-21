@@ -178,11 +178,10 @@ class FixParameter(_Objective):
         # this is necessary because of JAX GitHub Issue #4085
         params_leaves = flatten_list(
             [
-                list(
-                    np.array(params_leaves)[idx][
-                        np.argsort(np.array(thing.optimizable_params)[idx])
-                    ]
-                )
+                [
+                    [params_leaves[i] for i in idx][j]
+                    for j in np.argsort(np.array(thing.optimizable_params)[idx])
+                ]
                 for idx in leaf_indices
             ]
         )
@@ -209,15 +208,12 @@ class FixParameter(_Objective):
 
         # set default target
         if self.target is None and self.bounds is None:
-            self.target = jnp.concatenate(
+            self.target = np.concatenate(
                 [
-                    target[idx]
-                    for target, param, idx in zip(
-                        tree_leaves(thing.params_dict),
-                        params_leaves,
-                        self._indices_leaves,
+                    np.atleast_1d(param[idx])
+                    for param, idx in zip(
+                        tree_leaves(thing.params_dict), self._indices_leaves
                     )
-                    if param
                 ]
             )
 
@@ -242,7 +238,7 @@ class FixParameter(_Objective):
         """
         return jnp.concatenate(
             [
-                param[idx]
+                jnp.atleast_1d(param[idx])
                 for param, idx in zip(tree_leaves(params), self._indices_leaves)
             ]
         )

@@ -118,7 +118,7 @@ class _Basis(IOAble, ABC):
 
         Returns
         -------
-        idx : ndarray of int
+        idx : int
             Index of given mode numbers.
 
         """

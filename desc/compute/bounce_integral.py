@@ -282,8 +282,7 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
         field line.
     pitch : Array, shape(P, S)
         λ values.
-        Last axis enumerates the λ value for a particular field line
-        parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
+        λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
         where in the latter the labels (ρ, α) are interpreted as index into the
         last axis that corresponds to that field line.
         If two-dimensional, the first axis is the batch axis as usual.
@@ -310,11 +309,24 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     return B_c, B_z_ra_c, pitch
 
 
-def pitch_of_extrema(knots, B_c, B_z_ra_c):
+def pitch_of_extrema(knots, B_c, B_z_ra_c, sort=False):
     """Return pitch values that will capture fat banana orbits.
 
-    These pitch values are 1/|B|(ζ*) where |B|(ζ*) are local maxima.
-    The local minima are returned as well.
+    Particles with λ = 1 / |B|(ζ*) where |B|(ζ*) are local maxima
+    have fat banana orbits increasing neoclassical transport.
+
+    When computing ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ in equation 29 of
+        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+        Evaluation of 1/ν neoclassical transport in stellarators.
+        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+        https://doi.org/10.1063/1.873749
+    the contribution of ∑ⱼ Hⱼ² / Iⱼ to ε is largest in the intervals such that
+    b ∈ [|B|(ζ*) - db, |B|(ζ*)].
+    To see this, observe that Iⱼ ∼ √(1 − λ B), hence Hⱼ² / Iⱼ ∼ Hⱼ² / √(1 − λ B).
+    For λ = 1 / |B|(ζ*), near |B|(ζ*), the quantity 1 / √(1 − λ B) is singular.
+    The slower |B| tends to |B|(ζ*) the less integrable this singularity becomes.
+    Therefore, a quadrature for ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ would do well to evaluate the
+    integrand near b = 1 / λ = |B|(ζ*).
 
     Parameters
     ----------
@@ -332,6 +344,8 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c):
         Second axis enumerates the splines along the field lines.
         Last axis enumerates the polynomials of the spline along a particular
         field line.
+    sort : bool
+        Whether to sort pitch values in order of increasing ζ* along field line.
 
     Returns
     -------
@@ -342,27 +356,65 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c):
 
         If there were less than ``N * (degree - 1)`` extrema detected along a
         field line, then the first axis, which enumerates the pitch values for
-        a particular field line, is padded with nan.
+        a particular field line, is padded with nan. The first axis is sorted
+        in order of decreasing pitch values.
 
     """
     B_c, B_z_ra_c, _ = _check_shape(knots, B_c, B_z_ra_c)
     S, N, degree = B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
+    # The local minima are returned as well, which has no negative effect
+    # other than perhaps not being an optimal quadrature point.
     extrema = _poly_root(
         c=B_z_ra_c,
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
+        sort=sort,
         # False to double weight orbits with |B|_z_ra = |B|_zz_ra = 0 at bounce points.
         distinct=True,
     )
     # Can detect at most degree of |B|_z_ra spline extrema between each knot.
     assert extrema.shape == (S, N, degree - 1)
-    # Reshape so that last axis enumerates (unsorted) extrema along a field line.
+    # Reshape so that last axis enumerates extrema along a field line.
     B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
     # Might be useful to pad all the nan at the end rather than interspersed.
     B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
     assert pitch.shape == (N * (degree - 1), S)
     return pitch
+
+
+# TODO: Any reason to not define pitch as b from the start?
+#   Would be simpler to use 1/lambda in formulas and redefine lambda = b.
+def pitch_trapz(pitch_knot, resolution):
+    """Returns quadrature points for trapezoidal integration in 1/pitch between knots.
+
+    Parameters
+    ----------
+    pitch_knot : Array, shape(P, S)
+        λ values that should be included as quadrature points.
+        λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
+        where in the latter the labels (ρ, α) are interpreted as index into the
+        last axis that corresponds to that field line.
+        The first axis is the batch axis as usual.
+    resolution : int
+        Number of quadrature points.
+
+    Returns
+    -------
+    pitch : Array, shape((P - 1) * resolution + 1, S)
+        Quadrature points in pitch space.
+
+    """
+    pitch_knot = jnp.atleast_2d(pitch_knot)
+    errorif(pitch_knot.ndim != 2)
+    # It is tedious to do a composite Gauss Quadrature with points at b_knot.
+    # So let's just do trapezoidal for now.
+    b_knot = jnp.sort(1 / pitch_knot, axis=0)
+    b = jnp.linspace(b_knot[:-1, ...], b_knot[1:, ...], resolution, endpoint=False)
+    b = jnp.moveaxis(b, source=0, destination=1).reshape(-1, pitch_knot.shape[-1])
+    b = jnp.append(b, b_knot[jnp.newaxis, -1, ...], axis=0)
+    assert b.shape == ((pitch_knot.shape[0] - 1) * resolution + 1, pitch_knot.shape[-1])
+    return 1 / b
 
 
 def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):
@@ -372,8 +424,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):
     ----------
     pitch : Array, shape(P, S)
         λ values.
-        Last axis enumerates the λ value for a particular field line
-        parameterized by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
+        λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
         where in the latter the labels (ρ, α) are interpreted as index into the
         last axis that corresponds to that field line.
         If two-dimensional, the first axis is the batch axis as usual.
@@ -468,21 +519,19 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):
             "Discontinuity detected. Is B_z_ra the derivative of the spline of B?",
         )
     return bp1, bp2
-    # This is no longer implemented at the moment.
-    #   If the first intersect is at a non-negative derivative, that particle
-    #   may be trapped in a well outside this snapshot of the field line. If, in
-    #   addition, the last intersect is at a non-positive derivative, then we
-    #   have information to compute a bounce integral between these points.
-    #   This single bounce integral is somewhat undefined since the field typically
-    #   does not close on itself, but in some cases it can make sense to include it.
-    #   To make this integral well-defined, an approximation is made that the field
-    #   line is periodic such that ζ = knots[-1] can be interpreted as ζ = 0 so
-    #   that the distance between these bounce points is well-defined. This is fine
-    #   as long as after a transit the field line begins physically close to where
-    #   it began on the previous transit, for then continuity of |B| implies
-    #   |B|(knots[-1] < ζ < knots[-1] + knots[0]) is close to |B|(0 < ζ < knots[0]).
-    #   We don't need to check conditions for the latter, because if they are not
-    #   satisfied, the quadrature will evaluate √(1 − λ |B|) as nan automatically.
+    # Consistent with (in particular the discussion on page 3 and 5 of)
+    # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    # Evaluation of 1/ν neoclassical transport in stellarators.
+    # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    # https://doi.org/10.1063/1.873749.
+    # we ignore the bounce points of particles assigned to a class that
+    # are trapped outside this snapshot of the field line. The caveat
+    # is that the field line discussed in the paper above specifies the
+    # flux surface completely as its length tends to infinity, whereas
+    # the field line snapshot here is for a particular alpha coordinate.
+    # Don't think it's necessary to stitch together the field lines using
+    # rotational transform to potentially capture the bounce point outside
+    # this snapshot of the field line.
 
 
 def _affine_bijection_forward(x, a, b):
@@ -491,13 +540,13 @@ def _affine_bijection_forward(x, a, b):
     return y
 
 
-def _affine_bijection_reverse(x, a, b):
+def affine_bijection_reverse(x, a, b):
     """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
     y = (x + 1) / 2 * (b - a) + a
     return y
 
 
-def _grad_affine_bijection_reverse(a, b):
+def grad_affine_bijection_reverse(a, b):
     """Gradient of reverse affine bijection."""
     dy_dx = (b - a) / 2
     return dy_dx
@@ -640,8 +689,7 @@ _repeated_docstring = """w : Array, shape(w.size, )
         Norm of magnetic field derivative with respect to field-line following label.
     pitch : Array, shape(P, S)
         λ values to evaluate the bounce integral at each field line.
-        Last axis enumerates the λ value for a particular field line parameterized
-        by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
+        λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
         where in the latter the labels (ρ, α) are interpreted as index into the
         last axis that corresponds to that field line.
         The first axis is the batch axis as usual.
@@ -761,11 +809,11 @@ def _bounce_quadrature(
         return g.reshape(-1, S, knots.size)
 
     f = map(_group_grid_data_by_field_line, f)
-    Z = _affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
+    Z = affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
     # Integrate and complete the change of variable.
     result = _interpolatory_quadrature(
         Z, w, integrand, f, B_sup_z, B, B_z_ra, pitch, knots, method
-    ) * _grad_affine_bijection_reverse(bp1, bp2)
+    ) * grad_affine_bijection_reverse(bp1, bp2)
     assert result.shape == (pitch.shape[0], S, bp1.shape[-1])
     return result
 
@@ -975,8 +1023,7 @@ def bounce_integral_map(
             of the function at particular pitch values.
         pitch : Array, shape(P, S)
             λ values to evaluate the bounce integral at each field line.
-            Last axis enumerates the λ value for a particular field line parameterized
-            by ρ, α. That is, λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
+            λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
             where in the latter the labels (ρ, α) are interpreted as index into the
             last axis that corresponds to that field line.
             If two-dimensional, the first axis is the batch axis as usual.

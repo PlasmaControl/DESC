@@ -15,19 +15,20 @@ from scipy.special import ellipkm1
 from desc.backend import complex_sqrt, flatnonzero
 from desc.compute.bounce_integral import (
     _affine_bijection_forward,
-    _affine_bijection_reverse,
     _bounce_quadrature,
-    _grad_affine_bijection_reverse,
     _poly_der,
     _poly_root,
     _poly_val,
+    affine_bijection_reverse,
     automorphism_arcsin,
     automorphism_sin,
     bounce_integral_map,
     bounce_points,
+    grad_affine_bijection_reverse,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     pitch_of_extrema,
+    pitch_trapz,
     take_mask,
     tanh_sinh_quad,
 )
@@ -45,6 +46,7 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
+from desc.utils import only1
 
 
 @partial(np.vectorize, signature="(m)->()")
@@ -87,7 +89,9 @@ def test_mask_operations():
             equal_nan=True,
         ), "take_mask has bugs."
         assert np.array_equal(
-            last[i], desired[-1] if desired.size else np.nan
+            last[i],
+            desired[-1] if desired.size else np.nan,
+            equal_nan=True,
         ), "flatnonzero has bugs."
 
 
@@ -235,8 +239,21 @@ def test_pitch_of_extrema():
     )
     B_z_ra = B.derivative()
     pitch_scipy = 1 / B(B_z_ra.roots(extrapolate=False))
-    pitch = _filter_not_nan(pitch_of_extrema(k, B.c, B_z_ra.c))
-    np.testing.assert_allclose(pitch, pitch_scipy)
+    pitch = pitch_of_extrema(k, B.c, B_z_ra.c)
+    np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy)
+
+
+@pytest.mark.unit
+def test_pitch_trapz():
+    """Test this utility function."""
+    B_min_tz = np.array([0.1, 0.2])
+    B_max_tz = np.array([1, 3])
+    pitch_knot = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
+    pitch = pitch_trapz(pitch_knot, resolution=3)
+    assert np.array_equal(1 / pitch, np.sort(1 / pitch, axis=-1))
+    for i in range(pitch_knot.shape[0]):
+        for j in range(pitch_knot.shape[1]):
+            assert only1(np.isclose(pitch_knot[i, j], pitch[:, j]).tolist())
 
 
 @pytest.mark.unit
@@ -392,14 +409,14 @@ def test_automorphism():
     a, b = -312, 786
     x = np.linspace(a, b, 10)
     y = _affine_bijection_forward(x, a, b)
-    x_1 = _affine_bijection_reverse(y, a, b)
+    x_1 = affine_bijection_reverse(y, a, b)
     np.testing.assert_allclose(x_1, x)
     np.testing.assert_allclose(_affine_bijection_forward(x_1, a, b), y)
     np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y)
     np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y)
 
     np.testing.assert_allclose(
-        _grad_affine_bijection_reverse(a, b),
+        grad_affine_bijection_reverse(a, b),
         1 / (2 / (b - a)),
     )
     np.testing.assert_allclose(
@@ -581,7 +598,7 @@ def test_integral_0(k=0.9, resolution=10):
     bp1 = np.zeros_like(k)
     bp2 = np.arcsin(k)
     x, w = tanh_sinh_quad(resolution, grad_automorphism_arcsin)
-    Z = _affine_bijection_reverse(
+    Z = affine_bijection_reverse(
         automorphism_arcsin(x), bp1[..., np.newaxis], bp2[..., np.newaxis]
     )
     k = k[..., np.newaxis]
@@ -589,7 +606,7 @@ def test_integral_0(k=0.9, resolution=10):
     def integrand(Z, k):
         return safediv(4 / k, np.sqrt(1 - 1 / k**2 * np.sin(Z) ** 2))
 
-    quad = np.dot(integrand(Z, k), w) * _grad_affine_bijection_reverse(bp1, bp2)
+    quad = np.dot(integrand(Z, k), w) * grad_affine_bijection_reverse(bp1, bp2)
     if k.size == 1:
         q = integrate.quad(integrand, bp1.item(), bp2.item(), args=(k.item(),))[0]
         np.testing.assert_allclose(quad, q, rtol=1e-5)
@@ -603,7 +620,7 @@ def test_integral_1(k=0.9, resolution=10):
     bp1 = np.zeros_like(k)
     bp2 = np.arcsin(k)
     x, w = tanh_sinh_quad(resolution, grad_automorphism_arcsin)
-    Z = _affine_bijection_reverse(
+    Z = affine_bijection_reverse(
         automorphism_arcsin(x), bp1[..., np.newaxis], bp2[..., np.newaxis]
     )
     k = k[..., np.newaxis]
@@ -611,7 +628,7 @@ def test_integral_1(k=0.9, resolution=10):
     def integrand(Z, k):
         return 4 * k * np.sqrt(1 - 1 / k**2 * np.sin(Z) ** 2)
 
-    quad = np.dot(integrand(Z, k), w) * _grad_affine_bijection_reverse(bp1, bp2)
+    quad = np.dot(integrand(Z, k), w) * grad_affine_bijection_reverse(bp1, bp2)
     if k.size == 1:
         q = integrate.quad(integrand, bp1.item(), bp2.item(), args=(k.item(),))[0]
         np.testing.assert_allclose(quad, q, rtol=1e-4)

@@ -258,6 +258,34 @@ def _poly_val(x, c):
     return val
 
 
+def composite_linspace(knots, resolution):
+    """Returns linearly spaced points between ``knots``.
+
+    Parameters
+    ----------
+    knots : Array
+        First axis has values to return linearly spaced values between.
+        The remaining axis are batch axes.
+    resolution : int
+        Number of points between each knot.
+
+    Returns
+    -------
+    result : Array, shape((knots.shape[0] - 1) * resolution + 1, *knots.shape[1:])
+        Sorted linearly spaced points between ``knots``.
+
+    """
+    knots = jnp.atleast_1d(knots)
+    P = knots.shape[0]
+    S = knots.shape[1:]
+    knots = jnp.sort(knots, axis=0)
+    result = jnp.linspace(knots[:-1, ...], knots[1:, ...], resolution, endpoint=False)
+    result = jnp.moveaxis(result, source=0, destination=1).reshape(-1, *S)
+    result = jnp.append(result, knots[jnp.newaxis, -1, ...], axis=0)
+    assert result.shape == ((P - 1) * resolution + 1, *S)
+    return result
+
+
 def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     """Ensure inputs have compatible shape, and return them with full dimension.
 
@@ -369,7 +397,6 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, sort=False):
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
         sort=sort,
-        # False to double weight orbits with |B|_z_ra = |B|_zz_ra = 0 at bounce points.
         distinct=True,
     )
     # Can detect at most degree of |B|_z_ra spline extrema between each knot.
@@ -381,42 +408,6 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, sort=False):
     pitch = 1 / B_extrema.T
     assert pitch.shape == (N * (degree - 1), S)
     return pitch
-
-
-def composite_linspace(knots, resolution, invert=False):
-    """Returns linearly spaced points between ``knots``.
-
-    Parameters
-    ----------
-    knots : Array, shape(P, ...)
-        First axis has values to return linearly spaced values between.
-        The remaining axis are batch axes.
-    resolution : int
-        Number of points between each knot.
-    invert : bool
-        Whether the spacing is uniform in ``1 / knots`` or ``knots``.
-
-    Returns
-    -------
-    result : Array, shape((P - 1) * resolution + 1, *knots.shape[1:])
-        Sorted in increasing order of ``1 / knots`` or ``knots``
-        depending on whether ``invert`` is true or false, respectively.
-
-    """
-    knots = jnp.atleast_1d(knots)
-    P = knots.shape[0]
-    S = knots.shape[1:]
-
-    def inverse_if_invert(f):
-        return 1 / f if invert else f
-
-    b_knot = jnp.sort(inverse_if_invert(knots), axis=0)
-    b = jnp.linspace(b_knot[:-1, ...], b_knot[1:, ...], resolution, endpoint=False)
-    b = jnp.moveaxis(b, source=0, destination=1).reshape(-1, *S)
-    b = jnp.append(b, b_knot[jnp.newaxis, -1, ...], axis=0)
-    assert b.shape == ((P - 1) * resolution + 1, *S)
-    result = inverse_if_invert(b)
-    return result
 
 
 def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):
@@ -639,7 +630,7 @@ def tanh_sinh_quad(resolution, w=lambda x: 1):
     Parameters
     ----------
     resolution: int
-        Number of quadrature points.
+        Number of quadrature points, preferably odd.
     w : callable
         Weight function defined, positive, and continuous on (-1, 1).
 

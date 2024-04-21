@@ -245,30 +245,20 @@ def test_pitch_of_extrema():
 
 @pytest.mark.unit
 def test_composite_linspace():
-    """Test this utility function useful for integration over pitch variable."""
+    """Test this utility function useful for Newton-Cotes integration over pitch."""
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
     pitch_knot = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
-
-    def inverse_if_invert(f, invert):
-        return 1 / f if invert else f
-
-    def test(invert):
-        print()
-        print(inverse_if_invert(pitch_knot, invert))
-        pitch = composite_linspace(pitch_knot, resolution=3, invert=invert)
-        b = inverse_if_invert(pitch, invert)
-        print()
-        print(b)
-        np.testing.assert_allclose(
-            b, np.sort(b, axis=0), atol=0, rtol=0, err_msg=invert
-        )
-        for i in range(pitch_knot.shape[0]):
-            for j in range(pitch_knot.shape[1]):
-                assert only1(np.isclose(pitch_knot[i, j], pitch[:, j]).tolist())
-
-    test(False)
-    test(True)
+    b_knot = 1 / pitch_knot
+    print()
+    print(b_knot)
+    b = composite_linspace(b_knot, resolution=3)
+    print()
+    print(b)
+    np.testing.assert_allclose(b, np.sort(b, axis=0), atol=0, rtol=0)
+    for i in range(pitch_knot.shape[0]):
+        for j in range(pitch_knot.shape[1]):
+            assert only1(np.isclose(b_knot[i, j], b[:, j]).tolist())
 
 
 @pytest.mark.unit

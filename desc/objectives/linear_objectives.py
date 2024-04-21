@@ -187,7 +187,8 @@ class FixParameter(_Objective):
         )
 
         # set indices
-        if isinstance(self._indices, bool) and self._indices:  # default to all params
+        if isinstance(self._indices, bool):  # default to all indices
+            errorif(not self._indices, ValueError, "indices cannot be False")
             indices = tree_map(lambda dim: np.arange(dim, dtype=int), thing.dimensions)
             indices_leaves = [
                 idx if param else False
@@ -252,9 +253,7 @@ class FixParameter(_Objective):
             Optimizable object that will be optimized to satisfy the Objective.
 
         """
-        new_target = self.compute(thing.params_dict)
-        assert len(new_target) == len(self.target)
-        self.target = new_target
+        self.target = self.compute(thing.params_dict)
         if self._use_jit:
             self.jit()
 

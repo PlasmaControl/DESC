@@ -22,6 +22,7 @@ dependencies:
     # testing and benchmarking
     - qsc
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
+    - quadax
 
   # building the docs
   - nbsphinx == 0.8.12

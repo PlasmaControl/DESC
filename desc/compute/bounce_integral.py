@@ -639,7 +639,7 @@ def tanh_sinh_quad(resolution, w=lambda x: 1):
     Parameters
     ----------
     resolution: int
-        Number of quadrature points.
+        Number of quadrature points, preferably odd.
     w : callable
         Weight function defined, positive, and continuous on (-1, 1).
 

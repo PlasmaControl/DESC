@@ -10,6 +10,7 @@ expensive computations.
 """
 
 from orthax import legendre
+from quadax import simpson
 from scipy.constants import mu_0
 
 from desc.backend import jnp, trapezoid
@@ -17,9 +18,9 @@ from desc.backend import jnp, trapezoid
 from .bounce_integral import (
     affine_bijection_reverse,
     bounce_integral_map,
+    composite_linspace,
     grad_affine_bijection_reverse,
     pitch_of_extrema,
-    pitch_trapz,
 )
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals_map
@@ -249,15 +250,13 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["rho", "|grad(psi)|", "kappa_g", "sqrt(g)", "psi_r", "S(r)", "R"],
+    data=["rho", "|grad(psi)|", "kappa_g", "sqrt(g)", "psi_r", "S(r)", "V_r(r)", "R"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     # Evaluation of 1/ν neoclassical transport in stellarators.
     # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     # https://doi.org/10.1063/1.873749.
-    raise NotImplementedError("Effective ripple requires GitHub PR #854.")
-
     kwargs.setdefault(
         "knots",
         jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, transforms["grid"].num_zeta),
@@ -269,7 +268,12 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     alpha = affine_bijection_reverse(alpha, 0, alpha_max)
     alpha_weight = alpha_weight * grad_affine_bijection_reverse(0, alpha_max)
     rho = transforms["grid"].compress(data["rho"])
-    bounce_integral, items = bounce_integral_map(rho, alpha, kwargs["knots"])
+    # TODO: (outside scope of ripple pr)
+    #  bounce_integral_map only needs eq because map_coordinates needs it.
+    #  Maybe modify map coordinates to work with transforms and not eq object?
+    bounce_integral, items = bounce_integral_map(
+        kwargs["eq"], rho, alpha, kwargs["knots"]
+    )
 
     def integrand_H(grad_psi_norm, kappa_g, B, pitch, Z):
         return (
@@ -284,22 +288,71 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     def integrand_I(B, pitch, Z):
         return jnp.sqrt(1 - pitch * B) / B
 
-    pitch = pitch_of_extrema(kwargs["knots"], items["B.c"], items["B_z_ra.c"])
-    pitch = pitch_trapz(pitch, kwargs.get("pitch quad resolution", 20))
-    H = bounce_integral(integrand_H, [data["|grad(psi)|"], data["kappa_g"]], pitch)
-    I = bounce_integral(integrand_I, [], pitch)
-    H = H.reshape(H.shape[0], rho.size, alpha.size, -1)
-    I = I.reshape(I.shape[0], rho.size, alpha.size, -1)
-    pitch = pitch.reshape(-1, rho.size, alpha.size)
+    def ripple_sum(b):
+        """Return the ripple sum ∑ⱼ Hⱼ² / Iⱼ evaluated at b.
 
-    # E = ∑ⱼ Hⱼ² / Iⱼ except the sum over j is split across the axis enumerating alpha.
-    E = jnp.nansum(H**2 / I, axis=-1)
-    # E = ∫ db ∑ⱼ Hⱼ² / Iⱼ
-    E = jnp.dot(trapezoid(E, 1 / pitch, axis=0), alpha_weight)
-    surface_integrate = surface_integrals_map(transforms["grid"], expand_out=False)
-    s1 = surface_integrate(data["sqrt(g)"] / data["psi_r"])
-    s2 = transforms["grid"].compress(data["S(r)"])
+        Parameters
+        ----------
+        b : Array
+            Multiplicative inverse of pitch angle.
 
-    epsilon = (jnp.pi * data["R"] ** 2 / (8 * 2**0.5) * s1 / s2**2 * E) ** (2 / 3)
-    data["effective ripple"] = transforms["grid"].expand(epsilon)
+        Returns
+        -------
+        ripple : Array, shape(..., rho.size, alpha.size)
+            ∑ⱼ Hⱼ² / Iⱼ except the sum over j is split across axis enumerating alpha.
+
+        """
+        pitch = 1 / b
+        H = bounce_integral(integrand_H, [data["|grad(psi)|"], data["kappa_g"]], pitch)
+        I = bounce_integral(integrand_I, [], pitch)
+        H = H.reshape(H.shape[0], rho.size, alpha.size, -1)
+        I = I.reshape(I.shape[0], rho.size, alpha.size, -1)
+        ripple = jnp.nansum(H**2 / I, axis=-1)
+        return ripple
+
+    def db_integrate(integrand, b_knot, quad):
+        """Return the ripple sum integral ∫ db ∑ⱼ Hⱼ² / Iⱼ.
+
+        Parameters
+        ----------
+        integrand : callable
+            Function to integrate.
+        b_knot : Array
+            Breakpoints where the quadrature should take more care.
+            For simple schemes this means to include a quadrature point here.
+        quad : callable
+            Quadrature method.
+            See https://quadax.readthedocs.io/en/latest/index.html.
+
+        Returns
+        -------
+        ripple : Array, shape(rho.size, )
+            ∫ db ∑ⱼ Hⱼ² / Iⱼ.
+
+        """
+        is_Newton_Cotes = quad == trapezoid or quad == simpson
+        if is_Newton_Cotes:
+            b = composite_linspace(b_knot, kwargs.get("db quad resolution", 19))
+            ripple_sum = integrand(b)
+            ripple = quad(ripple_sum, b.reshape(ripple_sum.shape), axis=0)
+        else:
+            # Could use adaptive Clenshaw-Curtis quadrature with
+            # quadax.quadcc(integrand, b_knot).
+            raise NotImplementedError
+        return jnp.dot(ripple, alpha_weight)
+
+    # TODO: Seems more natural to define pitch = lambda = b from the start...
+    # TODO: need to add B_max_tz.
+    b = 1 / pitch_of_extrema(kwargs["knots"], items["B.c"], items["B_z_ra.c"])
+
+    ripple = db_integrate(ripple_sum, b, kwargs.get("db quad", trapezoid))
+    ripple = transforms["grid"].expand(ripple)
+    data["effective ripple"] = (
+        jnp.pi
+        * data["R"] ** 2
+        / (8 * 2**0.5)
+        * (data["V_r(r)"] / data["psi_r"])
+        / data["S(r)"] ** 2
+        * ripple
+    ) ** (2 / 3)
     return data

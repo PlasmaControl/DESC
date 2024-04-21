@@ -71,6 +71,7 @@ class _FixedObjective(_Objective):
         return target, bounds
 
 
+# Rename to `FixParameters` (plural) instead?
 class FixParameter(_Objective):
     """Fix specific degrees of freedom associated with a given Optimizable thing.
 
@@ -174,13 +175,15 @@ class FixParameter(_Objective):
         assert tree_structure(self._params) == structure
         params_leaves = tree_leaves(self._params)
 
-        # sort params to the same flattend order as indices
+        # sort params to the same flattend leaf order as indices
         # this is necessary because of JAX GitHub Issue #4085
         params_leaves = flatten_list(
             [
                 [
                     [params_leaves[i] for i in idx][j]
-                    for j in np.argsort(np.array(thing.optimizable_params)[idx])
+                    for j in np.argsort(
+                        np.atleast_1d(tree_leaves(thing.optimizable_params))[idx]
+                    )
                 ]
                 for idx in leaf_indices
             ]

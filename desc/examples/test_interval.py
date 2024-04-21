@@ -19,7 +19,7 @@ from desc.geometry import convert_spectral_to_FE
 M = 20  # Note M > 2 required
 N = 0
 L = 0
-K = 2
+K = 1
 mesh = FiniteElementMesh1D(M, K=K)
 integral = mesh.integrate(np.ones((M * mesh.nquad, 1000)))
 length_total = 0.0

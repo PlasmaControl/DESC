@@ -1,6 +1,5 @@
 """Classes for spectral bases and functions for evaluation."""
 import functools
-import math as mth
 import warnings
 from abc import ABC, abstractmethod
 from math import factorial
@@ -2252,49 +2251,34 @@ class FiniteElementMesh2D:
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
 
-        """
-        Still working on implementation for any L,M. For now, taking cases and
-        taking advantage of mesh.refined() in scikit. Starting with a unit square
-        in (rho,theta):
+        # rho_theta mesh
+        # Go back later to fix visualization
+        mesh = fem.MeshLine(np.linspace(0, 1, L)) * fem.MeshLine(
+            np.linspace(0, 2 * np.pi, M)
+        )
 
-        mesh.refined(1) divides [0,1] in half on both axes (8 finite elements)
-        mesh.refined(2) divides [0,1] in quarters on both axes (32 finite elements)
-        .
-        .
-        .
-        mesh.refined(n) divides [0,1] into 2^n (2^(2n+1) finite elements)
-
-
-        """
-        if (
-            mth.log(M, 2).is_integer() is True
-            and mth.log(L, 2).is_integer() is True
-            # and L == M
-        ):
-
-            p = 0  # int(mth.log(M, 2))
-            mesh = fem.MeshLine(np.linspace(0, 1, L)) * fem.MeshLine(
-                np.linspace(0, 2 * np.pi, M, endpoint=True)
-            )  # .to_meshtri().refined(p)
+        # Turn squares into triangles
+        mesh = mesh.to_meshtri()
 
         vertices = mesh.doflocs
+
+        # Turning vertices into shape(number of points, number of coordaintes)
+        vertices = vertices.T
         print(vertices, vertices.shape)
-
-        # Rescale Theta axis by 2pi:
-        mesh.doflocs[1] = 2 * np.pi * mesh.doflocs[1]
-
-        if K == 1:
-            element = fem.ElementTriP1()
-        else:
-            element = fem.ElementTriP2()
-        # Will form basis later
 
         # Plotting the 2D Mesh
         from skfem.visuals.matplotlib import draw, draw_mesh2d
 
         ax = draw(mesh)
         p = draw_mesh2d(mesh, ax=ax)
-        p.show()
+        p.show
+
+        if K == 1:
+            element = fem.ElementTriP1()
+
+        else:
+
+            element = fem.ElementTriP2()
 
         # Will fix this next section later
         # Compute the triangle elements for all 2ML triangles
@@ -2302,10 +2286,10 @@ class FiniteElementMesh2D:
         for i in range(M):
             for j in range(L):
                 # Deal with the periodic boundary conditions...??
-                triangle1 = TriangleFiniteElement(vertices[(i + j * M) * 2, :, :], K=K)
-                triangle2 = TriangleFiniteElement(
-                    vertices[(i + j * M) * 2 + 1, :, :], K=K
-                )
+
+                # Going to use mesh.elements_satisfying to retrieve vertices
+                triangle1 = TriangleFiniteElement(vertices[(i + j * M) * 2, :], K=K)
+                triangle2 = TriangleFiniteElement(vertices[(i + j * M) * 2 + 1, :], K=K)
                 triangles.append(triangle1)
                 triangles.append(triangle2)
         self.vertices = vertices

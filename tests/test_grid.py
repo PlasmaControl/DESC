@@ -14,6 +14,8 @@ from desc.grid import (
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
+    meshgrid_inverse_idx,
+    meshgrid_unique_idx,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -753,6 +755,25 @@ class TestGrid:
         test("rho", cg_sym)
         test("theta", cg_sym)
         test("zeta", cg_sym)
+
+    @pytest.mark.unit
+    def test_meshgrid_idx(self):
+        """Test unique, inverse idx computing logic from meshgrid."""
+        R = np.linspace(0, 1, 4)
+        T = np.linspace(0, 2 * np.pi, 2)
+        Z = np.linspace(0, 10 * np.pi, 3)
+        r, t, z = map(np.ravel, np.meshgrid(R, T, Z, indexing="ij"))
+        uR, uT, uZ = meshgrid_unique_idx(R.size, T.size, Z.size)
+        iR, iT, iZ = meshgrid_inverse_idx(R.size, T.size, Z.size)
+        _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(uR, unique)
+        np.testing.assert_allclose(iR, inverse)
+        _, unique, inverse = np.unique(t, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(uT, unique)
+        np.testing.assert_allclose(iT, inverse)
+        _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(uZ, unique)
+        np.testing.assert_allclose(iZ, inverse)
 
 
 @pytest.mark.unit

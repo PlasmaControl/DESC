@@ -73,6 +73,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     vmap = jax.vmap
     scan = jax.lax.scan
     bincount = jnp.bincount
+    repeat = jnp.repeat
+    flatnonzero = jnp.flatnonzero
+    take = jnp.take
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -110,6 +113,38 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
+
+    def put_along_axis(arr, indices, values, axis):
+        """Put values into the destination array by matching 1d index and data slices.
+
+        This iterates over matching 1d slices oriented along the specified axis in
+        the index and data arrays, and uses the former to place values into the
+        latter.
+
+        Parameters
+        ----------
+        arr : ndarray (Ni..., M, Nk...)
+            Destination array.
+        indices : ndarray (Ni..., J, Nk...)
+            Indices to change along each 1d slice of `arr`. This must match the
+            dimension of arr, but dimensions in Ni and Nj may be 1 to broadcast
+            against `arr`.
+        values : array_like (Ni..., J, Nk...)
+            values to insert at those indices. Its shape and dimension are
+            broadcast to match that of `indices`.
+        axis : int
+            The axis to take 1d slices along. If axis is None, the destination
+            array is treated as if a flattened 1d view had been created of it.
+
+        """
+        if not (axis == -1 or axis == arr.ndim - 1):
+            raise NotImplementedError(
+                f"put_along_axis for axis={axis} not implemented yet."
+            )
+        if isinstance(arr, np.ndarray):
+            arr[..., indices] = values
+            return arr
+        return jnp.asarray(arr).at[..., indices].set(values)
 
     def sign(x):
         """Sign function, but returns 1 for x==0.
@@ -376,6 +411,26 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         else:
             return jax.scipy.integrate.trapezoid(y, x, dx, axis)
 
+    def complex_sqrt(x):
+        """Compute the square root of x.
+
+        For negative input elements, a complex value is returned
+        (unlike numpy.sqrt which returns NaN).
+
+        Parameters
+        ----------
+        x : array_like
+            The input value(s).
+
+        Returns
+        -------
+        out : ndarray
+            The square root of x.
+
+        """
+        out = jnp.sqrt(x.astype("complex128"))
+        return out
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -391,6 +446,9 @@ else:  # pragma: no cover
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
+
+    complex_sqrt = np.emath.sqrt
+    put_along_axis = np.put_along_axis
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
@@ -569,7 +627,8 @@ else:  # pragma: no cover
             val = body_fun(val)
         return val
 
-    def vmap(fun, out_axes=0):
+    # TODO: generalize this, maybe use np.vectorize
+    def vmap(fun, in_axes=0, out_axes=0):
         """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
 
         Like Python's builtin map,
@@ -580,6 +639,8 @@ else:  # pragma: no cover
         ----------
         fun: callable
             Function (A -> B)
+        in_axes: int
+            Axis to map over.
         out_axes: int
             An integer indicating where the mapped axis should appear in the output.
 
@@ -589,8 +650,16 @@ else:  # pragma: no cover
             Vectorized version of fun.
 
         """
+        if in_axes != 0:
+            raise NotImplementedError(
+                f"Backend for numpy vmap for in_axes={in_axes} not implemented yet."
+            )
 
         def fun_vmap(fun_inputs):
+            if isinstance(fun_inputs, tuple):
+                raise NotImplementedError(
+                    "Backend implementation of vmap fails for multiple args in tuple."
+                )
             return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
 
         return fun_vmap
@@ -634,9 +703,21 @@ else:  # pragma: no cover
             ys.append(y)
         return carry, np.stack(ys)
 
-    def bincount(x, weights=None, minlength=None, length=None):
-        """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
-        return np.bincount(x, weights, minlength)
+    def bincount(x, weights=None, minlength=0, length=None):
+        """A numpy implementation of jnp.bincount."""
+        x = np.clip(x, 0, None)
+        if length is None:
+            length = max(minlength, x.max() + 1)
+        else:
+            minlength = max(minlength, length)
+        return np.bincount(x, weights, minlength)[:length]
+
+    def repeat(a, repeats, axis=None, total_repeat_length=None):
+        """A numpy implementation of jnp.repeat."""
+        out = np.repeat(a, repeats, axis)
+        if total_repeat_length is not None:
+            out = out[:total_repeat_length]
+        return out
 
     def custom_jvp(fun, *args, **kwargs):
         """Dummy function for custom_jvp without JAX."""
@@ -755,3 +836,44 @@ else:  # pragma: no cover
             return np.trapezoid(y, x, dx, axis)
         else:
             return np.trapz(y, x, dx, axis)
+
+    def flatnonzero(a, size=None, fill_value=0):
+        """A numpy implementation of jnp.flatnonzero."""
+        nz = np.flatnonzero(a)
+        if size is not None:
+            nz = np.pad(nz, (0, max(size - nz.size, 0)), constant_values=fill_value)
+        return nz
+
+    def take(
+        a,
+        indices,
+        axis=None,
+        out=None,
+        mode="fill",
+        unique_indices=False,
+        indices_are_sorted=False,
+        fill_value=None,
+    ):
+        """A numpy implementation of jnp.take."""
+        if mode == "fill":
+            if fill_value is None:
+                # copy jax logic
+                # https://jax.readthedocs.io/en/latest/_modules/jax/_src/lax/slicing.html#gather
+                if np.issubdtype(a.dtype, np.inexact):
+                    fill_value = np.nan
+                elif np.issubdtype(a.dtype, np.signedinteger):
+                    fill_value = np.iinfo(a.dtype).min
+                elif np.issubdtype(a.dtype, np.unsignedinteger):
+                    fill_value = np.iinfo(a.dtype).max
+                elif a.dtype == np.bool_:
+                    fill_value = True
+                else:
+                    raise ValueError(f"Unsupported dtype {a.dtype}.")
+            out = np.where(
+                (-a.size <= indices) & (indices < a.size),
+                np.take(a, indices, axis, out, mode="wrap"),
+                fill_value,
+            )
+        else:
+            out = np.take(a, indices, axis, out, mode)
+        return out

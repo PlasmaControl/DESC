@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from scipy import optimize, special
 
-from desc.backend import fori_loop, jnp, put
+from desc.backend import fori_loop, jnp, put, repeat, take
 from desc.io import IOAble
 from desc.utils import Index, check_nonnegint, check_posint, errorif
 
@@ -349,28 +349,18 @@ class _Grid(IOAble, ABC):
 
         """
         assert surface_label in {"rho", "theta", "zeta"}
+        errorif(
+            not hasattr(self, f"_unique_{surface_label}_idx"),
+            AttributeError,
+            "compress operation undefined for jit compatible grids",
+        )
         assert len(x) == self.num_nodes
         if surface_label == "rho":
-            errorif(
-                not hasattr(self, "_unique_rho_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_rho_idx]
+            return take(x, self.unique_rho_idx, axis=0, unique_indices=True)
         if surface_label == "theta":
-            errorif(
-                not hasattr(self, "_unique_theta_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_theta_idx]
+            return take(x, self.unique_theta_idx, axis=0, unique_indices=True)
         if surface_label == "zeta":
-            errorif(
-                not hasattr(self, "_unique_zeta_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_zeta_idx]
+            return take(x, self.unique_zeta_idx, axis=0, unique_indices=True)
 
     def expand(self, x, surface_label="rho"):
         """Expand ``x`` by duplicating elements to match the grid's pattern.
@@ -395,28 +385,18 @@ class _Grid(IOAble, ABC):
 
         """
         assert surface_label in {"rho", "theta", "zeta"}
+        errorif(
+            not hasattr(self, f"_inverse_{surface_label}_idx"),
+            AttributeError,
+            "expand operation undefined for jit compatible grids",
+        )
         if surface_label == "rho":
-            errorif(
-                not hasattr(self, "_inverse_rho_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
             assert len(x) == self.num_rho
             return x[self.inverse_rho_idx]
         if surface_label == "theta":
-            errorif(
-                not hasattr(self, "_inverse_theta_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
             assert len(x) == self.num_theta
             return x[self.inverse_theta_idx]
         if surface_label == "zeta":
-            errorif(
-                not hasattr(self, "_inverse_zeta_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
             assert len(x) == self.num_zeta
             return x[self.inverse_zeta_idx]
 
@@ -448,14 +428,14 @@ class _Grid(IOAble, ABC):
             xc = other_grid.compress(x, surface_label)
             y = self.expand(xc, surface_label)
         except AttributeError:
-            self_nodes = jnp.asarray(self.nodes)
-            other_nodes = jnp.asarray(other_grid.nodes)
             axis = {"rho": 0, "theta": 1, "zeta": 2}[surface_label]
+            self_nodes = jnp.asarray(self.nodes[:, axis])
+            other_nodes = jnp.asarray(other_grid.nodes[:, axis])
             y = jnp.zeros((self.num_nodes, *x.shape[1:]))
 
             def body(i, y):
                 y = jnp.where(
-                    jnp.abs(self_nodes[:, axis] - other_nodes[i, axis]) <= tol,
+                    jnp.abs(self_nodes - other_nodes[i]) <= tol,
                     x[i],
                     y,
                 )
@@ -509,13 +489,15 @@ class Grid(_Grid):
         Node coordinates, in (rho,theta,zeta)
     sort : bool
         Whether to sort the nodes for use with FFT method.
+    spacing : ndarray of shape(num_nodes, 3)
+        May be provided to ensure even spacing for surface averages etc.
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
         etc may be wrong if grid contains duplicate nodes.
     """
 
-    def __init__(self, nodes, sort=False, jitable=False, **kwargs):
+    def __init__(self, nodes, sort=False, jitable=False, spacing=None, **kwargs):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
@@ -523,6 +505,8 @@ class Grid(_Grid):
         self._sym = False
         self._node_pattern = "custom"
         self._nodes, self._spacing = self._create_nodes(nodes)
+        if spacing is not None:
+            self._spacing = spacing
         if sort:
             self._sort_nodes()
         if jitable:
@@ -650,6 +634,8 @@ class LinearGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._endpoint = bool(endpoint)
+        self._theta_endpoint = False
+        self._zeta_endpoint = False
         self._node_pattern = "linear"
         self._nodes, self._spacing = self._create_nodes(
             L=L,
@@ -885,38 +871,26 @@ class LinearGrid(_Grid):
             else:
                 dz = np.array([ZETA_ENDPOINT])
 
-        self._endpoint = (
+        self._theta_endpoint = (
             t.size > 0
-            and z.size > 0
-            and (
-                (
-                    np.isclose(t[0], 0, atol=1e-12)
-                    and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
-                )
-                or (t.size == 1 and z.size > 1)
-            )
-            and (
-                (
-                    np.isclose(z[0], 0, atol=1e-12)
-                    and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
-                )
-                or (z.size == 1 and t.size > 1)
-            )
-        )  # if only one theta or one zeta point, can have endpoint=True
+            and np.isclose(t[0], 0, atol=1e-12)
+            and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
+        )
+        self._zeta_endpoint = (
+            z.size > 0
+            and np.isclose(z[0], 0, atol=1e-12)
+            and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
+        )
+        # if only one theta or one zeta point, can have endpoint=True
         # if the other one is a full array
+        self._endpoint = (self._theta_endpoint or (t.size == 1 and z.size > 1)) and (
+            self._zeta_endpoint or (z.size == 1 and t.size > 1)
+        )
 
-        r, t, z = np.meshgrid(r, t, z, indexing="ij")
-        r = r.flatten()
-        t = t.flatten()
-        z = z.flatten()
-
-        dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
-        dr = dr.flatten()
-        dt = dt.flatten()
-        dz = dz.flatten()
-
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
+        r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
+        dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
+        nodes = np.column_stack([r, t, z])
+        spacing = np.column_stack([dr, dt, dz])
 
         return nodes, spacing
 
@@ -1596,3 +1570,81 @@ def find_least_rational_surfaces(
     io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
     rho = _find_rho(iota, io, tol=atol)
     return rho, io
+
+
+def meshgrid_inverse_idx(a_size, b_size, c_size):
+    """Return inverse indices for meshgrid pattern.
+
+    It is common to construct a meshgrid in the following manner.
+        .. code-block:: python
+
+        a, b, c = jnp.meshgrid(a, b, c, indexing="ij")
+        a, b, c = map(jnp.ravel, (a, b, c))
+        nodes = jnp.column_stack([a, b, c])
+        grid = Grid(nodes, sort=False, jitable=True)
+
+    Since ``jitable=True`` was specified, the attribute ``grid.inverse_*_idx``
+    can not be automatically computed.  This method computes these indices.
+    One can then pass them in as keyword arguments to the Grid constructor.
+
+    Parameters
+    ----------
+    a_size : int
+        Size of the first argument to meshgrid.
+    b_size : int
+        Size of the second argument to meshgrid.
+    c_size : int
+        Size of the third argument to meshgrid.
+
+    Returns
+    -------
+    inverse_idx : ndarray, ndarray, ndarray
+        The inverse indices.
+
+    """
+    inverse_a_idx = repeat(
+        jnp.arange(a_size),
+        b_size * c_size,
+        total_repeat_length=a_size * b_size * c_size,
+    )
+    inverse_b_idx = jnp.tile(
+        repeat(jnp.arange(b_size), c_size, total_repeat_length=b_size * c_size), a_size
+    )
+    inverse_c_idx = jnp.tile(jnp.arange(c_size), a_size * b_size)
+    return inverse_a_idx, inverse_b_idx, inverse_c_idx
+
+
+def meshgrid_unique_idx(a_size, b_size, c_size):
+    """Return unique indices for meshgrid pattern.
+
+    It is common to construct a meshgrid in the following manner.
+        .. code-block:: python
+
+        a, b, c = jnp.meshgrid(a, b, c, indexing="ij")
+        a, b, c = map(jnp.ravel, (a, b, c))
+        nodes = jnp.column_stack([a, b, c])
+        grid = Grid(nodes, sort=False, jitable=True)
+
+    Since ``jitable=True`` was specified, the attribute ``grid.unique_*_idx``
+    can not be automatically computed. This method computes these indices.
+    One can then pass them in as keyword arguments to the Grid constructor.
+
+    Parameters
+    ----------
+    a_size : int
+        Size of the first argument to meshgrid.
+    b_size : int
+        Size of the second argument to meshgrid.
+    c_size : int
+        Size of the third argument to meshgrid.
+
+    Returns
+    -------
+    unique_idx : ndarray, ndarray, ndarray
+        The unique indices.
+
+    """
+    unique_a_idx = jnp.arange(a_size) * b_size * c_size
+    unique_b_idx = jnp.arange(b_size) * c_size
+    unique_c_idx = jnp.arange(c_size)
+    return unique_a_idx, unique_b_idx, unique_c_idx

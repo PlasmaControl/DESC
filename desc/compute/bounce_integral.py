@@ -1,21 +1,26 @@
 """."""
 
 
-def affine_bijection_reverse():
+def affine_bijection_reverse(*args):
     """."""
     pass
 
 
-def grad_affine_bijection_reverse():
+def grad_affine_bijection_reverse(*args):
     """."""
     pass
 
 
-def bounce_integral_map():
+def bounce_integral_map(*args):
     """."""
     pass
 
 
-def pitch_of_extrema():
+def pitch_of_extrema(*args):
+    """."""
+    pass
+
+
+def pitch_trapz(*args):
     """."""
     pass

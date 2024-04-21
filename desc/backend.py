@@ -368,6 +368,14 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         )
         return x, (jnp.linalg.norm(res), niter)
 
+    def trapezoid(y, x=None, dx=1.0, axis=-1):
+        """Integrate along the given axis using the composite trapezoidal rule."""
+        if hasattr(jnp, "trapezoid"):
+            # https://github.com/google/jax/issues/20410
+            return jnp.trapezoid(y, x, dx, axis)
+        else:
+            return jax.scipy.integrate.trapezoid(y, x, dx, axis)
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -739,3 +747,11 @@ else:  # pragma: no cover
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
+
+    def trapezoid(y, x=None, dx=1.0, axis=-1):
+        """Integrate along the given axis using the composite trapezoidal rule."""
+        if hasattr(np, "trapezoid"):
+            # https://github.com/numpy/numpy/issues/25586
+            return np.trapezoid(y, x, dx, axis)
+        else:
+            return np.trapz(y, x, dx, axis)

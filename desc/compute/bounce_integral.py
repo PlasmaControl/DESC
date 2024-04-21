@@ -92,7 +92,7 @@ def _root_quadratic(a, b, c, distinct=False):
     C = complex_sqrt(discriminant)
 
     def root(xi):
-        return (-b + xi * C) / (2 * a)
+        return safediv(-b + xi * C, 2 * a)
 
     is_linear = jnp.isclose(a, 0)
     suppress_root = distinct & jnp.isclose(discriminant, 0)
@@ -108,10 +108,10 @@ def _root_cubic(a, b, c, d, distinct=False):
     t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
     discriminant = t_1**2 - 4 * t_0**3
     C = ((t_1 + complex_sqrt(discriminant)) / 2) ** (1 / 3)
-    C_is_zero = jnp.isclose(t_0, 0) & jnp.isclose(t_1, 0)
+    C_is_zero = jnp.isclose(C, 0)
 
     def root(xi):
-        return (b + xi * C + jnp.where(C_is_zero, 0, t_0 / (xi * C))) / (-3 * a)
+        return safediv(b + xi * C + jnp.where(C_is_zero, 0, t_0 / (xi * C)), -3 * a)
 
     xi0 = 1
     xi1 = (-1 + (-3) ** 0.5) / 2
@@ -383,38 +383,40 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, sort=False):
     return pitch
 
 
-# TODO: Any reason to not define pitch as b from the start?
-#   Would be simpler to use 1/lambda in formulas and redefine lambda = b.
-def pitch_trapz(pitch_knot, resolution):
-    """Returns quadrature points for trapezoidal integration in 1/pitch between knots.
+def composite_linspace(knots, resolution, invert=False):
+    """Returns linearly spaced points between ``knots``.
 
     Parameters
     ----------
-    pitch_knot : Array, shape(P, S)
-        λ values that should be included as quadrature points.
-        λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
-        where in the latter the labels (ρ, α) are interpreted as index into the
-        last axis that corresponds to that field line.
-        The first axis is the batch axis as usual.
+    knots : Array, shape(P, ...)
+        First axis has values to return linearly spaced values between.
+        The remaining axis are batch axes.
     resolution : int
-        Number of quadrature points.
+        Number of points between each knot.
+    invert : bool
+        Whether the spacing is uniform in ``1 / knots`` or ``knots``.
 
     Returns
     -------
-    pitch : Array, shape((P - 1) * resolution + 1, S)
-        Quadrature points in pitch space.
+    result : Array, shape((P - 1) * resolution + 1, *knots.shape[1:])
+        Sorted in increasing order of ``1 / knots`` or ``knots``
+        depending on whether ``invert`` is true or false, respectively.
 
     """
-    pitch_knot = jnp.atleast_2d(pitch_knot)
-    errorif(pitch_knot.ndim != 2)
-    # It is tedious to do a composite Gauss Quadrature with points at b_knot.
-    # So let's just do trapezoidal for now.
-    b_knot = jnp.sort(1 / pitch_knot, axis=0)
+    knots = jnp.atleast_1d(knots)
+    P = knots.shape[0]
+    S = knots.shape[1:]
+
+    def inverse_if_invert(f):
+        return 1 / f if invert else f
+
+    b_knot = jnp.sort(inverse_if_invert(knots), axis=0)
     b = jnp.linspace(b_knot[:-1, ...], b_knot[1:, ...], resolution, endpoint=False)
-    b = jnp.moveaxis(b, source=0, destination=1).reshape(-1, pitch_knot.shape[-1])
+    b = jnp.moveaxis(b, source=0, destination=1).reshape(-1, *S)
     b = jnp.append(b, b_knot[jnp.newaxis, -1, ...], axis=0)
-    assert b.shape == ((pitch_knot.shape[0] - 1) * resolution + 1, pitch_knot.shape[-1])
-    return 1 / b
+    assert b.shape == ((P - 1) * resolution + 1, *S)
+    result = inverse_if_invert(b)
+    return result
 
 
 def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):

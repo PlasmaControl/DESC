@@ -24,11 +24,11 @@ from desc.compute.bounce_integral import (
     automorphism_sin,
     bounce_integral_map,
     bounce_points,
+    composite_linspace,
     grad_affine_bijection_reverse,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     pitch_of_extrema,
-    pitch_trapz,
     take_mask,
     tanh_sinh_quad,
 )
@@ -244,16 +244,31 @@ def test_pitch_of_extrema():
 
 
 @pytest.mark.unit
-def test_pitch_trapz():
-    """Test this utility function."""
+def test_composite_linspace():
+    """Test this utility function useful for integration over pitch variable."""
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
     pitch_knot = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
-    pitch = pitch_trapz(pitch_knot, resolution=3)
-    assert np.array_equal(1 / pitch, np.sort(1 / pitch, axis=-1))
-    for i in range(pitch_knot.shape[0]):
-        for j in range(pitch_knot.shape[1]):
-            assert only1(np.isclose(pitch_knot[i, j], pitch[:, j]).tolist())
+
+    def inverse_if_invert(f, invert):
+        return 1 / f if invert else f
+
+    def test(invert):
+        print()
+        print(inverse_if_invert(pitch_knot, invert))
+        pitch = composite_linspace(pitch_knot, resolution=3, invert=invert)
+        b = inverse_if_invert(pitch, invert)
+        print()
+        print(b)
+        np.testing.assert_allclose(
+            b, np.sort(b, axis=0), atol=0, rtol=0, err_msg=invert
+        )
+        for i in range(pitch_knot.shape[0]):
+            for j in range(pitch_knot.shape[1]):
+                assert only1(np.isclose(pitch_knot[i, j], pitch[:, j]).tolist())
+
+    test(False)
+    test(True)
 
 
 @pytest.mark.unit

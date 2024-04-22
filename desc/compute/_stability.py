@@ -16,7 +16,7 @@ from desc.backend import jnp, trapezoid
 
 from .bounce_integral import (
     affine_bijection_reverse,
-    bounce_integral_map,
+    bounce_integral,
     composite_linspace,
     grad_affine_bijection_reverse,
     pitch_of_extrema,
@@ -249,7 +249,17 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["rho", "|grad(psi)|", "kappa_g", "sqrt(g)", "psi_r", "S(r)", "V_r(r)", "R"],
+    data=[
+        "rho",
+        "|grad(psi)|",
+        "kappa_g",
+        "sqrt(g)",
+        "psi_r",
+        "S(r)",
+        "V_r(r)",
+        "R",
+        "max_tz |B|",  # Could use softmax.
+    ],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
@@ -267,12 +277,11 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     alpha = affine_bijection_reverse(alpha, 0, alpha_max)
     alpha_weight = alpha_weight * grad_affine_bijection_reverse(0, alpha_max)
     rho = transforms["grid"].compress(data["rho"])
+
     # TODO: (outside scope of ripple pr)
     #  bounce_integral_map only needs eq because map_coordinates needs it.
     #  Maybe modify map coordinates to work with transforms and not eq object?
-    bounce_integral, items = bounce_integral_map(
-        kwargs["eq"], rho, alpha, kwargs["knots"]
-    )
+    bounce_integrate, items = bounce_integral(kwargs["eq"], rho, alpha, kwargs["knots"])
 
     def integrand_H(grad_psi_norm, kappa_g, B, pitch, Z):
         return (
@@ -302,8 +311,8 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
 
         """
         pitch = 1 / b
-        H = bounce_integral(integrand_H, [data["|grad(psi)|"], data["kappa_g"]], pitch)
-        I = bounce_integral(integrand_I, [], pitch)
+        H = bounce_integrate(integrand_H, [data["|grad(psi)|"], data["kappa_g"]], pitch)
+        I = bounce_integrate(integrand_I, [], pitch)
         H = H.reshape(H.shape[0], rho.size, alpha.size, -1)
         I = I.reshape(I.shape[0], rho.size, alpha.size, -1)
         ripple = jnp.nansum(H**2 / I, axis=-1)
@@ -341,11 +350,14 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
             raise NotImplementedError
         return jnp.dot(ripple, alpha_weight)
 
-    # TODO: Seems more natural to define pitch = lambda = b from the start...
-    # TODO: need to add B_max_tz.
     b = 1 / pitch_of_extrema(kwargs["knots"], items["B.c"], items["B_z_ra.c"])
-
+    b = jnp.append(
+        b.reshape(-1, rho.size, alpha.size),
+        transforms["grid"].compress(data["max_tz |B|"])[jnp.newaxis, :, jnp.newaxis],
+        axis=0,
+    ).reshape(-1, rho.size * alpha.size)
     ripple = db_integrate(ripple_sum, b, kwargs.get("db quad", trapezoid))
+
     ripple = transforms["grid"].expand(ripple)
     data["effective ripple"] = (
         jnp.pi

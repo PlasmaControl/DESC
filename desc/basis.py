@@ -2253,6 +2253,7 @@ class FiniteElementMesh2D:
 
         # rho_theta mesh
         # Go back later to fix visualization
+        # Ensuring 2ML triangles
         mesh = fem.MeshLine(np.linspace(0, 1, L)) * fem.MeshLine(
             np.linspace(0, 2 * np.pi, M)
         )
@@ -2262,9 +2263,12 @@ class FiniteElementMesh2D:
 
         vertices = mesh.doflocs
 
-        # Turning vertices into shape(number of points, number of coordaintes)
+        # Turning vertices into shape(number of points, number of coordinates)
         vertices = vertices.T
         print(vertices, vertices.shape)
+
+        # Vertices are enumerated as starting at the bottom, going up M points, and then
+        # starting at the bottom again and repeating this process.
 
         # Plotting the 2D Mesh
         from skfem.visuals.matplotlib import draw, draw_mesh2d
@@ -2283,13 +2287,48 @@ class FiniteElementMesh2D:
         # Will fix this next section later
         # Compute the triangle elements for all 2ML triangles
         triangles = []
-        for i in range(M):
-            for j in range(L):
+        for i in range(L - 1):
+            for j in range(M - 1):
+
                 # Deal with the periodic boundary conditions...??
 
-                # Going to use mesh.elements_satisfying to retrieve vertices
-                triangle1 = TriangleFiniteElement(vertices[(i + j * M) * 2, :], K=K)
-                triangle2 = TriangleFiniteElement(vertices[(i + j * M) * 2 + 1, :], K=K)
+                # There are ML quadrilaterals in the grid. Each quad corresponds to ij
+                # Pick quad:
+
+                b_l = i + j + 1 + i * (M - 1)
+                b_r = b_l + M
+                t_l = b_l + 1
+                t_r = b_r + 1
+
+                print(b_l, b_r, t_l, t_r)
+
+                # Form the triangles, want vertices to have shape (3,2)
+
+                triangle_1_vertices = np.zeros([3, 2])
+                triangle_1_vertices[0, 0] = vertices[b_l - 1, 0]
+                triangle_1_vertices[0, 1] = vertices[b_l - 1, 1]
+
+                triangle_1_vertices[1, 0] = vertices[t_l - 1, 0]
+                triangle_1_vertices[1, 1] = vertices[t_l - 1, 1]
+
+                triangle_1_vertices[2, 0] = vertices[b_r - 1, 0]
+                triangle_1_vertices[2, 1] = vertices[b_r - 1, 1]
+
+                triangle_2_vertices = np.zeros([3, 2])
+                triangle_2_vertices[0, 0] = vertices[b_r - 1, 0]
+                triangle_2_vertices[0, 1] = vertices[b_r - 1, 1]
+
+                triangle_2_vertices[1, 0] = vertices[t_l - 1, 0]
+                triangle_2_vertices[1, 1] = vertices[t_l - 1, 1]
+
+                triangle_2_vertices[2, 0] = vertices[t_r - 1, 0]
+                triangle_2_vertices[2, 1] = vertices[t_r - 1, 1]
+
+                print(triangle_1_vertices, triangle_2_vertices)
+
+                # Grabbing the two triangles in each quadrilateral:
+                triangle1 = TriangleFiniteElement(triangle_1_vertices, K=K)
+                triangle2 = TriangleFiniteElement(triangle_2_vertices, K=K)
                 triangles.append(triangle1)
                 triangles.append(triangle2)
         self.vertices = vertices
@@ -2405,8 +2444,6 @@ class FiniteElementMesh2D:
             return L_b
 
         # Need K == 3
-
-    # working on basis functions, writing something for now
 
     def get_basis_functions(self, rho_theta, i, a, b, K=1):
         """Retrieve basis functions on entire mesh.

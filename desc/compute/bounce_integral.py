@@ -2,7 +2,8 @@
 
 from functools import partial
 
-from interpax import CubicHermiteSpline, interp1d
+from interpax import CubicHermiteSpline, PPoly, interp1d
+from matplotlib import pyplot as plt
 
 from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take
 from desc.compute.utils import safediv
@@ -50,6 +51,14 @@ def take_mask(a, mask, size=None, fill_value=None):
         unique_indices=True,
         indices_are_sorted=True,
     )
+
+
+# only use for debugging
+def _filter_not_nan(a):
+    """Filter out nan from ``a`` while asserting nan is padded at right."""
+    is_nan = jnp.isnan(a)
+    assert jnp.array_equal(is_nan, jnp.sort(is_nan, axis=-1)), "take_mask() has a bug."
+    return a[~is_nan]
 
 
 def _filter_real(a, a_min=-jnp.inf, a_max=jnp.inf):
@@ -512,14 +521,104 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):
     # Don't think it's necessary to stitch together the field lines using
     # rotational transform to potentially capture the bounce point outside
     # this snapshot of the field line.
-
     if check:
-        msg = "Bounce points have an inversion. Maybe create an issue on GitHub."
-        assert not jnp.any(bp1 > bp2), msg
-        msg = "Discontinuity detected. Is B_z_ra the derivative of the spline of B?"
-        assert not jnp.any(bp1[..., 1:] < bp2[..., :-1]), msg
-
+        _check_bounce_points(bp1, bp2, pitch, knots, B_c)
     return bp1, bp2
+
+
+def plot_field_line(
+    B,
+    pitch,
+    bp1=jnp.array([]),
+    bp2=jnp.array([]),
+    start=None,
+    stop=None,
+    show=True,
+):
+    """Plot the field line given spline of |B|.
+
+    Parameters
+    ----------
+    B : PPoly
+        Spline of |B| over given field line.
+    pitch : float
+        λ value.
+    bp1 : Array
+        Bounce points with B_z_ra <= 0.
+    bp2 : Array
+        Bounce points with B_z_ra >= 0.
+    start : float
+        Minimum zeta on plot.
+    stop : float
+        Maximum zeta of plot.
+    show : bool
+        Whether to show the plot.
+
+    Returns
+    -------
+    fig, ax : matplotlib figure and axes.
+
+    """
+    fig, ax = plt.subplots()
+    for knot in B.x:
+        ax.axvline(x=knot, color="red", linestyle="--")
+    ax.axhline(y=1 / pitch, color="purple", label=r"$1 / \lambda$")
+    z = jnp.linspace(
+        start=B.x[0] if start is None else start,
+        stop=B.x[-1] if stop is None else stop,
+        num=100,
+    )
+    ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$")
+    ax.plot(bp1, jnp.full_like(bp1, 1 / pitch), "v", markersize=8, label="bp1")
+    ax.plot(bp2, jnp.full_like(bp2, 1 / pitch), "^", markersize=8, label="bp2")
+    ax.set_xlabel(r"Field line $\zeta$")
+    ax.set_ylabel("Tesla")
+    ax.legend()
+    if show:
+        plt.tight_layout()
+        plt.show()
+        plt.close()
+    return fig, ax
+
+
+def _check_bounce_points(bp1, bp2, pitch, knots, B_c):
+    """Check that bounce points are computed correctly.
+
+    Parameters
+    ----------
+    bp1, bp2 : Array, Array
+        Output of ``bounce_points``.
+    pitch : Array
+        Input to ``bounce_points``.
+    knots : Array
+        Input to ``bounce_points``.
+    B_c : Array
+        Input to ``bounce_points``.
+
+    """
+    msg_1 = "Bounce points have an inversion. Maybe create an issue on GitHub."
+    err_1 = jnp.any(bp1 > bp2)
+    msg_2 = "Discontinuity detected. Is B_z_ra the derivative of the spline of B?"
+    err_2 = jnp.any(bp1[..., 1:] < bp2[..., :-1])
+    if err_1 or err_2:
+        P, S = bp1.shape[:-1]
+        for p in range(P):
+            for s in range(S):
+                err_1_ps = jnp.any(bp1[p, s] > bp2[p, s])
+                err_2_ps = jnp.any(bp1[p, s, 1:] < bp2[p, s, :-1])
+                if err_1_ps or err_2_ps:
+                    print(f"Error at index {p},{s} out of {P},{S}")
+                    bp1_ps = _filter_not_nan(bp1[p, s])
+                    bp2_ps = _filter_not_nan(bp2[p, s])
+                    print(bp1_ps)
+                    print(bp2_ps)
+                    plot_field_line(
+                        PPoly(B_c[:, s], knots, check=True), pitch[p, s], bp1_ps, bp2_ps
+                    )
+                    assert not err_1_ps, msg_1
+                    assert not err_2_ps, msg_2
+    assert not err_1, msg_1
+    assert not err_2, msg_2
 
 
 def _affine_bijection_forward(x, a, b):
@@ -889,7 +988,7 @@ def bounce_integral(
     alpha=None,
     knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 25),
     quad=tanh_sinh_quad,
-    automorphism=(automorphism_sin, grad_automorphism_sin),
+    automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
     return_items=True,
     **kwargs,
 ):
@@ -931,8 +1030,9 @@ def bounce_integral(
         The returned quadrature points xₖ and weights wₖ
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
         For the default choice of the automorphism below,
-        Tanh-Sinh quadrature works well if the integrand is hypersingular.
-        Otherwise, Gauss-Legendre quadrature can be more competitive.
+        Tanh-Sinh quadrature works well if the integrand is singular.
+        Otherwise, Gauss-Legendre quadrature with the sin automorphism
+        can be more competitive.
     automorphism : callable, callable
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.

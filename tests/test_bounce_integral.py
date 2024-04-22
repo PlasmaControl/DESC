@@ -5,7 +5,6 @@ from functools import partial
 
 import numpy as np
 import pytest
-from matplotlib import pyplot as plt
 from scipy import integrate
 
 # TODO: can use the one from interpax once .solve() is implemented
@@ -16,6 +15,7 @@ from desc.backend import complex_sqrt, flatnonzero
 from desc.compute.bounce_integral import (
     _affine_bijection_forward,
     _bounce_quadrature,
+    _filter_not_nan,
     _poly_der,
     _poly_root,
     _poly_val,
@@ -29,6 +29,7 @@ from desc.compute.bounce_integral import (
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     pitch_of_extrema,
+    plot_field_line,
     take_mask,
     tanh_sinh_quad,
 )
@@ -55,13 +56,6 @@ def _last_value(a):
     a = np.ravel(a)[::-1]
     idx = np.squeeze(flatnonzero(~np.isnan(a), size=1, fill_value=0))
     return a[idx]
-
-
-def _filter_not_nan(a):
-    """Filter out nan from ``a`` while asserting nan is padded at right."""
-    is_nan = np.isnan(a)
-    assert np.array_equal(is_nan, np.sort(is_nan, axis=-1))
-    return a[~is_nan]
 
 
 def _sqrt(x):
@@ -265,49 +259,35 @@ def test_composite_linspace():
 def test_bounce_points():
     """Test that bounce points are computed correctly."""
 
-    def plot_field_line(B, pitch, start, end):
-        # Can observe correctness of bounce points through this plot.
-        fig, ax = plt.subplots()
-        for knot in B.x:
-            ax.axvline(x=knot, color="red", linestyle="--")
-        z = np.linspace(start, end, 100)
-        ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$")
-        ax.plot(z, np.full(z.size, 1 / pitch), label=r"$1 / \lambda$")
-        ax.set_xlabel(r"Field line $\zeta$")
-        ax.set_ylabel("Tesla")
-        ax.legend()
-        plt.show()
-        plt.close()
-
-    def test_bp1_first(plot=False):
+    def test_bp1_first(plot):
         start = np.pi / 3
         end = 6 * np.pi
         knots = np.linspace(start, end, 5)
         B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
         pitch = 2
-        if plot:
-            plot_field_line(B, pitch, start, end)
         bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        if plot:
+            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
 
-    def test_bp2_first(plot=False):
+    def test_bp2_first(plot):
         start = -3 * np.pi
         end = -start
         k = np.linspace(start, end, 5)
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch = 2
-        if plot:
-            plot_field_line(B, pitch, start, end)
         bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        if plot:
+            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[1::2])
         np.testing.assert_allclose(bp2, intersect[0::2][1:])
 
-    def test_bp1_before_extrema(plot=False):
+    def test_bp1_before_extrema(plot):
         start = -np.pi
         end = -2 * start
         k = np.linspace(start, end, 5)
@@ -316,11 +296,10 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3]
-        if plot:
-            plot_field_line(B, pitch, start, end)
-
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        if plot:
+            plot_field_line(B, pitch, bp1, bp2)
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[1], 1.9827671337414938)
@@ -328,7 +307,7 @@ def test_bounce_points():
         np.testing.assert_allclose(bp1, intersect[[1, 2]])
         np.testing.assert_allclose(bp2, intersect[[2, 3]])
 
-    def test_bp2_before_extrema(plot=False):
+    def test_bp2_before_extrema(plot):
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -339,16 +318,15 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        if plot:
-            plot_field_line(B, pitch, start, end)
-
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        if plot:
+            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
         np.testing.assert_allclose(bp2, intersect[[1, -1]])
 
-    def test_extrema_first_and_before_bp1(plot=False):
+    def test_extrema_first_and_before_bp1(plot):
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -359,11 +337,10 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        if plot:
-            plot_field_line(B, pitch, k[2], end)
-
         bp1, bp2 = bounce_points(pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        if plot:
+            plot_field_line(B, pitch, bp1, bp2, start=k[2])
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], 0.8353192766102349)
@@ -372,7 +349,7 @@ def test_bounce_points():
         np.testing.assert_allclose(bp1, intersect[[0, 1, 3]])
         np.testing.assert_allclose(bp2, intersect[[0, 2, 4]])
 
-    def test_extrema_first_and_before_bp2(plot=False):
+    def test_extrema_first_and_before_bp2(plot):
         start = -1.2 * np.pi
         end = -2 * start + 1
         k = np.linspace(start, end, 7)
@@ -383,11 +360,10 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1]
-        if plot:
-            plot_field_line(B, pitch, start, end)
-
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        if plot:
+            plot_field_line(B, pitch, bp1, bp2)
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], -0.6719044147510538)
@@ -396,16 +372,16 @@ def test_bounce_points():
         np.testing.assert_allclose(bp2, intersect[1::2])
 
     # These are all the unique cases, if all tests pass then the bounce_points
-    # should work correctly for all inputs. Pass in True to see plots.
-    test_bp1_first()
-    test_bp2_first()
-    test_bp1_before_extrema()
-    test_bp2_before_extrema()
+    # should work correctly for all inputs.
+    test_bp1_first(True)
+    test_bp2_first(True)
+    test_bp1_before_extrema(True)
+    test_bp2_before_extrema(True)
     # In theory, this test should only pass if distinct=True when computing the
     # intersections in bounce points. However, we can get lucky due to floating
     # point errors, and it may also pass when distinct=False.
-    test_extrema_first_and_before_bp1()
-    test_extrema_first_and_before_bp2()
+    test_extrema_first_and_before_bp1(True)
+    test_extrema_first_and_before_bp2(True)
 
 
 @pytest.mark.unit

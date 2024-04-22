@@ -794,7 +794,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert len(x) == len(self)
         return x
 
-    def compute(
+    def compute(  # noqa: C901 - Simplify this
         self,
         names,
         grid=None,
@@ -833,14 +833,127 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(names, coil) for coil in self]
         if data is None:
             data = [{}] * len(self)
+        if not isinstance(names, (list, tuple)):
+            names = [names]
+        if "x" not in names and self.NFP > 1 or self.sym:
+            # need "x" for doing the symmetry and rotation
+            names.append("x")
         # if user supplied initial data for each coil we also need to vmap over that.
         data = vmap(
             lambda d, x: self[0].compute(
                 names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
             )
         )(tree_stack(data), tree_stack(params))
+        data_unstacked = tree_unstack(data)
 
-        return tree_unstack(data)
+        native_basis = {
+            FourierRZCoil: "rpz",
+            FourierPlanarCoil: "rpz",
+            FourierXYZCoil: "xyz",
+            SplineXYZCoil: "xyz",
+        }[type(self[0])]
+        basis = kwargs.get("basis", native_basis)
+
+        # needs to make a new dictionary for each coil...
+        #### stellarator symmetry flip section ####
+        keys_to_be_rotated = [
+            "x",
+            "x_s",
+            "x_ss",
+            "x_sss",
+            "frenet_tangent",
+            "frenet_normal",
+            "frenet_binormal",
+        ]
+        data_to_be_rotated = {}
+        data_sizes = []
+        for coil_data in data_unstacked:
+            for key in names:
+                if key in keys_to_be_rotated:
+                    if key not in data_to_be_rotated.keys():
+                        data_to_be_rotated[key] = coil_data[key]
+                        if key == "x":
+                            data_sizes.append(coil_data[key].shape[0])
+                    else:
+                        data_to_be_rotated[key] = jnp.vstack(
+                            [data_to_be_rotated[key], coil_data[key]]
+                        )
+        if basis == "xyz":
+            coords_xyz = data_to_be_rotated["x"]
+            # easier to think of the vector symmetry in cylindrical
+            # in stellarator symmetry, the vector [fR,fphi,fZ]
+            # will, at the symmetric point across the half period plane,
+            # be equal to [-fR, fphi, fZ]
+            for key in data_to_be_rotated.keys():
+                if key == "x":
+                    continue
+                data_to_be_rotated[key] = xyz2rpz_vec(
+                    data_to_be_rotated[key], x=coords_xyz[:, 0], y=coords_xyz[:, 1]
+                )
+        else:
+            coords_xyz = rpz2xyz(data_to_be_rotated["x"])
+
+        # this should work assuming it is only a single coilset of coils
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+
+        # if stellarator symmetric, add reflected nodes from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            coords_sym = (
+                coords_xyz
+                @ reflection_matrix(normal).T
+                @ reflection_matrix([0, 0, 1]).T
+            )
+            coords_xyz = jnp.vstack((coords_xyz, coords_sym))
+            # flip the array
+            # bc it is a reflection
+            coords_sym = jnp.flip(coords_sym, axis=0)
+            if basis == "rpz":
+                # put back to rpz if needed
+                coords_sym = xyz2rpz(coords_sym)
+            split_coords = jnp.split(coords_sym, data_sizes)
+            data_all_coils = data_unstacked.copy()
+            for key in data_to_be_rotated.keys():
+                if key == "x":
+                    continue
+                data_sym = jnp.vstack(
+                    (
+                        data_to_be_rotated[key],
+                        jnp.vstack(
+                            (
+                                -data_to_be_rotated[key][:, 0],
+                                data_to_be_rotated[key][:, 1],
+                                data_to_be_rotated[key][:, 2],
+                            )
+                        ).T,
+                    )
+                )
+                if basis == "xyz":
+                    # put back to corect coord system if needed
+                    data_sym = rpz2xyz_vec(
+                        data_sym, x=coords_xyz[:, 0], y=coords_xyz[:, 1]
+                    )
+                data_to_be_rotated[key] = jnp.split(data_sym, data_sizes)
+            for i, (coildata, coord) in enumerate(zip(data_unstacked, split_coords)):
+                # first copy over the dict
+                data_all_coils.append(coildata.copy())
+                # next, put the corresponding new data into it
+                # we flip it again so that we don't change the
+                # orientation of the coils
+                data_all_coils[-1]["x"] = jnp.flip(coord, axis=0)
+                for key in data_to_be_rotated.keys():
+                    if key in keys_to_be_rotated:
+                        if key == "x":
+                            continue
+                        data_all_coils[-1][key] = jnp.flip(
+                            data_to_be_rotated[key][i], axis=0
+                        )
+                    else:  # dont need to rotate, just copy over
+                        data_all_coils[-1][key] = coildata[key].copy()
+
+        return data_all_coils
 
     def translate(self, *args, **kwargs):
         """Translate the coils along an axis."""

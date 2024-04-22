@@ -466,16 +466,37 @@ def test_bounce_quadrature():
     x_t, w_t = tanh_sinh_quad(18, grad_automorphism_arcsin)
     x_t = automorphism_arcsin(x_t)
     tanh_sinh_arcsin = _bounce_quadrature(
-        bp1, bp2, x_t, w_t, integrand, [], B_sup_z, B, B_z_ra, pitch, knots
+        bp1,
+        bp2,
+        x_t,
+        w_t,
+        integrand,
+        [],
+        B_sup_z,
+        B,
+        B_z_ra,
+        pitch,
+        knots,
+        check=True,
     )
     np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
-
-    # suppress the singularity
     x_g, w_g = np.polynomial.legendre.leggauss(16)
+    # suppress the singularity
     w_g = w_g * grad_automorphism_sin(x_g)
     x_g = automorphism_sin(x_g)
     leg_gauss_sin = _bounce_quadrature(
-        bp1, bp2, x_g, w_g, integrand, [], B_sup_z, B, B_z_ra, pitch, knots
+        bp1,
+        bp2,
+        x_g,
+        w_g,
+        integrand,
+        [],
+        B_sup_z,
+        B,
+        B_z_ra,
+        pitch,
+        knots,
+        check=True,
     )
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
 
@@ -497,7 +518,7 @@ def test_example_code():
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
 
-    bounce_integrate, items = bounce_integral(eq, rho, alpha)
+    bounce_integrate, items = bounce_integral(eq, rho, alpha, check=True)
     g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
     pitch = pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])
     num = bounce_integrate(integrand_num, g_zz, pitch)
@@ -519,8 +540,7 @@ def test_example_code():
     print(pitch[:, i, j])
     # Some of these bounce averages will evaluate as nan.
     # You should filter out these nan values when computing stuff.
-    average_sum_over_field_line = np.nansum(average, axis=-1)
-    print(average_sum_over_field_line)
+    print(np.nansum(average, axis=-1))
 
 
 # @pytest.mark.unit
@@ -586,7 +606,7 @@ def test_elliptic_integral_limit():
     # TODO now compare result to elliptic integral
     bounce_integrate, items = bounce_integral(eq, rho, alpha, knots, check=True)
     pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
-    bp1, bp2 = bounce_points(pitch, knots, items["B.c"], items["B_z_ra.c"])
+    bp1, bp2 = bounce_points(pitch, knots, items["B.c"], items["B_z_ra.c"], check=True)
 
 
 @pytest.mark.unit

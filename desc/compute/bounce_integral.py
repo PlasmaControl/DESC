@@ -653,6 +653,61 @@ def tanh_sinh_quad(resolution, w=lambda x: 1):
     return x, W
 
 
+def _suppress_bad_nan(V):
+    """Zero out nan values induced by error.
+
+    Assuming that V is a well-behaved function of some interpolation points Z,
+    then V(Z) should evaluate as NaN only if Z is NaN. This condition needs to
+    be enforced explicitly due to floating point and interpolation error.
+
+    In the context of bounce integrals, the √(1 − λ |B|) terms necessitate this.
+    For interpolation error in |B| may yield λ |B| > 1 at quadrature points
+    between bounce points, which is inconsistent with our knowledge of the |B|
+    spline on which the bounce points were computed. This inconsistency will
+    be more prevalent in the limit the number of quadrature points per bounce
+    integration is much greater than the number of knots.
+
+    Parameters
+    ----------
+    V : Array
+        Interpolation values.
+
+    Returns
+    -------
+    V : Array
+        The interpolation values with the bad NaN values set to zero.
+
+    """
+    # This simple logic is encapsulated here to make explicit the bug it resolves.
+    V = jnp.nan_to_num(V)
+    return V
+
+
+def _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product):
+    """Check that no integrals were lost and the hairy ball theorem is upheld."""
+    is_not_quad_point = jnp.isnan(Z)
+    # We want quantities to evaluate as finite only at quadrature points
+    # for the integrals with boundaries at valid bounce points.
+    msg = "Interpolation failed."
+    assert jnp.all(jnp.isfinite(B_sup_z) ^ is_not_quad_point), msg
+    assert jnp.all(jnp.isfinite(B) ^ is_not_quad_point), msg
+    assert jnp.all(jnp.isfinite(B_z_ra)), msg
+    for ff in f:
+        assert jnp.all(jnp.isfinite(ff) ^ is_not_quad_point), msg
+
+    msg = "|B| has vanished."
+    assert not jnp.isclose(B, 0).any(), msg
+    assert not jnp.isclose(B_sup_z, 0).any(), msg
+
+    quad_resolution = Z.shape[-1]
+    # Number of integrals that we should be computing.
+    goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
+    # Number of integrals that were actually computed.
+    actual = jnp.isfinite(inner_product).sum()
+    assert goal == actual, f"Lost {goal - actual} integrals."
+    assert jnp.all(jnp.isfinite(inner_product) ^ is_not_quad_point[..., 0])
+
+
 _repeated_docstring = """w : Array, shape(w.size, )
         Quadrature weights.
     integrand : callable
@@ -748,7 +803,10 @@ def _interpolatory_quadrature(
     # Specify derivative at knots for ≈ cubic hermite interpolation.
     B = _interp1d_vec_with_df(Z_ps, knots, B, B_z_ra, method="cubic").reshape(shape)
     pitch = pitch[..., jnp.newaxis, jnp.newaxis]
-    inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch, Z=Z) / B_sup_z, w)
+    inner_product = jnp.dot(
+        _suppress_bad_nan(integrand(*f, B=B, pitch=pitch, Z=Z)) / B_sup_z,
+        w,
+    )
     if check:
         _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product)
     return inner_product
@@ -757,31 +815,6 @@ def _interpolatory_quadrature(
 _interpolatory_quadrature.__doc__ = _interpolatory_quadrature.__doc__.replace(
     _delimiter, _repeated_docstring + _delimiter, 1
 )
-
-
-def _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product):
-    """Check that no integrals were lost and the hairy ball theorem is upheld."""
-    is_not_quad_point = jnp.isnan(Z)
-    # We want quantities to evaluate as finite only at quadrature points
-    # for the integrals with boundaries at valid bounce points.
-    msg = "Interpolation failed."
-    assert jnp.all(jnp.isfinite(B_sup_z) ^ is_not_quad_point), msg
-    assert jnp.all(jnp.isfinite(B) ^ is_not_quad_point), msg
-    assert jnp.all(jnp.isfinite(B_z_ra)), msg
-    for ff in f:
-        assert jnp.all(jnp.isfinite(ff) ^ is_not_quad_point), msg
-
-    msg = "|B| has vanished."
-    assert not jnp.isclose(B, 0).any(), msg
-    assert not jnp.isclose(B_sup_z, 0).any(), msg
-
-    quad_resolution = Z.shape[-1]
-    # Number of integrals that we should be computing.
-    goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
-    # Number of integrals that were actually computed.
-    actual = jnp.isfinite(inner_product).sum()
-    assert goal == actual, f"Lost {goal - actual} integrals."
-    assert jnp.all(jnp.isfinite(inner_product) ^ is_not_quad_point[..., 0])
 
 
 def _bounce_quadrature(
@@ -944,7 +977,7 @@ def bounce_integral(
     f(ℓ) = (1 − λ |B|) * g_zz, where g_zz is the squared norm of the
     toroidal basis vector on some set of field lines specified by (ρ, α)
     coordinates. This is defined as
-        [∫ f(ℓ) / √(1 − λ |B|) dℓ] / [∫ 1 / √(1 − λ |B|) dℓ]
+        (∫ f(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ)
 
 
     .. code-block:: python
@@ -961,7 +994,7 @@ def bounce_integral(
         eq = get("HELIOTRON")
         rho = jnp.linspace(1e-12, 1, 6)
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 5)
-        bounce_integrate, items = bounce_integral(eq, rho, alpha)
+        bounce_integrate, items = bounce_integral(eq, rho, alpha, check=True)
 
         g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
         pitch = pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])
@@ -984,8 +1017,7 @@ def bounce_integral(
         print(pitch[:, i, j])
         # Some of these bounce averages will evaluate as nan.
         # You should filter out these nan values when computing stuff.
-        average_sum_over_field_line = jnp.nansum(average, axis=-1)
-        print(average_sum_over_field_line)
+        print(jnp.nansum(average, axis=-1))
 
     """
     check = kwargs.pop("check", False)

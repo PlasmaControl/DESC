@@ -289,7 +289,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
             * jnp.sqrt(1 / pitch - B)
             * (4 / B - pitch)
             * grad_psi_norm
-            * kappa_g
+            * kappa_g  # todo: review and use cvdrift0
             / B
         )
 

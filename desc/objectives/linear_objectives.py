@@ -240,10 +240,14 @@ class FixParameter(_Objective):
             Fixed degree of freedom errors.
 
         """
+        params_leaves = tree_leaves(params)
+        # FIXME: should still work if only a subset of params get passed in
+        # TODO: need to cast to full dict
+        assert len(params_leaves) == len(self._indices_leaves)
         return jnp.concatenate(
             [
                 jnp.atleast_1d(param[idx])
-                for param, idx in zip(tree_leaves(params), self._indices_leaves)
+                for param, idx in zip(params_leaves, self._indices_leaves)
             ]
         )
 

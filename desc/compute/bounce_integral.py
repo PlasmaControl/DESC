@@ -274,7 +274,7 @@ def composite_linspace(knots, resolution):
     ----------
     knots : Array
         First axis has values to return linearly spaced values between.
-        The remaining axis are batch axes.
+        The remaining axes are batch axes.
     resolution : int
         Number of points between each knot.
 
@@ -334,10 +334,8 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     errorif(not (B_c.ndim == B_z_ra_c.ndim == 3), msg=msg)
     errorif(B_c.shape[0] - 1 != B_z_ra_c.shape[0], msg=msg)
     errorif(B_c.shape[1:] != B_z_ra_c.shape[1:], msg=msg)
-    errorif(
-        B_c.shape[-1] != knots.size - 1,
-        msg="Last axis fails to enumerate spline polynomials.",
-    )
+    msg = "Last axis fails to enumerate spline polynomials."
+    errorif(B_c.shape[-1] != knots.size - 1, msg=msg)
     if pitch is not None:
         pitch = jnp.atleast_2d(pitch)
         msg = "Supplied invalid shape for pitch angles."
@@ -353,17 +351,19 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, sort=False):
     have fat banana orbits increasing neoclassical transport.
 
     When computing ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ in equation 29 of
+
         V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
         Evaluation of 1/ν neoclassical transport in stellarators.
         Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
         https://doi.org/10.1063/1.873749
+
     the contribution of ∑ⱼ Hⱼ² / Iⱼ to ε is largest in the intervals such that
-    b ∈ [|B|(ζ*) - db, |B|(ζ*)].
-    To see this, observe that Iⱼ ∼ √(1 − λ B), hence Hⱼ² / Iⱼ ∼ Hⱼ² / √(1 − λ B).
-    For λ = 1 / |B|(ζ*), near |B|(ζ*), the quantity 1 / √(1 − λ B) is singular.
-    The slower |B| tends to |B|(ζ*) the less integrable this singularity becomes.
-    Therefore, a quadrature for ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ would do well to evaluate the
-    integrand near b = 1 / λ = |B|(ζ*).
+    b ∈ [|B|(ζ*) - db, |B|(ζ*)]. To see this, observe that Iⱼ ∼ √(1 − λ B),
+    hence Hⱼ² / Iⱼ ∼ Hⱼ² / √(1 − λ B). For λ = 1 / |B|(ζ*), near |B|(ζ*), the
+    quantity 1 / √(1 − λ B) is singular. The slower |B| tends to |B|(ζ*) the
+    less integrable this singularity becomes. Therefore, a quadrature for
+    ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ would do well to evaluate the integrand near
+    b = 1 / λ = |B|(ζ*).
 
     Parameters
     ----------
@@ -526,61 +526,6 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False):
     return bp1, bp2
 
 
-def plot_field_line(
-    B,
-    pitch,
-    bp1=jnp.array([]),
-    bp2=jnp.array([]),
-    start=None,
-    stop=None,
-    show=True,
-):
-    """Plot the field line given spline of |B|.
-
-    Parameters
-    ----------
-    B : PPoly
-        Spline of |B| over given field line.
-    pitch : float
-        λ value.
-    bp1 : Array
-        Bounce points with B_z_ra <= 0.
-    bp2 : Array
-        Bounce points with B_z_ra >= 0.
-    start : float
-        Minimum zeta on plot.
-    stop : float
-        Maximum zeta of plot.
-    show : bool
-        Whether to show the plot.
-
-    Returns
-    -------
-    fig, ax : matplotlib figure and axes.
-
-    """
-    fig, ax = plt.subplots()
-    for knot in B.x:
-        ax.axvline(x=knot, color="red", linestyle="--")
-    ax.axhline(y=1 / pitch, color="purple", label=r"$1 / \lambda$")
-    z = jnp.linspace(
-        start=B.x[0] if start is None else start,
-        stop=B.x[-1] if stop is None else stop,
-        num=100,
-    )
-    ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$")
-    ax.plot(bp1, jnp.full_like(bp1, 1 / pitch), "v", markersize=8, label="bp1")
-    ax.plot(bp2, jnp.full_like(bp2, 1 / pitch), "^", markersize=8, label="bp2")
-    ax.set_xlabel(r"Field line $\zeta$")
-    ax.set_ylabel("Tesla")
-    ax.legend()
-    if show:
-        plt.tight_layout()
-        plt.show()
-        plt.close()
-    return fig, ax
-
-
 def _check_bounce_points(bp1, bp2, pitch, knots, B_c):
     """Check that bounce points are computed correctly.
 
@@ -608,8 +553,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c):
                 err_2_ps = jnp.any(bp1[p, s, 1:] < bp2[p, s, :-1])
                 if err_1_ps or err_2_ps:
                     print(f"Error at index {p},{s} out of {P},{S}")
-                    bp1_ps = _filter_not_nan(bp1[p, s])
-                    bp2_ps = _filter_not_nan(bp2[p, s])
+                    bp1_ps, bp2_ps = map(_filter_not_nan, (bp1[p, s], bp2[p, s]))
                     print(bp1_ps)
                     print(bp2_ps)
                     plot_field_line(
@@ -619,6 +563,66 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c):
                     assert not err_2_ps, msg_2
     assert not err_1, msg_1
     assert not err_2, msg_2
+
+
+def plot_field_line(
+    B,
+    pitch=None,
+    bp1=jnp.array([]),
+    bp2=jnp.array([]),
+    start=None,
+    stop=None,
+    num=200,
+    show=True,
+):
+    """Plot the field line given spline of |B|.
+
+    Parameters
+    ----------
+    B : PPoly
+        Spline of |B| over given field line.
+    pitch : float
+        λ value.
+    bp1 : Array
+        Bounce points with B_z_ra <= 0.
+    bp2 : Array
+        Bounce points with B_z_ra >= 0.
+    start : float
+        Minimum ζ on plot.
+    stop : float
+        Maximum ζ of plot.
+    num : int
+        Number of ζ points to plot.
+    show : bool
+        Whether to show the plot.
+
+    Returns
+    -------
+    fig, ax : matplotlib figure and axes.
+
+    """
+    fig, ax = plt.subplots()
+    for knot in B.x:
+        ax.axvline(x=knot, color="red", linestyle="--")
+    z = jnp.linspace(
+        start=B.x[0] if start is None else start,
+        stop=B.x[-1] if stop is None else stop,
+        num=num,
+    )
+    ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$")
+    if pitch is not None:
+        b = 1 / pitch
+        ax.axhline(y=b, color="purple", label=r"$1 / \lambda$")
+        ax.plot(bp1, jnp.full_like(bp1, b), "v", markersize=8, label="bp1")
+        ax.plot(bp2, jnp.full_like(bp2, b), "^", markersize=8, label="bp2")
+    ax.set_xlabel(r"Field line $\zeta$")
+    ax.set_ylabel("Tesla")
+    ax.legend()
+    if show:
+        plt.tight_layout()
+        plt.show()
+        plt.close()
+    return fig, ax
 
 
 def _affine_bijection_forward(x, a, b):
@@ -778,7 +782,7 @@ def _suppress_bad_nan(V):
 
     """
     # This simple logic is encapsulated here to make explicit the bug it resolves.
-    V = jnp.nan_to_num(V)
+    V = jnp.nan_to_num(V, posinf=jnp.inf, neginf=-jnp.inf)
     return V
 
 
@@ -803,8 +807,16 @@ def _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product):
     goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
     # Number of integrals that were actually computed.
     actual = jnp.isfinite(inner_product).sum()
-    assert goal == actual, f"Lost {goal - actual} integrals."
-    assert jnp.all(jnp.isfinite(inner_product) ^ is_not_quad_point[..., 0])
+    err_msg = (
+        f"Lost {goal - actual} integrals.\n"
+        "If the integrand is not singular, consider making a GitHub issue.\n"
+        "Otherwise, this spline method has failed.\n"
+        "In particular, the spline approaches the singularity slower than the "
+        "true integrand, which makes the integral of the spline much less "
+        "integrable than the true integral."
+    )
+    assert goal == actual, err_msg
+    assert jnp.all(jnp.isfinite(inner_product) ^ is_not_quad_point[..., 0]), err_msg
 
 
 _repeated_docstring = """w : Array, shape(w.size, )
@@ -840,6 +852,8 @@ _repeated_docstring = """w : Array, shape(w.size, )
     method : str
         Method of interpolation for functions contained in ``f``.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
+    check : bool
+        Flag for debugging.
 
     """
 _delimiter = "Returns"
@@ -901,6 +915,7 @@ def _interpolatory_quadrature(
     B_sup_z = _interp1d_vec(Z_ps, knots, B_sup_z, method=method).reshape(shape)
     # Specify derivative at knots for ≈ cubic hermite interpolation.
     B = _interp1d_vec_with_df(Z_ps, knots, B, B_z_ra, method="cubic").reshape(shape)
+
     pitch = pitch[..., jnp.newaxis, jnp.newaxis]
     inner_product = jnp.dot(
         _suppress_bad_nan(integrand(*f, B=B, pitch=pitch, Z=Z)) / B_sup_z,
@@ -984,12 +999,12 @@ _bounce_quadrature.__doc__ = _bounce_quadrature.__doc__.replace(
 
 def bounce_integral(
     eq,
-    rho=jnp.linspace(1e-12, 1, 5),
+    rho=jnp.linspace(1e-7, 1, 5),
     alpha=None,
     knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 25),
     quad=tanh_sinh_quad,
     automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
-    return_items=True,
+    check=False,
     **kwargs,
 ):
     """Returns a method to compute the bounce integral of any quantity.
@@ -1041,16 +1056,18 @@ def bounce_integral(
         defines a change of variable for the bounce integral. The choice made
         for the automorphism can augment or suppress singularities.
         Keep this in mind when choosing the quadrature method.
-    return_items : bool
-        Whether to return ``items`` as described below.
+    check : bool
+        Flag for debugging.
     kwargs
         Can specify additional arguments to the ``quad`` method with kwargs.
+        Can also specify reference magnetic field strength and length scale
+        for normalization.
 
     Returns
     -------
     bounce_integrate : callable
         This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
-        specified field line ℓ (constant rho, alpha), for every λ value in ``pitch``.
+        specified field line ℓ for every λ value in ``pitch``.
     items : dict
         grid_desc : Grid
             DESC coordinate grid for the given field line coordinates.
@@ -1120,8 +1137,8 @@ def bounce_integral(
         print(jnp.nansum(average, axis=-1))
 
     """
-    check = kwargs.pop("check", False)
-    normalize = kwargs.pop("normalize", 1)
+    B_ref = kwargs.pop("B_ref", 1)
+    L_ref = kwargs.pop("L_ref", 1)
     if quad == tanh_sinh_quad:
         kwargs.setdefault("resolution", 19)
     x, w = quad(**kwargs)
@@ -1148,9 +1165,9 @@ def bounce_integral(
         # TODO: look into override grid in different PR
         override_grid=False,
     )
-    B_sup_z = data["B^zeta"].reshape(S, knots.size)
-    B = data["|B|"].reshape(S, knots.size) / normalize
-    B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size) / normalize
+    B_sup_z = data["B^zeta"].reshape(S, knots.size) * L_ref / B_ref
+    B = data["|B|"].reshape(S, knots.size) / B_ref
+    B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size) / B_ref
     # Compute spline of |B| along field lines.
     B_c = jnp.moveaxis(
         CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c,
@@ -1160,6 +1177,13 @@ def bounce_integral(
     assert B_c.shape == (4, S, knots.size - 1)
     B_z_ra_c = _poly_der(B_c)
     assert B_z_ra_c.shape == (3, S, knots.size - 1)
+    items = {
+        "grid_desc": grid_desc,
+        "grid_fl": grid_fl,
+        "knots": knots,
+        "B.c": B_c,
+        "B_z_ra.c": B_z_ra_c,
+    }
 
     def bounce_integrate(integrand, f, pitch, method="akima"):
         """Bounce integrate ∫ f(ℓ) dℓ.
@@ -1220,14 +1244,4 @@ def bounce_integral(
         assert result.shape[-1] == (knots.size - 1) * 3
         return result
 
-    if return_items:
-        items = {
-            "grid_desc": grid_desc,
-            "grid_fl": grid_fl,
-            "knots": knots,
-            "B.c": B_c,
-            "B_z_ra.c": B_z_ra_c,
-        }
-        return bounce_integrate, items
-    else:
-        return bounce_integrate
+    return bounce_integrate, items

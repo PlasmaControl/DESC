@@ -22,7 +22,7 @@ from desc.compute.bounce_integral import (
     affine_bijection_reverse,
     automorphism_arcsin,
     automorphism_sin,
-    bounce_integral_map,
+    bounce_integral,
     bounce_points,
     composite_linspace,
     grad_affine_bijection_reverse,
@@ -124,7 +124,7 @@ def test_reshape_convention():
 
     err_msg = "The ordering conventions are required for correctness."
     assert "P, S, N" in inspect.getsource(bounce_points), err_msg
-    src = inspect.getsource(bounce_integral_map)
+    src = inspect.getsource(bounce_integral)
     assert "S, knots.size" in src, err_msg
     assert "pitch.shape[0], rho.size, alpha.size" in src, err_msg
     src = inspect.getsource(desc_grid_from_field_line_coords)
@@ -481,12 +481,12 @@ def test_bounce_quadrature():
 
 
 @pytest.mark.unit
-def test_example_code_and_hairy_ball():
-    """Test example code in bounce_integral docstring and ensure B does not vanish."""
+def test_example_code():
+    """Test example code in bounce_integral docstring."""
 
     def integrand_num(g_zz, B, pitch, Z):
         """Integrand in integral in numerator of bounce average."""
-        f = (1 - pitch * B) * g_zz  # something arbitrary
+        f = (1 - pitch * B) * g_zz
         return safediv(f, _sqrt(1 - pitch * B))
 
     def integrand_den(B, pitch, Z):
@@ -496,19 +496,12 @@ def test_example_code_and_hairy_ball():
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
-    knots = np.linspace(0, 6 * np.pi, 20)
 
-    bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots)
-
-    # start hairy ball test
-    B = eq.compute("|B|", grid=items["grid_desc"], override_grid=False)["|B|"]
-    assert not np.isclose(B, 0, atol=1e-19).any(), "B should never vanish."
-    # end hairy ball test
-
+    bounce_integrate, items = bounce_integral(eq, rho, alpha)
     g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
-    pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
-    num = bounce_integral(integrand_num, g_zz, pitch)
-    den = bounce_integral(integrand_den, [], pitch)
+    pitch = pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])
+    num = bounce_integrate(integrand_num, g_zz, pitch)
+    den = bounce_integrate(integrand_den, [], pitch)
     average = num / den
     assert np.isfinite(average).any()
 
@@ -591,7 +584,7 @@ def test_elliptic_integral_limit():
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 10)
     knots = np.linspace(0, 6 * np.pi, 20)
     # TODO now compare result to elliptic integral
-    bounce_integral, items = bounce_integral_map(eq, rho, alpha, knots, check=True)
+    bounce_integrate, items = bounce_integral(eq, rho, alpha, knots, check=True)
     pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
     bp1, bp2 = bounce_points(pitch, knots, items["B.c"], items["B_z_ra.c"])
 
@@ -659,7 +652,9 @@ def test_bounce_averaged_drifts():
     # normalization
     Lref = data["a"]
     epsilon = Lref * rho
-    psi_boundary = np.max(np.abs(data["psi"]))
+    psi_boundary = np.max(
+        np.abs(data["psi"])
+    )  # data["psi"][np.argmax(np.abs(data["psi"]))]
     Bref = 2 * np.abs(psi_boundary) / Lref**2
 
     # Creating a grid along a field line
@@ -679,7 +674,7 @@ def test_bounce_averaged_drifts():
     #       Response: Currently the API is such that the method does all the
     #                 above preprocessing for you. Let's test it for correctness
     #                 first then do this later.
-    bounce_integral, items = bounce_integral_map(
+    bounce_integrate, items = bounce_integral(
         # FIXME: Question
         #  add normalize to compute matching bounce points for the test
         #  below, but should everything related to B be normalized?
@@ -760,48 +755,28 @@ def test_bounce_averaged_drifts():
 
     k2 = 0.5 * ((1 - pitch * B0) / (pitch * B0 * epsilon) + 1)
     k = np.sqrt(k2)
-    # Fixme: What exactly is this a function of?
-    # cvdrift, gbdrift is a grid quantity, so grid.num_nodes length
-    # on a single field line grid -> so it has length number of zeta points
-    # So bavg_drift_an has shape shape (number of pitch, number of zeta points).
-    # For a fixed pitch at index i, what is difference bavg_drift_an[i, j]
-    # and bavg_drift_an[i, j+1]?
-    # RG : Here are the notes that explain these integrals
-    # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf
-
-    integral_0 = test_integral_0(k)
-    integral_1 = test_integral_1(k)
-    integral_2 = 16 * k * integral_0
-    integral_3 = (
-        4 / 9 * (8 * k * (-1 + 2 * k2) * integral_1 - 4 * k * (-1 + k2) * integral_0)
-    )
-
-    integral_4 = (
+    # Here are the notes that explain these integrals.
+    # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf.
+    I_0 = test_integral_0(k)
+    I_1 = test_integral_1(k)
+    I_2 = 16 * k * I_0
+    I_3 = 4 / 9 * (8 * k * (-1 + 2 * k2) * I_1 - 4 * k * (-1 + k2) * I_0)
+    I_4 = (
         2
         * np.sqrt(2)
         / 3
-        * (4 * np.sqrt(2) * k * (-1 + 2 * k2) * integral_0 - 2 * (-1 + k2) * integral_1)
+        * (4 * np.sqrt(2) * k * (-1 + 2 * k2) * I_0 - 2 * (-1 + k2) * I_1)
     )
-    integral_5 = (
+    I_5 = (
         2
         / 30
-        * (
-            32 * k * (1 - k2 + k2**2) * integral_0
-            - 16 * k * (1 - 3 * k2 + 2 * k2**2) * integral_1
-        )
+        * (32 * k * (1 - k2 + k2**2) * I_0 - 16 * k * (1 - 3 * k2 + 2 * k2**2) * I_1)
     )
-    integral_6 = 2 / 3 * (k * (-2 + 4 * k2) * integral_0 - 4 * (-1 + k2) * integral_1)
-    integral_7 = 4 / k * (2 * k2 * integral_0 + (1 - 2 * k2) * integral_1)
+    I_6 = 2 / 3 * (k * (-2 + 4 * k2) * I_0 - 4 * (-1 + k2) * I_1)
+    I_7 = 4 / k * (2 * k2 * I_0 + (1 - 2 * k2) * I_1)
 
-    bavg_drift_an = (
-        fudge_factor3 * dPdrho / B0**2 * integral_1
-        - 0.5
-        * fudge_factor2
-        * (
-            s_hat * (integral_0 + integral_1 + integral_2 + integral_3)
-            + alpha_MHD / B0**4 * (integral_4 + integral_5)
-            - (integral_6 + integral_7)
-        )
+    bavg_drift_an = fudge_factor3 * dPdrho / B0**2 * I_1 - 0.5 * fudge_factor2 * (
+        s_hat * (I_0 + I_1 + I_2 + I_3) + alpha_MHD / B0**4 * (I_4 + I_5) - (I_6 + I_7)
     )
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
@@ -810,7 +785,7 @@ def test_bounce_averaged_drifts():
         g = _sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
-    bavg_drift_num = bounce_integral(
+    bavg_drift_num = bounce_integrate(
         integrand=integrand,
         # additional things to interpolate onto quadrature points besides B and pitch
         f=[cvdrift, gbdrift],

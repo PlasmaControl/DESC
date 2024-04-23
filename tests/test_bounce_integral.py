@@ -671,23 +671,21 @@ def test_bounce_averaged_drifts():
     coords1[:, 0] = np.broadcast_to(rho, N)
     coords1[:, 1] = theta_PEST
     coords1[:, 2] = zeta
-    # c1 = eq.compute_theta_coords(coords1)  # noqa: E800
-    # grid = Grid(c1, sort=False)  # noqa: E800
     # TODO: Request: The bounce integral operator should be able to take a grid.
     #       Response: Currently the API is such that the method does all the
     #                 above preprocessing for you. Let's test it for correctness
     #                 first then do this later.
+    resolution = 50
     bounce_integrate, items = bounce_integral(
-        eq,
-        rho,
-        alpha,
+        eq=eq,
+        rho=rho,
+        alpha=alpha,
         knots=zeta,
         B_ref=B_ref,
         L_ref=L_ref,
         check=True,
         plot=True,
-        monotonic=True,
-        resolution=50,
+        resolution=resolution,
     )
     data_keys = [
         "|grad(psi)|^2",
@@ -708,14 +706,16 @@ def test_bounce_averaged_drifts():
     # normalizations
     bmag = data_bounce["|B|"] / B_ref
     B0 = np.mean(bmag)
-    bmag_an = B0 * (1 - epsilon * np.cos(theta_PEST))
-    np.testing.assert_allclose(bmag, bmag_an, atol=5e-3, rtol=5e-3)
+    bmag_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
+    np.testing.assert_allclose(bmag, bmag_analytic, atol=5e-3, rtol=5e-3)
 
-    x = L_ref * rho  # same as epsilon
+    x = L_ref * rho  # same as epsilon?
     s_hat = -x / iota * shear / L_ref
     gradpar = L_ref * data_bounce["B^zeta"] / data_bounce["|B|"]
-    gradpar_an = 2 * L_ref * data_bounce["iota"] * (1 - epsilon * np.cos(theta_PEST))
-    np.testing.assert_allclose(gradpar, gradpar_an, atol=9e-3, rtol=5e-3)
+    gradpar_analytic = (
+        2 * L_ref * data_bounce["iota"] * (1 - epsilon * np.cos(theta_PEST))
+    )
+    np.testing.assert_allclose(gradpar, gradpar_analytic, atol=9e-3, rtol=5e-3)
 
     # Comparing coefficient calculation here with coefficients from compute/_metric
     cvdrift = (
@@ -733,27 +733,27 @@ def test_bounce_averaged_drifts():
         * s_hat
         / B_ref
     )
-    gds21_an = (
+    gds21_analytic = (
         -1 * s_hat * (s_hat * theta_PEST - alpha_MHD / bmag**4 * np.sin(theta_PEST))
     )
-    np.testing.assert_allclose(gds21, gds21_an, atol=1.7e-2, rtol=5e-4)
+    np.testing.assert_allclose(gds21, gds21_analytic, atol=1.7e-2, rtol=5e-4)
 
     fudge_factor2 = 0.19
-    gbdrift_an = fudge_factor2 * (
-        -s_hat + (np.cos(theta_PEST) - gds21_an / s_hat * np.sin(theta_PEST))
+    gbdrift_analytic = fudge_factor2 * (
+        -s_hat + (np.cos(theta_PEST) - gds21_analytic / s_hat * np.sin(theta_PEST))
     )
     fudge_factor3 = 0.07
-    cvdrift_an = gbdrift_an + fudge_factor3 * alpha_MHD / bmag**2
+    cvdrift_analytic = gbdrift_analytic + fudge_factor3 * alpha_MHD / bmag**2
     # Comparing coefficients with their analytical expressions
-    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.2e-2, rtol=5e-3)
-    np.testing.assert_allclose(cvdrift, cvdrift_an, atol=1.8e-2, rtol=5e-3)
+    np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1.2e-2, rtol=5e-3)
+    np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=1.8e-2, rtol=5e-3)
 
     # Values of pitch angle lambda for which to evaluate the bounce averages.
     delta_shift = 1e-6
-    pitch_resolution = 11
+    pitch_resolution = 50
     pitch = np.linspace(
         1 / np.max(bmag) + delta_shift, 1 / np.min(bmag) - delta_shift, pitch_resolution
-    ).reshape(pitch_resolution, -1)
+    )
     k2 = 0.5 * ((1 - pitch * B0) / (pitch * B0 * epsilon) + 1)
     k = np.sqrt(k2)
     # Here are the notes that explain these integrals.
@@ -776,7 +776,7 @@ def test_bounce_averaged_drifts():
     I_6 = 2 / 3 * (k * (-2 + 4 * k2) * I_0 - 4 * (-1 + k2) * I_1)
     I_7 = 4 / k * (2 * k2 * I_0 + (1 - 2 * k2) * I_1)
 
-    bavg_drift_an = np.squeeze(
+    bouce_drift_analytic = (
         fudge_factor3 * dPdrho / B0**2 * I_1
         - 0.5
         * fudge_factor2
@@ -788,33 +788,24 @@ def test_bounce_averaged_drifts():
     )
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
-        # The arguments to this function will be interpolated
-        # onto the quadrature points before these quantities are evaluated.
         g = _sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
-    bavg_drift_num = bounce_integrate(
+    bounce_drift = bounce_integrate(
         integrand=integrand,
-        # additional things to interpolate onto quadrature points besides B and pitch
         f=[cvdrift, gbdrift],
-        pitch=pitch,
+        pitch=pitch.reshape(pitch_resolution, -1),
     )
-    assert np.isfinite(bavg_drift_num).any(), "Quadrature failed."
-    # There should be only one bounce integral done per pitch in this example,
-    # so we can pull out the not nan values.
-    bavg_drift_num = np.squeeze(_filter_not_nan(bavg_drift_num))
-    assert bavg_drift_an.shape == bavg_drift_num.shape
-    x = np.arange(bavg_drift_an.size)
-    plt.scatter(x, bavg_drift_an, label="analytic")
-    plt.scatter(x, bavg_drift_num, label="numerical")
-    plt.title("Comparison of analytical to numerical.")
+    # There is only one bounce integral per pitch in this example.
+    bounce_drift = np.squeeze(_filter_not_nan(bounce_drift))
+    assert bouce_drift_analytic.shape == bounce_drift.shape
+
+    plt.plot(1 / pitch, bouce_drift_analytic, marker="o", label="analytic")
+    plt.plot(1 / pitch, bounce_drift, marker="x", label="numerical")
+    plt.xlabel(r"$1 / \lambda$")
+    plt.ylabel("Bounce averaged drift")
+    plt.title(f"Quadrature resolution = {resolution}. Delta shift = {delta_shift}.")
     plt.legend()
+    plt.tight_layout()
     plt.show()
-    for i in range(pitch.shape[0]):
-        np.testing.assert_allclose(
-            bavg_drift_num[i],
-            bavg_drift_an[i],
-            atol=2e-2,
-            rtol=1e-2,
-            err_msg=f"Failed on index {i} for 1/pitch {1 / pitch[i]}",
-        )
+    np.testing.assert_allclose(bounce_drift, bouce_drift_analytic, atol=2e-2, rtol=1e-2)

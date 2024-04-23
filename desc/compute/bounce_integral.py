@@ -685,7 +685,7 @@ def plot_field_line_with_ripple(
             )
 
     ax.set_xlabel(r"Field line $\zeta$")
-    ax.set_ylabel("Tesla")
+    ax.set_ylabel(r"$\vert B \vert \sim 1 / \lambda$")
     ax.legend(legend.values(), legend.keys())
     title = r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$"
     if id is not None:

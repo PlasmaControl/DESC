@@ -293,7 +293,7 @@ class TestCoilSet:
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
-    def test_symmetry_coil_properties(self):
+    def test_symmetry_coil_properties(self):  # noqa C901 : simplify
         """Tests that compute magnetic field is correct from symmetry."""
         eq = get("precise_QH")
         minor_radius = eq.compute("a")["a"]
@@ -327,10 +327,17 @@ class TestCoilSet:
             "x",
             "x_s",
             "x_ss",
+            "x_sss",
             "curvature",
+            "torsion",
             "frenet_normal",
             "frenet_tangent",
             "frenet_binormal",
+            "X",
+            "Y",
+            "Z",
+            "R",
+            "phi",
         ]
         # test in rpz basis
         data_sym = sym_coilset.compute(
@@ -351,8 +358,22 @@ class TestCoilSet:
                     asymdata["x"] = (
                         asymdata["x"].at[:, 1].set(asymdata["x"][:, 1] + 2 * np.pi)
                     )
+                elif key == "phi" and np.all(asymdata["phi"] < 0):
+                    asymdata["phi"] = asymdata["phi"] + 2 * np.pi
+                if key == "x" and np.all(symdata["x"][:, 1] < 0):
+                    # check if the phi is negative and if so add 2pi, as
+                    # the .from_symmetry function can give negative phi while
+                    # in the .compute for a symmetric coilset we add to phi
+                    # for rotations, so it is positive
+                    symdata["x"] = (
+                        symdata["x"].at[:, 1].set(symdata["x"][:, 1] + 2 * np.pi)
+                    )
+                elif key == "phi" and np.all(symdata["phi"] < 0):
+                    symdata["phi"] = symdata["phi"] + 2 * np.pi
 
-                if flip_vec and symdata[key].ndim == 2:
+                if flip_vec and (
+                    symdata[key].ndim == 2 or key in ["X", "Y", "Z", "phi", "R"]
+                ):
                     # this is a sym coil, shoul flip the order of symdata so it lines up
                     np.testing.assert_allclose(
                         np.flip(symdata[key], axis=0),
@@ -379,7 +400,14 @@ class TestCoilSet:
             if (i) % num_coils == 0 and i > 0:
                 flip_vec = not flip_vec
             for key in symdata.keys():
-                if flip_vec and symdata[key].ndim == 2:
+                if key == "phi" and np.all(asymdata["phi"] < 0):
+                    asymdata["phi"] = asymdata["phi"] + 2 * np.pi
+                if key == "phi" and np.all(symdata["phi"] < 0):
+                    symdata["phi"] = symdata["phi"] + 2 * np.pi
+
+                if flip_vec and (
+                    symdata[key].ndim == 2 or key in ["X", "Y", "Z", "phi", "R"]
+                ):
                     # this is a sym coil, shoul flip the order of symdata so it lines up
                     np.testing.assert_allclose(
                         np.flip(symdata[key], axis=0),

@@ -1009,9 +1009,31 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     rotated_data, jnp.cumsum(jnp.array(data_sizes_all))[:-1]
                 )
                 for k in range(N_coils_per_FP):
-
                     data_this_FP[k][key] = rotated_data_per_coil_this_FP[k]
             data_all_coils += copy.deepcopy(data_this_FP)
+        # finally, check if the scalar positions are in the computed quantities,
+        # and if so set them to the correct values based off of "x"
+        keys_to_set_manually = {"X", "Y", "Z", "R", "phi"}.intersection(
+            data_all_coils[0].keys()
+        )
+        if not len(keys_to_set_manually):
+            # just return data now if the user never requested
+            # any scalar coordinates
+            return data_all_coils
+        # if not, then we assign them for each coil based off its "x"
+        for coildata in data_all_coils:
+            if basis == "xyz":
+                coords_xyz = coildata["x"]
+                coords_rpz = xyz2rpz(coildata["x"])
+            else:
+                coords_rpz = coildata["x"]
+                coords_xyz = rpz2xyz(coildata["x"])
+            coildata["X"] = coords_xyz[:, 0]
+            coildata["Y"] = coords_xyz[:, 1]
+            coildata["Z"] = coords_xyz[:, 2]
+            coildata["R"] = coords_rpz[:, 0]
+            coildata["phi"] = coords_rpz[:, 1]
+
         # TODO: handle if "X","Y","Z" or "R","phi","Z" are in the computed quantities
         return data_all_coils
 

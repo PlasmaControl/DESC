@@ -73,7 +73,7 @@ def convert_spectral_to_FE(
     """
     # Assume uniform grid
     N = R_basis.N
-    I = Rprime_basis.I_2MN
+    I = Rprime_basis.I_2ML
     Q = Rprime_basis.Q
     L = Rprime_basis.L
     nmodes = I * Q  # Number of total basis functions
@@ -90,11 +90,7 @@ def convert_spectral_to_FE(
             ).reshape(3, I * nquad)
         ).T
     elif N == 0:
-        quadpoints = (
-            np.array(np.meshgrid(quadpoints_mesh, np.zeros(1), indexing="ij")).reshape(
-                3, I * nquad
-            )
-        ).T
+        quadpoints = np.hstack((quadpoints_mesh, np.zeros((I, 1))))
     else:
         quadpoints = quadpoints_mesh  # transpose here?
     print("quadpoints_shape = ", quadpoints.shape)

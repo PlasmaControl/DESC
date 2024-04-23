@@ -25,18 +25,6 @@ L = 18
 M = 20
 N = 0
 K = 1
-mesh = FiniteElementMesh1D_scikit(M, K=K)
-integral = mesh.integrate(np.ones((M * mesh.nquad, 1000)))
-length_total = 0.0
-for interval in mesh.intervals:
-    length_total += interval.length
-assert np.allclose(integral, 2 * np.pi)
-
-quadpoints = mesh.return_quadrature_points()
-integral = mesh.integrate(np.array([np.cos(quadpoints)]).T)
-assert np.allclose(integral, 0.0)
-integral = mesh.integrate(np.array([np.cos(quadpoints) ** 2]).T)
-assert np.allclose(integral, np.pi)
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
@@ -93,7 +81,8 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-rho = np.linspace(0, 1, 5)
+L_FE = 5
+rho = np.linspace(0, 1, L_FE)
 nodes = (
     np.array(np.meshgrid(rho, theta, np.zeros(1), indexing="ij"))
     .reshape(3, len(theta) * len(rho))
@@ -105,9 +94,9 @@ print("R_lmn, Z_lmn = ", R_lmn, Z_lmn)
 plt.plot(R, Z, "ro", label="DESC rep")
 
 print(M, L, N, K)
-Rprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
-Zprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
-Lprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
+Rprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
+Zprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
+Lprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
 
 # Convert to the finite element basis
 Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(

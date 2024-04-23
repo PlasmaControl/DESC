@@ -26,10 +26,11 @@ class AspectRatio(_Objective):
         will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=2``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=2``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -50,7 +51,9 @@ class AspectRatio(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -185,10 +188,11 @@ class Elongation(_Objective):
         will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=1``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -209,7 +213,9 @@ class Elongation(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -343,10 +349,11 @@ class Volume(_Objective):
         will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=1``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -367,7 +374,9 @@ class Volume(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -527,10 +536,11 @@ class PlasmaVesselDistance(_Objective):
         Bounding surface to penalize distance to.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``bounds=(1,np.inf)``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``bounds=(1,np.inf)``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -551,8 +561,10 @@ class PlasmaVesselDistance(_Objective):
         reverse mode and forward over reverse mode respectively.
     surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     use_softmin: bool, optional
         Use softmin or hard min.
     surface_fixed: bool, optional
@@ -774,10 +786,11 @@ class MeanCurvature(_Objective):
         will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``bounds=(-np.inf, 0)``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``bounds=(-np.inf, 0)``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -797,7 +810,9 @@ class MeanCurvature(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -931,10 +946,11 @@ class PrincipalCurvature(_Objective):
         will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=1``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -954,7 +970,9 @@ class PrincipalCurvature(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
 
@@ -1084,10 +1102,11 @@ class BScaleLength(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``bounds=(1,np.inf)``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``bounds=(1,np.inf)``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1107,7 +1126,8 @@ class BScaleLength(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
 
@@ -1234,10 +1254,11 @@ class GoodCoordinates(_Objective):
         Relative weight between the Jacobian and radial terms.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f

@@ -802,7 +802,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         params=None,
         transforms=None,
         data=None,
-        return_only_unique=True,
+        return_only_unique=False,
         **kwargs,
     ):
         """Compute the quantity given by name on grid, for each coil in the coilset.
@@ -919,7 +919,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         data_one_FP = data_unstacked.copy()
         if self.sym:
             # add the sizes of the flipped coordinates too
-            data_sizes_all = data_sizes + data_sizes[::-1]
+            data_sizes_one_FP = data_sizes + data_sizes[::-1]
             normal = jnp.array(
                 [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
             )
@@ -954,7 +954,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     )
 
                     data_to_be_rotated[key] = jnp.split(
-                        data_sym, jnp.cumsum(jnp.array(data_sizes_all))[:-1]
+                        data_sym, jnp.cumsum(jnp.array(data_sizes_one_FP))[:-1]
                     )
             # use [::-1] so that we use the last coils dict first,
             # as we have the coords stacked
@@ -966,6 +966,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 for key in data_to_be_rotated.keys():
                     if key != "x":
                         data_one_FP[-1][key] = data_to_be_rotated[key][i + len(self)]
+        else:
+            data_sizes_one_FP = data_sizes
         # now rotate things through the field periods
         N_coils_per_FP = len(data_one_FP)
         data_all_coils = []
@@ -1006,7 +1008,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                             phi=coords_rpz[:, 1] + i * 2 * np.pi / self.NFP,
                         )
                 rotated_data_per_coil_this_FP = jnp.split(
-                    rotated_data, jnp.cumsum(jnp.array(data_sizes_all))[:-1]
+                    rotated_data, jnp.cumsum(jnp.array(data_sizes_one_FP))[:-1]
                 )
                 for k in range(N_coils_per_FP):
                     data_this_FP[k][key] = rotated_data_per_coil_this_FP[k]

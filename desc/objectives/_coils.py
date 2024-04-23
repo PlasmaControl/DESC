@@ -239,7 +239,7 @@ class _CoilObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             grid=self._grid,
-            basis=kwargs.get("basis", None),
+            basis=kwargs.get("basis", "xyz"),
         )
 
         return data
@@ -727,8 +727,6 @@ class CoilsetMinDistance(_CoilObjective):
         """
         data = super().compute(params, constants=constants, basis="xyz")
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
-        # FIXME: what if coilset has NFP or stell symmetry?
-        # we want to compare distances across all coils...
 
         pts = jnp.dstack([d["x"].T for d in data]).T  # shape (ncoil, npts, 3)
         ncoil = pts.shape[0]

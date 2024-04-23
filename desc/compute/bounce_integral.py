@@ -99,12 +99,12 @@ def _filter_real(a, a_min=-jnp.inf, a_max=jnp.inf):
 
 
 def _root_linear(a, b, distinct=False):
-    """Return r such that a * r + b = 0."""
+    """Return r such that a r + b = 0."""
     return safediv(-b, a, fill=jnp.where(jnp.isclose(b, 0), 0, jnp.nan))
 
 
 def _root_quadratic(a, b, c, distinct=False):
-    """Return r such that a * r**2 + b * r + c = 0."""
+    """Return r such that a r² + b r + c = 0."""
     discriminant = b**2 - 4 * a * c
     C = complex_sqrt(discriminant)
 
@@ -119,7 +119,7 @@ def _root_quadratic(a, b, c, distinct=False):
 
 
 def _root_cubic(a, b, c, d, distinct=False):
-    """Return r such that a * r**3 + b * r**2 + c * r + d = 0."""
+    """Return r such that a r³ + b r² + c r + d = 0."""
     # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
     t_0 = b**2 - 3 * a * c
     t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
@@ -186,7 +186,7 @@ def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
             r = [_filter_real(rr, a_min, a_max) for rr in r]
         r = jnp.stack(r, axis=-1)
         # We didn't handle the case of removing the double complex roots when
-        # distinct is True, so we still need to remove double roots.
+        # ``distinct`` is true, so we still need to remove double roots.
         # This is necessary even when returning only real roots because
         # floating point math can cast complex roots with small imaginary
         # part into real roots.
@@ -281,17 +281,18 @@ def _poly_val(x, c):
     return val
 
 
-def composite_linspace(knots, resolution):
+def composite_linspace(knots, resolution, is_sorted=False):
     """Returns linearly spaced points between ``knots``.
 
     Parameters
     ----------
     knots : Array
         First axis has values to return linearly spaced values between.
-        It is assumed these values are sorted.
         The remaining axes are batch axes.
     resolution : int
         Number of points between each knot.
+    is_sorted : bool
+        Whether the knots are already sorted along the first axis.
 
     Returns
     -------
@@ -302,6 +303,8 @@ def composite_linspace(knots, resolution):
     knots = jnp.atleast_1d(knots)
     P = knots.shape[0]
     S = knots.shape[1:]
+    if not is_sorted:
+        knots = jnp.sort(knots, axis=0)
     result = jnp.linspace(knots[:-1, ...], knots[1:, ...], resolution, endpoint=False)
     result = jnp.moveaxis(result, source=0, destination=1).reshape(-1, *S)
     result = jnp.append(result, knots[jnp.newaxis, -1, ...], axis=0)
@@ -358,7 +361,7 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     return B_c, B_z_ra_c, pitch
 
 
-def pitch_of_extrema(knots, B_c, B_z_ra_c):
+def pitch_of_extrema(knots, B_c, B_z_ra_c, epsilon_shift=1e-6):
     """Return pitch values that will capture fat banana orbits.
 
     Particles with λ = 1 / |B|(ζ*) where |B|(ζ*) are local maxima
@@ -395,6 +398,9 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c):
         Second axis enumerates the splines along the field lines.
         Last axis enumerates the polynomials of the spline along a particular
         field line.
+    epsilon_shift : float
+        Small amount to shift maxima down and minima up to avoid floating point
+        errors in downstream routines.
 
     Returns
     -------
@@ -405,31 +411,35 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c):
 
         If there were less than ``N * (degree - 1)`` extrema detected along a
         field line, then the first axis, which enumerates the pitch values for
-        a particular field line, is padded with nan. The first axis is sorted
-        in order of decreasing pitch values.
+        a particular field line, is padded with nan.
 
     """
     B_c, B_z_ra_c, _ = _check_shape(knots, B_c, B_z_ra_c)
     S, N, degree = B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
-    ext = _poly_root(
+    extrema = _poly_root(
         c=B_z_ra_c, a_min=jnp.array([0]), a_max=jnp.diff(knots), distinct=True
     )
     # Can detect at most degree of |B|_z_ra spline extrema between each knot.
-    assert ext.shape == (S, N, degree - 1)
+    assert extrema.shape == (S, N, degree - 1)
     # Reshape so that last axis enumerates extrema along a field line.
-    B_ext = _poly_val(x=ext, c=B_c[..., jnp.newaxis]).reshape(S, -1)
-    B_ext = jnp.sort(B_ext, axis=-1)
+    B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
+    B_extrema_z_ra = _poly_val(
+        x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis]
+    ).reshape(S, -1)
 
-    # Not possible to detect all bounce points on extrema due to floating point errors.
-    # TODO: Sift them up and down by epsilon.
-    # _poly_val(x=ext, c=_poly_der(B_z_ra_c)[..., jnp.newaxis]) # noqa: E800
-    eps = 0
-    B_ext = jnp.clip(
-        B_ext,
-        B_ext[:, 0, jnp.newaxis] + eps,
-        _last_value(B_ext)[:, jnp.newaxis] - eps,
+    # Floating point error impedes consistent detection of bounce points riding
+    # extrema. Shift pitch values slightly to resolve this issue.
+    # Higher priority to shift down maxima than shift up minima, so identify near
+    # equality with zero as maxima.
+    is_maxima = B_extrema_z_ra <= 0
+    B_extrema = jnp.where(
+        is_maxima,
+        (1 - epsilon_shift) * B_extrema,
+        (1 + epsilon_shift) * B_extrema,
     )
-    pitch = 1 / B_ext.T
+    # Pad all the nan at the end rather than interspersed to be consistent.
+    B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
+    pitch = 1 / B_extrema.T
     assert pitch.shape == (N * (degree - 1), S)
     return pitch
 
@@ -663,28 +673,26 @@ def plot_field_line_with_ripple(
     add(ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$"))
 
     if pitch is not None:
-        pitch = jnp.atleast_1d(pitch)
+        b = jnp.atleast_1d(1 / pitch)
         bp1, bp2 = map(jnp.atleast_2d, (bp1, bp2))
-        for p in range(pitch.shape[0]):
-            b = 1 / pitch[p]
-            add(ax.axhline(b, color="tab:purple", label=r"$1 / \lambda$"))
-            bp1_p, bp2_p = map(_filter_not_nan, (bp1[p], bp2[p]))
+        for bb in jnp.unique(b):
+            add(ax.axhline(bb, color="tab:purple", alpha=0.25, label=r"$1 / \lambda$"))
+        for i in range(b.shape[0]):
+            bp1_i, bp2_i = map(_filter_not_nan, (bp1[i], bp2[i]))
             add(
                 ax.scatter(
-                    bp1_p,
-                    jnp.full_like(bp1_p, b),
+                    bp1_i,
+                    jnp.full_like(bp1_i, b[i]),
                     marker="v",
-                    s=75,
                     color="tab:red",
                     label="bp1",
                 )
             )
             add(
                 ax.scatter(
-                    bp2_p,
-                    jnp.full_like(bp2_p, b),
+                    bp2_i,
+                    jnp.full_like(bp2_i, b[i]),
                     marker="^",
-                    s=75,
                     color="tab:green",
                     label="bp2",
                 )
@@ -695,7 +703,7 @@ def plot_field_line_with_ripple(
     ax.legend(legend.values(), legend.keys())
     title = r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$"
     if id is not None:
-        title = f"{id}. {title}"
+        title = f"{title}. id = {id}."
     ax.set_title(title)
     if show:
         plt.tight_layout()
@@ -892,7 +900,7 @@ def _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product):
     goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
     # Number of integrals that were actually computed.
     actual = jnp.isfinite(inner_product).sum()
-    err_msg = f"Lost {goal - actual} integrals.\n"
+    err_msg = f"Lost {goal - actual} integrals. Likely due to floating point error."
     assert goal == actual, err_msg
     assert jnp.all(jnp.isfinite(inner_product) ^ is_not_quad_point[..., 0]), err_msg
 
@@ -1199,7 +1207,7 @@ def bounce_integral(
         eq = get("HELIOTRON")
         rho = jnp.linspace(1e-12, 1, 6)
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 5)
-        bounce_integrate, items = bounce_integral(eq, rho, alpha, check=True)
+        bounce_integrate, items = bounce_integral(eq, rho, alpha)
 
         g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
         pitch = pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])

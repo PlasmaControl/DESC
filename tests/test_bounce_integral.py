@@ -221,9 +221,11 @@ def test_pitch_of_extrema():
         k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
     )
     B_z_ra = B.derivative()
-    pitch_scipy = 1 / np.sort(B(B_z_ra.roots(extrapolate=False)))
-    pitch = pitch_of_extrema(k, B.c, B_z_ra.c)
-    np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy)
+    pitch_scipy = 1 / B(B_z_ra.roots(extrapolate=False))
+    rtol = 1e-7
+    pitch = pitch_of_extrema(k, B.c, B_z_ra.c, epsilon_shift=rtol)
+    eps = 100 * np.finfo(float).eps
+    np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy, rtol=rtol + eps)
 
 
 @pytest.mark.unit
@@ -232,7 +234,7 @@ def test_composite_linspace():
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
     pitch_knot = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
-    b_knot = np.sort(1 / pitch_knot, axis=0)
+    b_knot = 1 / pitch_knot
     print()
     print(b_knot)
     b = composite_linspace(b_knot, resolution=3)
@@ -477,7 +479,7 @@ def test_bounce_quadrature():
 @pytest.mark.unit
 def test_example_bounce_integral():
     """Test example code in bounce_integral docstring."""
-    # This test also smoke tests the bounce_points routine because
+    # This test also stress tests the bounce_points routine because
     # the |B| spline that is generated from this combination of knots
     # equilibrium etc. has many edge cases for bounce point computations.
 
@@ -494,7 +496,7 @@ def test_example_bounce_integral():
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
 
-    bounce_integrate, items = bounce_integral(eq, rho, alpha, check=True)
+    bounce_integrate, items = bounce_integral(eq, rho, alpha, check=True, plot=False)
     g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
     pitch = pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])
     num = bounce_integrate(integrand_num, g_zz, pitch)
@@ -738,8 +740,11 @@ def test_bounce_averaged_drifts():
     np.testing.assert_allclose(cvdrift, cvdrift_an, atol=1.8e-2, rtol=5e-3)
 
     # Values of pitch angle lambda for which to evaluate the bounce averages.
-    pitch = np.linspace(1 / np.max(bmag), 1 / np.min(bmag), 11)
-    pitch = pitch.reshape(pitch.shape[0], -1)
+    delta_shift = 1e-6
+    pitch_resolution = 11
+    pitch = np.linspace(
+        1 / np.max(bmag) + delta_shift, 1 / np.min(bmag) - delta_shift, pitch_resolution
+    ).reshape(pitch_resolution, -1)
     k2 = 0.5 * ((1 - pitch * B0) / (pitch * B0 * epsilon) + 1)
     k = np.sqrt(k2)
     # Here are the notes that explain these integrals.

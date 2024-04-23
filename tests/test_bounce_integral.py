@@ -1,21 +1,20 @@
 """Test bounce integral methods."""
 
 import inspect
+from functools import partial
 
 import numpy as np
 import pytest
+from matplotlib import pyplot as plt
 from scipy import integrate
-
-# TODO: can use the one from interpax once .solve() is implemented
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipkm1
 
-from desc.backend import complex_sqrt
+from desc.backend import complex_sqrt, flatnonzero
 from desc.compute.bounce_integral import (
     _affine_bijection_forward,
     _bounce_quadrature,
     _filter_not_nan,
-    _last_value,
     _poly_der,
     _poly_root,
     _poly_val,
@@ -55,6 +54,14 @@ def _sqrt(x):
     x = complex_sqrt(x)
     x = np.where(np.isclose(np.imag(x), 0), np.real(x), np.nan)
     return x
+
+
+@partial(np.vectorize, signature="(m)->()")
+def _last_value(a):
+    """Return the last non-nan value in ``a``."""
+    a = a[::-1]
+    idx = np.squeeze(flatnonzero(~np.isnan(a), size=1, fill_value=0))
+    return a[idx]
 
 
 @pytest.mark.unit
@@ -223,7 +230,7 @@ def test_pitch_of_extrema():
     B_z_ra = B.derivative()
     pitch_scipy = 1 / B(B_z_ra.roots(extrapolate=False))
     rtol = 1e-7
-    pitch = pitch_of_extrema(k, B.c, B_z_ra.c, epsilon_shift=rtol)
+    pitch = pitch_of_extrema(k, B.c, B_z_ra.c, relative_shift=rtol)
     eps = 100 * np.finfo(float).eps
     np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy, rtol=rtol + eps)
 
@@ -678,7 +685,9 @@ def test_bounce_averaged_drifts():
         B_ref=B_ref,
         L_ref=L_ref,
         check=True,
+        plot=True,
         monotonic=True,
+        resolution=50,
     )
     data_keys = [
         "|grad(psi)|^2",
@@ -767,8 +776,15 @@ def test_bounce_averaged_drifts():
     I_6 = 2 / 3 * (k * (-2 + 4 * k2) * I_0 - 4 * (-1 + k2) * I_1)
     I_7 = 4 / k * (2 * k2 * I_0 + (1 - 2 * k2) * I_1)
 
-    bavg_drift_an = fudge_factor3 * dPdrho / B0**2 * I_1 - 0.5 * fudge_factor2 * (
-        s_hat * (I_0 + I_1 + I_2 + I_3) + alpha_MHD / B0**4 * (I_4 + I_5) - (I_6 + I_7)
+    bavg_drift_an = np.squeeze(
+        fudge_factor3 * dPdrho / B0**2 * I_1
+        - 0.5
+        * fudge_factor2
+        * (
+            s_hat * (I_0 + I_1 + I_2 + I_3)
+            + alpha_MHD / B0**4 * (I_4 + I_5)
+            - (I_6 + I_7)
+        )
     )
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
@@ -784,13 +800,21 @@ def test_bounce_averaged_drifts():
         pitch=pitch,
     )
     assert np.isfinite(bavg_drift_num).any(), "Quadrature failed."
-    # there's only one field line on the grid, so squeeze out that axis
-    bavg_drift_num = np.squeeze(bavg_drift_num, axis=1)
+    # There should be only one bounce integral done per pitch in this example,
+    # so we can pull out the not nan values.
+    bavg_drift_num = np.squeeze(_filter_not_nan(bavg_drift_num))
+    assert bavg_drift_an.shape == bavg_drift_num.shape
+    x = np.arange(bavg_drift_an.size)
+    plt.scatter(x, bavg_drift_an, label="analytic")
+    plt.scatter(x, bavg_drift_num, label="numerical")
+    plt.title("Comparison of analytical to numerical.")
+    plt.legend()
+    plt.show()
     for i in range(pitch.shape[0]):
         np.testing.assert_allclose(
-            _filter_not_nan(bavg_drift_num[i]),
+            bavg_drift_num[i],
             bavg_drift_an[i],
             atol=2e-2,
             rtol=1e-2,
-            err_msg=f"Failed on index {i} for pitch {pitch[i]}",
+            err_msg=f"Failed on index {i} for 1/pitch {1 / pitch[i]}",
         )

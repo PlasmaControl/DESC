@@ -53,14 +53,6 @@ def take_mask(a, mask, size=None, fill_value=None):
     )
 
 
-@partial(jnp.vectorize, signature="(m)->()")
-def _last_value(a):
-    """Return the last non-nan value in ``a``."""
-    a = a[::-1]
-    idx = jnp.squeeze(flatnonzero(~jnp.isnan(a), size=1, fill_value=0))
-    return a[idx]
-
-
 # only use for debugging
 def _filter_not_nan(a):
     """Filter out nan from ``a`` while asserting nan is padded at right."""
@@ -185,11 +177,8 @@ def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         if keep_only_real:
             r = [_filter_real(rr, a_min, a_max) for rr in r]
         r = jnp.stack(r, axis=-1)
-        # We didn't handle the case of removing the double complex roots when
-        # ``distinct`` is true, so we still need to remove double roots.
-        # This is necessary even when returning only real roots because
-        # floating point math can cast complex roots with small imaginary
-        # part into real roots.
+        # We had ignored the case of double complex roots.
+        distinct = distinct and c.shape[0] > 3 and not keep_only_real
     else:
         # Compute from eigenvalues of polynomial companion matrix.
         # This method can fail to detect roots near extrema, which is often
@@ -211,7 +200,7 @@ def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         # Atol needs to be low enough that distinct roots which are close do not
         # get removed, otherwise algorithms that rely on continuity of the spline
         # such as bounce_points() will fail. The current atol was chosen so that
-        # test_bounce_points() passes.
+        # test_bounce_points() passes when this block is forced to run.
         mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=jnp.nan), 0, atol=1e-15)
         r = jnp.where(mask, jnp.nan, r)
     return r
@@ -361,7 +350,7 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     return B_c, B_z_ra_c, pitch
 
 
-def pitch_of_extrema(knots, B_c, B_z_ra_c, epsilon_shift=1e-6):
+def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     """Return pitch values that will capture fat banana orbits.
 
     Particles with λ = 1 / |B|(ζ*) where |B|(ζ*) are local maxima
@@ -398,8 +387,8 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, epsilon_shift=1e-6):
         Second axis enumerates the splines along the field lines.
         Last axis enumerates the polynomials of the spline along a particular
         field line.
-    epsilon_shift : float
-        Small amount to shift maxima down and minima up to avoid floating point
+    relative_shift : float
+        Relative amount to shift maxima down and minima up to avoid floating point
         errors in downstream routines.
 
     Returns
@@ -421,12 +410,8 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, epsilon_shift=1e-6):
     )
     # Can detect at most degree of |B|_z_ra spline extrema between each knot.
     assert extrema.shape == (S, N, degree - 1)
-    # Reshape so that last axis enumerates extrema along a field line.
-    B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
-    B_extrema_z_ra = _poly_val(
-        x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis]
-    ).reshape(S, -1)
-
+    B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis])
+    B_extrema_z_ra = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift pitch values slightly to resolve this issue.
     # Higher priority to shift down maxima than shift up minima, so identify near
@@ -434,9 +419,10 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, epsilon_shift=1e-6):
     is_maxima = B_extrema_z_ra <= 0
     B_extrema = jnp.where(
         is_maxima,
-        (1 - epsilon_shift) * B_extrema,
-        (1 + epsilon_shift) * B_extrema,
-    )
+        (1 - relative_shift) * B_extrema,
+        (1 + relative_shift) * B_extrema,
+    ).reshape(S, -1)
+    # Reshape so that last axis enumerates extrema along a field line.
     # Pad all the nan at the end rather than interspersed to be consistent.
     B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
@@ -674,10 +660,10 @@ def plot_field_line_with_ripple(
 
     if pitch is not None:
         b = jnp.atleast_1d(1 / pitch)
+        for val in jnp.unique(b):
+            add(ax.axhline(val, color="tab:purple", alpha=0.75, label=r"$1 / \lambda$"))
         bp1, bp2 = map(jnp.atleast_2d, (bp1, bp2))
-        for bb in jnp.unique(b):
-            add(ax.axhline(bb, color="tab:purple", alpha=0.25, label=r"$1 / \lambda$"))
-        for i in range(b.shape[0]):
+        for i in range(bp1.shape[0]):
             bp1_i, bp2_i = map(_filter_not_nan, (bp1[i], bp2[i]))
             add(
                 ax.scatter(

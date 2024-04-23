@@ -1,7 +1,6 @@
 """Test bounce integral methods."""
 
 import inspect
-from functools import partial
 
 import numpy as np
 import pytest
@@ -11,11 +10,12 @@ from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipkm1
 
-from desc.backend import complex_sqrt, flatnonzero
+from desc.backend import complex_sqrt
 from desc.compute.bounce_integral import (
     _affine_bijection_forward,
     _bounce_quadrature,
     _filter_not_nan,
+    _last_value,
     _poly_der,
     _poly_root,
     _poly_val,
@@ -29,7 +29,7 @@ from desc.compute.bounce_integral import (
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     pitch_of_extrema,
-    plot_field_line,
+    plot_field_line_with_ripple,
     take_mask,
     tanh_sinh_quad,
 )
@@ -48,14 +48,6 @@ from desc.objectives import (
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
 from desc.utils import only1
-
-
-@partial(np.vectorize, signature="(m)->()")
-def _last_value(a):
-    """Return the last non-nan value in ``a``."""
-    a = np.ravel(a)[::-1]
-    idx = np.squeeze(flatnonzero(~np.isnan(a), size=1, fill_value=0))
-    return a[idx]
 
 
 def _sqrt(x):
@@ -160,9 +152,6 @@ def test_poly_root():
     root = _poly_root(c.T, sort=True, distinct=True)
     for j in range(c.shape[0]):
         unique_roots = np.unique(np.roots(c[j]))
-        if j == 4:
-            # There are only two distinct roots.
-            unique_roots = unique_roots[[0, 1]]
         np.testing.assert_allclose(
             actual=_filter_not_nan(root[j]),
             desired=unique_roots,
@@ -232,7 +221,7 @@ def test_pitch_of_extrema():
         k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
     )
     B_z_ra = B.derivative()
-    pitch_scipy = 1 / B(B_z_ra.roots(extrapolate=False))
+    pitch_scipy = 1 / np.sort(B(B_z_ra.roots(extrapolate=False)))
     pitch = pitch_of_extrema(k, B.c, B_z_ra.c)
     np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy)
 
@@ -243,7 +232,7 @@ def test_composite_linspace():
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
     pitch_knot = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
-    b_knot = 1 / pitch_knot
+    b_knot = np.sort(1 / pitch_knot, axis=0)
     print()
     print(b_knot)
     b = composite_linspace(b_knot, resolution=3)
@@ -259,7 +248,7 @@ def test_composite_linspace():
 def test_bounce_points():
     """Test that bounce points are computed correctly."""
 
-    def test_bp1_first(plot):
+    def test_bp1_first():
         start = np.pi / 3
         end = 6 * np.pi
         knots = np.linspace(start, end, 5)
@@ -267,27 +256,29 @@ def test_bounce_points():
         pitch = 2
         bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
 
-    def test_bp2_first(plot):
+    def test_bp2_first():
         start = -3 * np.pi
         end = -start
         k = np.linspace(start, end, 5)
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch = 2
-        bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
+        bp1, bp2 = bounce_points(
+            pitch,
+            k,
+            B.c,
+            B.derivative().c,
+            check=True,
+        )
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[1::2])
         np.testing.assert_allclose(bp2, intersect[0::2][1:])
 
-    def test_bp1_before_extrema(plot):
+    def test_bp1_before_extrema():
         start = -np.pi
         end = -2 * start
         k = np.linspace(start, end, 5)
@@ -298,8 +289,6 @@ def test_bounce_points():
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3]
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[1], 1.9827671337414938)
@@ -307,7 +296,7 @@ def test_bounce_points():
         np.testing.assert_allclose(bp1, intersect[[1, 2]])
         np.testing.assert_allclose(bp2, intersect[[2, 3]])
 
-    def test_bp2_before_extrema(plot):
+    def test_bp2_before_extrema():
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -320,13 +309,11 @@ def test_bounce_points():
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
         np.testing.assert_allclose(bp2, intersect[[1, -1]])
 
-    def test_extrema_first_and_before_bp1(plot):
+    def test_extrema_first_and_before_bp1():
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -337,10 +324,11 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        bp1, bp2 = bounce_points(pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True)
+        bp1, bp2 = bounce_points(
+            pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True, plot=False
+        )
+        plot_field_line_with_ripple(B, pitch, bp1, bp2, start=k[2])
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2, start=k[2])
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], 0.8353192766102349)
@@ -349,7 +337,7 @@ def test_bounce_points():
         np.testing.assert_allclose(bp1, intersect[[0, 1, 3]])
         np.testing.assert_allclose(bp2, intersect[[0, 2, 4]])
 
-    def test_extrema_first_and_before_bp2(plot):
+    def test_extrema_first_and_before_bp2():
         start = -1.2 * np.pi
         end = -2 * start + 1
         k = np.linspace(start, end, 7)
@@ -360,10 +348,21 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1]
+        # This note may not make sense to the reader now, but if a regression
+        # fails this test, it will save many hours of debugging.
+        # If the filter in place to return only the distinct roots is too coarse,
+        # in particular atol < 1e-15, then this test will error. In the resulting
+        # plot that the error will produce the red bounce point on the first hump
+        # disappears. The true sequence is green, double red, green, red, green.
+        # The first green was close to the double red and hence the first of the
+        # double red root pair was erased as it was falsely detected as a duplicate.
+        # The second of the double red root pair is correctly erased. All that is
+        # left is the green. Now the bounce_points method assumes the intermediate
+        # value theorem holds for the continuous spline, so when fed these sequence
+        # of roots, the correct action is to ignore the first green root since
+        # otherwise the interior of the bounce points would be hills and not valleys.
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], -0.6719044147510538)
@@ -371,17 +370,15 @@ def test_bounce_points():
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
 
-    # These are all the unique cases, if all tests pass then the bounce_points
-    # should work correctly for all inputs.
-    test_bp1_first(True)
-    test_bp2_first(True)
-    test_bp1_before_extrema(True)
-    test_bp2_before_extrema(True)
+    test_bp1_first()
+    test_bp2_first()
+    test_bp1_before_extrema()
+    test_bp2_before_extrema()
     # In theory, this test should only pass if distinct=True when computing the
     # intersections in bounce points. However, we can get lucky due to floating
     # point errors, and it may also pass when distinct=False.
-    test_extrema_first_and_before_bp1(True)
-    test_extrema_first_and_before_bp2(True)
+    test_extrema_first_and_before_bp1()
+    test_extrema_first_and_before_bp2()
 
 
 @pytest.mark.unit
@@ -478,8 +475,11 @@ def test_bounce_quadrature():
 
 
 @pytest.mark.unit
-def test_example_code():
+def test_example_bounce_integral():
     """Test example code in bounce_integral docstring."""
+    # This test also smoke tests the bounce_points routine because
+    # the |B| spline that is generated from this combination of knots
+    # equilibrium etc. has many edge cases for bounce point computations.
 
     def integrand_num(g_zz, B, pitch, Z):
         """Integrand in integral in numerator of bounce average."""
@@ -669,7 +669,14 @@ def test_bounce_averaged_drifts():
     #                 above preprocessing for you. Let's test it for correctness
     #                 first then do this later.
     bounce_integrate, items = bounce_integral(
-        eq, rho, alpha, knots=zeta, check=True, B_ref=B_ref, L_ref=L_ref
+        eq,
+        rho,
+        alpha,
+        knots=zeta,
+        B_ref=B_ref,
+        L_ref=L_ref,
+        check=True,
+        monotonic=True,
     )
     data_keys = [
         "|grad(psi)|^2",

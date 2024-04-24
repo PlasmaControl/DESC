@@ -260,6 +260,87 @@ def _is_Newton_Cotes(quad):
 
 
 @register_compute_fun(
+    name="ripple",
+    label="∫ db ∑ⱼ Hⱼ² / Iⱼ",
+    units="~",
+    units_long="None",
+    description="Ripple sum integral",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    # Could use softmax. TODO: cvdrift0 not kappa_g
+    data=["rho", "|grad(psi)|", "kappa_g", "max_tz |B|"],
+)
+def _ripple(params, transforms, profiles, data, **kwargs):
+    # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    # Evaluation of 1/ν neoclassical transport in stellarators.
+    # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    # https://doi.org/10.1063/1.873749.
+
+    ripple_quad = kwargs.pop("ripple quad", trapezoid)
+    ripple_quad_resolution = kwargs.pop("ripple quad resolution", 19)
+    relative_shift = kwargs.pop("relative shift", 1e-6)
+    knots = kwargs.pop(
+        "knots",
+        jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, transforms["grid"].num_zeta),
+    )
+    num_alpha = kwargs.pop("num_alpha", transforms["grid"].num_theta)
+    alpha, w = legendre.leggauss(num_alpha)
+    alpha_max = (2 - transforms["grid"].sym) * jnp.pi
+    alpha = affine_bijection_reverse(alpha, 0, alpha_max)
+    w = w * grad_affine_bijection_reverse(0, alpha_max)
+    rho = transforms["grid"].compress(data["rho"])
+
+    # FIXME: (outside scope of ripple pr)
+    #  Modify map_coordinates to also work with transforms instead of eq object?
+    bounce_integrate, items = bounce_integral(
+        kwargs.pop("eq"), rho, alpha, knots, **kwargs
+    )
+
+    def ripple_sum(b):
+        """Return the ripple sum ∑ⱼ Hⱼ² / Iⱼ evaluated at b.
+
+        Parameters
+        ----------
+        b : Array, shape(b.shape[0], rho.size, alpha.size)
+            Multiplicative inverse of pitch angle.
+
+        Returns
+        -------
+        ripple_sum : Array, shape(b.shape[0], rho.size, alpha.size)
+            ∑ⱼ Hⱼ² / Iⱼ except the sum over j is split across alpha axis.
+
+        """
+        pitch = (1 / b).reshape(b.shape[0], -1)
+        H = bounce_integrate(_dH, [data["|grad(psi)|"], data["kappa_g"]], pitch)
+        I = bounce_integrate(_dI, [], pitch)
+        return jnp.nansum(H**2 / I, axis=-1).reshape(-1, rho.size, alpha.size)
+
+    max_tz_B = (1 - relative_shift) * transforms["grid"].compress(data["max_tz |B|"])
+    # Breakpoints where the quadrature should take more care.
+    # For simple schemes this means to include a quadrature point here.
+    breaks = 1 / pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])
+    breaks = jnp.append(
+        breaks.reshape(-1, rho.size, alpha.size),
+        max_tz_B[jnp.newaxis, :, jnp.newaxis],
+        axis=0,
+    )
+    breaks = jnp.sort(breaks, axis=0)
+    if _is_Newton_Cotes(ripple_quad):
+        b = composite_linspace(breaks, ripple_quad_resolution, is_sorted=True)
+        rip = ripple_quad(ripple_sum(b), b, axis=0)
+    else:
+        # want to use Clenshaw-Curtis with quadax.quadcc(ripple_sum, breaks)
+        raise NotImplementedError("Dependency conflict with quadax.")
+    # Integrate over flux surface.
+    ripple = rip.reshape(-1, w.size) @ w
+    data["ripple"] = transforms["grid"].expand(ripple)
+    return data
+
+
+@register_compute_fun(
     name="effective ripple",
     label="\\epsilon_{\\text{eff}}",
     units="~",
@@ -270,101 +351,19 @@ def _is_Newton_Cotes(quad):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=[
-        "rho",
-        "|grad(psi)|",
-        "kappa_g",
-        "sqrt(g)",
-        "psi_r",
-        "S(r)",
-        "V_r(r)",
-        "R",
-        "max_tz |B|",  # Could use softmax.
-    ],
+    data=["ripple" "psi_r", "S(r)", "V_r(r)", "R"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     # Evaluation of 1/ν neoclassical transport in stellarators.
     # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     # https://doi.org/10.1063/1.873749.
-
-    kwargs.setdefault(
-        "knots",
-        jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, transforms["grid"].num_zeta),
-    )
-    alpha_max = (2 - transforms["grid"].sym) * jnp.pi
-    alpha, w = legendre.leggauss(kwargs.get("num_alpha", transforms["grid"].num_theta))
-    alpha = affine_bijection_reverse(alpha, 0, alpha_max)
-    w = w * grad_affine_bijection_reverse(0, alpha_max)
-    rho = transforms["grid"].compress(data["rho"])
-
-    # TODO: (outside scope of ripple pr)
-    #  bounce_integral_map only needs eq because map_coordinates needs it.
-    #  Maybe modify map coordinates to work with transforms and not eq object?
-    bounce_integrate, items = bounce_integral(kwargs["eq"], rho, alpha, kwargs["knots"])
-
-    def ripple_sum(b):
-        """Return the ripple sum ∑ⱼ Hⱼ² / Iⱼ evaluated at b.
-
-        Parameters
-        ----------
-        b : Array, shape(b.shape[0], rho.size * alpha.size)
-            Multiplicative inverse of pitch angle.
-
-        Returns
-        -------
-        ripple_sum : Array, shape(b.shape[0], rho.size * alpha.size)
-            ∑ⱼ Hⱼ² / Iⱼ except the sum over j is split across alpha grid.
-
-        """
-        pitch = 1 / b
-        H = bounce_integrate(_dH, [data["|grad(psi)|"], data["kappa_g"]], pitch)
-        I = bounce_integrate(_dI, [], pitch)
-        return jnp.nansum(H**2 / I, axis=-1)
-
-    def compute_ripple(quad, breaks):
-        """Return the ripple sum integral ∫ db ∑ⱼ Hⱼ² / Iⱼ.
-
-        Parameters
-        ----------
-        quad : callable
-            Quadrature method.
-            See https://quadax.readthedocs.io/en/latest/index.html.
-        breaks : Array
-            Breakpoints where the quadrature should take more care.
-            For simple schemes this means to include a quadrature point here.
-
-        Returns
-        -------
-        ripple : Array, shape(rho.size, )
-            ∫ db ∑ⱼ Hⱼ² / Iⱼ.
-
-        """
-        if _is_Newton_Cotes(quad):
-            b = composite_linspace(breaks, kwargs.get("db quad resolution", 19))
-            rip = quad(ripple_sum(b), b, axis=0)
-        else:
-            # want to use Clenshaw-Curtis with quadax.quadcc(ripple_sum, breaks)
-            raise NotImplementedError("Dependency conflict with quadax.")
-        return rip.reshape(-1, w.size) @ w  # Integrate over flux surface.
-
-    max_tz_B = transforms["grid"].compress(data["max_tz |B|"])
-    relative_shift = 1e-6
-    max_tz_B = (1 - relative_shift) * max_tz_B
-    breaks = 1 / pitch_of_extrema(kwargs["knots"], items["B.c"], items["B_z_ra.c"])
-    breaks = jnp.append(
-        breaks.reshape(-1, rho.size, alpha.size),
-        max_tz_B[jnp.newaxis, :, jnp.newaxis],
-        axis=0,
-    ).reshape(-1, rho.size * alpha.size)
-
-    ripple = compute_ripple(kwargs.get("db quad", trapezoid), breaks)
     data["effective ripple"] = (
         jnp.pi
         * data["R"] ** 2
         / (8 * 2**0.5)
         * (data["V_r(r)"] / data["psi_r"])
         / data["S(r)"] ** 2
-        * transforms["grid"].expand(ripple)
+        * data["ripple"]
     ) ** (2 / 3)
     return data

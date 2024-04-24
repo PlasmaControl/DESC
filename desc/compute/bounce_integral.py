@@ -473,10 +473,10 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
     """
     B_c, B_z_ra_c, pitch = _check_shape(knots, B_c, B_z_ra_c, pitch)
     P, S, N, degree = pitch.shape[0], B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
-    # The polynomials' intersection points with 1 / λ is given by ``intersect``.
+    # The polynomials' intersection points with 1 / λ is given by intersect.
     # In order to be JIT compilable, this must have a shape that accommodates the
     # case where each polynomial intersects 1 / λ degree times.
-    # nan values in ``intersect`` denote a polynomial has less than degree intersects.
+    # nan values in intersect denote a polynomial has less than degree intersects.
     intersect = _poly_root(
         c=B_c,
         # New axis to use same pitches across polynomials of a particular spline.
@@ -491,8 +491,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     B_z_ra = _poly_val(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
     # Transform out of local power basis expansion.
-    intersect = intersect + knots[:-1, jnp.newaxis]
-    intersect = intersect.reshape(P, S, -1)
+    intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
 
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = ~jnp.isnan(intersect)
@@ -952,14 +951,7 @@ _interp1d_vec = jnp.vectorize(
     excluded={"method", "derivative", "extrap", "period"},
 )
 def _interp1d_vec_with_df(
-    xq,
-    x,
-    f,
-    fx,
-    method="cubic",
-    derivative=0,
-    extrap=False,
-    period=None,
+    xq, x, f, fx, method="cubic", derivative=0, extrap=False, period=None
 ):
     return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
 
@@ -1048,7 +1040,6 @@ def _bounce_quadrature(
     errorif(x.ndim != 1 or x.shape != w.shape)
     errorif(bp1.ndim != 3 or bp1.shape != bp2.shape)
     pitch = jnp.atleast_2d(pitch)
-
     S = B.shape[0]
     if not isinstance(f, (list, tuple)):
         f = [f]
@@ -1231,14 +1222,12 @@ def bounce_integral(
     rho = jnp.atleast_1d(rho)
     alpha = jnp.atleast_1d(alpha)
     knots = jnp.atleast_1d(knots)
-    # Compute |B| and group data along field lines.
     grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
     data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc)
     B_sup_z = data["B^zeta"].reshape(-1, knots.size) * L_ref / B_ref
     B = data["|B|"].reshape(-1, knots.size) / B_ref
     B_z_ra = data["|B|_z|r,a"].reshape(-1, knots.size) / B_ref
 
-    # Compute spline of |B| along field lines.
     monotonic = kwargs.pop("monotonic", False)
     B_c = (
         PchipInterpolator(knots, B, axis=-1, check=check).c

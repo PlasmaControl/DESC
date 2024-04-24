@@ -10,6 +10,7 @@ from termcolor import colored
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 
+from ..utils import errorif, warnif
 from .data_index import allowed_kwargs, data_index
 
 # map from profile name to equilibrium parameter name
@@ -862,14 +863,11 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         surface in the grid with code: ``function(q)``.
 
     """
-    if surface_label == "theta" and isinstance(grid, ConcentricGrid):
-        warnings.warn(
-            colored(
-                "Integrals over constant theta surfaces are poorly defined for "
-                + "ConcentricGrid.",
-                "yellow",
-            )
-        )
+    msg = colored(
+        "Integrals over constant theta surfaces are poorly defined for ConcentricGrid.",
+        "yellow",
+    )
+    warnif(surface_label == "theta" and isinstance(grid, ConcentricGrid), msg=msg)
     unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = _get_grid_surface(
         grid, surface_label
     )
@@ -1037,8 +1035,8 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
     expand_out = (
         expand_out
         # don't try to expand already expanded output
-        & hasattr(grid, f"num_{surface_label}")
-        & hasattr(grid, f"_inverse_{surface_label}_idx")
+        and hasattr(grid, f"num_{surface_label}")
+        and hasattr(grid, f"_inverse_{surface_label}_idx")
     )
     integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
 
@@ -1167,7 +1165,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # transform into the computational domain, so the second dimension that
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
-    assert hasattr(grid, f"num_{surface_label}") & hasattr(
+    assert hasattr(grid, f"num_{surface_label}") and hasattr(
         grid, f"_inverse_{surface_label}_idx"
     )
     return surface_integrals_map(grid, surface_label, expand_out=False)
@@ -1269,7 +1267,7 @@ def surface_variance(
     if has_idx:
         mean = grid.expand(mean, surface_label)
     variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T
-    if has_idx & expand_out:
+    if has_idx and expand_out:
         return grid.expand(variance, surface_label)
     else:
         return variance
@@ -1319,8 +1317,8 @@ def surface_min(grid, x, surface_label="rho"):
 
     """
     unique_size, inverse_idx, _, _, has_idx = _get_grid_surface(grid, surface_label)
-    if not has_idx:
-        raise NotImplementedError("Grid should have unique and inverse idx.")
+    msg = "Grid should have unique and inverse idx."
+    errorif(not has_idx, NotImplementedError, msg=msg)
     inverse_idx = jnp.asarray(inverse_idx)
     x = jnp.asarray(x)
     mins = jnp.full(unique_size, jnp.inf)

@@ -255,6 +255,10 @@ def _dI(B, pitch, Z):
     return jnp.sqrt(1 - pitch * B) / B
 
 
+def _is_Newton_Cotes(quad):
+    return quad == trapezoid  # or quad == quadax.simpson
+
+
 @register_compute_fun(
     name="effective ripple",
     label="\\epsilon_{\\text{eff}}",
@@ -318,17 +322,17 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         I = bounce_integrate(_dI, [], pitch)
         return jnp.nansum(H**2 / I, axis=-1)
 
-    def db_integrate(b_break, quad):
+    def compute_ripple(quad, breaks):
         """Return the ripple sum integral ∫ db ∑ⱼ Hⱼ² / Iⱼ.
 
         Parameters
         ----------
-        b_break : Array
-            Breakpoints where the quadrature should take more care.
-            For simple schemes this means to include a quadrature point here.
         quad : callable
             Quadrature method.
             See https://quadax.readthedocs.io/en/latest/index.html.
+        breaks : Array
+            Breakpoints where the quadrature should take more care.
+            For simple schemes this means to include a quadrature point here.
 
         Returns
         -------
@@ -336,39 +340,31 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
             ∫ db ∑ⱼ Hⱼ² / Iⱼ.
 
         """
-        # FIXME: dependency conflict with DESC and quadax.
-        # If Newton-Cotes quadrature, collect more b between breakpoints.
-        if quad == trapezoid:  # or quad == quadax.simpson
-            b = composite_linspace(b_break, kwargs.get("db quad resolution", 19))
-            ripple_field_line = quad(ripple_sum(b), b, axis=0)
-        # Otherwise use an adaptive quadrature.
+        if _is_Newton_Cotes(quad):
+            b = composite_linspace(breaks, kwargs.get("db quad resolution", 19))
+            rip = quad(ripple_sum(b), b, axis=0)
         else:
-            # Recommend using adaptive Clenshaw-Curtis quadrature.
-            # quadax.quadcc(ripple_sum, b_break).
-            raise NotImplementedError
-        # Integrate over flux surface.
-        return ripple_field_line.reshape(-1, w.size) @ w
+            # want to use Clenshaw-Curtis with quadax.quadcc(ripple_sum, breaks)
+            raise NotImplementedError("Dependency conflict with quadax.")
+        return rip.reshape(-1, w.size) @ w  # Integrate over flux surface.
 
     max_tz_B = transforms["grid"].compress(data["max_tz |B|"])
-    # Required to avoid floating point errors.
     relative_shift = 1e-6
     max_tz_B = (1 - relative_shift) * max_tz_B
-
-    b_break = 1 / pitch_of_extrema(kwargs["knots"], items["B.c"], items["B_z_ra.c"])
-    b_break = jnp.append(
-        b_break.reshape(-1, rho.size, alpha.size),
+    breaks = 1 / pitch_of_extrema(kwargs["knots"], items["B.c"], items["B_z_ra.c"])
+    breaks = jnp.append(
+        breaks.reshape(-1, rho.size, alpha.size),
         max_tz_B[jnp.newaxis, :, jnp.newaxis],
         axis=0,
     ).reshape(-1, rho.size * alpha.size)
-    ripple = db_integrate(b_break, kwargs.get("db quad", trapezoid))
-    ripple = transforms["grid"].expand(ripple)
 
+    ripple = compute_ripple(kwargs.get("db quad", trapezoid), breaks)
     data["effective ripple"] = (
         jnp.pi
         * data["R"] ** 2
         / (8 * 2**0.5)
         * (data["V_r(r)"] / data["psi_r"])
         / data["S(r)"] ** 2
-        * ripple
+        * transforms["grid"].expand(ripple)
     ) ** (2 / 3)
     return data

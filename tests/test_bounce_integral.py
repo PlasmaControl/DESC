@@ -676,6 +676,8 @@ def test_bounce_averaged_drifts():
     #                 above preprocessing for you. Let's test it for correctness
     #                 first then do this later.
     resolution = 50
+    # Whether to use monotonic or Hermite splines to interpolate |B|.
+    monotonic = False
     bounce_integrate, items = bounce_integral(
         eq=eq,
         rho=rho,
@@ -686,6 +688,7 @@ def test_bounce_averaged_drifts():
         check=True,
         plot=True,
         resolution=resolution,
+        monotonic=monotonic,
     )
     data_keys = [
         "|grad(psi)|^2",
@@ -744,7 +747,6 @@ def test_bounce_averaged_drifts():
     )
     fudge_factor3 = 0.07
     cvdrift_analytic = gbdrift_analytic + fudge_factor3 * alpha_MHD / bmag**2
-    # Comparing coefficients with their analytical expressions
     np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1.2e-2, rtol=5e-3)
     np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=1.8e-2, rtol=5e-3)
 
@@ -776,7 +778,7 @@ def test_bounce_averaged_drifts():
     I_6 = 2 / 3 * (k * (-2 + 4 * k2) * I_0 - 4 * (-1 + k2) * I_1)
     I_7 = 4 / k * (2 * k2 * I_0 + (1 - 2 * k2) * I_1)
 
-    bouce_drift_analytic = (
+    bounce_drift_analytic = (
         fudge_factor3 * dPdrho / B0**2 * I_1
         - 0.5
         * fudge_factor2
@@ -791,21 +793,33 @@ def test_bounce_averaged_drifts():
         g = _sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
+    # Can choose method of interpolation for all quantities besides |B| from
+    # interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html#interpax.interp1d.
+    method = "akima"
     bounce_drift = bounce_integrate(
         integrand=integrand,
         f=[cvdrift, gbdrift],
         pitch=pitch.reshape(pitch_resolution, -1),
+        method=method,
     )
     # There is only one bounce integral per pitch in this example.
     bounce_drift = np.squeeze(_filter_not_nan(bounce_drift))
-    assert bouce_drift_analytic.shape == bounce_drift.shape
+    assert bounce_drift_analytic.shape == bounce_drift.shape
 
-    plt.plot(1 / pitch, bouce_drift_analytic, marker="o", label="analytic")
+    plt.plot(1 / pitch, bounce_drift_analytic, marker="o", label="analytic")
     plt.plot(1 / pitch, bounce_drift, marker="x", label="numerical")
     plt.xlabel(r"$1 / \lambda$")
     plt.ylabel("Bounce averaged drift")
-    plt.title(f"Quadrature resolution = {resolution}. Delta shift = {delta_shift}.")
     plt.legend()
     plt.tight_layout()
     plt.show()
-    np.testing.assert_allclose(bounce_drift, bouce_drift_analytic, atol=2e-2, rtol=1e-2)
+    msg = (
+        "Maybe tune these parameters?"
+        f"Quadrature resolution is {resolution}.\n"
+        f"Delta shift is {delta_shift}.\n"
+        f"Spline method for integrand quantities is {method}.\n"
+        f"Spline method for |B| is monotonic? (as opposed to Hermite): {monotonic}."
+    )
+    np.testing.assert_allclose(
+        bounce_drift, bounce_drift_analytic, atol=2e-2, rtol=1e-2, err_msg=msg
+    )

@@ -144,7 +144,6 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
 
     # check that all constraints are actually satisfiable
     params = objective.unpack_state(xp, False)
-    print(params)
     for con in constraint.objectives:
         # FIXME: xpi is not always correct -- missing params?
         xpi = [params[i] for i, t in enumerate(objective.things) if t in con.things]

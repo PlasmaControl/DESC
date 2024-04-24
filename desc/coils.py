@@ -1287,7 +1287,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)
-        data = coils.compute("phi")
+        data = coils.compute("phi", return_only_unique=True)
         for i, cdata in enumerate(data):
             errorif(
                 np.any(cdata["phi"] > maxphi),

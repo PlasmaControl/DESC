@@ -24,6 +24,7 @@ from desc.compute.bounce_integral import (
     bounce_integral,
     bounce_points,
     composite_linspace,
+    desc_grid_from_field_line_coords,
     grad_affine_bijection_reverse,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
@@ -35,7 +36,6 @@ from desc.compute.bounce_integral import (
 from desc.compute.utils import dot, safediv
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import desc_grid_from_field_line_coords
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.objectives import (

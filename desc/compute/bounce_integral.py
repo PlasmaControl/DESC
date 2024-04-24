@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 
 from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take
 from desc.compute.utils import safediv
-from desc.equilibrium.coords import desc_grid_from_field_line_coords
+from desc.grid import Grid, meshgrid_inverse_idx, meshgrid_unique_idx
 from desc.utils import errorif
 
 
@@ -1328,3 +1328,55 @@ def bounce_integral(
         return result
 
     return bounce_integrate, items
+
+
+def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
+    """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
+
+    Create a meshgrid from the given field line coordinates,
+    and return the equivalent DESC coordinate grid.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium on which to perform coordinate mapping.
+    rho : ndarray
+        Unique flux surface label coordinates.
+    alpha : ndarray
+        Unique field line label coordinates over a constant rho surface.
+    zeta : ndarray
+        Unique field line-following ζ coordinates.
+
+    Returns
+    -------
+    grid_desc : Grid
+        DESC coordinate grid for the given field line coordinates.
+    grid_fl : Grid
+        Clebsch-Type field-line coordinate grid.
+
+    """
+    r, a, z_fl = map(jnp.ravel, jnp.meshgrid(rho, alpha, zeta, indexing="ij"))
+    coords_fl = jnp.column_stack([r, a, z_fl])
+    _unique_rho_idx = meshgrid_unique_idx(rho.size, alpha.size, zeta.size)[0]
+    _inverse_rho_idx = meshgrid_inverse_idx(rho.size, alpha.size, zeta.size)[0]
+    grid_fl = Grid(
+        nodes=coords_fl,
+        sort=False,
+        jitable=True,
+        _unique_rho_idx=_unique_rho_idx,
+        _inverse_rho_idx=_inverse_rho_idx,
+    )
+    coords_desc = eq.map_coordinates(
+        coords_fl,
+        inbasis=("rho", "alpha", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+    )
+    grid_desc = Grid(
+        nodes=coords_desc,
+        sort=False,
+        jitable=True,
+        _unique_rho_idx=_unique_rho_idx,
+        _inverse_rho_idx=_inverse_rho_idx,
+    )
+    return grid_desc, grid_fl

@@ -9,14 +9,7 @@ from termcolor import colored
 from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_profiles, get_transforms
-from desc.grid import (
-    ConcentricGrid,
-    Grid,
-    LinearGrid,
-    QuadratureGrid,
-    meshgrid_inverse_idx,
-    meshgrid_unique_idx,
-)
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import setdefault
 
@@ -307,59 +300,6 @@ def compute_theta_coords(
     if full_output:
         return out, (res, niter)
     return out
-
-
-def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
-    """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
-
-    Create a meshgrid from the given field line coordinates,
-    and return the equivalent DESC coordinate grid.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium on which to perform coordinate mapping.
-    rho : ndarray
-        Unique flux surface label coordinates.
-    alpha : ndarray
-        Unique field line label coordinates over a constant rho surface.
-    zeta : ndarray
-        Unique field line-following ζ coordinates.
-
-    Returns
-    -------
-    grid_desc : Grid
-        DESC coordinate grid for the given field line coordinates.
-    grid_fl : Grid
-        Clebsch-Type field-line coordinate grid.
-
-    """
-    r, a, z_fl = map(jnp.ravel, jnp.meshgrid(rho, alpha, zeta, indexing="ij"))
-    coords_fl = jnp.column_stack([r, a, z_fl])
-    _unique_rho_idx = meshgrid_unique_idx(rho.size, alpha.size, zeta.size)[0]
-    _inverse_rho_idx = meshgrid_inverse_idx(rho.size, alpha.size, zeta.size)[0]
-    grid_fl = Grid(
-        nodes=coords_fl,
-        sort=False,
-        jitable=True,
-        _unique_rho_idx=_unique_rho_idx,
-        _inverse_rho_idx=_inverse_rho_idx,
-    )
-    coords_desc = map_coordinates(
-        eq,
-        coords_fl,
-        inbasis=("rho", "alpha", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
-    grid_desc = Grid(
-        nodes=coords_desc,
-        sort=False,
-        jitable=True,
-        _unique_rho_idx=_unique_rho_idx,
-        _inverse_rho_idx=_inverse_rho_idx,
-    )
-    return grid_desc, grid_fl
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

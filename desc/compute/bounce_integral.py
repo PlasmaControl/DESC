@@ -854,21 +854,23 @@ def _suppress_bad_nan(V):
     return V
 
 
-def _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product):
+def _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product):
     """Check for floating point errors.
 
     Parameters
     ----------
     Z : Array
         Quadrature points at field line-following ζ coordinates.
+    f : iterable of Array, shape(Z.shape)
+        Arguments to the integrand interpolated to Z.
     B_sup_z : Array, shape(Z.shape)
-        Contravariant field-line following toroidal component of magnetic field.
-        Interpolated to Z.
+        Contravariant field-line following toroidal component of magnetic field,
+        interpolated to Z.
     B : Array, shape(Z.shape)
-        Norm of magnetic field. Interpolated to Z.
+        Norm of magnetic field, interpolated to Z.
     B_z_ra : Array, shape(Z.shape)
-        Norm of magnetic field derivative with respect to field-line following label.
-        Interpolated to Z.
+        Norm of magnetic field derivative with respect to field-line following label,
+        interpolated to Z.
     inner_product : Array
         Output of ``_interpolatory_quadrature``.
 
@@ -993,14 +995,13 @@ def _interpolatory_quadrature(
     B_sup_z = _interp1d_vec(Z_ps, knots, B_sup_z, method=method).reshape(shape)
     # Specify derivative at knots for ≈ cubic hermite interpolation.
     B = _interp1d_vec_with_df(Z_ps, knots, B, B_z_ra, method=method_B).reshape(shape)
-
     pitch = pitch[..., jnp.newaxis, jnp.newaxis]
     inner_product = jnp.dot(
         _suppress_bad_nan(integrand(*f, B=B, pitch=pitch, Z=Z)) / B_sup_z,
         w,
     )
     if check:
-        _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product)
+        _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product)
     return inner_product
 
 

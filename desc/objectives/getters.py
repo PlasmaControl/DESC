@@ -1,12 +1,10 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from ._equilibrium import (
-    CurrentDensity,
-    Energy,
-    ForceBalance,
-    HelicalForceBalance,
-    RadialForceBalance,
-)
+import numpy as np
+
+from desc.utils import is_any_instance
+
+from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
     AxisRSelfConsistency,
     AxisZSelfConsistency,
@@ -19,11 +17,14 @@ from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixParameter,
     FixPressure,
     FixPsi,
 )
@@ -49,10 +50,10 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    mode : one of {"force", "forces", "energy", "vacuum"}
+    mode : one of {"force", "forces", "energy"}
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
-        for minimizing MHD energy. "vacuum" directly minimizes current density.
+        for minimizing MHD energy.
     normalize : bool
         Whether to normalize units of objective.
 
@@ -71,10 +72,6 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
         objectives = (
             RadialForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
             HelicalForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
-        )
-    elif mode == "vacuum":
-        objectives = CurrentDensity(
-            eq=eq, normalize=normalize, normalize_target=normalize
         )
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
@@ -110,6 +107,9 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
                 constraints += (
                     con(eq=eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(eq, param, [])).size:
+            constraints += (FixParameter(eq, param),)
 
     return constraints
 
@@ -143,6 +143,9 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
                 constraints += (
                     con(eq=eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(eq, param, [])).size:
+            constraints += (FixParameter(eq, param),)
 
     return constraints
 
@@ -198,6 +201,9 @@ def get_NAE_constraints(
                 constraints += (
                     con(eq=desc_eq, normalize=normalize, normalize_target=normalize),
                 )
+    for param in ["I", "G", "Phi_mn"]:
+        if np.array(getattr(desc_eq, param, [])).size:
+            constraints += (FixParameter(desc_eq, param),)
 
     if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(
@@ -214,20 +220,32 @@ def get_NAE_constraints(
     return constraints
 
 
-def maybe_add_self_consistency(eq, constraints):
+def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
+    # Equilibrium
+    if (
+        hasattr(thing, "Ra_n")
+        and hasattr(thing, "Za_n")
+        and hasattr(thing, "Rb_lmn")
+        and hasattr(thing, "Zb_lmn")
+        and hasattr(thing, "L_lmn")
+    ):
+        if not is_any_instance(constraints, BoundaryRSelfConsistency):
+            constraints += (BoundaryRSelfConsistency(eq=thing),)
+        if not is_any_instance(constraints, BoundaryZSelfConsistency):
+            constraints += (BoundaryZSelfConsistency(eq=thing),)
+        if not is_any_instance(constraints, FixLambdaGauge):
+            constraints += (FixLambdaGauge(eq=thing),)
+        if not is_any_instance(constraints, AxisRSelfConsistency):
+            constraints += (AxisRSelfConsistency(eq=thing),)
+        if not is_any_instance(constraints, AxisZSelfConsistency):
+            constraints += (AxisZSelfConsistency(eq=thing),)
 
-    def _is_any_instance(things, cls):
-        return any([isinstance(t, cls) for t in things])
+    # Curve
+    elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):
+        if not is_any_instance(constraints, FixCurveShift):
+            constraints += (FixCurveShift(curve=thing),)
+        if not is_any_instance(constraints, FixCurveRotation):
+            constraints += (FixCurveRotation(curve=thing),)
 
-    if not _is_any_instance(constraints, BoundaryRSelfConsistency):
-        constraints += (BoundaryRSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, BoundaryZSelfConsistency):
-        constraints += (BoundaryZSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(eq=eq),)
-    if not _is_any_instance(constraints, AxisRSelfConsistency):
-        constraints += (AxisRSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, AxisZSelfConsistency):
-        constraints += (AxisZSelfConsistency(eq=eq),)
     return constraints

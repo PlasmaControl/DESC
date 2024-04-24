@@ -465,7 +465,7 @@ def solve_continuation_automatic(  # noqa: C901
     ----------
     eq : Equilibrium
         Unsolved Equilibrium with the final desired boundary, profiles, resolution.
-    objective : {"force", "energy", "vacuum"}
+    objective : {"force", "energy"}
         function to solve for equilibrium solution
     optimizer : str or Optimizer (optional)
         optimizer to use
@@ -638,7 +638,7 @@ def solve_continuation(  # noqa: C901
     ----------
     eqfam : EquilibriaFamily or list of Equilibria
         Equilibria to solve for at each step.
-    objective : {"force", "energy", "vacuum"}
+    objective : {"force", "energy"}
         function to solve for equilibrium solution
     optimizer : str or Optimizer (optional)
         optimizer to use

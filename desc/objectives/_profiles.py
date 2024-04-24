@@ -5,7 +5,7 @@ import numpy as np
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -23,12 +23,13 @@ class Pressure(_Objective):
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
-        locations.
+        locations. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -49,6 +50,7 @@ class Pressure(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid)``.
     name : str, optional
         Name of the objective function.
 
@@ -177,12 +179,13 @@ class RotationalTransform(_Objective):
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
-        locations.
+        locations. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -203,6 +206,9 @@ class RotationalTransform(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
     name : str, optional
         Name of the objective function.
 
@@ -263,6 +269,19 @@ class RotationalTransform(_Objective):
             )
         else:
             grid = self._grid
+
+        warnif(
+            (eq.iota is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
+            RuntimeWarning,
+            "RotationalTransform objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            (eq.iota is None) and (grid.num_zeta < 2 * eq.N),
+            RuntimeWarning,
+            "RotationalTransform objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
@@ -331,12 +350,13 @@ class Shear(_Objective):
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
-        locations.
+        locations. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -357,6 +377,9 @@ class Shear(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
     name : str, optional
         Name of the objective function.
 
@@ -417,6 +440,17 @@ class Shear(_Objective):
             )
         else:
             grid = self._grid
+
+        warnif(
+            (eq.iota is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
+            RuntimeWarning,
+            "Shear objective grid requires poloidal " "resolution for surface averages",
+        )
+        warnif(
+            (eq.iota is None) and (grid.num_zeta < 2 * eq.N),
+            RuntimeWarning,
+            "Shear objective grid requires toroidal " "resolution for surface averages",
+        )
 
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
@@ -483,12 +517,13 @@ class ToroidalCurrent(_Objective):
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
-        locations.
+        locations. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -509,6 +544,9 @@ class ToroidalCurrent(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
     name : str, optional
         Name of the objective function.
 
@@ -569,6 +607,19 @@ class ToroidalCurrent(_Objective):
             )
         else:
             grid = self._grid
+
+        warnif(
+            (eq.current is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
+            RuntimeWarning,
+            "ToroidalCurrent objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            (eq.current is None) and (grid.num_zeta < 2 * eq.N),
+            RuntimeWarning,
+            "ToroidalCurrent objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, grid.nodes[grid.unique_rho_idx]

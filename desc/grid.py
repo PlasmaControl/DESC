@@ -16,6 +16,8 @@ __all__ = [
     "ConcentricGrid",
     "find_least_rational_surfaces",
     "find_most_rational_surfaces",
+    "meshgrid_unique_idx",
+    "meshgrid_inverse_idx",
 ]
 
 

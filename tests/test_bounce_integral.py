@@ -242,10 +242,8 @@ def test_composite_linspace():
     B_max_tz = np.array([1, 3])
     pitch_knot = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
     b_knot = 1 / pitch_knot
-    print()
-    print(b_knot)
     b = composite_linspace(b_knot, resolution=3)
-    print()
+    print(b_knot)
     print(b)
     np.testing.assert_allclose(b, np.sort(b, axis=0), atol=0, rtol=0)
     for i in range(pitch_knot.shape[0]):
@@ -263,7 +261,9 @@ def test_bounce_points():
         knots = np.linspace(start, end, 5)
         B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
         pitch = 2
-        bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
+        bp1, bp2 = bounce_points(
+            pitch, knots, B.c, B.derivative().c, check=True, plot=False
+        )
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[0::2])
@@ -276,11 +276,7 @@ def test_bounce_points():
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch = 2
         bp1, bp2 = bounce_points(
-            pitch,
-            k,
-            B.c,
-            B.derivative().c,
-            check=True,
+            pitch, k, B.c, B.derivative().c, check=True, plot=False
         )
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -296,7 +292,7 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3]
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -316,13 +312,13 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
         np.testing.assert_allclose(bp2, intersect[[1, -1]])
 
-    def test_extrema_first_and_before_bp1():
+    def test_extrema_first_and_before_bp1(plot=False):
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -336,7 +332,8 @@ def test_bounce_points():
         bp1, bp2 = bounce_points(
             pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True, plot=False
         )
-        plot_field_line_with_ripple(B, pitch, bp1, bp2, start=k[2])
+        if plot:
+            plot_field_line_with_ripple(B, pitch, bp1, bp2, start=k[2])
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -357,8 +354,7 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1]
-        # This note may not make sense to the reader now, but if a regression
-        # fails this test, it will save many hours of debugging.
+        # If a regression fails this test, this note will save many hours of debugging.
         # If the filter in place to return only the distinct roots is too coarse,
         # in particular atol < 1e-15, then this test will error. In the resulting
         # plot that the error will produce the red bounce point on the first hump
@@ -370,7 +366,7 @@ def test_bounce_points():
         # value theorem holds for the continuous spline, so when fed these sequence
         # of roots, the correct action is to ignore the first green root since
         # otherwise the interior of the bounce points would be hills and not valleys.
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -741,12 +737,12 @@ def test_bounce_averaged_drifts():
     )
     np.testing.assert_allclose(gds21, gds21_analytic, atol=1.7e-2, rtol=5e-4)
 
-    fudge_factor2 = 0.19
-    gbdrift_analytic = fudge_factor2 * (
+    fudge_factor_gbdrift = 0.19
+    gbdrift_analytic = fudge_factor_gbdrift * (
         -s_hat + (np.cos(theta_PEST) - gds21_analytic / s_hat * np.sin(theta_PEST))
     )
-    fudge_factor3 = 0.07
-    cvdrift_analytic = gbdrift_analytic + fudge_factor3 * alpha_MHD / bmag**2
+    fudge_factor_cvdrift = 0.07
+    cvdrift_analytic = gbdrift_analytic + fudge_factor_cvdrift * alpha_MHD / bmag**2
     np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1.2e-2, rtol=5e-3)
     np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=1.8e-2, rtol=5e-3)
 
@@ -779,9 +775,9 @@ def test_bounce_averaged_drifts():
     I_7 = 4 / k * (2 * k2 * I_0 + (1 - 2 * k2) * I_1)
 
     bounce_drift_analytic = (
-        fudge_factor3 * dPdrho / B0**2 * I_1
+        fudge_factor_cvdrift * dPdrho / B0**2 * I_1
         - 0.5
-        * fudge_factor2
+        * fudge_factor_gbdrift
         * (
             s_hat * (I_0 + I_1 + I_2 + I_3)
             + alpha_MHD / B0**4 * (I_4 + I_5)
@@ -804,7 +800,7 @@ def test_bounce_averaged_drifts():
     )
     # There is only one bounce integral per pitch in this example.
     bounce_drift = np.squeeze(_filter_not_nan(bounce_drift))
-    assert bounce_drift_analytic.shape == bounce_drift.shape
+    assert bounce_drift.shape == bounce_drift_analytic.shape
 
     plt.plot(1 / pitch, bounce_drift_analytic, marker="o", label="analytic")
     plt.plot(1 / pitch, bounce_drift, marker="x", label="numerical")
@@ -814,11 +810,12 @@ def test_bounce_averaged_drifts():
     plt.tight_layout()
     plt.show()
     msg = (
-        "Maybe tune these parameters?"
+        "Maybe tune these parameters?\n"
         f"Quadrature resolution is {resolution}.\n"
         f"Delta shift is {delta_shift}.\n"
         f"Spline method for integrand quantities is {method}.\n"
-        f"Spline method for |B| is monotonic? (as opposed to Hermite): {monotonic}."
+        f"Spline method for |B| is monotonic? (as opposed to Hermite): {monotonic}.\n"
+        f"Fudge factors: {fudge_factor_gbdrift}, {fudge_factor_cvdrift}.\n"
     )
     np.testing.assert_allclose(
         bounce_drift, bounce_drift_analytic, atol=2e-2, rtol=1e-2, err_msg=msg

@@ -281,7 +281,7 @@ def composite_linspace(breaks, resolution, is_sorted=False):
     resolution : int
         Number of points between each break.
     is_sorted : bool
-        Whether the knots are already sorted along the first axis.
+        Whether the breaks are already sorted along the first axis.
 
     Returns
     -------
@@ -406,7 +406,6 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     extrema = _poly_root(
         c=B_z_ra_c, a_min=jnp.array([0]), a_max=jnp.diff(knots), distinct=True
     )
-    # Can detect at most degree of |B|_z_ra spline extrema between each knot.
     assert extrema.shape == (S, N, degree - 1)
     B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis])
     B_zz_ra_extrema = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
@@ -415,13 +414,12 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     # Higher priority to shift down maxima than shift up minima, so identify near
     # equality with zero as maxima.
     is_maxima = B_zz_ra_extrema <= 0
+    # Reshape so that last axis enumerates extrema along a field line.
     B_extrema = jnp.where(
         is_maxima,
         (1 - relative_shift) * B_extrema,
         (1 + relative_shift) * B_extrema,
     ).reshape(S, -1)
-    # Reshape so that last axis enumerates extrema along a field line.
-    # Pad all the nan at the end rather than interspersed to be consistent.
     B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
     assert pitch.shape == (N * (degree - 1), S)
@@ -564,33 +562,27 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
     P, S = bp1.shape[:-1]
 
     msg_1 = "Bounce points have an inversion."
-    err_1 = jnp.any(bp1 > bp2, axis=(0, -1))
+    err_1 = jnp.any(bp1 > bp2, axis=-1)
     msg_2 = "Discontinuity detected."
-    err_2 = jnp.any(bp1[..., 1:] < bp2[..., :-1], axis=(0, -1))
+    err_2 = jnp.any(bp1[..., 1:] < bp2[..., :-1], axis=-1)
 
-    for s in jnp.nonzero(err_1 | err_2)[0]:
+    for s in range(S):
         B = PPoly(B_c[:, s], knots)
-        B_mid = B((bp1[:, s] + bp2[:, s]) / 2)
         for p in range(P):
-            err_1_ps = jnp.any(bp1[p, s] > bp2[p, s])
-            err_2_ps = jnp.any(bp1[p, s, 1:] < bp2[p, s, :-1])
-            err_3_ps = jnp.any(B_mid[p] > 1 / pitch[p, s] + eps)
-            if err_1_ps or err_2_ps or err_3_ps:
-                bp1_ps, bp2_ps, B_mid_ps = map(
-                    _filter_not_nan, (bp1[p, s], bp2[p, s], B_mid[p])
+            B_mid = B((bp1[p, s] + bp2[p, s]) / 2)
+            err_3 = jnp.any(B_mid > 1 / pitch[p, s] + eps)
+            if err_1[p, s] or err_2[p, s] or err_3:
+                bp1_p, bp2_p, B_mid = map(
+                    _filter_not_nan, (bp1[p, s], bp2[p, s], B_mid)
                 )
-                plot_field_line_with_ripple(
-                    B, pitch[p, s], bp1_ps, bp2_ps, id=f"{p},{s}"
-                )
-                print("bp1:", bp1_ps)
-                print("bp2:", bp2_ps)
-                assert not err_1_ps, msg_1
-                assert not err_2_ps, msg_2
-                msg_3 = f"B midpoint = {B_mid_ps} > {1 / pitch[p, s] + eps} = 1/pitch."
-                assert not err_3_ps, msg_3
-    if plot:
-        for s in range(S):
-            B = PPoly(B_c[:, s], knots)
+                plot_field_line_with_ripple(B, pitch[p, s], bp1_p, bp2_p, id=f"{p},{s}")
+                print("bp1:", bp1_p)
+                print("bp2:", bp2_p)
+                assert not err_1[p, s], msg_1
+                assert not err_2[p, s], msg_2
+                msg_3 = f"B midpoint = {B_mid} > {1 / pitch[p, s] + eps} = 1/pitch."
+                assert not err_3, msg_3
+        if plot:
             plot_field_line_with_ripple(B, pitch[:, s], bp1[:, s], bp2[:, s], id=str(s))
 
 
@@ -857,12 +849,30 @@ def _suppress_bad_nan(V):
 
     """
     # This simple logic is encapsulated here to make explicit the bug it resolves.
+    # Don't suppress inf as that indicates catastrophic floating point error.
     V = jnp.nan_to_num(V, posinf=jnp.inf, neginf=-jnp.inf)
     return V
 
 
 def _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product):
-    """Check that no integrals were lost and the hairy ball theorem is upheld."""
+    """Check for floating point errors.
+
+    Parameters
+    ----------
+    Z : Array
+        Quadrature points at field line-following ζ coordinates.
+    B_sup_z : Array, shape(Z.shape)
+        Contravariant field-line following toroidal component of magnetic field.
+        Interpolated to Z.
+    B : Array, shape(Z.shape)
+        Norm of magnetic field. Interpolated to Z.
+    B_z_ra : Array, shape(Z.shape)
+        Norm of magnetic field derivative with respect to field-line following label.
+        Interpolated to Z.
+    inner_product : Array
+        Output of ``_interpolatory_quadrature``.
+
+    """
     is_not_quad_point = jnp.isnan(Z)
     # We want quantities to evaluate as finite only at quadrature points
     # for the integrals with boundaries at valid bounce points.
@@ -873,7 +883,7 @@ def _assert_finite_and_hairy(Z, B_sup_z, B, f, B_z_ra, inner_product):
     for ff in f:
         assert jnp.all(jnp.isfinite(ff) ^ is_not_quad_point), msg
 
-    msg = "|B| has vanished."
+    msg = "|B| has vanished, violating the hairy ball theorem."
     assert not jnp.isclose(B, 0).any(), msg
     assert not jnp.isclose(B_sup_z, 0).any(), msg
 
@@ -1215,7 +1225,38 @@ def bounce_integral(
         print(jnp.nansum(average, axis=-1))
 
     """
+    if alpha is None:
+        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
+    rho = jnp.atleast_1d(rho)
+    alpha = jnp.atleast_1d(alpha)
+    knots = jnp.atleast_1d(knots)
+    # Compute |B| and group data along field lines.
+    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc)
+    B_sup_z = data["B^zeta"].reshape(-1, knots.size) * L_ref / B_ref
+    B = data["|B|"].reshape(-1, knots.size) / B_ref
+    B_z_ra = data["|B|_z|r,a"].reshape(-1, knots.size) / B_ref
+
+    # Compute spline of |B| along field lines.
     monotonic = kwargs.pop("monotonic", False)
+    B_c = (
+        PchipInterpolator(knots, B, axis=-1, check=check).c
+        if monotonic
+        else CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c
+    )
+    B_c = jnp.moveaxis(B_c, source=1, destination=-1)
+    B_z_ra_c = _poly_der(B_c)
+    degree = 3
+    assert B_c.shape == (degree + 1, rho.size * alpha.size, knots.size - 1)
+    assert B_z_ra_c.shape == (degree, rho.size * alpha.size, knots.size - 1)
+    items = {
+        "grid_desc": grid_desc,
+        "grid_fl": grid_fl,
+        "knots": knots,
+        "B.c": B_c,
+        "B_z_ra.c": B_z_ra_c,
+    }
+
     if quad == tanh_sinh_quad:
         kwargs.setdefault("resolution", 19)
     x, w = quad(**kwargs)
@@ -1225,43 +1266,6 @@ def bounce_integral(
     # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
     # Apply reverse automorphism to quadrature points.
     x = auto(x)
-
-    if alpha is None:
-        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
-    rho = jnp.atleast_1d(rho)
-    alpha = jnp.atleast_1d(alpha)
-    knots = jnp.atleast_1d(knots)
-    # number of field lines or splines
-    S = rho.size * alpha.size
-
-    # Compute |B| and group data along field lines.
-    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
-    data = eq.compute(
-        ["B^zeta", "|B|", "|B|_z|r,a"],
-        grid=grid_desc,
-        # TODO: look into override grid in different PR
-        override_grid=False,
-    )
-    B_sup_z = data["B^zeta"].reshape(S, knots.size) * L_ref / B_ref
-    B = data["|B|"].reshape(S, knots.size) / B_ref
-    B_z_ra = data["|B|_z|r,a"].reshape(S, knots.size) / B_ref
-    # Compute spline of |B| along field lines.
-    B_c = (
-        PchipInterpolator(knots, B, axis=-1, check=check).c
-        if monotonic
-        else CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c
-    )
-    B_c = jnp.moveaxis(B_c, source=1, destination=-1)
-    B_z_ra_c = _poly_der(B_c)
-    assert B_c.shape == (4, S, knots.size - 1)
-    assert B_z_ra_c.shape == (3, S, knots.size - 1)
-    items = {
-        "grid_desc": grid_desc,
-        "grid_fl": grid_fl,
-        "knots": knots,
-        "B.c": B_c,
-        "B_z_ra.c": B_z_ra_c,
-    }
 
     def bounce_integrate(integrand, f, pitch, method="akima"):
         """Bounce integrate ∫ f(ℓ) dℓ.
@@ -1298,7 +1302,7 @@ def bounce_integral(
 
         Returns
         -------
-        result : Array, shape(P, S, (knots.size - 1) * 3)
+        result : Array, shape(P, S, (knots.size - 1) * degree)
             First axis enumerates pitch values. Second axis enumerates the field
             lines. Last axis enumerates the bounce integrals.
 
@@ -1320,7 +1324,7 @@ def bounce_integral(
             method_B="monotonic" if monotonic else "cubic",
             check=check,
         )
-        assert result.shape[-1] == (knots.size - 1) * 3
+        assert result.shape[-1] == (knots.size - 1) * degree
         return result
 
     return bounce_integrate, items

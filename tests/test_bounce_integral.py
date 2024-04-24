@@ -524,72 +524,6 @@ def test_example_bounce_integral():
     print(np.nansum(average, axis=-1))
 
 
-# @pytest.mark.unit
-def test_elliptic_integral_limit():
-    """Test bounce integral matches elliptic integrals.
-
-    In the limit of a low beta, large aspect ratio tokamak the bounce integral
-    should converge to the elliptic integrals of the first kind.
-    todo: would be nice to understand physics for why these are supposed
-        to be proportional to bounce integral. Is this discussed in any book?
-        Also, looking at
-        https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.ellipk.html
-        Are we saying that in this limit, we expect that |B| ~ sin(t)^2, with m as the
-        pitch angle? I assume that we want to add g_zz to the integrand in the
-        definition of the function in the scipy documentation above,
-        and after a change of variables the bounce points will be the endpoints of
-        the integration.
-        So this test will test whether the quadrature is accurate
-        (and not whether the bounce points were accurate).
-
-    """
-    assert False, "Test not finished yet."
-    L, M, N, NFP, sym = 6, 6, 6, 1, True
-    surface = FourierRZToroidalSurface(
-        R_lmn=[1.0, 0.1],
-        Z_lmn=[0.0, -0.1],
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[0, 0], [-1, 0]]),
-        sym=sym,
-        NFP=NFP,
-    )
-    eq = Equilibrium(
-        L=L,
-        M=M,
-        N=N,
-        NFP=NFP,
-        surface=surface,
-        pressure=PowerSeriesProfile([1e2, 0, -1e2]),
-        iota=PowerSeriesProfile([1, 0, 2]),
-        Psi=1.0,
-    )
-    eq = solve_continuation_automatic(eq)[-1]
-
-    def beta(grid, data):
-        return data["<beta>_vol"]
-
-    low_beta = 0.01
-    # todo: error that objective function has no linear attribute?
-    objective = ObjectiveFunction(
-        (ObjectiveFromUser(fun=beta, eq=eq, target=low_beta),)
-    )
-
-    constraints = (*get_fixed_boundary_constraints(eq), get_equilibrium_objective(eq))
-    opt = Optimizer("proximal-lsq-exact")
-    eq, result = eq.optimize(
-        objective=objective, constraints=constraints, optimizer=opt
-    )
-    print(result)
-
-    rho = np.array([0.5])
-    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 10)
-    knots = np.linspace(0, 6 * np.pi, 20)
-    # TODO now compare result to elliptic integral
-    bounce_integrate, items = bounce_integral(eq, rho, alpha, knots, check=True)
-    pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
-    bp1, bp2 = bounce_points(pitch, knots, items["B.c"], items["B_z_ra.c"], check=True)
-
-
 @pytest.mark.unit
 def test_integral_0(k=0.9, resolution=10):
     """4 / k * ellipkinc(np.arcsin(k), 1 / k**2)."""
@@ -640,8 +574,7 @@ def test_bounce_averaged_drifts():
 
     Calculate bounce-averaged drifts using the bounce-average routine and
     compare it with the analytical expression
-    # Note 1: This test can be merged with the elliptic integral test as
-    we do calculate elliptic integrals here
+    # Note 1: This test can be merged with the low beta test
     # Note 2: Remove tests/test_equilibrium :: test_shifted_circle_geometry
     # once all the epsilons and Gammas have been implemented and tested
     """
@@ -663,14 +596,11 @@ def test_bounce_averaged_drifts():
     zeta = np.linspace(-np.pi / iota, np.pi / iota, N)
     alpha = 0
     theta_PEST = alpha + iota * zeta
-    coords1 = np.zeros((N, 3))
-    coords1[:, 0] = np.broadcast_to(rho, N)
-    coords1[:, 1] = theta_PEST
-    coords1[:, 2] = zeta
     # TODO: Request: The bounce integral operator should be able to take a grid.
     #       Response: Currently the API is such that the method does all the
     #                 above preprocessing for you. Let's test it for correctness
     #                 first then do this later.
+
     resolution = 50
     # Whether to use monotonic or Hermite splines to interpolate |B|.
     monotonic = False
@@ -756,8 +686,8 @@ def test_bounce_averaged_drifts():
     k = np.sqrt(k2)
     # Here are the notes that explain these integrals.
     # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf.
-    I_0 = test_integral_0(k)
-    I_1 = test_integral_1(k)
+    I_0 = test_integral_0(k, resolution)
+    I_1 = test_integral_1(k, resolution)
     I_2 = 16 * k * I_0
     I_3 = 4 / 9 * (8 * k * (-1 + 2 * k2) * I_1 - 4 * k * (-1 + k2) * I_0)
     I_4 = (
@@ -819,4 +749,58 @@ def test_bounce_averaged_drifts():
     )
     np.testing.assert_allclose(
         bounce_drift, bounce_drift_analytic, atol=2e-2, rtol=1e-2, err_msg=msg
+    )
+
+
+@pytest.mark.regression
+def test_bounce_averaged_drifts_low_beta():
+    """Test bounce integrals in low beta limit."""
+    assert False, "Test not finished yet."
+    L, M, N, NFP, sym = 6, 6, 6, 1, True
+    surface = FourierRZToroidalSurface(
+        R_lmn=[1.0, 0.1],
+        Z_lmn=[0.0, -0.1],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=sym,
+        NFP=NFP,
+    )
+    eq = Equilibrium(
+        L=L,
+        M=M,
+        N=N,
+        NFP=NFP,
+        surface=surface,
+        pressure=PowerSeriesProfile([1e2, 0, -1e2]),
+        iota=PowerSeriesProfile([1, 0, 2]),
+        Psi=1.0,
+    )
+    eq = solve_continuation_automatic(eq)[-1]
+
+    def beta(grid, data):
+        return data["<beta>_vol"]
+
+    low_beta = 0.01
+    # todo: error that objective function has no linear attribute?
+    objective = ObjectiveFunction(
+        (ObjectiveFromUser(fun=beta, eq=eq, target=low_beta),)
+    )
+
+    constraints = (*get_fixed_boundary_constraints(eq), get_equilibrium_objective(eq))
+    opt = Optimizer("proximal-lsq-exact")
+    eq, result = eq.optimize(
+        objective=objective, constraints=constraints, optimizer=opt
+    )
+    print(result)
+
+    rho = np.array([0.5])
+    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 10)
+    knots = np.linspace(0, 6 * np.pi, 20)
+    # TODO now compare result to elliptic integral
+    bounce_integrate, items = bounce_integral(
+        eq, rho, alpha, knots, check=True, plot=False
+    )
+    pitch = pitch_of_extrema(knots, items["B.c"], items["B_z_ra.c"])
+    bp1, bp2 = bounce_points(
+        pitch, knots, items["B.c"], items["B_z_ra.c"], check=True, plot=False
     )

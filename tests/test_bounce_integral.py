@@ -5,9 +5,8 @@ from functools import partial
 
 import numpy as np
 import pytest
+from matplotlib import pyplot as plt
 from scipy import integrate
-
-# TODO: can use the one from interpax once .solve() is implemented
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipkm1
 
@@ -29,7 +28,7 @@ from desc.compute.bounce_integral import (
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     pitch_of_extrema,
-    plot_field_line,
+    plot_field_line_with_ripple,
     take_mask,
     tanh_sinh_quad,
 )
@@ -50,19 +49,19 @@ from desc.profiles import PowerSeriesProfile
 from desc.utils import only1
 
 
-@partial(np.vectorize, signature="(m)->()")
-def _last_value(a):
-    """Return the last non-nan value in ``a``."""
-    a = np.ravel(a)[::-1]
-    idx = np.squeeze(flatnonzero(~np.isnan(a), size=1, fill_value=0))
-    return a[idx]
-
-
 def _sqrt(x):
     """Reproduces jnp.sqrt with np.sqrt."""
     x = complex_sqrt(x)
     x = np.where(np.isclose(np.imag(x), 0), np.real(x), np.nan)
     return x
+
+
+@partial(np.vectorize, signature="(m)->()")
+def _last_value(a):
+    """Return the last non-nan value in ``a``."""
+    a = a[::-1]
+    idx = np.squeeze(flatnonzero(~np.isnan(a), size=1, fill_value=0))
+    return a[idx]
 
 
 @pytest.mark.unit
@@ -160,9 +159,6 @@ def test_poly_root():
     root = _poly_root(c.T, sort=True, distinct=True)
     for j in range(c.shape[0]):
         unique_roots = np.unique(np.roots(c[j]))
-        if j == 4:
-            # There are only two distinct roots.
-            unique_roots = unique_roots[[0, 1]]
         np.testing.assert_allclose(
             actual=_filter_not_nan(root[j]),
             desired=unique_roots,
@@ -233,8 +229,10 @@ def test_pitch_of_extrema():
     )
     B_z_ra = B.derivative()
     pitch_scipy = 1 / B(B_z_ra.roots(extrapolate=False))
-    pitch = pitch_of_extrema(k, B.c, B_z_ra.c)
-    np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy)
+    rtol = 1e-7
+    pitch = pitch_of_extrema(k, B.c, B_z_ra.c, relative_shift=rtol)
+    eps = 100 * np.finfo(float).eps
+    np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy, rtol=rtol + eps)
 
 
 @pytest.mark.unit
@@ -259,7 +257,7 @@ def test_composite_linspace():
 def test_bounce_points():
     """Test that bounce points are computed correctly."""
 
-    def test_bp1_first(plot):
+    def test_bp1_first():
         start = np.pi / 3
         end = 6 * np.pi
         knots = np.linspace(start, end, 5)
@@ -267,27 +265,29 @@ def test_bounce_points():
         pitch = 2
         bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
 
-    def test_bp2_first(plot):
+    def test_bp2_first():
         start = -3 * np.pi
         end = -start
         k = np.linspace(start, end, 5)
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch = 2
-        bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
+        bp1, bp2 = bounce_points(
+            pitch,
+            k,
+            B.c,
+            B.derivative().c,
+            check=True,
+        )
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[1::2])
         np.testing.assert_allclose(bp2, intersect[0::2][1:])
 
-    def test_bp1_before_extrema(plot):
+    def test_bp1_before_extrema():
         start = -np.pi
         end = -2 * start
         k = np.linspace(start, end, 5)
@@ -298,8 +298,6 @@ def test_bounce_points():
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3]
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[1], 1.9827671337414938)
@@ -307,7 +305,7 @@ def test_bounce_points():
         np.testing.assert_allclose(bp1, intersect[[1, 2]])
         np.testing.assert_allclose(bp2, intersect[[2, 3]])
 
-    def test_bp2_before_extrema(plot):
+    def test_bp2_before_extrema():
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -320,13 +318,11 @@ def test_bounce_points():
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
         np.testing.assert_allclose(bp2, intersect[[1, -1]])
 
-    def test_extrema_first_and_before_bp1(plot):
+    def test_extrema_first_and_before_bp1():
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -337,10 +333,11 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        bp1, bp2 = bounce_points(pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True)
+        bp1, bp2 = bounce_points(
+            pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True, plot=False
+        )
+        plot_field_line_with_ripple(B, pitch, bp1, bp2, start=k[2])
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2, start=k[2])
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], 0.8353192766102349)
@@ -349,7 +346,7 @@ def test_bounce_points():
         np.testing.assert_allclose(bp1, intersect[[0, 1, 3]])
         np.testing.assert_allclose(bp2, intersect[[0, 2, 4]])
 
-    def test_extrema_first_and_before_bp2(plot):
+    def test_extrema_first_and_before_bp2():
         start = -1.2 * np.pi
         end = -2 * start + 1
         k = np.linspace(start, end, 7)
@@ -360,10 +357,21 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1]
+        # This note may not make sense to the reader now, but if a regression
+        # fails this test, it will save many hours of debugging.
+        # If the filter in place to return only the distinct roots is too coarse,
+        # in particular atol < 1e-15, then this test will error. In the resulting
+        # plot that the error will produce the red bounce point on the first hump
+        # disappears. The true sequence is green, double red, green, red, green.
+        # The first green was close to the double red and hence the first of the
+        # double red root pair was erased as it was falsely detected as a duplicate.
+        # The second of the double red root pair is correctly erased. All that is
+        # left is the green. Now the bounce_points method assumes the intermediate
+        # value theorem holds for the continuous spline, so when fed these sequence
+        # of roots, the correct action is to ignore the first green root since
+        # otherwise the interior of the bounce points would be hills and not valleys.
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2)
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], -0.6719044147510538)
@@ -371,17 +379,15 @@ def test_bounce_points():
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
 
-    # These are all the unique cases, if all tests pass then the bounce_points
-    # should work correctly for all inputs.
-    test_bp1_first(True)
-    test_bp2_first(True)
-    test_bp1_before_extrema(True)
-    test_bp2_before_extrema(True)
+    test_bp1_first()
+    test_bp2_first()
+    test_bp1_before_extrema()
+    test_bp2_before_extrema()
     # In theory, this test should only pass if distinct=True when computing the
     # intersections in bounce points. However, we can get lucky due to floating
     # point errors, and it may also pass when distinct=False.
-    test_extrema_first_and_before_bp1(True)
-    test_extrema_first_and_before_bp2(True)
+    test_extrema_first_and_before_bp1()
+    test_extrema_first_and_before_bp2()
 
 
 @pytest.mark.unit
@@ -478,8 +484,11 @@ def test_bounce_quadrature():
 
 
 @pytest.mark.unit
-def test_example_code():
+def test_example_bounce_integral():
     """Test example code in bounce_integral docstring."""
+    # This test also stress tests the bounce_points routine because
+    # the |B| spline that is generated from this combination of knots
+    # equilibrium etc. has many edge cases for bounce point computations.
 
     def integrand_num(g_zz, B, pitch, Z):
         """Integrand in integral in numerator of bounce average."""
@@ -494,7 +503,7 @@ def test_example_code():
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
 
-    bounce_integrate, items = bounce_integral(eq, rho, alpha, check=True)
+    bounce_integrate, items = bounce_integral(eq, rho, alpha, check=True, plot=False)
     g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
     pitch = pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])
     num = bounce_integrate(integrand_num, g_zz, pitch)
@@ -662,14 +671,24 @@ def test_bounce_averaged_drifts():
     coords1[:, 0] = np.broadcast_to(rho, N)
     coords1[:, 1] = theta_PEST
     coords1[:, 2] = zeta
-    # c1 = eq.compute_theta_coords(coords1)  # noqa: E800
-    # grid = Grid(c1, sort=False)  # noqa: E800
     # TODO: Request: The bounce integral operator should be able to take a grid.
     #       Response: Currently the API is such that the method does all the
     #                 above preprocessing for you. Let's test it for correctness
     #                 first then do this later.
+    resolution = 50
+    # Whether to use monotonic or Hermite splines to interpolate |B|.
+    monotonic = False
     bounce_integrate, items = bounce_integral(
-        eq, rho, alpha, knots=zeta, check=True, B_ref=B_ref, L_ref=L_ref
+        eq=eq,
+        rho=rho,
+        alpha=alpha,
+        knots=zeta,
+        B_ref=B_ref,
+        L_ref=L_ref,
+        check=True,
+        plot=True,
+        resolution=resolution,
+        monotonic=monotonic,
     )
     data_keys = [
         "|grad(psi)|^2",
@@ -690,14 +709,16 @@ def test_bounce_averaged_drifts():
     # normalizations
     bmag = data_bounce["|B|"] / B_ref
     B0 = np.mean(bmag)
-    bmag_an = B0 * (1 - epsilon * np.cos(theta_PEST))
-    np.testing.assert_allclose(bmag, bmag_an, atol=5e-3, rtol=5e-3)
+    bmag_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
+    np.testing.assert_allclose(bmag, bmag_analytic, atol=5e-3, rtol=5e-3)
 
-    x = L_ref * rho  # same as epsilon
+    x = L_ref * rho  # same as epsilon?
     s_hat = -x / iota * shear / L_ref
     gradpar = L_ref * data_bounce["B^zeta"] / data_bounce["|B|"]
-    gradpar_an = 2 * L_ref * data_bounce["iota"] * (1 - epsilon * np.cos(theta_PEST))
-    np.testing.assert_allclose(gradpar, gradpar_an, atol=9e-3, rtol=5e-3)
+    gradpar_analytic = (
+        2 * L_ref * data_bounce["iota"] * (1 - epsilon * np.cos(theta_PEST))
+    )
+    np.testing.assert_allclose(gradpar, gradpar_analytic, atol=9e-3, rtol=5e-3)
 
     # Comparing coefficient calculation here with coefficients from compute/_metric
     cvdrift = (
@@ -715,24 +736,26 @@ def test_bounce_averaged_drifts():
         * s_hat
         / B_ref
     )
-    gds21_an = (
+    gds21_analytic = (
         -1 * s_hat * (s_hat * theta_PEST - alpha_MHD / bmag**4 * np.sin(theta_PEST))
     )
-    np.testing.assert_allclose(gds21, gds21_an, atol=1.7e-2, rtol=5e-4)
+    np.testing.assert_allclose(gds21, gds21_analytic, atol=1.7e-2, rtol=5e-4)
 
     fudge_factor2 = 0.19
-    gbdrift_an = fudge_factor2 * (
-        -s_hat + (np.cos(theta_PEST) - gds21_an / s_hat * np.sin(theta_PEST))
+    gbdrift_analytic = fudge_factor2 * (
+        -s_hat + (np.cos(theta_PEST) - gds21_analytic / s_hat * np.sin(theta_PEST))
     )
     fudge_factor3 = 0.07
-    cvdrift_an = gbdrift_an + fudge_factor3 * alpha_MHD / bmag**2
-    # Comparing coefficients with their analytical expressions
-    np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.2e-2, rtol=5e-3)
-    np.testing.assert_allclose(cvdrift, cvdrift_an, atol=1.8e-2, rtol=5e-3)
+    cvdrift_analytic = gbdrift_analytic + fudge_factor3 * alpha_MHD / bmag**2
+    np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1.2e-2, rtol=5e-3)
+    np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=1.8e-2, rtol=5e-3)
 
     # Values of pitch angle lambda for which to evaluate the bounce averages.
-    pitch = np.linspace(1 / np.max(bmag), 1 / np.min(bmag), 11)
-    pitch = pitch.reshape(pitch.shape[0], -1)
+    delta_shift = 1e-6
+    pitch_resolution = 50
+    pitch = np.linspace(
+        1 / np.max(bmag) + delta_shift, 1 / np.min(bmag) - delta_shift, pitch_resolution
+    )
     k2 = 0.5 * ((1 - pitch * B0) / (pitch * B0 * epsilon) + 1)
     k = np.sqrt(k2)
     # Here are the notes that explain these integrals.
@@ -755,30 +778,48 @@ def test_bounce_averaged_drifts():
     I_6 = 2 / 3 * (k * (-2 + 4 * k2) * I_0 - 4 * (-1 + k2) * I_1)
     I_7 = 4 / k * (2 * k2 * I_0 + (1 - 2 * k2) * I_1)
 
-    bavg_drift_an = fudge_factor3 * dPdrho / B0**2 * I_1 - 0.5 * fudge_factor2 * (
-        s_hat * (I_0 + I_1 + I_2 + I_3) + alpha_MHD / B0**4 * (I_4 + I_5) - (I_6 + I_7)
+    bounce_drift_analytic = (
+        fudge_factor3 * dPdrho / B0**2 * I_1
+        - 0.5
+        * fudge_factor2
+        * (
+            s_hat * (I_0 + I_1 + I_2 + I_3)
+            + alpha_MHD / B0**4 * (I_4 + I_5)
+            - (I_6 + I_7)
+        )
     )
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
-        # The arguments to this function will be interpolated
-        # onto the quadrature points before these quantities are evaluated.
         g = _sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
-    bavg_drift_num = bounce_integrate(
+    # Can choose method of interpolation for all quantities besides |B| from
+    # interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html#interpax.interp1d.
+    method = "akima"
+    bounce_drift = bounce_integrate(
         integrand=integrand,
-        # additional things to interpolate onto quadrature points besides B and pitch
         f=[cvdrift, gbdrift],
-        pitch=pitch,
+        pitch=pitch.reshape(pitch_resolution, -1),
+        method=method,
     )
-    assert np.isfinite(bavg_drift_num).any(), "Quadrature failed."
-    # there's only one field line on the grid, so squeeze out that axis
-    bavg_drift_num = np.squeeze(bavg_drift_num, axis=1)
-    for i in range(pitch.shape[0]):
-        np.testing.assert_allclose(
-            _filter_not_nan(bavg_drift_num[i]),
-            bavg_drift_an[i],
-            atol=2e-2,
-            rtol=1e-2,
-            err_msg=f"Failed on index {i} for pitch {pitch[i]}",
-        )
+    # There is only one bounce integral per pitch in this example.
+    bounce_drift = np.squeeze(_filter_not_nan(bounce_drift))
+    assert bounce_drift_analytic.shape == bounce_drift.shape
+
+    plt.plot(1 / pitch, bounce_drift_analytic, marker="o", label="analytic")
+    plt.plot(1 / pitch, bounce_drift, marker="x", label="numerical")
+    plt.xlabel(r"$1 / \lambda$")
+    plt.ylabel("Bounce averaged drift")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    msg = (
+        "Maybe tune these parameters?"
+        f"Quadrature resolution is {resolution}.\n"
+        f"Delta shift is {delta_shift}.\n"
+        f"Spline method for integrand quantities is {method}.\n"
+        f"Spline method for |B| is monotonic? (as opposed to Hermite): {monotonic}."
+    )
+    np.testing.assert_allclose(
+        bounce_drift, bounce_drift_analytic, atol=2e-2, rtol=1e-2, err_msg=msg
+    )

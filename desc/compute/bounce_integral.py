@@ -270,35 +270,33 @@ def _poly_val(x, c):
     return val
 
 
-def composite_linspace(knots, resolution, is_sorted=False):
-    """Returns linearly spaced points between ``knots``.
+def composite_linspace(breaks, resolution, is_sorted=False):
+    """Returns linearly spaced points between breakpoints.
 
     Parameters
     ----------
-    knots : Array
+    breaks : Array
         First axis has values to return linearly spaced values between.
         The remaining axes are batch axes.
     resolution : int
-        Number of points between each knot.
+        Number of points between each break.
     is_sorted : bool
         Whether the knots are already sorted along the first axis.
 
     Returns
     -------
-    result : Array, shape((knots.shape[0] - 1) * resolution + 1, *knots.shape[1:])
-        Sorted linearly spaced points between ``knots``.
+    pts : Array, shape((breaks.shape[0] - 1) * resolution + 1, *breaks.shape[1:])
+        Sorted linearly spaced points between ``breaks``.
 
     """
-    knots = jnp.atleast_1d(knots)
-    P = knots.shape[0]
-    S = knots.shape[1:]
+    breaks = jnp.atleast_1d(breaks)
     if not is_sorted:
-        knots = jnp.sort(knots, axis=0)
-    result = jnp.linspace(knots[:-1, ...], knots[1:, ...], resolution, endpoint=False)
-    result = jnp.moveaxis(result, source=0, destination=1).reshape(-1, *S)
-    result = jnp.append(result, knots[jnp.newaxis, -1, ...], axis=0)
-    assert result.shape == ((P - 1) * resolution + 1, *S)
-    return result
+        breaks = jnp.sort(breaks, axis=0)
+    pts = jnp.linspace(breaks[:-1, ...], breaks[1:, ...], resolution, endpoint=False)
+    pts = jnp.moveaxis(pts, source=0, destination=1).reshape(-1, *breaks.shape[1:])
+    pts = jnp.append(pts, breaks[jnp.newaxis, -1, ...], axis=0)
+    assert pts.shape == ((breaks.shape[0] - 1) * resolution + 1, *breaks.shape[1:])
+    return pts
 
 
 def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
@@ -411,12 +409,12 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     # Can detect at most degree of |B|_z_ra spline extrema between each knot.
     assert extrema.shape == (S, N, degree - 1)
     B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis])
-    B_extrema_z_ra = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
+    B_zz_ra_extrema = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift pitch values slightly to resolve this issue.
     # Higher priority to shift down maxima than shift up minima, so identify near
     # equality with zero as maxima.
-    is_maxima = B_extrema_z_ra <= 0
+    is_maxima = B_zz_ra_extrema <= 0
     B_extrema = jnp.where(
         is_maxima,
         (1 - relative_shift) * B_extrema,
@@ -572,25 +570,23 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
 
     for s in jnp.nonzero(err_1 | err_2)[0]:
         B = PPoly(B_c[:, s], knots)
+        B_mid = B((bp1[:, s] + bp2[:, s]) / 2)
         for p in range(P):
-            B_mid = B((bp1[p, s] + bp2[p, s]) / 2)
             err_1_ps = jnp.any(bp1[p, s] > bp2[p, s])
             err_2_ps = jnp.any(bp1[p, s, 1:] < bp2[p, s, :-1])
-            err_3_ps = jnp.any(B_mid > 1 / pitch[p, s] + eps)
+            err_3_ps = jnp.any(B_mid[p] > 1 / pitch[p, s] + eps)
             if err_1_ps or err_2_ps or err_3_ps:
-                print(f"Error at index p={p}, s={s} out of {P},{S}.")
-                bp1_ps, bp2_ps, B_mid = map(
-                    _filter_not_nan, (bp1[p, s], bp2[p, s], B_mid)
+                bp1_ps, bp2_ps, B_mid_ps = map(
+                    _filter_not_nan, (bp1[p, s], bp2[p, s], B_mid[p])
                 )
-                print("bp1:        ", bp1_ps)
-                print("bp2:        ", bp2_ps)
-                print("B - 1/pitch:", B(bp1_ps) - 1 / pitch[p, s])
                 plot_field_line_with_ripple(
                     B, pitch[p, s], bp1_ps, bp2_ps, id=f"{p},{s}"
                 )
+                print("bp1:", bp1_ps)
+                print("bp2:", bp2_ps)
                 assert not err_1_ps, msg_1
                 assert not err_2_ps, msg_2
-                msg_3 = f"B midpoint = {B_mid} > {1 / pitch[p, s] + eps} = 1/pitch."
+                msg_3 = f"B midpoint = {B_mid_ps} > {1 / pitch[p, s] + eps} = 1/pitch."
                 assert not err_3_ps, msg_3
     if plot:
         for s in range(S):

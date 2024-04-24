@@ -850,7 +850,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             )
         )(tree_stack(data), tree_stack(params))
         data_unstacked = tree_unstack(data)
-        if return_only_unique:
+        if return_only_unique or (self.NFP == 1 and not self.sym):
+            # if NFP=1 and no sym, then every coil has been computed
+            # already, so just return it now
             return data_unstacked
 
         ##### Try other way above this

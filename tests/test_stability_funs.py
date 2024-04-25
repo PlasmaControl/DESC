@@ -7,7 +7,6 @@ from netCDF4 import Dataset
 import desc.examples
 import desc.io
 from desc.equilibrium import Equilibrium
-from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import MagneticWell, MercierStability
 
@@ -342,11 +341,3 @@ def test_magwell_print(capsys):
         + "\n"
     )
     assert out.out == corr_out
-
-
-@pytest.mark.unit
-def test_effective_ripple():
-    """Compare DESC effective ripple against neo stellopt."""
-    eq = get("HELIOTRON")
-    data = eq.compute("effective ripple")
-    assert np.isfinite(data["effective ripple"]).all()

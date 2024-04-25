@@ -631,9 +631,6 @@ def test_bounce_averaged_drifts():
         resolution=resolution,
         monotonic=monotonic,
     )
-    # FIXME (outside scope of the bounce branch):
-    #  override_grid should not be required for the test to pass.
-    #  and anytime override_grid is true we should print a blue warning.
     data = eq.compute(
         [
             "|grad(psi)|^2",
@@ -648,7 +645,6 @@ def test_bounce_averaged_drifts():
         ],
         grid=grid_desc,
         data=data,
-        override_grid=False,
     )
 
     # normalizations

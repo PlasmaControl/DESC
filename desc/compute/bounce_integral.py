@@ -269,7 +269,7 @@ def _poly_val(x, c):
     return val
 
 
-def composite_linspace(breaks, resolution, is_sorted=False):
+def composite_linspace(breaks, resolution):
     """Returns linearly spaced points between breakpoints.
 
     Parameters
@@ -277,20 +277,17 @@ def composite_linspace(breaks, resolution, is_sorted=False):
     breaks : Array
         First axis has values to return linearly spaced values between.
         The remaining axes are batch axes.
+        Assumes input is sorted.
     resolution : int
         Number of points between each break.
-    is_sorted : bool
-        Whether the breaks are already sorted along the first axis.
 
     Returns
     -------
     pts : Array, shape((breaks.shape[0] - 1) * resolution + 1, *breaks.shape[1:])
-        Sorted linearly spaced points between ``breaks``.
+        Linearly spaced points between ``breaks``.
 
     """
     breaks = jnp.atleast_1d(breaks)
-    if not is_sorted:
-        breaks = jnp.sort(breaks, axis=0)
     pts = jnp.linspace(breaks[:-1, ...], breaks[1:, ...], resolution, endpoint=False)
     pts = jnp.moveaxis(pts, source=0, destination=1).reshape(-1, *breaks.shape[1:])
     pts = jnp.append(pts, breaks[jnp.newaxis, -1, ...], axis=0)
@@ -410,15 +407,14 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     B_zz_ra_extrema = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift pitch values slightly to resolve this issue.
-    # Higher priority to shift down maxima than shift up minima, so identify near
-    # equality with zero as maxima.
-    is_maxima = B_zz_ra_extrema <= 0
-    # Reshape so that last axis enumerates extrema along a field line.
     B_extrema = jnp.where(
-        is_maxima,
+        # Higher priority to shift down maxima than shift up minima, so identify
+        # near equality with zero as maxima.
+        B_zz_ra_extrema <= 0,
         (1 - relative_shift) * B_extrema,
         (1 + relative_shift) * B_extrema,
     ).reshape(S, -1)
+    # Reshape so that last axis enumerates extrema along a field line.
     B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
     assert pitch.shape == (N * (degree - 1), S)
@@ -733,7 +729,7 @@ def grad_automorphism_arcsin(x):
 grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 
 
-def automorphism_sin(x, eps=5e-7):
+def automorphism_sin(x, eps=None):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     The derivative of the sin automorphism is Lipschitz.
@@ -763,16 +759,14 @@ def automorphism_sin(x, eps=5e-7):
         Transformed points.
 
     """
-    x = jnp.where(x > +eps, x - eps, x)
-    x = jnp.where(x < -eps, x + eps, x)
     y = jnp.sin(jnp.pi * x / 2)
-    return y
+    if eps is None:
+        eps = 1e3 * jnp.finfo(jnp.array(1.0).dtype).eps
+    return jnp.clip(y, -1 + eps, 1 - eps)
 
 
-def grad_automorphism_sin(x, eps=5e-7):
+def grad_automorphism_sin(x):
     """Gradient of sin automorphism."""
-    x = jnp.where(x > +eps, x - eps, x)
-    x = jnp.where(x < -eps, x + eps, x)
     dy_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
     return dy_dx
 

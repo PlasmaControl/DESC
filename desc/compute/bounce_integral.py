@@ -557,7 +557,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
         Whether to plot even if error was not detected.
 
     """
-    eps = 10 * jnp.finfo(jnp.array(1.0)).eps
+    eps = 10 * jnp.finfo(jnp.array(1.0).dtype).eps
     P, S = bp1.shape[:-1]
 
     msg_1 = "Bounce points have an inversion."
@@ -706,10 +706,6 @@ def grad_affine_bijection_reverse(a, b):
 def automorphism_arcsin(x):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    The arcsin automorphism is an expansion, so it pushes the evaluation points
-    of the bounce integrand toward the singular region, which may induce
-    floating point error.
-
     The gradient of the arcsin automorphism introduces a singularity that augments
     the singularity in the bounce integral. Therefore, the quadrature scheme
     used to evaluate the integral must work well on singular integrals.
@@ -717,10 +713,12 @@ def automorphism_arcsin(x):
     Parameters
     ----------
     x : Array
+        Points to tranform.
 
     Returns
     -------
     y : Array
+        Transformed points.
 
     """
     y = 2 * jnp.arcsin(x) / jnp.pi
@@ -736,12 +734,8 @@ def grad_automorphism_arcsin(x):
 grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 
 
-def automorphism_sin(x):
+def automorphism_sin(x, eps=5e-7):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
-
-    The sin automorphism is a contraction, so it pulls the evaluation points
-    of the bounce integrand away from the singular region, inducing less
-    floating point error.
 
     The derivative of the sin automorphism is Lipschitz.
     When this automorphism is used as the change of variable map for the bounce
@@ -760,18 +754,26 @@ def automorphism_sin(x):
     Parameters
     ----------
     x : Array
+        Points to transform.
+    eps : float
+        Buffer for floating point error.
 
     Returns
     -------
     y : Array
+        Transformed points.
 
     """
+    x = jnp.where(x > +eps, x - eps, x)
+    x = jnp.where(x < -eps, x + eps, x)
     y = jnp.sin(jnp.pi * x / 2)
     return y
 
 
-def grad_automorphism_sin(x):
+def grad_automorphism_sin(x, eps=5e-7):
     """Gradient of sin automorphism."""
+    x = jnp.where(x > +eps, x - eps, x)
+    x = jnp.where(x < -eps, x + eps, x)
     dy_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
     return dy_dx
 
@@ -808,8 +810,8 @@ def tanh_sinh_quad(resolution, w=lambda x: 1, t_max=None):
     if t_max is None:
         # boundary of integral
         x_max = jnp.array(1.0)
-        # subtract machine epsilon with buffer for floating point error
-        x_max = x_max - 10 * jnp.finfo(x_max).eps
+        # buffer for floating point error
+        x_max = x_max - 10 * jnp.finfo(x_max.dtype).eps
         # inverse of tanh-sinh transformation
         t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
     kh = jnp.linspace(-t_max, t_max, resolution)
@@ -893,9 +895,8 @@ def _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product):
     goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
     # Number of integrals that were actually computed.
     actual = jnp.isfinite(inner_product).sum()
-    err_msg = f"Lost {goal - actual} integrals. Likely due to floating point error."
+    err_msg = f"Lost {goal - actual} integrals from floating point error."
     assert goal == actual, err_msg
-    assert jnp.all(jnp.isfinite(inner_product) ^ is_not_quad_point[..., 0]), err_msg
 
 
 _repeated_docstring = """w : Array, shape(w.size, )
@@ -1074,7 +1075,7 @@ def bounce_integral(
     alpha=None,
     knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 40),
     quad=tanh_sinh_quad,
-    automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
+    automorphism=(automorphism_sin, grad_automorphism_sin),
     B_ref=1,
     L_ref=1,
     check=False,

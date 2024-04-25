@@ -395,8 +395,8 @@ def test_automorphism():
     x_1 = affine_bijection_reverse(y, a, b)
     np.testing.assert_allclose(x_1, x)
     np.testing.assert_allclose(_affine_bijection_forward(x_1, a, b), y)
-    np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y)
-    np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y)
+    np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y, atol=1e-6)
+    np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y, atol=1e-6)
 
     np.testing.assert_allclose(
         grad_affine_bijection_reverse(a, b),
@@ -405,13 +405,21 @@ def test_automorphism():
     np.testing.assert_allclose(
         grad_automorphism_sin(y),
         1 / grad_automorphism_arcsin(automorphism_sin(y)),
-        atol=1e-14,
+        atol=1e-6,
     )
     np.testing.assert_allclose(
         1 / grad_automorphism_arcsin(y),
         grad_automorphism_sin(automorphism_arcsin(y)),
-        atol=1e-14,
+        atol=2e-6,
     )
+
+    # test that floating point error is acceptable
+    x, w = tanh_sinh_quad(19)
+    assert np.all(np.abs(x) < 1)
+    y = 1 / (1 - np.abs(automorphism_sin(x)))
+    assert np.isfinite(y).all()
+    y = 1 / (1 - np.abs(automorphism_arcsin(x)))
+    assert np.isfinite(y).all()
 
 
 @pytest.mark.unit

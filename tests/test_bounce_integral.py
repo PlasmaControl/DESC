@@ -232,7 +232,9 @@ def test_pitch_of_extrema():
     rtol = 1e-7
     pitch = pitch_of_extrema(k, B.c, B_z_ra.c, relative_shift=rtol)
     eps = 100 * np.finfo(float).eps
-    np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy, rtol=rtol + eps)
+    np.testing.assert_allclose(
+        np.sort(_filter_not_nan(pitch)), np.sort(pitch_scipy), rtol=rtol + eps
+    )
 
 
 @pytest.mark.unit
@@ -240,15 +242,16 @@ def test_composite_linspace():
     """Test this utility function useful for Newton-Cotes integration over pitch."""
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
-    pitch_knot = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
-    b_knot = 1 / pitch_knot
-    b = composite_linspace(b_knot, resolution=3)
-    print(b_knot)
+    pitch = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
+    breaks = 1 / pitch
+    breaks = np.sort(breaks, axis=0)
+    b = composite_linspace(breaks, resolution=3)
+    print(breaks)
     print(b)
     np.testing.assert_allclose(b, np.sort(b, axis=0), atol=0, rtol=0)
-    for i in range(pitch_knot.shape[0]):
-        for j in range(pitch_knot.shape[1]):
-            assert only1(np.isclose(b_knot[i, j], b[:, j]).tolist())
+    for i in range(pitch.shape[0]):
+        for j in range(pitch.shape[1]):
+            assert only1(np.isclose(breaks[i, j], b[:, j]).tolist())
 
 
 @pytest.mark.unit
@@ -395,8 +398,8 @@ def test_automorphism():
     x_1 = affine_bijection_reverse(y, a, b)
     np.testing.assert_allclose(x_1, x)
     np.testing.assert_allclose(_affine_bijection_forward(x_1, a, b), y)
-    np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y)
-    np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y)
+    np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y, atol=5e-7)
+    np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y, atol=5e-7)
 
     np.testing.assert_allclose(
         grad_affine_bijection_reverse(a, b),
@@ -405,13 +408,23 @@ def test_automorphism():
     np.testing.assert_allclose(
         grad_automorphism_sin(y),
         1 / grad_automorphism_arcsin(automorphism_sin(y)),
-        atol=1e-14,
+        atol=2e-6,
     )
     np.testing.assert_allclose(
         1 / grad_automorphism_arcsin(y),
         grad_automorphism_sin(automorphism_arcsin(y)),
-        atol=1e-14,
+        atol=2e-6,
     )
+
+    # test that floating point error is acceptable
+    x, w = tanh_sinh_quad(19)
+    assert np.all(np.abs(x) < 1)
+    y = 1 / (1 - np.abs(x))
+    assert np.isfinite(y).all()
+    y = 1 / (1 - np.abs(automorphism_sin(x)))
+    assert np.isfinite(y).all()
+    y = 1 / (1 - np.abs(automorphism_arcsin(x)))
+    assert np.isfinite(y).all()
 
 
 @pytest.mark.unit

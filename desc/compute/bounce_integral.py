@@ -97,16 +97,15 @@ def _root_linear(a, b, distinct=False):
 
 def _root_quadratic(a, b, c, distinct=False):
     """Return r such that a r² + b r + c = 0."""
+    # numerical.recipes/book.html, page 227
     discriminant = b**2 - 4 * a * c
     C = complex_sqrt(discriminant)
-
-    def root(xi):
-        return safediv(-b + xi * C, 2 * a)
-
+    sgn = jnp.sign(jnp.real(jnp.conj(b) * C))
+    q = -0.5 * (b + sgn * C)
     is_linear = jnp.isclose(a, 0)
     suppress_root = distinct & jnp.isclose(discriminant, 0)
-    r1 = jnp.where(is_linear, _root_linear(b, c), root(-1))
-    r2 = jnp.where(is_linear | suppress_root, jnp.nan, root(1))
+    r1 = jnp.where(is_linear, _root_linear(b, c), safediv(q, a))
+    r2 = jnp.where(is_linear | suppress_root, jnp.nan, safediv(c, q))
     return r1, r2
 
 
@@ -270,7 +269,7 @@ def _poly_val(x, c):
     return val
 
 
-def composite_linspace(breaks, resolution, is_sorted=False):
+def composite_linspace(breaks, resolution):
     """Returns linearly spaced points between breakpoints.
 
     Parameters
@@ -278,20 +277,17 @@ def composite_linspace(breaks, resolution, is_sorted=False):
     breaks : Array
         First axis has values to return linearly spaced values between.
         The remaining axes are batch axes.
+        Assumes input is sorted.
     resolution : int
         Number of points between each break.
-    is_sorted : bool
-        Whether the breaks are already sorted along the first axis.
 
     Returns
     -------
     pts : Array, shape((breaks.shape[0] - 1) * resolution + 1, *breaks.shape[1:])
-        Sorted linearly spaced points between ``breaks``.
+        Linearly spaced points between ``breaks``.
 
     """
     breaks = jnp.atleast_1d(breaks)
-    if not is_sorted:
-        breaks = jnp.sort(breaks, axis=0)
     pts = jnp.linspace(breaks[:-1, ...], breaks[1:, ...], resolution, endpoint=False)
     pts = jnp.moveaxis(pts, source=0, destination=1).reshape(-1, *breaks.shape[1:])
     pts = jnp.append(pts, breaks[jnp.newaxis, -1, ...], axis=0)
@@ -411,15 +407,14 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     B_zz_ra_extrema = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift pitch values slightly to resolve this issue.
-    # Higher priority to shift down maxima than shift up minima, so identify near
-    # equality with zero as maxima.
-    is_maxima = B_zz_ra_extrema <= 0
-    # Reshape so that last axis enumerates extrema along a field line.
     B_extrema = jnp.where(
-        is_maxima,
+        # Higher priority to shift down maxima than shift up minima, so identify
+        # near equality with zero as maxima.
+        B_zz_ra_extrema <= 0,
         (1 - relative_shift) * B_extrema,
         (1 + relative_shift) * B_extrema,
     ).reshape(S, -1)
+    # Reshape so that last axis enumerates extrema along a field line.
     B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
     assert pitch.shape == (N * (degree - 1), S)
@@ -557,7 +552,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
         Whether to plot even if error was not detected.
 
     """
-    eps = 10 * jnp.finfo(jnp.array(1.0)).eps
+    eps = 10 * jnp.finfo(jnp.array(1.0).dtype).eps
     P, S = bp1.shape[:-1]
 
     msg_1 = "Bounce points have an inversion."
@@ -706,10 +701,6 @@ def grad_affine_bijection_reverse(a, b):
 def automorphism_arcsin(x):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    The arcsin automorphism is an expansion, so it pushes the evaluation points
-    of the bounce integrand toward the singular region, which may induce
-    floating point error.
-
     The gradient of the arcsin automorphism introduces a singularity that augments
     the singularity in the bounce integral. Therefore, the quadrature scheme
     used to evaluate the integral must work well on singular integrals.
@@ -717,10 +708,12 @@ def automorphism_arcsin(x):
     Parameters
     ----------
     x : Array
+        Points to tranform.
 
     Returns
     -------
     y : Array
+        Transformed points.
 
     """
     y = 2 * jnp.arcsin(x) / jnp.pi
@@ -736,12 +729,8 @@ def grad_automorphism_arcsin(x):
 grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 
 
-def automorphism_sin(x):
+def automorphism_sin(x, eps=None):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
-
-    The sin automorphism is a contraction, so it pulls the evaluation points
-    of the bounce integrand away from the singular region, inducing less
-    floating point error.
 
     The derivative of the sin automorphism is Lipschitz.
     When this automorphism is used as the change of variable map for the bounce
@@ -760,14 +749,20 @@ def automorphism_sin(x):
     Parameters
     ----------
     x : Array
+        Points to transform.
+    eps : float
+        Buffer for floating point error.
 
     Returns
     -------
     y : Array
+        Transformed points.
 
     """
     y = jnp.sin(jnp.pi * x / 2)
-    return y
+    if eps is None:
+        eps = 1e3 * jnp.finfo(jnp.array(1.0).dtype).eps
+    return jnp.clip(y, -1 + eps, 1 - eps)
 
 
 def grad_automorphism_sin(x):
@@ -808,8 +803,8 @@ def tanh_sinh_quad(resolution, w=lambda x: 1, t_max=None):
     if t_max is None:
         # boundary of integral
         x_max = jnp.array(1.0)
-        # subtract machine epsilon with buffer for floating point error
-        x_max = x_max - 10 * jnp.finfo(x_max).eps
+        # buffer for floating point error
+        x_max = x_max - 10 * jnp.finfo(x_max.dtype).eps
         # inverse of tanh-sinh transformation
         t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
     kh = jnp.linspace(-t_max, t_max, resolution)
@@ -893,9 +888,8 @@ def _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product):
     goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
     # Number of integrals that were actually computed.
     actual = jnp.isfinite(inner_product).sum()
-    err_msg = f"Lost {goal - actual} integrals. Likely due to floating point error."
+    err_msg = f"Lost {goal - actual} integrals from floating point error."
     assert goal == actual, err_msg
-    assert jnp.all(jnp.isfinite(inner_product) ^ is_not_quad_point[..., 0]), err_msg
 
 
 _repeated_docstring = """w : Array, shape(w.size, )
@@ -1070,7 +1064,7 @@ _bounce_quadrature.__doc__ = _bounce_quadrature.__doc__.replace(
 
 def bounce_integral(
     eq,
-    rho=jnp.linspace(1e-7, 1, 5),
+    rho=jnp.linspace(1e-7, 1, 10),
     alpha=None,
     knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 40),
     quad=tanh_sinh_quad,

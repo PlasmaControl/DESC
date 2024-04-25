@@ -21,8 +21,8 @@ from desc.basis import (
 from desc.geometry import convert_spectral_to_FE
 
 plt.figure()
-L = 18
-M = 20
+L = 10
+M = 10
 N = 0
 K = 1
 
@@ -63,17 +63,17 @@ Z_lmn[1, 0] = 5.0
 R_lmn = R_lmn.reshape(num_modes * (2 * N + 1))
 Z_lmn = Z_lmn.reshape(num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
-amp = 2
-R_lmn[np.isclose(R_lmn, 0.0)] = (
-    (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
-    * amp
-    / np.arange(1, len(R_lmn[np.isclose(R_lmn, 0.0)]) + 1)
-)
-Z_lmn[np.isclose(Z_lmn, 0.0)] = (
-    (np.random.rand(np.sum(np.isclose(Z_lmn, 0.0))) - 0.5)
-    * amp
-    / np.arange(1, len(R_lmn[np.isclose(Z_lmn, 0.0)]) + 1)
-)
+# amp = 2
+# R_lmn[np.isclose(R_lmn, 0.0)] = (
+#     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
+#     * amp
+#     / np.arange(1, len(R_lmn[np.isclose(R_lmn, 0.0)]) + 1)
+# )
+# Z_lmn[np.isclose(Z_lmn, 0.0)] = (
+#     (np.random.rand(np.sum(np.isclose(Z_lmn, 0.0))) - 0.5)
+#     * amp
+#     / np.arange(1, len(R_lmn[np.isclose(Z_lmn, 0.0)]) + 1)
+# )
 
 # Set the coefficients in the basis class
 R_basis.R_lmn = R_lmn
@@ -81,13 +81,14 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-L_FE = 5
-rho = np.linspace(0, 1, L_FE)
+L_FE = 2
+rho = np.linspace(0.1, 1, L_FE)
 nodes = (
     np.array(np.meshgrid(rho, theta, np.zeros(1), indexing="ij"))
     .reshape(3, len(theta) * len(rho))
     .T
 )
+# print(R_basis.evaluate(nodes=nodes).shape, R_lmn.shape, nodes.shape)
 R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 print("R_lmn, Z_lmn = ", R_lmn, Z_lmn)

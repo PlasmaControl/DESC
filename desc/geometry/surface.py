@@ -92,7 +92,7 @@ def convert_spectral_to_FE(
             ).reshape(3, I * nquad)
         ).T
     elif N == 0:
-        quadpoints = np.hstack((quadpoints_mesh, np.zeros((I, 1))))
+        quadpoints = np.hstack((quadpoints_mesh, np.zeros((I * nquad, 1))))
     else:
         quadpoints = quadpoints_mesh  # transpose here?
     print("quadpoints_shape = ", quadpoints.shape)
@@ -104,6 +104,8 @@ def convert_spectral_to_FE(
     Zprime_pre_evaluated = Zprime_basis.evaluate(nodes=quadpoints)
     Lprime_pre_evaluated = Lprime_basis.evaluate(nodes=quadpoints)
     IQ = I * Q
+    print(Rprime_pre_evaluated.shape, len(mesh.triangles), mesh.nquad)
+    exit()
     Bjb_Z = mesh.integrate(
         (
             Zprime_pre_evaluated[:, np.newaxis, :IQ]

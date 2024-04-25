@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-M = 20  # Note M > 2 required
+M = 10  # Note M > 2 required
 N = 0
 L = 0
 K = 1

@@ -1220,6 +1220,7 @@ class FiniteElementBasis(_FE_Basis):
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
 
             # Sum the basis functions from each triangle node
+            # print(basis_functions)
             basis_functions = np.reshape(basis_functions, (len(t), -1))
             inds = i * self.Q + q
         else:
@@ -2359,6 +2360,7 @@ class FiniteElementMesh2D:
 
         if K == 2:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
+            weights = weights * 2
             add_row = [
                 integration_points[0][1],
                 integration_points[0][0],
@@ -2615,6 +2617,7 @@ class FiniteElementMesh2D:
                 if a >= 0 and b >= 0 and (a + b) <= 1:
                     triangle_indices[i] = j
                     basis_functions[i, i * self.Q: (i + 1) * self.Q], _ = triangle.get_basis_functions(v.reshape(1, 2))
+                    # print(i, j, v, basis_functions[i, i * self.Q: (i + 1) * self.Q])
         return triangle_indices, basis_functions
 
     def return_quadrature_points(self):
@@ -2623,8 +2626,8 @@ class FiniteElementMesh2D:
         Returns
         -------
         quadrature points: 2D ndarray, shape (nquad * 2ML, 2)
-            Points in (theta, zeta) representing the quadrature point
-            locations for integration in barycentric coordinates.
+            Points in (rho, theta) representing the quadrature point
+            locations for integration, return in real-space coordinates.
 
         """
         nquad = self.nquad

@@ -16,8 +16,6 @@ __all__ = [
     "ConcentricGrid",
     "find_least_rational_surfaces",
     "find_most_rational_surfaces",
-    "meshgrid_unique_idx",
-    "meshgrid_inverse_idx",
 ]
 
 
@@ -496,8 +494,57 @@ class Grid(_Grid):
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
-        etc may be wrong if grid contains duplicate nodes.
+        etc. may be wrong if grid contains duplicate nodes.
     """
+
+    @classmethod
+    def create_meshgrid(cls, a, b, c):
+        """Create a meshgrid from the given coordinates.
+
+        Parameters
+        ----------
+        a, b, c : Array, Array, Array
+            Unique values of each coordinate.
+
+        Returns
+        -------
+        grid : Grid
+            Meshgrid with indices assigned.
+
+        """
+        a, b, c = map(jnp.atleast_1d, (a, b, c))
+        aa, bb, cc = map(jnp.ravel, jnp.meshgrid(a, b, c, indexing="ij"))
+        nodes = jnp.column_stack([aa, bb, cc])
+
+        ds = jnp.array([1 / a.size, 2 * jnp.pi / b.size, 2 * jnp.pi / c.size])
+        num_nodes = a.size * b.size * c.size
+        spacing = jnp.ones(num_nodes)[:, jnp.newaxis] * ds
+
+        unique_a_idx = jnp.arange(a.size) * b.size * c.size
+        unique_b_idx = jnp.arange(b.size) * c.size
+        unique_c_idx = jnp.arange(c.size)
+        inverse_a_idx = repeat(
+            unique_a_idx // (b.size * c.size),
+            b.size * c.size,
+            total_repeat_length=num_nodes,
+        )
+        inverse_b_idx = jnp.tile(
+            repeat(unique_b_idx // c.size, c.size, total_repeat_length=b.size * c.size),
+            a.size,
+        )
+        inverse_c_idx = jnp.tile(unique_c_idx, a.size * b.size)
+        return cls(
+            nodes=nodes,
+            spacing=spacing,
+            sort=False,
+            jitable=True,
+            _unique_rho_idx=unique_a_idx,
+            _unique_theta_idx=unique_b_idx,
+            _unique_zeta_idx=unique_c_idx,
+            _inverse_rho_idx=inverse_a_idx,
+            _inverse_theta_idx=inverse_b_idx,
+            _inverse_zeta_idx=inverse_c_idx,
+        )
 
     def __init__(self, nodes, sort=False, jitable=False, spacing=None, **kwargs):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
@@ -512,8 +559,8 @@ class Grid(_Grid):
         if sort:
             self._sort_nodes()
         if jitable:
-            # dont do anything with symmetry since that changes # of nodes
-            # avoid point at the axis, for now. FIXME: make axis boolean mask?
+            # Don't do anything with symmetry since that changes # of nodes
+            # avoid point at the axis, for now.
             r, t, z = self._nodes.T
             r = jnp.where(r == 0, 1e-12, r)
             self._nodes = jnp.array([r, t, z]).T
@@ -1572,81 +1619,3 @@ def find_least_rational_surfaces(
     io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
     rho = _find_rho(iota, io, tol=atol)
     return rho, io
-
-
-def meshgrid_inverse_idx(a_size, b_size, c_size):
-    """Return inverse indices for meshgrid pattern.
-
-    It is common to construct a meshgrid in the following manner.
-        .. code-block:: python
-
-        a, b, c = jnp.meshgrid(a, b, c, indexing="ij")
-        a, b, c = map(jnp.ravel, (a, b, c))
-        nodes = jnp.column_stack([a, b, c])
-        grid = Grid(nodes, sort=False, jitable=True)
-
-    Since ``jitable=True`` was specified, the attribute ``grid.inverse_*_idx``
-    can not be automatically computed.  This method computes these indices.
-    One can then pass them in as keyword arguments to the Grid constructor.
-
-    Parameters
-    ----------
-    a_size : int
-        Size of the first argument to meshgrid.
-    b_size : int
-        Size of the second argument to meshgrid.
-    c_size : int
-        Size of the third argument to meshgrid.
-
-    Returns
-    -------
-    inverse_idx : ndarray, ndarray, ndarray
-        The inverse indices.
-
-    """
-    inverse_a_idx = repeat(
-        jnp.arange(a_size),
-        b_size * c_size,
-        total_repeat_length=a_size * b_size * c_size,
-    )
-    inverse_b_idx = jnp.tile(
-        repeat(jnp.arange(b_size), c_size, total_repeat_length=b_size * c_size), a_size
-    )
-    inverse_c_idx = jnp.tile(jnp.arange(c_size), a_size * b_size)
-    return inverse_a_idx, inverse_b_idx, inverse_c_idx
-
-
-def meshgrid_unique_idx(a_size, b_size, c_size):
-    """Return unique indices for meshgrid pattern.
-
-    It is common to construct a meshgrid in the following manner.
-        .. code-block:: python
-
-        a, b, c = jnp.meshgrid(a, b, c, indexing="ij")
-        a, b, c = map(jnp.ravel, (a, b, c))
-        nodes = jnp.column_stack([a, b, c])
-        grid = Grid(nodes, sort=False, jitable=True)
-
-    Since ``jitable=True`` was specified, the attribute ``grid.unique_*_idx``
-    can not be automatically computed. This method computes these indices.
-    One can then pass them in as keyword arguments to the Grid constructor.
-
-    Parameters
-    ----------
-    a_size : int
-        Size of the first argument to meshgrid.
-    b_size : int
-        Size of the second argument to meshgrid.
-    c_size : int
-        Size of the third argument to meshgrid.
-
-    Returns
-    -------
-    unique_idx : ndarray, ndarray, ndarray
-        The unique indices.
-
-    """
-    unique_a_idx = jnp.arange(a_size) * b_size * c_size
-    unique_b_idx = jnp.arange(b_size) * c_size
-    unique_c_idx = jnp.arange(c_size)
-    return unique_a_idx, unique_b_idx, unique_c_idx

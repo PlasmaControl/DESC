@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 
 from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take
 from desc.compute.utils import safediv
-from desc.grid import Grid, meshgrid_inverse_idx, meshgrid_unique_idx
+from desc.grid import Grid
 from desc.utils import errorif
 
 
@@ -193,6 +193,7 @@ def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
             if a_max is not None:
                 a_max = a_max[..., jnp.newaxis]
             r = _filter_real(r, a_min, a_max)
+
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
     if distinct:
@@ -320,8 +321,8 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     pitch : Array, shape(P, S)
         λ values.
         λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
-        where in the latter the labels (ρ, α) are interpreted as index into the
-        last axis that corresponds to that field line.
+        where in the latter the labels (ρ, α) are interpreted as the index into
+        the last axis that corresponds to that field line.
         If two-dimensional, the first axis is the batch axis as usual.
 
     """
@@ -429,8 +430,8 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
     pitch : Array, shape(P, S)
         λ values.
         λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
-        where in the latter the labels (ρ, α) are interpreted as index into the
-        last axis that corresponds to that field line.
+        where in the latter the labels (ρ, α) are interpreted as the index into
+        the last axis that corresponds to that field line.
         If two-dimensional, the first axis is the batch axis as usual.
     knots : Array, shape(knots.size, )
         Field line-following ζ coordinates of spline knots.
@@ -574,7 +575,10 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
                 print("bp2:", bp2_p)
                 assert not err_1[p, s], msg_1
                 assert not err_2[p, s], msg_2
-                msg_3 = f"B midpoint = {B_mid} > {1 / pitch[p, s] + eps} = 1/pitch."
+                msg_3 = (
+                    f"B midpoint = {B_mid} > {1 / pitch[p, s] + eps} = 1/pitch."
+                    "Should use a monotonic spline."
+                )
                 assert not err_3, msg_3
         if plot:
             plot_field_line_with_ripple(B, pitch[:, s], bp1[:, s], bp2[:, s], id=str(s))
@@ -903,7 +907,7 @@ _repeated_docstring = """w : Array, shape(w.size, )
         bounce integral of ``integrand(*f, B=B, pitch=pitch, Z=Z)``.
         Note that any arrays baked into the callable method should broadcast
         with ``Z``.
-    f : list or tuple of Array, shape(P, S, knots.size, )
+    f : list of Array, shape(P, S, knots.size, )
         Arguments to the callable ``integrand``.
         These should be the functions in the integrand of the bounce integral
         evaluated (or interpolated to) the nodes of the returned desc
@@ -917,7 +921,7 @@ _repeated_docstring = """w : Array, shape(w.size, )
     pitch : Array, shape(P, S)
         λ values to evaluate the bounce integral at each field line.
         λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
-        where in the latter the labels (ρ, α) are interpreted as index into the
+        where in the latter the labels (ρ, α) are interpreted as the index into the
         last axis that corresponds to that field line.
         The first axis is the batch axis as usual.
     knots : Array, shape(knots.size, )
@@ -1031,23 +1035,23 @@ def _bounce_quadrature(
         lines. Last axis enumerates the bounce integrals.
 
     """
-    errorif(x.ndim != 1 or x.shape != w.shape)
     errorif(bp1.ndim != 3 or bp1.shape != bp2.shape)
+    errorif(x.ndim != 1 or x.shape != w.shape)
     pitch = jnp.atleast_2d(pitch)
     S = B.shape[0]
     if not isinstance(f, (list, tuple)):
         f = [f]
 
-    def _group_grid_data_by_field_line(g):
+    def group_data_by_field_line_and_pitch(g):
         msg = (
-            "Should have at most two dimensions, in which case the first axis "
+            "Should have at most three dimensions, in which case the first axis "
             "is interpreted as the batch axis, which enumerates the evaluation "
             "of the function at particular pitch values."
         )
-        errorif(g.ndim > 2, msg=msg)
+        errorif(g.ndim > 3, msg=msg)
         return g.reshape(-1, S, knots.size)
 
-    f = map(_group_grid_data_by_field_line, f)
+    f = map(group_data_by_field_line_and_pitch, f)
     Z = affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
     # Integrate and complete the change of variable.
     result = _interpolatory_quadrature(
@@ -1063,10 +1067,10 @@ _bounce_quadrature.__doc__ = _bounce_quadrature.__doc__.replace(
 
 
 def bounce_integral(
-    eq,
-    rho=jnp.linspace(1e-7, 1, 10),
-    alpha=None,
-    knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 40),
+    B_sup_z,
+    B,
+    B_z_ra,
+    knots,
     quad=tanh_sinh_quad,
     automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
     B_ref=1,
@@ -1095,16 +1099,25 @@ def bounce_integral(
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium on which the bounce integral is computed.
-    rho : Array
-        Unique flux surface label coordinates.
-    alpha : Array
-        Unique field line label coordinates over a constant rho surface.
-    knots : Array
-        Field line following coordinate values at which to compute a spline
-        of the integrand, for every field line in the meshgrid formed from
-        rho and alpha specified above.
+    B_sup_z : Array, shape(S, knots.size, )
+        Contravariant field-line following toroidal component of magnetic field.
+        B^ζ(ρ, α, ζ) is specified by ``B_sup_z[(ρ, α), ζ]``,  where in the latter
+        the labels (ρ, α) are interpreted as the index into the first axis that
+        corresponds to that field line.
+    B : Array, shape(S, knots.size, )
+        Norm of magnetic field.
+        |B|(ρ, α, ζ) is specified by ``B[(ρ, α), ζ]``,  where in the latter
+        the labels (ρ, α) are interpreted as the index into the first axis that
+        corresponds to that field line.
+    B_z_ra : Array, shape(S, knots.size, )
+        Norm of magnetic field derivative with respect to field-line following label.
+        ∂|B|/∂_ζ(ρ, α, ζ) is specified by ``B_z_ra[(ρ, α), ζ]``,  where in the latter
+        the labels (ρ, α) are interpreted as the index into the first axis that
+        corresponds to that field line.
+    knots : Array, shape(knots.size, )
+        Field line following coordinate values at which ``B_sup_z``,
+        ``B``, and ``B_z_ra`` were evaluated.
+        These knots are used to compute a spline of the integrand.
         The number of knots specifies a grid resolution as increasing the
         number of knots increases the accuracy of representing the integrand
         and the accuracy of the locations of the bounce points.
@@ -1116,7 +1129,7 @@ def bounce_integral(
         Tanh-Sinh quadrature works well if the integrand is singular.
         Otherwise, Gauss-Legendre quadrature with the sin automorphism
         can be more competitive.
-    automorphism : callable, callable
+    automorphism : (callable, callable)
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
         The inverse of the supplied automorphism is composed with the affine
@@ -1142,12 +1155,8 @@ def bounce_integral(
     bounce_integrate : callable
         This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
         specified field line ℓ for every λ value in ``pitch``.
-    items : dict
-        grid_desc : Grid
-            DESC coordinate grid for the given field line coordinates.
-        grid_fl : Grid
-            Clebsch-Type field-line coordinate grid.
-        knots : Array,
+    spline : dict
+        knots : Array, shape(knots.size, )
             Field line-following ζ coordinates of spline knots.
         B.c : Array, shape(4, S, knots.size - 1)
             Polynomial coefficients of the spline of |B| in local power basis.
@@ -1173,6 +1182,21 @@ def bounce_integral(
 
     .. code-block:: python
 
+        eq = get("HELIOTRON")
+        rho = np.linspace(1e-12, 1, 6)
+        alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
+        knots = np.linspace(-3 * np.pi, 3 * np.pi, 40)
+        grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+        data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc)
+        bounce_integrate, spline = bounce_integral(
+            data["B^zeta"],
+            data["|B|"],
+            data["|B|_z|r,a"],
+            knots,
+            check=True,
+            plot=False,
+        )
+
         def integrand_num(g_zz, B, pitch, Z):
             # Integrand in integral in numerator of bounce average.
             f = (1 - pitch * B) * g_zz
@@ -1182,17 +1206,12 @@ def bounce_integral(
             # Integrand in integral in denominator of bounce average.
             return safediv(1, jnp.sqrt(1 - pitch * B))
 
-        eq = get("HELIOTRON")
-        rho = jnp.linspace(1e-12, 1, 6)
-        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 5)
-        bounce_integrate, items = bounce_integral(eq, rho, alpha)
-
-        g_zz = eq.compute("g_zz", grid=items["grid_desc"])["g_zz"]
-        pitch = pitch_of_extrema(items["knots"], items["B.c"], items["B_z_ra.c"])
+        g_zz = eq.compute("g_zz", grid=grid_desc, data=data)["g_zz"]
+        pitch = pitch_of_extrema(knots, spline["B.c"], spline["B_z_ra.c"])
         num = bounce_integrate(integrand_num, g_zz, pitch)
         den = bounce_integrate(integrand_den, [], pitch)
         average = num / den
-        assert jnp.isfinite(average).any()
+        assert np.isfinite(average).any()
 
         # Now we can group the data by field line.
         average = average.reshape(pitch.shape[0], rho.size, alpha.size, -1)
@@ -1201,27 +1220,28 @@ def bounce_integral(
         print(average[:, i, j])
         # are the bounce averages along the field line with nodes
         # given in Clebsch-Type field-line coordinates ρ, α, ζ
-        nodes = items["grid_fl"].nodes.reshape(rho.size, alpha.size, -1, 3)
+        nodes = grid_fl.nodes.reshape(rho.size, alpha.size, -1, 3)
         print(nodes[i, j])
         # for the pitch values stored in
         pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
         print(pitch[:, i, j])
         # Some of these bounce averages will evaluate as nan.
         # You should filter out these nan values when computing stuff.
-        print(jnp.nansum(average, axis=-1))
+        print(np.nansum(average, axis=-1))
 
     """
-    if alpha is None:
-        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 10)
-    rho = jnp.atleast_1d(rho)
-    alpha = jnp.atleast_1d(alpha)
-    knots = jnp.atleast_1d(knots)
-    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
-    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc)
-    B_sup_z = data["B^zeta"].reshape(-1, knots.size) * L_ref / B_ref
-    B = data["|B|"].reshape(-1, knots.size) / B_ref
-    B_z_ra = data["|B|_z|r,a"].reshape(-1, knots.size) / B_ref
 
+    def group_data_by_field_line(g):
+        errorif(g.ndim > 2)
+        return g.reshape(-1, knots.size)
+
+    B_sup_z = B_sup_z * L_ref / B_ref
+    B = B / B_ref
+    B_z_ra = B_z_ra / B_ref
+    B_sup_z, B, B_z_ra = map(group_data_by_field_line, (B_sup_z, B, B_z_ra))
+    errorif(not (B_sup_z.shape == B.shape == B_z_ra.shape))
+
+    # Compute splines.
     monotonic = kwargs.pop("monotonic", False)
     B_c = (
         PchipInterpolator(knots, B, axis=-1, check=check).c
@@ -1231,15 +1251,10 @@ def bounce_integral(
     B_c = jnp.moveaxis(B_c, source=1, destination=-1)
     B_z_ra_c = _poly_der(B_c)
     degree = 3
-    assert B_c.shape == (degree + 1, rho.size * alpha.size, knots.size - 1)
-    assert B_z_ra_c.shape == (degree, rho.size * alpha.size, knots.size - 1)
-    items = {
-        "grid_desc": grid_desc,
-        "grid_fl": grid_fl,
-        "knots": knots,
-        "B.c": B_c,
-        "B_z_ra.c": B_z_ra_c,
-    }
+    assert B_c.shape[0] == degree + 1
+    assert B_z_ra_c.shape[0] == degree
+    assert B_c.shape[-1] == B_z_ra_c.shape[-1] == knots.size - 1
+    spline = {"knots": knots, "B.c": B_c, "B_z_ra.c": B_z_ra_c}
 
     if quad == tanh_sinh_quad:
         kwargs.setdefault("resolution", 19)
@@ -1265,19 +1280,18 @@ def bounce_integral(
             bounce integral of ``integrand(*f, B=B, pitch=pitch, Z=Z)``.
             Note that any arrays baked into the callable method should broadcast
             with ``Z``.
-        f : list of Array, shape(P, items["grid_desc"].num_nodes, )
+        f : list of Array, shape(..., S, knots.size)
             Arguments to the callable ``integrand``.
             These should be the functions in the integrand of the bounce integral
-            evaluated (or interpolated to) the nodes of the returned desc
-            coordinate grid.
-            Should have at most two dimensions, in which case the first axis
+            evaluated (or interpolated to) DESC grid.
+            Should have at most three dimensions, in which case the first axis
             is interpreted as the batch axis, which enumerates the evaluation
             of the function at particular pitch values.
         pitch : Array, shape(P, S)
             λ values to evaluate the bounce integral at each field line.
             λ(ρ, α) is specified by ``pitch[..., (ρ, α)]``
-            where in the latter the labels (ρ, α) are interpreted as index into the
-            last axis that corresponds to that field line.
+            where in the latter the labels (ρ, α) are interpreted as the index into
+            the last axis that corresponds to that field line.
             If two-dimensional, the first axis is the batch axis as usual.
         method : str
             Method of interpolation for functions contained in ``f``.
@@ -1311,10 +1325,15 @@ def bounce_integral(
         assert result.shape[-1] == (knots.size - 1) * degree
         return result
 
-    return bounce_integrate, items
+    return bounce_integrate, spline
 
 
-def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
+def desc_grid_from_field_line_coords(
+    eq,
+    rho=jnp.linspace(1e-7, 1, 10),
+    alpha=None,
+    zeta=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 40),
+):
     """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
 
     Create a meshgrid from the given field line coordinates,
@@ -1328,6 +1347,7 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
         Unique flux surface label coordinates.
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
+        Defaults to 20 linearly spaced nodes.
     zeta : ndarray
         Unique field line-following ζ coordinates.
 
@@ -1339,19 +1359,11 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
         Clebsch-Type field-line coordinate grid.
 
     """
-    r, a, z_fl = map(jnp.ravel, jnp.meshgrid(rho, alpha, zeta, indexing="ij"))
-    coords_fl = jnp.column_stack([r, a, z_fl])
-    _unique_rho_idx = meshgrid_unique_idx(rho.size, alpha.size, zeta.size)[0]
-    _inverse_rho_idx = meshgrid_inverse_idx(rho.size, alpha.size, zeta.size)[0]
-    grid_fl = Grid(
-        nodes=coords_fl,
-        sort=False,
-        jitable=True,
-        _unique_rho_idx=_unique_rho_idx,
-        _inverse_rho_idx=_inverse_rho_idx,
-    )
+    if alpha is None:
+        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 20)
+    grid_fl = Grid.create_meshgrid(rho, alpha, zeta)
     coords_desc = eq.map_coordinates(
-        coords_fl,
+        grid_fl.nodes,
         inbasis=("rho", "alpha", "zeta"),
         outbasis=("rho", "theta", "zeta"),
         period=(jnp.inf, 2 * jnp.pi, jnp.inf),
@@ -1360,7 +1372,7 @@ def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
         nodes=coords_desc,
         sort=False,
         jitable=True,
-        _unique_rho_idx=_unique_rho_idx,
-        _inverse_rho_idx=_inverse_rho_idx,
+        _unique_rho_idx=grid_fl.unique_rho_idx,
+        _inverse_rho_idx=grid_fl.inverse_rho_idx,
     )
     return grid_desc, grid_fl

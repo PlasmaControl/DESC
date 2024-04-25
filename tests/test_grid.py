@@ -14,8 +14,6 @@ from desc.grid import (
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
-    meshgrid_inverse_idx,
-    meshgrid_unique_idx,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -757,23 +755,22 @@ class TestGrid:
         test("zeta", cg_sym)
 
     @pytest.mark.unit
-    def test_meshgrid_idx(self):
-        """Test unique, inverse idx computing logic from meshgrid."""
+    def test_meshgrid(self):
+        """Test meshgrid constructor."""
         R = np.linspace(0, 1, 4)
         T = np.linspace(0, 2 * np.pi, 2)
         Z = np.linspace(0, 10 * np.pi, 3)
-        r, t, z = map(np.ravel, np.meshgrid(R, T, Z, indexing="ij"))
-        uR, uT, uZ = meshgrid_unique_idx(R.size, T.size, Z.size)
-        iR, iT, iZ = meshgrid_inverse_idx(R.size, T.size, Z.size)
+        grid = Grid.create_meshgrid(R, T, Z)
+        r, t, z = grid.nodes.T
         _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(uR, unique)
-        np.testing.assert_allclose(iR, inverse)
+        np.testing.assert_allclose(grid.unique_rho_idx, unique)
+        np.testing.assert_allclose(grid.inverse_rho_idx, inverse)
         _, unique, inverse = np.unique(t, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(uT, unique)
-        np.testing.assert_allclose(iT, inverse)
+        np.testing.assert_allclose(grid.unique_theta_idx, unique)
+        np.testing.assert_allclose(grid.inverse_theta_idx, inverse)
         _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(uZ, unique)
-        np.testing.assert_allclose(iZ, inverse)
+        np.testing.assert_allclose(grid.unique_zeta_idx, unique)
+        np.testing.assert_allclose(grid.inverse_zeta_idx, inverse)
 
 
 @pytest.mark.unit

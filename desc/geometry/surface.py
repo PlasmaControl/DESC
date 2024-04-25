@@ -104,8 +104,7 @@ def convert_spectral_to_FE(
     Zprime_pre_evaluated = Zprime_basis.evaluate(nodes=quadpoints)
     Lprime_pre_evaluated = Lprime_basis.evaluate(nodes=quadpoints)
     IQ = I * Q
-    print(Rprime_pre_evaluated.shape, len(mesh.triangles), mesh.nquad)
-    exit()
+
     Bjb_Z = mesh.integrate(
         (
             Zprime_pre_evaluated[:, np.newaxis, :IQ]

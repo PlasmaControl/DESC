@@ -232,7 +232,9 @@ def test_pitch_of_extrema():
     rtol = 1e-7
     pitch = pitch_of_extrema(k, B.c, B_z_ra.c, relative_shift=rtol)
     eps = 100 * np.finfo(float).eps
-    np.testing.assert_allclose(_filter_not_nan(pitch), pitch_scipy, rtol=rtol + eps)
+    np.testing.assert_allclose(
+        np.sort(_filter_not_nan(pitch)), np.sort(pitch_scipy), rtol=rtol + eps
+    )
 
 
 @pytest.mark.unit

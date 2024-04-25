@@ -97,16 +97,15 @@ def _root_linear(a, b, distinct=False):
 
 def _root_quadratic(a, b, c, distinct=False):
     """Return r such that a r² + b r + c = 0."""
+    # numerical.recipes/book.html, page 227
     discriminant = b**2 - 4 * a * c
     C = complex_sqrt(discriminant)
-
-    def root(xi):
-        return safediv(-b + xi * C, 2 * a)
-
+    sgn = jnp.sign(jnp.real(jnp.conj(b) * C))
+    q = -0.5 * (b + sgn * C)
     is_linear = jnp.isclose(a, 0)
     suppress_root = distinct & jnp.isclose(discriminant, 0)
-    r1 = jnp.where(is_linear, _root_linear(b, c), root(-1))
-    r2 = jnp.where(is_linear | suppress_root, jnp.nan, root(1))
+    r1 = jnp.where(is_linear, _root_linear(b, c), safediv(q, a))
+    r2 = jnp.where(is_linear | suppress_root, jnp.nan, safediv(c, q))
     return r1, r2
 
 
@@ -1071,11 +1070,11 @@ _bounce_quadrature.__doc__ = _bounce_quadrature.__doc__.replace(
 
 def bounce_integral(
     eq,
-    rho=jnp.linspace(1e-7, 1, 5),
+    rho=jnp.linspace(1e-7, 1, 10),
     alpha=None,
     knots=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 40),
     quad=tanh_sinh_quad,
-    automorphism=(automorphism_sin, grad_automorphism_sin),
+    automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
     B_ref=1,
     L_ref=1,
     check=False,

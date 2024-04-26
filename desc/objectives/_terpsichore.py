@@ -196,7 +196,8 @@ class TERPSICHORE(_Objective):
     def write_vmec(self):
 
         print("Figure out how to do this directly from DESC equilibrium quantities!!")
-
+        
+        #VMECIO.save(eq, "path/to/wout.nc", surfs=32)
         
     
     def compute_fort18(self):
@@ -260,7 +261,7 @@ class TERPSICHORE(_Objective):
 
         print("Need a command to remove remnants of pasts TERPS runs (tpr16_dat_wall in particular) or move them to a new directory")
 
-        if (os.path.exists(os.path.join(self.path, "tpr16_dat_wall"))):
+        if (os.path.exists(os.path.join(self.path, 'tpr16_dat_wall'))):
             rm_cmd = ['rm', 'tpr16_dat_wall'] # There's probably a better way to handle this
             subprocess.run(rm_cmd)
             

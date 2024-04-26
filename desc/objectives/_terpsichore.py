@@ -3,6 +3,7 @@ import subprocess
 from scipy.interpolate import interp1d
 import os
 import time
+import math
 from desc.backend import jnp,put
 
 from .objective_funs import ObjectiveFunction, _Objective
@@ -46,12 +47,12 @@ class TERPSICHORE(_Objective):
     # Used by GX objective, not sure where they're used yet
     _scalar = True
     _linear = False
-    _units = "[]" # Outputting with dimensions or normalized?
+    _units = "[1/s]"
     _print_value_fmt = "Growth rate: {:10.3e} "
 
 
     # Need to sure up the paths
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", path=None, bounds=None,normalize=False,normalize_target=False, awall=1.3, deltajp=4.e-2, modelk=0, al0=-5.e-2, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, max_moden=8):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", path=None, bounds=None,normalize=False, submit_script_name="terps_job.submit", normalize_target=False, awall=1.3, deltajp=5.e-1, modelk=0, al0=-5.e-2, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, min_moden=-8, max_moden=11):
         
         if target is None and bounds is None:
             target = 0
@@ -67,6 +68,7 @@ class TERPSICHORE(_Objective):
         self.max_bozn = max_bozn
         self.mode_family = mode_family
         self.max_modem = max_modem
+        self.min_moden = min_moden
         self.max_moden = max_moden
         self.grid = grid
         
@@ -85,8 +87,10 @@ class TERPSICHORE(_Objective):
         self._print_value_fmt = "Growth rate: {:10.3e} " + units
 
 
-        wout_filename = "wout_C640.nc"
+        wout_filename = "wout_C640_MPOL-7_NTOR-6_NS-32.nc"
         self.path = path
+        self.submit_script_name = submit_script_name
+        self.submit_script_path = os.path.join(self.path, self.submit_script_name)
         self.wout_file = os.path.join(self.path, wout_filename)
         self.vmec2terps_app = os.path.join(self.path, "thea-vmec2terps.x")
         self.terps_app = os.path.join(self.path, "tpr_ap.x")
@@ -112,35 +116,6 @@ class TERPSICHORE(_Objective):
 
         """
         eq = self.things[0]
-            
-        if self.grid is None:
-            '''
-            self.grid_eq = QuadratureGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-            )
-
-            #Construct flux-tube geometry
-            data = eq.compute('iota')
-            rhoa = eq.compute('rho')
-            iotad = data['iota']
-            fi = interp1d(rhoa['rho'],iotad)
-            
-            rho = np.sqrt(self.psi)
-            iota = fi(rho)
-            zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iota),(np.pi*self.npol-self.alpha)/np.abs(iota),2*self.nzgrid+1)
-            theta_sfl = iota/np.abs(iota)*self.alpha*np.ones(len(zeta)) + iota*zeta
-            
-            zeta_center = zeta[self.nzgrid]
-            rhoa = rho*np.ones(len(zeta))
-            c = np.vstack([rhoa,theta_sfl,zeta]).T
-            coords = eq.compute_theta_coords(c,tol=1e-10,maxiter=50)
-            self.grid = Grid(coords,sort=False)
-
-            '''
-            
         self._dim_f = 1
 
         timer = Timer()
@@ -168,8 +143,9 @@ class TERPSICHORE(_Objective):
         '''
         if verbose > 0:
             print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-        
+        #timer.start("Precomputing transforms")
+
+        '''
         #Need separate transforms and profiles for the equilibrium and flux-tube
         self.eq = eq
         #self._profiles = get_profiles(self._field_line_keys, obj=eq, grid=self.grid)
@@ -183,16 +159,13 @@ class TERPSICHORE(_Objective):
         }
 
 
-        #if self._normalize:
-            #scales = compute_scaling_factors(eq)
-            # I think only needed if we're not using the TERPS normalization?
-
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
 #        self._check_dimensions()
 #        self._set_dimensions(eq)
+        '''
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -208,51 +181,138 @@ class TERPSICHORE(_Objective):
         if constants is None:
             constants = self.constants
 
-        self.write_vmec()   # Write VMEC file from DESC
+        #self.write_vmec()   # Write VMEC file from DESC
         self.compute_fort18()
         self.write_terps_io()
         self.run_terps()
-
         self.terps_outfile = os.path.join(self.path,'fort.16') # Let's change the name of this at some point
         self.parse_terps_outfile()
 
-
-        # Is something analogous needed for TERPS??
-        if qflux_avg > 20:
-            out_fail = 'fail_' + str(self.t) + '_.nc'
-            copyfile(out_file,out_fail)
-            stdout = 'stdout.out_' + str(self.t)
-            stdout_fail = 'stdout_fail.out_' + str(self.t)
-            copyfile(stdout,stdout_fail)
-        return jnp.atleast_1d(qflux_avg)
+        print("Growth rate = {}".format(self.growth_rate))
+        
+        return jnp.atleast_1d(self.growth_rate)
         
 
+    def write_vmec(self):
+
+        print("Figure out how to do this directly from DESC equilibrium quantities!!")
+
+        
+    
     def compute_fort18(self):
 
         print("Figure out how to do this directly from DESC equilibrium quantities!!")
         
-        #stdout = 'stdout.out_' + str(self.t) # Again, replace 't' with something stability-related
-        #stderr = 'stderr.out_' + str(self.t)
-        #fs = open('stdout.out_' + str(self.t),'w')
         fs = open('stdout.vmec2terps','w')
-        cmd = [self.vmec2terps_app, self.wout_file]
-        subprocess.run(cmd,stdout=fs)
-        fs.close()
-        # Need to ensure that the output file is in the correct directory
-        
-    def run_terps(self):
-        #stdout = 'stdout.out_' + str(self.t) # Again, replace 't' with something stability-related
-        #stderr = 'stderr.out_' + str(self.t)
-        fs = open('stdout.terps','w')
-        cmd = ['srun', '-N', '1', '-t', '00:45:00', '--ntasks-per-node=1', '--mem-per-cpu=100G', self.terps_app, '<', self.terps_infile]
+        head, tail = os.path.split(self.wout_file)
+        cmd = [self.vmec2terps_app, tail]
         subprocess.run(cmd,stdout=fs)
         fs.close()
 
+    def is_terps_complete(self, slurm_file, stop_time, running, runtime):
+
+        if not os.path.exists(slurm_file):
+            return False
+        else:
+            f_slurm = open(slurm_file, 'r')
+
+        if (running):
+            print("Stop time = {} seconds".format(stop_time))
+            print("Current runtime = {} seconds".format(math.ceil(runtime)))
+            if (runtime > stop_time):
+                print("TERPS was unable to find a growth rate. Exiting...")
+                exit()
+            
+        terps_out_contents = f_slurm.read()
+
+        if 'GROWTH RATE' in terps_out_contents:
+            f_slurm.close()
+            rm_cmd = ['rm', 'tpr16_dat_wall'] # There's probably a better way to handle this
+            subprocess.run(rm_cmd)
+            return True
+        else:
+            f_slurm.close()
+            return False
+        
+    def run_terps(self):
+
+        sleep_time = 10 # seconds
+        stop_time = 300 # seconds (kill the infinite loop if TERPS ran into an error and won't be printing growth rate)
+        
+        fs = open('stdout.terps','w')
+        head, tail = os.path.split(self.terps_infile)
+        
+        # This could potentially launch a number of parallel TERPS jobs (probably at least want to run parallel jobs for N=0 and N=1 family)
+        
+        if not (os.path.exists(self.submit_script_path)):
+            f = open(self.submit_script_path,"w")
+            f.write("#!/bin/bash\n")
+            f.write("#SBATCH --job-name=terps    # Job name\n")
+            f.write("#SBATCH --time=00:45:00               # Time limit hrs:min:sec\n")
+            f.write("#SBATCH --output=terps_%j.log   # Standard output and error log\n")
+            f.write("#SBATCH --nodes=1\n")
+            f.write("#SBATCH --mem-per-cpu=100G\n")
+            f.write("#SBATCH --ntasks-per-node=1\n")
+            f.write("#SBATCH --partition=stellar-debug\n")
+            f.write("\n")
+            f.write("srun {} < {}\n".format(self.terps_app,tail))
+            f.close()
+
+        print("Need a command to remove remnants of pasts TERPS runs (tpr16_dat_wall in particular) or move them to a new directory")
+
+        if (os.path.exists(os.path.join(self.path, "tpr16_dat_wall"))):
+            rm_cmd = ['rm', 'tpr16_dat_wall'] # There's probably a better way to handle this
+            subprocess.run(rm_cmd)
+            
+        cmd = ['sbatch', self.submit_script_path]
+        terps_process = subprocess.run(cmd,stdout=subprocess.PIPE)
+        out_text = terps_process.stdout.decode('utf-8')
+        fs.write(out_text)
+        jobID = out_text.split()[-1]
+        slurm_file = os.path.join(self.path,"terps_{}.log".format(jobID))
+
+        running = False
+        runtime = 0.0
+        tic = time.perf_counter()
+        while not self.is_terps_complete(slurm_file, stop_time, running, runtime):
+            if not running:
+                check_status_cmd = ['squeue', '-j', jobID, '--format="%T"']
+                check_status = subprocess.run(check_status_cmd, stdout=subprocess.PIPE)
+                status_text = check_status.stdout.decode('utf-8')
+                status = status_text.split()[1].replace('"','')
+                if status == 'RUNNING':
+                    running = True
+                    tic = time.perf_counter()
+                    print("TERPS has started running")
+                elif status == 'PENDING':
+                    print("TERPS is still in the queue")
+                else:
+                    print(status)
+                    exit()
+                    
+            else:
+                print("Growth rate not found. Checking again in {} seconds".format(sleep_time))
+
+            time.sleep(sleep_time)
+            toc = time.perf_counter()
+            runtime = toc-tic
+
+        print("Found growth rate!")
+        
+        fs.close()
+
+        # Need a command here to wait until all TERPS runs are complete if doing some form of parallel execution
+        
+        
     def parse_terps_outfile(self):
 
         # Read fort.16 and search for growth rate
-        f = open(self.terps_outfile, 'r')
-        
+        if (os.path.exists(self.terps_outfile)):
+            f = open(self.terps_outfile, 'r')
+        else:
+            print("TERPS fort.16 output file not found! Exiting...")
+            exit()
+            
         growth_rate = []
         for line_number, line in enumerate(f, start=1):
             index = line.find('GROWTH RATE')
@@ -277,8 +337,6 @@ class TERPSICHORE(_Objective):
         n = len(values) 
         argnum = np.arange(0,n,1)
 
-        print(argnum)
-        exit()
         jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-2)
         
         return (primal_out, jvp)
@@ -305,8 +363,8 @@ class TERPSICHORE(_Objective):
     
     def write_terps_io(self):
 
-        eq_identifier = "C624"
-        
+        eq_identifier = "C640"
+
         self.terps_infile = os.path.join(self.path, "{}_N{}_family".format(eq_identifier, self.mode_family))
         f = open(self.terps_infile,"w")
 
@@ -322,7 +380,8 @@ class TERPSICHORE(_Objective):
         boz_str_title = "C M=  0"
         boz_str_neg = "      0"
         boz_str_pos = "      1"
-        for _im in range(1,max_bozm+1):
+        #for _im in range(1,self.max_bozm+1):
+        for _im in range(1,37):
             if (_im >= 10):
                 boz_str_title += " "+str(_im)[1]
             else:
@@ -333,7 +392,7 @@ class TERPSICHORE(_Objective):
 
         boz_str_title += "  N\n"
         f.write(boz_str_title)
-        for _in in range(-max_bozn,max_bozn+1):
+        for _in in range(-self.max_bozn,self.max_bozn+1):
             final_str_neg = boz_str_neg+"{:>3}\n".format(_in)
             final_str_pos = boz_str_pos+"{:>3}\n".format(_in)
             if _in < 0.0:
@@ -357,37 +416,39 @@ class TERPSICHORE(_Objective):
         f.write("  1.0001e+00  0.0000e-00  0.6500e-00  0.0000e-00  1.0000e-00  1.0001e+00     -2\n")
         f.write("\n")
         f.write("C    AWALL       EWALL       DWALL       GWALL       DRWAL       DZWAL   NPWALL\n")
-        f.write("  {:10.4e}  1.5000e+00 -1.0000e-00  5.2000e-00 -0.0000e-00 +0.0000e-00      2\n".format(awall))
+        f.write("  {:10.4e}  1.5000e+00 -1.0000e-00  5.2000e-00 -0.0000e-00 +0.0000e-00      2\n".format(self.awall))
         f.write("C\n")
         f.write("C    RPLMIN       XPLO      DELTAJP       WCT        CURFAC\n")
-        f.write("  1.0000e-05  {:10.4e}  {:10.4e}  6.6667e-01  1.0000e-00\n".format(xplo, deltajp))
+        f.write("  1.0000e-05  {:10.4e}  {:10.4e}  6.6667e-01  1.0000e-00\n".format(self.xplo, self.deltajp))
         f.write("C\n")
-        f.write("C                                                             MODELK =      {}\n".format(modelk))
+        f.write("C                                                             MODELK =      {}\n".format(self.modelk))
         f.write("C\n")
-        f.write("C     NUMBER OF EQUILIBRIUM FIELD PERIODS PER STABILITY PERIOD: NSTA =      {}\n".format(nfp))
+        f.write("C     NUMBER OF EQUILIBRIUM FIELD PERIODS PER STABILITY PERIOD: NSTA =      {}\n".format(self.nfp))
         f.write("C\n")
         f.write("C     TABLE OF FOURIER COEFFIENTS FOR STABILITY DISPLACEMENTS\n")
         f.write("C\n")
         f.write("C M=  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5  N\n")
 
-        #for _in in range(-max_moden,max_moden+1):
         for _in in range(-8,11):
 
             in_family = False
-            if (_in % 2 == mode_family): # This needs to be modified for nfp != 2,3
+            if (_in % 2 == self.mode_family): # This needs to be modified for nfp != 2,3
                 in_family = True
 
             if _in <= 0:
                 mode_str = "      0"
             else:
-                if ((np.abs(_in) <= max_moden) and (in_family)):
+                if ((_in <= self.max_moden) and (_in >= self.min_moden) and (in_family)):
                     mode_str = "      1"
                 else:
                     mode_str = "      0"
                 
             for _im in range(1,55+1):
-                if ((_im <= max_modem) and (in_family)):
-                    mode_str += " 1"
+                if ((_im <= self.max_modem) and (in_family)):
+                    if ((_in <= self.max_moden) and (_in >= self.min_moden)):
+                        mode_str += " 1"
+                    else:
+                        mode_str += " 0"
                 else:
                     mode_str += " 0"
 
@@ -396,7 +457,7 @@ class TERPSICHORE(_Objective):
 
         f.write("C\n")
         f.write("C   NEV NITMAX         AL0     EPSPAM IGREEN MPINIT\n")
-        f.write("      {}   4500  {:10.3e}  1.000E-04      0      0\n".format(nev,al0))
+        f.write("      {}   4500  {:10.3e}  1.000E-04      0      0\n".format(self.nev,self.al0))
         f.write("C\n")
         
         f.close()

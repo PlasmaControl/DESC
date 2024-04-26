@@ -351,21 +351,6 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     Particles with λ = 1 / |B|(ζ*) where |B|(ζ*) are local maxima
     have fat banana orbits increasing neoclassical transport.
 
-    When computing ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ in equation 29 of
-
-        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-        Evaluation of 1/ν neoclassical transport in stellarators.
-        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-        https://doi.org/10.1063/1.873749
-
-    the contribution of ∑ⱼ Hⱼ² / Iⱼ to ε is largest in the intervals such that
-    b ∈ [|B|(ζ*) - db, |B|(ζ*)]. To see this, observe that Iⱼ ∼ √(1 − λ B),
-    hence Hⱼ² / Iⱼ ∼ Hⱼ² / √(1 − λ B). For λ = 1 / |B|(ζ*), near |B|(ζ*), the
-    quantity 1 / √(1 − λ B) is singular. The slower |B| tends to |B|(ζ*) the
-    less integrable this singularity becomes. Therefore, a quadrature for
-    ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ would do well to evaluate the integrand near
-    b = 1 / λ = |B|(ζ*).
-
     Parameters
     ----------
     knots : Array, shape(knots.size, )
@@ -416,7 +401,6 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
         (1 + relative_shift) * B_extrema,
     ).reshape(S, -1)
     # Reshape so that last axis enumerates extrema along a field line.
-    B_extrema = take_mask(B_extrema, ~jnp.isnan(B_extrema))
     pitch = 1 / B_extrema.T
     assert pitch.shape == (N * (degree - 1), S)
     return pitch
@@ -469,13 +453,8 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
     """
     B_c, B_z_ra_c, pitch = _check_shape(knots, B_c, B_z_ra_c, pitch)
     P, S, N, degree = pitch.shape[0], B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
-    # The polynomials' intersection points with 1 / λ is given by intersect.
-    # In order to be JIT compilable, this must have a shape that accommodates the
-    # case where each polynomial intersects 1 / λ degree times.
-    # nan values in intersect denote a polynomial has less than degree intersects.
     intersect = _poly_root(
         c=B_c,
-        # New axis to use same pitches across polynomials of a particular spline.
         k=(1 / pitch)[..., jnp.newaxis],
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
@@ -495,9 +474,6 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
     intersect = take_mask(intersect, is_intersect)
     B_z_ra = take_mask(B_z_ra, is_intersect)
     assert intersect.shape == B_z_ra.shape == (P, S, N * degree)
-    # Sign of derivative determines whether an intersect is a valid bounce point.
-    # Need to include zero derivative intersects to compute the WFB
-    # (world's fattest banana) orbit bounce integrals.
     is_bp1 = B_z_ra <= 0
     is_bp2 = B_z_ra >= 0
     # The pairs bp1[i, j, k] and bp2[i, j, k] are boundaries of an integral only
@@ -514,10 +490,10 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
     # due to floating point errors grows, so the real solution is to pick a less
     # degenerate pitch value - one that does not ride the global extrema of |B|.
     is_bp2 = put_along_axis(is_bp2, jnp.array(0), edge_case, axis=-1)
-
     # Get ζ values of bounce points from the masks.
     bp1 = take_mask(intersect, is_bp1)
     bp2 = take_mask(intersect, is_bp2)
+
     # Consistent with (in particular the discussion on page 3 and 5 of)
     # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     # Evaluation of 1/ν neoclassical transport in stellarators.
@@ -570,7 +546,9 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
                 bp1_p, bp2_p, B_mid = map(
                     _filter_not_nan, (bp1[p, s], bp2[p, s], B_mid)
                 )
-                plot_field_line_with_ripple(B, pitch[p, s], bp1_p, bp2_p, id=f"{p},{s}")
+                plot_field_line_with_ripple(
+                    B, pitch[p, s], bp1_p, bp2_p, name=f"{p},{s}"
+                )
                 print("bp1:", bp1_p)
                 print("bp2:", bp2_p)
                 assert not err_1[p, s], msg_1
@@ -581,7 +559,9 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
                 )
                 assert not err_3, msg_3
         if plot:
-            plot_field_line_with_ripple(B, pitch[:, s], bp1[:, s], bp2[:, s], id=str(s))
+            plot_field_line_with_ripple(
+                B, pitch[:, s], bp1[:, s], bp2[:, s], name=str(s)
+            )
 
 
 def plot_field_line_with_ripple(
@@ -593,7 +573,7 @@ def plot_field_line_with_ripple(
     stop=None,
     num=300,
     show=True,
-    id=None,
+    name=None,
 ):
     """Plot the field line given spline of |B| and bounce points etc.
 
@@ -616,7 +596,7 @@ def plot_field_line_with_ripple(
         Should be dense to see oscillations.
     show : bool
         Whether to show the plot.
-    id : str
+    name : str
         String to prepend to plot title.
 
     Returns
@@ -674,8 +654,8 @@ def plot_field_line_with_ripple(
     ax.set_ylabel(r"$\vert B \vert \sim 1 / \lambda$")
     ax.legend(legend.values(), legend.keys())
     title = r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$"
-    if id is not None:
-        title = f"{title}. id = {id}."
+    if name is not None:
+        title = f"{title}. name = {name}."
     ax.set_title(title)
     if show:
         plt.tight_layout()
@@ -712,7 +692,7 @@ def automorphism_arcsin(x):
     Parameters
     ----------
     x : Array
-        Points to tranform.
+        Points to transform.
 
     Returns
     -------
@@ -821,37 +801,6 @@ def tanh_sinh_quad(resolution, w=lambda x: 1, t_max=None):
     return x, W
 
 
-def _suppress_bad_nan(V):
-    """Zero out nan values induced by error.
-
-    Assuming that V is a well-behaved function of some interpolation points Z,
-    then V(Z) should evaluate as NaN only if Z is NaN. This condition needs to
-    be enforced explicitly due to floating point and interpolation error.
-
-    In the context of bounce integrals, the √(1 − λ |B|) terms necessitate this.
-    For interpolation error in |B| may yield λ |B| > 1 at quadrature points
-    between bounce points, which is inconsistent with our knowledge of the |B|
-    spline on which the bounce points were computed. This inconsistency can
-    be more prevalent in the limit the number of quadrature points per bounce
-    integration is much greater than the number of knots.
-
-    Parameters
-    ----------
-    V : Array
-        Interpolation values.
-
-    Returns
-    -------
-    V : Array
-        The interpolation values with the bad NaN values set to zero.
-
-    """
-    # This simple logic is encapsulated here to make explicit the bug it resolves.
-    # Don't suppress inf as that indicates catastrophic floating point error.
-    V = jnp.nan_to_num(V, posinf=jnp.inf, neginf=-jnp.inf)
-    return V
-
-
 def _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product):
     """Check for floating point errors.
 
@@ -892,8 +841,10 @@ def _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product):
     goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
     # Number of integrals that were actually computed.
     actual = jnp.isfinite(inner_product).sum()
-    err_msg = f"Lost {goal - actual} integrals from floating point error."
-    assert goal == actual, err_msg
+    assert goal == actual, (
+        f"Lost {goal - actual} integrals "
+        "from floating point or spline approximation error."
+    )
 
 
 _repeated_docstring = """w : Array, shape(w.size, )
@@ -983,11 +934,17 @@ def _interpolatory_quadrature(
     Z_ps = Z.reshape(Z.shape[0], Z.shape[1], -1)
     f = [_interp1d_vec(Z_ps, knots, ff, method=method).reshape(shape) for ff in f]
     B_sup_z = _interp1d_vec(Z_ps, knots, B_sup_z, method=method).reshape(shape)
-    # Specify derivative at knots for ≈ cubic hermite interpolation.
     B = _interp1d_vec_with_df(Z_ps, knots, B, B_z_ra, method=method_B).reshape(shape)
-    pitch = pitch[..., jnp.newaxis, jnp.newaxis]
+    V = integrand(*f, B=B, pitch=pitch[..., jnp.newaxis, jnp.newaxis], Z=Z)
+    # Assuming that V is a well-behaved function of some interpolation points Z,
+    # V(Z) should evaluate as NaN only if Z is NaN. This condition needs to
+    # be enforced explicitly due to floating point and interpolation error.
+    # In the context of bounce integrals, the √(1 − λ |B|) terms necessitate this.
+    # For interpolation error in |B| may yield λ |B| > 1 at quadrature points
+    # between bounce points. Don't suppress inf as that indicates catastrophic
+    # floating point error.
     inner_product = jnp.dot(
-        _suppress_bad_nan(integrand(*f, B=B, pitch=pitch, Z=Z)) / B_sup_z,
+        jnp.nan_to_num(V, posinf=jnp.inf, neginf=-jnp.inf) / B_sup_z,
         w,
     )
     if check:
@@ -1274,7 +1231,7 @@ def bounce_integral(
         integrand : callable
             This callable is the composition operator on the set of functions in ``f``
             that maps the functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ.
-            It should accept the items in ``f`` as arguments as well as two additional
+            It should accept the items in ``f`` as arguments as well as the additional
             keyword arguments: ``B``, ``pitch``, and ``Z``, where ``Z`` is the set of
             quadrature points. A quadrature will be performed to approximate the
             bounce integral of ``integrand(*f, B=B, pitch=pitch, Z=Z)``.

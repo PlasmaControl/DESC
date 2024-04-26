@@ -97,8 +97,16 @@ metadata about the quantity. The necessary fields are detailed below:
   are specified in ``axis_limit_data``. The dependencies specified in this list are
   marked to be computed only when there is a node at the magnetic axis.
 * ``parameterization``: what sorts of DESC objects is this function for. Most functions
-  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.Curve``,
-  or specific types eg ``desc.geometry.FourierRZCurve``.
+  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.core.Curve``,
+  or specific types eg ``desc.geometry.curve.FourierRZCurve``. If a quantity is computed differently
+  for a subclass versus a superclass, then one may define a compute function for the superclass
+  (e.g. for ``desc.geometry.Curve``) which will be used for that class and any of its subclasses,
+  and then if a specific subclass requires a different method, one may define a second compute function for
+  the same quantity, with a parameterization for that subclass (e.g. ``desc.geometry.curve.SplineXYZCurve``).
+  See the compute definitions for the ``length`` quantity in ``compute/_curve.py`` for an example of this,
+  which is similar to the inheritance structure of Python classes. Note that for the compute function inheritance to work
+  properly, the definition of the compute function for the subclass implementation must come AFTER
+  the superclass compute function's definition, otherwise an error will be thrown when the data index is created.
 * ``kwargs``: If the compute function requires any additional arguments they should
   be specified like ``kwarg="description"`` where ``kwarg`` is replaced by the actual
   keyword argument, and ``"description"`` is a string describing what it is.

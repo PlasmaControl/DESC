@@ -1,4 +1,5 @@
 """Classes for spectral bases and functions for evaluation."""
+
 import functools
 import warnings
 from abc import ABC, abstractmethod
@@ -1212,7 +1213,6 @@ class FiniteElementBasis(_FE_Basis):
             inds = i * self.Q + q
         elif self.N == 0:
             # Tessellate the domain and find the basis functions for theta, zeta
-            # Rho, Theta = np.meshgrid(r, t, indexing="ij")
             Rho_Theta = np.array([np.ravel(r), np.ravel(t)]).T
             (
                 intervals,
@@ -1220,7 +1220,6 @@ class FiniteElementBasis(_FE_Basis):
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
 
             # Sum the basis functions from each triangle node
-            # print(basis_functions)
             basis_functions = np.reshape(basis_functions, (len(t), -1))
             inds = i * self.Q + q
         else:
@@ -2097,25 +2096,53 @@ class FiniteElementMesh3D_scikit:
         self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
         self.K = K
 
-        """ Still working on implementation for any L,M,N. For now, taking cases
-        and taking advantage of mesh.refined() in scikit. Starting with a unit square in
-        (rho,theta,zeta)
-        mesh.refined(1) divides [0,1] in half on all three axes (40 FEs)
-        mesh.refined(2) divides [0,1] in quarters on all three axes (320 FEs)
-        mesh.refined(3) divides [0,1] in eighths on all three axes (2560 FEs)
-        mesh.refined(4) divides [0,1] in 1/16th on all three axes
-
-
-        """
-        # For now:mesh = fem.MeshTet2()
-
-        """
         if K == 1:
-            e = fem.ElementTetP1()
-        else:
-            e = fem.ElementTetP2()
+            mesh = fem.MeshTet1.init_tensor(
+                np.linspace(0, 1, L),
+                np.linspace(0, 2 * np.pi, M),
+                np.linspace(0, 2 * np.pi, N),
+            )
 
+        else:
+            mesh = fem.MeshTet2.init_tensor(
+                np.linspace(0, 1, L),
+                np.linspace(0, 2 * np.pi, M),
+                np.linspace(0, 2 * np.pi, N),
+            )
+        vertices = mesh.doflocs
+
+        vertices = vertices.T
+
+        # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
+        # Initialize tetrahedra = []
+        # Pick four points of tetrahedral elements:
         """
+        for i in range(L - 1):
+            for j in range(M - 1):
+                for l in range(N - 1):
+
+                    # There are MNL tetrahedra in the mesh, we identify each one:
+
+                    # Form the tetrahedra, want vertices to have shape (4,3)
+                    tetrahedra_vertices = np.zeros([4, 3])
+                    # Will use tetrahedra_vertices[0,0] =
+
+                    # Grabbing the six tetrahedra in each Rectangular prism:
+                    tetrahedron1 = TetrahedronFiniteElement(tetrahedron_1_vertices, K=K)
+                    tetrahedron2 = TetrahedronFiniteElement(tetrahedron_2_vertices, K=K)
+                    tetrahedron3 = TetrahedronFiniteElement(tetrahedron_3_vertices, K=K)
+                    tetrahedron4 = TetrahedronFiniteElement(tetrahedron_4_vertices, K=K)
+                    tetrahedron5 = TetrahedronFiniteElement(tetrahedron_5_vertices, K=K)
+                    tetrahedron6 = TetrahedronFiniteElement(tetrahedron_6_vertices, K=K)
+                    tetrahedra.append(tetrahedron1)
+                    tetrahedra.append(tetrahedron2)
+                    tetrahedra.append(tetrahedron3)
+                    tetrahedra.append(tetrahedron4)
+                    tetrahedra.append(tetrahedron5)
+                    tetrahedra.append(tetrahedron6)
+                    self.vertices = vertices
+                    self.tetrahedra = tetrahedra
+                    """
 
     def visualize():
         """Visualize 3D Mesh."""
@@ -2616,8 +2643,9 @@ class FiniteElementMesh2D:
                 b = -(np.cross(v, v2) - np.cross(v1, v2)) / np.cross(v2, v3)
                 if a >= 0 and b >= 0 and (a + b) <= 1:
                     triangle_indices[i] = j
-                    basis_functions[i, i * self.Q: (i + 1) * self.Q], _ = triangle.get_basis_functions(v.reshape(1, 2))
-                    # print(i, j, v, basis_functions[i, i * self.Q: (i + 1) * self.Q])
+                    basis_functions[i, i * self.Q : (i + 1) * self.Q], _ = (
+                        triangle.get_basis_functions(v.reshape(1, 2))
+                    )
         return triangle_indices, basis_functions
 
     def return_quadrature_points(self):
@@ -2686,6 +2714,19 @@ class FiniteElementMesh2D:
                 f[i * nquad : (i + 1) * nquad, :],
             )
         return integral / 2.0
+
+
+class TetrahedronFiniteElement:
+    """Class representing a triangle in a 3D grid of finite elements.
+
+    Parameters
+    ----------
+    vertices: array-like, shape(4,3)
+        The four vertices of the triangle in (rho_i,theta_i, zeta_i)
+    K: integer
+        The order of the finite elements to use, which gives (K+1)(K+2)(K+3) / 6
+        basis functions.
+    """
 
 
 class FiniteElementMesh1D:

@@ -271,8 +271,36 @@ class Curve(IOAble, Optimizable, ABC):
             coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    # TODO: to_rz method for converting to FourierRZCurve representation
-    # (might be impossible to parameterize some curves with toroidal angle phi)
+    def to_FourierRZ(self, N=None, grid=None, NFP=None, name=""):
+        """Convert Curve to FourierRZCurve representation.
+
+        Note that some types of curves may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCurve.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierRZCurve
+            New representation of the curve parameterized by Fourier series for R,Z.
+
+        """
+        from .curve import FourierRZCurve
+
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierRZCurve.from_values(
+            coords, N=N, NFP=NFP if NFP is not None else 1, basis="xyz", name=name
+        )
 
 
 class Surface(IOAble, Optimizable, ABC):

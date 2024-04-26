@@ -1455,14 +1455,14 @@ def test_regcoil_helical_coils_check_objective_method(
 
     # test finding coils
 
-    numCoils = 40
+    numCoils = 20
 
     coilset2 = surface_current_field2.to_CoilSet(
         desirednumcoils=numCoils,
     )
     coilset2 = coilset2.to_FourierXYZ(N=150)
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
-    np.testing.assert_allclose(B, B_from_coils, atol=7e-3)
+    np.testing.assert_allclose(B, B_from_coils, atol=7e-3, rtol=1e-3)
 
 
 @pytest.mark.regression

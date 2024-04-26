@@ -9,6 +9,7 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import quadax
 from orthax import legendre
 
 from desc.backend import jnp, trapezoid
@@ -89,6 +90,22 @@ def _ripple(params, transforms, profiles, data, **kwargs):
         I = bounce_integrate(_dI, [], pitch)
         return jnp.nansum(H**2 / I, axis=-1)
 
+    # For ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ in equation 29 of
+    # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    # Evaluation of 1/ν neoclassical transport in stellarators.
+    # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    # https://doi.org/10.1063/1.873749
+    # the contribution of ∑ⱼ Hⱼ² / Iⱼ to ε is largest in the intervals such that
+    # b ∈ [|B|(ζ*) - db, |B|(ζ*)]. To see this, observe that Iⱼ ∼ √(1 − λ B),
+    # hence Hⱼ² / Iⱼ ∼ Hⱼ² / √(1 − λ B). For λ = 1 / |B|(ζ*), near |B|(ζ*), the
+    # quantity 1 / √(1 − λ B) is singular. The slower |B| tends to |B|(ζ*) the
+    # less integrable this singularity becomes. Therefore, a quadrature for
+    # ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ would do well to evaluate the integrand near
+    # b = 1 / λ = |B|(ζ*).
+    # The same should be done for the minima. For particles
+    # with 1 / λ = |B|(ζ*) minima, the measure of the bounce integral ∫ f(ℓ) dℓ
+    # ~ |ζ₂ − ζ₁| → 0, and the strength of the singularity ~ 1 / |∂|B|/∂_ζ| → ∞.
+    # So  ∫ f(ℓ) dℓ ≈ [f(ζ₂) ζ₂ - f(ζ₁) ζ₁] / |∂|B|/∂_ζ|.
     # Breakpoints where the quadrature should take more care.
     # For simple schemes this means to include a quadrature point here.
     breaks = 1 / pitch_of_extrema(
@@ -99,12 +116,19 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     breaks = jnp.vstack([breaks, max_tz_B[jnp.newaxis]])
     breaks = jnp.sort(breaks, axis=0).reshape(breaks.shape[0], -1)
 
-    if ripple_quad == trapezoid:  # or quadax.simpson
-        b = composite_linspace(breaks, ripple_quad_res)
-        rip = ripple_quad(ripple_sum(b), b, axis=0)
-    else:
-        # want to use Clenshaw-Curtis with quadax.quadcc(ripple_sum, breaks)
-        raise NotImplementedError("Dependency conflict with quadax.")
+    is_Newton_Cotes = (
+        ripple_quad == trapezoid
+        or ripple_quad == quadax.trapezoid
+        or ripple_quad == quadax.simpson
+    )
+    try:
+        if is_Newton_Cotes:
+            b = composite_linspace(breaks, ripple_quad_res)
+            rip = ripple_quad(ripple_sum(b), b, axis=0)
+        else:
+            rip = ripple_quad(ripple_sum, breaks)
+    except TypeError as e:
+        raise NotImplementedError from e
 
     # Integrate over flux surface.
     ripple = jnp.dot(rip.reshape(num_rho, -1), alpha_weight)

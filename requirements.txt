@@ -11,6 +11,6 @@ orthax
 plotly >= 5.16, < 6.0
 psutil
 pylatexenc >= 2.0, < 3.0
-# quadax
+quadax >= 0.2.1
 scipy >= 1.7.0, < 2.0.0
 termcolor

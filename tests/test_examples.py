@@ -1455,7 +1455,7 @@ def test_regcoil_helical_coils_check_objective_method(
 
     # test finding coils
 
-    numCoils = 20
+    numCoils = 15
 
     coilset2 = surface_current_field2.to_CoilSet(
         desirednumcoils=numCoils,

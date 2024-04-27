@@ -13,6 +13,7 @@ from desc.backend import (
 )
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
 from desc.singularities import compute_B_plasma
 from desc.utils import Timer, errorif, warnif
@@ -741,7 +742,7 @@ class CoilsetMinDistance(_CoilObjective):
 
         def body(i):
             dx = pts[i] - pts
-            dist = jnp.linalg.norm(dx, axis=-1)
+            dist = safenorm(dx, axis=-1)
             # ignore distance to pts within each coil
             mask = jnp.ones(ncoil)
             mask = mask.at[i].set(0)[:, None]

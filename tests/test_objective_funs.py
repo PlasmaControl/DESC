@@ -2209,7 +2209,7 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()
-        coilset = CoilSet.linspaced_angular(coil)
+        coilset = CoilSet.linspaced_angular(coil, n=3)
         obj = ObjectiveFunction(objective(coilset), use_jit=False)
         obj.build(verbose=0)
         g = obj.grad(obj.x())

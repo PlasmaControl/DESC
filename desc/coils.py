@@ -1,6 +1,5 @@
 """Classes for magnetic field coils."""
 
-import copy
 import numbers
 from abc import ABC
 from collections.abc import MutableSequence
@@ -1014,7 +1013,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 )
                 for k in range(N_coils_per_FP):
                     data_this_FP[k][key] = rotated_data_per_coil_this_FP[k]
-            data_all_coils += copy.deepcopy(data_this_FP)
+            data_all_coils += [dict(d) for d in data_this_FP]
         # finally, check if the scalar positions are in the computed quantities,
         # and if so set them to the correct values based off of "x"
         keys_to_set_manually = {"X", "Y", "Z", "R", "phi"}.intersection(

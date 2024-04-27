@@ -516,17 +516,13 @@ class Grid(_Grid):
         aa, bb, cc = map(jnp.ravel, jnp.meshgrid(a, b, c, indexing="ij"))
         nodes = jnp.column_stack([aa, bb, cc])
 
-        ds = jnp.array([1 / a.size, 2 * jnp.pi / b.size, 2 * jnp.pi / c.size])
-        num_nodes = a.size * b.size * c.size
-        spacing = jnp.ones(num_nodes)[:, jnp.newaxis] * ds
-
         unique_a_idx = jnp.arange(a.size) * b.size * c.size
         unique_b_idx = jnp.arange(b.size) * c.size
         unique_c_idx = jnp.arange(c.size)
         inverse_a_idx = repeat(
             unique_a_idx // (b.size * c.size),
             b.size * c.size,
-            total_repeat_length=num_nodes,
+            total_repeat_length=a.size * b.size * c.size,
         )
         inverse_b_idx = jnp.tile(
             repeat(unique_b_idx // c.size, c.size, total_repeat_length=b.size * c.size),
@@ -535,7 +531,6 @@ class Grid(_Grid):
         inverse_c_idx = jnp.tile(unique_c_idx, a.size * b.size)
         return cls(
             nodes=nodes,
-            spacing=spacing,
             sort=False,
             jitable=True,
             _unique_rho_idx=unique_a_idx,

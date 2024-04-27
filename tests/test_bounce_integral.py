@@ -643,9 +643,14 @@ def test_bounce_averaged_drifts():
         knots=zeta,
         B_ref=B_ref,
         L_ref=L_ref,
+        quad=tanh_sinh_quad,
+        automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
+        resolution=quad_resolution,
+        # quad=np.polynomial.legendre.leggauss,  # noqa: E800
+        # automorphism=(automorphism_sin, grad_automorphism_sin),  # noqa: E800
+        # deg=quad_resolution,  # noqa: E800
         check=True,
         plot=True,
-        resolution=quad_resolution,
         monotonic=monotonic,
     )
 
@@ -748,7 +753,7 @@ def test_bounce_averaged_drifts():
         method=method,
     )
     bounce_drift = np.squeeze(_filter_not_nan(bounce_drift))
-    msg = "There is only one bounce integral per pitch in this example."
+    msg = "There should be one bounce integral per pitch in this example."
     assert bounce_drift.size == bounce_drift_analytic.size, msg
 
     fig, ax = plt.subplots(2)

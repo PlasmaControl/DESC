@@ -654,7 +654,7 @@ def test_bounce_averaged_drifts():
         # automorphism=(automorphism_sin, grad_automorphism_sin),  # noqa: E800
         # deg=quad_resolution,  # noqa: E800
         check=True,
-        plot=True,
+        plot=False,
         monotonic=monotonic,
     )
 
@@ -718,24 +718,17 @@ def test_bounce_averaged_drifts():
     # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf.
     I_0 = test_integral_0(k, quad_resolution)
     I_1 = test_integral_1(k, quad_resolution)
-    I_2 = 16 * k * I_0
-    I_3 = 4 / 9 * (8 * k * (-1 + 2 * k2) * I_1 - 4 * k * (-1 + k2) * I_0)
-    I_4 = (
-        2
-        * np.sqrt(2)
-        / 3
-        * (4 * np.sqrt(2) * k * (-1 + 2 * k2) * I_0 - 2 * (-1 + k2) * I_1)
-    )
-    I_5 = (
-        2
-        / 30
-        * (32 * k * (1 - k2 + k2**2) * I_0 - 16 * k * (1 - 3 * k2 + 2 * k2**2) * I_1)
-    )
-    I_6 = 2 / 3 * (k * (-2 + 4 * k2) * I_0 - 4 * (-1 + k2) * I_1)
-    I_7 = 4 / k * (2 * k2 * I_0 + (1 - 2 * k2) * I_1)
+    K = k / 4 * I_0
+    E = I_1 / (4 * k)
+    I_2 = 16 * k * E
+    I_3 = 16 * k / 9 * (2 * (-1 + 2 * k2) * E - (-1 + k2) * K)
+    I_4 = 16 * k / 3 * ((-1 + 2 * k2) * E - (-1 + k2) * K)
+    I_5 = 32 * k / 30 * (2 * (1 - k2 + k2**2) * E - (1 - 3 * k2 + 2 * k2**2) * K)
+    I_6 = 4 / k * (2 * k2 * E + (1 - 2 * k2) * K)
+    I_7 = 2 * k / 3 * ((-2 + 4 * k2) * E - 4 * (-1 + k2) * K)
 
     bounce_drift_analytic = (
-        fudge_factor_cvdrift * dPdrho / B0**2 * I_1
+        -fudge_factor_cvdrift * dPdrho / B0**2 * I_1
         - 0.5
         * fudge_factor_gbdrift
         * (

@@ -675,8 +675,9 @@ def test_bounce_averaged_drifts():
     shear = grid_flux.compress(data_flux["iota_r"]).item()
     s_hat = -x / iota * shear / L_ref
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
-    gradpar_analytic = 2 * L_ref * iota * taylor
-    np.testing.assert_allclose(gradpar, gradpar_analytic, atol=1e-2)
+    gradpar_analytic = L_ref * taylor
+    G0 = np.mean(gradpar_analytic)
+    np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
 
     # Comparing coefficient calculation here with coefficients from compute/_metric
     cvdrift = -2 * np.sign(psi) * B_ref * L_ref**2 * rho * data["cvdrift"]
@@ -736,7 +737,7 @@ def test_bounce_averaged_drifts():
             + alpha_MHD / B0**4 * (I_4 + I_5)
             - (I_6 + I_7)
         )
-    )
+    ) / G0
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
         g = _sqrt(1 - pitch * B)

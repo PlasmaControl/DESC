@@ -7,7 +7,6 @@ mpmath >= 1.0.0, < 2.0
 netcdf4 >= 1.5.4, < 2.0
 numpy >= 1.20.0, < 2.0.0
 nvgpu
-orthax
 plotly >= 5.16, < 6.0
 psutil
 pylatexenc >= 2.0, < 3.0

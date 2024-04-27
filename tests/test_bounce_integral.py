@@ -632,7 +632,7 @@ def test_bounce_averaged_drifts():
     #  no longer matches analytic. The analytic plot looks as expected though.
     #  So we just need to make sure we are using the correct psi in the numerical
     #  computations in this test and elsewhere in DESC.
-    B_ref = 2 * np.abs(psi) / L_ref**2
+    B_ref = 2 * np.abs(psi_boundary) / L_ref**2
 
     quad_resolution = 50
     monotonic = False
@@ -643,9 +643,14 @@ def test_bounce_averaged_drifts():
         knots=zeta,
         B_ref=B_ref,
         L_ref=L_ref,
+        quad=tanh_sinh_quad,
+        automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
+        resolution=quad_resolution,
+        # quad=np.polynomial.legendre.leggauss,  # noqa: E800
+        # automorphism=(automorphism_sin, grad_automorphism_sin),  # noqa: E800
+        # deg=quad_resolution,  # noqa: E800
         check=True,
         plot=True,
-        resolution=quad_resolution,
         monotonic=monotonic,
     )
 
@@ -658,41 +663,40 @@ def test_bounce_averaged_drifts():
     theta_PEST = alpha + iota * zeta
     B_normalized = data["|B|"] / B_ref
     B0 = np.mean(B_normalized)
-    # same as B0 / (1 + epsilon cos(theta)) assuming epsilon << 1
-    B_normalized_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
-    np.testing.assert_allclose(B_normalized, B_normalized_analytic, rtol=5e-3)
+    # same as 1 / (1 + epsilon cos(theta)) assuming epsilon << 1
+    taylor = 1 - epsilon * np.cos(theta_PEST)
+    B_normalized_analytic = B0 * taylor
+    np.testing.assert_allclose(B_normalized, B_normalized_analytic, atol=3e-3)
 
     shear = grid_flux.compress(data_flux["iota_r"]).item()
     s_hat = -x / iota * shear / L_ref
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
-    gradpar_analytic = 2 * L_ref * iota * (1 - epsilon * np.cos(theta_PEST))
-    np.testing.assert_allclose(gradpar, gradpar_analytic, atol=9e-3, rtol=5e-3)
+    gradpar_analytic = 2 * L_ref * iota * taylor
+    np.testing.assert_allclose(gradpar, gradpar_analytic, atol=1e-2)
 
     # Comparing coefficient calculation here with coefficients from compute/_metric
     cvdrift = -2 * np.sign(psi) * B_ref * L_ref**2 * rho * data["cvdrift"]
     gbdrift = -2 * np.sign(psi) * B_ref * L_ref**2 * rho * data["gbdrift"]
     dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * data["|B|"] ** 2)
     alpha_MHD = -np.mean(dPdrho / iota**2 * 0.5)
-    gds21 = (  # noqa: F841
-        -np.sign(iota) * dot(data["grad(psi)"], data["grad(alpha)"]) * s_hat / B_ref
-    )
+    gds21 = -np.sign(iota) * dot(data["grad(psi)"], data["grad(alpha)"]) * s_hat / B_ref
     gds21_analytic = (
         -1
         * s_hat
         * (s_hat * theta_PEST - alpha_MHD / B_normalized**4 * np.sin(theta_PEST))
     )
-    # np.testing.assert_allclose(gds21, gds21_analytic)  # noqa: E800
+    np.testing.assert_allclose(gds21, gds21_analytic, atol=2e-2)
 
     fudge_factor_gbdrift = 0.19
     gbdrift_analytic = fudge_factor_gbdrift * (
         -s_hat + (np.cos(theta_PEST) - gds21_analytic / s_hat * np.sin(theta_PEST))
     )
     fudge_factor_cvdrift = 0.07
-    cvdrift_analytic = (  # noqa: F841
+    cvdrift_analytic = (
         gbdrift_analytic + fudge_factor_cvdrift * alpha_MHD / B_normalized**2
     )
-    # np.testing.assert_allclose(gbdrift, gbdrift_analytic) # noqa: E800
-    # np.testing.assert_allclose(cvdrift, cvdrift_analytic) # noqa: E800
+    np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1e-2)
+    np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=2e-2)
 
     # Values of pitch angle lambda for which to evaluate the bounce averages.
     delta_shift = 1e-6
@@ -749,7 +753,7 @@ def test_bounce_averaged_drifts():
         method=method,
     )
     bounce_drift = np.squeeze(_filter_not_nan(bounce_drift))
-    msg = "There is only one bounce integral per pitch in this example."
+    msg = "There should be one bounce integral per pitch in this example."
     assert bounce_drift.size == bounce_drift_analytic.size, msg
 
     fig, ax = plt.subplots(2)

@@ -714,7 +714,6 @@ def test_bounce_averaged_drifts():
     # https://cptc.wisc.edu/wp-content/uploads/sites/327/2017/09/UW-CPTC_15-4.pdf.
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     k = _sqrt(k2)
-    print(k2)
     # Here are the notes that explain these integrals.
     # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf.
     I_0 = test_integral_0(k, quad_resolution)
@@ -729,11 +728,11 @@ def test_bounce_averaged_drifts():
     I_7 = 2 * k / 3 * ((-2 + 4 * k2) * E - 4 * (-1 + k2) * K)
 
     bounce_drift_analytic = (
-        -fudge_factor_cvdrift * dPdrho / B0**2 * I_1
+        fudge_factor_cvdrift * alpha_MHD / B0**2 * I_1
         - 0.5
         * fudge_factor_gbdrift
         * (
-            s_hat * (I_0 + I_1 + I_2 + I_3)
+            s_hat * (I_0 + I_1 - I_2 - I_3)
             + alpha_MHD / B0**4 * (I_4 + I_5)
             - (I_6 + I_7)
         )

@@ -13,6 +13,9 @@ dependencies:
   - pip
   - pip:
     - interpax >= 0.3.1
+    # Conda only parses a single list of pip requirements.
+    # If two pip lists are given, all but the last list is skipped.
+    - interpax
     - jax[cpu] >= 0.3.2, < 0.5.0
     - nvgpu
     - plotly >= 5.16, < 6.0

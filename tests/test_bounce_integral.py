@@ -489,7 +489,11 @@ def test_example_bounce_integral():
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
     knots = np.linspace(-3 * np.pi, 3 * np.pi, 40)
     grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
-    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid_desc)
+    data = eq.compute(
+        ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
+        grid=grid_desc,
+        override_grid=False,  # Need to have this.
+    )
     bounce_integrate, spline = bounce_integral(
         data["B^zeta"],
         data["|B|"],
@@ -508,9 +512,8 @@ def test_example_bounce_integral():
         """Integrand in integral in denominator of bounce average."""
         return safediv(1, _sqrt(1 - pitch * B))
 
-    g_zz = eq.compute("g_zz", grid=grid_desc, data=data)["g_zz"]
     pitch = pitch_of_extrema(knots, spline["B.c"], spline["B_z_ra.c"])
-    num = bounce_integrate(integrand_num, g_zz, pitch)
+    num = bounce_integrate(integrand_num, data["g_zz"], pitch)
     den = bounce_integrate(integrand_den, [], pitch)
     average = num / den
     assert np.isfinite(average).any()
@@ -620,6 +623,7 @@ def test_bounce_averaged_drifts():
             "grad(psi)",
         ],
         grid=grid_desc,
+        override_grid=False,  # Need to have this.
     )
 
     # normalization

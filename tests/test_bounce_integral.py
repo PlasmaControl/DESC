@@ -24,10 +24,10 @@ from desc.compute.bounce_integral import (
     bounce_points,
     composite_linspace,
     desc_grid_from_field_line_coords,
+    get_extrema,
     grad_affine_bijection_reverse,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
-    pitch_of_extrema,
     plot_field_line_with_ripple,
     take_mask,
     tanh_sinh_quad,
@@ -209,7 +209,7 @@ def test_poly_val():
 
 
 @pytest.mark.unit
-def test_pitch_of_extrema():
+def test_get_extrema():
     """Test that these pitch intersect extrema of |B|."""
     start = -np.pi
     end = -2 * start
@@ -218,13 +218,13 @@ def test_pitch_of_extrema():
         k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
     )
     B_z_ra = B.derivative()
-    pitch_scipy = np.sort(1 / B(B_z_ra.roots(extrapolate=False)))
+    extrema_scipy = np.sort(B(B_z_ra.roots(extrapolate=False)))
     rtol = 1e-7
-    pitch = pitch_of_extrema(k, B.c, B_z_ra.c, relative_shift=rtol)
+    extrema = get_extrema(k, B.c, B_z_ra.c, relative_shift=rtol)
     eps = 100 * np.finfo(float).eps
-    pitch = np.sort(_filter_not_nan(pitch))
-    assert pitch.size == pitch_scipy.size
-    np.testing.assert_allclose(pitch, pitch_scipy, rtol=rtol + eps)
+    extrema = _filter_not_nan(extrema)
+    assert extrema.size == extrema_scipy.size
+    np.testing.assert_allclose(extrema, extrema_scipy, rtol=rtol + eps)
 
 
 @pytest.mark.unit
@@ -232,15 +232,12 @@ def test_composite_linspace():
     """Test this utility function useful for Newton-Cotes integration over pitch."""
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
-    pitch = np.linspace(1 / B_min_tz, 1 / B_max_tz, num=5)
-    breaks = 1 / pitch
-    breaks = np.sort(breaks, axis=0)
+    breaks = np.linspace(B_min_tz, B_max_tz, num=5)
     b = composite_linspace(breaks, resolution=3)
     print(breaks)
     print(b)
-    np.testing.assert_allclose(b, np.sort(b, axis=0), atol=0, rtol=0)
-    for i in range(pitch.shape[0]):
-        for j in range(pitch.shape[1]):
+    for i in range(breaks.shape[0]):
+        for j in range(breaks.shape[1]):
             assert only1(np.isclose(breaks[i, j], b[:, j]).tolist())
 
 
@@ -512,7 +509,7 @@ def test_example_bounce_integral():
         """Integrand in integral in denominator of bounce average."""
         return safediv(1, _sqrt(1 - pitch * B))
 
-    pitch = pitch_of_extrema(knots, spline["B.c"], spline["B_z_ra.c"])
+    pitch = 1 / get_extrema(knots, spline["B.c"], spline["B_z_ra.c"])
     num = bounce_integrate(integrand_num, data["g_zz"], pitch)
     den = bounce_integrate(integrand_den, [], pitch)
     average = num / den
@@ -535,48 +532,88 @@ def test_example_bounce_integral():
     print(np.nansum(average, axis=-1))
 
 
-@pytest.mark.unit
-def test_integral_0(k=0.9, resolution=10):
-    """4 / k * ellipkinc(np.arcsin(k), 1 / k**2)."""
+@partial(np.vectorize, excluded={0})
+def _adaptive_elliptic(integrand, k):
+    return integrate.quad(integrand, 0, 2 * np.arcsin(k), args=(k,))[0]
+
+
+def _fixed_elliptic(integrand, k, resolution):
     k = np.atleast_1d(k)
-    bp1 = np.zeros_like(k)
-    bp2 = np.arcsin(k)
+    a = np.zeros_like(k)
+    b = 2 * np.arcsin(k)
     x, w = tanh_sinh_quad(resolution, grad_automorphism_arcsin)
     Z = affine_bijection_reverse(
-        automorphism_arcsin(x), bp1[..., np.newaxis], bp2[..., np.newaxis]
+        automorphism_arcsin(x), a[..., np.newaxis], b[..., np.newaxis]
     )
     k = k[..., np.newaxis]
-
-    def integrand(Z, k):
-        return safediv(4 / k, np.sqrt(1 - 1 / k**2 * np.sin(Z) ** 2))
-
-    quad = np.dot(integrand(Z, k), w) * grad_affine_bijection_reverse(bp1, bp2)
-    if k.size == 1:
-        q = integrate.quad(integrand, bp1.item(), bp2.item(), args=(k.item(),))[0]
-        np.testing.assert_allclose(quad, q, rtol=1e-5)
+    quad = np.dot(integrand(Z, k), w) * grad_affine_bijection_reverse(a, b)
     return quad
 
 
-@pytest.mark.unit
-def test_integral_1(k=0.9, resolution=10):
-    """4 * k * ellipeinc(np.arcsin(k), 1 / k**2)."""
-    k = np.atleast_1d(k)
-    bp1 = np.zeros_like(k)
-    bp2 = np.arcsin(k)
-    x, w = tanh_sinh_quad(resolution, grad_automorphism_arcsin)
-    Z = affine_bijection_reverse(
-        automorphism_arcsin(x), bp1[..., np.newaxis], bp2[..., np.newaxis]
+def _elliptic_incomplete(k2):
+    K_integrand = lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * (k / 4)
+    E_integrand = lambda Z, k: 2 * np.sqrt(k**2 - np.sin(Z / 2) ** 2) / (k * 4)
+    # Scipy's elliptic integrals are broken.
+    # https://github.com/scipy/scipy/issues/20525.
+    k = np.sqrt(k2)
+    K = _adaptive_elliptic(K_integrand, k)
+    E = _adaptive_elliptic(E_integrand, k)
+    # Make sure scipy's adaptive quadrature is not broken.
+    np.testing.assert_allclose(K, _fixed_elliptic(K_integrand, k, 9), rtol=1e-3)
+    np.testing.assert_allclose(E, _fixed_elliptic(E_integrand, k, 9), rtol=1e-3)
+
+    # Here are the notes that explain these integrals.
+    # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf.
+    I_0 = 4 / k * K
+    I_1 = 4 * k * E
+    I_2 = 16 * k * E
+    I_3 = 16 * k / 9 * (2 * (-1 + 2 * k2) * E - (-1 + k2) * K)
+    I_4 = 16 * k / 3 * ((-1 + 2 * k2) * E - 2 * (-1 + k2) * K)
+    I_5 = 32 * k / 30 * (2 * (1 - k2 + k2**2) * E - (1 - 3 * k2 + 2 * k2**2) * K)
+    I_6 = 4 / k * (2 * k2 * E + (1 - 2 * k2) * K)
+    I_7 = 2 * k / 3 * ((-2 + 4 * k2) * E - 4 * (-1 + k2) * K)
+    # Check for math mistakes.
+    np.testing.assert_allclose(
+        I_2,
+        _adaptive_elliptic(
+            lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * Z * np.sin(Z), k
+        ),
     )
-    k = k[..., np.newaxis]
-
-    def integrand(Z, k):
-        return 4 * k * np.sqrt(1 - 1 / k**2 * np.sin(Z) ** 2)
-
-    quad = np.dot(integrand(Z, k), w) * grad_affine_bijection_reverse(bp1, bp2)
-    if k.size == 1:
-        q = integrate.quad(integrand, bp1.item(), bp2.item(), args=(k.item(),))[0]
-        np.testing.assert_allclose(quad, q, rtol=1e-4)
-    return quad
+    np.testing.assert_allclose(
+        I_3,
+        _adaptive_elliptic(
+            lambda Z, k: 2 * np.sqrt(k**2 - np.sin(Z / 2) ** 2) * Z * np.sin(Z), k
+        ),
+    )
+    np.testing.assert_allclose(
+        I_4,
+        _adaptive_elliptic(
+            lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.sin(Z) ** 2, k
+        ),
+    )
+    np.testing.assert_allclose(
+        I_5,
+        _adaptive_elliptic(
+            lambda Z, k: 2 * np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.sin(Z) ** 2, k
+        ),
+    )
+    # scipy fails
+    np.testing.assert_allclose(
+        I_6,
+        _fixed_elliptic(
+            lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.cos(Z),
+            k,
+            resolution=9,
+        ),
+        rtol=1e-2,
+    )
+    np.testing.assert_allclose(
+        I_7,
+        _adaptive_elliptic(
+            lambda Z, k: 2 * np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.cos(Z), k
+        ),
+    )
+    return I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7
 
 
 @pytest.mark.unit
@@ -654,7 +691,7 @@ def test_bounce_averaged_drifts():
         # automorphism=(automorphism_sin, grad_automorphism_sin),  # noqa: E800
         # deg=quad_resolution,  # noqa: E800
         check=True,
-        plot=True,
+        plot=False,
         monotonic=monotonic,
     )
 
@@ -675,8 +712,10 @@ def test_bounce_averaged_drifts():
     shear = grid_flux.compress(data_flux["iota_r"]).item()
     s_hat = -x / iota * shear / L_ref
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
-    gradpar_analytic = 2 * L_ref * iota * taylor
-    np.testing.assert_allclose(gradpar, gradpar_analytic, atol=1e-2)
+    gradpar_analytic = L_ref * taylor
+    gradpar_theta_analytic = iota * gradpar_analytic
+    G0 = np.mean(gradpar_theta_analytic)
+    np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
 
     # Comparing coefficient calculation here with coefficients from compute/_metric
     cvdrift = -2 * np.sign(psi) * B_ref * L_ref**2 * rho * data["cvdrift"]
@@ -710,40 +749,19 @@ def test_bounce_averaged_drifts():
         1 / np.min(B_normalized) - delta_shift,
         pitch_resolution,
     )
-    # Changed from RG appendix equation A10 to match equation 19 here
-    # https://cptc.wisc.edu/wp-content/uploads/sites/327/2017/09/UW-CPTC_15-4.pdf.
-    k2 = 0.5 * ((1 - pitch * B0) / epsilon + 1)
-    k = _sqrt(k2)
-    # Here are the notes that explain these integrals.
-    # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf.
-    I_0 = test_integral_0(k, quad_resolution)
-    I_1 = test_integral_1(k, quad_resolution)
-    I_2 = 16 * k * I_0
-    I_3 = 4 / 9 * (8 * k * (-1 + 2 * k2) * I_1 - 4 * k * (-1 + k2) * I_0)
-    I_4 = (
-        2
-        * np.sqrt(2)
-        / 3
-        * (4 * np.sqrt(2) * k * (-1 + 2 * k2) * I_0 - 2 * (-1 + k2) * I_1)
-    )
-    I_5 = (
-        2
-        / 30
-        * (32 * k * (1 - k2 + k2**2) * I_0 - 16 * k * (1 - 3 * k2 + 2 * k2**2) * I_1)
-    )
-    I_6 = 2 / 3 * (k * (-2 + 4 * k2) * I_0 - 4 * (-1 + k2) * I_1)
-    I_7 = 4 / k * (2 * k2 * I_0 + (1 - 2 * k2) * I_1)
+    k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
+    I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
 
     bounce_drift_analytic = (
-        fudge_factor_cvdrift * dPdrho / B0**2 * I_1
+        fudge_factor_cvdrift * alpha_MHD / B0**2 * I_1
         - 0.5
         * fudge_factor_gbdrift
         * (
-            s_hat * (I_0 + I_1 + I_2 + I_3)
+            s_hat * (I_0 + I_1 - I_2 - I_3)
             + alpha_MHD / B0**4 * (I_4 + I_5)
             - (I_6 + I_7)
         )
-    )
+    ) / G0
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
         g = _sqrt(1 - pitch * B)

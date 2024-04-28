@@ -345,11 +345,8 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     return B_c, B_z_ra_c, pitch
 
 
-def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
-    """Return pitch values that will capture fat banana orbits.
-
-    Particles with λ = 1 / |B|(ζ*) where |B|(ζ*) are local maxima
-    have fat banana orbits increasing neoclassical transport.
+def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6, sort=True):
+    """Return |B| values at extrema.
 
     Parameters
     ----------
@@ -370,6 +367,8 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     relative_shift : float
         Relative amount to shift maxima down and minima up to avoid floating point
         errors in downstream routines.
+    sort : bool
+        Whether to sort output.
 
     Returns
     -------
@@ -379,8 +378,7 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
         ``knots.size - 1``, and the number of field lines is denoted by ``S``.
 
         If there were less than ``N * (degree - 1)`` extrema detected along a
-        field line, then the first axis, which enumerates the pitch values for
-        a particular field line, is padded with nan.
+        field line, then the first axis is padded with nan.
 
     """
     B_c, B_z_ra_c, _ = _check_shape(knots, B_c, B_z_ra_c)
@@ -393,17 +391,19 @@ def pitch_of_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     B_zz_ra_extrema = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift pitch values slightly to resolve this issue.
-    B_extrema = jnp.where(
-        # Higher priority to shift down maxima than shift up minima, so identify
-        # near equality with zero as maxima.
-        B_zz_ra_extrema <= 0,
-        (1 - relative_shift) * B_extrema,
-        (1 + relative_shift) * B_extrema,
-    ).reshape(S, -1)
-    # Reshape so that last axis enumerates extrema along a field line.
-    pitch = 1 / B_extrema.T
-    assert pitch.shape == (N * (degree - 1), S)
-    return pitch
+    B_extrema = (
+        jnp.where(
+            # Higher priority to shift down maxima than shift up minima, so identify
+            # near equality with zero as maxima.
+            B_zz_ra_extrema <= 0,
+            (1 - relative_shift) * B_extrema,
+            (1 + relative_shift) * B_extrema,
+        )
+        .reshape(S, -1)
+        .T
+    )
+    assert B_extrema.shape == (N * (degree - 1), S)
+    return jnp.sort(B_extrema, axis=0) if sort else B_extrema
 
 
 def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
@@ -925,9 +925,9 @@ def _interpolatory_quadrature(
     )
     if check:
         _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product)
-        if plot:
-            _plot(Z, B, name=r"$\vert B \vert$")
-            _plot(Z, V, name="integrand")
+        # if plot:  # noqa: E800
+        #     _plot(Z, B, name=r"$\vert B \vert$")  # noqa: E800
+        #     _plot(Z, V, name="integrand")  # noqa: E800
     return inner_product
 
 
@@ -1240,7 +1240,7 @@ def bounce_integral(
             # Integrand in integral in denominator of bounce average.
             return safediv(1, jnp.sqrt(1 - pitch * B))
 
-        pitch = pitch_of_extrema(knots, spline["B.c"], spline["B_z_ra.c"])
+        pitch = 1 / get_extrema(knots, spline["B.c"], spline["B_z_ra.c"])
         num = bounce_integrate(integrand_num, data["g_zz"], pitch)
         den = bounce_integrate(integrand_den, [], pitch)
         average = num / den

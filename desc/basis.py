@@ -25,7 +25,7 @@ __all__ = [
     "FiniteElementMesh1D",
     "FiniteElementMesh1D_scikit",
     "FiniteElementMesh2D",
-    "FiniteElementMesh3D_scikit",
+    "FiniteElementMesh3D",
     "ChebyshevPolynomial",
 ]
 
@@ -2072,7 +2072,7 @@ def zernike_norm(l, m):
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
 
 
-class FiniteElementMesh3D_scikit:
+class FiniteElementMesh3D:
     """Class representing a 3D mesh in (rho, theta, zeta) using scikit-fem.
 
     Parameters
@@ -2114,9 +2114,9 @@ class FiniteElementMesh3D_scikit:
         vertices = vertices.T
 
         # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
-        # Initialize tetrahedra = []
+        tetrahedra = []
         # Pick four points of tetrahedral elements:
-        """
+
         for i in range(L - 1):
             for j in range(M - 1):
                 for l in range(N - 1):
@@ -2124,7 +2124,15 @@ class FiniteElementMesh3D_scikit:
                     # There are MNL tetrahedra in the mesh, we identify each one:
 
                     # Form the tetrahedra, want vertices to have shape (4,3)
-                    tetrahedra_vertices = np.zeros([4, 3])
+
+                    tetrahedra = []
+                    tetrahedron_1_vertices = np.zeros([4, 3])
+                    tetrahedron_2_vertices = np.zeros([4, 3])
+                    tetrahedron_3_vertices = np.zeros([4, 3])
+                    tetrahedron_4_vertices = np.zeros([4, 3])
+                    tetrahedron_5_vertices = np.zeros([4, 3])
+                    tetrahedron_6_vertices = np.zeros([4, 3])
+
                     # Will use tetrahedra_vertices[0,0] =
 
                     # Grabbing the six tetrahedra in each Rectangular prism:
@@ -2142,7 +2150,6 @@ class FiniteElementMesh3D_scikit:
                     tetrahedra.append(tetrahedron6)
                     self.vertices = vertices
                     self.tetrahedra = tetrahedra
-                    """
 
     def visualize():
         """Visualize 3D Mesh."""
@@ -2165,7 +2172,7 @@ class FiniteElementMesh3D_scikit:
         -------
         coordinate_matrix: Matrix of volume coordinates for mesh
         """
-        nodes = self.find_tetrahedra_corresponding_to_points(rho_theta_zeta)
+        nodes = self.find_tetrahedron_corresponding_to_points(rho_theta_zeta)
 
         A = np.ones((4, 4))
         for i in range(3):
@@ -2201,23 +2208,9 @@ class FiniteElementMesh3D_scikit:
         integral: 1D ndarray, shape (num_functions)
             Value of the integral over the mesh for each component of f
         """
-        nquad = self.nquad
-        if f.shape[1] > 1:
-            integral = np.zeros(f.shape[1])
-        else:
-            integral = 0.0
-        for i, triangle in enumerate(self.triangles):
-            integral += np.dot(
-                abs(triangle.area2) * self.weights,
-                f[i * nquad : (i + 1) * nquad, :],
-            )
-        return integral / 2.0
-
-
-"""
 
     def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta):
-        Given a point on the mesh, find which tetrahedron it lies inside.
+        """Given a point on the mesh, find which tetrahedron it lies inside.
 
         Parameters
         ----------
@@ -2233,27 +2226,57 @@ class FiniteElementMesh3D_scikit:
             The basis functions corresponding to the tetrahedra in
             tetrahedra_indices.
 
-
-        tetrahedra_triangle_indices = np.zeros(rho_theta_zeta.shape[0])
+        """
+        tetrahedra_indices = np.zeros(rho_theta_zeta.shape[0])
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
         for i in range(rho_theta_zeta.shape[0]):
             v = rho_theta_zeta[i, :]
             for j, tetrahedron in enumerate(self.tetrahedra):
-                v1 = tetrahedra.vertices[0, :]
-                v2 = tetrahedra.vertices[1, :]
-                v3 = tetrahedra.vertices[2, :]
-                v4 = tetrahedra.vertices[3, :]
-                P = tetrahedra_indices[i]
-                D0 = np.array([[v1[0], v1[1], v1[2],1],[v2[0], v2[1], v2[2], 1],
-                               [v3[0], v3[1], v3[2], 1],[v4[0], v4[1], v4[2], 1]])
-                D1 = np.array([[P[0], P[1], P[2],1],[v2[0], v2[1], v2[2], 1],
-                               [v3[0], v3[1], v3[2], 1],[v4[0], v4[1], v4[2], 1]])
-                D2 = np.array([[v1[0], v1[1], v1[2],1],[P[0], P[1], P[2],1],
-                               [v3[0], v3[1], v3[2], 1],[v4[0], v4[1], v4[2], 1]])
-                D3 =  np.array([[v1[0], v1[1], v1[2],1],[v2[0], v2[1], v2[2], 1],
-                                [P[0], P[1], P[2],1],[v4[0], v4[1], v4[2], 1]])
-                D4 = np.array([[v1[0], v1[1], v1[2],1],[v2[0], v2[1], v2[2], 1],
-                                [v3[0], v3[1], v3[2], 1],[P[0], P[1], P[2],1]])
+                v1 = self.tetrahedra.vertices[0, :]
+                v2 = self.tetrahedra.vertices[1, :]
+                v3 = self.tetrahedra.vertices[2, :]
+                v4 = self.tetrahedra.vertices[3, :]
+                P = self.tetrahedra_indices[i]
+                D0 = np.array(
+                    [
+                        [v1[0], v1[1], v1[2], 1],
+                        [v2[0], v2[1], v2[2], 1],
+                        [v3[0], v3[1], v3[2], 1],
+                        [v4[0], v4[1], v4[2], 1],
+                    ]
+                )
+                D1 = np.array(
+                    [
+                        [P[0], P[1], P[2], 1],
+                        [v2[0], v2[1], v2[2], 1],
+                        [v3[0], v3[1], v3[2], 1],
+                        [v4[0], v4[1], v4[2], 1],
+                    ]
+                )
+                D2 = np.array(
+                    [
+                        [v1[0], v1[1], v1[2], 1],
+                        [P[0], P[1], P[2], 1],
+                        [v3[0], v3[1], v3[2], 1],
+                        [v4[0], v4[1], v4[2], 1],
+                    ]
+                )
+                D3 = np.array(
+                    [
+                        [v1[0], v1[1], v1[2], 1],
+                        [v2[0], v2[1], v2[2], 1],
+                        [P[0], P[1], P[2], 1],
+                        [v4[0], v4[1], v4[2], 1],
+                    ]
+                )
+                D4 = np.array(
+                    [
+                        [v1[0], v1[1], v1[2], 1],
+                        [v2[0], v2[1], v2[2], 1],
+                        [v3[0], v3[1], v3[2], 1],
+                        [P[0], P[1], P[2], 1],
+                    ]
+                )
 
                 Det0 = np.linalg.det(D0)
                 Det1 = np.linalg.det(D1)
@@ -2261,15 +2284,17 @@ class FiniteElementMesh3D_scikit:
                 Det3 = np.linal.det(D3)
                 Det4 = np.linalg.det(D4)
 
-                #Check whether point lies inside tetrahedra:
+                # Check whether point lies inside tetrahedra:
 
-                if sign(Det0) == sign(Det1) and sign(Det0) == sign(Det2) and
-                sign(Det0) == sign(Det3) and sign(Det0) == sign(Det4):
+                if (
+                    np.sign(Det0) == np.sign(Det1)
+                    and np.sign(Det0) == np.sign(Det2)
+                    and np.sign(Det0) == np.sign(Det3)
+                    and np.sign(Det0) == np.sign(Det4)
+                ):
                     tetrahedra_indices[i] = j
-                    basis_functions[i, :], _ = tetrahedra.get_basis_functions(v)
+                    basis_functions[i, :], _ = self.tetrahedra.get_basis_functions(v)
         return tetrahedra_indices, basis_functions
-
-        """
 
 
 class FiniteElementMesh2D:
@@ -2727,6 +2752,72 @@ class TetrahedronFiniteElement:
         The order of the finite elements to use, which gives (K+1)(K+2)(K+3) / 6
         basis functions.
     """
+
+    def __init__(self, vertices, K=1):
+        self.vertices = vertices
+
+        self.Q = int(((K + 1) * (K + 2) * (K + 3)) / 6)
+        self.K = K
+
+        # Write something to check whether basis functions vanish at the right spots
+
+        assert self.nodes.shape[0] == self.Q
+
+    def find_tetrahedron_corresponding_to_points(self, rho_theta_zeta):
+        """Given a point on the mesh, find which tetrahdron it lies inside.
+
+        Parameters
+        ----------
+        rho_theta_zeta = 3D ndarray, shape(nrho * ntheta * nzeta, 3)
+            Set of points for which we want to find the tetrahedron that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        tetrahedron_indices : 1D ndarray, shape (num_points)
+            Set of indices that specific the tetrahedron where each point lies.
+        basis_functions : 2D ndarray, shape (num_points, Q)
+            The basis functions corresponding to the tetrahedron in
+            tetrahedron_indices.
+        """
+
+    def get_barycentric_coordinates(self, rho_theta_zeta):
+        """Gets the barycentic coordinates, given a mesh in rho, theta, zeta.
+
+        Parameters
+        ----------
+        rho_theta_zeta = 3D ndarray, shape(nrho * ntheta * nzeta, 3)
+            Coordinates of the origininal grid, lying inside this tetrahedron.
+
+        Returns
+        -------
+        eta_u = 3D array, shape (nrho * ntheta * nzeta, 4)
+            Barycentric coordinates defined by the tetrahedron and evaluated at the
+            points (rho, theta, zeta)
+        """
+
+    # We'll use tetrahedra_indices = self.find_tetrahedron_corresponding_to_points
+
+    def get_basis_functions(self, rho_theta_zeta):
+        """
+        Gets the barycentric basis functions.
+
+        Return the tetrahedron basis functions, evaluated at the 3D rho, theta,
+        and zeta mesh points provided to the function.
+
+
+        Parameters
+        ----------
+        rho_theta_zeta = 3D ndarray, shape(nrho * ntheta * nzeta, 3)
+            Coordinates of the origininal grid, lying inside this tetrahedron.
+
+        Returns
+        -------
+        psi_q = (rho_theta_zeta, Q)
+
+        """
+
+    # Will use eta = self.get_barycentric_coordinates(rho_theta_zeta)
 
 
 class FiniteElementMesh1D:

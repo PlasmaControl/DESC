@@ -617,9 +617,7 @@ def _elliptic_incomplete(k2):
     return I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7
 
 
-def _compute_field_line_data(
-    eq, rho, alpha, field_line_names, other_0d_or_1dr_names=None
-):
+def _compute_field_line_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
     """Compute field line quantities on correct grids.
 
     Parameters
@@ -630,9 +628,10 @@ def _compute_field_line_data(
         Field line radial label.
     alpha : Array
         Field line poloidal label.
-    field_line_names : list
+    names_field_line : list
         Field line quantities that will be computed on the returned field line grid.
-    other_0d_or_1dr_names : list, optional
+        Should not include 0d or 1dr quantities.
+    names_0d_or_1dr : list
         Other quantities to compute that are constant throughout volume or over
         flux surface.
 
@@ -649,14 +648,14 @@ def _compute_field_line_data(
 
     """
     errorif(alpha != 0, NotImplementedError)
-    if other_0d_or_1dr_names is None:
-        other_0d_or_1dr_names = []
-    other_0d_or_1dr_names.append("iota")
+    if names_0d_or_1dr is None:
+        names_0d_or_1dr = []
+    names_0d_or_1dr.append("iota")
     p = "desc.equilibrium.equilibrium.Equilibrium"
     # Gather dependencies of given quantities.
     deps = (
-        get_data_deps(field_line_names + other_0d_or_1dr_names, obj=p, has_axis=False)
-        + other_0d_or_1dr_names
+        get_data_deps(names_field_line + names_0d_or_1dr, obj=p, has_axis=False)
+        + names_0d_or_1dr
     )
     deps = list(set(deps))
     # Create grid with given flux surfaces.
@@ -687,9 +686,13 @@ def _compute_field_line_data(
     data.update(data0d)
     data.update(data1d)
     # Compute field line quantities with precomputed dependencies.
+    for name in names_field_line:
+        if name in data:
+            del data[name]
     data = eq.compute(
-        names=field_line_names, grid=grid_desc, data=data, override_grid=False
+        names=names_field_line, grid=grid_desc, data=data, override_grid=False
     )
+    assert np.allclose(data["iota"], iota)
     return data, grid_desc, grid_fl, zeta
 
 
@@ -712,7 +715,7 @@ def test_bounce_averaged_drifts():
         eq,
         rho,
         alpha,
-        field_line_names=[
+        names_field_line=[
             "B^zeta",
             "|B|",
             "|B|_z|r,a",
@@ -721,7 +724,7 @@ def test_bounce_averaged_drifts():
             "grad(alpha)",
             "grad(psi)",
         ],
-        other_0d_or_1dr_names=["iota_r", "a", "psi"],
+        names_0d_or_1dr=["iota_r", "a", "psi"],
     )
     assert np.allclose(data["psi"], psi)
 

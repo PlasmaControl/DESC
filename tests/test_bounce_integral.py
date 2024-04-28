@@ -11,6 +11,7 @@ from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipkm1
 
 from desc.backend import complex_sqrt, flatnonzero
+from desc.compute import data_index
 from desc.compute.bounce_integral import (
     _affine_bijection_forward,
     _filter_not_nan,
@@ -32,11 +33,11 @@ from desc.compute.bounce_integral import (
     take_mask,
     tanh_sinh_quad,
 )
-from desc.compute.utils import dot, safediv
+from desc.compute.utils import dot, get_data_deps, safediv
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
-from desc.utils import only1
+from desc.utils import errorif, only1
 
 
 def _sqrt(x):
@@ -509,7 +510,7 @@ def test_example_bounce_integral():
         """Integrand in integral in denominator of bounce average."""
         return safediv(1, _sqrt(1 - pitch * B))
 
-    pitch = 1 / get_extrema(knots, spline["B.c"], spline["B_z_ra.c"])
+    pitch = 1 / get_extrema(**spline)
     num = bounce_integrate(integrand_num, data["g_zz"], pitch)
     den = bounce_integrate(integrand_den, [], pitch)
     average = num / den
@@ -616,6 +617,82 @@ def _elliptic_incomplete(k2):
     return I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7
 
 
+def _compute_field_line_data(
+    eq, rho, alpha, field_line_names, other_0d_or_1dr_names=None
+):
+    """Compute field line quantities on correct grids.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to compute on.
+    rho : Array
+        Field line radial label.
+    alpha : Array
+        Field line poloidal label.
+    field_line_names : list
+        Field line quantities that will be computed on the returned field line grid.
+    other_0d_or_1dr_names : list, optional
+        Other quantities to compute that are constant throughout volume or over
+        flux surface.
+
+    Returns
+    -------
+    data : dict
+        Computed quantities.
+    grid_desc : Grid
+        Grid on which the returned quantities can be broadcast on.
+    grid_fl : Grid
+        Clebsch-Type field-line coordinates corresponding to above grid.
+    zeta : Array
+        Zeta values along field line.
+
+    """
+    errorif(alpha != 0, NotImplementedError)
+    if other_0d_or_1dr_names is None:
+        other_0d_or_1dr_names = []
+    other_0d_or_1dr_names.append("iota")
+    p = "desc.equilibrium.equilibrium.Equilibrium"
+    # Gather dependencies of given quantities.
+    deps = (
+        get_data_deps(field_line_names + other_0d_or_1dr_names, obj=p, has_axis=False)
+        + other_0d_or_1dr_names
+    )
+    deps = list(set(deps))
+    # Create grid with given flux surfaces.
+    grid1dr = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
+    # Compute dependencies on correct grids.
+    seed_data = eq.compute(deps, grid=grid1dr)
+    dep1dr = {dep for dep in deps if data_index[p][dep]["coordinates"] == "r"}
+    dep0d = {dep for dep in deps if data_index[p][dep]["coordinates"] == ""}
+
+    # Make a set of nodes along a single fieldline.
+    iota = grid1dr.compress(seed_data["iota"]).item()
+    zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
+    # Make grid that can separate into field lines via a reshape operation,
+    # as expected by bounce_integral().
+    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, zeta)
+
+    # Collect quantities that can be used as a seed to compute the
+    # field line quantities over the grid mapped from field line coordinates.
+    # (Single field line grid won't have enough poloidal resolution to
+    # compute these quantities accurately).
+    data0d = {key: val for key, val in seed_data.items() if key in dep0d}
+    data1d = {
+        key: grid_desc.copy_data_from_other(val, grid1dr)
+        for key, val in seed_data.items()
+        if key in dep1dr
+    }
+    data = {}
+    data.update(data0d)
+    data.update(data1d)
+    # Compute field line quantities with precomputed dependencies.
+    data = eq.compute(
+        names=field_line_names, grid=grid_desc, data=data, override_grid=False
+    )
+    return data, grid_desc, grid_fl, zeta
+
+
 @pytest.mark.unit
 def test_bounce_averaged_drifts():
     """Test bounce-averaged drift with analytical expressions.
@@ -630,48 +707,30 @@ def test_bounce_averaged_drifts():
     psi = 0.25 * psi_boundary
     rho = np.sqrt(psi / psi_boundary)
     assert np.isclose(rho, 0.5)
-
-    # Compute flux surface quantities on a grid that we know has
-    # resolution and node placement for correct flux surface quantities.
-    grid_flux = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    data_flux = eq.compute(
-        names=["iota", "iota_r", "a", "psi"],
-        grid=grid_flux,
-    )
-    assert np.isclose(grid_flux.compress(data_flux["psi"]).item(), psi)
-
     alpha = 0
-    iota = grid_flux.compress(data_flux["iota"]).item()
-    zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-    # Compute quantities on grid that can separate into field lines via
-    # a simple np.reshape operation, as expected by bounce_integral().
-    grid_desc, _ = desc_grid_from_field_line_coords(eq, rho, alpha, zeta)
-    data = eq.compute(
-        names=[
+    data, grid, grid_fl, zeta = _compute_field_line_data(
+        eq,
+        rho,
+        alpha,
+        field_line_names=[
             "B^zeta",
             "|B|",
             "|B|_z|r,a",
             "cvdrift",
             "gbdrift",
-            "cvdrift0",
-            "B",
             "grad(alpha)",
-            "|grad(psi)|^2",
             "grad(psi)",
         ],
-        grid=grid_desc,
-        override_grid=False,  # Need to have this.
+        other_0d_or_1dr_names=["iota_r", "a", "psi"],
     )
+    assert np.allclose(data["psi"], psi)
 
     # normalization
-    L_ref = data_flux["a"]
+    L_ref = data["a"]
     # FIXME:
-    #  When we (incorrectly) use psi, numerical and analytic match up to a sign
-    #  error, but the analytic plot doesn't reproduce results that match paper,
-    #  which makes sense.
-    #  When we use the proper psi at the lcfs, (i.e. psi_boundary) the numerical
-    #  no longer matches analytic. The analytic plot looks as expected though.
-    #  So we just need to make sure we are using the correct psi in the numerical
+    #  When we use psi, numerical and analytic match better.
+    #  When we use the psi at the lcfs, plots match worse.
+    #  Need to make sure we are using the correct psi in the numerical
     #  computations in this test and elsewhere in DESC.
     B_ref = 2 * np.abs(psi_boundary) / L_ref**2
 
@@ -695,12 +754,12 @@ def test_bounce_averaged_drifts():
         monotonic=monotonic,
     )
 
-    # FIXME: Do these have the correct normalization in the radial coordinate?
     epsilon = L_ref * rho
     # I wouldn't really consider 0.05 << 1... maybe for a rough approximation.
     assert np.isclose(epsilon, 0.05)
     x = L_ref * rho
 
+    iota = grid.compress(data["iota"]).item()
     theta_PEST = alpha + iota * zeta
     B_normalized = data["|B|"] / B_ref
     B0 = np.mean(B_normalized)
@@ -709,7 +768,7 @@ def test_bounce_averaged_drifts():
     B_normalized_analytic = B0 * taylor
     np.testing.assert_allclose(B_normalized, B_normalized_analytic, atol=3e-3)
 
-    shear = grid_flux.compress(data_flux["iota_r"]).item()
+    shear = grid.compress(data["iota_r"]).item()
     s_hat = -x / iota * shear / L_ref
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
     gradpar_analytic = L_ref * taylor
@@ -751,7 +810,6 @@ def test_bounce_averaged_drifts():
     )
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
-
     bounce_drift_analytic = (
         fudge_factor_cvdrift * alpha_MHD / B0**2 * I_1
         - 0.5

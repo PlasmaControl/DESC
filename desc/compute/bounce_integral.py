@@ -372,11 +372,10 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6, sort=True):
 
     Returns
     -------
-    pitch : Array, shape(N * (degree - 1), S)
+    B_extrema : Array, shape(N * (degree - 1), S)
         For the shaping notation, the ``degree`` of the spline of |B| matches
         ``B_c.shape[0] - 1``, the number of polynomials per spline ``N`` matches
         ``knots.size - 1``, and the number of field lines is denoted by ``S``.
-
         If there were less than ``N * (degree - 1)`` extrema detected along a
         field line, then the first axis is padded with nan.
 
@@ -1240,7 +1239,7 @@ def bounce_integral(
             # Integrand in integral in denominator of bounce average.
             return safediv(1, jnp.sqrt(1 - pitch * B))
 
-        pitch = 1 / get_extrema(knots, spline["B.c"], spline["B_z_ra.c"])
+        pitch = 1 / get_extrema(**spline)
         num = bounce_integrate(integrand_num, data["g_zz"], pitch)
         den = bounce_integrate(integrand_den, [], pitch)
         average = num / den
@@ -1287,7 +1286,7 @@ def bounce_integral(
     assert B_c.shape[0] == degree + 1
     assert B_z_ra_c.shape[0] == degree
     assert B_c.shape[-1] == B_z_ra_c.shape[-1] == knots.size - 1
-    spline = {"knots": knots, "B.c": B_c, "B_z_ra.c": B_z_ra_c}
+    spline = {"knots": knots, "B_c": B_c, "B_z_ra_c": B_z_ra_c}
 
     if quad == tanh_sinh_quad:
         kwargs.setdefault("resolution", 19)

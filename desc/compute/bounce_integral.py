@@ -925,9 +925,9 @@ def _interpolatory_quadrature(
     )
     if check:
         _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product)
-        if plot:
-            _plot(Z, B, name=r"$\vert B \vert$")
-            _plot(Z, V, name="integrand")
+        # if plot:  # noqa: E800
+        #     _plot(Z, B, name=r"$\vert B \vert$")  # noqa: E800
+        #     _plot(Z, V, name="integrand")  # noqa: E800
     return inner_product
 
 

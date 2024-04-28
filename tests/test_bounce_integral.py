@@ -676,7 +676,8 @@ def test_bounce_averaged_drifts():
     s_hat = -x / iota * shear / L_ref
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
     gradpar_analytic = L_ref * taylor
-    G0 = np.mean(gradpar_analytic)
+    gradpar_theta_analytic = iota * gradpar_analytic
+    G0 = np.mean(gradpar_theta_analytic)
     np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
 
     # Comparing coefficient calculation here with coefficients from compute/_metric

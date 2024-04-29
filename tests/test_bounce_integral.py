@@ -629,8 +629,7 @@ def _compute_field_line_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=N
         Field line quantities that will be computed on the returned field line grid.
         Should not include 0d or 1dr quantities.
     names_0d_or_1dr : list
-        Other quantities to compute that are constant throughout volume or over
-        flux surface.
+        Things to compute that are constant throughout volume or over flux surface.
 
     Returns
     -------

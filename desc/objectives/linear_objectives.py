@@ -113,7 +113,7 @@ class FixParameter(_Objective):
         weight=1,
         normalize=False,
         normalize_target=False,
-        name="Fixed parameters",  # TODO: add params
+        name="Fixed parameters",
     ):
         self._params = params
         super().__init__(
@@ -3123,7 +3123,7 @@ class FixAtomicNumber(_FixProfile):
         return params["Zeff_l"][self._idx]
 
 
-class FixPsi(_FixedObjective):
+class FixPsi(FixParameter):
     """Fixes total toroidal magnetic flux within the last closed flux surface.
 
     Parameters
@@ -3164,9 +3164,9 @@ class FixPsi(_FixedObjective):
         normalize_target=True,
         name="fixed-Psi",
     ):
-        self._target_from_user = setdefault(bounds, target)
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Psi": True},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -3174,52 +3174,12 @@ class FixPsi(_FixedObjective):
             normalize_target=normalize_target,
             name=name,
         )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        self._dim_f = 1
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.Psi, None, np.array([0])
-        )
-
         if self._normalize:
-            scales = compute_scaling_factors(eq)
+            scales = compute_scaling_factors(self.things[0])
             self._normalization = scales["Psi"]
 
-        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
-        """Compute fixed-Psi error.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Total toroidal magnetic flux error (Wb).
-
-        """
-        return params["Psi"]
-
-
-class FixCurveShift(_FixedObjective):
+class FixCurveShift(FixParameter):
     """Fixes Curve.shift attribute, which is redundant with other Curve params.
 
     Parameters
@@ -3259,9 +3219,9 @@ class FixCurveShift(_FixedObjective):
         normalize_target=True,
         name="fixed-shift",
     ):
-        self._target_from_user = setdefault(bounds, target)
         super().__init__(
-            things=curve,
+            thing=curve,
+            params={"shift": True},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -3270,50 +3230,8 @@ class FixCurveShift(_FixedObjective):
             name=name,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        curve = self.things[0]
-        self._dim_f = curve.shift.size
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, curve.shift, None, np.arange(self._dim_f)
-        )
-
-        if self._normalize:
-            self._normalization = 1
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed-shift error.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of curve degrees of freedom, eg Curve.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Curve shift (m).
-
-        """
-        return params["shift"]
-
-
-class FixCurveRotation(_FixedObjective):
+class FixCurveRotation(FixParameter):
     """Fixes Curve.rotmat attribute, which is redundant with other Curve params.
 
     Parameters
@@ -3353,9 +3271,9 @@ class FixCurveRotation(_FixedObjective):
         normalize_target=True,
         name="fixed-rotation",
     ):
-        self._target_from_user = setdefault(bounds, target)
         super().__init__(
-            things=curve,
+            thing=curve,
+            params={"rotmat": True},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -3364,50 +3282,8 @@ class FixCurveRotation(_FixedObjective):
             name=name,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        curve = self.things[0]
-        self._dim_f = curve.rotmat.size
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, curve.rotmat, None, np.arange(self._dim_f)
-        )
-
-        if self._normalize:
-            self._normalization = 1
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed-rotation error.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of curve degrees of freedom, eg Curve.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Curve rotation matrix (rad).
-
-        """
-        return params["rotmat"]
-
-
-class FixOmniWell(_FixedObjective):
+class FixOmniWell(FixParameter):
     """Fixes OmnigenousField.B_lm coefficients.
 
     Parameters
@@ -3449,11 +3325,9 @@ class FixOmniWell(_FixedObjective):
         indices=True,
         name="fixed omnigenity well",
     ):
-        self._field = field
-        self._indices = indices
-        self._target_from_user = setdefault(bounds, target)
         super().__init__(
-            things=field,
+            thing=field,
+            params={"B_lm": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -3462,56 +3336,8 @@ class FixOmniWell(_FixedObjective):
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        field = self.things[0]
-
-        # find indices to fix
-        if self._indices is False or self._indices is None:  # no indices to fix
-            self._idx = np.array([], dtype=int)
-        elif self._indices is True:  # all indices
-            self._idx = np.arange(np.size(self._field.B_lm))
-        else:  # specified indices
-            self._idx = np.atleast_1d(self._indices)
-
-        self._dim_f = self._idx.size
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, field.B_lm[self._idx], None, self._idx
-        )
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed omnigenity well error.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed well shape error.
-
-        """
-        return params["B_lm"][self._idx]
-
-
-class FixOmniMap(_FixedObjective):
+class FixOmniMap(FixParameter):
     """Fixes OmnigenousField.x_lmn coefficients.
 
     Parameters
@@ -3553,11 +3379,9 @@ class FixOmniMap(_FixedObjective):
         indices=True,
         name="fixed omnigenity map",
     ):
-        self._field = field
-        self._indices = indices
-        self._target_from_user = setdefault(bounds, target)
         super().__init__(
-            things=field,
+            thing=field,
+            params={"x_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -3565,54 +3389,6 @@ class FixOmniMap(_FixedObjective):
             normalize_target=normalize_target,
             name=name,
         )
-
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        field = self.things[0]
-
-        # find indices to fix
-        if self._indices is False or self._indices is None:  # no indices to fix
-            self._idx = np.array([], dtype=int)
-        elif self._indices is True:  # all indices
-            self._idx = np.arange(np.size(self._field.x_lmn))
-        else:  # specified indices
-            self._idx = np.atleast_1d(self._indices)
-
-        self._dim_f = self._idx.size
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, field.x_lmn[self._idx], None, self._idx
-        )
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed omnigenity map error.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed omnigenity map error.
-
-        """
-        return params["x_lmn"][self._idx]
 
 
 class FixOmniBmax(_FixedObjective):

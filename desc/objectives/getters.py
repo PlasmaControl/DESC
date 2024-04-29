@@ -238,8 +238,7 @@ def maybe_add_self_consistency(thing, constraints):
             constraints += (AxisZSelfConsistency(eq=thing),)
 
     # Curve
-    # FIXME: make this work for CoilSet
-    elif not hasattr(thing, "__len__") and {"shift", "rotmat"} <= set(
+    elif {"shift", "rotmat"} <= set(
         unique_list(flatten_list(thing.optimizable_params))[0]
     ):
         if not is_any_instance(constraints, FixCurveShift):

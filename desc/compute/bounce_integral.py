@@ -1361,7 +1361,7 @@ def bounce_integral(
 def desc_grid_from_field_line_coords(
     eq,
     rho=jnp.linspace(1e-7, 1, 10),
-    alpha=None,
+    alpha=0,
     zeta=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 40),
 ):
     """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
@@ -1389,8 +1389,6 @@ def desc_grid_from_field_line_coords(
         Clebsch-Type field-line coordinate grid.
 
     """
-    if alpha is None:
-        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 20)
     grid_fl = Grid.create_meshgrid(rho, alpha, zeta)
     coords_desc = eq.map_coordinates(
         grid_fl.nodes,

@@ -2166,28 +2166,46 @@ class FiniteElementMesh3D:
 
         Parameters
         ----------
+        rho_theta_zeta : 3D ndarray, shape (num_points, 3)
+            Set of points for which we want to find the tetrahedra that
+            they lie inside of in the mesh.
         K : Order of the finite element
+
 
         Returns
         -------
         coordinate_matrix: Matrix of volume coordinates for mesh
         """
-        nodes = self.find_tetrahedron_corresponding_to_points(rho_theta_zeta)
+        # nodes should be (4,3)
 
-        A = np.ones((4, 4))
-        for i in range(3):
-            for j in range(4):
-                A[i][j] = nodes[i][j]
+        tetrahedra_location = self.find_tetrahedron_corresponding_to_points(
+            rho_theta_zeta
+        )[0]
 
-        coordinate_matrix = np.zeros((4, 4))
+        # Initialize coordinate matrix, shape (num_points,4)
+        coordinate_matrix = np.zeros(rho_theta_zeta[0], 4)
+        # Looping through points
 
-        for index in range(4):
+        for i in range(rho_theta_zeta.shape[0]):
+            # grab_tetrahedron corresponding to point
+            idx = tetrahedra_location[i]
+            tetrahedron_with_point = self.tetrahedra[idx]
+            nodes = tetrahedron_with_point
+            A = np.ones((4, 4))
+            for j in range(3):
+                for l in range(4):
+                    A[j][l] = nodes[l][j]
+
             X_vec = np.array(
-                [[nodes[0][index]], [nodes[1][index]], [nodes[2][index]], [1]]
+                [
+                    [rho_theta_zeta[i][0]],
+                    [rho_theta_zeta[i][1]],
+                    [rho_theta_zeta[i][2]],
+                    [1],
+                ]
             )
-            L = np.dot((np.linalg.inv(A)), X_vec)
-            for j in range(4):
-                coordinate_matrix[index][j] = L[j]
+            coordinate_matrix[i] = np.dot((np.linalg.inv(A)), X_vec)
+
         return coordinate_matrix
 
     # Working on basis functions in separate document
@@ -2450,132 +2468,34 @@ class FiniteElementMesh2D:
 
         Returns
         -------
-        L_b : (rho_theta, Q)
+        coordinate_matrix: (rho_theta, Q)
         """
-        if K == 1:
+        triangle_location = self.find_triangles_corresponding_to_points(rho_theta)[0]
 
-            L_b = np.zeros([4, 3])
+        # Initialize coordinate matrix, shape (num_points,3)
+        coordinate_matrix = np.zeros(rho_theta[0], 3)
+        # Looping through points
 
-            nodes = rho_theta
-            # Left Triangle {(0,0), (1,0), (0,1)}
+        for i in range(rho_theta.shape[0]):
+            # grab triangle corresponding to point
+            idx = triangle_location[i]
+            triangle_with_point = self.triangle[idx]
+            nodes = triangle_with_point
+            A = np.ones((3, 3))
+            for j in range(2):
+                for l in range(3):
+                    A[j][l] = nodes[l][j]
 
-            A = nodes[:, [0, 1, 2]]
-            O = np.array([1, 1, 1])
-            A = np.vstack((A, O))
+            X_vec = np.array([[rho_theta[i][0]], [rho_theta[i][1]], [1]])
+            coordinate_matrix[i] = np.dot((np.linalg.inv(A)), X_vec)
 
-            for i in range(3):
-                x_vec = np.array([[nodes[0][i]], [nodes[1][i]], [1]])
-                L_b[i, :] = np.dot((np.linalg.inv(A)), x_vec)
+        return coordinate_matrix
 
-            # Right Triangle {(1,0), (0,1), (1,1)}
+    def get_basis_functions(self, rho_theta, K=1):
+        """Gets the barycentric basis functions on rho_theta mesh.
 
-            A = nodes[:, [1, 2, 3]]
-            O = np.array([1, 1, 1])
-            A = np.vstack((A, O))
-
-            for i in range(3):
-                x_vec = np.array([[nodes[0][i + 1]], [nodes[1][i + 1]], [1]])
-                L_b[i + 1, :] = np.dot((np.linalg.inv(A)), x_vec)
-
-            return L_b
-
-        if K == 2:
-
-            L_b = np.zeros([10, 3])
-
-            nodes = rho_theta
-
-            # Left Triangle {(0,0), (1,0), (0,1), (1/2,0), (0,1/2), (1/2,1/2)}
-
-            A = nodes[:, [0, 1, 2]]
-            O = np.array([1, 1, 1])
-            A = np.vstack((A, O))
-
-            for i in range(3):
-                x_vec = np.array([[nodes[0][i]], [nodes[1][i]], [1]])
-                L_b[i, :] = np.dot((np.linalg.inv(A)), x_vec)
-
-            for i in range(4):
-                x_vec = np.array([[nodes[0][i + 4]], [nodes[1][i + 4]], [1]])
-                L_b[i + 4, :] = np.dot((np.linalg.inv(A)), x_vec)
-
-            # Right Triangle {(1,0), (1/2,1/2), (0,1), (1/2,1), (1,1/2), (1,1)}
-
-            A = nodes[:, [1, 2, 3]]
-            O = np.array([1, 1, 1])
-            A = np.vstack((A, O))
-
-            for i in range(2):
-                x_vec = np.array([[nodes[0][i + 8]], [nodes[1][i + 8]], [1]])
-                L_b[i + 8, :] = np.dot((np.linalg.inv(A)), x_vec)
-
-            x_vec = np.array([[nodes[0][3]], [nodes[1][3]], [1]])
-            L_b[3, :] = np.dot((np.linalg.inv(A)), x_vec)
-
-            return L_b
-
-        # Need K == 3
-
-    def get_basis_functions(self, rho_theta, i, a, b, K=1):
-        """Retrieve basis functions on entire mesh.
-
-        Return the triangle basis functions, used for evaluation.
-
-        Parameters
-        ----------
-        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
-        Coordinates of the original grid, lying inside this triangle.
-        i: node corresponding to basis functions
-        a,b: function inputs
-
-        Returns
-        -------
-        function in terms of a and b
-        """
-        if K == 1:
-
-            if np.all(rho_theta[i, :]) == np.all([0, 0]) or np.all(
-                rho_theta[i, :]
-            ) == np.all([1, 2 * np.pi]):
-                return 1 - a - b
-
-            if np.all(rho_theta[i, :]) == np.all([0, 2 * np.pi]):
-                return a
-
-            if np.all(rho_theta[i, :]) == np.all([1, 0]):
-                return b
-
-        if K == 2:
-
-            if np.all(rho_theta[i, :]) == np.all([0, 0]) or np.all(
-                rho_theta[i, :]
-            ) == np.all([1, 2 * np.pi]):
-                return (2 * (1 - a - b) - 1) * (1 - a - b)
-
-            if np.all(rho_theta[i, :]) == np.all([0, 2 * np.pi]):
-                return (2 * (a) - 1) * (a)
-
-            if np.all(rho_theta[i, :]) == np.all([1, 0]):
-                return (2 * (b) - 1) * (b)
-
-            if np.all(rho_theta[i, :]) == np.all([0.5, np.pi]):
-                return 4 * a * b
-
-            if np.all(rho_theta[i, :]) == np.all([0, np.pi]):
-                return 4 * a * (1 - a - b)
-
-            if np.all(rho_theta[i, :]) == np.all([0.5, 0]):
-                return 4 * b * (1 - a - b)
-
-            # Need K==3
-
-    def evaluate_basis_at_nodes(
-        self, rho_theta, K=1
-    ):  # i,j are indices, adding f for now
-        """Evaluate basis function at nodes.
-
-        Return the triangle basis functions evaluated at the 2D rho
-        and theta mesh points provided to the function.
+        Return the triangle basis functions, evaluated at the 2D rho
+        and theta mesh points.
 
         Parameters
         ----------
@@ -2584,48 +2504,16 @@ class FiniteElementMesh2D:
 
         Returns
         -------
-        psi_q : (rho_theta, Q)
+        coordinate_matrix: (rho_theta, Q)
         """
-        L_b = self.get_barycentric_coordinates(rho_theta, K)
-        if K == 1:
 
-            # As a reminder, with this linear case,
-            # we have two finite elements: {(0,0), (1,0), (0,1)},
-            # and {(1,0), (0,1), (1,1)}
-            # We label (0,0) as node 0, (0,1) as node 1,
-            # (1,0) as node 2, and (1,1) as node 3
+    # Will use triangle_location 
+    # and self.find_triangles_corresponding_to_points(rho_theta)[0]
 
-            psi_q = np.zeros(4, 4)
-
-            for i in range(4):
-                for j in range(4):
-                    psi_q[i][j] = self.get_basis_functions(
-                        rho_theta, i, L_b[i][0], L_b[i][1], K
-                    )
-
-            return psi_q
-
-        if K == 2:
-
-            psi_q = np.zeros(9, 9)
-
-            for i in range(9):
-                for j in range(9):
-                    psi_q[i][j] = self.get_basis_functions(
-                        rho_theta, i, L_b[i][0], L_b[i][1], K
-                    )
-            return psi_q
-            """
-        if K == 3:
-
-            psi_q = np.zeros(16, 16)
-
-            for i in range(16):
-                for j in range(16):
-                    psi_q[i][j] = get_basis_functions(
-                    rho_theta, i, L_b[i][0], L_b[i][1], K)
-            return psi_q
-            """
+    # Will use for i in range(rho_theta.shape[0]):
+    # grab triangle corresponding to point
+    # Will use idx = triangle_location[i]
+    # Will use   triangle_with_point = self.triangle[idx]
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""

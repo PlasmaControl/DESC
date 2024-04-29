@@ -1219,7 +1219,7 @@ def bounce_integral(
         data = eq.compute(
             ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
             grid=grid_desc,
-            override_grid=False,  # Need to have this.
+            override_grid=False,
         )
         bounce_integrate, spline = bounce_integral(
             data["B^zeta"],
@@ -1230,20 +1230,17 @@ def bounce_integral(
             plot=False,
         )
 
-        def integrand_num(g_zz, B, pitch, Z):
-            # Integrand in integral in numerator of bounce average.
+        def numerator(g_zz, B, pitch, Z):
             f = (1 - pitch * B) * g_zz
             return safediv(f, jnp.sqrt(1 - pitch * B))
 
-        def integrand_den(B, pitch, Z):
-            # Integrand in integral in denominator of bounce average.
+        def denominator(B, pitch, Z):
             return safediv(1, jnp.sqrt(1 - pitch * B))
 
         pitch = 1 / get_extrema(**spline)
-        num = bounce_integrate(integrand_num, data["g_zz"], pitch)
-        den = bounce_integrate(integrand_den, [], pitch)
+        num = bounce_integrate(numerator, data["g_zz"], pitch)
+        den = bounce_integrate(denominator, [], pitch)
         average = num / den
-        assert np.isfinite(average).any()
 
         # Now we can group the data by field line.
         average = average.reshape(pitch.shape[0], rho.size, alpha.size, -1)

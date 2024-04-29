@@ -3495,3 +3495,56 @@ class FixOmniBmax(_FixedObjective):
         """
         f = jnp.dot(self._A, params["x_lmn"])
         return f
+
+
+class FixSheetCurrent(FixParameter):
+    """Fixes the sheet current parameters of a free-boundary equilibrium.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Default is ``target=eq.Psi``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Default is ``target=eq.Psi``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(~)"
+    _print_value_fmt = "Fixed sheet current error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed sheet current",
+    ):
+        super().__init__(
+            thing=eq,
+            params={"I": True, "G": True, "Phi_mn": True},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )

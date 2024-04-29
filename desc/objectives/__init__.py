@@ -66,6 +66,7 @@ from .linear_objectives import (
     FixParameter,
     FixPressure,
     FixPsi,
+    FixSheetCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,

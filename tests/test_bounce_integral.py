@@ -601,7 +601,7 @@ def _elliptic_incomplete(k2):
         _fixed_elliptic(
             lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.cos(Z),
             k,
-            resolution=9,
+            resolution=11,
         ),
         rtol=1e-2,
     )
@@ -614,8 +614,8 @@ def _elliptic_incomplete(k2):
     return I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7
 
 
-def _compute_field_line_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
-    """Compute field line quantities on correct grids.
+def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
+    """Compute field line quantities on correct grid for test_drift().
 
     Parameters
     ----------
@@ -643,11 +643,9 @@ def _compute_field_line_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=N
         Zeta values along field line.
 
     """
-    # TODO: https://github.com/PlasmaControl/DESC/issues/719
     errorif(alpha != 0, NotImplementedError)
     if names_0d_or_1dr is None:
         names_0d_or_1dr = []
-    names_0d_or_1dr.append("iota")
     p = "desc.equilibrium.equilibrium.Equilibrium"
     # Gather dependencies of given quantities.
     deps = (
@@ -689,7 +687,6 @@ def _compute_field_line_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=N
     data = eq.compute(
         names=names_field_line, grid=grid_desc, data=data, override_grid=False
     )
-    assert np.allclose(data["iota"], iota)
     return data, grid_desc, grid_fl, zeta
 
 
@@ -709,7 +706,7 @@ def test_drift():
     rho = np.sqrt(psi / psi_boundary)
     assert np.isclose(rho, 0.5)
     alpha = 0
-    data, grid, grid_fl, zeta = _compute_field_line_data(
+    data, grid, grid_fl, zeta = _get_data(
         eq,
         rho,
         alpha,
@@ -721,8 +718,9 @@ def test_drift():
             "gbdrift",
             "grad(alpha)",
             "grad(psi)",
+            "|grad(psi)|",
         ],
-        ["iota_r", "a", "psi"],
+        ["shear", "a", "psi", "iota"],
     )
     assert np.allclose(data["psi"], psi)
 
@@ -748,8 +746,10 @@ def test_drift():
 
     B = data["|B|"] / B_ref
     B0 = np.mean(B)
+    # TODO: epsilon should be dimensionless, and probably computed in a way that
+    #   is independent of normalization length scales.
     # I wouldn't really consider 0.05 << 1... maybe for a rough approximation.
-    epsilon = L_ref * rho
+    epsilon = L_ref * rho  # Aspect ratio of the flux surface.
     assert np.isclose(epsilon, 0.05)
     iota = grid.compress(data["iota"]).item()
     theta_PEST = alpha + iota * zeta
@@ -757,30 +757,30 @@ def test_drift():
     B_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
     np.testing.assert_allclose(B, B_analytic, atol=3e-3)
 
-    x = L_ref * rho
-    shear = grid.compress(data["iota_r"]).item()
-    s_hat = -x / iota * shear / L_ref
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
-    gradpar_analytic = L_ref * (1 - epsilon * np.cos(theta_PEST))
+    # TODO: This method of computing G0 suggests a fixed point iteration?
+    G0 = data["a"]
+    gradpar_analytic = G0 * (1 - epsilon * np.cos(theta_PEST))
     gradpar_theta_analytic = iota * gradpar_analytic
     G0 = np.mean(gradpar_theta_analytic)
     np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
 
     # Comparing coefficient calculation here with coefficients from compute/_metric
-    normalization = -2 * np.sign(psi) * B_ref * L_ref**2 * rho
+    normalization = -np.sign(psi) * B_ref * L_ref**2
     cvdrift = data["cvdrift"] * normalization
     gbdrift = data["gbdrift"] * normalization
     dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * data["|B|"] ** 2)
-    alpha_MHD = -np.mean(dPdrho / iota**2 * 0.5)
-    gds21 = -np.sign(iota) * dot(data["grad(psi)"], data["grad(alpha)"]) * s_hat / B_ref
-    gds21_analytic = (
-        -1 * s_hat * (s_hat * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST))
+    alpha_MHD = -0.5 * dPdrho / iota**2
+    shear = grid.compress(data["shear"]).item()
+    gds21 = -np.sign(iota) * shear * dot(data["grad(psi)"], data["grad(alpha)"]) / B_ref
+    gds21_analytic = -shear * (
+        shear * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
     )
     np.testing.assert_allclose(gds21, gds21_analytic, atol=2e-2)
 
     fudge_1 = 0.19
     gbdrift_analytic = fudge_1 * (
-        -s_hat + (np.cos(theta_PEST) - gds21_analytic / s_hat * np.sin(theta_PEST))
+        -shear + np.cos(theta_PEST) - gds21_analytic / shear * np.sin(theta_PEST)
     )
     fudge_2 = 0.07
     cvdrift_analytic = gbdrift_analytic + fudge_2 * alpha_MHD / B**2
@@ -791,7 +791,7 @@ def test_drift():
     pitch = 1 / np.linspace(
         np.min(B) * (1 + relative_shift),
         np.max(B) * (1 - relative_shift),
-        50,
+        100,
     )
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
@@ -803,7 +803,7 @@ def test_drift():
         - 0.5
         * fudge_1
         * (
-            s_hat * (I_0 + I_1 - I_2 - I_3)
+            shear * (I_0 + I_1 - I_2 - I_3)
             + alpha_MHD / B0**4 * (I_4 + I_5)
             - (I_6 + I_7)
         )
@@ -824,8 +824,8 @@ def test_drift():
     assert drift.size == drift_analytic.size, msg
 
     fig, ax = plt.subplots()
-    ax.plot(1 / pitch, drift_analytic, marker="o", label="analytic")
-    ax.plot(1 / pitch, drift, marker="x", label="numerical")
+    ax.plot(1 / pitch, drift_analytic, label="analytic")
+    ax.plot(1 / pitch, drift, label="numerical")
     ax.set_xlabel(r"$1 / \lambda$")
     ax.set_ylabel("Bounce averaged drift")
     # FIXME: Increase tolerance or correct analytic expressions.

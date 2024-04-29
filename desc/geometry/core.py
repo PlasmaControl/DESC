@@ -35,9 +35,9 @@ class Curve(IOAble, Optimizable, ABC):
         if hasattr(self, "_NFP"):
             self._NFP = int(self._NFP)
         if not hasattr(self, "_shift"):
-            self._shift = jnp.array([0, 0, 0], dtype=float)
+            self.shift
         if not hasattr(self, "_rotmat"):
-            self._rotmat = jnp.eye(3, dtype=float).flatten()
+            self.rotmat
 
     @optimizable_parameter
     @property

@@ -813,6 +813,9 @@ def test_bounce_averaged_drifts():
     )
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
+    y = np.sqrt(epsilon * pitch * B0)
+    I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
+    I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
     bounce_drift_analytic = (
         fudge_factor_cvdrift * alpha_MHD / B0**2 * I_1
         - 0.5

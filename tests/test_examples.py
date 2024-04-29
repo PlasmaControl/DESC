@@ -640,8 +640,8 @@ def test_multiobject_optimization_al():
     constraints = (
         ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
         FixPressure(eq=eq),
-        FixParameter(surf, ["R_lmn", "Z_lmn"], [np.array([0]), np.array([-1])]),
-        FixParameter(eq, ["Psi", "i_l"]),
+        FixParameter(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameter(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
@@ -679,8 +679,8 @@ def test_multiobject_optimization_prox():
     constraints = (
         ForceBalance(eq=eq),
         FixPressure(eq=eq),
-        FixParameter(surf, ["R_lmn", "Z_lmn"], [np.array([0]), np.array([-1])]),
-        FixParameter(eq, ["Psi", "i_l"]),
+        FixParameter(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameter(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
     )
 
@@ -999,19 +999,14 @@ def test_only_non_eq_optimization():
     """Test for optimizing only a non-eq object."""
     eq = get("DSHAPE")
     surf = eq.surface
-
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(
-            surf, params="R_lmn", indices=np.array(surf.R_basis.get_idx(0, 0, 0))
-        ),
+        FixParameter(surf, {"R_lmn": np.array(surf.R_basis.get_idx(0, 0, 0))}),
     )
-
     obj = PrincipalCurvature(surf, target=1)
-
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-exact")
-    (surf), result = optimizer.optimize(
+    (surf), _ = optimizer.optimize(
         (surf), objective, constraints, verbose=3, maxiter=100
     )
     surf = surf[0]
@@ -1258,7 +1253,7 @@ def test_quadratic_flux_optimization_with_analytic_field():
 
     optimizer = Optimizer("lsq-exact")
 
-    constraints = (FixParameter(field, "R0"),)
+    constraints = (FixParameter(field, {"R0": True}),)
     quadflux_obj = QuadraticFlux(
         eq=eq,
         field=field,
@@ -1287,7 +1282,7 @@ def test_second_stage_optimization():
     eq = get("DSHAPE")
     field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field))
-    constraints = FixParameter(field, [["R0"], []])
+    constraints = FixParameter(field, [{"R0": True}, {}])
     optimizer = Optimizer("lsq-exact")
     (field,), _ = optimizer.optimize(
         things=field, objective=objective, constraints=constraints, verbose=2

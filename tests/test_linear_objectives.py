@@ -939,12 +939,29 @@ def test_fix_subset_of_params_in_collection():
     xy_coil = FourierXYZCoil()
     full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xy_coil))
 
-    # TODO: use a better example to test broadcasting for a whole coilset
     params = [
-        [["current"], ["center", "normal", "r_n"], ["current", "shift", "rotmat"], []],
-        [["current", "Z_n"], ["R_n", "Z_n"], ["Z_n"]],
-        ["Z_n", "shift", "rotmat"],
+        [
+            {"current": True},
+            {"center": True, "normal": np.array([1])},
+            {"r_n": True},
+            {},
+        ],
+        {"shift": True, "rotmat": True},
+        {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
     ]
+    target = np.concatenate(
+        (
+            np.array([1, 2, 0, 0, 1, 1]),
+            np.eye(3).flatten(),
+            np.array([0, 0, 0]),
+            np.eye(3).flatten(),
+            np.array([0, 0, 1]),
+            np.eye(3).flatten(),
+            np.array([0, 0, 2]),
+            np.array([10, 2, -2]),
+        )
+    )
+
     obj = FixParameter(full_coilset, params)
     obj.build()
-    assert obj.dim_f == 41
+    np.testing.assert_allclose(obj.target, target)

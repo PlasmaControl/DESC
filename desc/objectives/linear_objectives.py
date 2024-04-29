@@ -12,16 +12,9 @@ from abc import ABC
 import numpy as np
 from termcolor import colored
 
-from desc.backend import (
-    jnp,
-    tree_leaves,
-    tree_map,
-    tree_structure,
-    tree_unflatten,
-    treedef_is_leaf,
-)
+from desc.backend import jnp, tree_leaves, tree_map, tree_structure
 from desc.basis import zernike_radial, zernike_radial_coeffs
-from desc.utils import broadcast_tree, errorif, flatten_list, setdefault
+from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -79,11 +72,11 @@ class FixParameter(_Objective):
     ----------
     thing : Optimizable
         Object whose degrees of freedom are being fixed.
-    params : pytree with leaves of type str
-        Names of parameters to fix. Defaults to all parameters.
-    indices : pytree with leaves of type array
-        Indices to fix for each parameter in params.
-        The default value indices=True fixes all indices.
+    params : nested list of dicts
+        Dict keys are the names of parameters to fix (str), and dict values are the
+        indices to fix for each corresonding parameter (int array).
+        Must have the same pytree structure as thing.params_dict.
+        The default is to fix all indices of all parameters.
     target : dict of {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Should have the same tree structure as thing.params. Defaults to things.params.
@@ -115,7 +108,6 @@ class FixParameter(_Objective):
         self,
         thing,
         params=None,
-        indices=True,
         target=None,
         bounds=None,
         weight=1,
@@ -124,7 +116,6 @@ class FixParameter(_Objective):
         name="Fixed parameters",  # TODO: add params
     ):
         self._params = params
-        self._indices = indices
         super().__init__(
             things=thing,
             target=target,
@@ -147,77 +138,22 @@ class FixParameter(_Objective):
 
         """
         thing = self.things[0]
-        structure = tree_structure(thing.optimizable_params)
 
-        def leaves_per_branch(tree_tuple):
-            """Get the number of leaves per branch in a pytree, in flattened order."""
-            tree, lengths = tree_tuple
-            if all([treedef_is_leaf(tree_structure(x)) for x in tree]):
-                lengths.append(len(tree))
-                return [], lengths
-            else:
-                return (
-                    [leaves_per_branch((branch, lengths)) for branch in tree],
-                    lengths,
-                )
+        # default params
+        default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+        self._params = setdefault(self._params, default_params)
+        self._params = broadcast_tree(self._params, default_params)
+        self._indices = tree_leaves(self._params)
+        assert tree_structure(self._params) == tree_structure(default_params)
 
-        # indices of flattened tree leaves
-        _, lengths = leaves_per_branch((thing.optimizable_params, []))
-        starts = np.insert(np.cumsum(lengths), 0, 0)
-        leaf_indices = [
-            np.arange(start, start + length, dtype=int)
-            for start, length in zip(starts, lengths)
-        ]
+        self._dim_f = sum(idx.size for idx in self._indices)
 
-        # set params
-        self._params = setdefault(self._params, thing.optimizable_params)
-        self._params = broadcast_tree(self._params, thing.optimizable_params, sort=True)
-        assert tree_structure(self._params) == structure
-        params_leaves = tree_leaves(self._params)
-
-        # sort params to the same flattend leaf order as indices
-        # this is necessary because of JAX GitHub Issue #4085
-        params_leaves = flatten_list(
-            [
-                [
-                    [params_leaves[i] for i in idx][j]
-                    for j in np.argsort(
-                        np.atleast_1d(tree_leaves(thing.optimizable_params))[idx]
-                    )
-                ]
-                for idx in leaf_indices
-            ]
-        )
-
-        # set indices
-        if isinstance(self._indices, bool):  # default to all indices
-            errorif(not self._indices, ValueError, "indices cannot be False")
-            indices = tree_map(lambda dim: np.arange(dim, dtype=int), thing.dimensions)
-            indices_leaves = [
-                idx if param else False
-                for idx, param in zip(tree_leaves(indices), params_leaves)
-            ]
-            self._indices = tree_unflatten(structure, indices_leaves)
-        self._indices = broadcast_tree(  # indices cannot be sorted like the params!
-            self._indices, thing.optimizable_params, sort=False
-        )
-        assert tree_structure(self._indices) == structure
-        self._indices_leaves = tree_leaves(self._indices)
-        self._indices_leaves = [  # replace False leaves with empy arrays
-            indices if not isinstance(indices, bool) else np.array([], dtype=int)
-            for indices in self._indices_leaves
-        ]
-
-        self._dim_f = sum(idx.size for idx in self._indices_leaves)
-
-        # set default target
+        # default target
         if self.target is None and self.bounds is None:
             self.target = np.concatenate(
                 [
                     np.atleast_1d(param[idx])
-                    for param, idx in zip(
-                        tree_leaves(thing.params_dict), self._indices_leaves
-                    )
+                    for param, idx in zip(tree_leaves(thing.params_dict), self._indices)
                 ]
             )
 
@@ -240,14 +176,10 @@ class FixParameter(_Objective):
             Fixed degree of freedom errors.
 
         """
-        params_leaves = tree_leaves(params)
-        # FIXME: should still work if only a subset of params get passed in
-        # TODO: need to cast to full dict
-        assert len(params_leaves) == len(self._indices_leaves)
         return jnp.concatenate(
             [
                 jnp.atleast_1d(param[idx])
-                for param, idx in zip(params_leaves, self._indices_leaves)
+                for param, idx in zip(tree_leaves(params), self._indices)
             ]
         )
 

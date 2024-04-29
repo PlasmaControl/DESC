@@ -1010,7 +1010,9 @@ def test_optimize_multiple_things_different_order():
         # don't let eq vary
         FixParameter(eq),
         # only let the minor radius of the surface vary
-        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+        FixParameter(
+            surf, params=["R_lmn"], indices=np.array(surf.R_basis.get_idx(M=0, N=0))
+        ),
     )
 
     target_dist = 1
@@ -1029,7 +1031,7 @@ def test_optimize_multiple_things_different_order():
     optimizer = Optimizer("lsq-exact")
 
     # ensure it runs when (eq,surf) are passed
-    (eq1, surf1), result = optimizer.optimize(
+    (eq1, surf1), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=15, copy=True
     )
     # ensure surface changed correctly
@@ -1050,7 +1052,9 @@ def test_optimize_multiple_things_different_order():
         # don't let eq vary
         FixParameter(eq),
         # only let the minor radius of the surface vary
-        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+        FixParameter(
+            surf, params=["R_lmn"], indices=np.array(surf.R_basis.get_idx(M=0, N=0))
+        ),
     )
     obj = PlasmaVesselDistance(
         surface=surf,
@@ -1063,7 +1067,7 @@ def test_optimize_multiple_things_different_order():
     objective = ObjectiveFunction((obj,))
     # ensure it runs when (surf,eq) are passed which is opposite
     # the order of objective.things
-    (surf2, eq2), result = optimizer.optimize(
+    (surf2, eq2), _ = optimizer.optimize(
         (surf, eq), objective, constraints, verbose=3, maxiter=15, copy=True
     )
 

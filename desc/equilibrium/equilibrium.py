@@ -877,6 +877,11 @@ class Equilibrium(IOAble, Optimizable):
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            data0d_seed = {
+                key: data[key]
+                for key in data
+                if data_index[p][key]["coordinates"] == ""
+            }
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -885,17 +890,18 @@ class Equilibrium(IOAble, Optimizable):
                 profiles=get_profiles(dep0d, obj=self, grid=grid0d),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
-                data={
-                    key: data[key]
-                    for key in data
-                    if data_index[p][key]["coordinates"] == ""
-                },
+                data=data0d_seed,
                 **kwargs,
             )
             # these should all be 0d quantities so don't need to compress/expand
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
+        data0d_seed = (
+            {key: data[key] for key in data if data_index[p][key]["coordinates"] == ""}
+            if ((calc1dr or calc1dz) and override_grid)
+            else {}
+        )
         if calc1dr and override_grid:
             grid1dr = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
@@ -904,8 +910,11 @@ class Equilibrium(IOAble, Optimizable):
                 NFP=self.NFP,
                 sym=self.sym,
             )
-            # TODO: Pass in data0d as a seed once there are 1d quantities that
-            #  depend on 0d quantities in data_index.
+            data1dr_seed = {
+                key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
+                for key in data
+                if data_index[p][key]["coordinates"] == "r"
+            }
             data1dr = compute_fun(
                 self,
                 dep1dr,
@@ -914,13 +923,7 @@ class Equilibrium(IOAble, Optimizable):
                 profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
-                data={
-                    key: grid1dr.copy_data_from_other(
-                        data[key], grid, surface_label="rho"
-                    )
-                    for key in data
-                    if data_index[p][key]["coordinates"] == "r"
-                },
+                data=data1dr_seed | data0d_seed,
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid
@@ -940,8 +943,11 @@ class Equilibrium(IOAble, Optimizable):
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym,
             )
-            # TODO: Pass in data0d as a seed once there are 1d quantities that
-            # depend on 0d quantities in data_index.
+            data1dz_seed = {
+                key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
+                for key in data
+                if data_index[p][key]["coordinates"] == "z"
+            }
             data1dz = compute_fun(
                 self,
                 dep1dz,
@@ -950,13 +956,7 @@ class Equilibrium(IOAble, Optimizable):
                 profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
-                data={
-                    key: grid1dz.copy_data_from_other(
-                        data[key], grid, surface_label="zeta"
-                    )
-                    for key in data
-                    if data_index[p][key]["coordinates"] == "z"
-                },
+                data=data1dz_seed | data0d_seed,
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid

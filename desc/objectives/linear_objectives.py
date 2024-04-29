@@ -215,7 +215,7 @@ class BoundaryRSelfConsistency(_Objective):
 
     _scalar = False
     _linear = True
-    _fixed = False
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
     _print_value_fmt = "R boundary self consistency error: {:10.3e} "
 
@@ -313,7 +313,7 @@ class BoundaryZSelfConsistency(_Objective):
 
     _scalar = False
     _linear = True
-    _fixed = False
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
     _print_value_fmt = "Z boundary self consistency error: {:10.3e} "
 
@@ -411,7 +411,7 @@ class AxisRSelfConsistency(_Objective):
 
     _scalar = False
     _linear = True
-    _fixed = False
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _print_value_fmt = "R axis self consistency error: {:10.3e} (m)"
 
     def __init__(
@@ -497,7 +497,7 @@ class AxisZSelfConsistency(_Objective):
 
     _scalar = False
     _linear = True
-    _fixed = False
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _print_value_fmt = "Z axis self consistency error: {:10.3e} (m)"
 
     def __init__(
@@ -725,7 +725,7 @@ class FixLambdaGauge(_Objective):
 
     _scalar = False
     _linear = True
-    _fixed = False
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
     _print_value_fmt = "lambda gauge error: {:10.3e} "
 
@@ -805,68 +805,48 @@ class FixLambdaGauge(_Objective):
         return jnp.dot(self._A, params["L_lmn"])
 
 
-class FixThetaSFL(_Objective):
+class FixThetaSFL(FixParameter):
     """Fixes lambda=0 so that poloidal angle is the SFL poloidal angle.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
     _units = "(rad)"
-    _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
+    _print_value_fmt = "theta - theta SFL error: {:10.3e} "
 
-    def __init__(self, eq, name="Theta SFL"):
-        super().__init__(things=eq, target=0, weight=1, name=name)
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        idx = np.arange(eq.L_basis.num_modes)
-        modes_idx = idx
-        self._idx = idx
-
-        self._dim_f = modes_idx.size
-
-        self.target = np.zeros_like(modes_idx)
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute Theta SFL errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Theta - Theta SFL errors.
-
-        """
-        fixed_params = params["L_lmn"][self._idx]
-        return fixed_params
+    def __init__(
+        self,
+        eq,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="theta SFL",
+    ):
+        super().__init__(
+            thing=eq,
+            params={"L_lmn": True},
+            target=0,
+            bounds=None,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
 
 class FixAxisR(FixParameter):
@@ -1261,7 +1241,7 @@ class FixSumModesR(_FixedObjective):
 
     """
 
-    _fixed = False  # not "diagonal", since its fixing a sum
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
     _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
 
@@ -1427,7 +1407,7 @@ class FixSumModesZ(_FixedObjective):
 
     """
 
-    _fixed = False  # not "diagonal", since its fixing a sum
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
     _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
 
@@ -1595,7 +1575,7 @@ class FixSumModesLambda(_FixedObjective):
 
     """
 
-    _fixed = False  # not "diagonal", since its fixing a sum
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
     _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
 
@@ -2642,6 +2622,9 @@ class FixOmniBmax(_FixedObjective):
 
 class FixSheetCurrent(FixParameter):
     """Fixes the sheet current parameters of a free-boundary equilibrium.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
 
     Parameters
     ----------

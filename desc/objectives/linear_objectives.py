@@ -7,7 +7,6 @@ Linear objective functions must be of the form `A*x-b`, where:
 """
 
 import warnings
-from abc import ABC
 
 import numpy as np
 from termcolor import colored
@@ -617,9 +616,9 @@ class FixBoundaryR(FixParameter):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         if isinstance(modes, bool):
-            idx = modes
+            indices = modes
         else:
-            idx = np.concatenate(
+            indices = np.concatenate(
                 [
                     [eq.surface.R_basis.get_idx(L=l, M=m, N=n)]
                     for l, m, n in np.atleast_2d(modes)
@@ -628,7 +627,7 @@ class FixBoundaryR(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"Rb_lmn": idx},
+            params={"Rb_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -688,9 +687,9 @@ class FixBoundaryZ(FixParameter):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         if isinstance(modes, bool):
-            idx = modes
+            indices = modes
         else:
-            idx = np.concatenate(
+            indices = np.concatenate(
                 [
                     [eq.surface.Z_basis.get_idx(L=l, M=m, N=n)]
                     for l, m, n in np.atleast_2d(modes)
@@ -699,7 +698,7 @@ class FixBoundaryZ(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"Zb_lmn": idx},
+            params={"Zb_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -920,9 +919,9 @@ class FixAxisR(FixParameter):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         if isinstance(modes, bool):
-            idx = modes
+            indices = modes
         else:
-            idx = np.concatenate(
+            indices = np.concatenate(
                 [
                     [eq.axis.R_basis.get_idx(L=l, M=m, N=n)]
                     for l, m, n in np.atleast_2d(modes)
@@ -931,7 +930,7 @@ class FixAxisR(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"Ra_n": idx},
+            params={"Ra_n": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -991,9 +990,9 @@ class FixAxisZ(FixParameter):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         if isinstance(modes, bool):
-            idx = modes
+            indices = modes
         else:
-            idx = np.concatenate(
+            indices = np.concatenate(
                 [
                     [eq.axis.Z_basis.get_idx(L=l, M=m, N=n)]
                     for l, m, n in np.atleast_2d(modes)
@@ -1002,7 +1001,7 @@ class FixAxisZ(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"Za_n": idx},
+            params={"Za_n": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1062,9 +1061,9 @@ class FixModeR(FixParameter):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         if isinstance(modes, bool):
-            idx = modes
+            indices = modes
         else:
-            idx = np.concatenate(
+            indices = np.concatenate(
                 [
                     [eq.R_basis.get_idx(L=l, M=m, N=n)]
                     for l, m, n in np.atleast_2d(modes)
@@ -1073,7 +1072,7 @@ class FixModeR(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"R_lmn": idx},
+            params={"R_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1133,9 +1132,9 @@ class FixModeZ(FixParameter):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         if isinstance(modes, bool):
-            idx = modes
+            indices = modes
         else:
-            idx = np.concatenate(
+            indices = np.concatenate(
                 [
                     [eq.Z_basis.get_idx(L=l, M=m, N=n)]
                     for l, m, n in np.atleast_2d(modes)
@@ -1144,7 +1143,7 @@ class FixModeZ(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"Z_lmn": idx},
+            params={"Z_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1205,9 +1204,9 @@ class FixModeLambda(FixParameter):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         if isinstance(modes, bool):
-            idx = modes
+            indices = modes
         else:
-            idx = np.concatenate(
+            indices = np.concatenate(
                 [
                     [eq.L_basis.get_idx(L=l, M=m, N=n)]
                     for l, m, n in np.atleast_2d(modes)
@@ -1216,7 +1215,7 @@ class FixModeLambda(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"L_lmn": idx},
+            params={"L_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1728,105 +1727,7 @@ class FixSumModesLambda(_FixedObjective):
         return f
 
 
-class _FixProfile(_FixedObjective, ABC):
-    """Fixes profile coefficients (or values, for SplineProfile).
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
-    indices : ndarray or Bool, optional
-        indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
-        corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(indices).
-        If True/False uses all/none of the Profile.params indices.
-    name : str, optional
-        Name of the objective function.
-
-    """
-
-    _print_value_fmt = "Fix-profile error: {:10.3e} "
-
-    def __init__(
-        self,
-        eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        profile=None,
-        indices=True,
-        name="",
-    ):
-        self._profile = profile
-        self._indices = indices
-        self._target_from_user = setdefault(bounds, target)
-        super().__init__(
-            things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, eq, profile, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
-        profile : Profile, optional
-            profile to fix
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._profile is None or self._profile.params.size != eq.L + 1:
-            self._profile = profile
-
-        # find indices to fix
-        if self._indices is False or self._indices is None:  # no indices to fix
-            self._idx = np.array([], dtype=int)
-        elif self._indices is True:  # all indices of Profile.params
-            self._idx = np.arange(np.size(self._profile.params))
-        else:  # specified indices
-            self._idx = np.atleast_1d(self._indices)
-
-        self._dim_f = self._idx.size
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, self._profile.params[self._idx], None, self._idx
-        )
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-
-class FixPressure(_FixProfile):
+class FixPressure(FixParameter):
     """Fixes pressure coefficients.
 
     Parameters
@@ -1849,8 +1750,6 @@ class FixPressure(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -1863,7 +1762,7 @@ class FixPressure(_FixProfile):
     """
 
     _units = "(Pa)"
-    _print_value_fmt = "Fixed-pressure profile error: {:10.3e} "
+    _print_value_fmt = "Fixed pressure profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -1873,66 +1772,30 @@ class FixPressure(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        profile=None,
         indices=True,
-        name="fixed-pressure",
+        name="fixed pressure",
     ):
+        if eq.pressure is None:
+            raise RuntimeError(
+                "Attempting to fix pressure on an Equilibrium with no "
+                + "pressure profile assigned."
+            )
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["p"]
         super().__init__(
-            eq=eq,
+            thing=eq,
+            params={"p_l", indices},
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            profile=profile,
-            indices=indices,
             name=name,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if eq.pressure is None:
-            raise RuntimeError(
-                "Attempting to fix pressure on an equilibrium with no "
-                + "pressure profile assigned"
-            )
-        profile = eq.pressure
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["p"]
-        super().build(eq, profile, use_jit, verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed pressure profile errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        return params["p_l"][self._idx]
-
-
-class FixAnisotropy(_FixProfile):
+class FixAnisotropy(FixParameter):
     """Fixes anisotropic pressure coefficients.
 
     Parameters
@@ -1955,8 +1818,6 @@ class FixAnisotropy(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -1969,7 +1830,7 @@ class FixAnisotropy(_FixProfile):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed-anisotropy profile error: {:10.3e} "
+    _print_value_fmt = "Fixed anisotropy profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -1979,63 +1840,27 @@ class FixAnisotropy(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        profile=None,
         indices=True,
-        name="fixed-anisotropy",
+        name="fixed anisotropy",
     ):
+        if eq.anisotropy is None:
+            raise RuntimeError(
+                "Attempting to fix anisotropy on an Equilibrium with no "
+                + "anisotropy profile assigned."
+            )
         super().__init__(
-            eq=eq,
+            thing=eq,
+            params={"a_lmn", indices},
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            profile=profile,
-            indices=indices,
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if eq.anisotropy is None:
-            raise RuntimeError(
-                "Attempting to fix anisotropy on an equilibrium with no "
-                + "anisotropy profile assigned"
-            )
-        profile = eq.anisotropy
-        super().build(eq, profile, use_jit, verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed pressure profile errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        return params["a_lmn"][self._idx]
-
-
-class FixIota(_FixProfile):
+class FixIota(FixParameter):
     """Fixes rotational transform coefficients.
 
     Parameters
@@ -2059,8 +1884,6 @@ class FixIota(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True. Has no effect for this objective.
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices.
@@ -2073,7 +1896,7 @@ class FixIota(_FixProfile):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed-iota profile error: {:10.3e} "
+    _print_value_fmt = "Fixed iota profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -2083,63 +1906,27 @@ class FixIota(_FixProfile):
         weight=1,
         normalize=False,
         normalize_target=False,
-        profile=None,
         indices=True,
-        name="fixed-iota",
+        name="fixed iota",
     ):
+        if eq.iota is None:
+            raise RuntimeError(
+                "Attempting to fix iota on an Equilibrium with no "
+                + "iota profile assigned."
+            )
         super().__init__(
-            eq=eq,
+            thing=eq,
+            params={"i_l", indices},
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            profile=profile,
-            indices=indices,
             name=name,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if eq.iota is None:
-            raise RuntimeError(
-                "Attempt to fix rotational transform on an equilibrium with no "
-                + "rotational transform profile assigned"
-            )
-        profile = eq.iota
-        super().build(eq, profile, use_jit, verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed iota errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        return params["i_l"][self._idx]
-
-
-class FixCurrent(_FixProfile):
+class FixCurrent(FixParameter):
     """Fixes toroidal current profile coefficients.
 
     Parameters
@@ -2162,8 +1949,6 @@ class FixCurrent(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -2176,7 +1961,7 @@ class FixCurrent(_FixProfile):
     """
 
     _units = "(A)"
-    _print_value_fmt = "Fixed-current profile error: {:10.3e} "
+    _print_value_fmt = "Fixed current profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -2186,66 +1971,30 @@ class FixCurrent(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        profile=None,
         indices=True,
-        name="fixed-current",
+        name="fixed current",
     ):
+        if eq.current is None:
+            raise RuntimeError(
+                "Attempting to fix current on an Equilibrium with no "
+                + "current profile assigned."
+            )
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["I"]
         super().__init__(
-            eq=eq,
+            thing=eq,
+            params={"c_l", indices},
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            profile=profile,
-            indices=indices,
             name=name,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if eq.current is None:
-            raise RuntimeError(
-                "Attempting to fix toroidal current on an equilibrium with no "
-                + "current profile assigned"
-            )
-        profile = eq.current
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["I"]
-        super().build(eq, profile, use_jit, verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed current errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        return params["c_l"][self._idx]
-
-
-class FixElectronTemperature(_FixProfile):
+class FixElectronTemperature(FixParameter):
     """Fixes electron temperature profile coefficients.
 
     Parameters
@@ -2268,8 +2017,6 @@ class FixElectronTemperature(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -2282,7 +2029,7 @@ class FixElectronTemperature(_FixProfile):
     """
 
     _units = "(eV)"
-    _print_value_fmt = "Fixed-electron-temperature profile error: {:10.3e} "
+    _print_value_fmt = "Fixed electron temperature profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -2292,66 +2039,30 @@ class FixElectronTemperature(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        profile=None,
         indices=True,
-        name="fixed-electron-temperature",
+        name="fixed electron temperature",
     ):
+        if eq.electron_temperature is None:
+            raise RuntimeError(
+                "Attempting to fix electron temperature on an Equilibrium with no "
+                + "electron temperature profile assigned."
+            )
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["T"]
         super().__init__(
-            eq=eq,
+            thing=eq,
+            params={"Te_l", indices},
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            profile=profile,
-            indices=indices,
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if eq.electron_temperature is None:
-            raise RuntimeError(
-                "Attempting to fix electron temperature on an equilibrium with no "
-                + "electron temperature profile assigned"
-            )
-        profile = eq.electron_temperature
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["T"]
-        super().build(eq, profile, use_jit, verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed electron temperature errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        return params["Te_l"][self._idx]
-
-
-class FixElectronDensity(_FixProfile):
+class FixElectronDensity(FixParameter):
     """Fixes electron density profile coefficients.
 
     Parameters
@@ -2388,7 +2099,7 @@ class FixElectronDensity(_FixProfile):
     """
 
     _units = "(m^-3)"
-    _print_value_fmt = "Fixed-electron-density profile error: {:10.3e} "
+    _print_value_fmt = "Fixed electron density profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -2398,66 +2109,30 @@ class FixElectronDensity(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        profile=None,
         indices=True,
-        name="fixed-electron-density",
+        name="fixed electron density",
     ):
+        if eq.electron_density is None:
+            raise RuntimeError(
+                "Attempting to fix electron density on an Equilibrium with no "
+                + "electron density profile assigned."
+            )
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["n"]
         super().__init__(
-            eq=eq,
+            thing=eq,
+            params={"ne_l", indices},
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            profile=profile,
-            indices=indices,
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if eq.electron_density is None:
-            raise RuntimeError(
-                "Attempting to fix electron density on an equilibrium with no "
-                + "electron density profile assigned"
-            )
-        profile = eq.electron_density
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["n"]
-        super().build(eq, profile, use_jit, verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed electron density errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        return params["ne_l"][self._idx]
-
-
-class FixIonTemperature(_FixProfile):
+class FixIonTemperature(FixParameter):
     """Fixes ion temperature profile coefficients.
 
     Parameters
@@ -2480,8 +2155,6 @@ class FixIonTemperature(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -2494,7 +2167,7 @@ class FixIonTemperature(_FixProfile):
     """
 
     _units = "(eV)"
-    _print_value_fmt = "Fixed-ion-temperature profile error: {:10.3e} "
+    _print_value_fmt = "Fixed ion temperature profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -2504,66 +2177,30 @@ class FixIonTemperature(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        profile=None,
         indices=True,
-        name="fixed-ion-temperature",
+        name="fixed ion temperature",
     ):
+        if eq.ion_temperature is None:
+            raise RuntimeError(
+                "Attempting to fix ion temperature on an Equilibrium with no "
+                + "ion temperature profile assigned."
+            )
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["T"]
         super().__init__(
-            eq=eq,
+            thing=eq,
+            params={"Ti_l", indices},
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            profile=profile,
-            indices=indices,
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if eq.ion_temperature is None:
-            raise RuntimeError(
-                "Attempting to fix ion temperature on an equilibrium with no "
-                + "ion temperature profile assigned"
-            )
-        profile = eq.ion_temperature
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["T"]
-        super().build(eq, profile, use_jit, verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed ion temperature errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        return params["Ti_l"][self._idx]
-
-
-class FixAtomicNumber(_FixProfile):
+class FixAtomicNumber(FixParameter):
     """Fixes effective atomic number profile coefficients.
 
     Parameters
@@ -2587,8 +2224,6 @@ class FixAtomicNumber(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True. Has no effect for this objective.
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -2601,7 +2236,7 @@ class FixAtomicNumber(_FixProfile):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed-atomic-number profile error: {:10.3e} "
+    _print_value_fmt = "Fixed atomic number profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -2611,60 +2246,24 @@ class FixAtomicNumber(_FixProfile):
         weight=1,
         normalize=False,
         normalize_target=False,
-        profile=None,
         indices=True,
-        name="fixed-atomic-number",
+        name="fixed atomic number",
     ):
+        if eq.atomic_number is None:
+            raise RuntimeError(
+                "Attempting to fix atomic number on an Equilibrium with no "
+                + "atomic_number profile assigned."
+            )
         super().__init__(
-            eq=eq,
+            thing=eq,
+            params={"Zeff_l", indices},
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            profile=profile,
-            indices=indices,
             name=name,
         )
-
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if eq.atomic_number is None:
-            raise RuntimeError(
-                "Attempting to fix atomic number on an equilibrium with no "
-                + "atomic number profile assigned"
-            )
-        profile = eq.atomic_number
-        super().build(eq, profile, use_jit, verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed atomic number errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        return params["Zeff_l"][self._idx]
 
 
 class FixPsi(FixParameter):
@@ -2696,7 +2295,7 @@ class FixPsi(FixParameter):
     """
 
     _units = "(Wb)"
-    _print_value_fmt = "Fixed-Psi error: {:10.3e} "
+    _print_value_fmt = "Fixed Psi error: {:10.3e} "
 
     def __init__(
         self,
@@ -2706,7 +2305,7 @@ class FixPsi(FixParameter):
         weight=1,
         normalize=True,
         normalize_target=True,
-        name="fixed-Psi",
+        name="fixed Psi",
     ):
         if normalize:
             scales = compute_scaling_factors(eq)
@@ -2751,7 +2350,7 @@ class FixCurveShift(FixParameter):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed-shift error: {:10.3e} "
+    _print_value_fmt = "Fixed shift error: {:10.3e} "
 
     def __init__(
         self,
@@ -2761,7 +2360,7 @@ class FixCurveShift(FixParameter):
         weight=1,
         normalize=True,
         normalize_target=True,
-        name="fixed-shift",
+        name="fixed shift",
     ):
         super().__init__(
             thing=curve,
@@ -2803,7 +2402,7 @@ class FixCurveRotation(FixParameter):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed-rotation error: {:10.3e} "
+    _print_value_fmt = "Fixed rotation error: {:10.3e} "
 
     def __init__(
         self,
@@ -2813,7 +2412,7 @@ class FixCurveRotation(FixParameter):
         weight=1,
         normalize=True,
         normalize_target=True,
-        name="fixed-rotation",
+        name="fixed rotation",
     ):
         super().__init__(
             thing=curve,

@@ -567,7 +567,7 @@ class AxisZSelfConsistency(_Objective):
         return f
 
 
-class FixBoundaryR(_FixedObjective):
+class FixBoundaryR(FixParameter):
     """Boundary condition on the R boundary parameters.
 
     Parameters
@@ -594,16 +594,9 @@ class FixBoundaryR(_FixedObjective):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
-    surface_label : float, optional
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str, optional
         Name of the objective function.
 
-    Notes
-    -----
-    If specifying particular modes to fix, the rows of the resulting constraint `A`
-    matrix and `target` vector will be re-sorted according to the ordering of
-    `basis.modes` which may be different from the order that was passed in.
     """
 
     _units = "(m)"
@@ -618,14 +611,24 @@ class FixBoundaryR(_FixedObjective):
         normalize=True,
         normalize_target=True,
         modes=True,
-        surface_label=None,
         name="lcfs R",
     ):
-        self._modes = modes
-        self._target_from_user = setdefault(bounds, target)
-        self._surface_label = surface_label
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        if isinstance(modes, bool):
+            idx = modes
+        else:
+            idx = np.concatenate(
+                [
+                    [eq.surface.R_basis.get_idx(L=l, M=m, N=n)]
+                    for l, m, n in np.atleast_2d(modes)
+                ],
+                dtype=int,
+            )
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Rb_lmn": idx},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -634,86 +637,8 @@ class FixBoundaryR(_FixedObjective):
             name=name,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-        elif self._modes is True:  # all modes
-            modes = eq.surface.R_basis.modes
-            idx = np.arange(eq.surface.R_basis.num_modes)
-            modes_idx = idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.surface.R_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.surface.R_basis.modes
-            # and eq.surface.R_lmn,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.surface.R_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the surface, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = idx.size
-        # Rb_lmn -> Rb optimization space
-        self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.surface.R_lmn[idx], None, modes_idx
-        )
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute boundary R errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            boundary R errors.
-
-        """
-        return jnp.dot(self._A, params["Rb_lmn"])
-
-
-class FixBoundaryZ(_FixedObjective):
+class FixBoundaryZ(FixParameter):
     """Boundary condition on the Z boundary parameters.
 
     Parameters
@@ -740,16 +665,9 @@ class FixBoundaryZ(_FixedObjective):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the surface modes.
-    surface_label : float, optional
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str, optional
         Name of the objective function.
 
-    Notes
-    -----
-    If specifying particular modes to fix, the rows of the resulting constraint `A`
-    matrix and `target` vector will be re-sorted according to the ordering of
-    `basis.modes` which may be different from the order that was passed in.
     """
 
     _units = "(m)"
@@ -764,14 +682,24 @@ class FixBoundaryZ(_FixedObjective):
         normalize=True,
         normalize_target=True,
         modes=True,
-        surface_label=None,
         name="lcfs Z",
     ):
-        self._modes = modes
-        self._target_from_user = setdefault(bounds, target)
-        self._surface_label = surface_label
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        if isinstance(modes, bool):
+            idx = modes
+        else:
+            idx = np.concatenate(
+                [
+                    [eq.surface.Z_basis.get_idx(L=l, M=m, N=n)]
+                    for l, m, n in np.atleast_2d(modes)
+                ],
+                dtype=int,
+            )
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Zb_lmn": idx},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -779,84 +707,6 @@ class FixBoundaryZ(_FixedObjective):
             normalize_target=normalize_target,
             name=name,
         )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-        elif self._modes is True:  # all modes
-            modes = eq.surface.Z_basis.modes
-            idx = np.arange(eq.surface.Z_basis.num_modes)
-            modes_idx = idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.surface.Z_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.surface.Z_basis.modes
-            # and eq.surface.Z_lmn,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.surface.Z_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the surface, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = idx.size
-        # Zb_lmn -> Zb optimization space
-        self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.surface.Z_lmn[idx], None, modes_idx
-        )
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute boundary Z errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            boundary Z errors.
-
-        """
-        return jnp.dot(self._A, params["Zb_lmn"])
 
 
 class FixLambdaGauge(_Objective):
@@ -1020,7 +870,7 @@ class FixThetaSFL(_Objective):
         return fixed_params
 
 
-class FixAxisR(_FixedObjective):
+class FixAxisR(FixParameter):
     """Fixes magnetic axis R coefficients.
 
     Parameters
@@ -1066,10 +916,22 @@ class FixAxisR(_FixedObjective):
         modes=True,
         name="axis R",
     ):
-        self._modes = modes
-        self._target_from_user = setdefault(bounds, target)
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        if isinstance(modes, bool):
+            idx = modes
+        else:
+            idx = np.concatenate(
+                [
+                    [eq.axis.R_basis.get_idx(L=l, M=m, N=n)]
+                    for l, m, n in np.atleast_2d(modes)
+                ],
+                dtype=int,
+            )
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Ra_n": idx},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1078,87 +940,8 @@ class FixAxisR(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-        elif self._modes is True:  # all modes
-            modes = eq.axis.R_basis.modes
-            idx = np.arange(eq.axis.R_basis.num_modes)
-            modes_idx = idx
-        else:  # specified modes
-            modes = np.atleast_1d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.axis.R_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.axis.R_basis.modes and eq.axis.R_n,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.axis.R_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the axis, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = idx.size
-        # Ra_lmn -> Ra optimization space
-        self._A = np.eye(eq.axis.R_basis.num_modes)[idx, :]
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.axis.R_n[idx], None, modes_idx
-        )
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute axis R errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Axis R errors.
-
-        """
-        f = jnp.dot(self._A, params["Ra_n"])
-        return f
-
-
-class FixAxisZ(_FixedObjective):
+class FixAxisZ(FixParameter):
     """Fixes magnetic axis Z coefficients.
 
     Parameters
@@ -1204,10 +987,22 @@ class FixAxisZ(_FixedObjective):
         modes=True,
         name="axis Z",
     ):
-        self._modes = modes
-        self._target_from_user = setdefault(bounds, target)
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        if isinstance(modes, bool):
+            idx = modes
+        else:
+            idx = np.concatenate(
+                [
+                    [eq.axis.Z_basis.get_idx(L=l, M=m, N=n)]
+                    for l, m, n in np.atleast_2d(modes)
+                ],
+                dtype=int,
+            )
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Za_n": idx},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1216,87 +1011,8 @@ class FixAxisZ(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-        elif self._modes is True:  # all modes
-            modes = eq.axis.Z_basis.modes
-            idx = np.arange(eq.axis.Z_basis.num_modes)
-            modes_idx = idx
-        else:  # specified modes
-            modes = np.atleast_1d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.axis.Z_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.axis.Z_basis.modes and eq.axis.Z_n,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.axis.Z_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the axis, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = idx.size
-        # Za_lmn -> Za optimization space
-        self._A = np.eye(eq.axis.Z_basis.num_modes)[idx, :]
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.axis.Z_n[idx], None, modes_idx
-        )
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute axis Z errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Axis Z errors.
-
-        """
-        f = jnp.dot(self._A, params["Za_n"])
-        return f
-
-
-class FixModeR(_FixedObjective):
+class FixModeR(FixParameter):
     """Fixes Fourier-Zernike R coefficients.
 
     Parameters
@@ -1322,8 +1038,7 @@ class FixModeR(_FixedObjective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
-        If True uses all of the Equilibrium's modes.
-        Must be either True or specified as an array
+        If True/False uses all/none of the basis modes.
     name : str, optional
         Name of the objective function.
 
@@ -1341,16 +1056,24 @@ class FixModeR(_FixedObjective):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="Fix Mode R",
+        name="fix mode R",
     ):
-        self._modes = modes
-        if modes is None or modes is False:
-            raise ValueError(
-                f"modes kwarg must be specified or True with FixModeR got {modes}"
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        if isinstance(modes, bool):
+            idx = modes
+        else:
+            idx = np.concatenate(
+                [
+                    [eq.R_basis.get_idx(L=l, M=m, N=n)]
+                    for l, m, n in np.atleast_2d(modes)
+                ],
+                dtype=int,
             )
-        self._target_from_user = setdefault(bounds, target)
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"R_lmn": idx},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1359,72 +1082,8 @@ class FixModeR(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._modes is True:  # all modes
-            modes = eq.R_basis.modes
-            self._idx = np.arange(eq.R_basis.num_modes)
-            modes_idx = self._idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, self._idx, modes_idx = np.intersect1d(
-                eq.R_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            if self._idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the basis, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = modes_idx.size
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.R_lmn[self._idx], None, modes_idx
-        )
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute Fixed mode R errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed mode R errors.
-
-        """
-        fixed_params = params["R_lmn"][self._idx]
-        return fixed_params
-
-
-class FixModeZ(_FixedObjective):
+class FixModeZ(FixParameter):
     """Fixes Fourier-Zernike Z coefficients.
 
     Parameters
@@ -1450,8 +1109,7 @@ class FixModeZ(_FixedObjective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
-        If True uses all of the Equilibrium's modes.
-        Must be either True or specified as an array
+        If True/False uses all/none of the basis modes.
     name : str, optional
         Name of the objective function.
 
@@ -1469,16 +1127,24 @@ class FixModeZ(_FixedObjective):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="Fix Mode Z",
+        name="fix mode Z",
     ):
-        self._modes = modes
-        if modes is None or modes is False:
-            raise ValueError(
-                f"modes kwarg must be specified or True with FixModeZ got {modes}"
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        if isinstance(modes, bool):
+            idx = modes
+        else:
+            idx = np.concatenate(
+                [
+                    [eq.Z_basis.get_idx(L=l, M=m, N=n)]
+                    for l, m, n in np.atleast_2d(modes)
+                ],
+                dtype=int,
             )
-        self._target_from_user = setdefault(bounds, target)
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Z_lmn": idx},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1487,72 +1153,8 @@ class FixModeZ(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._modes is True:  # all modes
-            modes = eq.Z_basis.modes
-            self._idx = np.arange(eq.Z_basis.num_modes)
-            modes_idx = self._idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, self._idx, modes_idx = np.intersect1d(
-                eq.Z_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            if self._idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the basis, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = modes_idx.size
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.Z_lmn[self._idx], None, modes_idx
-        )
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute Fixed mode Z errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed mode Z errors.
-
-        """
-        fixed_params = params["Z_lmn"][self._idx]
-        return fixed_params
-
-
-class FixModeLambda(_FixedObjective):
+class FixModeLambda(FixParameter):
     """Fixes Fourier-Zernike lambda coefficients.
 
     Parameters
@@ -1579,8 +1181,7 @@ class FixModeLambda(_FixedObjective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
-        If True uses all of the Equilibrium's modes.
-        Must be either True or specified as an array
+        If True/False uses all/none of the basis modes.
     name : str
         Name of the objective function.
 
@@ -1598,17 +1199,24 @@ class FixModeLambda(_FixedObjective):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="Fix Mode lambda",
+        name="fix mode lambda",
     ):
-        self._modes = modes
-        if modes is None or modes is False:
-            raise ValueError(
-                "modes kwarg must be specified"
-                + f" or True with FixModeLambda got {modes}"
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        if isinstance(modes, bool):
+            idx = modes
+        else:
+            idx = np.concatenate(
+                [
+                    [eq.L_basis.get_idx(L=l, M=m, N=n)]
+                    for l, m, n in np.atleast_2d(modes)
+                ],
+                dtype=int,
             )
-        self._target_from_user = target
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"L_lmn": idx},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1616,70 +1224,6 @@ class FixModeLambda(_FixedObjective):
             normalize=normalize,
             normalize_target=normalize_target,
         )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._modes is True:  # all modes
-            modes = eq.L_basis.modes
-            self._idx = np.arange(eq.L_basis.num_modes)
-            modes_idx = self._idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, self._idx, modes_idx = np.intersect1d(
-                eq.L_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            if self._idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the basis, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = modes_idx.size
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.L_lmn[self._idx], None, modes_idx
-        )
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute Fixed mode lambda errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed mode lambda errors.
-
-        """
-        fixed_params = params["L_lmn"][self._idx]
-        return fixed_params
 
 
 class FixSumModesR(_FixedObjective):
@@ -3164,6 +2708,9 @@ class FixPsi(FixParameter):
         normalize_target=True,
         name="fixed-Psi",
     ):
+        if normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["Psi"]
         super().__init__(
             thing=eq,
             params={"Psi": True},
@@ -3174,9 +2721,6 @@ class FixPsi(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
-        if self._normalize:
-            scales = compute_scaling_factors(self.things[0])
-            self._normalization = scales["Psi"]
 
 
 class FixCurveShift(FixParameter):

@@ -174,7 +174,7 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["ripple", "psi_r", "S(r)", "V_r(r)", "R"],
+    data=["ripple", "psi_r", "S(r)", "V_r(r)", "R0"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
@@ -183,7 +183,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     # https://doi.org/10.1063/1.873749.
     data["effective ripple"] = (
         jnp.pi
-        * data["R"] ** 2
+        * data["R0"] ** 2  # average major radius
         / (8 * 2**0.5)
         * (data["V_r(r)"] / data["psi_r"])
         / data["S(r)"] ** 2

@@ -84,10 +84,14 @@ def test_effective_ripple():
         eq,
         grid_desc,
         ["B^zeta", "|B|_z|r,a", "|B|", "|grad(psi)|", "cvdrift0"],
-        ["max_tz |B|"],
+        ["max_tz |B|", "R0"],
     )
     data = eq.compute(
-        "ripple", grid=grid_desc, data=data, override_grid=False, grid_fl=grid_fl
+        "ripple",
+        grid=grid_desc,
+        data=data,
+        override_grid=False,
+        grid_fl=grid_fl,
     )
     assert np.isfinite(data["ripple"]).all()
     rho = grid_desc.compress(grid_desc.nodes[:, 0])
@@ -96,6 +100,13 @@ def test_effective_ripple():
     ax.plot(rho, ripple, label="ripple")
     plt.show()
     plt.close()
+    # Workaround until eq.compute() is fixed.
+    data_R0 = eq.compute("R0")
+    for key in data_R0:
+        if key not in data:
+            # Need to add R0's dependencies which are surface functions of zeta
+            # aren't attempted to be recomputed on grid_desc.
+            data[key] = data_R0[key]
     data = eq.compute("effective ripple", grid=grid_desc, data=data)
     assert np.isfinite(data["effective ripple"]).all()
     eff_ripple = grid_desc.compress(data["effective ripple"])

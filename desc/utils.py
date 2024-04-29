@@ -610,12 +610,12 @@ def is_any_instance(things, cls):
     return any([isinstance(t, cls) for t in things])
 
 
-def broadcast_tree(tree_in, tree_out):
+def broadcast_tree(tree_in, tree_out, dtype=int):
     """Broadcast tree_in to the same pytree structure as tree_out.
 
-    Both trees must be nested lists of dicts with string keys and in array values.
-    Or the values can be bools, where False broadcasts to an empty int array and True
-    broadcasts to the corresponding int array from tree_out.
+    Both trees must be nested lists of dicts with string keys and array values.
+    Or the values can be bools, where False broadcasts to an empty array and True
+    broadcasts to the corresponding array from tree_out.
 
     Parameters
     ----------
@@ -623,6 +623,8 @@ def broadcast_tree(tree_in, tree_out):
         Tree to broadcast.
     tree_out : pytree
         Tree with structure to broadcast to.
+    dtype : optional
+        Data type of array values. Default = int.
 
     Returns
     -------
@@ -640,13 +642,13 @@ def broadcast_tree(tree_in, tree_out):
                 "dict keys of tree_in must be a subset of those in tree_out",
             )
             if isinstance(value, bool) and value:
-                tree_new[key] = np.atleast_1d(tree_out[key]).astype(dtype=int)
+                tree_new[key] = np.atleast_1d(tree_out[key]).astype(dtype=dtype)
             if isinstance(value, bool) and not value:
-                tree_new[key] = np.array([], dtype=int)
-            value = np.atleast_1d(value).astype(dtype=int)
+                tree_new[key] = np.array([], dtype=dtype)
+            value = np.atleast_1d(value).astype(dtype=dtype)
         for key, value in tree_out.items():
             if key not in tree_new.keys():
-                tree_new[key] = np.array([], dtype=int)
+                tree_new[key] = np.array([], dtype=dtype)
             errorif(
                 not np.all(np.isin(tree_new[key], value)),
                 ValueError,
@@ -656,7 +658,7 @@ def broadcast_tree(tree_in, tree_out):
     # tree_out is deeper than tree_in
     elif isinstance(tree_in, dict) and isinstance(tree_out, list):
         return [broadcast_tree(tree_in.copy(), branch) for branch in tree_out]
-    # both trees at branch layers
+    # both trees at branch layer
     elif isinstance(tree_in, list) and isinstance(tree_out, list):
         errorif(
             len(tree_in) != len(tree_out),

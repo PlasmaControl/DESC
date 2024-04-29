@@ -883,7 +883,13 @@ class Equilibrium(IOAble, Optimizable):
                 params=params,
                 transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
                 profiles=get_profiles(dep0d, obj=self, grid=grid0d),
-                data=None,
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data={
+                    key: data[key]
+                    for key in data
+                    if data_index[p][key]["coordinates"] == ""
+                },
                 **kwargs,
             )
             # these should all be 0d quantities so don't need to compress/expand
@@ -899,14 +905,22 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym,
             )
             # TODO: Pass in data0d as a seed once there are 1d quantities that
-            # depend on 0d quantities in data_index.
+            #  depend on 0d quantities in data_index.
             data1dr = compute_fun(
                 self,
                 dep1dr,
                 params=params,
                 transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
                 profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
-                data=None,
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data={
+                    key: grid1dr.copy_data_from_other(
+                        data[key], grid, surface_label="rho"
+                    )
+                    for key in data
+                    if data_index[p][key]["coordinates"] == "r"
+                },
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid
@@ -915,6 +929,7 @@ class Equilibrium(IOAble, Optimizable):
                 for key, val in data1dr.items()
                 if key in dep1dr
             }
+
             data.update(data1dr)
 
         if calc1dz and override_grid:
@@ -933,7 +948,15 @@ class Equilibrium(IOAble, Optimizable):
                 params=params,
                 transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
                 profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
-                data=None,
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data={
+                    key: grid1dz.copy_data_from_other(
+                        data[key], grid, surface_label="zeta"
+                    )
+                    for key in data
+                    if data_index[p][key]["coordinates"] == "z"
+                },
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid

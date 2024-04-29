@@ -18,14 +18,15 @@ dependencies:
     - interpax >= 0.3.1
     - jax[cpu] >= 0.3.2, < 0.5.0
     - nvgpu
+    - orthax
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
+    - quadax >= 0.2.1
     # building the docs
     - sphinx-github-style >= 1.0, < 2.0
     # testing and benchmarking
     - qsc
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
-    - quadax >= 0.2.1
 
   # building the docs
   - nbsphinx == 0.8.12

@@ -17,6 +17,7 @@ dependencies:
     # If two pip lists are given, all but the last list is skipped.
     - jax[cpu] >= 0.3.2, < 0.5.0
     - nvgpu
+    - orthax
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
     - quadax >= 0.2.1

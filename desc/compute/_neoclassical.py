@@ -9,8 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import orthax
 import quadax
-from orthax import legendre
 
 from desc.backend import jnp, trapezoid
 
@@ -62,7 +62,7 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
         Quadrature weights.
 
     """
-    x, w = legendre.leggauss(resolution)
+    x, w = orthax.legendre.leggauss(resolution)
     w = w * grad_affine_bijection_reverse(a_min, a_max)
     alpha = affine_bijection_reverse(x, a_min, a_max)
     return alpha, w

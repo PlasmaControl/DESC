@@ -616,8 +616,8 @@ class FixBoundaryR(FixParameter):
             indices = modes
         else:
             indices = np.array([], dtype=int)
-            for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(*mode, False))
         super().__init__(
             thing=eq,
             params={"Rb_lmn": indices},
@@ -697,8 +697,8 @@ class FixBoundaryZ(FixParameter):
             indices = modes
         else:
             indices = np.array([], dtype=int)
-            for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(*mode, False))
         super().__init__(
             thing=eq,
             params={"Zb_lmn": indices},
@@ -802,7 +802,6 @@ class FixLambdaGauge(_Objective):
             self._A = A
 
         self._dim_f = self._A.shape[0]
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -919,8 +918,8 @@ class FixAxisR(FixParameter):
             indices = modes
         else:
             indices = np.array([], dtype=int)
-            for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.axis.R_basis.get_idx(*mode, False))
         super().__init__(
             thing=eq,
             params={"Ra_n": indices},
@@ -1000,8 +999,8 @@ class FixAxisZ(FixParameter):
             indices = modes
         else:
             indices = np.array([], dtype=int)
-            for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.axis.Z_basis.get_idx(*mode, False))
         super().__init__(
             thing=eq,
             params={"Za_n": indices},
@@ -1081,8 +1080,8 @@ class FixModeR(FixParameter):
             indices = modes
         else:
             indices = np.array([], dtype=int)
-            for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.R_basis.get_idx(*mode, False))
         super().__init__(
             thing=eq,
             params={"R_lmn": indices},
@@ -1162,8 +1161,8 @@ class FixModeZ(FixParameter):
             indices = modes
         else:
             indices = np.array([], dtype=int)
-            for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.Z_basis.get_idx(*mode, False))
         super().__init__(
             thing=eq,
             params={"Z_lmn": indices},
@@ -1244,8 +1243,8 @@ class FixModeLambda(FixParameter):
             indices = modes
         else:
             indices = np.array([], dtype=int)
-            for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.L_basis.get_idx(*mode, False))
         super().__init__(
             thing=eq,
             params={"L_lmn": indices},

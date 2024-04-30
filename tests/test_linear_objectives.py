@@ -800,39 +800,21 @@ def test_FixSumModes_passed_target_too_long():
 
 
 @pytest.mark.unit
-def test_FixMode_False_or_None_modes():
-    """Test Fixing Modes without specifying modes or All modes."""
-    eq = Equilibrium(L=3, M=4)
-    with pytest.raises(ValueError):
-        FixModeR(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeR(eq, modes=None, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeZ(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeZ(eq, modes=None, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeLambda(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeLambda(eq, modes=None, target=np.array([[0, 1]]))
-
-
-@pytest.mark.unit
 def test_FixSumModes_False_or_None_modes():
     """Test Fixing Sum Modes without specifying modes or All modes."""
     eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixSumModesZ(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesZ(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=None)
     with pytest.raises(ValueError):
-        FixSumModesR(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesR(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=None)
     with pytest.raises(ValueError):
-        FixSumModesLambda(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesLambda(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesLambda(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesLambda(eq, modes=None)
 
 
 def _is_any_instance(things, cls):

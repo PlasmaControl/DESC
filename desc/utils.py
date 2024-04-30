@@ -639,7 +639,8 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
             errorif(
                 key not in tree_out.keys(),
                 ValueError,
-                "dict keys of tree_in must be a subset of those in tree_out",
+                f"dict key '{key}' of tree_in must be a subset of those in tree_out: "
+                + f"{list(tree_out.keys())}",
             )
             if isinstance(value, bool):
                 if value:
@@ -654,7 +655,8 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
             errorif(
                 not np.all(np.isin(tree_new[key], value)),
                 ValueError,
-                "dict values of tree_in must be a subset of those in tree_out",
+                f"dict value {tree_new[key]} of tree_in must be a subset "
+                + f"of those in tree_out: {value}",
             )
         return tree_new
     # tree_out is deeper than tree_in

@@ -105,7 +105,14 @@ def map_coordinates(  # noqa: C901
     coords = periodic(coords)
 
     params = setdefault(params, eq.params_dict)
-
+    data_seed = {}
+    # kind of a hack bc iota_num/den still get computed even if not needed to compute
+    # iota. They need surface averages which don't work on arbitrary grids, so we just
+    # create some dummy values here and pass those in.
+    data_seed["iota_num"] = jnp.full(len(coords), jnp.nan)
+    data_seed["iota_den"] = jnp.full(len(coords), jnp.nan)
+    data_seed["iota_num_r"] = jnp.full(len(coords), jnp.nan)
+    data_seed["iota_den_r"] = jnp.full(len(coords), jnp.nan)
     profiles = get_profiles(inbasis + basis_derivs, eq, None)
     # do surface average to get iota once
     if "iota" in profiles and profiles["iota"] is None:
@@ -113,11 +120,9 @@ def map_coordinates(  # noqa: C901
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
-        # need some dummy spacing values bc iota_num/iota_den still computed using FSA
-        # even if iota profile is given, but we don't care about those values.
-        grid = Grid(y, spacing=jnp.ones_like(y), sort=False, jitable=True)
+        grid = Grid(y, sort=False, jitable=True)
         transforms = get_transforms(basis, eq, grid, jitable=True)
-        data = compute_fun(eq, basis, params, transforms, profiles)
+        data = compute_fun(eq, basis, params, transforms, profiles, data_seed.copy())
         x = jnp.array([data[k] for k in basis]).T
         return x
 

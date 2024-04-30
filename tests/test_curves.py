@@ -248,6 +248,70 @@ class TestRZCurve:
         np.testing.assert_allclose(curve3.NFP, curve4.NFP)
         np.testing.assert_allclose(curve3.sym, curve4.sym)
 
+    def test_to_FourierRZCurve(self):
+        """Test conversion to FourierRZCurve."""
+        xyz = FourierXYZCurve(modes=[-1, 1], X_n=[0, 10], Y_n=[10, 0], Z_n=[0, 0])
+        grid = LinearGrid(N=10, endpoint=False)
+        # convert back and check now
+        rzz = xyz.to_FourierRZ(N=2, grid=grid)
+        np.testing.assert_allclose(rzz.R_n[rzz.R_basis.get_idx(0)], 10)
+        np.testing.assert_allclose(rzz.Z_n, 0)
+
+        np.testing.assert_allclose(
+            rzz.compute("curvature", grid=grid)["curvature"],
+            xyz.compute("curvature", grid=grid)["curvature"],
+        )
+        np.testing.assert_allclose(
+            rzz.compute("torsion", grid=grid)["torsion"],
+            xyz.compute("torsion", grid=grid)["torsion"],
+        )
+        np.testing.assert_allclose(
+            rzz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+        )
+        np.testing.assert_allclose(
+            rzz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
+            atol=1e-12,
+        )
+
+        # same thing but pass in a closed grid
+        grid = LinearGrid(N=10, endpoint=True)
+        rzz = xyz.to_FourierRZ(N=2, grid=grid)
+        np.testing.assert_allclose(rzz.R_n[rzz.R_basis.get_idx(0)], 10)
+        np.testing.assert_allclose(rzz.Z_n, 0)
+        np.testing.assert_allclose(
+            rzz.compute("curvature", grid=grid)["curvature"],
+            xyz.compute("curvature", grid=grid)["curvature"],
+        )
+        np.testing.assert_allclose(
+            rzz.compute("torsion", grid=grid)["torsion"],
+            xyz.compute("torsion", grid=grid)["torsion"],
+        )
+        np.testing.assert_allclose(
+            rzz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+        )
+        np.testing.assert_allclose(
+            rzz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
+            atol=1e-12,
+        )
+        # pass in non-monotonic phi
+        phi_non_monotonic = np.array([0, 3, 2, 4, 1])
+        grid = Grid(
+            np.vstack(
+                [
+                    np.zeros_like(phi_non_monotonic),
+                    np.zeros_like(phi_non_monotonic),
+                    phi_non_monotonic,
+                ]
+            ).T,
+            sort=False,
+        )
+        with pytest.raises(ValueError):
+            xyz.to_FourierRZ(N=1, grid=grid)
+
 
 class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""

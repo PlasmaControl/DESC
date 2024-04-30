@@ -293,6 +293,137 @@ class TestCoilSet:
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
+    def test_symmetry_coil_properties(self):  # noqa C901 : simplify
+        """Tests that compute magnetic field is correct from symmetry."""
+        eq = get("precise_QH")
+        minor_radius = eq.compute("a")["a"]
+
+        # initialize CoilSet with symmetry
+        num_coils = 3  # number of unique coils per half field period
+        grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
+            data_center = eq.axis.compute("x", grid=grid, basis="xyz")
+            data_normal = eq.compute("e^zeta", grid=grid)
+        centers = data_center["x"]
+        normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
+        coils = []
+        for k in range(1, 2 * num_coils + 1, 2):
+            coil = FourierPlanarCoil(
+                current=1e6,
+                center=centers[k, :],
+                normal=normals[k, :],
+                r_n=[0, minor_radius + 0.5, 0],
+            )
+            coils.append(coil)
+        sym_coilset = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
+
+        # equivalent CoilSet without symmetry
+        asym_coilset = CoilSet.from_symmetry(sym_coilset, NFP=eq.NFP, sym=eq.sym)
+
+        # test that both coil sets compute the quantities
+        grid = LinearGrid(rho=[1.0], N=10, NFP=1, sym=False)
+        data_keys = [
+            "length",
+            "x",
+            "x_s",
+            "x_ss",
+            "x_sss",
+            "curvature",
+            "torsion",
+            "frenet_normal",
+            "frenet_tangent",
+            "frenet_binormal",
+            "X",
+            "Y",
+            "Z",
+            "R",
+            "phi",
+        ]
+        # test in rpz basis
+        data_sym = sym_coilset.compute(
+            data_keys, grid, basis="rpz", return_only_unique=False
+        )
+        data_asym = asym_coilset.compute(data_keys, grid, basis="rpz")
+        assert len(data_asym) == len(data_sym)
+        flip_vec = False
+        for i, (symdata, asymdata) in enumerate(zip(data_sym, data_asym)):
+            if (i) % num_coils == 0 and i > 0:
+                flip_vec = not flip_vec
+            for key in symdata.keys():
+                if key == "x" and np.all(asymdata["x"][:, 1] < 0):
+                    # check if the phi is negative and if so add 2pi, as
+                    # the .from_symmetry function can give negative phi while
+                    # in the .compute for a symmetric coilset we add to phi
+                    # for rotations, so it is positive
+                    asymdata["x"] = (
+                        asymdata["x"].at[:, 1].set(asymdata["x"][:, 1] + 2 * np.pi)
+                    )
+                elif key == "phi" and np.all(asymdata["phi"] < 0):
+                    asymdata["phi"] = asymdata["phi"] + 2 * np.pi
+                if key == "x" and np.all(symdata["x"][:, 1] < 0):
+                    # check if the phi is negative and if so add 2pi, as
+                    # the .from_symmetry function can give negative phi while
+                    # in the .compute for a symmetric coilset we add to phi
+                    # for rotations, so it is positive
+                    symdata["x"] = (
+                        symdata["x"].at[:, 1].set(symdata["x"][:, 1] + 2 * np.pi)
+                    )
+                elif key == "phi" and np.all(symdata["phi"] < 0):
+                    symdata["phi"] = symdata["phi"] + 2 * np.pi
+
+                if flip_vec and (
+                    symdata[key].ndim == 2 or key in ["X", "Y", "Z", "phi", "R"]
+                ):
+                    # this is a sym coil, shoul flip the order of symdata so it lines up
+                    np.testing.assert_allclose(
+                        np.flip(symdata[key], axis=0),
+                        asymdata[key],
+                        atol=1e-14,
+                        err_msg=f"coil {i} {key}",
+                    )
+                else:
+                    np.testing.assert_allclose(
+                        symdata[key],
+                        asymdata[key],
+                        atol=1e-14,
+                        err_msg=f"coil {i} {key}",
+                    )
+
+        # test in xyz basis
+        data_sym = sym_coilset.compute(
+            data_keys, grid, basis="xyz", return_only_unique=False
+        )
+        data_asym = asym_coilset.compute(data_keys, grid, basis="xyz")
+        assert len(data_asym) == len(data_sym)
+        flip_vec = False
+        for i, (symdata, asymdata) in enumerate(zip(data_sym, data_asym)):
+            if (i) % num_coils == 0 and i > 0:
+                flip_vec = not flip_vec
+            for key in symdata.keys():
+                if key == "phi" and np.all(asymdata["phi"] < 0):
+                    asymdata["phi"] = asymdata["phi"] + 2 * np.pi
+                if key == "phi" and np.all(symdata["phi"] < 0):
+                    symdata["phi"] = symdata["phi"] + 2 * np.pi
+
+                if flip_vec and (
+                    symdata[key].ndim == 2 or key in ["X", "Y", "Z", "phi", "R"]
+                ):
+                    # this is a sym coil, shoul flip the order of symdata so it lines up
+                    np.testing.assert_allclose(
+                        np.flip(symdata[key], axis=0),
+                        asymdata[key],
+                        atol=1e-14,
+                        err_msg=f"coil {i} {key} xyz",
+                    )
+                else:
+                    np.testing.assert_allclose(
+                        symdata[key],
+                        asymdata[key],
+                        atol=1e-14,
+                        err_msg=f"coil {i} {key} xyz",
+                    )
+
+    @pytest.mark.unit
     def test_symmetry_magnetic_field(self):
         """Tests that compute magnetic field is correct from symmetry."""
         eq = get("precise_QH")

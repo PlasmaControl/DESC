@@ -823,6 +823,27 @@ class TestObjectiveFunction:
         test(nested_coils, grid=nested_grids)
 
     @pytest.mark.unit
+    def test_coil_min_distance(self):
+        """Tests coilset minimum distance between coils."""
+        ncoils = 4
+        displacement = [0, 0, 10]
+
+        def test(coils, grid=None):
+            obj = CoilsetMinDistance(coils, grid=grid)
+            obj.build()
+            f = obj.compute(params=coils.params_dict)
+            assert f.size == len(coils)
+            np.testing.assert_allclose(f, displacement[-1] / (ncoils), rtol=1e-8)
+
+        coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
+        coils = CoilSet.linspaced_linear(coil, n=ncoils, displacement=displacement)
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=ncoils, displacement=displacement
+        )
+
+        test(coils)
+        test(mixed_coils, grid=LinearGrid(N=5))
+
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""
         t_field = ToroidalMagneticField(1, 1)
@@ -879,28 +900,6 @@ class TestObjectiveFunction:
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
-
-    @pytest.mark.unit
-    def test_coil_min_distance(self):
-        """Tests coilset minimum distance between coils."""
-        ncoils = 4
-        displacement = [0, 0, 10]
-
-        def test(coils, grid=None):
-            obj = CoilsetMinDistance(coils, grid=grid)
-            obj.build()
-            f = obj.compute(params=coils.params_dict)
-            assert f.size == len(coils)
-            np.testing.assert_allclose(f, displacement[-1] / (ncoils), rtol=1e-8)
-
-        coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
-        coils = CoilSet.linspaced_linear(coil, n=ncoils, displacement=displacement)
-        mixed_coils = MixedCoilSet.linspaced_linear(
-            coil, n=ncoils, displacement=displacement
-        )
-
-        test(coils)
-        test(mixed_coils, grid=LinearGrid(N=5))
 
     @pytest.mark.unit
     def test_toroidal_flux(self):
@@ -1745,6 +1744,7 @@ class TestComputeScalarResolution:
         CoilLength,
         CoilTorsion,
         CoilCurvature,
+        CoilsetMinDistance,
         QuadraticFlux,
         ToroidalFlux,
         # need to avoid blowup near the axis
@@ -2028,7 +2028,9 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
-    @pytest.mark.parametrize("objective", [CoilLength, CoilTorsion, CoilCurvature])
+    @pytest.mark.parametrize(
+        "objective", [CoilLength, CoilTorsion, CoilCurvature, CoilsetMinDistance]
+    )
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()
@@ -2064,6 +2066,7 @@ class TestObjectiveNaNGrad:
         VacuumBoundaryError,
         CoilLength,
         CoilCurvature,
+        CoilsetMinDistance,
         CoilTorsion,
         QuadraticFlux,
         ToroidalFlux,
@@ -2203,11 +2206,13 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), str(objective)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("objective", [CoilLength, CoilTorsion, CoilCurvature])
+    @pytest.mark.parametrize(
+        "objective", [CoilLength, CoilTorsion, CoilCurvature, CoilsetMinDistance]
+    )
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()
-        coilset = CoilSet.linspaced_angular(coil)
+        coilset = CoilSet.linspaced_angular(coil, n=3)
         obj = ObjectiveFunction(objective(coilset), use_jit=False)
         obj.build(verbose=0)
         g = obj.grad(obj.x())

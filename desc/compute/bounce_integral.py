@@ -405,7 +405,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6, sort=True):
     return jnp.sort(B_extrema, axis=0) if sort else B_extrema
 
 
-def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
+def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs):
     """Compute the bounce points given spline of |B| and pitch λ.
 
     Parameters
@@ -507,11 +507,11 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True):
     # rotational transform to potentially capture the bounce point outside
     # this snapshot of the field line.
     if check:
-        _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot)
+        _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot, **kwargs)
     return bp1, bp2
 
 
-def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=True):
+def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=True, **kwargs):
     """Check that bounce points are computed correctly.
 
     Parameters
@@ -547,7 +547,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=True):
                 )
                 if plot:
                     plot_field_line_with_ripple(
-                        B, pitch[p, s], bp1_p, bp2_p, name=f"{p},{s}"
+                        B, pitch[p, s], bp1_p, bp2_p, name=f"{p},{s}", **kwargs
                     )
                 print("bp1:", bp1_p)
                 print("bp2:", bp2_p)
@@ -561,7 +561,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=True):
                 assert not err_3, msg_3
         if plot:
             plot_field_line_with_ripple(
-                B, pitch[:, s], bp1[:, s], bp2[:, s], name=str(s)
+                B, pitch[:, s], bp1[:, s], bp2[:, s], name=str(s), **kwargs
             )
 
 
@@ -575,6 +575,7 @@ def plot_field_line_with_ripple(
     num=500,
     show=True,
     name=None,
+    plot_pitch=True,
 ):
     """Plot the field line given spline of |B| and bounce points etc.
 
@@ -598,6 +599,8 @@ def plot_field_line_with_ripple(
         Whether to show the plot.
     name : str
         String to prepend to plot title.
+    plot_pitch: bool
+        Whether to plot the pitch lines.
 
     Returns
     -------
@@ -626,9 +629,14 @@ def plot_field_line_with_ripple(
 
     if pitch is not None:
         b = jnp.atleast_1d(1 / pitch)
-        for val in jnp.unique(b):
-            add(ax.axhline(val, color="tab:purple", alpha=0.75, label=r"$1 / \lambda$"))
-        bp1, bp2 = map(jnp.atleast_2d, (bp1, bp2))
+        if plot_pitch:
+            for val in b:
+                add(
+                    ax.axhline(
+                        val, color="tab:purple", alpha=0.75, label=r"$1 / \lambda$"
+                    )
+                )
+        bp1, bp2 = jnp.atleast_2d(bp1, bp2)
         for i in range(bp1.shape[0]):
             bp1_i, bp2_i = map(_filter_not_nan, (bp1[i], bp2[i]))
             add(
@@ -1259,6 +1267,7 @@ def bounce_integral(
         print(np.nansum(average, axis=-1))
 
     """
+    plot_pitch = kwargs.pop("plot_pitch", True)
 
     def group_data_by_field_line(g):
         errorif(g.ndim > 2)
@@ -1334,7 +1343,9 @@ def bounce_integral(
             lines. Last axis enumerates the bounce integrals.
 
         """
-        bp1, bp2 = bounce_points(pitch, knots, B_c, B_z_ra_c, check, plot)
+        bp1, bp2 = bounce_points(
+            pitch, knots, B_c, B_z_ra_c, check, plot, plot_pitch=plot_pitch
+        )
         result = _bounce_quadrature(
             bp1,
             bp2,

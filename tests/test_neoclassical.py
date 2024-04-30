@@ -99,9 +99,14 @@ def test_effective_ripple():
         # an adaptive quadrature would use less memory
         b_quad=trapezoid,
         b_quad_res=5,
+        # Gauss-Legendre quadrature with sin automorph ~28 nodes.
+        # But the real advantage is that Gauss-Legendre with sin
+        # allows for composite Gauss-Legendre quadrature which
+        # will be able to match 30 node quadrature with maybe ~10 nodes.
+        # So very large memory savings.
         quad=lambda: tanh_sinh_quad(30),
-        check=False,
-        plot=False,
+        # check=True,  # noqa: E800
+        # plot=True,  # noqa: E800
     )
     assert np.isfinite(data["ripple"]).all()
     rho = grid_desc.compress(grid_desc.nodes[:, 0])

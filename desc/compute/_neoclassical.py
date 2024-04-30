@@ -79,7 +79,14 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["B^zeta", "|B|_z|r,a", "|B|", "max_tz |B|", "|grad(psi)|", "cvdrift0"],
+    data=[
+        "B^zeta",
+        "|B|_z|r,a",
+        "|B|",
+        "max_tz |B|",
+        "|grad(psi)|",
+        "cvdrift0",
+    ],
     grid_fl="Grid : Field line grid.",
     alpha_weight="Array : Quadrature weight over alpha.",
     b_quad="callable : Quadrature method to integrate over dB.",
@@ -92,10 +99,6 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     plot="bool : Whether to plot some things if check is true.",
 )
 def _ripple(params, transforms, profiles, data, **kwargs):
-    # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    # Evaluation of 1/ν neoclassical transport in stellarators.
-    # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-    # https://doi.org/10.1063/1.873749
     grid_fl = kwargs.pop("grid_fl")
     num_rho = grid_fl.num_rho
     errorif(num_rho != transforms["grid"].num_rho)
@@ -133,6 +136,9 @@ def _ripple(params, transforms, profiles, data, **kwargs):
         I = bounce_integrate(_dI, [], pitch)
         return jnp.nansum(H**2 / I, axis=-1)
 
+    # could use softmax wlog
+    max_B = (1 - shift) * transforms["grid"].compress(data["max_tz |B|"])
+    max_B = max_B[:, jnp.newaxis]
     # For ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ, the contribution of ∑ⱼ Hⱼ² / Iⱼ is largest in the
     # intervals such that b ∈ [|B|(ζ*) - db, |B|(ζ*)] where ζ* is a maxima. To
     # see this, observe that Iⱼ ∼ √(1 − λ |B|), so Hⱼ² / Iⱼ ∼ Hⱼ² / √(1 − λ |B|).
@@ -141,12 +147,14 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     # the integrand near b = 1 / λ = |B|(ζ*) to capture the fat banana orbits.
     # Breakpoints where the quadrature should take more care.
     # For simple schemes this means to include a quadrature point here.
-    breaks = jnp.nan_to_num(
-        get_extrema(**spline, relative_shift=shift, sort=False)
-    ).reshape(-1, num_rho, alpha.size)
-    max_tz_B = (1 - shift) * transforms["grid"].compress(data["max_tz |B|"])
-    max_tz_B = jnp.broadcast_to(max_tz_B[:, jnp.newaxis], (num_rho, alpha.size))
-    breaks = jnp.vstack([breaks, max_tz_B[jnp.newaxis]])
+    breaks = get_extrema(**spline, relative_shift=shift, sort=False).reshape(
+        -1, num_rho, alpha.size
+    )
+    breaks = jnp.where(jnp.isnan(breaks), max_B, breaks)
+    # Need to include max_B regardless of whether there was nan.
+    breaks = jnp.vstack(
+        [breaks, jnp.broadcast_to(max_B, (num_rho, alpha.size))[jnp.newaxis]]
+    )
     breaks = jnp.sort(breaks, axis=0).reshape(breaks.shape[0], -1)
 
     try:
@@ -179,10 +187,12 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     data=["ripple", "psi_r", "S(r)", "V_r(r)", "R0"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
-    # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    # Evaluation of 1/ν neoclassical transport in stellarators.
-    # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-    # https://doi.org/10.1063/1.873749.
+    """Evaluation of 1/ν neoclassical transport in stellarators.
+
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    https://doi.org/10.1063/1.873749
+    """
     data["effective ripple"] = (
         jnp.pi
         * data["R0"] ** 2  # average major radius

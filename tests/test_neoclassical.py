@@ -4,9 +4,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from desc.backend import trapezoid
 from desc.compute import data_index, get_data_deps
-from desc.compute.bounce_integral import desc_grid_from_field_line_coords
-from desc.examples import get
+from desc.compute.bounce_integral import (
+    desc_grid_from_field_line_coords,
+    tanh_sinh_quad,
+)
+from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 
 
@@ -34,7 +38,6 @@ def _compute_field_line_data(eq, grid_desc, names_field_line, names_0d_or_1dr=No
     # TODO: https://github.com/PlasmaControl/DESC/issues/719
     if names_0d_or_1dr is None:
         names_0d_or_1dr = []
-    names_0d_or_1dr.append("iota")
     p = "desc.equilibrium.equilibrium.Equilibrium"
     # Gather dependencies of given quantities.
     deps = (
@@ -60,9 +63,7 @@ def _compute_field_line_data(eq, grid_desc, names_field_line, names_0d_or_1dr=No
         for key, val in seed_data.items()
         if key in dep1dr
     }
-    data = {}
-    data.update(data0d)
-    data.update(data1d)
+    data = data0d | data1d
     # Compute field line quantities with precomputed dependencies.
     for name in names_field_line:
         if name in data:
@@ -76,9 +77,12 @@ def _compute_field_line_data(eq, grid_desc, names_field_line, names_0d_or_1dr=No
 @pytest.mark.unit
 def test_effective_ripple():
     """Compare DESC effective ripple against neo stellopt."""
-    eq = get("HELIOTRON")
+    eq = Equilibrium.load(
+        "tests/inputs/DESC_from_NAE_O_r1_precise_QI_plunk_fixed_bdry_r0"
+        ".15_L_9_M_9_N_24_output.h5"
+    )
     grid_desc, grid_fl = desc_grid_from_field_line_coords(
-        eq, rho=np.linspace(1e-7, 1, 10)
+        eq, rho=np.linspace(0.01, 1, 20)
     )
     data = _compute_field_line_data(
         eq,
@@ -92,14 +96,21 @@ def test_effective_ripple():
         data=data,
         override_grid=False,
         grid_fl=grid_fl,
+        # an adaptive quadrature would use less memory
+        b_quad=trapezoid,
+        b_quad_res=5,
+        quad=lambda: tanh_sinh_quad(30),
+        check=False,
+        plot=False,
     )
     assert np.isfinite(data["ripple"]).all()
     rho = grid_desc.compress(grid_desc.nodes[:, 0])
     ripple = grid_desc.compress(data["ripple"])
-    fig, ax = plt.subplots()
-    ax.plot(rho, ripple, label="ripple")
-    plt.show()
-    plt.close()
+    fig, ax = plt.subplots(2)
+    ax[0].plot(rho, ripple, marker="o", label="∫ db ∑ⱼ Hⱼ² / Iⱼ")
+    ax[0].set_xlabel(r"$\rho$")
+    ax[0].set_ylabel("ripple")
+    ax[0].set_title("Ripple, defined as ∫ db ∑ⱼ Hⱼ² / Iⱼ")
     # Workaround until eq.compute() is fixed.
     data_R0 = eq.compute("R0")
     for key in data_R0:
@@ -110,7 +121,10 @@ def test_effective_ripple():
     data = eq.compute("effective ripple", grid=grid_desc, data=data)
     assert np.isfinite(data["effective ripple"]).all()
     eff_ripple = grid_desc.compress(data["effective ripple"])
-    fig, ax = plt.subplots()
-    ax.plot(rho, eff_ripple, label="Effective ripple")
+    ax[1].plot(rho, eff_ripple, marker="o", label=r"$\epsilon_{\text{effective}}$")
+    ax[1].set_xlabel(r"$\rho$")
+    ax[1].set_ylabel(r"$\epsilon_{\text{effective}}$")
+    ax[1].set_title("Effective ripple (not raised to 3/2 power)")
+    plt.tight_layout()
     plt.show()
     plt.close()

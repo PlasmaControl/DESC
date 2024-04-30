@@ -1286,7 +1286,7 @@ def bounce_integral(
     spline = {"knots": knots, "B_c": B_c, "B_z_ra_c": B_z_ra_c}
 
     if quad == tanh_sinh_quad:
-        kwargs.setdefault("resolution", 19)
+        kwargs.setdefault("resolution", 29)
     x, w = quad(**kwargs)
     # The gradient of the transformation is the weight function w(x) of the integral.
     auto, grad_auto = automorphism

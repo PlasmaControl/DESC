@@ -88,6 +88,8 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     " to avoid floating point errors.",
     quad="callable : Quadrature method to compute bounce integrals.",
     automorphism="(callable, callable) : Change of variables for bounce integral.",
+    check="bool : Flag for debugging.",
+    plot="bool : Whether to plot some things if check is true.",
 )
 def _ripple(params, transforms, profiles, data, **kwargs):
     # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
@@ -106,7 +108,7 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     alpha_weight = jnp.atleast_1d(kwargs.pop("alpha_weight", 2 * jnp.pi / alpha.size))
     knots = grid_fl.compress(grid_fl.nodes[:, 2], surface_label="zeta")
     b_quad = kwargs.pop("b_quad", trapezoid)
-    b_quad_res = kwargs.pop("b_quad_res", 19)
+    b_quad_res = kwargs.pop("b_quad_res", 5)
     shift = kwargs.pop("shift", 1e-6)
     bounce_integrate, spline = bounce_integral(
         data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, **kwargs

@@ -1030,9 +1030,9 @@ def test_freeb_vacuum():
         modes_Z=[[-1, 0]],
         NFP=5,
     )
-
     eq = Equilibrium(M=6, N=6, Psi=-0.035, surface=surf)
     eq.solve()
+
     constraints = (
         ForceBalance(eq=eq),
         FixCurrent(eq=eq),
@@ -1042,15 +1042,15 @@ def test_freeb_vacuum():
     objective = ObjectiveFunction(
         VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
     )
-    eq, out = eq.optimize(
+    eq, _ = eq.optimize(
         objective,
         constraints,
         optimizer="proximal-lsq-exact",
         verbose=3,
         options={},
     )
-    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
 
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=4e-2)  # only check rho=1
 
 
@@ -1088,9 +1088,9 @@ def test_freeb_axisym():
         modes_Z=[[-1, 0]],
         NFP=1,
     )
-
     eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
     eq.solve()
+
     constraints = (
         ForceBalance(eq=eq),
         FixIota(eq=eq),
@@ -1102,27 +1102,26 @@ def test_freeb_axisym():
     )
 
     # we know this is a pretty simple shape so we'll only use |m| <= 2
-    R_modes = (
-        eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :],
-    )
-
+    R_modes = eq.surface.R_basis.modes[
+        np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :
+    ]
     Z_modes = eq.surface.Z_basis.modes[
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > 2, :
     ]
-
     bdry_constraints = (
         FixBoundaryR(eq=eq, modes=R_modes),
         FixBoundaryZ(eq=eq, modes=Z_modes),
     )
-    eq, out = eq.optimize(
+
+    eq, _ = eq.optimize(
         objective,
         constraints + bdry_constraints,
         optimizer="proximal-lsq-exact",
         verbose=3,
         options={},
     )
-    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
 
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=2e-2)  # only check rho=1
 
 

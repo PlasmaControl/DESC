@@ -1765,7 +1765,7 @@ class FixPressure(FixParameter):
             self._normalization = scales["p"]
         super().__init__(
             thing=eq,
-            params={"p_l", indices},
+            params={"p_l": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1830,7 +1830,7 @@ class FixAnisotropy(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"a_lmn", indices},
+            params={"a_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1896,7 +1896,7 @@ class FixIota(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"i_l", indices},
+            params={"i_l": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1964,7 +1964,7 @@ class FixCurrent(FixParameter):
             self._normalization = scales["I"]
         super().__init__(
             thing=eq,
-            params={"c_l", indices},
+            params={"c_l": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2032,7 +2032,7 @@ class FixElectronTemperature(FixParameter):
             self._normalization = scales["T"]
         super().__init__(
             thing=eq,
-            params={"Te_l", indices},
+            params={"Te_l": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2102,7 +2102,7 @@ class FixElectronDensity(FixParameter):
             self._normalization = scales["n"]
         super().__init__(
             thing=eq,
-            params={"ne_l", indices},
+            params={"ne_l": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2170,7 +2170,7 @@ class FixIonTemperature(FixParameter):
             self._normalization = scales["T"]
         super().__init__(
             thing=eq,
-            params={"Ti_l", indices},
+            params={"Ti_l": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2236,7 +2236,7 @@ class FixAtomicNumber(FixParameter):
             )
         super().__init__(
             thing=eq,
-            params={"Zeff_l", indices},
+            params={"Zeff_l": indices},
             target=target,
             bounds=bounds,
             weight=weight,

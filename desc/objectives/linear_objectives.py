@@ -698,7 +698,7 @@ class FixBoundaryZ(FixParameter):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(*mode, False))
+                indices = np.append(indices, eq.surface.Z_basis.get_idx(*mode, False))
         super().__init__(
             thing=eq,
             params={"Zb_lmn": indices},

@@ -873,7 +873,6 @@ class _Objective(IOAble, ABC):
                 raise ValueError("bounds must be: (lower bound, upper bound)")
         else:  # target only gets used if bounds is None
             self._target = np.asarray(self._target)
-            print(self.target)
             if not is_broadcastable((self.dim_f,), self.target.shape) or (
                 self.dim_f == 1 and self.target.size != 1
             ):

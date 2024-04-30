@@ -904,27 +904,27 @@ def test_fix_omni_indices():
     # no indices
     constraint = FixOmniWell(field=field, indices=False)
     constraint.build()
-    assert constraint._idx.size == 0
+    assert constraint.dim_f == 0
     constraint = FixOmniMap(field=field, indices=False)
     constraint.build()
-    assert constraint._idx.size == 0
+    assert constraint.dim_f == 0
 
     # all indices
     constraint = FixOmniWell(field=field, indices=True)
     constraint.build()
-    assert constraint._idx.size == field.B_lm.size
+    assert constraint.dim_f == field.B_lm.size
     constraint = FixOmniMap(field=field, indices=True)
     constraint.build()
-    assert constraint._idx.size == field.x_lmn.size
+    assert constraint.dim_f == field.x_lmn.size
 
     # specified indices
     indices = np.arange(3, 8)
     constraint = FixOmniWell(field=field, indices=indices)
     constraint.build()
-    assert constraint._idx.size == indices.size
+    assert constraint.dim_f == indices.size
     constraint = FixOmniMap(field=field, indices=indices)
     constraint.build()
-    assert constraint._idx.size == indices.size
+    assert constraint.dim_f == indices.size
 
 
 @pytest.mark.unit

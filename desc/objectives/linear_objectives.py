@@ -618,13 +618,9 @@ class FixBoundaryR(FixParameter):
         if isinstance(modes, bool):
             indices = modes
         else:
-            indices = np.concatenate(
-                [
-                    [eq.surface.R_basis.get_idx(L=l, M=m, N=n)]
-                    for l, m, n in np.atleast_2d(modes)
-                ],
-                dtype=int,
-            )
+            indices = np.array([], dtype=int)
+            for l, m, n in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
         super().__init__(
             thing=eq,
             params={"Rb_lmn": indices},
@@ -689,13 +685,9 @@ class FixBoundaryZ(FixParameter):
         if isinstance(modes, bool):
             indices = modes
         else:
-            indices = np.concatenate(
-                [
-                    [eq.surface.Z_basis.get_idx(L=l, M=m, N=n)]
-                    for l, m, n in np.atleast_2d(modes)
-                ],
-                dtype=int,
-            )
+            indices = np.array([], dtype=int)
+            for l, m, n in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
         super().__init__(
             thing=eq,
             params={"Zb_lmn": indices},
@@ -901,13 +893,9 @@ class FixAxisR(FixParameter):
         if isinstance(modes, bool):
             indices = modes
         else:
-            indices = np.concatenate(
-                [
-                    [eq.axis.R_basis.get_idx(L=l, M=m, N=n)]
-                    for l, m, n in np.atleast_2d(modes)
-                ],
-                dtype=int,
-            )
+            indices = np.array([], dtype=int)
+            for l, m, n in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
         super().__init__(
             thing=eq,
             params={"Ra_n": indices},
@@ -972,13 +960,9 @@ class FixAxisZ(FixParameter):
         if isinstance(modes, bool):
             indices = modes
         else:
-            indices = np.concatenate(
-                [
-                    [eq.axis.Z_basis.get_idx(L=l, M=m, N=n)]
-                    for l, m, n in np.atleast_2d(modes)
-                ],
-                dtype=int,
-            )
+            indices = np.array([], dtype=int)
+            for l, m, n in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
         super().__init__(
             thing=eq,
             params={"Za_n": indices},
@@ -1043,13 +1027,9 @@ class FixModeR(FixParameter):
         if isinstance(modes, bool):
             indices = modes
         else:
-            indices = np.concatenate(
-                [
-                    [eq.R_basis.get_idx(L=l, M=m, N=n)]
-                    for l, m, n in np.atleast_2d(modes)
-                ],
-                dtype=int,
-            )
+            indices = np.array([], dtype=int)
+            for l, m, n in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
         super().__init__(
             thing=eq,
             params={"R_lmn": indices},
@@ -1114,13 +1094,9 @@ class FixModeZ(FixParameter):
         if isinstance(modes, bool):
             indices = modes
         else:
-            indices = np.concatenate(
-                [
-                    [eq.Z_basis.get_idx(L=l, M=m, N=n)]
-                    for l, m, n in np.atleast_2d(modes)
-                ],
-                dtype=int,
-            )
+            indices = np.array([], dtype=int)
+            for l, m, n in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
         super().__init__(
             thing=eq,
             params={"Z_lmn": indices},
@@ -1186,13 +1162,9 @@ class FixModeLambda(FixParameter):
         if isinstance(modes, bool):
             indices = modes
         else:
-            indices = np.concatenate(
-                [
-                    [eq.L_basis.get_idx(L=l, M=m, N=n)]
-                    for l, m, n in np.atleast_2d(modes)
-                ],
-                dtype=int,
-            )
+            indices = np.array([], dtype=int)
+            for l, m, n in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
         super().__init__(
             thing=eq,
             params={"L_lmn": indices},

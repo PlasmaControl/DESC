@@ -634,18 +634,20 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
     """
     # both trees at leaf layer
     if isinstance(tree_in, dict) and isinstance(tree_out, dict):
-        tree_new = tree_in.copy()
+        tree_new = {}
         for key, value in tree_in.items():
             errorif(
                 key not in tree_out.keys(),
                 ValueError,
                 "dict keys of tree_in must be a subset of those in tree_out",
             )
-            if isinstance(value, bool) and value:
-                tree_new[key] = np.atleast_1d(tree_out[key]).astype(dtype=dtype)
-            if isinstance(value, bool) and not value:
-                tree_new[key] = np.array([], dtype=dtype)
-            value = np.atleast_1d(value).astype(dtype=dtype)
+            if isinstance(value, bool):
+                if value:
+                    tree_new[key] = np.atleast_1d(tree_out[key]).astype(dtype=dtype)
+                else:
+                    tree_new[key] = np.array([], dtype=dtype)
+            else:
+                tree_new[key] = np.atleast_1d(value).astype(dtype=dtype)
         for key, value in tree_out.items():
             if key not in tree_new.keys():
                 tree_new[key] = np.array([], dtype=dtype)

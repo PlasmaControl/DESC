@@ -612,15 +612,12 @@ class FixBoundaryR(FixParameter):
         modes=True,
         name="lcfs R",
     ):
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
         if isinstance(modes, bool):
             indices = modes
         else:
             indices = np.array([], dtype=int)
             for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
+                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
         super().__init__(
             thing=eq,
             params={"Rb_lmn": indices},
@@ -631,6 +628,23 @@ class FixBoundaryR(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixBoundaryZ(FixParameter):
@@ -679,15 +693,12 @@ class FixBoundaryZ(FixParameter):
         modes=True,
         name="lcfs Z",
     ):
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
         if isinstance(modes, bool):
             indices = modes
         else:
             indices = np.array([], dtype=int)
             for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
+                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
         super().__init__(
             thing=eq,
             params={"Zb_lmn": indices},
@@ -698,6 +709,23 @@ class FixBoundaryZ(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixLambdaGauge(_Objective):
@@ -887,15 +915,12 @@ class FixAxisR(FixParameter):
         modes=True,
         name="axis R",
     ):
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
         if isinstance(modes, bool):
             indices = modes
         else:
             indices = np.array([], dtype=int)
             for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
+                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
         super().__init__(
             thing=eq,
             params={"Ra_n": indices},
@@ -906,6 +931,23 @@ class FixAxisR(FixParameter):
             normalize=normalize,
             normalize_target=normalize_target,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixAxisZ(FixParameter):
@@ -954,15 +996,12 @@ class FixAxisZ(FixParameter):
         modes=True,
         name="axis Z",
     ):
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
         if isinstance(modes, bool):
             indices = modes
         else:
             indices = np.array([], dtype=int)
             for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
+                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
         super().__init__(
             thing=eq,
             params={"Za_n": indices},
@@ -973,6 +1012,23 @@ class FixAxisZ(FixParameter):
             normalize=normalize,
             normalize_target=normalize_target,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixModeR(FixParameter):
@@ -1021,15 +1077,12 @@ class FixModeR(FixParameter):
         modes=True,
         name="fix mode R",
     ):
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
         if isinstance(modes, bool):
             indices = modes
         else:
             indices = np.array([], dtype=int)
             for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
+                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
         super().__init__(
             thing=eq,
             params={"R_lmn": indices},
@@ -1040,6 +1093,23 @@ class FixModeR(FixParameter):
             normalize=normalize,
             normalize_target=normalize_target,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixModeZ(FixParameter):
@@ -1088,15 +1158,12 @@ class FixModeZ(FixParameter):
         modes=True,
         name="fix mode Z",
     ):
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
         if isinstance(modes, bool):
             indices = modes
         else:
             indices = np.array([], dtype=int)
             for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
+                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
         super().__init__(
             thing=eq,
             params={"Z_lmn": indices},
@@ -1107,6 +1174,23 @@ class FixModeZ(FixParameter):
             normalize=normalize,
             normalize_target=normalize_target,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixModeLambda(FixParameter):
@@ -1143,7 +1227,7 @@ class FixModeLambda(FixParameter):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed-lambda modes error: {:10.3e} "
+    _print_value_fmt = "Fixed lambda modes error: {:10.3e} "
 
     def __init__(
         self,
@@ -1156,15 +1240,12 @@ class FixModeLambda(FixParameter):
         modes=True,
         name="fix mode lambda",
     ):
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
         if isinstance(modes, bool):
             indices = modes
         else:
             indices = np.array([], dtype=int)
             for l, m, n in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(L=l, M=m, N=n))
+                indices = np.append(indices, eq.surface.R_basis.get_idx(l, m, n, False))
         super().__init__(
             thing=eq,
             params={"L_lmn": indices},
@@ -1727,14 +1808,6 @@ class FixPressure(FixParameter):
         indices=True,
         name="fixed pressure",
     ):
-        if eq.pressure is None:
-            raise RuntimeError(
-                "Attempting to fix pressure on an Equilibrium with no "
-                + "pressure profile assigned."
-            )
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["p"]
         super().__init__(
             thing=eq,
             params={"p_l": indices},
@@ -1745,6 +1818,28 @@ class FixPressure(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.pressure is None:
+            raise RuntimeError(
+                "Attempting to fix pressure on an Equilibrium with no "
+                + "pressure profile assigned."
+            )
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["p"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixAnisotropy(FixParameter):
@@ -1795,11 +1890,6 @@ class FixAnisotropy(FixParameter):
         indices=True,
         name="fixed anisotropy",
     ):
-        if eq.anisotropy is None:
-            raise RuntimeError(
-                "Attempting to fix anisotropy on an Equilibrium with no "
-                + "anisotropy profile assigned."
-            )
         super().__init__(
             thing=eq,
             params={"a_lmn": indices},
@@ -1810,6 +1900,25 @@ class FixAnisotropy(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.anisotropy is None:
+            raise RuntimeError(
+                "Attempting to fix anisotropy on an Equilibrium with no "
+                + "anisotropy profile assigned."
+            )
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixIota(FixParameter):
@@ -1861,11 +1970,6 @@ class FixIota(FixParameter):
         indices=True,
         name="fixed iota",
     ):
-        if eq.iota is None:
-            raise RuntimeError(
-                "Attempting to fix iota on an Equilibrium with no "
-                + "iota profile assigned."
-            )
         super().__init__(
             thing=eq,
             params={"i_l": indices},
@@ -1876,6 +1980,25 @@ class FixIota(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.iota is None:
+            raise RuntimeError(
+                "Attempting to fix iota on an Equilibrium with no "
+                + "iota profile assigned."
+            )
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixCurrent(FixParameter):
@@ -1926,14 +2049,6 @@ class FixCurrent(FixParameter):
         indices=True,
         name="fixed current",
     ):
-        if eq.current is None:
-            raise RuntimeError(
-                "Attempting to fix current on an Equilibrium with no "
-                + "current profile assigned."
-            )
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["I"]
         super().__init__(
             thing=eq,
             params={"c_l": indices},
@@ -1944,6 +2059,28 @@ class FixCurrent(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.current is None:
+            raise RuntimeError(
+                "Attempting to fix current on an Equilibrium with no "
+                + "current profile assigned."
+            )
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["I"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixElectronTemperature(FixParameter):
@@ -1994,14 +2131,6 @@ class FixElectronTemperature(FixParameter):
         indices=True,
         name="fixed electron temperature",
     ):
-        if eq.electron_temperature is None:
-            raise RuntimeError(
-                "Attempting to fix electron temperature on an Equilibrium with no "
-                + "electron temperature profile assigned."
-            )
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["T"]
         super().__init__(
             thing=eq,
             params={"Te_l": indices},
@@ -2012,6 +2141,28 @@ class FixElectronTemperature(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.electron_temperature is None:
+            raise RuntimeError(
+                "Attempting to fix electron temperature on an Equilibrium with no "
+                + "electron temperature profile assigned."
+            )
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["T"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixElectronDensity(FixParameter):
@@ -2064,14 +2215,6 @@ class FixElectronDensity(FixParameter):
         indices=True,
         name="fixed electron density",
     ):
-        if eq.electron_density is None:
-            raise RuntimeError(
-                "Attempting to fix electron density on an Equilibrium with no "
-                + "electron density profile assigned."
-            )
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["n"]
         super().__init__(
             thing=eq,
             params={"ne_l": indices},
@@ -2082,6 +2225,28 @@ class FixElectronDensity(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.electron_density is None:
+            raise RuntimeError(
+                "Attempting to fix electron density on an Equilibrium with no "
+                + "electron density profile assigned."
+            )
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["n"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixIonTemperature(FixParameter):
@@ -2132,14 +2297,6 @@ class FixIonTemperature(FixParameter):
         indices=True,
         name="fixed ion temperature",
     ):
-        if eq.ion_temperature is None:
-            raise RuntimeError(
-                "Attempting to fix ion temperature on an Equilibrium with no "
-                + "ion temperature profile assigned."
-            )
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["T"]
         super().__init__(
             thing=eq,
             params={"Ti_l": indices},
@@ -2150,6 +2307,28 @@ class FixIonTemperature(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.ion_temperature is None:
+            raise RuntimeError(
+                "Attempting to fix ion temperature on an Equilibrium with no "
+                + "ion temperature profile assigned."
+            )
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["T"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixAtomicNumber(FixParameter):
@@ -2201,11 +2380,6 @@ class FixAtomicNumber(FixParameter):
         indices=True,
         name="fixed atomic number",
     ):
-        if eq.atomic_number is None:
-            raise RuntimeError(
-                "Attempting to fix atomic number on an Equilibrium with no "
-                + "atomic_number profile assigned."
-            )
         super().__init__(
             thing=eq,
             params={"Zeff_l": indices},
@@ -2216,6 +2390,25 @@ class FixAtomicNumber(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.atomic_number is None:
+            raise RuntimeError(
+                "Attempting to fix atomic number on an Equilibrium with no "
+                + "atomic_number profile assigned."
+            )
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixPsi(FixParameter):
@@ -2259,9 +2452,6 @@ class FixPsi(FixParameter):
         normalize_target=True,
         name="fixed Psi",
     ):
-        if normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["Psi"]
         super().__init__(
             thing=eq,
             params={"Psi": True},
@@ -2272,6 +2462,23 @@ class FixPsi(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["Psi"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixCurveShift(FixParameter):

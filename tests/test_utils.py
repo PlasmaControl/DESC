@@ -98,7 +98,9 @@ def test_broadcast_tree():
     # tree with proper structure already does not change
     tree_in = tree_out.copy()
     tree = broadcast_tree(tree_in, tree_out)
-    assert tree == tree_in
+    assert tree_structure(tree) == tree_structure(tree_out)
+    for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_out)):
+        np.testing.assert_allclose(leaf, leaf_correct)
 
     # broadcast single leaf to full tree
     tree_in = {"a": np.arange(1)}

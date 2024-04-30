@@ -750,18 +750,18 @@ def test_FixBoundary_passed_target_no_passed_modes_error():
 def test_FixAxis_passed_target_no_passed_modes_error():
     """Test Fixing Axis with no passed-in modes."""
     eq = Equilibrium()
-    FixZ = FixAxisZ(eq=eq, modes=True, target=np.array([0, 0]))
-    with pytest.raises(ValueError):
-        FixZ.build()
-    FixZ = FixAxisZ(eq=eq, modes=False, target=np.array([0, 0]))
-    with pytest.raises(ValueError):
-        FixZ.build()
     FixR = FixAxisR(eq=eq, modes=True, target=np.array([0, 0]))
     with pytest.raises(ValueError):
         FixR.build()
     FixR = FixAxisR(eq=eq, modes=False, target=np.array([0, 0]))
     with pytest.raises(ValueError):
         FixR.build()
+    FixZ = FixAxisZ(eq=eq, modes=True, target=np.array([0, 0]))
+    with pytest.raises(ValueError):
+        FixZ.build()
+    FixZ = FixAxisZ(eq=eq, modes=False, target=np.array([0, 0]))
+    with pytest.raises(ValueError):
+        FixZ.build()
 
 
 @pytest.mark.unit

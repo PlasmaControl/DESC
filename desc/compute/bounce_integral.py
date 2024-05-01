@@ -1088,9 +1088,6 @@ def _bounce_quadrature(
 
         def loop(bp):
             bp1, bp2 = bp
-            bp1 = bp1.T
-            bp2 = bp2.T
-            assert bp1.shape == bp2.shape == (pitch.shape[0], S)
             z = affine_bijection_reverse(
                 x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis]
             )
@@ -1110,7 +1107,7 @@ def _bounce_quadrature(
                 plot,
             )
 
-        _, result = imap(loop, (bp1.T, bp2.T))
+        _, result = imap(loop, (jnp.moveaxis(bp1, -1, 0), jnp.moveaxis(bp2, -1, 0)))
         result = jnp.moveaxis(result, source=0, destination=-1)
 
     result = result * grad_affine_bijection_reverse(bp1, bp2)
@@ -1365,9 +1362,8 @@ def bounce_integral(
             Defaults to akima spline to suppress oscillation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
         batched : bool
-            Whether to perform computation in a batched manner.
-            If you can afford the memory expense, keeping this as true is more
-            efficient.
+            Whether to perform computation in a batched manner.s
+            If you can afford the memory expense, batched is more efficient.
 
         Returns
         -------

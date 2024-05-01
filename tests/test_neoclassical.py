@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from desc.backend import trapezoid
 from desc.compute import data_index, get_data_deps
 from desc.compute.bounce_integral import (
     desc_grid_from_field_line_coords,
@@ -82,13 +81,15 @@ def test_effective_ripple():
         ".15_L_9_M_9_N_24_output.h5"
     )
     grid_desc, grid_fl = desc_grid_from_field_line_coords(
-        eq, rho=np.linspace(0.01, 1, 20)
+        eq,
+        rho=np.linspace(0.01, 1, 20),
+        zeta=np.linspace(-3 * np.pi, 3 * np.pi, 50),
     )
     data = _compute_field_line_data(
         eq,
         grid_desc,
         ["B^zeta", "|B|_z|r,a", "|B|", "|grad(psi)|", "cvdrift0"],
-        ["max_tz |B|", "R0"],
+        ["max_tz |B|", "R0", "V_r(r)", "psi_r", "S(r)"],
     )
     data = eq.compute(
         "ripple",
@@ -96,8 +97,6 @@ def test_effective_ripple():
         data=data,
         override_grid=False,
         grid_fl=grid_fl,
-        # an adaptive quadrature would use less memory
-        b_quad=trapezoid,
         b_quad_res=5,
         # Gauss-Legendre quadrature with sin automorph ~28 nodes.
         # But the real advantage is that Gauss-Legendre with sin
@@ -116,14 +115,22 @@ def test_effective_ripple():
     ax[0].set_xlabel(r"$\rho$")
     ax[0].set_ylabel("ripple")
     ax[0].set_title("Ripple, defined as ∫ db ∑ⱼ Hⱼ² / Iⱼ")
-    # Workaround until eq.compute() is fixed.
+    # Workaround until eq.compute() is fixed to only compute dependencies
+    # that are needed for the requested computation. (So don't compute
+    # dependencies of things already in data).
     data_R0 = eq.compute("R0")
     for key in data_R0:
         if key not in data:
             # Need to add R0's dependencies which are surface functions of zeta
             # aren't attempted to be recomputed on grid_desc.
             data[key] = data_R0[key]
-    data = eq.compute("effective ripple", grid=grid_desc, data=data)
+    data = eq.compute(
+        "effective ripple",
+        grid=grid_desc,
+        data=data,
+        grid_fl=grid_fl,
+        override_grid=False,
+    )
     assert np.isfinite(data["effective ripple"]).all()
     eff_ripple = grid_desc.compress(data["effective ripple"])
     ax[1].plot(rho, eff_ripple, marker="o", label=r"$\epsilon_{\text{effective}}$")

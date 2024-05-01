@@ -11,10 +11,11 @@ expensive computations.
 
 import orthax
 import quadax
+from termcolor import colored
 
 from desc.backend import jnp, trapezoid
 
-from ..utils import errorif
+from ..utils import errorif, warnif
 from .bounce_integral import (
     affine_bijection_reverse,
     bounce_integral,
@@ -44,6 +45,13 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     For use with computing effective ripple, set resolution > 1 to see if a long
     field line integral can be approximated by flux surface average of field line
     integrals over finite transits.
+
+    Assuming the rotational transform is irrational, the limit where the
+    parameterization of the field line length tends to infinity, the
+    integrals in (29), (30), (31) will converge to a flux surface average.
+    In theory, we can compute the effective ripple via flux surface
+    averages. It is not tested whether such a method will converge to the
+    limit faster than extending the length of the field line chunk.
 
     Parameters
     ----------
@@ -79,20 +87,11 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=[
-        "B^zeta",
-        "|B|_z|r,a",
-        "|B|",
-        "max_tz |B|",
-        "|grad(psi)|",
-        "cvdrift0",
-    ],
+    data=["B^zeta", "|B|_z|r,a", "|B|", "max_tz |B|", "|grad(psi)|", "cvdrift0"],
     grid_fl="Grid : Field line grid.",
     alpha_weight="Array : Quadrature weight over alpha.",
     b_quad="callable : Quadrature method to integrate over dB.",
     b_quad_res="int : Resolution for quadrature over dB.",
-    shift="float : Relative amount to shift maxima down and minima up"
-    " to avoid floating point errors.",
     quad="callable : Quadrature method to compute bounce integrals.",
     automorphism="(callable, callable) : Change of variables for bounce integral.",
     check="bool : Flag for debugging.",
@@ -108,11 +107,10 @@ def _ripple(params, transforms, profiles, data, **kwargs):
         msg="Set override_grid=False.",
     )
     alpha = grid_fl.compress(grid_fl.nodes[:, 1], surface_label="theta")
-    alpha_weight = jnp.atleast_1d(kwargs.pop("alpha_weight", 2 * jnp.pi / alpha.size))
+    alpha_weight = jnp.atleast_1d(kwargs.pop("alpha_weight", 1 / alpha.size))
     knots = grid_fl.compress(grid_fl.nodes[:, 2], surface_label="zeta")
     b_quad = kwargs.pop("b_quad", trapezoid)
     b_quad_res = kwargs.pop("b_quad_res", 5)
-    shift = kwargs.pop("shift", 1e-6)
     bounce_integrate, spline = bounce_integral(
         data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, **kwargs
     )
@@ -136,9 +134,6 @@ def _ripple(params, transforms, profiles, data, **kwargs):
         I = bounce_integrate(_dI, [], pitch)
         return jnp.nansum(H**2 / I, axis=-1)
 
-    # could use softmax wlog
-    max_B = (1 - shift) * transforms["grid"].compress(data["max_tz |B|"])
-    max_B = max_B[:, jnp.newaxis]
     # For ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ, the contribution of ∑ⱼ Hⱼ² / Iⱼ is largest in the
     # intervals such that b ∈ [|B|(ζ*) - db, |B|(ζ*)] where ζ* is a maxima. To
     # see this, observe that Iⱼ ∼ √(1 − λ |B|), so Hⱼ² / Iⱼ ∼ Hⱼ² / √(1 − λ |B|).
@@ -147,11 +142,11 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     # the integrand near b = 1 / λ = |B|(ζ*) to capture the fat banana orbits.
     # Breakpoints where the quadrature should take more care.
     # For simple schemes this means to include a quadrature point here.
-    breaks = get_extrema(**spline, relative_shift=shift, sort=False).reshape(
-        -1, num_rho, alpha.size
-    )
+    breaks = get_extrema(**spline, sort=False).reshape(-1, num_rho, alpha.size)
+    # Need to remove nan and include (soft)max_B regardless of whether any nan.
+    max_B = (1 - 1e-6) * transforms["grid"].compress(data["max_tz |B|"])
+    max_B = max_B[:, jnp.newaxis]
     breaks = jnp.where(jnp.isnan(breaks), max_B, breaks)
-    # Need to include max_B regardless of whether there was nan.
     breaks = jnp.vstack(
         [breaks, jnp.broadcast_to(max_B, (num_rho, alpha.size))[jnp.newaxis]]
     )
@@ -163,6 +158,7 @@ def _ripple(params, transforms, profiles, data, **kwargs):
             b = composite_linspace(breaks, b_quad_res)
             rip = b_quad(ripple_sum(b), b, axis=0)
         else:
+            # use adaptive quadrature from quadax
             rip = b_quad(ripple_sum, breaks)
     except TypeError as e:
         raise NotImplementedError from e
@@ -184,7 +180,9 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["ripple", "psi_r", "S(r)", "V_r(r)", "R0"],
+    data=["B^zeta", "|B|", "|grad(psi)|", "ripple", "R0", "V_r(r)", "psi_r", "S(r)"],
+    fsa="bool : Whether to surface average to approximate the limit.",
+    grid_fl="Grid : Field line grid.",
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     """Evaluation of 1/ν neoclassical transport in stellarators.
@@ -193,12 +191,25 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     https://doi.org/10.1063/1.873749
     """
+    g = kwargs["grid_fl"]
+    if kwargs.get("fsa", False):
+        l = g.nodes[g.unique_zeta_idx[-1], 2] - g.nodes[g.unique_zeta_idx[0], 2]
+        V = data["V_r(r)"] / data["psi_r"] * l
+        S = data["S(r)"] * l
+    else:
+        num_alpha = g.num_theta
+        shape = (g.num_rho, num_alpha, g.num_zeta)
+        z = jnp.reshape(g.nodes[:, 2], shape)
+        v = jnp.reshape(1 / (data["B^zeta"] * data["|B|"]), shape)
+        V = jnp.mean(quadax.simpson(v, z, axis=-1), axis=1)
+        S = jnp.mean(
+            quadax.simpson(v * data["|grad(psi)|"].reshape(shape), z, axis=-1),
+            axis=1,
+        )
+        V, S = map(transforms["grid"].expand, (V, S))
+        warnif(num_alpha != 1, msg=colored("Reduced via mean over alpha.", "yellow"))
+
     data["effective ripple"] = (
-        jnp.pi
-        * data["R0"] ** 2  # average major radius
-        / (8 * 2**0.5)
-        * (data["V_r(r)"] / data["psi_r"])
-        / data["S(r)"] ** 2
-        * data["ripple"]
+        jnp.pi * data["R0"] ** 2 / (8 * 2**0.5) * V / S**2 * data["ripple"]
     ) ** (2 / 3)
     return data

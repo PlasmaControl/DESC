@@ -528,6 +528,7 @@ class TestGrid:
             "M": 1,
             "N": 0,
             "NFP": 1,
+            "NFP_umbilic_factor": 1,
             "Psi": 1.0,
             "pressure": np.array([[0, 0]]),
             "iota": np.array([[0, 0]]),

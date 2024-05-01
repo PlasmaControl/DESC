@@ -144,6 +144,7 @@ class FourierRZCurve(Curve):
         """Change the maximum toroidal resolution."""
         N = check_nonnegint(N, "N")
         NFP = check_posint(NFP, "NFP")
+        NFP_umbilic_factor = check_posint(NFP_umbilic_factor, "NFP_umbilic_factor")
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))

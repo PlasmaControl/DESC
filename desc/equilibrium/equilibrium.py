@@ -443,6 +443,7 @@ class Equilibrium(IOAble, Optimizable):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
+
         self._NFP_umbilic_factor = (
             int(self._NFP_umbilic_factor)
             if self._NFP_umbilic_factor is not None
@@ -454,6 +455,7 @@ class Equilibrium(IOAble, Optimizable):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
+        self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
         self._L_grid = int(self._L_grid)
         self._M_grid = int(self._M_grid)
         self._N_grid = int(self._N_grid)

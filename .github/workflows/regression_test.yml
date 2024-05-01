@@ -65,6 +65,7 @@ jobs:
             ./prof.db
       - name: Upload coverage
         id : codecov
+        continue-on-error: true
         uses: Wandalen/wretry.action@v1.3.0
         with:
           action: codecov/codecov-action@v3

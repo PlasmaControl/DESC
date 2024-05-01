@@ -104,7 +104,6 @@ def test_effective_ripple():
         # will be able to match 30 node quadrature with maybe ~10 nodes.
         # So very large memory savings.
         quad=lambda: tanh_sinh_quad(41),
-        batched=False,
         # check=True,  # noqa: E800
         # plot=True,  # noqa: E800
     )

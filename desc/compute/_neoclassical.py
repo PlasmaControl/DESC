@@ -94,7 +94,7 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     b_quad_res="int : Resolution for quadrature over dB.",
     quad="callable : Quadrature method to compute bounce integrals.",
     automorphism="(callable, callable) : Change of variables for bounce integral.",
-    batched="bool : Whether to perform computation in a batched manner.",
+    # TODO: remove later
     check="bool : Flag for debugging.",
     plot="bool : Whether to plot some things if check is true.",
 )
@@ -112,7 +112,6 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     knots = grid_fl.compress(grid_fl.nodes[:, 2], surface_label="zeta")
     b_quad = kwargs.pop("b_quad", trapezoid)
     b_quad_res = kwargs.pop("b_quad_res", 5)
-    batched = kwargs.pop("batched", False)
     bounce_integrate, spline = bounce_integral(
         data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, **kwargs
     )
@@ -133,9 +132,9 @@ def _ripple(params, transforms, profiles, data, **kwargs):
         """
         pitch = 1 / b
         H = bounce_integrate(
-            _dH, [data["|grad(psi)|"], data["cvdrift0"]], pitch, batched=batched
+            _dH, [data["|grad(psi)|"], data["cvdrift0"]], pitch, batched=False
         )
-        I = bounce_integrate(_dI, [], pitch, batched=batched)
+        I = bounce_integrate(_dI, [], pitch, batched=False)
         return jnp.nansum(H**2 / I, axis=-1)
 
     # For ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ, the contribution of ∑ⱼ Hⱼ² / Iⱼ is largest in the

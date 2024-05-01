@@ -83,7 +83,7 @@ def test_effective_ripple():
     grid_desc, grid_fl = desc_grid_from_field_line_coords(
         eq,
         rho=np.linspace(0.01, 1, 20),
-        zeta=np.linspace(-3 * np.pi, 3 * np.pi, 50),
+        zeta=np.linspace(-10 * np.pi, 10 * np.pi, 100),
     )
     data = _compute_field_line_data(
         eq,
@@ -103,7 +103,8 @@ def test_effective_ripple():
         # allows for composite Gauss-Legendre quadrature which
         # will be able to match 30 node quadrature with maybe ~10 nodes.
         # So very large memory savings.
-        quad=lambda: tanh_sinh_quad(30),
+        quad=lambda: tanh_sinh_quad(41),
+        batched=False,
         # check=True,  # noqa: E800
         # plot=True,  # noqa: E800
     )

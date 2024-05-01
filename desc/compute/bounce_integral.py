@@ -906,9 +906,8 @@ def _interpolatory_quadrature(
     """
     assert pitch.ndim == 2
     assert w.ndim == knots.ndim == 1
-    if Z.ndim == 3:
-        Z = jnp.expand_dims(Z, axis=2)
-    assert Z.shape == (pitch.shape[0], B.shape[0], Z.shape[2], w.size)
+    assert 3 <= Z.ndim <= 4 and Z.shape[:2] == (pitch.shape[0], B.shape[0])
+    assert Z.shape[-1] == w.size
     assert knots.size == B.shape[-1]
     assert B_sup_z.shape == B.shape == B_z_ra.shape
     # Spline the integrand so that we can evaluate it at quadrature points
@@ -920,16 +919,19 @@ def _interpolatory_quadrature(
     f = [_interp1d_vec(Z_ps, knots, f_i, method=method).reshape(shape) for f_i in f]
     B_sup_z = _interp1d_vec(Z_ps, knots, B_sup_z, method=method).reshape(shape)
     B = _interp1d_vec_with_df(Z_ps, knots, B, B_z_ra, method=method_B).reshape(shape)
-    V = integrand(*f, B=B, pitch=pitch[..., jnp.newaxis, jnp.newaxis], Z=Z)
-    # Assuming that V is a well-behaved function of some interpolation points Z,
-    # V(Z) should evaluate as NaN only if Z is NaN. This condition needs to
+    pitch = jnp.expand_dims(pitch, axis=(2, 3) if Z.ndim == 4 else 2)
+    # Assuming that the integrand is a well-behaved function of some interpolation
+    # points Z, it should evaluate as NaN only if Z is NaN. This condition needs to
     # be enforced explicitly due to floating point and interpolation error.
     # In the context of bounce integrals, the √(1 − λ |B|) terms necessitate this.
     # For interpolation error in |B| may yield λ |B| > 1 at quadrature points
     # between bounce points. Don't suppress inf as that indicates catastrophic
     # floating point error.
     inner_product = jnp.dot(
-        jnp.nan_to_num(V, posinf=jnp.inf, neginf=-jnp.inf) / B_sup_z,
+        jnp.nan_to_num(
+            integrand(*f, B=B, pitch=pitch, Z=Z), posinf=jnp.inf, neginf=-jnp.inf
+        )
+        / B_sup_z,
         w,
     )
     if check:
@@ -937,8 +939,6 @@ def _interpolatory_quadrature(
         # if plot:  # noqa: E800
         #     _plot(Z, B, name=r"$\vert B \vert$")  # noqa: E800
         #     _plot(Z, V, name="integrand")  # noqa: E800
-    if inner_product.shape[2] == 1:
-        inner_product = jnp.squeeze(inner_product, axis=2)
     return inner_product
 
 
@@ -975,8 +975,8 @@ def _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product):
     assert jnp.all(jnp.isfinite(B_sup_z) ^ is_not_quad_point), msg
     assert jnp.all(jnp.isfinite(B) ^ is_not_quad_point), msg
     assert jnp.all(jnp.isfinite(B_z_ra)), msg
-    for ff in f:
-        assert jnp.all(jnp.isfinite(ff) ^ is_not_quad_point), msg
+    for f_i in f:
+        assert jnp.all(jnp.isfinite(f_i) ^ is_not_quad_point), msg
 
     msg = "|B| has vanished, violating the hairy ball theorem."
     assert not jnp.isclose(B, 0).any(), msg

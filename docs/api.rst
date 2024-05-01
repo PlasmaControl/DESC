@@ -274,6 +274,7 @@ Profiles
     :template: class.rst
 
     desc.profiles.PowerSeriesProfile
+    desc.profiles.TwoPowerProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
     desc.profiles.ScaledProfile

@@ -10,7 +10,7 @@ from termcolor import colored
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 
-from .data_index import data_index
+from .data_index import allowed_kwargs, data_index
 
 # map from profile name to equilibrium parameter name
 profile_names = {
@@ -66,16 +66,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     for name in names:
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
-    allowed_kwargs = {
-        "basis",
-        "gamma",
-        "helicity",
-        "iota",
-        "M_booz",
-        "N_booz",
-        "method",
-    }
-    bad_kwargs = kwargs.keys() - allowed_kwargs
+    bad_kwargs = kwargs.keys() - (allowed_kwargs | {"method"})
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 
@@ -103,6 +94,9 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     return data
 
 
+# TODO: can we do the basis change here possibly? instead of repeating it everywhere?
+#  Maybe give an "inherent basis" parameter to the compute decorator
+#  so we check what the natural basis is versus what the desired is?
 def _compute(
     parameterization, names, params, transforms, profiles, data=None, **kwargs
 ):
@@ -375,7 +369,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "w":  # used for Boozer transfrom
+        elif c == "w":  # used for Boozer transform
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(

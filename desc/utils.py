@@ -603,3 +603,8 @@ def unique_list(thelist):
             unique.append(x)
         inds.append(unique.index(x))
     return unique, inds
+
+
+def is_any_instance(things, cls):
+    """Check if any of things is an instance of cls."""
+    return any([isinstance(t, cls) for t in things])

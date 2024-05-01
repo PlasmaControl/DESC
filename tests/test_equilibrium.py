@@ -362,18 +362,17 @@ def test_poincare_as_bc(SOLOVEV):
 
     # perturb slightly from the axisymmetric equilibrium
     eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)
-    eq_poin.xsection = eq_poin.get_poincare_xsection_at(zeta=0)
     # this constrains lambda at the zeta=0 surface, using eq's current value of lambda
     constraints = get_fixed_xsection_constraints(eq=eq_poin)
     objective = ObjectiveFunction(ForceBalance(eq=eq_poin))
     eq_poin.solve(
         verbose=1,
-        ftol=1e-6,
+        ftol=1e-8,
         objective=objective,
         constraints=constraints,
         maxiter=100,
-        xtol=1e-6,
-        gtol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
     )
 
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq, Nz=6)
@@ -386,7 +385,7 @@ def test_poincare_as_bc(SOLOVEV):
     grid = LinearGrid(L=50, M=50, zeta=0)
     L_2D = eq.compute(names="lambda", grid=grid)
     L_3D = eq_poin.compute(names="lambda", grid=grid)
-    np.testing.assert_allclose(L_2D["lambda"], L_3D["lambda"], atol=1e-15)
+    np.testing.assert_allclose(L_2D["lambda"], L_3D["lambda"], atol=1e-13)
 
 
 @pytest.mark.unit

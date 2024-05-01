@@ -43,9 +43,10 @@ print(f"\nUpdating files in {pwd}")
 
 for fname in glob.glob(pwd + "/*.h5"):
     foutputname = fname.split(".")[0].split("/")[-1]
-    print(f"Updating the output file {foutputname}")
-    # load old output file
-    # this will automatically update it by calling _set_up
-    eqfam = load(fname)
-    # save new output file
-    eqfam.save(fname)
+    if foutputname != os.path.join(pwd, "DSHAPE_output_saved_without_current"):
+        print(f"Updating the output file {foutputname}")
+        # load old output file
+        # this will automatically update it by calling _set_up
+        eqfam = load(fname)
+        # save new output file
+        eqfam.save(fname)

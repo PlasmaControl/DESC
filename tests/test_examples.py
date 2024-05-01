@@ -725,6 +725,7 @@ def test_omnigenity_qa():
     eq.L_lmn *= lone
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
+    eq.xsection = eq.get_poincare_xsection_at(zeta=0)
     eq.Psi *= 5  # B0 = 1 T
     eq.solve()
 

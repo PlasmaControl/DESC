@@ -25,8 +25,8 @@ from desc.basis import (
     zernike_radial_coeffs,
     zernike_radial_poly,
 )
-from desc.examples import get
 from desc.derivatives import Derivative
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.transform import Transform
 
@@ -404,6 +404,7 @@ class TestBasis:
         with pytest.raises(ValueError):
             _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
 
+
 def test_jacobi_jvp():
     """Test that custom derivative rule for jacobi polynomials works."""
     basis = ZernikePolynomial(25, 25)
@@ -421,8 +422,8 @@ def test_jacobi_jvp():
         )
         f2 = _jacobi(n, alpha, beta, jacobi_arg[:, None], i + 1)
         np.testing.assert_allclose(f1, f2)
-        
-        
+
+
 @pytest.mark.unit
 def test_get_basis_poincare():
     """Test FourierZernike to ZernikePolynomial utility function."""
@@ -450,4 +451,3 @@ def test_FourierZernike_to_FourierZernike_no_N_modes():
     L_2D = transf.transform(L_lmn_no_N)
     L_3D = eq.compute("lambda", grid=grid)["lambda"]
     np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)
-    

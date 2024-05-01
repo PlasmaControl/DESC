@@ -1342,7 +1342,7 @@ def bounce_integral(
     # Apply reverse automorphism to quadrature points.
     x = auto(x)
 
-    def bounce_integrate(integrand, f, pitch, method="akima", batched=False):
+    def bounce_integrate(integrand, f, pitch, method="akima", batched=True):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
         Parameters

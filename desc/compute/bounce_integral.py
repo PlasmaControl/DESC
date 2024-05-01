@@ -5,7 +5,7 @@ from functools import partial
 from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
 from matplotlib import pyplot as plt
 
-from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, take
+from desc.backend import complex_sqrt, flatnonzero, imap, jnp, put_along_axis, take
 from desc.compute.utils import safediv
 from desc.grid import Grid
 from desc.utils import errorif
@@ -898,6 +898,8 @@ def _interpolatory_quadrature(
     """
     assert pitch.ndim == 2
     assert w.ndim == knots.ndim == 1
+    if Z.ndim == 3:
+        Z = jnp.expand_dims(Z, axis=2)
     assert Z.shape == (pitch.shape[0], B.shape[0], Z.shape[2], w.size)
     assert knots.size == B.shape[-1]
     assert B_sup_z.shape == B.shape == B_z_ra.shape
@@ -927,6 +929,8 @@ def _interpolatory_quadrature(
         # if plot:  # noqa: E800
         #     _plot(Z, B, name=r"$\vert B \vert$")  # noqa: E800
         #     _plot(Z, V, name="integrand")  # noqa: E800
+    if inner_product.shape[2] == 1:
+        inner_product = jnp.squeeze(inner_product, axis=2)
     return inner_product
 
 
@@ -1020,6 +1024,7 @@ def _bounce_quadrature(
     knots,
     method="akima",
     method_B="cubic",
+    batched=True,
     check=False,
     plot=True,
 ):
@@ -1059,23 +1064,56 @@ def _bounce_quadrature(
         return g.reshape(-1, S, knots.size)
 
     f = map(group_data_by_field_line_and_pitch, f)
-    Z = affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
+
     # Integrate and complete the change of variable.
-    result = _interpolatory_quadrature(
-        Z,
-        w,
-        integrand,
-        f,
-        B_sup_z,
-        B,
-        B_z_ra,
-        pitch,
-        knots,
-        method,
-        method_B,
-        check,
-        plot,
-    ) * grad_affine_bijection_reverse(bp1, bp2)
+    if batched:
+        Z = affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
+        result = _interpolatory_quadrature(
+            Z,
+            w,
+            integrand,
+            f,
+            B_sup_z,
+            B,
+            B_z_ra,
+            pitch,
+            knots,
+            method,
+            method_B,
+            check,
+            plot,
+        )
+    else:
+        f = list(f)
+
+        def loop(bp):
+            bp1, bp2 = bp
+            bp1 = bp1.T
+            bp2 = bp2.T
+            assert bp1.shape == bp2.shape == (pitch.shape[0], S)
+            z = affine_bijection_reverse(
+                x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis]
+            )
+            return None, _interpolatory_quadrature(
+                z,
+                w,
+                integrand,
+                f,
+                B_sup_z,
+                B,
+                B_z_ra,
+                pitch,
+                knots,
+                method,
+                method_B,
+                check,
+                plot,
+            )
+
+        _, result = imap(loop, (bp1.T, bp2.T))
+        result = jnp.moveaxis(result, source=0, destination=-1)
+
+    result = result * grad_affine_bijection_reverse(bp1, bp2)
     assert result.shape == (pitch.shape[0], S, bp1.shape[-1])
     return result
 
@@ -1295,7 +1333,7 @@ def bounce_integral(
     # Apply reverse automorphism to quadrature points.
     x = auto(x)
 
-    def bounce_integrate(integrand, f, pitch, method="akima"):
+    def bounce_integrate(integrand, f, pitch, method="akima", batched=False):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
         Parameters
@@ -1326,6 +1364,10 @@ def bounce_integral(
             Method of interpolation for functions contained in ``f``.
             Defaults to akima spline to suppress oscillation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
+        batched : bool
+            Whether to perform computation in a batched manner.
+            If you can afford the memory expense, keeping this as true is more
+            efficient.
 
         Returns
         -------
@@ -1349,6 +1391,7 @@ def bounce_integral(
             knots,
             method,
             method_B="monotonic" if monotonic else "cubic",
+            batched=batched,
             check=check,
             plot=plot,
         )

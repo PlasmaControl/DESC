@@ -11,7 +11,7 @@ from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipkm1
 from tests.test_plotting import tol_1d
 
-from desc.backend import complex_sqrt, flatnonzero
+from desc.backend import flatnonzero, jnp
 from desc.compute import data_index
 from desc.compute.bounce_integral import (
     _affine_bijection_forward,
@@ -39,13 +39,6 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.utils import errorif, only1
-
-
-def _sqrt(x):
-    """Reproduces jnp.sqrt with np.sqrt."""
-    x = complex_sqrt(x)
-    x = np.where(np.isclose(np.imag(x), 0), np.real(x), np.nan)
-    return x
 
 
 @partial(np.vectorize, signature="(m)->()")
@@ -436,7 +429,7 @@ def test_bounce_quadrature():
     rtol = 1e-3
 
     def integrand(B, pitch, Z):
-        return 1 / np.sqrt(1 - pitch * m * B)
+        return 1 / jnp.sqrt(1 - pitch * m * B)
 
     bp1 = -np.pi / 2 * v
     bp2 = -bp1
@@ -502,10 +495,10 @@ def test_example_bounce_integral():
 
     def numerator(g_zz, B, pitch, Z):
         f = (1 - pitch * B) * g_zz
-        return safediv(f, _sqrt(1 - pitch * B))
+        return safediv(f, jnp.sqrt(1 - pitch * B))
 
     def denominator(B, pitch, Z):
-        return safediv(1, _sqrt(1 - pitch * B))
+        return safediv(1, jnp.sqrt(1 - pitch * B))
 
     pitch = 1 / get_extrema(**spline)
     num = bounce_integrate(numerator, data["g_zz"], pitch)
@@ -810,7 +803,7 @@ def test_drift():
     ) / G0
 
     def integrand(cvdrift, gbdrift, B, pitch, Z):
-        g = np.sqrt(1 - pitch * B)
+        g = jnp.sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
     drift = bounce_integrate(

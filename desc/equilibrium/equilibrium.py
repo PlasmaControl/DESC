@@ -259,7 +259,11 @@ class Equilibrium(IOAble, Optimizable):
         N_grid = check_nonnegint(N_grid, "N_grid")
 
         self._N = int(setdefault(N, self.surface.N))
-        self._M = int(setdefault(M, setdefault(self.surface.M, self.xsection.M)))
+        self._M = (
+            int(setdefault(M, self.surface.M))
+            if not (xsection is not None and surface is None)
+            else int(setdefault(M, self.xsection.M))
+        )
         self._L = int(
             setdefault(
                 L,
@@ -410,6 +414,7 @@ class Equilibrium(IOAble, Optimizable):
             else:
                 self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=False)
                 self._surface = self.get_surface_at(rho=1.0)
+                self._axis = self.get_axis()
         if check_orientation:
             ensure_positive_jacobian(self)
         if kwargs.get("check_kwargs", True):
@@ -466,13 +471,13 @@ class Equilibrium(IOAble, Optimizable):
             "Ti_l",
             "Zeff_l",
             "a_lmn",
+            "Rp_lmn",
+            "Zp_lmn",
+            "Lp_lmn",
             "Ra_n",
             "Za_n",
             "Rb_lmn",
             "Zb_lmn",
-            "Rp_lmn",
-            "Zp_lmn",
-            "Lp_lmn",
             "I",
             "G",
             "Phi_mn",

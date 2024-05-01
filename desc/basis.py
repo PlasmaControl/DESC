@@ -1798,7 +1798,7 @@ def _jacobi_jvp(x, xdot):
     # to work fine.
     return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
 
-  
+
 def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
     """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0.
 

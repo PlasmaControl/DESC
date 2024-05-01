@@ -450,7 +450,7 @@ class Surface(IOAble, Optimizable, ABC):
                     M=2 * self.M + 5,
                     N=2 * self.N + 5,
                     NFP=self.NFP,
-                    NFP_umbilic_factor=self.NFP_umbilic_factor,
+                    NFP_umbilic_factor=int(self.NFP_umbilic_factor),
                 )
             elif hasattr(self, "zeta"):  # constant zeta surface
                 grid = QuadratureGrid(
@@ -492,7 +492,7 @@ class Surface(IOAble, Optimizable, ABC):
                     M=2 * self.M + 5,
                     N=2 * self.N + 5,
                     NFP=self.NFP,
-                    NFP_umbilic_factor=self.NFP_umbilic_factor,
+                    NFP_umbilic_factor=int(self.NFP_umbilic_factor),
                 )
         elif (
             calc0d and override_grid and hasattr(self, "zeta")

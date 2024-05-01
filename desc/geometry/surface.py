@@ -1,6 +1,5 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
-import numbers
 import warnings
 
 import numpy as np
@@ -112,6 +111,7 @@ class FourierRZToroidalSurface(Surface):
         self._M = setdefault(M, max(MR, MZ))
         self._N = setdefault(N, max(NR, NZ))
         self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
 
         if sym == "auto":
             if np.all(
@@ -164,15 +164,19 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def NFP_umbilic_factor(self):
-        """Field period umbilic factor."""
+        """NFP umbilic factor."""
         return self._NFP_umbilic_factor
 
     @NFP_umbilic_factor.setter
-    def NFP_umbilic_factor(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP_umbilic_factor should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP_umbilic_factor=new)
+    def NFP_umbilic_factor(self, NFP_umbilic_factor):
+        if (
+            not (hasattr(self, "_NFP_umbilic_factor"))
+            or self._NFP_umbilic_factor is None
+        ):
+            self._NFP_umbilic_factor = int(1)
+
+        if check_posint(self._NFP_umbilic_factor) is False:
+            self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
 
     @property
     def R_basis(self):

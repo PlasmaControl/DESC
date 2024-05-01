@@ -720,11 +720,6 @@ def _get_grid_surface(grid, surface_label):
             )
         )
 
-    try:
-        has_endpoint_dupe = has_endpoint_dupe[0]
-    except TypeError:
-        has_endpoint_dupe = has_endpoint_dupe
-
     return unique_size, inverse_idx, spacing, has_endpoint_dupe
 
 

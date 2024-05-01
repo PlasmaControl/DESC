@@ -8,7 +8,7 @@ from termcolor import colored
 
 from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
 from desc.compute import compute as compute_fun
-from desc.compute import data_index, get_profiles, get_transforms
+from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import setdefault
@@ -105,15 +105,11 @@ def map_coordinates(  # noqa: C901
     coords = periodic(coords)
 
     params = setdefault(params, eq.params_dict)
-    data_seed = {}
-    # kind of a hack bc iota_num/den still get computed even if not needed to compute
-    # iota. They need surface averages which don't work on arbitrary grids, so we just
-    # create some dummy values here and pass those in.
-    data_seed["iota_num"] = jnp.full(len(coords), jnp.nan)
-    data_seed["iota_den"] = jnp.full(len(coords), jnp.nan)
-    data_seed["iota_num_r"] = jnp.full(len(coords), jnp.nan)
-    data_seed["iota_den_r"] = jnp.full(len(coords), jnp.nan)
     profiles = get_profiles(inbasis + basis_derivs, eq, None)
+    p = "desc.equilibrium.equilibrium.Equilibrium"
+    names = inbasis + basis_derivs + outbasis
+    deps = list(set(get_data_deps(names, obj=p) + list(names)))
+
     # do surface average to get iota once
     if "iota" in profiles and profiles["iota"] is None:
         profiles["iota"] = eq.get_profile("iota", params=params)
@@ -121,8 +117,15 @@ def map_coordinates(  # noqa: C901
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
         grid = Grid(y, sort=False, jitable=True)
+        data = {}
+        if "iota" in deps:
+            data["iota"] = profiles["iota"](grid, params=params["i_l"])
+        if "iota_r" in deps:
+            data["iota_r"] = profiles["iota"](grid, dr=1, params=params["i_l"])
+        if "iota_rr" in deps:
+            data["iota_rr"] = profiles["iota"](grid, dr=2, params=params["i_l"])
         transforms = get_transforms(basis, eq, grid, jitable=True)
-        data = compute_fun(eq, basis, params, transforms, profiles, data_seed.copy())
+        data = compute_fun(eq, basis, params, transforms, profiles, data)
         x = jnp.array([data[k] for k in basis]).T
         return x
 

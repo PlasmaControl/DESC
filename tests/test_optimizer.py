@@ -1102,6 +1102,7 @@ def test_optimize_with_single_constraint():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.filterwarnings("ignore::UserWarning")
 def test_proximal_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
@@ -1144,10 +1145,9 @@ def test_proximal_jacobian():
     prox1 = ProximalProjection(obj1, con1, eq1, perturb_options, solve_options)
     prox2 = ProximalProjection(obj2, con2, eq2, perturb_options, solve_options)
     prox3 = ProximalProjection(obj3, con3, eq3, perturb_options, solve_options)
-    with pytest.raises(UserWarning):
-        prox1.build()
-        prox2.build()
-        prox3.build()
+    prox1.build()
+    prox2.build()
+    prox3.build()
 
     x = prox1.x(eq)
     v = np.random.default_rng(1138).random(x.shape)

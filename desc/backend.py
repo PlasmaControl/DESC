@@ -71,6 +71,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
+    imap = jax.lax.map
     scan = jax.lax.scan
     bincount = jnp.bincount
     repeat = jnp.repeat
@@ -450,6 +451,44 @@ else:  # pragma: no cover
     complex_sqrt = np.emath.sqrt
     put_along_axis = np.put_along_axis
 
+    def imap(f, xs, out_axes=0):
+        """A numpy implementation of jax.lax.map."""
+        if not isinstance(xs, np.ndarray):
+            raise NotImplementedError("Require numpy array input, or install jax.")
+        return np.stack([f(x) for x in xs], axis=out_axes)
+
+    def vmap(fun, in_axes=0, out_axes=0):
+        """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
+
+        Like Python's builtin map,
+        except inputs and outputs are in the form of stacked arrays,
+        and the returned object is a vectorized version of the input function.
+
+        Parameters
+        ----------
+        fun: callable
+            Function (A -> B)
+        in_axes: int
+            Axis to map over.
+        out_axes: int
+            An integer indicating where the mapped axis should appear in the output.
+
+        Returns
+        -------
+        fun_vmap: callable
+            Vectorized version of fun.
+
+        """
+        if in_axes != 0:
+            raise NotImplementedError(
+                f"Backend for numpy vmap for in_axes={in_axes} not implemented yet."
+            )
+
+        def f(fun_inputs):
+            return imap(fun, fun_inputs, out_axes)
+
+        return f
+
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
         raise NotImplementedError
@@ -626,43 +665,6 @@ else:  # pragma: no cover
         while cond_fun(val):
             val = body_fun(val)
         return val
-
-    # TODO: generalize this, maybe use np.vectorize
-    def vmap(fun, in_axes=0, out_axes=0):
-        """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
-
-        Like Python's builtin map,
-        except inputs and outputs are in the form of stacked arrays,
-        and the returned object is a vectorized version of the input function.
-
-        Parameters
-        ----------
-        fun: callable
-            Function (A -> B)
-        in_axes: int
-            Axis to map over.
-        out_axes: int
-            An integer indicating where the mapped axis should appear in the output.
-
-        Returns
-        -------
-        fun_vmap: callable
-            Vectorized version of fun.
-
-        """
-        if in_axes != 0:
-            raise NotImplementedError(
-                f"Backend for numpy vmap for in_axes={in_axes} not implemented yet."
-            )
-
-        def fun_vmap(fun_inputs):
-            if isinstance(fun_inputs, tuple):
-                raise NotImplementedError(
-                    "Backend implementation of vmap fails for multiple args in tuple."
-                )
-            return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
-
-        return fun_vmap
 
     def scan(f, init, xs, length=None, reverse=False, unroll=1):
         """Scan a function over leading array axes while carrying along state.

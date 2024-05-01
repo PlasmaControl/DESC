@@ -34,6 +34,10 @@ class Curve(IOAble, Optimizable, ABC):
         """Set things after loading."""
         if hasattr(self, "_NFP"):
             self._NFP = int(self._NFP)
+        if not hasattr(self, "_shift"):
+            self.shift
+        if not hasattr(self, "_rotmat"):
+            self.rotmat
 
     @optimizable_parameter
     @property

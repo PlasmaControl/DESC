@@ -1371,9 +1371,8 @@ def bounce_integral(
             Defaults to akima spline to suppress oscillation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
         batched : bool
-            Whether to perform computation in a batched manner.
-            If you can afford the memory expense, keeping this as true is more
-            efficient.
+            Whether to perform computation in a batched manner.s
+            If you can afford the memory expense, batched is more efficient.
 
         Returns
         -------

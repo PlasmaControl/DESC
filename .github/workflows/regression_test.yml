@@ -54,7 +54,6 @@ jobs:
             --group ${{ matrix.group }} \
             --splitting-algorithm least_duration \
             --db ./prof.db
-        continue-on-error: true  # Continue even if this group fails
       - name: save coverage file and plot comparison results
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,7 +65,6 @@ jobs:
             ./prof.db
       - name: Upload coverage
         id : codecov
-        continue-on-error: true
         uses: Wandalen/wretry.action@v1.3.0
         with:
           action: codecov/codecov-action@v3

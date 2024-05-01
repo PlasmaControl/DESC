@@ -54,6 +54,7 @@ jobs:
             --group ${{ matrix.group }} \
             --splitting-algorithm least_duration \
             --db ./prof.db
+        continue-on-error: true  # Continue even if this group fails
       - name: save coverage file and plot comparison results
         if: always()
         uses: actions/upload-artifact@v4

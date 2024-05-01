@@ -327,7 +327,6 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, coord=None):
 
         # now overwrite stuff to deal with the axis
         scale = zernike_radial(coord, 0, 0)
-        scale = scale.flatten()
         for k, (l, m, n) in enumerate(b_basis.modes):
             if m != 0:
                 continue

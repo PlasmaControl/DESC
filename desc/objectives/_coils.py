@@ -5,7 +5,6 @@ import numpy as np
 from desc.backend import (
     fori_loop,
     jnp,
-    tree_flatten,
     tree_leaves,
     tree_map,
     tree_structure,
@@ -166,9 +165,9 @@ class _CoilObjective(_Objective):
         else:
             # this case covers an inputted list of grids that matches the size
             # of the inputted coils. Can be a 1D list or nested list.
-            flattened_grid = tree_flatten(
+            flattened_grid = tree_leaves(
                 self._grid, is_leaf=lambda x: isinstance(x, _Grid)
-            )[0]
+            )
             self._grid = tree_unflatten(coil_structure, flattened_grid)
 
         timer = Timer()
@@ -343,10 +342,10 @@ class CoilLength(_CoilObjective):
             self._normalization = self._scales["a"]
 
         # TODO: repeated code but maybe it's fine
-        flattened_coils = tree_flatten(
+        flattened_coils = tree_leaves(
             self._coils,
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
-        )[0]
+        )
         flattened_coils = (
             [flattened_coils[0]]
             if not isinstance(self._coils, CoilSet)
@@ -372,7 +371,7 @@ class CoilLength(_CoilObjective):
             Coil length.
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([dat["length"] for dat in data])
         return out
 
@@ -488,7 +487,7 @@ class CoilCurvature(_CoilObjective):
             1D array of coil curvature values.
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["curvature"] for dat in data])
         return out
 
@@ -605,7 +604,7 @@ class CoilTorsion(_CoilObjective):
             Coil torsion.
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["torsion"] for dat in data])
         return out
 
@@ -706,10 +705,10 @@ class CoilsetMinDistance(_CoilObjective):
             self._normalization = self._scales["a"]
 
         # TODO: repeated code but maybe it's fine
-        flattened_coils = tree_flatten(
+        flattened_coils = tree_leaves(
             self._coils,
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
-        )[0]
+        )
         flattened_coils = (
             [flattened_coils[0]]
             if not isinstance(self._coils, CoilSet)
@@ -735,21 +734,23 @@ class CoilsetMinDistance(_CoilObjective):
             Distance to nearest coil for each coil in the coilset.
         """
         data = super().compute(params, constants=constants, basis="xyz")
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
 
         pts = jnp.dstack([d["x"].T for d in data]).T  # shape (ncoil, npts, 3)
-        ncoil = pts.shape[0]
 
         def body(i):
             dx = pts[i] - pts
             dist = safenorm(dx, axis=-1)
             # ignore distance to pts within each coil
-            mask = jnp.ones(ncoil)
+            mask = jnp.ones(self.dim_f)
             mask = mask.at[i].set(0)[:, None]
             return jnp.min(dist, where=mask, initial=jnp.inf)
 
         min_dist_per_coil = fori_loop(
-            0, ncoil, lambda i, mind: mind.at[i].set(body(i)), jnp.zeros(ncoil)
+            0,
+            self.dim_f,
+            lambda i, mind: mind.at[i].set(body(i)),
+            jnp.zeros(self.dim_f),
         )
 
         return min_dist_per_coil

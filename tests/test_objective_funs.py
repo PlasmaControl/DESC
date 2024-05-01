@@ -837,7 +837,8 @@ class TestObjectiveFunction:
 
         coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
         coils = CoilSet.linspaced_linear(coil, n=ncoils, displacement=displacement)
-        mixed_coils = MixedCoilSet.linspaced_linear(
+        # TODO: add test with linspaced_angular
+        mixed_coils = MixedCoilSet.linspaced_linear(  # this isn't testing anything new
             coil, n=ncoils, displacement=displacement
         )
 

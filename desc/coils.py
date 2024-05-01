@@ -1128,6 +1128,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             B = rpz2xyz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B
 
+    # TODO: remove this function
     def compute_minimum_distance(
         self,
         params=None,

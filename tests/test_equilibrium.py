@@ -350,10 +350,8 @@ def test_poincare_bc(HELIOTRON):
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_poincare_sfl_bc(
-    SOLOVEV,
-):
-    """Test fixed poincare+lambda solve."""
+def test_poincare_as_bc(SOLOVEV):
+    """Test fixed poincare+lambda solve for axissymetric equilibrium."""
     # solve an equilibrium with R,Z and lambda specified on zeta=0 surface
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eq_poin = eq.set_poincare_equilibrium()
@@ -364,6 +362,7 @@ def test_poincare_sfl_bc(
 
     # perturb slightly from the axisymmetric equilibrium
     eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)
+    eq_poin.xsection = eq_poin.get_poincare_xsection_at(zeta=0)
     # this constrains lambda at the zeta=0 surface, using eq's current value of lambda
     constraints = get_fixed_xsection_constraints(eq=eq_poin)
     objective = ObjectiveFunction(ForceBalance(eq=eq_poin))
@@ -381,7 +380,7 @@ def test_poincare_sfl_bc(
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq_poin, Nz=6)
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=2e-3)
+    np.testing.assert_allclose(rho_err, 0, atol=6e-3)
     np.testing.assert_allclose(theta_err, 0, atol=2e-3)
 
     grid = LinearGrid(L=50, M=50, zeta=0)

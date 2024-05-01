@@ -1,7 +1,5 @@
 """Classes for parameterized 3D space curves."""
 
-import numbers
-
 import numpy as np
 
 from desc.backend import jnp, put
@@ -92,8 +90,10 @@ class FourierRZCurve(Curve):
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
-        self._NFP = int(NFP)
-        self._NFP_umbilic_factor = int(NFP_umbilic_factor)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._NFP_umbilic_factor = check_posint(
+            NFP_umbilic_factor, "NFP_umbilic_factor", False
+        )
         self._R_basis = FourierSeries(
             N,
             int(NFP),
@@ -106,12 +106,6 @@ class FourierRZCurve(Curve):
             NFP_umbilic_factor=int(NFP_umbilic_factor),
             sym="sin" if sym else False,
         )
-        self._NFP = check_posint(NFP, "NFP", False)
-        self._NFP_umbilic_factor = check_posint(
-            NFP_umbilic_factor, "NFP_umbilic_factor", False
-        )
-        self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
-        self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
@@ -140,20 +134,6 @@ class FourierRZCurve(Curve):
     def NFP_umbilic_factor(self):
         """Field period umbilic factor."""
         return self._NFP_umbilic_factor
-
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
-
-    @NFP_umbilic_factor.setter
-    def NFP_umbilic_factor(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP_umbilic_factor=new)
 
     @property
     def N(self):
@@ -285,7 +265,9 @@ class FourierRZCurve(Curve):
         return curve
 
     @classmethod
-    def from_values(cls, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+    def from_values(
+        cls, coords, N=10, NFP=1, NFP_umbilic_factor=1, basis="rpz", name="", sym=False
+    ):
         """Fit coordinates to FourierRZCurve representation.
 
         Parameters
@@ -298,6 +280,9 @@ class FourierRZCurve(Curve):
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
+        NFP_umbilic_factor : int
+            Umbilic factor to fit curves that go around multiple times toroidally before
+            closing on themselves.
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "rpz"
 
@@ -342,7 +327,14 @@ class FourierRZCurve(Curve):
         transform = Transform(grid, basis, build_pinv=True)
         R_n = transform.fit(R)
         Z_n = transform.fit(Z)
-        return FourierRZCurve(R_n=R_n, Z_n=Z_n, NFP=NFP, name=name, sym=sym)
+        return FourierRZCurve(
+            R_n=R_n,
+            Z_n=Z_n,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            name=name,
+            sym=sym,
+        )
 
 
 def _unclose_curve(X, Y, Z):
@@ -596,8 +588,8 @@ class FourierXYZCurve(Curve):
             errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
             errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
 
-        grid = LinearGrid(zeta=s, NFP=1, NFP_umbilic_factor=1, sym=False)
-        basis = FourierSeries(N=N, NFP=1, NFP_umbilic_factor=1, sym=False)
+        grid = LinearGrid(zeta=s, NFP=1, sym=False)
+        basis = FourierSeries(N=N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
         X_n = transform.fit(X)
         Y_n = transform.fit(Y)

@@ -708,16 +708,6 @@ def _get_grid_surface(grid, surface_label):
     else:
         spacing = grid.spacing[:, :2]
 
-        has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
-            grid.nodes[grid.unique_zeta_idx[-1], 2]
-            == 2 * np.pi / (grid.NFP / grid.NFP_umbilic_factor),
-        )
-
-    try:
-        has_endpoint_dupe = has_endpoint_dupe[0]
-    except ValueError:
-        has_endpoint_dupe = has_endpoint_dupe
-
         unique_size = getattr(grid, "num_zeta", -1)
         inverse_idx = getattr(grid, "_inverse_zeta_idx", jnp.array([]))
         has_endpoint_dupe = (
@@ -729,6 +719,11 @@ def _get_grid_surface(grid, surface_label):
                 == 2 * np.pi / grid.NFP * grid.NFP_umbilic_factor
             )
         )
+
+    try:
+        has_endpoint_dupe = has_endpoint_dupe[0]
+    except TypeError:
+        has_endpoint_dupe = has_endpoint_dupe
 
     return unique_size, inverse_idx, spacing, has_endpoint_dupe
 

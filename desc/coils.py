@@ -1128,59 +1128,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             B = rpz2xyz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B
 
-    # TODO: remove this function
-    def compute_minimum_distance(
-        self,
-        params=None,
-        grid=None,
-        transforms=None,
-        **kwargs,
-    ):
-        """Compute minimum distance between coils in the coilset.
-
-        Parameters
-        ----------
-        params : dict or array-like of dict, optional
-            parameters to pass to curves, either the same for all curves,
-            or one for each member
-        grid : Grid, int or None or array-like, optional
-            Grid used to discretize coil, the same for all coils. If an integer, uses
-            that many equally spaced points.
-
-        Returns
-        -------
-        d_min : float
-            the minimum coil-coil distance between coils in the coilset.
-        """
-        if params is None:
-            params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
-            for par, coil in zip(params, self):
-                par["current"] = coil.current
-
-        coil_coords = self.compute(
-            "x",
-            grid=grid,
-            params=params,
-            basis="xyz",
-            transforms=transforms,
-            **kwargs,
-        )
-        # set some large value for initial separation
-        minSeparation2 = 1e20
-        for whichCoil1 in range(len(self)):
-            coords1 = coil_coords[whichCoil1]["x"]
-            for whichCoil2 in range(whichCoil1):
-                coords2 = coil_coords[whichCoil2]["x"]
-
-                d = jnp.linalg.norm(
-                    coords1[:, None, :] - coords2[None, :, :],
-                    axis=-1,
-                )
-
-                minSeparation2 = jnp.min(jnp.array([jnp.min(d), minSeparation2]))
-
-        return minSeparation2
-
     @classmethod
     def linspaced_angular(
         cls, coil, current=None, axis=[0, 0, 1], angle=2 * np.pi, n=10, endpoint=False

@@ -336,9 +336,7 @@ class TestCoilSet:
             "phi",
         ]
         # test in rpz basis
-        data_sym = sym_coilset.compute(
-            data_keys, grid, basis="rpz", return_only_unique=False
-        )
+        data_sym = sym_coilset.compute(data_keys, grid, basis="rpz")
         data_asym = asym_coilset.compute(data_keys, grid, basis="rpz")
         assert len(data_asym) == len(data_sym)
         flip_vec = False
@@ -386,9 +384,7 @@ class TestCoilSet:
                     )
 
         # test in xyz basis
-        data_sym = sym_coilset.compute(
-            data_keys, grid, basis="xyz", return_only_unique=False
-        )
+        data_sym = sym_coilset.compute(data_keys, grid, basis="xyz")
         data_asym = asym_coilset.compute(data_keys, grid, basis="xyz")
         assert len(data_asym) == len(data_sym)
         flip_vec = False
@@ -418,6 +414,39 @@ class TestCoilSet:
                         atol=1e-14,
                         err_msg=f"coil {i} {key} xyz",
                     )
+
+    @pytest.mark.unit
+    def test_symmetry_position(self):
+        """Tests that compute position is correct from symmetry."""
+        eq = get("precise_QH")
+        minor_radius = eq.compute("a")["a"]
+
+        # initialize CoilSet with symmetry
+        num_coils = 1  # number of unique coils per half field period
+        grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
+            data_center = eq.axis.compute("x", grid=grid, basis="xyz")
+            data_normal = eq.compute("e^zeta", grid=grid)
+        centers = data_center["x"]
+        normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
+        coils = []
+        for k in range(1, 2 * num_coils + 1, 2):
+            coil = FourierPlanarCoil(
+                current=1e6,
+                center=centers[k, :],
+                normal=normals[k, :],
+                r_n=[0, minor_radius + 0.5, 0],
+            )
+            coils.append(coil)
+        sym_coilset = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
+
+        # equivalent CoilSet without symmetry
+        asym_coilset = CoilSet.from_symmetry(sym_coilset, NFP=eq.NFP, sym=eq.sym)
+
+        # check that positions of both CoilSets are the same
+        x_sym = sym_coilset.compute_position()
+        x_asym = asym_coilset.compute_position()
+        np.testing.assert_allclose(x_sym, x_asym)
 
     @pytest.mark.unit
     def test_symmetry_magnetic_field(self):

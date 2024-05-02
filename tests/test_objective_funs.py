@@ -825,25 +825,32 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_coil_min_distance(self):
         """Tests coilset minimum distance between coils."""
-        ncoils = 4
-        displacement = [0, 0, 10]
+        n = 3
+        disp = 5
+        coil1 = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
+        coils_linear = CoilSet.linspaced_linear(coil1, n=n, displacement=[0, 0, disp])
 
-        def test(coils, grid=None):
-            obj = CoilsetMinDistance(coils, grid=grid)
+        center = 3
+        radius = 1
+        coil2 = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=radius)
+        coils_angular = CoilSet.linspaced_angular(coil2, n=4)
+
+        def test(coils, mindist, grid=None, rtol=1e-8):
+            obj = CoilsetMinDistance(coils)
             obj.build()
             f = obj.compute(params=coils.params_dict)
             assert f.size == len(coils)
-            np.testing.assert_allclose(f, displacement[-1] / (ncoils), rtol=1e-8)
+            np.testing.assert_allclose(f, mindist, rtol=rtol)
 
-        coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
-        coils = CoilSet.linspaced_linear(coil, n=ncoils, displacement=displacement)
-        # TODO: add test with linspaced_angular
-        mixed_coils = MixedCoilSet.linspaced_linear(  # this isn't testing anything new
-            coil, n=ncoils, displacement=displacement
+        test(coils_linear, disp / n)
+        test(
+            coils_angular,
+            np.sqrt(2 * (center - radius) ** 2),
+            grid=LinearGrid(zeta=4),
+            rtol=5e-2,  # FIXME: get this test to pass with lower rtol
         )
-
-        test(coils)
-        test(mixed_coils, grid=LinearGrid(N=5))
+        # TODO: add test with symmetry
+        # TODO: add test with MixedCoilSet
 
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""

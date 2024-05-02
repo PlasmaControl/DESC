@@ -802,7 +802,7 @@ def test_drift():
     )
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
-    y = np.sqrt(1 * epsilon * pitch * B0)
+    y = np.sqrt(2 * epsilon * pitch * B0)
     I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
     I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
     drift_analytic = (

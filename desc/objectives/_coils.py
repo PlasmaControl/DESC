@@ -216,7 +216,7 @@ class _CoilObjective(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None, **kwargs):
+    def compute(self, params, constants=None):
         """Compute data of coil for given data key.
 
         Parameters
@@ -241,7 +241,6 @@ class _CoilObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             grid=self._grid,
-            basis=kwargs.get("basis", "xyz"),
         )
 
         return data

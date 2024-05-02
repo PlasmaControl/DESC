@@ -823,7 +823,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert len(x) == len(self)
         return x
 
-    def compute(  # noqa: C901 - Simplify this
+    def compute(
         self,
         names,
         grid=None,
@@ -1579,7 +1579,6 @@ class MixedCoilSet(CoilSet):
         """
         params = self._make_arraylike(params)
         source_grid = self._make_arraylike(source_grid)
-
         x = jnp.vstack(
             [
                 coil.compute_position(par, grd)

@@ -87,13 +87,20 @@ class FixParameters(_Objective):
         Should be a scalar or have the same tree structure as thing.params.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True. Has no effect for this objective.
     name : str, optional
         Name of the objective function.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.coils import FourierXYZCoil
+        from desc.grid import LinearGrid
+        import numpy as np
 
     """
 
@@ -110,8 +117,8 @@ class FixParameters(_Objective):
         target=None,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         name="Fixed parameters",
     ):
         self._params = params
@@ -738,6 +745,10 @@ class FixLambdaGauge(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     name : str, optional
         Name of the objective function.
 
@@ -752,6 +763,8 @@ class FixLambdaGauge(_Objective):
     def __init__(
         self,
         eq,
+        normalize=True,
+        normalize_target=True,
         name="lambda gauge",
     ):
         super().__init__(
@@ -759,6 +772,8 @@ class FixLambdaGauge(_Objective):
             target=0,
             bounds=None,
             weight=1,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 
@@ -832,6 +847,10 @@ class FixThetaSFL(FixParameters):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     name : str, optional
         Name of the objective function.
 
@@ -844,6 +863,8 @@ class FixThetaSFL(FixParameters):
         self,
         eq,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         name="theta SFL",
     ):
         super().__init__(
@@ -852,6 +873,8 @@ class FixThetaSFL(FixParameters):
             target=0,
             bounds=None,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 
@@ -1198,6 +1221,10 @@ class FixModeLambda(FixParameters):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to Objective.dim_f.
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1216,6 +1243,8 @@ class FixModeLambda(FixParameters):
         target=None,
         bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         modes=True,
         name="fix mode lambda",
     ):
@@ -1231,6 +1260,8 @@ class FixModeLambda(FixParameters):
             target=target,
             bounds=bounds,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 
@@ -1584,6 +1615,10 @@ class FixSumModesLambda(_FixedObjective):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f.
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*L_111 + 1*L_222...
@@ -1609,6 +1644,8 @@ class FixSumModesLambda(_FixedObjective):
         target=None,
         bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         sum_weights=None,
         modes=True,
         name="Fix Sum Modes lambda",
@@ -1640,6 +1677,8 @@ class FixSumModesLambda(_FixedObjective):
             target=target,
             bounds=bounds,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 
@@ -1895,6 +1934,10 @@ class FixIota(FixParameters):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices.
@@ -1915,6 +1958,8 @@ class FixIota(FixParameters):
         target=None,
         bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         indices=True,
         name="fixed iota",
     ):
@@ -1924,6 +1969,8 @@ class FixIota(FixParameters):
             target=target,
             bounds=bounds,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 
@@ -2294,6 +2341,10 @@ class FixAtomicNumber(FixParameters):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -2314,6 +2365,8 @@ class FixAtomicNumber(FixParameters):
         target=None,
         bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         indices=True,
         name="fixed atomic number",
     ):
@@ -2323,6 +2376,8 @@ class FixAtomicNumber(FixParameters):
             target=target,
             bounds=bounds,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 
@@ -2485,6 +2540,10 @@ class FixCurveRotation(FixParameters):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     name : str, optional
         Name of the objective function.
 
@@ -2499,6 +2558,8 @@ class FixCurveRotation(FixParameters):
         target=None,
         bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         name="fixed rotation",
     ):
         super().__init__(
@@ -2507,6 +2568,8 @@ class FixCurveRotation(FixParameters):
             target=target,
             bounds=bounds,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 
@@ -2579,6 +2642,10 @@ class FixOmniMap(FixParameters):
         Lower and upper bounds on the objective. Overrides target.
     weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     indices : ndarray or bool, optional
         indices of the field.x_lmn array to fix.
         Must have len(target) = len(weight) = len(indices).
@@ -2597,6 +2664,8 @@ class FixOmniMap(FixParameters):
         target=None,
         bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         indices=True,
         name="fixed omnigenity map",
     ):
@@ -2606,6 +2675,8 @@ class FixOmniMap(FixParameters):
             target=target,
             bounds=bounds,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 
@@ -2623,6 +2694,10 @@ class FixOmniBmax(_FixedObjective):
         Lower and upper bounds on the objective. Overrides target.
     weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -2638,6 +2713,8 @@ class FixOmniBmax(_FixedObjective):
         target=None,
         bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         name="fixed omnigenity B_max",
     ):
         self._target_from_user = setdefault(bounds, target)
@@ -2646,6 +2723,8 @@ class FixOmniBmax(_FixedObjective):
             target=target,
             bounds=bounds,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 

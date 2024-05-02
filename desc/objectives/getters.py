@@ -61,17 +61,13 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
         An objective function with default force balance objectives.
 
     """
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
     if mode == "energy":
-        objectives = Energy(eq=eq, normalize=normalize, normalize_target=normalize)
+        objectives = Energy(**kwargs)
     elif mode == "force":
-        objectives = ForceBalance(
-            eq=eq, normalize=normalize, normalize_target=normalize
-        )
+        objectives = ForceBalance(**kwargs)
     elif mode == "forces":
-        objectives = (
-            RadialForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
-            HelicalForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
-        )
+        objectives = (RadialForceBalance(**kwargs), HelicalForceBalance(**kwargs))
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)
@@ -95,17 +91,13 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
         A list of the linear constraints used in fixed-axis problems.
 
     """
-    normalize_kwargs = {"normalize": normalize, "normalize_target": normalize}
-    constraints = (
-        FixAxisR(eq=eq, **normalize_kwargs),
-        FixAxisZ(eq=eq, **normalize_kwargs),
-        FixPsi(eq=eq, **normalize_kwargs),
-    )
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
+    constraints = (FixAxisR(**kwargs), FixAxisZ(**kwargs), FixPsi(**kwargs))
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
-                constraints += (con(eq=eq, **normalize_kwargs),)
-    constraints += (FixSheetCurrent(eq),)
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
 
     return constraints
 
@@ -128,17 +120,13 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
         A list of the linear constraints used in fixed-boundary problems.
 
     """
-    normalize_kwargs = {"normalize": normalize, "normalize_target": normalize}
-    constraints = (
-        FixBoundaryR(eq=eq, **normalize_kwargs),
-        FixBoundaryZ(eq=eq, **normalize_kwargs),
-        FixPsi(eq=eq, **normalize_kwargs),
-    )
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
+    constraints = (FixBoundaryR(**kwargs), FixBoundaryZ(**kwargs), FixPsi(**kwargs))
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
-                constraints += (con(eq=eq, **normalize_kwargs),)
-    constraints += (FixSheetCurrent(eq),)
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
 
     return constraints
 
@@ -181,20 +169,16 @@ def get_NAE_constraints(
         A list of the linear constraints used in fixed-axis problems.
 
     """
-    normalize_kwargs = {"normalize": normalize, "normalize_target": normalize}
+    kwargs = {"eq": desc_eq, "normalize": normalize, "normalize_target": normalize}
     if not isinstance(fix_lambda, bool):
         fix_lambda = int(fix_lambda)
-    constraints = (
-        FixAxisR(eq=desc_eq, **normalize_kwargs),
-        FixAxisZ(eq=desc_eq, **normalize_kwargs),
-        FixPsi(eq=desc_eq, **normalize_kwargs),
-    )
+    constraints = (FixAxisR(**kwargs), FixAxisZ(**kwargs), FixPsi(**kwargs))
 
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(desc_eq, name) is not None:
-                constraints += (con(eq=desc_eq, **normalize_kwargs),)
-    constraints += (FixSheetCurrent(desc_eq),)
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
 
     if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(

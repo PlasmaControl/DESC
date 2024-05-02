@@ -381,6 +381,7 @@ def test_shifted_circle_geometry():
     expressions. These expression are available in Edmund Highcock's thesis on arxiv
     https://arxiv.org/pdf/1207.4419.pdf  (Table 3.5)
     """
+    # TODO: remove once all the epsilons and Gammas have been implemented and tested
     eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
 
     eq_keys = ["iota", "iota_r", "a", "rho", "psi"]

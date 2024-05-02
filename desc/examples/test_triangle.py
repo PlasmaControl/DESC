@@ -15,7 +15,7 @@ import numpy as np
 from desc.basis import FiniteElementMesh2D
 
 # Try triangulating whole mesh
-M = 2
+M = 10
 L = 2
 mesh = FiniteElementMesh2D(L, M, K=2)
 mesh.plot_triangles(plot_quadrature_points=False)
@@ -30,4 +30,5 @@ quadpoints = mesh.return_quadrature_points()
 integral = mesh.integrate(
     np.array([np.cos(quadpoints[:, 1]), np.sin(quadpoints[:, 1])]).T
 )
+print(integral)
 assert np.allclose(integral, 0.0)

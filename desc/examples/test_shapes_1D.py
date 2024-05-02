@@ -15,16 +15,15 @@ from matplotlib import pyplot as plt
 
 from desc.basis import (
     FiniteElementBasis,
-    FiniteElementMesh1D_scikit,
     FourierZernikeBasis,
 )
 from desc.geometry import convert_spectral_to_FE
 
 plt.figure()
-L = 10
-M = 10
+L = 4
+M = 4
 N = 0
-K = 1
+K = 2
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary

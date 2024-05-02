@@ -23,7 +23,6 @@ __all__ = [
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
     "FiniteElementMesh1D",
-    "FiniteElementMesh1D_scikit",
     "FiniteElementMesh2D",
     "FiniteElementMesh3D",
     "ChebyshevPolynomial",
@@ -792,7 +791,6 @@ class ZernikePolynomial(_Basis):
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
         decreasing size, ending in a triangle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
-        to the bottom of the pyramid, increasing L while keeping M constant,
         giving a "house" shape.
 
         ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
@@ -1144,7 +1142,7 @@ class FiniteElementBasis(_FE_Basis):
         self._NFP = NFP
         self._sym = sym
         if L == 0 and N == 0:
-            self.mesh = FiniteElementMesh1D_scikit(M, K=K)
+            self.mesh = FiniteElementMesh1D(M, K=K)
             self.I_2ML = M - 1
             self.Q = K + 1
         elif N == 0:
@@ -2423,31 +2421,51 @@ class FiniteElementMesh2D:
         self.triangles = triangles
 
         # Setup quadrature points and weights for numerical integration using scikit-fem
+        # if K == 1:
+        #     integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
+        #     weights = np.array([1.0])
 
-        if K == 1:
-            integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
-            weights = np.array([1.0])
+        # if K == 1:
+        #     [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
+        #     print(integration_points, integration_points.shape)
+        #     weights = weights * 2
+        #     add_row = [
+        #         integration_points[0][1],
+        #         integration_points[0][0],
+        #         integration_points[0][0],
+        #     ]
+        #     integration_points = np.vstack([add_row, integration_points])
+        #     print(integration_points, integration_points.shape)
 
-        if K == 2:
-            [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
-            weights = weights * 2
-            add_row = [
-                integration_points[0][1],
-                integration_points[0][0],
-                integration_points[0][0],
-            ]
-            integration_points = np.vstack([add_row, integration_points])
-
-        if K == 3:
-            [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
-            add_row = [
-                integration_points[0][0],
-                integration_points[0][1],
-                integration_points[0][1],
-                integration_points[0][2],
-            ]
-            integration_points = np.vstack([add_row, integration_points])
-            integration_points = np.transpose(integration_points)
+        # if K == 2:
+        #     [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
+        #     print(integration_points, integration_points.shape)
+        #     weights = weights * 2
+        #     add_row = [
+        #         integration_points[0][0],
+        #         integration_points[0][1],
+        #         integration_points[0][1],
+        #         integration_points[0][2],
+        #     ]
+        #     integration_points = np.vstack([add_row, integration_points])
+        #     integration_points = np.transpose(integration_points)
+        #     print(integration_points, integration_points.shape)
+        
+        [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
+        weights = weights * 2
+        print(integration_points, integration_points.shape, weights)
+        add_row = [
+            integration_points[0][0],
+            integration_points[0][1],
+            integration_points[0][2],
+            integration_points[0][1],
+            integration_points[0][2],
+            integration_points[1][1],
+            integration_points[1][2],
+        ]
+        integration_points = np.vstack([add_row, integration_points])
+        integration_points = np.transpose(integration_points)
+        print(integration_points, integration_points.shape)
 
         # Integration points, weights, and number of integration points
 
@@ -2729,7 +2747,7 @@ class FiniteElementMesh1D:
         self.K = K
 
         # can exactly integrate 2 * nquad - 1 degree polynomials
-        self.nquad = K + 1
+        self.nquad = K
 
         theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
         self.Theta = theta
@@ -3500,7 +3518,7 @@ class IntervalFiniteElement:
             plt.xlabel(r"$\theta$")
 
 
-class FiniteElementMesh1D_scikit:
+class FiniteElementMesh1D:
     """Class representing a 1D mesh in theta.
 
     This class represents a 1D FE basis coming from a
@@ -3529,7 +3547,7 @@ class FiniteElementMesh1D_scikit:
         vertices = np.ravel(basis.doflocs)
 
         # can exactly integrate 2 * nquad - 1 degree polynomials
-        self.nquad = max(nquad, K + 1)
+        self.nquad = K + 1
 
         theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
         self.Theta = theta
@@ -3702,195 +3720,6 @@ class FiniteElementMesh1D_scikit:
                 interval.jacobian * self.weights @ f[i * nquad : (i + 1) * nquad, :]
             )
         return integral
-
-
-class IntervalFiniteElement_scikit:
-    """Class representing an interval in a 1D grid of finite elements.
-
-    Takes the range of the isoparametric coordinate eta as [-1, 1],
-    instead of other definitions using [0, 1].
-
-    Parameters
-    ----------
-    vertices: array-like, shape(2)
-        The two vertices of the interval in the theta mesh.
-    K: integer
-        The order of the finite elements to use, which gives (K + 1)
-        basis functions.
-    """
-
-    def __init__(self, vertices, K=1):
-        self.vertices = vertices
-        self.length = vertices[1] - vertices[0]
-        self.Q = K + 1
-        self.K = K
-
-        # if K = 1 or K = 2 with equally-spaced points
-        # Jacobian is length / 2 for isoparametric form eta in [-1, 1]
-        # still true for K > 2 ??
-        self.jacobian = self.length / 2.0
-
-        # Going to construct equally spaced nodes for order K interval,
-        # which gives Q such nodes.
-        self.nodes = np.linspace(vertices[0], vertices[1], self.Q, endpoint=True)
-        self.eta_nodes, _ = self.get_barycentric_coordinates(self.nodes)
-        self.basis_functions_nodes, _ = self.get_basis_functions(self.nodes)
-
-        # Check basis functions vanish at all nodes except the associated node.
-        for i in range(self.Q):
-            assert np.allclose(self.basis_functions_nodes[i, i], 1.0)
-            for j in range(self.Q):
-                if i != j:
-                    assert np.allclose(self.basis_functions_nodes[i, j], 0.0)
-
-        # Check we have the same number of basis functions as nodes.
-        assert self.nodes.shape[0] == self.Q
-
-    def get_basis_functions(self, theta):
-        """
-        Gets the barycentric basis functions.
-
-        Return the interval basis functions, evaluated at the 1D theta
-        mesh points provided to the function.
-
-        Parameters
-        ----------
-        theta : 1D ndarray, shape (M)
-            Coordinates of the original grid, lying inside this triangle.
-
-        Returns
-        -------
-        psi_q : (M, Q)
-            Basis functions in each interval.
-
-        """
-        eta, theta_in_interval = self.get_barycentric_coordinates(theta)
-        theta = theta_in_interval
-
-        # Compute the vertex basis functions first
-        basis_functions = np.zeros((theta.shape[0], self.Q))
-        for i in range(self.Q):
-            basis_functions[:, i] = self.lagrange_polynomial(eta, self.eta_nodes, i)
-
-        if self.K == 1:
-            assert np.allclose(basis_functions[:, 0], 0.5 * (1 - eta))
-            assert np.allclose(basis_functions[:, 1], 0.5 * (1 + eta))
-        if self.K == 2:
-            # Note the basis function ordering
-            assert np.allclose(basis_functions[:, 0], 0.5 * eta * (eta - 1))
-            assert np.allclose(basis_functions[:, 2], 0.5 * eta * (eta + 1))
-            assert np.allclose(basis_functions[:, 1], 1 - eta**2)
-
-        return basis_functions, theta_in_interval
-
-    def lagrange_polynomial(self, eta_i, eta_nodes_i, q):
-        """
-        Computes lagrange polynomials.
-
-        Computes the lagrange polynomial given the ith component of the
-        Barycentric coordinates on a theta mesh, the ith component
-        of the interval nodes defined for the basis functions,
-        and the index q of which node this is.
-
-        Parameters
-        ----------
-        eta_i : 1D ndarray, shape(M)
-            The barycentric coordinate i defined at theta points.
-        eta_nodes_i : 1D ndarray, shape(Q)
-            The barycentric coordinate i defined at the interval nodes.
-        q : integer
-            The index of the node we are using to define the basis function.
-            Options are 0, ..., Q - 1
-
-        Returns
-        -------
-        lp : 1D ndarray, shape(M)
-            The lagrange polynomial associated with the barycentric
-            coordinate i, the polynomial order K + 1, and the node q.
-
-        """
-        denom = 1.0
-        numerator = np.ones(len(eta_i))
-        # Avoid choosing the node q associated with this basis function
-        for i in range(self.Q):
-            if i != q:
-                numerator *= eta_i - eta_nodes_i[i]
-                denom *= eta_nodes_i[q] - eta_nodes_i[i]
-        lp = numerator / denom
-        return lp
-
-    def get_barycentric_coordinates(self, theta):
-        """
-        Gets the barycentric coordinates, given a mesh in theta.
-
-        Parameters
-        ----------
-        theta : 1D ndarray, shape (M)
-            Coordinates of the original grid, lying inside this interval.
-
-        Returns
-        -------
-        eta_u: 1D array, shape (M)
-            Barycentric coordinates defined by the interval and evaluated
-            at the points theta.
-        """
-        # Get the Barycentric coordinates
-        eta = 2 * (theta - self.vertices[0]) / self.length - 1
-        try:
-            eta_shape = eta.shape[0]
-        except IndexError:
-            eta = np.array([eta])
-            theta = np.array([theta])
-            eta_shape = eta.shape[0]
-
-        # zero out numerical errors or weird minus signs like -0
-        eta[np.isclose(eta, 0.0)] = 0.0
-
-        # Check that all the points are indeed inside the triangle
-        eta_final = []
-        theta_in_interval = []
-        for i in range(eta_shape):
-            if eta[i] < -1 or eta[i] > 1:
-                warnings.warn(
-                    "Found theta points outside this interval ... "
-                    "Not using these points to evaluate the barycentric "
-                    "coordinates."
-                )
-            else:
-                eta_final.append(eta[i])
-                theta_in_interval.append(theta[i])
-        return np.array(eta_final), np.array(theta_in_interval)
-
-    def plot_interval(self):
-        """
-        Plot the interval.
-
-        Also plots all of the basis functions.
-
-        Parameters
-        ----------
-        plot_quadrature_points : bool
-            Flag to indicate whether or not the quadrature points for
-            integration should also be plotted on the mesh.
-        """
-        # Define uniform grid in (theta, zeta)
-        theta = np.linspace(self.vertices[0], self.vertices[1], endpoint=True)
-
-        # Get the basis functions in the triangle
-        psi_q, theta_in_interval = self.get_basis_functions(theta)
-
-        for i in range(self.Q):
-            plt.subplot(1, self.Q, i + 1)
-            plt.grid()
-
-            # Plot the nodes of the interval
-            plt.plot(self.nodes, np.zeros(self.Q), "ro", markersize=2)
-
-            # Plot the ith basis function
-            plt.plot(theta_in_interval, psi_q[:, i], "b--")
-            plt.xlim(0, 2 * np.pi)
-            plt.ylabel(r"$\psi_q(\theta)$")
-            plt.xlabel(r"$\theta$")
 
 
 def find_intermadiate_jacobi(dx, args):

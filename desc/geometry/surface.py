@@ -164,15 +164,41 @@ def convert_spectral_to_FE(
     Aj_R = np.array(Aj_R)
     Aj_Z = np.array(Aj_Z)
     Aj_L = np.array(Aj_L)
-    lu = splu(Bjb_R)
-    Rprime = lu.solve(Aj_R)
-    Rprime_lmn = Rprime.reshape(nmodes)
-    lu = splu(Bjb_Z)
-    Zprime = lu.solve(Aj_Z)
-    Zprime_lmn = Zprime.reshape(nmodes)
-    lu = splu(Bjb_L)
-    Lprime = lu.solve(Aj_L)
-    Lprime_lmn = Lprime.reshape(nmodes)
+    print(Bjb_R)
+    # for i in range(len(Aj_R)):
+    Rprime_lmn = np.zeros(Aj_R.shape)
+    Zprime_lmn = np.zeros(Aj_Z.shape)
+    Lprime_lmn = np.zeros(Aj_L.shape)
+    for i in range(mesh.M - 1):
+        print(i, Bjb_R[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q])
+        Rprime_lmn[i * mesh.Q: (i + 1) * mesh.Q] = np.linalg.inv(
+            Bjb_R[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q]
+            ) @ Aj_R[i * mesh.Q: (i + 1) * mesh.Q]
+        Zprime_lmn[i * mesh.Q: (i + 1) * mesh.Q] = np.linalg.inv(
+            Bjb_Z[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q]
+            ) @ Aj_Z[i * mesh.Q: (i + 1) * mesh.Q]
+        Lprime_lmn[i * mesh.Q: (i + 1) * mesh.Q] = np.linalg.inv(
+            Bjb_L[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q]
+            ) @ Aj_L[i * mesh.Q: (i + 1) * mesh.Q]
+    # Zprime_lmn = np.linalg.pinv(Bjb_Z) @ Aj_Z
+    # Lprime_lmn = np.linalg.pinv(Bjb_L) @ Aj_L
+    u, s, v = np.linalg.svd(Bjb_R[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q])
+    
+    from matplotlib import pyplot as plt 
+    
+    plt.figure()
+    plt.semilogy(s)
+    plt.show()
+    print(Bjb_R)
+    # lu = splu(Bjb_R)
+    # Rprime = lu.solve(Aj_R)
+    # Rprime_lmn = Rprime.reshape(nmodes)
+    # lu = splu(Bjb_Z)
+    # Zprime = lu.solve(Aj_Z)
+    # Zprime_lmn = Zprime.reshape(nmodes)
+    # lu = splu(Bjb_L)
+    # Lprime = lu.solve(Aj_L)
+    # Lprime_lmn = Lprime.reshape(nmodes)
     t2 = time.time()
     print("Time to solve Ax = b, ", t2 - t1)
     return Rprime_lmn, Zprime_lmn, Lprime_lmn

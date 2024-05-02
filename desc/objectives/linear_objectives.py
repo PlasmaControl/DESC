@@ -98,9 +98,37 @@ class FixParameters(_Objective):
     --------
     .. code-block:: python
 
-        from desc.coils import FourierXYZCoil
-        from desc.grid import LinearGrid
         import numpy as np
+        from desc.coils import (
+            CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
+        )
+        from desc.objectives import FixParameters
+
+        # toroidal field coil set with 3 coils
+        tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=3)
+        # vertical field coil set with 2 coils
+        vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+        vf_coilset = CoilSet.linspaced_linear(
+            vf_coil, displacement=[0, 0, 2], n=2, endpoint=True
+        )
+        # another single coil
+        coil = FourierXYZCoil()
+        # full coil set with TF coils, VF coils, and other single coil
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xy_coil))
+
+        params = [
+            [
+                {"current": True},  # fix "current" in 1st TF coil
+                # fix "center" and one component of "normal" for 2nd TF coil
+                {"center": True, "normal": np.array([1])},
+                {},  # fix nothing in 3rd TF coil
+            ],
+            {"shift": True, "rotmat": True},  # fix "shift" & "rotmat" for all VF coils
+            # fix specified indices of "X_n" and "Z_n", but not "Y_n", for other coil
+            {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+        ]
+        obj = FixParameters(full_coilset, params)
 
     """
 

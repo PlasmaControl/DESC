@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipkm1
+from tests.test_plotting import tol_1d
 
 from desc.backend import flatnonzero, jnp
 from desc.compute import data_index
@@ -31,7 +32,7 @@ from desc.compute.bounce_integral import (
     grad_automorphism_sin,
     plot_field_line_with_ripple,
     take_mask,
-    tanh_sinh_quad,
+    tanh_sinh,
 )
 from desc.compute.utils import dot, get_data_deps, safediv
 from desc.equilibrium import Equilibrium
@@ -398,7 +399,7 @@ def test_automorphism():
     )
 
     # test that floating point error is acceptable
-    x, w = tanh_sinh_quad(19)
+    x, w = tanh_sinh(19)
     assert np.all(np.abs(x) < 1)
     y = 1 / (1 - np.abs(x))
     assert np.isfinite(y).all()
@@ -437,7 +438,7 @@ def test_bounce_quadrature():
         B,
         B_z_ra,
         knots,
-        quad=tanh_sinh_quad,
+        quad=tanh_sinh,
         automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
         resolution=18,
         check=True,
@@ -446,27 +447,15 @@ def test_bounce_quadrature():
     assert tanh_sinh_arcsin.size == 1
     np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
 
-    bounce_integrate, _ = bounce_integral(
-        B_sup_z,
-        B,
-        B_z_ra,
-        knots,
-        quad=np.polynomial.legendre.leggauss,
-        automorphism=(automorphism_sin, grad_automorphism_sin),
-        deg=16,
-        check=True,
-    )
+    bounce_integrate, _ = bounce_integral(B_sup_z, B, B_z_ra, knots, deg=16, check=True)
     leg_gauss_sin = _filter_not_nan(bounce_integrate(integrand, [], pitch))
     assert leg_gauss_sin.size == 1
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
 
 
 @pytest.mark.unit
-def test_example_bounce_integral():
-    """Test example code in bounce_integral docstring."""
-    # This test also stress tests the bounce_points routine because
-    # the |B| spline that is generated from this combination of knots
-    # equilibrium etc. has edge cases for bounce point computations.
+def test_bounce_integral_checks():
+    """Test that all the internal correctness checks pass for real example."""
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
@@ -481,7 +470,7 @@ def test_example_bounce_integral():
         data["|B|_z|r,a"],
         knots,
         check=True,
-        resolution=3,  # not checking quadrature accuracy in this test
+        deg=3,  # not checking quadrature accuracy in this test
     )
 
     def numerator(g_zz, B, pitch, Z):
@@ -493,7 +482,7 @@ def test_example_bounce_integral():
 
     pitch = 1 / get_extrema(**spline)
     num = bounce_integrate(numerator, data["g_zz"], pitch)
-    den = bounce_integrate(denominator, [], pitch)
+    den = bounce_integrate(denominator, [], pitch, batched=False)
     average = num / den
     assert np.isfinite(average).any()
 
@@ -507,7 +496,7 @@ def _fixed_elliptic(integrand, k, resolution):
     k = np.atleast_1d(k)
     a = np.zeros_like(k)
     b = 2 * np.arcsin(k)
-    x, w = tanh_sinh_quad(resolution, grad_automorphism_arcsin)
+    x, w = tanh_sinh(resolution, grad_automorphism_arcsin)
     Z = affine_bijection_reverse(
         automorphism_arcsin(x), a[..., np.newaxis], b[..., np.newaxis]
     )
@@ -658,6 +647,7 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
 
 
 @pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_drift():
     """Test bounce-averaged drift with analytical expressions."""
     eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
@@ -693,8 +683,6 @@ def test_drift():
         knots=zeta,
         B_ref=B_ref,
         L_ref=L_ref,
-        quad=np.polynomial.legendre.leggauss,
-        automorphism=(automorphism_sin, grad_automorphism_sin),
         # tanh-sinh-arcsin quadrature requires 9 nodes to leg-gauss-sin's 5
         deg=5,
         check=True,
@@ -704,7 +692,6 @@ def test_drift():
     B0 = np.mean(B)
     # TODO: epsilon should be dimensionless, and probably computed in a way that
     #   is independent of normalization length scales.
-    # I wouldn't really consider 0.05 << 1... maybe for a rough approximation.
     epsilon = L_ref * rho  # Aspect ratio of the flux surface.
     assert np.isclose(epsilon, 0.05)
     iota = grid.compress(data["iota"]).item()
@@ -714,7 +701,7 @@ def test_drift():
     np.testing.assert_allclose(B, B_analytic, atol=3e-3)
 
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
-    # TODO: This method of computing G0 suggests a fixed point iteration?
+    # This method of computing G0 suggests a fixed point iteration?
     G0 = data["a"]
     gradpar_analytic = G0 * (1 - epsilon * np.cos(theta_PEST))
     gradpar_theta_analytic = iota * gradpar_analytic
@@ -818,4 +805,4 @@ def test_drift():
     ax.set_ylabel("Bounce averaged binormal drift")
     ax.set_title(r"Bounce averaged binormal drift, low $\beta$ shifted circle model")
     np.testing.assert_allclose(drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2)
-    plt.show()
+    return fig

@@ -2,6 +2,7 @@
 
 from functools import partial
 
+import orthax.legendre
 from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
 from matplotlib import pyplot as plt
 
@@ -765,7 +766,7 @@ def grad_automorphism_sin(x):
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 
 
-def tanh_sinh_quad(resolution, w=lambda x: 1, t_max=None):
+def tanh_sinh(resolution, w=lambda x: 1, t_max=None):
     """Tanh-Sinh quadrature.
 
     Returns quadrature points xₖ and weights Wₖ for the approximate evaluation
@@ -1103,8 +1104,8 @@ def _bounce_quadrature(
                 knots,
                 method,
                 method_B,
-                check,
-                plot,
+                check=False,
+                plot=False,
             )
 
         _, result = imap(loop, (jnp.moveaxis(bp1, -1, 0), jnp.moveaxis(bp2, -1, 0)))
@@ -1125,8 +1126,8 @@ def bounce_integral(
     B,
     B_z_ra,
     knots,
-    quad=tanh_sinh_quad,
-    automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
+    quad=orthax.legendre.leggauss,
+    automorphism=(automorphism_sin, grad_automorphism_sin),
     B_ref=1,
     L_ref=1,
     check=False,
@@ -1192,8 +1193,9 @@ def bounce_integral(
         The quadrature scheme used to evaluate the integral.
         The returned quadrature points xₖ and weights wₖ
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
-        Gauss-Legendre quadrature (``orthax.legendre.leggauss``)
-        with ``automorphism_sin`` can be competitive against the default choice.
+        Tanh-Sinh quadrature ``tanh_sinh`` with ``automorphism_arcsin``
+        can be competitive against the default choice of Gauss-Legendre
+        quadrature with ``orthax.legendre.leggauss`` and `automorphism_sin``.
     automorphism : (callable, callable)
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
@@ -1314,8 +1316,8 @@ def bounce_integral(
     assert B_c.shape[-1] == B_z_ra_c.shape[-1] == knots.size - 1
     spline = {"knots": knots, "B_c": B_c, "B_z_ra_c": B_z_ra_c}
 
-    if quad == tanh_sinh_quad:
-        kwargs.setdefault("resolution", 19)
+    if quad == orthax.legendre.leggauss:
+        kwargs.setdefault("deg", 19)
     x, w = quad(**kwargs)
     # The gradient of the transformation is the weight function w(x) of the integral.
     auto, grad_auto = automorphism

@@ -795,17 +795,20 @@ def test_drift():
     np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
 
     relative_shift = 1e-6
-    pitch = 1 / np.linspace(
-        np.min(B) * (1 + relative_shift),
-        np.max(B) * (1 - relative_shift),
-        100,
+    pitch = (
+        1
+        / np.linspace(
+            np.min(B) * (1 + relative_shift),
+            np.max(B) * (1 - relative_shift),
+            100,
+        )[:-1]
     )
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
     y = np.sqrt(2 * epsilon * pitch * B0)
     I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
     I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
-    drift_analytic = (
+    drift_analytic_num = (
         fudge_2 * alpha_MHD / B0**2 * I_1
         - 0.5
         * fudge_1
@@ -816,25 +819,43 @@ def test_drift():
         )
     ) / G0
 
-    def integrand(cvdrift, gbdrift, B, pitch, Z):
+    drift_analytic_denom = I_0 / G0
+
+    drift_analytic = drift_analytic_num / drift_analytic_denom
+
+    def integrand_num(cvdrift, gbdrift, B, pitch, Z):
         g = jnp.sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
-    drift = bounce_integrate(
-        integrand=integrand,
+    def integrand_denom(B, pitch, Z):
+        g = jnp.sqrt(1 - pitch * B)
+        return 1 / g
+
+    drift_numerical_num = bounce_integrate(
+        integrand=integrand_num,
         f=[cvdrift, gbdrift],
         pitch=pitch[:, np.newaxis],
         method="akima",
     )
-    drift = np.squeeze(_filter_not_nan(drift))
+
+    drift_numerical_denom = bounce_integrate(
+        integrand=integrand_denom,
+        f=[],
+        pitch=pitch[:, np.newaxis],
+        method="akima",
+    )
+
+    drift_numerical_num = np.squeeze(_filter_not_nan(drift_numerical_num))
+    drift_numerical_denom = np.squeeze(_filter_not_nan(drift_numerical_denom))
+
+    drift_numerical = drift_numerical_num / drift_numerical_denom
     msg = "There should be one bounce integral per pitch in this example."
-    assert drift.size == drift_analytic.size, msg
+    assert drift_numerical.size == drift_analytic.size, msg
 
     fig, ax = plt.subplots()
     ax.plot(1 / pitch, drift_analytic, label="analytic")
-    ax.plot(1 / pitch, drift, label="numerical")
+    ax.plot(1 / pitch, drift_numerical, label="numerical")
     ax.set_xlabel(r"$1 / \lambda$")
     ax.set_ylabel("Bounce averaged drift")
-    # FIXME: Increase tolerance or correct analytic expressions.
-    # np.testing.assert_allclose(drift, drift_analytic)  # noqa: E800
+    np.testing.assert_allclose(drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2)
     return fig

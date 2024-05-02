@@ -653,7 +653,7 @@ class CoilsetMinDistance(_CoilObjective):
 
     _scalar = False
     _units = "(m)"
-    _print_value_fmt = "CoilSet Minimum Distance: {:10.3e} "
+    _print_value_fmt = "Minimum coil-coil distance: {:10.3e} "
 
     def __init__(
         self,
@@ -669,7 +669,7 @@ class CoilsetMinDistance(_CoilObjective):
         name="coilset minimum distance",
     ):
         if target is None and bounds is None:
-            target = 0
+            bounds = (0, np.inf)
         self._coils = coils
 
         super().__init__(
@@ -710,9 +710,9 @@ class CoilsetMinDistance(_CoilObjective):
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
         )
         flattened_coils = (
-            [flattened_coils[0]]
-            if not isinstance(self._coils, CoilSet)
-            else flattened_coils
+            flattened_coils
+            if isinstance(self._coils, CoilSet)
+            else [flattened_coils[0]]  # XXX: I don't understand this
         )
         self._dim_f = len(flattened_coils)
         self._constants["quad_weights"] = 1
@@ -732,11 +732,9 @@ class CoilsetMinDistance(_CoilObjective):
         -------
         f : array of floats
             Distance to nearest coil for each coil in the coilset.
-        """
-        data = super().compute(params, constants=constants, basis="xyz")
-        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
 
-        pts = jnp.dstack([d["x"].T for d in data]).T  # shape (ncoil, npts, 3)
+        """
+        pts = self._coils.compute_position(source_grid=self._grid)
 
         def body(i):
             dx = pts[i] - pts

@@ -6,7 +6,16 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import fori_loop, jit, jnp, scan, tree_stack, tree_unstack, vmap
+from desc.backend import (
+    fori_loop,
+    jit,
+    jnp,
+    scan,
+    tree_leaves,
+    tree_stack,
+    tree_unstack,
+    vmap,
+)
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.geometry import (
@@ -146,6 +155,26 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
+
+    def compute_position(self, params=None, source_grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        x : ndarray, shape(n,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        x = self.compute("x", grid=source_grid, params=params, **kwargs)["x"]
+        return jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape = (1, num_nodes, 3)
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -853,6 +882,64 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
+    def compute_position(self, params=None, source_grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        x : ndarray, shape(n,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        if params is None:
+            params = [get_params("x", coil) for coil in self]
+        basis = kwargs.pop("basis", "xyz")
+        data = self.compute("x", grid=source_grid, params=params, basis=basis, **kwargs)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        x = jnp.dstack([d["x"].T for d in data]).T  # shape = (ncoils, num_nodes, 3)
+
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+        if basis.lower() == "rpz":
+            xyz = rpz2xyz(x)
+        else:
+            xyz = x
+
+        # if stellarator symmetric, add reflected coils from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            xyz = jnp.vstack((xyz, xyz_sym))
+
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        rpz = xyz2rpz(xyz)
+
+        # if field period symmetry, add rotated coils from other field periods
+        if self.NFP > 1:
+            rpz0 = rpz
+            for k in range(1, self.NFP):
+                rpz = jnp.vstack(
+                    (rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0]))
+                )
+
+        # ensure phi in [0, 2pi)
+        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
+
+        if basis.lower() == "xyz":
+            x = rpz2xyz(rpz)
+        else:
+            x = rpz
+        return x
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
     ):
@@ -1035,7 +1122,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)
-        data = coils.compute("phi", return_only_unique=True)
+        data = coils.compute("phi")
         for i, cdata in enumerate(data):
             errorif(
                 np.any(cdata["phi"] > maxphi),
@@ -1472,6 +1559,34 @@ class MixedCoilSet(CoilSet):
                 self.coils, grid, params, transforms, data
             )
         ]
+
+    def compute_position(self, params=None, source_grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        x : ndarray, shape(n,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        params = self._make_arraylike(params)
+        source_grid = self._make_arraylike(source_grid)
+
+        x = jnp.vstack(
+            [
+                coil.compute_position(par, grd)
+                for coil, par, grd in zip(self.coils, params, source_grid)
+            ]
+        )
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None

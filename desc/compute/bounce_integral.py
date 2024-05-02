@@ -4,6 +4,7 @@ from functools import partial
 
 from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
 from matplotlib import pyplot as plt
+from orthax.legendre import leggauss
 
 from desc.backend import complex_sqrt, flatnonzero, imap, jnp, put_along_axis, take
 from desc.compute.utils import safediv
@@ -405,7 +406,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6, sort=True):
     return jnp.sort(B_extrema, axis=0) if sort else B_extrema
 
 
-def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs):
+def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False):
     """Compute the bounce points given spline of |B| and pitch λ.
 
     Parameters
@@ -507,11 +508,11 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
     # rotational transform to potentially capture the bounce point outside
     # this snapshot of the field line.
     if check:
-        _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot, **kwargs)
+        _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot)
     return bp1, bp2
 
 
-def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=True, **kwargs):
+def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
     """Check that bounce points are computed correctly.
 
     Parameters
@@ -547,7 +548,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=True, **kwargs):
                 )
                 if plot:
                     plot_field_line_with_ripple(
-                        B, pitch[p, s], bp1_p, bp2_p, name=f"{p},{s}", **kwargs
+                        B, pitch[p, s], bp1_p, bp2_p, name=f"{p},{s}"
                     )
                 print("bp1:", bp1_p)
                 print("bp2:", bp2_p)
@@ -561,7 +562,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=True, **kwargs):
                 assert not err_3, msg_3
         if plot:
             plot_field_line_with_ripple(
-                B, pitch[:, s], bp1[:, s], bp2[:, s], name=str(s), **kwargs
+                B, pitch[:, s], bp1[:, s], bp2[:, s], name=str(s)
             )
 
 
@@ -575,7 +576,6 @@ def plot_field_line_with_ripple(
     num=500,
     show=True,
     name=None,
-    plot_pitch=True,
 ):
     """Plot the field line given spline of |B| and bounce points etc.
 
@@ -599,8 +599,6 @@ def plot_field_line_with_ripple(
         Whether to show the plot.
     name : str
         String to prepend to plot title.
-    plot_pitch: bool
-        Whether to plot the pitch lines.
 
     Returns
     -------
@@ -629,13 +627,8 @@ def plot_field_line_with_ripple(
 
     if pitch is not None:
         b = jnp.atleast_1d(1 / pitch)
-        if plot_pitch:
-            for val in b:
-                add(
-                    ax.axhline(
-                        val, color="tab:purple", alpha=0.75, label=r"$1 / \lambda$"
-                    )
-                )
+        for val in b:
+            add(ax.axhline(val, color="tab:purple", alpha=0.25, label=r"$1 / \lambda$"))
         bp1, bp2 = jnp.atleast_2d(bp1, bp2)
         for i in range(bp1.shape[0]):
             bp1_i, bp2_i = map(_filter_not_nan, (bp1[i], bp2[i]))
@@ -773,7 +766,7 @@ def grad_automorphism_sin(x):
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 
 
-def tanh_sinh_quad(resolution, w=lambda x: 1, t_max=None):
+def tanh_sinh(resolution, w=lambda x: 1, t_max=None):
     """Tanh-Sinh quadrature.
 
     Returns quadrature points xₖ and weights Wₖ for the approximate evaluation
@@ -889,7 +882,7 @@ def _interpolatory_quadrature(
     method,
     method_B,
     check=False,
-    plot=True,
+    plot=False,
 ):
     """Interpolate given functions to points Z and perform quadrature.
 
@@ -1034,7 +1027,7 @@ def _bounce_quadrature(
     method_B="cubic",
     batched=True,
     check=False,
-    plot=True,
+    plot=False,
 ):
     """Bounce integrate ∫ f(ℓ) dℓ.
 
@@ -1111,8 +1104,8 @@ def _bounce_quadrature(
                 knots,
                 method,
                 method_B,
-                check,
-                plot,
+                check=False,
+                plot=False,
             )
 
         _, result = imap(loop, (jnp.moveaxis(bp1, -1, 0), jnp.moveaxis(bp2, -1, 0)))
@@ -1133,12 +1126,12 @@ def bounce_integral(
     B,
     B_z_ra,
     knots,
-    quad=tanh_sinh_quad,
-    automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
+    quad=leggauss,
+    automorphism=(automorphism_sin, grad_automorphism_sin),
     B_ref=1,
     L_ref=1,
     check=False,
-    plot=True,
+    plot=False,
     **kwargs,
 ):
     """Returns a method to compute the bounce integral of any quantity.
@@ -1150,10 +1143,9 @@ def bounce_integral(
         f(ℓ) is the quantity to integrate along the field line,
         and the boundaries of the integral are bounce points, ζ₁, ζ₂, such that
         (λ |B|)(ζᵢ) = 1.
-    Physically, the pitch angle λ is the magnetic moment over the energy
-    of particle. For a particle with fixed λ, bounce points are defined to be
-    the location on the field line such that the particle's velocity parallel
-    to the magnetic field is zero.
+    For a particle with fixed λ, bounce points are defined to be the location
+    on the field line such that the particle's velocity parallel to the magnetic
+    field is zero.
 
     The bounce integral is defined up to a sign.
     We choose the sign that corresponds the particle's guiding center trajectory
@@ -1201,8 +1193,9 @@ def bounce_integral(
         The quadrature scheme used to evaluate the integral.
         The returned quadrature points xₖ and weights wₖ
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
-        Gauss-Legendre quadrature (``orthax.legendre.leggauss``)
-        with ``automorphism_sin`` can be competitive against the default choice.
+        Tanh-Sinh quadrature ``tanh_sinh`` with ``automorphism_arcsin``
+        can be competitive against the default choice of Gauss-Legendre
+        quadrature with `automorphism_sin``.
     automorphism : (callable, callable)
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
@@ -1257,7 +1250,7 @@ def bounce_integral(
         eq = get("HELIOTRON")
         rho = np.linspace(1e-12, 1, 6)
         alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
-        knots = np.linspace(-3 * np.pi, 3 * np.pi, 40)
+        knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
         grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
         data = eq.compute(
             ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
@@ -1265,12 +1258,7 @@ def bounce_integral(
             override_grid=False,
         )
         bounce_integrate, spline = bounce_integral(
-            data["B^zeta"],
-            data["|B|"],
-            data["|B|_z|r,a"],
-            knots,
-            check=True,
-            plot=False,
+            data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, check=True
         )
 
         def numerator(g_zz, B, pitch, Z):
@@ -1302,7 +1290,6 @@ def bounce_integral(
         print(np.nansum(average, axis=-1))
 
     """
-    plot_pitch = kwargs.pop("plot_pitch", True)
 
     def group_data_by_field_line(g):
         errorif(g.ndim > 2)
@@ -1329,8 +1316,8 @@ def bounce_integral(
     assert B_c.shape[-1] == B_z_ra_c.shape[-1] == knots.size - 1
     spline = {"knots": knots, "B_c": B_c, "B_z_ra_c": B_z_ra_c}
 
-    if quad == tanh_sinh_quad:
-        kwargs.setdefault("resolution", 29)
+    if quad == leggauss:
+        kwargs.setdefault("deg", 19)
     x, w = quad(**kwargs)
     # The gradient of the transformation is the weight function w(x) of the integral.
     auto, grad_auto = automorphism
@@ -1371,7 +1358,7 @@ def bounce_integral(
             Defaults to akima spline to suppress oscillation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
         batched : bool
-            Whether to perform computation in a batched manner.s
+            Whether to perform computation in a batched manner.
             If you can afford the memory expense, batched is more efficient.
 
         Returns
@@ -1381,9 +1368,7 @@ def bounce_integral(
             lines. Last axis enumerates the bounce integrals.
 
         """
-        bp1, bp2 = bounce_points(
-            pitch, knots, B_c, B_z_ra_c, check, plot, plot_pitch=plot_pitch
-        )
+        bp1, bp2 = bounce_points(pitch, knots, B_c, B_z_ra_c, check, plot)
         result = _bounce_quadrature(
             bp1,
             bp2,
@@ -1411,7 +1396,7 @@ def bounce_integral(
 def desc_grid_from_field_line_coords(
     eq,
     rho=jnp.linspace(1e-7, 1, 10),
-    alpha=0,
+    alpha=jnp.array([0]),
     zeta=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 40),
 ):
     """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
@@ -1427,7 +1412,6 @@ def desc_grid_from_field_line_coords(
         Unique flux surface label coordinates.
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
-        Defaults to 20 linearly spaced nodes.
     zeta : ndarray
         Unique field line-following ζ coordinates.
 

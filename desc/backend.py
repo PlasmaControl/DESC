@@ -451,10 +451,13 @@ else:  # pragma: no cover
     complex_sqrt = np.emath.sqrt
     put_along_axis = np.put_along_axis
 
-    def imap(f, xs, out_axes=0):
-        """A numpy implementation of jax.lax.map."""
+    def imap(f, xs, in_axes=0, out_axes=0):
+        """Generalizes jax.lax.map; uses numpy."""
         if not isinstance(xs, np.ndarray):
-            raise NotImplementedError("Require numpy array input, or install jax.")
+            raise NotImplementedError(
+                "Require numpy array input, or install jax to support pytrees."
+            )
+        xs = np.moveaxis(xs, source=in_axes, destination=0)
         return np.stack([f(x) for x in xs], axis=out_axes)
 
     def vmap(fun, in_axes=0, out_axes=0):
@@ -479,15 +482,7 @@ else:  # pragma: no cover
             Vectorized version of fun.
 
         """
-        if in_axes != 0:
-            raise NotImplementedError(
-                f"Backend for numpy vmap for in_axes={in_axes} not implemented yet."
-            )
-
-        def f(fun_inputs):
-            return imap(fun, fun_inputs, out_axes)
-
-        return f
+        return lambda xs: imap(fun, xs, in_axes, out_axes)
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""

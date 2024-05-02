@@ -5,10 +5,7 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index, get_data_deps
-from desc.compute.bounce_integral import (
-    desc_grid_from_field_line_coords,
-    tanh_sinh_quad,
-)
+from desc.compute.bounce_integral import desc_grid_from_field_line_coords, tanh_sinh
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 
@@ -103,7 +100,7 @@ def test_effective_ripple():
         # allows for composite Gauss-Legendre quadrature which
         # will be able to match 30 node quadrature with maybe ~10 nodes.
         # So very large memory savings.
-        quad=lambda: tanh_sinh_quad(41),
+        quad=lambda: tanh_sinh(41),
         # check=True,  # noqa: E800
         # plot=True,  # noqa: E800
     )

@@ -32,7 +32,7 @@ from desc.compute.bounce_integral import (
     grad_automorphism_sin,
     plot_field_line_with_ripple,
     take_mask,
-    tanh_sinh_quad,
+    tanh_sinh,
 )
 from desc.compute.utils import dot, get_data_deps, safediv
 from desc.equilibrium import Equilibrium
@@ -246,9 +246,7 @@ def test_bounce_points():
         knots = np.linspace(start, end, 5)
         B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
         pitch = 2
-        bp1, bp2 = bounce_points(
-            pitch, knots, B.c, B.derivative().c, check=True, plot=False
-        )
+        bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -261,9 +259,7 @@ def test_bounce_points():
         k = np.linspace(start, end, 5)
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch = 2
-        bp1, bp2 = bounce_points(
-            pitch, k, B.c, B.derivative().c, check=True, plot=False
-        )
+        bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -279,7 +275,7 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3]
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         assert bp1.size and bp2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
@@ -300,7 +296,7 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -318,9 +314,7 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        bp1, bp2 = bounce_points(
-            pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True, plot=False
-        )
+        bp1, bp2 = bounce_points(pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True)
         if plot:
             plot_field_line_with_ripple(B, pitch, bp1, bp2, start=k[2])
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
@@ -356,7 +350,7 @@ def test_bounce_points():
         # value theorem holds for the continuous spline, so when fed these sequence
         # of roots, the correct action is to ignore the first green root since
         # otherwise the interior of the bounce points would be hills and not valleys.
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         assert bp1.size and bp2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
@@ -405,7 +399,7 @@ def test_automorphism():
     )
 
     # test that floating point error is acceptable
-    x, w = tanh_sinh_quad(19)
+    x, w = tanh_sinh(19)
     assert np.all(np.abs(x) < 1)
     y = 1 / (1 - np.abs(x))
     assert np.isfinite(y).all()
@@ -444,42 +438,28 @@ def test_bounce_quadrature():
         B,
         B_z_ra,
         knots,
-        quad=tanh_sinh_quad,
+        quad=tanh_sinh,
         automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
         resolution=18,
         check=True,
-        plot=False,
     )
     tanh_sinh_arcsin = _filter_not_nan(bounce_integrate(integrand, [], pitch))
     assert tanh_sinh_arcsin.size == 1
     np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
 
-    bounce_integrate, _ = bounce_integral(
-        B_sup_z,
-        B,
-        B_z_ra,
-        knots,
-        quad=np.polynomial.legendre.leggauss,
-        automorphism=(automorphism_sin, grad_automorphism_sin),
-        deg=16,
-        check=True,
-        plot=False,
-    )
+    bounce_integrate, _ = bounce_integral(B_sup_z, B, B_z_ra, knots, deg=16, check=True)
     leg_gauss_sin = _filter_not_nan(bounce_integrate(integrand, [], pitch))
     assert leg_gauss_sin.size == 1
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
 
 
 @pytest.mark.unit
-def test_example_bounce_integral():
-    """Test example code in bounce_integral docstring."""
-    # This test also stress tests the bounce_points routine because
-    # the |B| spline that is generated from this combination of knots
-    # equilibrium etc. has many edge cases for bounce point computations.
+def test_bounce_integral_checks():
+    """Test that all the internal correctness checks pass for real example."""
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
-    knots = np.linspace(-3 * np.pi, 3 * np.pi, 40)
+    knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
     grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
     data = eq.compute(
         ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"], grid=grid_desc, override_grid=False
@@ -490,7 +470,7 @@ def test_example_bounce_integral():
         data["|B|_z|r,a"],
         knots,
         check=True,
-        plot=False,
+        deg=3,  # not checking quadrature accuracy in this test
     )
 
     def numerator(g_zz, B, pitch, Z):
@@ -502,25 +482,9 @@ def test_example_bounce_integral():
 
     pitch = 1 / get_extrema(**spline)
     num = bounce_integrate(numerator, data["g_zz"], pitch)
-    den = bounce_integrate(denominator, [], pitch)
+    den = bounce_integrate(denominator, [], pitch, batched=False)
     average = num / den
     assert np.isfinite(average).any()
-
-    # Now we can group the data by field line.
-    average = average.reshape(pitch.shape[0], rho.size, alpha.size, -1)
-    # The bounce averages stored at index i, j
-    i, j = 0, 0
-    print(average[:, i, j])
-    # are the bounce averages along the field line with nodes
-    # given in Clebsch-Type field-line coordinates ρ, α, ζ
-    nodes = grid_fl.nodes.reshape(rho.size, alpha.size, -1, 3)
-    print(nodes[i, j])
-    # for the pitch values stored in
-    pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
-    print(pitch[:, i, j])
-    # Some of these bounce averages will evaluate as nan.
-    # You should filter out these nan values when computing stuff.
-    print(np.nansum(average, axis=-1))
 
 
 @partial(np.vectorize, excluded={0})
@@ -532,7 +496,7 @@ def _fixed_elliptic(integrand, k, resolution):
     k = np.atleast_1d(k)
     a = np.zeros_like(k)
     b = 2 * np.arcsin(k)
-    x, w = tanh_sinh_quad(resolution, grad_automorphism_arcsin)
+    x, w = tanh_sinh(resolution, grad_automorphism_arcsin)
     Z = affine_bijection_reverse(
         automorphism_arcsin(x), a[..., np.newaxis], b[..., np.newaxis]
     )
@@ -607,6 +571,7 @@ def _elliptic_incomplete(k2):
     return I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7
 
 
+# kludge until GitHub issue #719 is resolved.
 def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
     """Compute field line quantities on correct grid for test_drift().
 
@@ -636,7 +601,6 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
         Zeta values along field line.
 
     """
-    errorif(alpha != 0, NotImplementedError)
     if names_0d_or_1dr is None:
         names_0d_or_1dr = []
     p = "desc.equilibrium.equilibrium.Equilibrium"
@@ -655,10 +619,11 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
 
     # Make a set of nodes along a single fieldline.
     iota = grid1dr.compress(seed_data["iota"]).item()
+    errorif(alpha != 0, NotImplementedError)
     zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
     # Make grid that can separate into field lines via a reshape operation,
     # as expected by bounce_integral().
-    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, zeta)
+    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, zeta=zeta)
 
     # Collect quantities that can be used as a seed to compute the
     # field line quantities over the grid mapped from field line coordinates.
@@ -670,9 +635,7 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
         for key, val in seed_data.items()
         if key in dep1dr
     }
-    data = {}
-    data.update(data0d)
-    data.update(data1d)
+    data = data0d | data1d
     # Compute field line quantities with precomputed dependencies.
     for name in names_field_line:
         if name in data:
@@ -686,13 +649,7 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_drift():
-    """Test bounce-averaged drift with analytical expressions.
-
-    Calculate bounce-averaged drifts using the bounce-average routine and
-    compare it with the analytical expression
-    # Note 2: Remove tests/test_equilibrium :: test_shifted_circle_geometry
-    # once all the epsilons and Gammas have been implemented and tested
-    """
+    """Test bounce-averaged drift with analytical expressions."""
     eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
     psi_boundary = eq.Psi / (2 * np.pi)
     psi = 0.25 * psi_boundary
@@ -726,22 +683,15 @@ def test_drift():
         knots=zeta,
         B_ref=B_ref,
         L_ref=L_ref,
-        quad=tanh_sinh_quad,  # noqa: E800
-        automorphism=(automorphism_arcsin, grad_automorphism_arcsin),  # noqa: E800
-        resolution=50,  # noqa: E800
-        # quad=np.polynomial.legendre.leggauss,  # noqa: E800
-        # automorphism=(automorphism_sin, grad_automorphism_sin),  # noqa: E800
-        # deg=50,  # noqa: E800
+        # tanh-sinh-arcsin quadrature requires 9 nodes to leg-gauss-sin's 5
+        deg=5,
         check=True,
-        plot=False,
-        monotonic=False,
     )
 
     B = data["|B|"] / B_ref
     B0 = np.mean(B)
     # TODO: epsilon should be dimensionless, and probably computed in a way that
     #   is independent of normalization length scales.
-    # I wouldn't really consider 0.05 << 1... maybe for a rough approximation.
     epsilon = L_ref * rho  # Aspect ratio of the flux surface.
     assert np.isclose(epsilon, 0.05)
     iota = grid.compress(data["iota"]).item()
@@ -751,7 +701,7 @@ def test_drift():
     np.testing.assert_allclose(B, B_analytic, atol=3e-3)
 
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
-    # TODO: This method of computing G0 suggests a fixed point iteration?
+    # This method of computing G0 suggests a fixed point iteration?
     G0 = data["a"]
     gradpar_analytic = G0 * (1 - epsilon * np.cos(theta_PEST))
     gradpar_theta_analytic = iota * gradpar_analytic
@@ -769,29 +719,44 @@ def test_drift():
     gds21_analytic = -shear * (
         shear * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
     )
+    gds21_analytic_low_order = -shear * (
+        shear * theta_PEST - alpha_MHD / B0**4 * np.sin(theta_PEST)
+    )
     np.testing.assert_allclose(gds21, gds21_analytic, atol=2e-2)
+    np.testing.assert_allclose(gds21, gds21_analytic_low_order, atol=2.7e-2)
 
     fudge_1 = 0.19
     gbdrift_analytic = fudge_1 * (
         -shear + np.cos(theta_PEST) - gds21_analytic / shear * np.sin(theta_PEST)
     )
+    gbdrift_analytic_low_order = fudge_1 * (
+        -shear
+        + np.cos(theta_PEST)
+        - gds21_analytic_low_order / shear * np.sin(theta_PEST)
+    )
     fudge_2 = 0.07
     cvdrift_analytic = gbdrift_analytic + fudge_2 * alpha_MHD / B**2
+    cvdrift_analytic_low_order = (
+        gbdrift_analytic_low_order + fudge_2 * alpha_MHD / B0**2
+    )
     np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1e-2)
     np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=2e-2)
+    np.testing.assert_allclose(gbdrift, gbdrift_analytic_low_order, atol=1e-2)
+    np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
 
     relative_shift = 1e-6
     pitch = 1 / np.linspace(
         np.min(B) * (1 + relative_shift),
         np.max(B) * (1 - relative_shift),
         100,
+        endpoint=False,
     )
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
-    y = np.sqrt(epsilon * pitch * B0)
+    y = np.sqrt(2 * epsilon * pitch * B0)
     I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
     I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
-    drift_analytic = (
+    drift_analytic_num = (
         fudge_2 * alpha_MHD / B0**2 * I_1
         - 0.5
         * fudge_1
@@ -802,25 +767,42 @@ def test_drift():
         )
     ) / G0
 
-    def integrand(cvdrift, gbdrift, B, pitch, Z):
+    drift_analytic_denom = I_0 / G0
+
+    drift_analytic = drift_analytic_num / drift_analytic_denom
+
+    def integrand_num(cvdrift, gbdrift, B, pitch, Z):
         g = jnp.sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
-    drift = bounce_integrate(
-        integrand=integrand,
+    def integrand_denom(B, pitch, Z):
+        g = jnp.sqrt(1 - pitch * B)
+        return 1 / g
+
+    drift_numerical_num = bounce_integrate(
+        integrand=integrand_num,
         f=[cvdrift, gbdrift],
         pitch=pitch[:, np.newaxis],
-        method="akima",
     )
-    drift = np.squeeze(_filter_not_nan(drift))
+
+    drift_numerical_denom = bounce_integrate(
+        integrand=integrand_denom,
+        f=[],
+        pitch=pitch[:, np.newaxis],
+    )
+
+    drift_numerical_num = np.squeeze(_filter_not_nan(drift_numerical_num))
+    drift_numerical_denom = np.squeeze(_filter_not_nan(drift_numerical_denom))
+
+    drift_numerical = drift_numerical_num / drift_numerical_denom
     msg = "There should be one bounce integral per pitch in this example."
-    assert drift.size == drift_analytic.size, msg
+    assert drift_numerical.size == drift_analytic.size, msg
 
     fig, ax = plt.subplots()
     ax.plot(1 / pitch, drift_analytic, label="analytic")
-    ax.plot(1 / pitch, drift, label="numerical")
-    ax.set_xlabel(r"$1 / \lambda$")
-    ax.set_ylabel("Bounce averaged drift")
-    # FIXME: Increase tolerance or correct analytic expressions.
-    # np.testing.assert_allclose(drift, drift_analytic)  # noqa: E800
+    ax.plot(1 / pitch, drift_numerical, label="numerical")
+    ax.set_xlabel(r"$\vert B \vert \sim 1 / \lambda$")
+    ax.set_ylabel("Bounce averaged binormal drift")
+    ax.set_title(r"Bounce averaged binormal drift, low $\beta$ shifted circle model")
+    np.testing.assert_allclose(drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2)
     return fig

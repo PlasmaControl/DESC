@@ -1893,6 +1893,10 @@ class FixAnisotropy(FixParameters):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -1913,6 +1917,8 @@ class FixAnisotropy(FixParameters):
         target=None,
         bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         indices=True,
         name="fixed anisotropy",
     ):
@@ -1922,6 +1928,8 @@ class FixAnisotropy(FixParameters):
             target=target,
             bounds=bounds,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
 

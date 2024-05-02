@@ -210,11 +210,11 @@ def maybe_add_self_consistency(thing, constraints):
         constraints += (BoundaryZSelfConsistency(eq=thing),)
     if {"L_lmn"} <= params and not is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=thing),)
-    if {"R_lmn", "Ra_lmn"} <= params and not is_any_instance(
+    if {"R_lmn", "Ra_n"} <= params and not is_any_instance(
         constraints, AxisRSelfConsistency
     ):
         constraints += (AxisRSelfConsistency(eq=thing),)
-    if {"Z_lmn", "Za_lmn"} <= params and not is_any_instance(
+    if {"Z_lmn", "Za_n"} <= params and not is_any_instance(
         constraints, AxisZSelfConsistency
     ):
         constraints += (AxisZSelfConsistency(eq=thing),)

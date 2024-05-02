@@ -769,16 +769,30 @@ def test_drift():
     gds21_analytic = -shear * (
         shear * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
     )
+    gds21_analytic_low_order = -shear * (
+        shear * theta_PEST - alpha_MHD / B0**4 * np.sin(theta_PEST)
+    )
     np.testing.assert_allclose(gds21, gds21_analytic, atol=2e-2)
+    np.testing.assert_allclose(gds21, gds21_analytic_low_order, atol=2.7e-2)
 
     fudge_1 = 0.19
     gbdrift_analytic = fudge_1 * (
         -shear + np.cos(theta_PEST) - gds21_analytic / shear * np.sin(theta_PEST)
     )
+    gbdrift_analytic_low_order = fudge_1 * (
+        -shear
+        + np.cos(theta_PEST)
+        - gds21_analytic_low_order / shear * np.sin(theta_PEST)
+    )
     fudge_2 = 0.07
     cvdrift_analytic = gbdrift_analytic + fudge_2 * alpha_MHD / B**2
+    cvdrift_analytic_low_order = (
+        gbdrift_analytic_low_order + fudge_2 * alpha_MHD / B0**2
+    )
     np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1e-2)
     np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=2e-2)
+    np.testing.assert_allclose(gbdrift, gbdrift_analytic_low_order, atol=1e-2)
+    np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
 
     relative_shift = 1e-6
     pitch = 1 / np.linspace(
@@ -788,7 +802,7 @@ def test_drift():
     )
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
-    y = np.sqrt(epsilon * pitch * B0)
+    y = np.sqrt(1 * epsilon * pitch * B0)
     I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
     I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
     drift_analytic = (

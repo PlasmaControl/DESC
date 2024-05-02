@@ -63,7 +63,7 @@ from .linear_objectives import (
     FixOmniBmax,
     FixOmniMap,
     FixOmniWell,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     FixSheetCurrent,

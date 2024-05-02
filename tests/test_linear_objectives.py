@@ -40,7 +40,7 @@ from desc.objectives import (
     FixModeZ,
     FixOmniMap,
     FixOmniWell,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -353,7 +353,7 @@ def test_factorize_linear_constraints_asserts():
         _ = factorize_linear_constraints(objective, constraint)
 
     # constraining a foreign thing
-    constraint = ObjectiveFunction(FixParameter(surf))
+    constraint = ObjectiveFunction(FixParameters(surf))
     constraint.build(verbose=0)
     with pytest.raises(UserWarning):
         _ = factorize_linear_constraints(objective, constraint)
@@ -911,7 +911,7 @@ def test_fix_omni_indices():
 
 @pytest.mark.unit
 def test_fix_subset_of_params_in_collection():
-    """Tests FixParameter fixing a subset of things in the collection."""
+    """Tests FixParameters fixing a subset of things in the collection."""
     tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
     vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
@@ -944,6 +944,6 @@ def test_fix_subset_of_params_in_collection():
         )
     )
 
-    obj = FixParameter(full_coilset, params)
+    obj = FixParameters(full_coilset, params)
     obj.build()
     np.testing.assert_allclose(obj.target, target)

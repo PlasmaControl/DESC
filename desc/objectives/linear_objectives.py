@@ -19,7 +19,7 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
-# TODO: get rid of this class and inherit from FixParameter instead?
+# TODO: get rid of this class and inherit from FixParameters instead?
 class _FixedObjective(_Objective):
     _fixed = True
     _linear = True
@@ -64,7 +64,7 @@ class _FixedObjective(_Objective):
 
 
 # Rename to `FixParameters` (plural) instead?
-class FixParameter(_Objective):
+class FixParameters(_Objective):
     """Fix specific degrees of freedom associated with a given Optimizable thing.
 
     Parameters
@@ -566,7 +566,7 @@ class AxisZSelfConsistency(_Objective):
         return f
 
 
-class FixBoundaryR(FixParameter):
+class FixBoundaryR(FixParameters):
     """Boundary condition on the R boundary parameters.
 
     Parameters
@@ -617,7 +617,7 @@ class FixBoundaryR(FixParameter):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.R_basis.get_idx(*mode, False))
+                indices = np.append(indices, eq.surface.R_basis.get_idx(*mode))
         super().__init__(
             thing=eq,
             params={"Rb_lmn": indices},
@@ -647,7 +647,7 @@ class FixBoundaryR(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixBoundaryZ(FixParameter):
+class FixBoundaryZ(FixParameters):
     """Boundary condition on the Z boundary parameters.
 
     Parameters
@@ -698,7 +698,7 @@ class FixBoundaryZ(FixParameter):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.Z_basis.get_idx(*mode, False))
+                indices = np.append(indices, eq.surface.Z_basis.get_idx(*mode))
         super().__init__(
             thing=eq,
             params={"Zb_lmn": indices},
@@ -759,8 +759,6 @@ class FixLambdaGauge(_Objective):
             target=0,
             bounds=None,
             weight=1,
-            normalize=False,
-            normalize_target=False,
             name=name,
         )
 
@@ -824,7 +822,7 @@ class FixLambdaGauge(_Objective):
         return jnp.dot(self._A, params["L_lmn"])
 
 
-class FixThetaSFL(FixParameter):
+class FixThetaSFL(FixParameters):
     """Fixes lambda=0 so that poloidal angle is the SFL poloidal angle.
 
     Parameters
@@ -834,12 +832,6 @@ class FixThetaSFL(FixParameter):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
     name : str, optional
         Name of the objective function.
 
@@ -852,8 +844,6 @@ class FixThetaSFL(FixParameter):
         self,
         eq,
         weight=1,
-        normalize=True,
-        normalize_target=True,
         name="theta SFL",
     ):
         super().__init__(
@@ -862,13 +852,11 @@ class FixThetaSFL(FixParameter):
             target=0,
             bounds=None,
             weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
             name=name,
         )
 
 
-class FixAxisR(FixParameter):
+class FixAxisR(FixParameters):
     """Fixes magnetic axis R coefficients.
 
     Parameters
@@ -919,7 +907,7 @@ class FixAxisR(FixParameter):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.axis.R_basis.get_idx(*mode, False))
+                indices = np.append(indices, eq.axis.R_basis.get_idx(*mode))
         super().__init__(
             thing=eq,
             params={"Ra_n": indices},
@@ -949,7 +937,7 @@ class FixAxisR(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixAxisZ(FixParameter):
+class FixAxisZ(FixParameters):
     """Fixes magnetic axis Z coefficients.
 
     Parameters
@@ -1000,7 +988,7 @@ class FixAxisZ(FixParameter):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.axis.Z_basis.get_idx(*mode, False))
+                indices = np.append(indices, eq.axis.Z_basis.get_idx(*mode))
         super().__init__(
             thing=eq,
             params={"Za_n": indices},
@@ -1030,7 +1018,7 @@ class FixAxisZ(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixModeR(FixParameter):
+class FixModeR(FixParameters):
     """Fixes Fourier-Zernike R coefficients.
 
     Parameters
@@ -1081,7 +1069,7 @@ class FixModeR(FixParameter):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.R_basis.get_idx(*mode, False))
+                indices = np.append(indices, eq.R_basis.get_idx(*mode))
         super().__init__(
             thing=eq,
             params={"R_lmn": indices},
@@ -1111,7 +1099,7 @@ class FixModeR(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixModeZ(FixParameter):
+class FixModeZ(FixParameters):
     """Fixes Fourier-Zernike Z coefficients.
 
     Parameters
@@ -1162,7 +1150,7 @@ class FixModeZ(FixParameter):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.Z_basis.get_idx(*mode, False))
+                indices = np.append(indices, eq.Z_basis.get_idx(*mode))
         super().__init__(
             thing=eq,
             params={"Z_lmn": indices},
@@ -1192,7 +1180,7 @@ class FixModeZ(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixModeLambda(FixParameter):
+class FixModeLambda(FixParameters):
     """Fixes Fourier-Zernike lambda coefficients.
 
     Parameters
@@ -1210,12 +1198,6 @@ class FixModeLambda(FixParameter):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to Objective.dim_f.
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1234,8 +1216,6 @@ class FixModeLambda(FixParameter):
         target=None,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
         modes=True,
         name="fix mode lambda",
     ):
@@ -1244,7 +1224,7 @@ class FixModeLambda(FixParameter):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.L_basis.get_idx(*mode, False))
+                indices = np.append(indices, eq.L_basis.get_idx(*mode))
         super().__init__(
             thing=eq,
             params={"L_lmn": indices},
@@ -1252,8 +1232,6 @@ class FixModeLambda(FixParameter):
             bounds=bounds,
             weight=weight,
             name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
         )
 
 
@@ -1606,12 +1584,6 @@ class FixSumModesLambda(_FixedObjective):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f.
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*L_111 + 1*L_222...
@@ -1637,8 +1609,6 @@ class FixSumModesLambda(_FixedObjective):
         target=None,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
         sum_weights=None,
         modes=True,
         name="Fix Sum Modes lambda",
@@ -1671,8 +1641,6 @@ class FixSumModesLambda(_FixedObjective):
             bounds=bounds,
             weight=weight,
             name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -1759,7 +1727,7 @@ class FixSumModesLambda(_FixedObjective):
         return f
 
 
-class FixPressure(FixParameter):
+class FixPressure(FixParameters):
     """Fixes pressure coefficients.
 
     Parameters
@@ -1841,7 +1809,7 @@ class FixPressure(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixAnisotropy(FixParameter):
+class FixAnisotropy(FixParameters):
     """Fixes anisotropic pressure coefficients.
 
     Parameters
@@ -1858,12 +1826,6 @@ class FixAnisotropy(FixParameter):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -1884,8 +1846,6 @@ class FixAnisotropy(FixParameter):
         target=None,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
         indices=True,
         name="fixed anisotropy",
     ):
@@ -1895,8 +1855,6 @@ class FixAnisotropy(FixParameter):
             target=target,
             bounds=bounds,
             weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
             name=name,
         )
 
@@ -1920,7 +1878,7 @@ class FixAnisotropy(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixIota(FixParameter):
+class FixIota(FixParameters):
     """Fixes rotational transform coefficients.
 
     Parameters
@@ -1937,13 +1895,6 @@ class FixIota(FixParameter):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices.
@@ -1964,8 +1915,6 @@ class FixIota(FixParameter):
         target=None,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
         indices=True,
         name="fixed iota",
     ):
@@ -1975,8 +1924,6 @@ class FixIota(FixParameter):
             target=target,
             bounds=bounds,
             weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
             name=name,
         )
 
@@ -2000,7 +1947,7 @@ class FixIota(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixCurrent(FixParameter):
+class FixCurrent(FixParameters):
     """Fixes toroidal current profile coefficients.
 
     Parameters
@@ -2082,7 +2029,7 @@ class FixCurrent(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixElectronTemperature(FixParameter):
+class FixElectronTemperature(FixParameters):
     """Fixes electron temperature profile coefficients.
 
     Parameters
@@ -2164,7 +2111,7 @@ class FixElectronTemperature(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixElectronDensity(FixParameter):
+class FixElectronDensity(FixParameters):
     """Fixes electron density profile coefficients.
 
     Parameters
@@ -2248,7 +2195,7 @@ class FixElectronDensity(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixIonTemperature(FixParameter):
+class FixIonTemperature(FixParameters):
     """Fixes ion temperature profile coefficients.
 
     Parameters
@@ -2330,7 +2277,7 @@ class FixIonTemperature(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixAtomicNumber(FixParameter):
+class FixAtomicNumber(FixParameters):
     """Fixes effective atomic number profile coefficients.
 
     Parameters
@@ -2347,13 +2294,6 @@ class FixAtomicNumber(FixParameter):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
@@ -2374,8 +2314,6 @@ class FixAtomicNumber(FixParameter):
         target=None,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
         indices=True,
         name="fixed atomic number",
     ):
@@ -2385,8 +2323,6 @@ class FixAtomicNumber(FixParameter):
             target=target,
             bounds=bounds,
             weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
             name=name,
         )
 
@@ -2410,7 +2346,7 @@ class FixAtomicNumber(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixPsi(FixParameter):
+class FixPsi(FixParameters):
     """Fixes total toroidal magnetic flux within the last closed flux surface.
 
     Parameters
@@ -2480,7 +2416,7 @@ class FixPsi(FixParameter):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixCurveShift(FixParameter):
+class FixCurveShift(FixParameters):
     """Fixes Curve.shift attribute, which is redundant with other Curve params.
 
     Parameters
@@ -2530,9 +2466,10 @@ class FixCurveShift(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+        # TODO: add normalization?
 
 
-class FixCurveRotation(FixParameter):
+class FixCurveRotation(FixParameters):
     """Fixes Curve.rotmat attribute, which is redundant with other Curve params.
 
     Parameters
@@ -2548,12 +2485,6 @@ class FixCurveRotation(FixParameter):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
     name : str, optional
         Name of the objective function.
 
@@ -2568,8 +2499,6 @@ class FixCurveRotation(FixParameter):
         target=None,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
         name="fixed rotation",
     ):
         super().__init__(
@@ -2578,13 +2507,11 @@ class FixCurveRotation(FixParameter):
             target=target,
             bounds=bounds,
             weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
             name=name,
         )
 
 
-class FixOmniWell(FixParameter):
+class FixOmniWell(FixParameters):
     """Fixes OmnigenousField.B_lm coefficients.
 
     Parameters
@@ -2636,9 +2563,10 @@ class FixOmniWell(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+        # TODO: add normalization?
 
 
-class FixOmniMap(FixParameter):
+class FixOmniMap(FixParameters):
     """Fixes OmnigenousField.x_lmn coefficients.
 
     Parameters
@@ -2651,12 +2579,6 @@ class FixOmniMap(FixParameter):
         Lower and upper bounds on the objective. Overrides target.
     weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
     indices : ndarray or bool, optional
         indices of the field.x_lmn array to fix.
         Must have len(target) = len(weight) = len(indices).
@@ -2675,8 +2597,6 @@ class FixOmniMap(FixParameter):
         target=None,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
         indices=True,
         name="fixed omnigenity map",
     ):
@@ -2686,8 +2606,6 @@ class FixOmniMap(FixParameter):
             target=target,
             bounds=bounds,
             weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
             name=name,
         )
 
@@ -2705,12 +2623,6 @@ class FixOmniBmax(_FixedObjective):
         Lower and upper bounds on the objective. Overrides target.
     weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
     name : str
         Name of the objective function.
 
@@ -2726,8 +2638,6 @@ class FixOmniBmax(_FixedObjective):
         target=None,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
         name="fixed omnigenity B_max",
     ):
         self._target_from_user = setdefault(bounds, target)
@@ -2736,8 +2646,6 @@ class FixOmniBmax(_FixedObjective):
             target=target,
             bounds=bounds,
             weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
             name=name,
         )
 
@@ -2798,7 +2706,7 @@ class FixOmniBmax(_FixedObjective):
         return f
 
 
-class FixSheetCurrent(FixParameter):
+class FixSheetCurrent(FixParameters):
     """Fixes the sheet current parameters of a free-boundary equilibrium.
 
     Note: this constraint is automatically applied when needed, and does not need to be
@@ -2852,3 +2760,4 @@ class FixSheetCurrent(FixParameter):
             normalize_target=normalize_target,
             name=name,
         )
+        # TODO: add normalization?

@@ -36,7 +36,7 @@ from desc.objectives import (
     FixIota,
     FixOmniBmax,
     FixOmniMap,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -640,8 +640,8 @@ def test_multiobject_optimization_al():
     constraints = (
         ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
         FixPressure(eq=eq),
-        FixParameter(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
-        FixParameter(eq, {"Psi": True, "i_l": True}),
+        FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
@@ -679,8 +679,8 @@ def test_multiobject_optimization_prox():
     constraints = (
         ForceBalance(eq=eq),
         FixPressure(eq=eq),
-        FixParameter(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
-        FixParameter(eq, {"Psi": True, "i_l": True}),
+        FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
     )
 
@@ -970,7 +970,7 @@ def test_non_eq_optimization():
 
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(eq),
+        FixParameters(eq),
         MeanCurvature(surf, bounds=(-8, 8)),
         PrincipalCurvature(surf, bounds=(0, 15)),
     )
@@ -1001,7 +1001,7 @@ def test_only_non_eq_optimization():
     surf = eq.surface
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(surf, {"R_lmn": np.array(surf.R_basis.get_idx(0, 0, 0))}),
+        FixParameters(surf, {"R_lmn": np.array(surf.R_basis.get_idx(0, 0, 0))}),
     )
     obj = PrincipalCurvature(surf, target=1)
     objective = ObjectiveFunction((obj,))
@@ -1252,7 +1252,7 @@ def test_quadratic_flux_optimization_with_analytic_field():
 
     optimizer = Optimizer("lsq-exact")
 
-    constraints = (FixParameter(field, {"R0": True}),)
+    constraints = (FixParameters(field, {"R0": True}),)
     quadflux_obj = QuadraticFlux(
         eq=eq,
         field=field,
@@ -1279,14 +1279,14 @@ def test_quadratic_flux_optimization_with_analytic_field():
 def test_second_stage_optimization():
     """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
     eq = get("DSHAPE")
+    grid = LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
-    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field))
-    constraints = FixParameter(field, [{"R0": True}, {}])
-    optimizer = Optimizer("lsq-exact")
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field, eval_grid=grid))
+    constraints = FixParameters(field, [{"R0": True}, {}])
+    optimizer = Optimizer("scipy-trf")
     (field,), _ = optimizer.optimize(
         things=field, objective=objective, constraints=constraints, verbose=2
     )
-    # TODO: could make this more robust instead of assuming only vertical field changes
-    np.testing.assert_allclose(field[0].R0, 3.5)
+    np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
     np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (does not change)
     np.testing.assert_allclose(field[1].B0, -0.022, rtol=1e-2)  # vertical field

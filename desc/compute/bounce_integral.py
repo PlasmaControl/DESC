@@ -2,9 +2,9 @@
 
 from functools import partial
 
-import orthax.legendre
 from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
 from matplotlib import pyplot as plt
+from orthax.legendre import leggauss
 
 from desc.backend import complex_sqrt, flatnonzero, imap, jnp, put_along_axis, take
 from desc.compute.utils import safediv
@@ -1126,7 +1126,7 @@ def bounce_integral(
     B,
     B_z_ra,
     knots,
-    quad=orthax.legendre.leggauss,
+    quad=leggauss,
     automorphism=(automorphism_sin, grad_automorphism_sin),
     B_ref=1,
     L_ref=1,
@@ -1195,7 +1195,7 @@ def bounce_integral(
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
         Tanh-Sinh quadrature ``tanh_sinh`` with ``automorphism_arcsin``
         can be competitive against the default choice of Gauss-Legendre
-        quadrature with ``orthax.legendre.leggauss`` and `automorphism_sin``.
+        quadrature with `automorphism_sin``.
     automorphism : (callable, callable)
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
@@ -1316,7 +1316,7 @@ def bounce_integral(
     assert B_c.shape[-1] == B_z_ra_c.shape[-1] == knots.size - 1
     spline = {"knots": knots, "B_c": B_c, "B_z_ra_c": B_z_ra_c}
 
-    if quad == orthax.legendre.leggauss:
+    if quad == leggauss:
         kwargs.setdefault("deg", 19)
     x, w = quad(**kwargs)
     # The gradient of the transformation is the weight function w(x) of the integral.

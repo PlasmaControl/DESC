@@ -841,7 +841,13 @@ class Equilibrium(IOAble, Optimizable):
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
-        deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
+        # If the user wants to compute x which depends on y which in turn depends on z,
+        # and they pass in y already computed in data, then we shouldn't need to compute
+        # z at all.
+        deps = list(
+            set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names)
+            - data.keys()  # subtract out y if already computed
+        )
         # TODO: replace this logic with `grid_type` from data_index
         dep0d = [
             dep

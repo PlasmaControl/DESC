@@ -910,6 +910,49 @@ def test_fix_omni_indices():
 
 
 @pytest.mark.unit
+def test_fix_parameters_input_order(DummyStellarator):
+    """Test that FixParameters preserves the input indices and target ordering."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    default_target = eq.Rb_lmn
+
+    # default objective
+    obj = FixBoundaryR(eq)
+    obj.build()
+    np.testing.assert_allclose(obj.target, default_target)
+
+    # manually specify default
+    obj = FixBoundaryR(eq, modes=eq.surface.R_basis.modes)
+    obj.build()
+    np.testing.assert_allclose(obj.target, default_target)
+
+    # reverse order
+    obj = FixBoundaryR(eq, modes=np.flipud(eq.surface.R_basis.modes))
+    obj.build()
+    np.testing.assert_allclose(obj.target, np.flipud(default_target))
+
+    # custom order
+    obj = ObjectiveFunction(
+        FixBoundaryR(eq, modes=np.array([[0, 0, 0], [0, 1, 0], [0, 1, 1]]))
+    )
+    obj.build()
+    np.testing.assert_allclose(obj.target_scaled, np.array([3, 1, 0.3]))
+    np.testing.assert_allclose(obj.compute_scaled_error(obj.x(eq)), np.zeros(obj.dim_f))
+
+    # custom target
+    obj = ObjectiveFunction(
+        FixBoundaryR(
+            eq,
+            modes=np.array([[0, 0, 0], [0, 1, 0], [0, 1, 1]]),
+            target=np.array([0, -1, 0.5]),
+        )
+    )
+    obj.build()
+    np.testing.assert_allclose(
+        obj.compute_scaled_error(obj.x(eq)), np.array([3, 2, -0.2])
+    )
+
+
+@pytest.mark.unit
 def test_fix_subset_of_params_in_collection():
     """Tests FixParameters fixing a subset of things in the collection."""
     tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])

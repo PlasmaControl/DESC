@@ -15,10 +15,10 @@ import numpy as np
 from desc.basis import FiniteElementMesh2D
 
 # Try triangulating whole mesh
-M = 10
+M = 5
 L = 2
 mesh = FiniteElementMesh2D(L, M, K=2)
-mesh.plot_triangles(plot_quadrature_points=False)
+mesh.plot_triangles(plot_quadrature_points=True)
 integral = mesh.integrate(np.ones((2 * M * L * mesh.nquad, 10000)))
 area2_total = 0.0
 for triangle in mesh.triangles:

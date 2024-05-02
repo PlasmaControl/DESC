@@ -1147,11 +1147,11 @@ class FiniteElementBasis(_FE_Basis):
             self.Q = K + 1
         elif N == 0:
             self.mesh = FiniteElementMesh2D(L, M, K=K)
-            self.I_2ML = 2 * (M - 1) * L
+            self.I_2ML = (M - 1) * L
             self.Q = int((K + 1) * (K + 2) / 2.0)
         else:
             # Repalce with FiniteElementMesh3D once we are ready to tackle
-            self.mesh = FiniteElementMesh2D(L, M, N, K=K)
+            self.mesh = FiniteElementMesh3D(L, M, N, K=K)
             self.I_2ML = 6 * (M - 1) * N * L
             self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
         self.nmodes = self.I_2ML * self.Q
@@ -2336,7 +2336,7 @@ class FiniteElementMesh2D:
     def __init__(self, L, M, K=1):
         self.M = M
         self.L = L
-        self.I_2ML = 2 * (M - 1) * L
+        self.I_2ML = (M - 1) * L
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
 
@@ -2425,47 +2425,44 @@ class FiniteElementMesh2D:
         #     integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
         #     weights = np.array([1.0])
 
-        # if K == 1:
-        #     [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
-        #     print(integration_points, integration_points.shape)
-        #     weights = weights * 2
-        #     add_row = [
-        #         integration_points[0][1],
-        #         integration_points[0][0],
-        #         integration_points[0][0],
-        #     ]
-        #     integration_points = np.vstack([add_row, integration_points])
-        #     print(integration_points, integration_points.shape)
+        if K == 1:
+            [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
+            weights = weights * 2
+            add_row = [
+                integration_points[0][1],
+                integration_points[0][0],
+                integration_points[0][0],
+            ]
+            integration_points = np.vstack([add_row, integration_points])
+            # print(integration_points, integration_points.shape)
 
-        # if K == 2:
-        #     [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
-        #     print(integration_points, integration_points.shape)
-        #     weights = weights * 2
-        #     add_row = [
-        #         integration_points[0][0],
-        #         integration_points[0][1],
-        #         integration_points[0][1],
-        #         integration_points[0][2],
-        #     ]
-        #     integration_points = np.vstack([add_row, integration_points])
-        #     integration_points = np.transpose(integration_points)
-        #     print(integration_points, integration_points.shape)
-        
-        [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
-        weights = weights * 2
-        print(integration_points, integration_points.shape, weights)
-        add_row = [
-            integration_points[0][0],
-            integration_points[0][1],
-            integration_points[0][2],
-            integration_points[0][1],
-            integration_points[0][2],
-            integration_points[1][1],
-            integration_points[1][2],
-        ]
-        integration_points = np.vstack([add_row, integration_points])
-        integration_points = np.transpose(integration_points)
-        print(integration_points, integration_points.shape)
+        if K == 2:
+            [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
+            weights = weights * 2
+            add_row = [
+                integration_points[0][0],
+                integration_points[0][1],
+                integration_points[0][1],
+                integration_points[0][2],
+            ]
+            integration_points = np.vstack([add_row, integration_points])
+            integration_points = np.transpose(integration_points)
+            # print(integration_points, integration_points.shape)
+        if K >= 3:
+            [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
+            weights = weights * 2
+            add_row = [
+                integration_points[0][0],
+                integration_points[0][1],
+                integration_points[0][2],
+                integration_points[0][1],
+                integration_points[0][2],
+                integration_points[1][1],
+                integration_points[1][2],
+            ]
+            integration_points = np.vstack([add_row, integration_points])
+            integration_points = np.transpose(integration_points)
+            # print(integration_points, integration_points.shape)
 
         # Integration points, weights, and number of integration points
 
@@ -2612,17 +2609,17 @@ class FiniteElementMesh2D:
         return quadrature_points
 
     def integrate(self, f):
-        """Integrates a function over the 2D mesh in (theta, zeta).
+        """Integrates a function over the 2D mesh in (rho, theta).
 
-        This function allows one to integrate any set of functions of theta,
-        zeta over the full 2D N x M mesh. Uses numerical quadrature
+        This function allows one to integrate any set of functions of rho,
+        theta over the full 2D L x M mesh. Uses numerical quadrature
         formula for triangles in the barycentric coordinates. Note that
         for K = 1, a single-point quadrature in the triangle is adequate.
 
         Parameters
         ----------
-        f : 2D ndarray, shape (nquad * 2NM, num_functions)
-            Vector function defined on the N x M mesh in (theta, zeta)
+        f : 2D ndarray, shape (nquad * 2ML, num_functions)
+            Vector function defined on the L x M mesh in (rho, theta)
             that we would like to integrate component-wise with respect
             to the basis functions. For integration over the barycentric
             coordinates, we need f to be prescribed at the quadrature points
@@ -2724,204 +2721,6 @@ class TetrahedronFiniteElement:
         """
 
     # Will use eta = self.get_barycentric_coordinates(rho_theta_zeta)
-
-
-class FiniteElementMesh1D:
-    """Class representing a 1D mesh in theta.
-
-    This class represents a 1D FE basis coming from a
-    set of M uniform points sampled in theta.
-
-    Parameters
-    ----------
-    M : int
-        Number of mesh points in the theta direction.
-    K: integer
-        The order of the finite elements to use, which gives (K+1)(K+2) / 2
-        basis functions.
-    """
-
-    def __init__(self, M, K=1):
-        self.M = M
-        self.Q = K + 1
-        self.K = K
-
-        # can exactly integrate 2 * nquad - 1 degree polynomials
-        self.nquad = K
-
-        theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
-        self.Theta = theta
-
-        # Compute the basis functions at each node
-        vertices = np.zeros((M - 1, 2))
-        intervals = []
-        for i in range(M - 1):
-            # Deal with the periodic boundary conditions...
-            vertices[i, 0] = theta[i]
-            vertices[i, 1] = theta[i + 1]
-            interval = IntervalFiniteElement(vertices[i, :], K=K)
-            intervals.append(interval)
-
-        # Have M vertices and M-1 intervals
-        self.vertices = vertices
-        self.intervals = intervals
-
-        # Setup quadrature points and weights for numerical integration
-        # Using Gauss-Legendre quadrature
-        integration_points = []
-        weights = []
-        # Ordered these from smallest to largest
-        if self.nquad == 1:
-            integration_points = [0.0]
-            weights = [2.0]
-        elif self.nquad == 2:
-            integration_points = [-1.0 / np.sqrt(3), 1.0 / np.sqrt(3)]
-            weights = [1.0, 1.0]
-        elif self.nquad == 3:
-            integration_points = [-np.sqrt(0.6), 0.0, np.sqrt(0.6)]
-            weights = [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0]
-        elif self.nquad == 4:
-            integration_points = [
-                -np.sqrt(3 + np.sqrt(4.8)) / 7.0,
-                -np.sqrt(3 - np.sqrt(4.8)) / 7.0,
-                np.sqrt(3 - np.sqrt(4.8)) / 7.0,
-                np.sqrt(3 + np.sqrt(4.8)) / 7.0,
-            ]
-            weights = [
-                0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
-                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
-                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
-                0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
-            ]
-
-        self.integration_points = np.array(integration_points)
-        self.weights = np.ravel(np.array(weights))
-
-    def plot_intervals(self, plot_quadrature_points=False):
-        """Plot all the intervals in the 1D mesh."""
-        plt.figure(100)
-        for i, interval in enumerate(self.intervals):
-            interval.plot_interval()
-        if plot_quadrature_points:
-            quadpoints = self.return_quadrature_points()
-            for i in range(self.Q):
-                plt.subplot(1, self.Q, i + 1)
-                plt.plot(quadpoints, np.zeros(len(quadpoints)), "ko")
-        plt.show()
-
-    def full_basis_functions_corresponding_to_points(self, theta):
-        """Given points on the mesh, find all (I, Q) basis functions values.
-
-        Parameters
-        ----------
-        theta : 1D ndarray, shape (num_points)
-            Set of points for which we want to find the intervals that
-            they lie inside of in the mesh.
-
-        Returns
-        -------
-        basis_functions : 3D ndarray, shape (num_points, I, Q)
-            All of the IQ basis functions evaluated at the points.
-            Most will be zero at a given point.
-        """
-        basis_functions = np.zeros((theta.shape[0], self.M - 1, self.Q))
-        for i in range(theta.shape[0]):
-            v = theta[i]
-            for j, interval in enumerate(self.intervals):
-                v1 = interval.vertices[0]
-                v2 = interval.vertices[1]
-                if v >= v1 and v <= v2:
-                    bfs, _ = interval.get_basis_functions(v)
-                    basis_functions[i, j, :] = bfs
-                    break
-        return basis_functions
-
-    def find_intervals_corresponding_to_points(self, theta):
-        """Given a point on the mesh, find which interval it lies inside.
-
-        Parameters
-        ----------
-        theta : 1D ndarray, shape (num_points)
-            Set of points for which we want to find the intervals that
-            they lie inside of in the mesh.
-
-        Returns
-        -------
-        interval_indices : 1D ndarray, shape (num_points)
-            Set of indices that specific the intervals where each point lies.
-        basis_functions : 2D ndarray, shape (num_points, Q)
-            The basis functions corresponding to the intervals in
-            interval_indices.
-        """
-        interval_indices = np.zeros(theta.shape[0])
-        basis_functions = np.zeros((theta.shape[0], self.Q))
-        for i in range(theta.shape[0]):
-            v = theta[i]
-            for j, interval in enumerate(self.intervals):
-                v1 = interval.vertices[0]
-                v2 = interval.vertices[1]
-                if v >= v1 and v <= v2:
-                    interval_indices[i] = j
-                    basis_functions[i, :], _ = interval.get_basis_functions(v)
-        return interval_indices, basis_functions
-
-    def return_quadrature_points(self):
-        """Get quadrature points for numerical integration over the mesh.
-
-        Returns
-        -------
-        quadrature points: 1D ndarray, shape (nquad * (M - 1))
-            Points in theta representing the quadrature point
-            locations for integration in barycentric coordinates.
-
-        """
-        nquad = self.nquad
-        quadrature_points = np.zeros((self.M - 1) * nquad)
-        q = 0
-        for interval in self.intervals:
-            for i in range(nquad):
-                theta1 = interval.vertices[0]
-                theta2 = interval.vertices[1]
-                quadrature_points[q] = (theta2 - theta1) * (
-                    self.integration_points[i] + 1
-                ) / 2.0 + theta1
-                q = q + 1
-
-        return quadrature_points
-
-    def integrate(self, f):
-        """Integrates a function over the 1D mesh in theta.
-
-        This function allows one to integrate any set of functions of theta
-        ver the full 1D mesh. Uses Gauss-Legendre quadrature
-        formula for in the barycentric coordinates.
-
-        Parameters
-        ----------
-        f : 1D ndarray, shape (nquad * M, num_functions)
-            Vector function defined on the mesh in theta
-            that we would like to integrate component-wise with respect
-            to the basis functions. For integration over the barycentric
-            coordinates, we need f to be prescribed at the quadrature points
-            in a barycentric coordinate system.
-
-        Returns
-        -------
-        integral: 1D ndarray, shape (num_functions)
-            Value of the integral over the mesh for each component of f.
-
-        """
-        nquad = self.nquad
-        if f.shape[1] > 1:
-            integral = np.zeros(f.shape[1])
-        else:
-            integral = 0.0
-        for i, interval in enumerate(self.intervals):
-            integral += (
-                interval.jacobian * self.weights @ f[i * nquad : (i + 1) * nquad, :]
-            )
-        return integral
-
 
 class TriangleFiniteElement:
     """Class representing a triangle in a 2D grid of finite elements.

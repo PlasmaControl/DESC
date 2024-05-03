@@ -794,7 +794,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     @property
     def num_coils(self):
         """int: Number of coils."""
-        return len(self)
+        return len(self) * (int(self.sym) + 1) * self.NFP
 
     @property
     def NFP(self):

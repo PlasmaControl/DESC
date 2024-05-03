@@ -8,7 +8,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import safenorm
-from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -1502,6 +1502,8 @@ class UmbilicCurvature(_Objective):
             curve = self.things[1]
 
         if self._grid is None:
+            from desc.grid import Grid
+
             phi_arr = jnp.linspace(0, 2 * np.pi, 42)
             phi_arr = jnp.concatenate(
                 (phi_arr, phi_arr + 2 * np.pi, phi_arr + 4 * np.pi)
@@ -1526,8 +1528,8 @@ class UmbilicCurvature(_Objective):
             # calculate theta for each point in each section
             theta = jnp.arctan2(Z - centroid_Z, R - centroid_R)
             theta = jnp.mod(theta, 2 * jnp.pi)
-
-            grid = Grid(np.array([np.ones((len(theta),)), theta.ravel(), phi_arr]).T)
+            phi_arr = np.mod(phi_arr, 2 * jnp.pi)
+            grid = Grid(np.array([np.ones((len(phi_arr),)), theta.ravel(), phi_arr]).T)
         else:
             grid = self._grid
 
@@ -1576,14 +1578,16 @@ class UmbilicCurvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
+        from desc.grid import Grid
+
         eq = self.things[0]
         curve = self.things[1]
 
         if constants is None:
             constants = self.constants
 
-        phi_arr = jnp.linspace(0, 2 * np.pi, 42)
-        phi_arr = jnp.concatenate((phi_arr, phi_arr + 2 * np.pi, phi_arr + 4 * np.pi))
+        phi_arr = jnp.linspace(0, 2 * jnp.pi, 42)
+        phi_arr = jnp.concatenate((phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi))
         grid0 = LinearGrid(zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor)
 
         data_keys = ["R", "Z"]
@@ -1595,17 +1599,6 @@ class UmbilicCurvature(_Objective):
         R = R.reshape(curve.NFP_umbilic_factor, 42).T
         Z = Z.reshape(curve.NFP_umbilic_factor, 42).T
 
-        data_keys1 = ["R", "Z"]
-        data_dict1 = eq.compute(data_keys1, grid=grid0)
-
-        R1 = data_dict1["R"]
-        Z1 = data_dict1["Z"]
-
-        R1 = R1.reshape(curve.NFP_umbilic_factor, 42).T
-        Z1 = Z1.reshape(curve.NFP_umbilic_factor, 42).T
-
-        distance = jnp.sqrt((R1 - R) ** 2 + (Z1 - Z) ** 2)
-
         # calculate centroids for each section
         centroid_R = jnp.mean(R, axis=1, keepdims=True)
         centroid_Z = jnp.mean(Z, axis=1, keepdims=True)
@@ -1614,8 +1607,9 @@ class UmbilicCurvature(_Objective):
         theta = jnp.arctan2(Z - centroid_Z, R - centroid_R)
         theta = jnp.mod(theta, 2 * jnp.pi)
 
+        phi_arr = np.mod(phi_arr, 2 * jnp.pi)
         umbilic_edge_grid = Grid(
-            np.array([np.ones((len(theta),)), theta.ravel(), phi_arr]).T
+            jnp.array([jnp.ones((len(phi_arr),)), theta.ravel(), phi_arr]).T
         )
 
         transforms = get_transforms(
@@ -1635,4 +1629,4 @@ class UmbilicCurvature(_Objective):
             profiles=profiles,
         )
 
-        return data["curvature_k2_rho"] + 0.01 * distance
+        return data["curvature_k2_rho"]

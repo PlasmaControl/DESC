@@ -20,6 +20,7 @@ from ._geometry import (
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    UmbilicCurvature,
     Volume,
 )
 from ._omnigenity import (

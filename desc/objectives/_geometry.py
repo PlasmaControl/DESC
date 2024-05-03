@@ -1395,7 +1395,7 @@ class GoodCoordinates(_Objective):
         return jnp.concatenate([g, constants["sigma"] * f])
 
 
-class Umbilic_curvature(_Objective):
+class UmbilicCurvature(_Objective):
     """Takes in an equilibrium object and an umbilic curve object.
 
     Umbilic object corresponds to the sharp boundary

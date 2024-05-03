@@ -832,11 +832,11 @@ class TestObjectiveFunction:
     def test_coil_min_distance(self):
         """Tests coilset minimum distance between coils."""
 
-        def test(coils, mindist, grid=None, rtol=1e-8):
+        def test(coils, mindist, grid=None):
             obj = CoilsetMinDistance(coils, grid=grid)
             obj.build()
             f = obj.compute(params=coils.params_dict)
-            np.testing.assert_allclose(f, mindist, rtol=rtol)
+            np.testing.assert_allclose(f, mindist)
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
@@ -873,12 +873,10 @@ class TestObjectiveFunction:
         vf_coilset = CoilSet.linspaced_linear(
             vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
         )
-        xyz_coil = FourierXYZCoil(X_n=[0, 5, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0])
+        xyz_coil = FourierXYZCoil(X_n=[0, 6, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0])
         coils_mixed = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+        test(coils_mixed, [0, 0, 0, 0, 1, 0, 1, 2], grid=LinearGrid(zeta=4))
         # TODO: move this coil set to conftest?
-        # FIXME: this is not working (2 values are placeholders)
-        # this should pass when the distance calculations are fixed
-        test(coils_mixed, [0, 0, 0, 0, 2, 0, 2, 1], grid=LinearGrid(zeta=4))
 
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""

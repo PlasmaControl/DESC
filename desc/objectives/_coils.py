@@ -700,6 +700,10 @@ class CoilsetMinDistance(_Objective):
         else:
             self._grid = self._grid
 
+        num_nodes = self._grid.num_nodes
+        perm_idx = np.tile(np.arange(num_nodes), 2)
+        self._perms = [perm_idx[k : k + num_nodes] for k in range(num_nodes)]
+
         coils = tree_leaves(self._coilset, is_leaf=lambda x: not hasattr(x, "__len__"))
         self._dim_f = len(coils)
 
@@ -726,24 +730,22 @@ class CoilsetMinDistance(_Objective):
             Distance to nearest coil for each coil in the coilset.
 
         """
-        pts = self._coilset.compute_position(source_grid=self._grid)
+        # include all permutations of grid nodes between coils
+        xyz = self._coilset.compute_position(source_grid=self._grid)
+        pts1 = jnp.tile(xyz, (1, len(self._perms), 1))
+        pts2 = jnp.concatenate([xyz[:, p, :] for p in self._perms], axis=1)
 
-        def body(i):
-            # FIXME: this is only element-wise distances! we need all permutations
-            dx = pts[i] - pts
-            dist = safenorm(dx, axis=-1)
-            # ignore distance to pts within each coil
-            mask = jnp.ones(self.dim_f)
-            mask = mask.at[i].set(0)[:, None]
+        def body(k):
+            dist = safenorm(pts1[k] - pts2, axis=-1)  # distances between pts
+            mask = jnp.ones(self.dim_f).at[k].set(0)[:, None]  # exclude same coil
             return jnp.min(dist, where=mask, initial=jnp.inf)
 
         min_dist_per_coil = fori_loop(
             0,
             self.dim_f,
-            lambda i, mind: mind.at[i].set(body(i)),
+            lambda k, min_dist: min_dist.at[k].set(body(k)),
             jnp.zeros(self.dim_f),
         )
-
         return min_dist_per_coil
 
 

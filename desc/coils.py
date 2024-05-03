@@ -1502,6 +1502,8 @@ class MixedCoilSet(CoilSet):
 
     """
 
+    _io_attrs_ = CoilSet._io_attrs_
+
     def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])

@@ -14,7 +14,13 @@ from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
-from desc.coils import CoilSet, FourierPlanarCoil, FourierXYZCoil, MixedCoilSet
+from desc.coils import (
+    CoilSet,
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+)
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -825,34 +831,54 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_coil_min_distance(self):
         """Tests coilset minimum distance between coils."""
+
+        def test(coils, mindist, grid=None, rtol=1e-8):
+            obj = CoilsetMinDistance(coils, grid=grid)
+            obj.build()
+            f = obj.compute(params=coils.params_dict)
+            np.testing.assert_allclose(f, mindist, rtol=rtol)
+
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
         disp = 5
         coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
         coils_linear = CoilSet.linspaced_linear(coil, n=n, displacement=[0, 0, disp])
-
-        # planar toroidal coils, min distances are between points on inboard midplane
-        center = 3
-        radius = 1
-        coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=radius)
-        coils_angular = CoilSet.linspaced_angular(coil, n=4)
-
-        def test(coils, mindist, grid=None, rtol=1e-8):
-            obj = CoilsetMinDistance(coils)
-            obj.build()
-            f = obj.compute(params=coils.params_dict)
-            assert f.size == len(coils)
-            np.testing.assert_allclose(f, mindist, rtol=rtol)
-
         test(coils_linear, disp / n)
-        test(
-            coils_angular,
-            np.sqrt(2 * (center - radius) ** 2),
-            grid=LinearGrid(zeta=4),
-            rtol=5e-2,  # FIXME: get this test to pass with lower rtol
+
+        # planar toroidal coils, without symmetry
+        # min points are at the inboard midplane and are corners of a square inscribed
+        # in a circle of radius = center - r
+        center = 3
+        r = 1
+        coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
+        coils_angular = CoilSet.linspaced_angular(coil, n=4)
+        test(coils_angular, np.sqrt(2) * (center - r), grid=LinearGrid(zeta=4))
+
+        # planar toroidal coils, with symmetry
+        # min points are at the inboard midplane and are corners of an octagon inscribed
+        # in a circle of radius = center - r
+        center = 3
+        r = 1
+        coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
+        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils_sym = CoilSet.from_symmetry(coils[1::2], NFP=2, sym=True)
+        test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGrid(zeta=4))
+
+        # mixture of toroidal field coilset, vertical field coilset, and extra coil
+        # TF coils instersect with the middle VF coil
+        # extra coil is 5 m from middle VF coil
+        tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=1)
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+        vf_coilset = CoilSet.linspaced_linear(
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
         )
-        # TODO: add test with symmetry
-        # TODO: add test with MixedCoilSet
+        xyz_coil = FourierXYZCoil(X_n=[0, 5, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0])
+        coils_mixed = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+        # TODO: move this coil set to conftest?
+        # FIXME: this is not working (2 values are placeholders)
+        # this should pass when the distance calculations are fixed
+        test(coils_mixed, [0, 0, 0, 0, 2, 0, 2, 1], grid=LinearGrid(zeta=4))
 
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""

@@ -9,7 +9,13 @@ import pytest
 from netCDF4 import Dataset
 
 from desc.__main__ import main
-from desc.coils import CoilSet, FourierPlanarCoil
+from desc.coils import (
+    CoilSet,
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+)
 from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -259,6 +265,26 @@ def DummyCoilSet(tmpdir_factory):
         "output_path_sym": output_path_sym,
         "output_path_asym": output_path_asym,
     }
+    return DummyCoilSet_out
+
+
+@pytest.fixture(scope="session")
+def DummyMixedCoilSet(tmpdir_factory):
+    """Create and save a dummy mixed coil set for testing."""
+    output_dir = tmpdir_factory.mktemp("result")
+    output_path = output_dir.join("DummyMixedCoilSet.h5")
+
+    tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
+    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+    vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+    vf_coilset = CoilSet.linspaced_linear(
+        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+    )
+    xyz_coil = FourierXYZCoil()
+    _ = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+
+    # full_coilset.save(output_path)  FIXME: MixedCoilSet save error
+    DummyCoilSet_out = {"output_path": output_path}
     return DummyCoilSet_out
 
 

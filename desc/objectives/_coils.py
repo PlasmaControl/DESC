@@ -713,7 +713,7 @@ class CoilsetMinDistance(_CoilObjective):
             if isinstance(self._coils, CoilSet)
             else [flattened_coils[0]]  # XXX: I don't understand this
         )
-        self._dim_f = len(flattened_coils)
+        self._dim_f = len(flattened_coils)  # FIXME: this is overkill for getting dim_f
         self._constants["quad_weights"] = 1
 
     def compute(self, params, constants=None):
@@ -736,6 +736,7 @@ class CoilsetMinDistance(_CoilObjective):
         pts = self._coils.compute_position(source_grid=self._grid)
 
         def body(i):
+            # FIXME: this is only element-wise distances! we need all permutations
             dx = pts[i] - pts
             dist = safenorm(dx, axis=-1)
             # ignore distance to pts within each coil

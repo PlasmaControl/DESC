@@ -704,12 +704,14 @@ class CoilsetMinDistance(_Objective):
         perm_idx = np.tile(np.arange(num_nodes), 2)
         self._perms = [perm_idx[k : k + num_nodes] for k in range(num_nodes)]
 
-        coils = tree_leaves(self._coilset, is_leaf=lambda x: not hasattr(x, "__len__"))
-        self._dim_f = len(coils)
+        self._dim_f = self._coilset.num_coils
 
         if self._normalize:
-            scales = compute_scaling_factors(coils[0])  # use first coil
-            self._normalization = scales["a"]
+            coils = tree_leaves(
+                self._coilset, is_leaf=lambda x: not hasattr(x, "__len__")
+            )
+            scales = [compute_scaling_factors(coil)["a"] for coil in coils]
+            self._normalization = np.mean(scales)  # mean length of coils
 
         super().build(use_jit=use_jit, verbose=verbose)
 

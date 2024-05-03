@@ -792,6 +792,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return self._coils
 
     @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return len(self)
+
+    @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
@@ -1511,6 +1516,11 @@ class MixedCoilSet(CoilSet):
         self._NFP = 1
         self._sym = False
         self._name = str(name)
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return sum([c.num_coils if hasattr(c, "num_coils") else 1 for c in self])
 
     def compute(
         self,

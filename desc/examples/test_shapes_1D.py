@@ -20,10 +20,10 @@ from desc.basis import (
 from desc.geometry import convert_spectral_to_FE
 
 plt.figure()
-L = 4
-M = 4
+L = 2
+M = 2
 N = 0
-K = 2
+K = 1
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary

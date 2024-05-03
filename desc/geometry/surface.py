@@ -78,6 +78,7 @@ def convert_spectral_to_FE(
     I = Rprime_basis.I_2ML
     Q = Rprime_basis.Q
     L = Rprime_basis.L
+    M = Rprime_basis.M
     nmodes = I * Q  # Number of total basis functions
     mesh = Rprime_basis.mesh
     nquad = mesh.nquad
@@ -90,6 +91,7 @@ def convert_spectral_to_FE(
     # plt.figure()
     # plt.scatter(quadpoints_mesh[:, 0], quadpoints_mesh[:, 1])
     # plt.show()
+    # print(quadpoints_mesh)
     if L == 0 and N == 0:
         quadpoints = (
             np.array(
@@ -119,12 +121,32 @@ def convert_spectral_to_FE(
             * Zprime_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
     ).reshape(IQ, IQ)
-    Bjb_R = mesh.integrate(
-        (
-            Rprime_pre_evaluated[:, np.newaxis, :IQ]
-            * Rprime_pre_evaluated[:, :IQ, np.newaxis]
-        ).reshape(I * nquad, -1)
-    ).reshape(IQ, IQ)
+    # Try uniform integration
+    rho_uniform = np.linspace(0, 1, L)
+    theta_uniform = np.linspace(0, 2 * np.pi, M)
+    quadpoints_uniform = np.array(np.meshgrid(rho_uniform, 
+                                     theta_uniform,
+                                     np.zeros(1),
+                                     indexing='ij')).reshape(3, -1).T
+    # print(quadpoints_uniform.shape)
+    # exit()
+    print(quadpoints)
+    print(quadpoints_uniform)
+    # exit()
+    drho = rho_uniform[1] - rho_uniform[0]
+    dtheta = theta_uniform[1] - theta_uniform[0]
+    Rprime_uniform = Rprime_basis.evaluate(nodes=quadpoints_uniform)
+    print(Rprime_uniform, quadpoints_uniform.shape)
+    exit()
+    RR = np.array(Rprime_uniform[:, np.newaxis, :IQ] * Rprime_uniform[:, :IQ, np.newaxis])
+    # print(RR.shape)
+    Bjb_R = (np.sum(RR, axis=0) * drho * dtheta).reshape(IQ, IQ)
+    # Bjb_R = mesh.integrate(
+    #     (
+    #         Rprime_pre_evaluated[:, np.newaxis, :IQ]
+    #         * Rprime_pre_evaluated[:, :IQ, np.newaxis]
+    #     ).reshape(I * nquad, -1)
+    # ).reshape(IQ, IQ)
     Bjb_L = mesh.integrate(
         (
             Lprime_pre_evaluated[:, np.newaxis, :IQ]
@@ -165,6 +187,7 @@ def convert_spectral_to_FE(
     Aj_Z = np.array(Aj_Z)
     Aj_L = np.array(Aj_L)
     # for i in range(len(Aj_R)):
+    print(Bjb_R, Aj_R)
     Rprime_lmn = np.zeros(Aj_R.shape)
     Zprime_lmn = np.zeros(Aj_Z.shape)
     Lprime_lmn = np.zeros(Aj_L.shape)

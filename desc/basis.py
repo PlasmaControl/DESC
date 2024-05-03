@@ -1147,12 +1147,11 @@ class FiniteElementBasis(_FE_Basis):
             self.Q = K + 1
         elif N == 0:
             self.mesh = FiniteElementMesh2D(L, M, K=K)
-            self.I_2ML = (M - 1) * L
+            self.I_2ML = 2 * (M - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) / 2.0)
         else:
-            # Repalce with FiniteElementMesh3D once we are ready to tackle
             self.mesh = FiniteElementMesh3D(L, M, N, K=K)
-            self.I_2ML = 6 * (M - 1) * N * L
+            self.I_2ML = 6 * (M - 1) * (N - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
         self.nmodes = self.I_2ML * self.Q
         self._modes = self._get_modes()
@@ -2336,7 +2335,7 @@ class FiniteElementMesh2D:
     def __init__(self, L, M, K=1):
         self.M = M
         self.L = L
-        self.I_2ML = (M - 1) * L
+        self.I_2ML = 2 * (M - 1) * (L - 1)
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
 
@@ -2574,6 +2573,7 @@ class FiniteElementMesh2D:
                     basis_functions[i, i * self.Q : (i + 1) * self.Q], _ = (
                         triangle.get_basis_functions(v.reshape(1, 2))
                     )
+                    break  # found the right triangle, so break out of j loop
         return triangle_indices, basis_functions
 
     def return_quadrature_points(self):
@@ -3345,8 +3345,9 @@ class FiniteElementMesh1D:
         basis = fem.CellBasis(mesh, e)
         vertices = np.ravel(basis.doflocs)
 
-        # can exactly integrate 2 * nquad - 1 degree polynomials
-        self.nquad = K + 1
+        # K + 1 here so that integral of basis_function * basis_function 
+        # is nonsingular, which requires a higher order integration
+        self.nquad = K + 1  
 
         theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
         self.Theta = theta

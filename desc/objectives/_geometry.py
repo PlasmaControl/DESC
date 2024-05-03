@@ -1448,7 +1448,7 @@ class UmbilicCurvature(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Principal curvature: {:10.3e} "
+    _print_value_fmt = "Umbilic curvature: {:10.3e} "
 
     def __init__(
         self,
@@ -1462,7 +1462,7 @@ class UmbilicCurvature(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="principal-curvature",
+        name="Umbilic curvature:",
     ):
         if target is None and bounds is None:
             target = 1
@@ -1491,15 +1491,8 @@ class UmbilicCurvature(_Objective):
             Level of output.
 
         """
-        if self._eq_fixed:
-            eq = self._eq
-            curve = self.things[0]
-        elif self._curve_fixed:
-            eq = self.things[0]
-            curve = self._curve
-        else:
-            eq = self.things[0]
-            curve = self.things[1]
+        eq = self.things[0]
+        curve = self.things[1]
 
         if self._grid is None:
             from desc.grid import Grid

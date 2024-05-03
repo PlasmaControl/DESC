@@ -608,7 +608,7 @@ class CoilTorsion(_CoilObjective):
         return out
 
 
-class CoilsetMinDistance(_CoilObjective):
+class CoilsetMinDistance(_Objective):
     """Target the min distance btwn coils in the coilset.
 
     Will yield one value per coil in the coilset, which is the
@@ -645,9 +645,10 @@ class CoilsetMinDistance(_CoilObjective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid used to discritize each coil. Default = LinearGrid(N=16)
     name : str, optional
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -669,11 +670,9 @@ class CoilsetMinDistance(_CoilObjective):
     ):
         if target is None and bounds is None:
             bounds = (0, np.inf)
-        self._coils = coils
-
+        self._grid = grid
         super().__init__(
-            coils,
-            ["x"],
+            things=coils,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -681,7 +680,6 @@ class CoilsetMinDistance(_CoilObjective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
-            grid=grid,
             name=name,
         )
 
@@ -696,25 +694,20 @@ class CoilsetMinDistance(_CoilObjective):
             Level of output.
 
         """
-        from desc.coils import CoilSet, _Coil
+        self._coilset = self.things[0]
+        if self._grid is None:
+            self._grid = LinearGrid(N=16)
+        else:
+            self._grid = self._grid
 
-        super().build(use_jit=use_jit, verbose=verbose)
+        coils = tree_leaves(self._coilset, is_leaf=lambda x: not hasattr(x, "__len__"))
+        self._dim_f = len(coils)
 
         if self._normalize:
-            self._normalization = self._scales["a"]
+            scales = compute_scaling_factors(coils[0])  # use first coil
+            self._normalization = scales["a"]
 
-        # TODO: repeated code but maybe it's fine
-        flattened_coils = tree_leaves(
-            self._coils,
-            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
-        )
-        flattened_coils = (
-            flattened_coils
-            if isinstance(self._coils, CoilSet)
-            else [flattened_coils[0]]  # XXX: I don't understand this
-        )
-        self._dim_f = len(flattened_coils)  # FIXME: this is overkill for getting dim_f
-        self._constants["quad_weights"] = 1
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute coil torsion.
@@ -733,7 +726,7 @@ class CoilsetMinDistance(_CoilObjective):
             Distance to nearest coil for each coil in the coilset.
 
         """
-        pts = self._coils.compute_position(source_grid=self._grid)
+        pts = self._coilset.compute_position(source_grid=self._grid)
 
         def body(i):
             # FIXME: this is only element-wise distances! we need all permutations

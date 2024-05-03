@@ -1579,6 +1579,7 @@ class MixedCoilSet(CoilSet):
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
+        # TODO: catch error if coils have different default grids
         params = self._make_arraylike(params)
         source_grid = self._make_arraylike(source_grid)
         x = jnp.vstack(

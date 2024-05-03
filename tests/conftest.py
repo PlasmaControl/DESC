@@ -9,7 +9,11 @@ import pytest
 from netCDF4 import Dataset
 
 from desc.__main__ import main
+from desc.coils import CoilSet, FourierPlanarCoil
+from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
+from desc.grid import LinearGrid
 from desc.vmec import VMECIO
 
 
@@ -215,6 +219,47 @@ def DummyStellarator(tmpdir_factory):
 
     DummyStellarator_out = {"output_path": output_path}
     return DummyStellarator_out
+
+
+@pytest.fixture(scope="session")
+def DummyCoilSet(tmpdir_factory):
+    """Create and save a dummy coil set for testing."""
+    output_dir = tmpdir_factory.mktemp("result")
+    output_path_sym = output_dir.join("DummyCoilSet_sym.h5")
+    output_path_asym = output_dir.join("DummyCoilSet_asym.h5")
+
+    eq = get("precise_QH")
+    minor_radius = eq.compute("a")["a"]
+
+    # CoilSet with symmetry
+    num_coils = 3  # number of unique coils per half field period
+    grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+    with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
+        data_center = eq.axis.compute("x", grid=grid, basis="xyz")
+        data_normal = eq.compute("e^zeta", grid=grid)
+    centers = data_center["x"]
+    normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
+    coils = []
+    for k in range(1, 2 * num_coils + 1, 2):
+        coil = FourierPlanarCoil(
+            current=1e6,
+            center=centers[k, :],
+            normal=normals[k, :],
+            r_n=[0, minor_radius + 0.5, 0],
+        )
+        coils.append(coil)
+    coilset_sym = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
+    coilset_sym.save(output_path_sym)
+
+    # equivalent CoilSet without symmetry
+    coilset_asym = CoilSet.from_symmetry(coilset_sym, NFP=eq.NFP, sym=eq.sym)
+    coilset_asym.save(output_path_asym)
+
+    DummyCoilSet_out = {
+        "output_path_sym": output_path_sym,
+        "output_path_asym": output_path_asym,
+    }
+    return DummyCoilSet_out
 
 
 @pytest.fixture(scope="session")

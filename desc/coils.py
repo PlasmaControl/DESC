@@ -169,12 +169,12 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         Returns
         -------
-        x : ndarray, shape(n,3)
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
         x = self.compute("x", grid=source_grid, params=params, **kwargs)["x"]
-        return jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape = (1, num_nodes, 3)
+        return jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -766,7 +766,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     """
 
-    _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
+    _io_attrs_ = ["_coils", "_NFP", "_sym"]
 
     def __init__(self, *coils, NFP=1, sym=False, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
@@ -895,7 +895,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Returns
         -------
-        x : ndarray, shape(n,3)
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
@@ -904,7 +904,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         basis = kwargs.pop("basis", "xyz")
         data = self.compute("x", grid=source_grid, params=params, basis=basis, **kwargs)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
-        x = jnp.dstack([d["x"].T for d in data]).T  # shape = (ncoils, num_nodes, 3)
+        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
 
         # stellarator symmetry is easiest in [X,Y,Z] coordinates
         if basis.lower() == "rpz":
@@ -918,7 +918,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
             )
             xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
-            xyz = jnp.vstack((xyz, xyz_sym))
+            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
 
         # field period rotation is easiest in [R,phi,Z] coordinates
         rpz = xyz2rpz(xyz)
@@ -1573,7 +1573,7 @@ class MixedCoilSet(CoilSet):
 
         Returns
         -------
-        x : ndarray, shape(n,3)
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """

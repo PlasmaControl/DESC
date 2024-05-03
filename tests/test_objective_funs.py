@@ -825,15 +825,17 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_coil_min_distance(self):
         """Tests coilset minimum distance between coils."""
+        # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
         disp = 5
-        coil1 = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
-        coils_linear = CoilSet.linspaced_linear(coil1, n=n, displacement=[0, 0, disp])
+        coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
+        coils_linear = CoilSet.linspaced_linear(coil, n=n, displacement=[0, 0, disp])
 
+        # planar toroidal coils, min distances are between points on inboard midplane
         center = 3
         radius = 1
-        coil2 = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=radius)
-        coils_angular = CoilSet.linspaced_angular(coil2, n=4)
+        coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=radius)
+        coils_angular = CoilSet.linspaced_angular(coil, n=4)
 
         def test(coils, mindist, grid=None, rtol=1e-8):
             obj = CoilsetMinDistance(coils)

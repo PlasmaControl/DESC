@@ -627,9 +627,9 @@ def plot_field_line_with_ripple(
 
     if pitch is not None:
         b = jnp.atleast_1d(1 / pitch)
-        for val in jnp.unique(b):
-            add(ax.axhline(val, color="tab:purple", alpha=0.75, label=r"$1 / \lambda$"))
-        bp1, bp2 = map(jnp.atleast_2d, (bp1, bp2))
+        for val in b:
+            add(ax.axhline(val, color="tab:purple", alpha=0.25, label=r"$1 / \lambda$"))
+        bp1, bp2 = jnp.atleast_2d(bp1, bp2)
         for i in range(bp1.shape[0]):
             bp1_i, bp2_i = map(_filter_not_nan, (bp1[i], bp2[i]))
             add(
@@ -1193,9 +1193,6 @@ def bounce_integral(
         The quadrature scheme used to evaluate the integral.
         The returned quadrature points xₖ and weights wₖ
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
-        Tanh-Sinh quadrature ``tanh_sinh`` with ``automorphism_arcsin``
-        can be competitive against the default choice of Gauss-Legendre
-        quadrature with `automorphism_sin``.
     automorphism : (callable, callable)
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.

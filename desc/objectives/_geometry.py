@@ -1516,12 +1516,8 @@ class Umbilic_curvature(_Objective):
             R = data_dict["R"]
             Z = data_dict["Z"]
 
-            indices = np.array(
-                [range(i, curve.NFP_umbilic_factor * 100, 100) for i in range(100)]
-            ).reshape(100, curve.NFP_umbilic_factor)
-
-            R = R[indices]
-            Z = Z[indices]
+            R = R.reshape(curve.NFP_umbilic_factor, 42).T
+            Z = Z.reshape(curve.NFP_umbilic_factor, 42).T
 
             # calculate centroids for each section
             centroid_R = jnp.mean(R, axis=1, keepdims=True)
@@ -1580,13 +1576,63 @@ class Umbilic_curvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
+        eq = self.things[0]
+        curve = self.things[1]
+
         if constants is None:
             constants = self.constants
+
+        phi_arr = jnp.linspace(0, 2 * np.pi, 42)
+        phi_arr = jnp.concatenate((phi_arr, phi_arr + 2 * np.pi, phi_arr + 4 * np.pi))
+        grid0 = LinearGrid(zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor)
+
+        data_keys = ["R", "Z"]
+        data_dict = curve.compute(data_keys, grid=grid0)
+
+        R = data_dict["R"]
+        Z = data_dict["Z"]
+
+        R = R.reshape(curve.NFP_umbilic_factor, 42).T
+        Z = Z.reshape(curve.NFP_umbilic_factor, 42).T
+
+        data_keys1 = ["R", "Z"]
+        data_dict1 = eq.compute(data_keys1, grid=grid0)
+
+        R1 = data_dict1["R"]
+        Z1 = data_dict1["Z"]
+
+        R1 = R1.reshape(curve.NFP_umbilic_factor, 42).T
+        Z1 = Z1.reshape(curve.NFP_umbilic_factor, 42).T
+
+        distance = jnp.sqrt((R1 - R) ** 2 + (Z1 - Z) ** 2)
+
+        # calculate centroids for each section
+        centroid_R = jnp.mean(R, axis=1, keepdims=True)
+        centroid_Z = jnp.mean(Z, axis=1, keepdims=True)
+
+        # calculate theta for each point in each section
+        theta = jnp.arctan2(Z - centroid_Z, R - centroid_R)
+        theta = jnp.mod(theta, 2 * jnp.pi)
+
+        umbilic_edge_grid = Grid(
+            np.array([np.ones((len(theta),)), theta.ravel(), phi_arr]).T
+        )
+
+        transforms = get_transforms(
+            self._data_keys, obj=eq, grid=umbilic_edge_grid, jitable=True
+        )
+
+        profiles = get_profiles(
+            self._data_keys, obj=eq, grid=umbilic_edge_grid, jitable=True
+        )
+
+        # now compute the curvature
         data = compute_fun(
-            self.things[0],
+            eq,
             self._data_keys,
             params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
+            transforms=transforms,
+            profiles=profiles,
         )
-        return data["curvature_k2_rho"]
+
+        return data["curvature_k2_rho"] + 0.01 * distance

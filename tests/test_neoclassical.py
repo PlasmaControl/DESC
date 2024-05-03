@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index, get_data_deps
-from desc.compute.bounce_integral import desc_grid_from_field_line_coords, tanh_sinh
+from desc.compute.bounce_integral import desc_grid_from_field_line_coords
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 
@@ -80,7 +80,7 @@ def test_effective_ripple():
     grid_desc, grid_fl = desc_grid_from_field_line_coords(
         eq,
         rho=np.linspace(0.01, 1, 20),
-        zeta=np.linspace(-10 * np.pi, 10 * np.pi, 100),
+        zeta=np.linspace(-20 * np.pi, 20 * np.pi, 200),
     )
     data = _compute_field_line_data(
         eq,
@@ -95,14 +95,7 @@ def test_effective_ripple():
         override_grid=False,
         grid_fl=grid_fl,
         b_quad_res=5,
-        # Gauss-Legendre quadrature with sin automorph ~28 nodes.
-        # But the real advantage is that Gauss-Legendre with sin
-        # allows for composite Gauss-Legendre quadrature which
-        # will be able to match 30 node quadrature with maybe ~10 nodes.
-        # So very large memory savings.
-        quad=lambda: tanh_sinh(41),
-        # check=True,  # noqa: E800
-        # plot=True,  # noqa: E800
+        quad_res=28,
     )
     assert np.isfinite(data["ripple"]).all()
     rho = grid_desc.compress(grid_desc.nodes[:, 0])

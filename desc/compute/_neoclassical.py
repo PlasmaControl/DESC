@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from functools import partial
+
 import orthax
 import quadax
 from termcolor import colored
@@ -94,6 +96,7 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     b_quad_res="int : Resolution for quadrature over dB.",
     quad="callable : Quadrature method to compute bounce integrals.",
     automorphism="(callable, callable) : Change of variables for bounce integral.",
+    quad_res="int : Resolution for quadrature to compute bounce integrals.",
     # TODO: remove later
     check="bool : Flag for debugging.",
     plot="bool : Whether to plot some things if check is true.",
@@ -112,6 +115,11 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     knots = grid_fl.compress(grid_fl.nodes[:, 2], surface_label="zeta")
     b_quad = kwargs.pop("b_quad", trapezoid)
     b_quad_res = kwargs.pop("b_quad_res", 5)
+    if "quad_res" in kwargs:
+        if "quad" in kwargs:
+            kwargs["quad"] = partial(kwargs["quad"], kwargs.pop("quad_res"))
+        else:
+            kwargs["deg"] = kwargs.pop("quad_res")
     bounce_integrate, spline = bounce_integral(
         data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, **kwargs
     )

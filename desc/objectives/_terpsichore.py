@@ -14,7 +14,6 @@ from desc.utils import Timer
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, get_params
 from desc.compute.utils import dot
-from desc.vmec.VMECIO import save
 
 from scipy.constants import mu_0, pi
 from desc.grid import LinearGrid, Grid, ConcentricGrid, QuadratureGrid
@@ -58,7 +57,7 @@ class TERPSICHORE(_Objective):
         if target is None and bounds is None:
             target = 0
         self.eq = eq
-        self.nsurf = nsurf
+        self.nsurf = nsurf # No functionality unless using dynamic allocation TERPS
         self.awall = awall
         self.deltajp = deltajp
         self.modelk = modelk
@@ -72,8 +71,9 @@ class TERPSICHORE(_Objective):
         self.max_modem = max_modem
         self.min_moden = min_moden
         self.max_moden = max_moden
-        self.lssl = 1 # LSSL and LSSD depend on the specified resolution and the required result is given after running the code (once for each variable)
-        self.lssd = 1
+        # lssl, lssd, lssl_repeat, and lssd_repeat are only used with dynamic allocation TERPS
+        self.lssl = 200 # LSSL and LSSD depend on the specified resolution and the required result is given after running the code (once for each variable)
+        self.lssd = 100
         self.lssl_repeat = True
         self.lssd_repeat = True
         self.grid = grid
@@ -127,58 +127,14 @@ class TERPSICHORE(_Objective):
 
         timer = Timer()
 
-        self._eq_keys = [
-            "iota",
-            "iota_r",
-            "a",
-            "rho",
-            "psi",
-        ]
-        '''
-        self._field_line_keys = [
-        "|B|", "|grad(psi)|^2", "grad(|B|)", "grad(alpha)", "grad(psi)",
-        "B", "grad(|B|)", "kappa", "B^theta", "B^zeta", "lambda_t", "lambda_z",'p_r',
-        "lambda_r", "lambda", "g^rr", "g^rt", "g^rz", "g^tz", "g^tt", "g^zz",
-        "e^rho", "e^theta", "e^zeta"
-        ]
-
-        self._args = get_params(
-            self._field_line_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=self.grid_eq.axis.size,
-        )
-        '''
-        if verbose > 0:
-            print("Precomputing transforms")
-        #timer.start("Precomputing transforms")
-
-        '''
-        #Need separate transforms and profiles for the equilibrium and flux-tube
-        self.eq = eq
-        #self._profiles = get_profiles(self._field_line_keys, obj=eq, grid=self.grid)
-        self._profiles_eq = get_profiles(self._eq_keys, obj=eq, grid=self.grid)
-        #self._transforms = get_transforms(self._field_line_keys, obj=eq, grid=self.grid)
-        self._transforms_eq = get_transforms(self._eq_keys, obj=eq, grid=self.grid)
-
-        self._constants = {
-            "transforms": self._transforms_eq,
-            "profiles": self._profiles_eq,
-        }
-
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-#        self._check_dimensions()
-#        self._set_dimensions(eq)
-        '''
         super().build(use_jit=use_jit, verbose=verbose)
+        
 
     def compute(self, params, constants=None):
 
         return self.terps_compute.bind(params,constants)
-        
+
+    
     def compute_impl(self, params, constants):
 
 #        params, constants = self._parse_args(*args, **kwargs)
@@ -191,7 +147,6 @@ class TERPSICHORE(_Objective):
         self.write_vmec()   # Write VMEC file from DESC equilibrium
         self.compute_fort18()
         self.write_terps_io()
-        exit()
         self.run_terps()
         self.terps_outfile = os.path.join(self.path,'fort.16') # Let's change the name of this at some point
         self.parse_terps_outfile()
@@ -203,52 +158,35 @@ class TERPSICHORE(_Objective):
 
     def write_vmec(self):
 
-        desc.vmec.VMECIO.save(eq, self.wout_file, surfs=self.nsurf)
-        
-    
+        from desc.vmec import VMECIO
+        VMECIO.save(self.eq, self.wout_file, surfs=self.nsurf)
+            
     def compute_fort18(self):
 
         print("Figure out how to do this directly from DESC equilibrium quantities!!")
         
-        fs = open('stdout.vmec2terps','w')
         head, tail = os.path.split(self.wout_file)
         cmd = [self.vmec2terps_app, tail]
-        subprocess.run(cmd,stdout=fs)
-        fs.close()
+        subprocess.run(cmd,stdout=subprocess.PIPE, check=True)
 
-    '''
-    def is_terps_complete(self, slurm_file, stop_time, running, runtime):
 
-        if not os.path.exists(slurm_file):
-            return False
-        else:
-            f_slurm = open(slurm_file, 'r')
+    def remove_terps_files(self):
 
-        if (running):
-            print("Stop time = {} seconds".format(stop_time))
-            print("Current runtime = {} seconds".format(math.ceil(runtime)))
-            if (runtime > stop_time):
-                print("TERPS was unable to find a growth rate. Exiting...")
-                exit()
-            
-        terps_out_contents = f_slurm.read()
-
-        if 'GROWTH RATE' in terps_out_contents:
-            f_slurm.close()
+        if (os.path.exists(os.path.join(self.path, 'tpr16_dat_wall'))):
             rm_cmd = ['rm', 'tpr16_dat_wall'] # There's probably a better way to handle this
             subprocess.run(rm_cmd)
-            return True
-        else:
-            f_slurm.close()
-            return False
-    '''
 
-    def is_terps_complete(self, stop_time, runtime):
+        if (os.path.exists(os.path.join(self.path, 'tpr16_dat_pvi'))):
+            rm_cmd = ['rm', 'tpr16_dat_pvi'] # There's probably a better way to handle this
+            subprocess.run(rm_cmd)
+        
 
-        if not os.path.exists(self.terps_stdout):
-            return False
-        else:
+    def is_terps_complete(self, stop_time, runtime, terps_subprocess):
+
+        if (os.path.exists(self.terps_stdout)):
             f_slurm = open(self.terps_stdout, 'r')
+        else:
+            return False
 
         print("Current runtime = {} seconds".format(math.ceil(runtime)))
         if (runtime > stop_time):
@@ -256,36 +194,47 @@ class TERPSICHORE(_Objective):
             exit()
             
         terps_out_contents = f_slurm.read()
-
-        if 'GROWTH RATE' in terps_out_contents:
-            f_slurm.close()
-            rm_cmd = ['rm', 'tpr16_dat_wall', 'tpr16_dat_pvi'] # There's probably a better way to handle this
-            subprocess.run(rm_cmd)
-            return True
         
+        if 'GROWTH RATE' in terps_out_contents:
+            if terps_subprocess.returncode == None:
+                terps_subprocess.terminate()
+            f_slurm.close()
+            self.remove_terps_files()
+            return True
+
+        else:
+            f_slurm.close()
+            return False
+
+        # Uncomment the following block when dynamic allocation is working correctly
+        '''
         elif 'PARAMETER LSSL' in terps_out_contents:
+            if terps_subprocess.returncode == None:
+                terps_subprocess.terminate()
+            f_slurm.seek(0)
             line = f_slurm.readline()
             while line:
                 if 'PARAMETER LSSL' in line:
                     self.lssl = int(line.split("TO:")[1])
                     break
                 line = f_slurm.readline()
-            write_terps_io() # Rewrite the input file with suggested value of LSSL and re-run
+            self.write_terps_io() # Rewrite the input file with suggested value of LSSL and re-run
             return True
         
         elif 'PARAMETER LSSD' in terps_out_contents:
+            if terps_subprocess.returncode == None:
+                terps_subprocess.terminate()
+            f_slurm.seek(0)
             line = f_slurm.readline()
             while line:
                 if 'PARAMETER LSSD' in line:
                     self.lssd = int(line.split("TO:")[1])
                     break
                 line = f_slurm.readline()
-            write_terps_io() # Rewrite the input file with suggested value of LSSD and re-run
+            self.write_terps_io() # Rewrite the input file with suggested value of LSSD and re-run
             return True
+        '''
         
-        else:
-            f_slurm.close()
-            return False
 
         
     def run_terps(self):
@@ -293,86 +242,33 @@ class TERPSICHORE(_Objective):
         sleep_time = 1 # seconds
         stop_time = 60 # seconds (kill the infinite loop if TERPS ran into an error and won't be printing growth rate)
         
+        fs_error = open('error.terps','w')
+        fs = open('stdout.terps','w')
         head, tail = os.path.split(self.terps_infile)
+
+        self.remove_terps_files()
         
-        rm_cmd = ['rm', 'tpr16_dat_wall', 'tpr16_dat_pvi'] # There's probably a better way to handle this
-        subprocess.run(rm_cmd)
-        
-        cmd = ['srun', self.terps_app, '<', tail, '>', self.terps_stdout]
-        terps_process = subprocess.run(cmd, stdout=subprocess.PIPE)
+        cmd = ['srun', '-n', '1', '-t', '00:01:00', self.terps_app]
+        terps_subprocess = subprocess.run(cmd, stdin=open(self.terps_infile,'r'), stdout=fs, stderr=fs_error)
 
         runtime = 0.0
-        while not self.is_terps_complete(self.terps_stdout, stop_time, runtime):
-            tic = time.perf_counter()
+        tic = time.perf_counter()
+        while not self.is_terps_complete(stop_time, runtime, terps_subprocess):
             time.sleep(sleep_time)
             toc = time.perf_counter()
             runtime = toc-tic
 
+        # Uncomment the following block when dynamic allocation TERPS is working
+        '''
         if (self.lssl_repeat):
             self.lssl_repeat = False
-            run_terps()
+            self.run_terps()
             
         elif (self.lssd_repeat):
             self.lssd_repeat = False
-            run_terps()
+            self.run_terps()
+        '''        
 
-        exit()
-            
-        '''
-        if (submit_scipt):
-            # This could potentially launch a number of parallel TERPS jobs (probably at least want to run parallel jobs for N=0 and N=1 family)
-            fs = open('stdout.terps','w')
-            
-            if not (os.path.exists(self.submit_script_path)):
-                f = open(self.submit_script_path,"w")
-                f.write("#!/bin/bash\n")
-                f.write("#SBATCH --job-name=terps    # Job name\n")
-                f.write("#SBATCH --time=00:45:00               # Time limit hrs:min:sec\n")
-                f.write("#SBATCH --output=terps_%j.log   # Standard output and error log\n")
-                f.write("#SBATCH --nodes=1\n")
-                f.write("#SBATCH --mem-per-cpu=100G\n")
-                f.write("#SBATCH --ntasks-per-node=1\n")
-                f.write("#SBATCH --partition=stellar-debug\n")
-                f.write("\n")
-                f.write("srun {} < {}\n".format(self.terps_app,tail))
-                f.close()
-
-                print("Need a command to remove remnants of pasts TERPS runs (tpr16_dat_wall in particular) or move them to a new directory")
-
-            
-            cmd = ['sbatch', self.submit_script_path]
-            terps_process = subprocess.run(cmd,stdout=subprocess.PIPE)
-            out_text = terps_process.stdout.decode('utf-8')
-            fs.write(out_text)
-            jobID = out_text.split()[-1]
-            slurm_file = os.path.join(self.path,"terps_{}.log".format(jobID))
-
-            running = False
-            runtime = 0.0
-            tic = time.perf_counter()
-            while not self.is_terps_complete(slurm_file, stop_time, running, runtime):
-                if not running:
-                    check_status_cmd = ['squeue', '-j', jobID, '--format="%T"']
-                    check_status = subprocess.run(check_status_cmd, stdout=subprocess.PIPE)
-                    status_text = check_status.stdout.decode('utf-8')
-                    status = status_text.split()[1].replace('"','')
-                    if status == 'RUNNING':
-                        running = True
-                        tic = time.perf_counter()
-                        print("TERPS has started running")
-                    elif status == 'PENDING':
-                        print("TERPS is still in the queue")
-                    else:
-                        print(status)
-                        exit()
-                    
-                else:
-                    print("Growth rate not found. Checking again in {} seconds".format(sleep_time))
-
-                time.sleep(sleep_time)
-                toc = time.perf_counter()
-                runtime = toc-tic
-        '''
         print("Found growth rate!")
         
         fs.close()
@@ -440,17 +336,21 @@ class TERPSICHORE(_Objective):
     def write_terps_io(self):
         
         eq_identifier = "C640"
+
+        # Uncomment the following block when dynamic allocation TERPS is working
+        '''
         ivac = self.nsurf // 4
-        if (max_moden > 8) or (max_modem > 16):
+        if (self.max_moden > 8) or (self.max_modem > 16):
             nj = 150
             nk = 150
-        elif (max_moden > 4) or (max_modem > 8):
+        elif (self.max_moden > 4) or (self.max_modem > 8):
             nj = 100
             nk = 100
         else:
             nj = 50
             nk = 50
-            
+        '''           
+ 
         self.terps_infile = os.path.join(self.path, "{}_N{}_family".format(eq_identifier, self.mode_family))
         f = open(self.terps_infile,"w")
 
@@ -458,9 +358,13 @@ class TERPSICHORE(_Objective):
         f.write("C\n")
         f.write("C        MM  NMIN  NMAX   MMS NSMIN NSMAX NPROCS INSOL\n")
         f.write("         {:>2d}   {:>3d}   {:>3d}    55    -8    10    1     0\n".format(self.max_bozm, -self.max_bozn, self.max_bozn))
+
+        # Uncomment the following block when dynamic allocation TERPS is working
+        '''
         f.write("C\n")
         f.write("C        NJ    NK  IVAC  LSSL  LSSD MMAXDF NMAXDF\n")
         f.write("        {:>3d}   {:>3d}   {:>3d}  {:>4d}  {:>4d}    120     64\n".format(nj, nk, ivac, self.lssl, self.lssd)) # Not exactly sure how to set LSSL and LSSD..usually it tells you to increase if not high enough (does this affect runtime?)
+        '''
         f.write("C\n")
         f.write("C     TABLE OF FOURIER COEFFIENTS FOR BOOZER COORDINATES\n")
         f.write("C     EQUILIBRIUM SETTINGS ARE COMPUTED FROM FIT/VMEC\n")

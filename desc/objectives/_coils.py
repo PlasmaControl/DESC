@@ -609,15 +609,15 @@ class CoilTorsion(_CoilObjective):
 
 
 class CoilsetMinDistance(_Objective):
-    """Target the min distance btwn coils in the coilset.
+    """Target the minimum distance between coils in a coilset.
 
-    Will yield one value per coil in the coilset, which is the
-    minimumm distance to the neighboring coils for that coilset.
+    Will yield one value per coil in the coilset, which is the minimumm distance to
+    another coil in that coilset.
 
     Parameters
     ----------
     coils : CoilSet
-        Coil(s) that are to be optimized
+        Coils that are to be optimized.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
@@ -716,20 +716,20 @@ class CoilsetMinDistance(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute coil torsion.
+        """Compute minimum distances between coils.
 
         Parameters
         ----------
         params : dict
-            Dictionary of the coil's degrees of freedom.
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
 
         Returns
         -------
         f : array of floats
-            Distance to nearest coil for each coil in the coilset.
+            Minimum distance to another coil for each coil in the coilset.
 
         """
         # include all permutations of grid nodes between coils

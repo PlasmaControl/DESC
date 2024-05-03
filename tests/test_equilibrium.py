@@ -47,7 +47,7 @@ def test_compute_theta_coords():
 def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) for common use cases."""
     # finding coordinates along a single field line
-    eq = get("W7-X")
+    eq = get("NCSX")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T

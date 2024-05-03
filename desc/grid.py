@@ -541,7 +541,7 @@ class Grid(_Grid):
             _inverse_zeta_idx=inverse_c_idx,
         )
 
-    def __init__(self, nodes, sort=False, jitable=False, spacing=None, **kwargs):
+    def __init__(self, nodes, sort=False, jitable=False, **kwargs):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
@@ -549,8 +549,6 @@ class Grid(_Grid):
         self._sym = False
         self._node_pattern = "custom"
         self._nodes, self._spacing = self._create_nodes(nodes)
-        if spacing is not None:
-            self._spacing = spacing
         if sort:
             self._sort_nodes()
         if jitable:

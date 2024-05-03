@@ -6,6 +6,7 @@ from functools import partial
 import numpy as np
 import pytest
 from matplotlib import pyplot as plt
+from orthax.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipkm1
@@ -489,16 +490,19 @@ def test_bounce_integral_checks():
 
 @partial(np.vectorize, excluded={0})
 def _adaptive_elliptic(integrand, k):
-    return integrate.quad(integrand, 0, 2 * np.arcsin(k), args=(k,))[0]
+    a = 0
+    b = 2 * np.arcsin(k)
+    return integrate.quad(integrand, a, b, args=(k,), points=b)[0]
 
 
-def _fixed_elliptic(integrand, k, resolution):
+def _fixed_elliptic(integrand, k, deg):
     k = np.atleast_1d(k)
     a = np.zeros_like(k)
     b = 2 * np.arcsin(k)
-    x, w = tanh_sinh(resolution, grad_automorphism_arcsin)
+    x, w = leggauss(deg)
+    w = w * grad_automorphism_sin(x)
     Z = affine_bijection_reverse(
-        automorphism_arcsin(x), a[..., np.newaxis], b[..., np.newaxis]
+        automorphism_sin(x), a[..., np.newaxis], b[..., np.newaxis]
     )
     k = k[..., np.newaxis]
     quad = np.dot(integrand(Z, k), w) * grad_affine_bijection_reverse(a, b)
@@ -514,8 +518,8 @@ def _elliptic_incomplete(k2):
     K = _adaptive_elliptic(K_integrand, k)
     E = _adaptive_elliptic(E_integrand, k)
     # Make sure scipy's adaptive quadrature is not broken.
-    np.testing.assert_allclose(K, _fixed_elliptic(K_integrand, k, 9), rtol=1e-3)
-    np.testing.assert_allclose(E, _fixed_elliptic(E_integrand, k, 9), rtol=1e-3)
+    np.testing.assert_allclose(K, _fixed_elliptic(K_integrand, k, 10))
+    np.testing.assert_allclose(E, _fixed_elliptic(E_integrand, k, 10))
 
     # Here are the notes that explain these integrals.
     # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf.
@@ -558,9 +562,8 @@ def _elliptic_incomplete(k2):
         _fixed_elliptic(
             lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.cos(Z),
             k,
-            resolution=11,
+            deg=10,
         ),
-        rtol=1e-2,
     )
     np.testing.assert_allclose(
         I_7,
@@ -683,8 +686,7 @@ def test_drift():
         knots=zeta,
         B_ref=B_ref,
         L_ref=L_ref,
-        # tanh-sinh-arcsin quadrature requires 9 nodes to leg-gauss-sin's 5
-        deg=5,
+        deg=28,  # converges to absolute and relative tolerance of 1e-7
         check=True,
     )
 
@@ -797,12 +799,9 @@ def test_drift():
     drift_numerical = drift_numerical_num / drift_numerical_denom
     msg = "There should be one bounce integral per pitch in this example."
     assert drift_numerical.size == drift_analytic.size, msg
+    np.testing.assert_allclose(drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2)
 
     fig, ax = plt.subplots()
-    ax.plot(1 / pitch, drift_analytic, label="analytic")
-    ax.plot(1 / pitch, drift_numerical, label="numerical")
-    ax.set_xlabel(r"$\vert B \vert \sim 1 / \lambda$")
-    ax.set_ylabel("Bounce averaged binormal drift")
-    ax.set_title(r"Bounce averaged binormal drift, low $\beta$ shifted circle model")
-    np.testing.assert_allclose(drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2)
+    ax.plot(1 / pitch, drift_analytic)
+    ax.plot(1 / pitch, drift_numerical)
     return fig

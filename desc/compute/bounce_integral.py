@@ -1193,9 +1193,6 @@ def bounce_integral(
         The quadrature scheme used to evaluate the integral.
         The returned quadrature points xₖ and weights wₖ
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
-        Tanh-Sinh quadrature ``tanh_sinh`` with ``automorphism_arcsin``
-        can be competitive against the default choice of Gauss-Legendre
-        quadrature with `automorphism_sin``.
     automorphism : (callable, callable)
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.

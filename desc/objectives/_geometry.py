@@ -1762,7 +1762,7 @@ class UmbilicDistance(_Objective):
     ):
 
         if target is None and bounds is None:
-            target = -10
+            target = 0.0
 
         self._eq = curve
         self._curve = curve
@@ -1926,7 +1926,6 @@ class UmbilicDistance(_Objective):
         R = R.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
         Z = Z.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
 
-        # now compute the curvature
         # now compute the curvature
         data_axis = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",

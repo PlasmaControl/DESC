@@ -1609,7 +1609,8 @@ class UmbilicCurvature(_Objective):
         phi_arr = jnp.mod(phi_arr, 2 * jnp.pi)
 
         umbilic_edge_grid = Grid(
-            jnp.array([jnp.ones((len(phi_arr),)), theta.ravel(), phi_arr]).T
+            jnp.array([jnp.ones((len(phi_arr),)), theta.ravel(), phi_arr]).T,
+            jitable=True,
         )
 
         equil_profiles = get_profiles(
@@ -1617,12 +1618,14 @@ class UmbilicCurvature(_Objective):
             obj=eq,
             grid=umbilic_edge_grid,
             has_axis=umbilic_edge_grid.axis.size,
+            jitable=True,
         )
         equil_transforms = get_transforms(
             self._equil_data_keys,
             obj=eq,
             grid=umbilic_edge_grid,
             has_axis=umbilic_edge_grid.axis.size,
+            jitable=True,
         )
 
         # now compute the curvature

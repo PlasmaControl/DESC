@@ -402,11 +402,11 @@ def test_automorphism():
     # test that floating point error is acceptable
     x, w = tanh_sinh(19)
     assert np.all(np.abs(x) < 1)
-    y = 1 / (1 - np.abs(x))
+    y = 1 / np.sqrt(1 - np.abs(x))
     assert np.isfinite(y).all()
-    y = 1 / (1 - np.abs(automorphism_sin(x)))
+    y = 1 / np.sqrt(1 - np.abs(automorphism_sin(x)))
     assert np.isfinite(y).all()
-    y = 1 / (1 - np.abs(automorphism_arcsin(x)))
+    y = 1 / np.sqrt(1 - np.abs(automorphism_arcsin(x)))
     assert np.isfinite(y).all()
 
 
@@ -441,7 +441,7 @@ def test_bounce_quadrature():
         knots,
         quad=tanh_sinh,
         automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
-        resolution=18,
+        deg=18,
         check=True,
     )
     tanh_sinh_arcsin = _filter_not_nan(bounce_integrate(integrand, [], pitch))

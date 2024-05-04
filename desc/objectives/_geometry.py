@@ -1457,19 +1457,26 @@ class UmbilicCurvature(_Objective):
         target=None,
         bounds=None,
         weight=1,
+        curve_grid=None,
+        boundary_grid=None,
+        curve_fixed=False,
         normalize=True,
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="Umbilic curvature:",
+        name="Umbilic curvature",
     ):
+
         if target is None and bounds is None:
-            target = 1
-        self._grid = grid
-        things = [eq, curve]
+            target = -10
+
+        self._curve = curve
+        self._curve_grid = curve_grid
+        self._boundary_grid = boundary_grid
+        self._curve_fixed = curve_fixed
         super().__init__(
-            things=things,
+            things=[eq, self._curve] if not curve_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1492,56 +1499,54 @@ class UmbilicCurvature(_Objective):
 
         """
         eq = self.things[0]
-        curve = self.things[1]
-
-        if self._grid is None:
-            from desc.grid import Grid
-
-            phi_arr = jnp.linspace(0, 2 * np.pi, 42)
+        curve = self._curve if self._curve_fixed else self.things[1]
+        # if things[1] is different than self._curve, update self._curve
+        if curve != self._curve:
+            self._curve = curve
+        if self._curve_grid is None:
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
             phi_arr = jnp.concatenate(
-                (phi_arr, phi_arr + 2 * np.pi, phi_arr + 4 * np.pi)
+                (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
             )
-            grid0 = LinearGrid(
+            curve_grid = LinearGrid(
                 zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor
             )
-
-            data_keys = ["R", "Z"]
-            data_dict = curve.compute(data_keys, grid=grid0)
-
-            R = data_dict["R"]
-            Z = data_dict["Z"]
-
-            R = R.reshape(curve.NFP_umbilic_factor, 42).T
-            Z = Z.reshape(curve.NFP_umbilic_factor, 42).T
-
-            # calculate centroids for each section
-            centroid_R = jnp.mean(R, axis=1, keepdims=True)
-            centroid_Z = jnp.mean(Z, axis=1, keepdims=True)
-
-            # calculate theta for each point in each section
-            theta = jnp.arctan2(Z - centroid_Z, R - centroid_R)
-            theta = jnp.mod(theta, 2 * jnp.pi)
-            phi_arr = np.mod(phi_arr, 2 * jnp.pi)
-            grid = Grid(np.array([np.ones((len(phi_arr),)), theta.ravel(), phi_arr]).T)
         else:
-            grid = self._grid
+            curve_grid = self._curve_grid
 
-        # grid is determined by the curve object
-        # whereas the objective is calculated on the equilibrium object
-        self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_k2_rho"]
+        self._dim_f = curve_grid.num_nodes * curve.NFP_umbilic_factor
+        self._equil_data_keys = ["curvature_k2_rho"]
+        self._curve_data_keys = ["R", "phi", "Z"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        curve_transforms = get_transforms(
+            self._curve_data_keys,
+            obj=curve,
+            grid=curve_grid,
+            has_axis=curve_grid.axis.size,
+        )
+
         self._constants = {
-            "transforms": transforms,
-            "profiles": profiles,
+            "curve_transforms": curve_transforms,
+            "quad_weights": 1,
         }
+
+        if self._curve_fixed:
+            # precompute the surface coordinates
+            # as the surface is fixed during the optimization
+            surface_coords = compute_fun(
+                self._curve,
+                self._curve_data_keys,
+                params=self._curve.params_dict,
+                transforms=curve_transforms,
+                profiles={},
+                basis="rpz",
+            )["R", "Z"]
+            self._constants["surface_coords"] = surface_coords
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1549,7 +1554,7 @@ class UmbilicCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"]
+            self._normalization = scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1573,24 +1578,25 @@ class UmbilicCurvature(_Objective):
         """
         from desc.grid import Grid
 
-        eq = self.things[0]
-        curve = self.things[1]
-
         if constants is None:
             constants = self.constants
 
-        phi_arr = jnp.linspace(0, 2 * jnp.pi, 42)
-        phi_arr = jnp.concatenate((phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi))
-        grid0 = LinearGrid(zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor)
+        eq = self.things[0]
+        curve = self.things[1]
 
-        data_keys = ["R", "Z"]
-        data_dict = curve.compute(data_keys, grid=grid0)
+        curve_data = compute_fun(
+            curve,
+            self._curve_data_keys,
+            params=params,
+            transforms=constants["curve_transforms"],
+            profiles={},
+        )
+        R = curve_data["R"]
+        phi_arr = curve_data["phi"]
+        Z = curve_data["Z"]
 
-        R = data_dict["R"]
-        Z = data_dict["Z"]
-
-        R = R.reshape(curve.NFP_umbilic_factor, 42).T
-        Z = Z.reshape(curve.NFP_umbilic_factor, 42).T
+        R = R.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
+        Z = Z.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
 
         # calculate centroids for each section
         centroid_R = jnp.mean(R, axis=1, keepdims=True)
@@ -1600,26 +1606,32 @@ class UmbilicCurvature(_Objective):
         theta = jnp.arctan2(Z - centroid_Z, R - centroid_R)
         theta = jnp.mod(theta, 2 * jnp.pi)
 
-        phi_arr = np.mod(phi_arr, 2 * jnp.pi)
+        phi_arr = jnp.mod(phi_arr, 2 * jnp.pi)
+
         umbilic_edge_grid = Grid(
             jnp.array([jnp.ones((len(phi_arr),)), theta.ravel(), phi_arr]).T
         )
 
-        transforms = get_transforms(
-            self._data_keys, obj=eq, grid=umbilic_edge_grid, jitable=True
+        equil_profiles = get_profiles(
+            self._equil_data_keys,
+            obj=eq,
+            grid=umbilic_edge_grid,
+            has_axis=umbilic_edge_grid.axis.size,
         )
-
-        profiles = get_profiles(
-            self._data_keys, obj=eq, grid=umbilic_edge_grid, jitable=True
+        equil_transforms = get_transforms(
+            self._equil_data_keys,
+            obj=eq,
+            grid=umbilic_edge_grid,
+            has_axis=umbilic_edge_grid.axis.size,
         )
 
         # now compute the curvature
         data = compute_fun(
             eq,
-            self._data_keys,
+            self._equil_data_keys,
             params=params,
-            transforms=transforms,
-            profiles=profiles,
+            transforms=equil_transforms,
+            profiles=equil_profiles,
         )
 
         return data["curvature_k2_rho"]

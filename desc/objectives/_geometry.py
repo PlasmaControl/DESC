@@ -1479,7 +1479,7 @@ class UmbilicCurvature(_Objective):
         self._equil_grid_axis = equil_grid_axis
         self._curve_fixed = curve_fixed
         super().__init__(
-            things=[eq, curve],
+            things=[eq, self._curve] if not curve_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1523,14 +1523,15 @@ class UmbilicCurvature(_Objective):
                 (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
             )
             phi_arr = jnp.mod(phi_arr, 2 * jnp.pi)
-            curve_grid = LinearGrid(
+            equil_grid_axis = LinearGrid(
                 rho=0.0,
                 zeta=phi_arr,
             )
         else:
-            equil_grid_axis = self._curve_grid_axis
+            equil_grid_axis = self._equil_grid_axis
 
         self._dim_f = int(curve_grid.num_nodes * curve.NFP_umbilic_factor)
+
         self._equil_data_keys = ["curvature_k2_rho"]
         self._equil_data_keys_axis = ["R", "Z"]
         self._curve_data_keys = ["R", "phi", "Z"]
@@ -1547,6 +1548,25 @@ class UmbilicCurvature(_Objective):
             has_axis=curve_grid.axis.size,
         )
 
+        equil_profiles_axis = get_profiles(
+            self._equil_data_keys_axis,
+            obj=eq,
+            grid=equil_grid_axis,
+            has_axis=equil_grid_axis.axis.size,
+        )
+        equil_transforms_axis = get_transforms(
+            self._equil_data_keys_axis,
+            obj=eq,
+            grid=equil_grid_axis,
+            has_axis=equil_grid_axis.axis.size,
+        )
+        self._constants = {
+            "equil_profiles_axis": equil_profiles_axis,
+            "equil_transforms_axis": equil_transforms_axis,
+            "curve_transforms": curve_transforms,
+            "quad_weights": 1,
+        }
+
         if self._curve_fixed:
             # precompute the surface coordinates
             # as the surface is fixed during the optimization
@@ -1560,26 +1580,6 @@ class UmbilicCurvature(_Objective):
             )
             self._constants["curve_coords"] = curve_coords
 
-        equil_profiles_axis = get_profiles(
-            self._equil_data_keys_axis,
-            obj=eq,
-            grid=equil_grid_axis,
-            has_axis=True,
-        )
-        equil_transforms_axis = get_transforms(
-            self._equil_data_keys_axis,
-            obj=eq,
-            grid=equil_grid_axis,
-            has_axis=True,
-        )
-
-        self._constants = {
-            "equil_profiles_axis": equil_profiles_axis,
-            "equil_transforms_axis": equil_transforms_axis,
-            "curve_transforms": curve_transforms,
-            "quad_weights": 1,
-        }
-
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -1590,7 +1590,7 @@ class UmbilicCurvature(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params=None, constants=None):
+    def compute(self, params_1=None, params_2=None, constants=None):
         """Compute max absolute principal curvature.
 
         Parameters
@@ -1623,7 +1623,7 @@ class UmbilicCurvature(_Objective):
             curve_data = compute_fun(
                 curve,
                 self._curve_data_keys,
-                params=params,
+                params=params_2,
                 transforms=constants["curve_transforms"],
                 profiles={},
             )
@@ -1636,9 +1636,9 @@ class UmbilicCurvature(_Objective):
 
         # now compute the curvature
         data_axis = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            eq,
             self._equil_data_keys_axis,
-            params=params,
+            params=params_1,
             profiles=constants["equil_profiles_axis"],
             transforms=constants["equil_transforms_axis"],
         )
@@ -1646,8 +1646,8 @@ class UmbilicCurvature(_Objective):
         R_axis = data_axis["R"]
         Z_axis = data_axis["Z"]
 
-        R_axis = jnp.tile(R_axis[:, jnp.newaxis], (1, curve.NFP_umbilic_factor))
-        Z_axis = jnp.tile(Z_axis[:, jnp.newaxis], (1, curve.NFP_umbilic_factor))
+        R_axis = R_axis.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
+        Z_axis = Z_axis.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
 
         # calculate theta for each point in each section
         theta = jnp.arctan2(Z - Z_axis, R - R_axis)
@@ -1679,7 +1679,7 @@ class UmbilicCurvature(_Objective):
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._equil_data_keys,
-            params=params,
+            params=params_1,
             profiles=equil_profiles,
             transforms=equil_transforms,
         )
@@ -1815,15 +1815,16 @@ class UmbilicDistance(_Objective):
                 (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
             )
             phi_arr = jnp.mod(phi_arr, 2 * jnp.pi)
-            curve_grid = LinearGrid(
+            equil_grid_axis = LinearGrid(
                 rho=0.0,
                 zeta=phi_arr,
             )
         else:
-            equil_grid_axis = self._curve_grid_axis
+            equil_grid_axis = self._equil_grid_axis
 
         self._dim_f = int(curve_grid.num_nodes * curve.NFP_umbilic_factor)
-        self._equil_data_keys = ["R, Z"]
+
+        self._equil_data_keys = ["R", "Z"]
         self._equil_data_keys_axis = ["R", "Z"]
         self._curve_data_keys = ["R", "phi", "Z"]
 
@@ -1843,15 +1844,14 @@ class UmbilicDistance(_Objective):
             self._equil_data_keys_axis,
             obj=eq,
             grid=equil_grid_axis,
-            has_axis=True,
+            has_axis=equil_grid_axis.axis.size,
         )
         equil_transforms_axis = get_transforms(
             self._equil_data_keys_axis,
             obj=eq,
             grid=equil_grid_axis,
-            has_axis=True,
+            has_axis=equil_grid_axis.axis.size,
         )
-
         self._constants = {
             "equil_profiles_axis": equil_profiles_axis,
             "equil_transforms_axis": equil_transforms_axis,
@@ -1882,7 +1882,7 @@ class UmbilicDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params=None, constants=None):
+    def compute(self, params_1=None, params_2=None, constants=None):
         """Compute max absolute principal curvature.
 
         Parameters
@@ -1915,7 +1915,7 @@ class UmbilicDistance(_Objective):
             curve_data = compute_fun(
                 curve,
                 self._curve_data_keys,
-                params=params,
+                params=params_2,
                 transforms=constants["curve_transforms"],
                 profiles={},
             )
@@ -1928,9 +1928,9 @@ class UmbilicDistance(_Objective):
 
         # now compute the curvature
         data_axis = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            eq,
             self._equil_data_keys_axis,
-            params=params,
+            params=params_1,
             profiles=constants["equil_profiles_axis"],
             transforms=constants["equil_transforms_axis"],
         )
@@ -1938,8 +1938,8 @@ class UmbilicDistance(_Objective):
         R_axis = data_axis["R"]
         Z_axis = data_axis["Z"]
 
-        R_axis = jnp.tile(R_axis[:, jnp.newaxis], (1, curve.NFP_umbilic_factor))
-        Z_axis = jnp.tile(Z_axis[:, jnp.newaxis], (1, curve.NFP_umbilic_factor))
+        R_axis = R_axis.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
+        Z_axis = Z_axis.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
 
         # calculate theta for each point in each section
         theta = jnp.arctan2(Z - Z_axis, R - R_axis)
@@ -1971,14 +1971,16 @@ class UmbilicDistance(_Objective):
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._equil_data_keys,
-            params=params,
+            params=params_1,
             profiles=equil_profiles,
             transforms=equil_transforms,
         )
 
         R_equil = data["R"]
         Z_equil = data["Z"]
+        R_equil = R_equil.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
+        Z_equil = Z_equil.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
 
-        distance = np.sqrt((R_equil - R) ** 2 + (Z_equil - Z) ** 2)
+        distance = jnp.sqrt((R_equil - R) ** 2 + (Z_equil - Z) ** 2)
 
-        return distance
+        return distance.ravel()

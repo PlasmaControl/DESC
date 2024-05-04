@@ -1980,4 +1980,5 @@ class UmbilicDistance(_Objective):
         Z_equil = data["Z"]
 
         distance = np.sqrt((R_equil - R) ** 2 + (Z_equil - Z) ** 2)
+
         return distance

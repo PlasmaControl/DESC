@@ -400,13 +400,13 @@ def test_automorphism():
     )
 
     # test that floating point error is acceptable
-    x, w = tanh_sinh(19)
+    x = tanh_sinh(19)[0]
     assert np.all(np.abs(x) < 1)
-    y = 1 / (1 - np.abs(x))
+    y = 1 / np.sqrt(1 - np.abs(x))
     assert np.isfinite(y).all()
-    y = 1 / (1 - np.abs(automorphism_sin(x)))
+    y = 1 / np.sqrt(1 - np.abs(automorphism_sin(x)))
     assert np.isfinite(y).all()
-    y = 1 / (1 - np.abs(automorphism_arcsin(x)))
+    y = 1 / np.sqrt(1 - np.abs(automorphism_arcsin(x)))
     assert np.isfinite(y).all()
 
 
@@ -421,18 +421,18 @@ def test_bounce_quadrature():
     # appears often in transformations.
     v = 7
     truth = v * 2 * ellipkm1(p)
-    rtol = 1e-3
+    rtol = 1e-4
 
     def integrand(B, pitch, Z):
         return 1 / jnp.sqrt(1 - pitch * m * B)
 
     bp1 = -np.pi / 2 * v
     bp2 = -bp1
-    knots = np.linspace(bp1, bp2, 15)
+    knots = np.linspace(bp1, bp2, 50)
     B_sup_z = np.ones(knots.size)
     B = np.clip(np.sin(knots / v) ** 2, 1e-7, 1)
     B_z_ra = np.sin(2 * knots / v) / v
-    pitch = 1 + np.finfo(np.array(1.0).dtype).eps
+    pitch = 1 + 50 * jnp.finfo(jnp.array(1.0).dtype).eps
 
     bounce_integrate, _ = bounce_integral(
         B_sup_z,
@@ -440,15 +440,15 @@ def test_bounce_quadrature():
         B_z_ra,
         knots,
         quad=tanh_sinh,
-        automorphism=(automorphism_arcsin, grad_automorphism_arcsin),
-        resolution=18,
+        automorphism=None,
+        deg=40,
         check=True,
     )
-    tanh_sinh_arcsin = _filter_not_nan(bounce_integrate(integrand, [], pitch))
-    assert tanh_sinh_arcsin.size == 1
-    np.testing.assert_allclose(tanh_sinh_arcsin, truth, rtol=rtol)
+    tanh_sinh_vanilla = _filter_not_nan(bounce_integrate(integrand, [], pitch))
+    assert tanh_sinh_vanilla.size == 1
+    np.testing.assert_allclose(tanh_sinh_vanilla, truth, rtol=rtol)
 
-    bounce_integrate, _ = bounce_integral(B_sup_z, B, B_z_ra, knots, deg=16, check=True)
+    bounce_integrate, _ = bounce_integral(B_sup_z, B, B_z_ra, knots, deg=25, check=True)
     leg_gauss_sin = _filter_not_nan(bounce_integrate(integrand, [], pitch))
     assert leg_gauss_sin.size == 1
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
@@ -501,9 +501,8 @@ def _fixed_elliptic(integrand, k, deg):
     b = 2 * np.arcsin(k)
     x, w = leggauss(deg)
     w = w * grad_automorphism_sin(x)
-    Z = affine_bijection_reverse(
-        automorphism_sin(x), a[..., np.newaxis], b[..., np.newaxis]
-    )
+    x = automorphism_sin(x)
+    Z = affine_bijection_reverse(x, a[..., np.newaxis], b[..., np.newaxis])
     k = k[..., np.newaxis]
     quad = np.dot(integrand(Z, k), w) * grad_affine_bijection_reverse(a, b)
     return quad

@@ -688,7 +688,8 @@ def automorphism_arcsin(x):
 
     The gradient of the arcsin automorphism introduces a singularity that augments
     the singularity in the bounce integral. Therefore, the quadrature scheme
-    used to evaluate the integral must work well on singular integrals.
+    used to evaluate the integral must work well on functions with large
+    derivative near the boundary.
 
     The arcsin automorphism pulls points in [−1, 1] away from the boundary.
     This can reduce floating point error if paired with a quadrature
@@ -719,15 +720,15 @@ def grad_automorphism_arcsin(x):
 grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 
 
-def automorphism_sin(x, eps=None):
+def automorphism_sin(x, s=0, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    The derivative of the sin automorphism is Lipschitz.
+    The gradient of the sin automorphism is Lipschitz.
     When this automorphism is used as the change of variable map for the bounce
     integral, the Lipschitzness prevents generation of new singularities.
-    Furthermore, its derivative vanishes like the integrand of the elliptic
-    integral of the second kind E(φ | 1), suppressing the singularity in the
-    bounce integrand.
+    Furthermore, its derivative vanishes to zero slowly near the boundary,
+    which will suppress the large derivatives near the boundary of singular
+    integrals.
 
     Therefore, this automorphism pulls the mass of the bounce integral away
     from the singularities, which should improve convergence of the quadrature
@@ -742,8 +743,10 @@ def automorphism_sin(x, eps=None):
     ----------
     x : Array
         Points to transform.
-    eps : float
-        Buffer for floating point error.
+    s : float
+        Strength of derivative suppression, s ∈ [0, 1].
+    m : int
+        Number of machine epsilons used for floating point error buffer.
 
     Returns
     -------
@@ -751,62 +754,68 @@ def automorphism_sin(x, eps=None):
         Transformed points.
 
     """
-    y = jnp.sin(jnp.pi * x / 2)
-    if eps is None:
-        eps = 1e3 * jnp.finfo(jnp.array(1.0).dtype).eps
+    errorif(not (0 <= s <= 1))
+    # s = 0 -> derivative vanishes like cosine.
+    # s = 1 -> derivative vanishes like cosine^k.
+    # Integrate cosine, cosine^k, and normalize codomain to [-1, 1] to get
+    # two automorphisms. Connect with homotopy, jointly continuous in s ∈ [0, 1].
+    # Then derivative suppression is continuous in s for finite k.
+    # As k → ∞ and s → 1, all integrable singularities and oscillations
+    # are removed; the integrand becomes a delta function.
+    # Setting s = 0 is optimal to integrate singularities of the form 1 / (1 - |x|)
+    # Setting s = 1 is optimal to integrate singularities of the form 1 / (1 - |x|)^k.
+    y0 = jnp.sin(jnp.pi * x / 2)
+    y1 = x + jnp.sin(jnp.pi * x) / jnp.pi  # k = 2
+    y = (1 - s) * y0 + s * y1
+    eps = m * jnp.finfo(jnp.array(1.0).dtype).eps
     return jnp.clip(y, -1 + eps, 1 - eps)
 
 
-def grad_automorphism_sin(x):
+def grad_automorphism_sin(x, s=0):
     """Gradient of sin automorphism."""
-    dy_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
+    dy0_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
+    dy1_dx = 1 + jnp.cos(jnp.pi * x)
+    dy_dx = (1 - s) * dy0_dx + s * dy1_dx
     return dy_dx
 
 
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 
 
-def tanh_sinh(resolution, w=lambda x: 1, t_max=None):
+def tanh_sinh(deg, m=10):
     """Tanh-Sinh quadrature.
 
-    Returns quadrature points xₖ and weights Wₖ for the approximate evaluation
-    of the integral ∫₋₁¹ w(x) f(x) dx ≈ ∑ₖ Wₖ f(xₖ).
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
 
     Parameters
     ----------
-    resolution: int
-        Number of quadrature points, preferably odd.
-    w : callable
-        Weight function defined, positive, and continuous on (-1, 1).
-    t_max : float
-        The positive limit of quadrature points to be mapped.
-        Larger limit implies better results, but limited due to overflow in sinh.
-        A typical value is 3.14.
-        Computed automatically if not supplied.
+    deg: int
+        Number of quadrature points.
+    m : int
+        Number of machine epsilons used for floating point error buffer.
+        Larger implies less floating point error, but increases the
+        minimum achievable error.
 
     Returns
     -------
     x : Array
         Quadrature points.
-    W : Array
+    w : Array
         Quadrature weights.
 
     """
-    if t_max is None:
-        # boundary of integral
-        x_max = jnp.array(1.0)
-        # buffer for floating point error
-        x_max = x_max - 10 * jnp.finfo(x_max.dtype).eps
-        # inverse of tanh-sinh transformation
-        t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
-    kh = jnp.linspace(-t_max, t_max, resolution)
-    h = 2 * t_max / (resolution - 1)
-    arg = 0.5 * jnp.pi * jnp.sinh(kh)
-    x = jnp.tanh(arg)
-    # weights for Tanh-Sinh quadrature ∫₋₁¹ f(x) dx ≈ ∑ₖ ωₖ f(xₖ)
-    W = 0.5 * jnp.pi * h * jnp.cosh(kh) / jnp.cosh(arg) ** 2
-    W = W * w(x)
-    return x, W
+    # buffer to avoid numerical instability
+    x_max = jnp.array(1.0)
+    x_max = x_max - m * jnp.finfo(x_max.dtype).eps
+    t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
+    # maximal-spacing scheme, doi.org/10.48550/arXiv.2007.15057
+    t = jnp.linspace(-t_max, t_max, deg)
+    dt = 2 * t_max / (deg - 1)
+    arg = 0.5 * jnp.pi * jnp.sinh(t)
+    x = jnp.tanh(arg)  # x = g(t)
+    w = 0.5 * jnp.pi * jnp.cosh(t) / jnp.cosh(arg) ** 2 * dt  # w = (dg/dt) dt
+    return x, w
 
 
 _repeated_docstring = """w : Array, shape(w.size, )
@@ -1193,7 +1202,7 @@ def bounce_integral(
         The quadrature scheme used to evaluate the integral.
         The returned quadrature points xₖ and weights wₖ
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
-    automorphism : (callable, callable)
+    automorphism : (callable, callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
         The inverse of the supplied automorphism is composed with the affine
@@ -1316,12 +1325,12 @@ def bounce_integral(
     if quad == leggauss:
         kwargs.setdefault("deg", 28)
     x, w = quad(**kwargs)
-    # The gradient of the transformation is the weight function w(x) of the integral.
-    auto, grad_auto = automorphism
-    w = w * grad_auto(x)
-    # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
-    # Apply reverse automorphism to quadrature points.
-    x = auto(x)
+    if automorphism is not None:
+        auto, grad_auto = automorphism
+        w = w * grad_auto(x)
+        # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
+        # Apply reverse automorphism to quadrature points.
+        x = auto(x)
 
     def bounce_integrate(integrand, f, pitch, method="akima", batched=True):
         """Bounce integrate ∫ f(ℓ) dℓ.

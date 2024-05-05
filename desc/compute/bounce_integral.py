@@ -782,23 +782,16 @@ def grad_automorphism_sin(x, s=0):
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 
 
-def tanh_sinh(deg, w=lambda x: 1, m=10):
+def tanh_sinh(deg, m=10):
     """Tanh-Sinh quadrature.
 
-    Returns quadrature points xₖ and weights Wₖ for the approximate evaluation
-    of the integral ∫₋₁¹ w(x) f(x) dx ≈ ∑ₖ Wₖ f(xₖ).
-
-    Notes
-    -----
-    This quadrature is ill-suited for high-precision accuracy due to numerical
-    amplification of errors in computing quadrature points.
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
 
     Parameters
     ----------
     deg: int
         Number of quadrature points.
-    w : callable
-        Weight function defined, positive, and continuous on (-1, 1).
     m : int
         Number of machine epsilons used for floating point error buffer.
         Larger implies less floating point error, but increases the
@@ -808,7 +801,7 @@ def tanh_sinh(deg, w=lambda x: 1, m=10):
     -------
     x : Array
         Quadrature points.
-    W : Array
+    w : Array
         Quadrature weights.
 
     """
@@ -821,10 +814,8 @@ def tanh_sinh(deg, w=lambda x: 1, m=10):
     dt = 2 * t_max / (deg - 1)
     arg = 0.5 * jnp.pi * jnp.sinh(t)
     x = jnp.tanh(arg)  # x = g(t)
-    # weights for Tanh-Sinh quadrature ∫₋₁¹ f(x) dx ≈ ∑ₖ ωₖ f(xₖ)
-    W = 0.5 * jnp.pi * jnp.cosh(t) / jnp.cosh(arg) ** 2 * dt  # W = (dg/dt) dt
-    W = W * w(x)
-    return x, W
+    w = 0.5 * jnp.pi * jnp.cosh(t) / jnp.cosh(arg) ** 2 * dt  # w = (dg/dt) dt
+    return x, w
 
 
 _repeated_docstring = """w : Array, shape(w.size, )
@@ -1211,7 +1202,7 @@ def bounce_integral(
         The quadrature scheme used to evaluate the integral.
         The returned quadrature points xₖ and weights wₖ
         should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
-    automorphism : (callable, callable)
+    automorphism : (callable, callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
         The inverse of the supplied automorphism is composed with the affine
@@ -1334,11 +1325,12 @@ def bounce_integral(
     if quad == leggauss:
         kwargs.setdefault("deg", 19)
     x, w = quad(**kwargs)
-    auto, grad_auto = automorphism
-    w = w * grad_auto(x)
-    # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
-    # Apply reverse automorphism to quadrature points.
-    x = auto(x)
+    if automorphism is not None:
+        auto, grad_auto = automorphism
+        w = w * grad_auto(x)
+        # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
+        # Apply reverse automorphism to quadrature points.
+        x = auto(x)
 
     def bounce_integrate(integrand, f, pitch, method="akima", batched=True):
         """Bounce integrate ∫ f(ℓ) dℓ.

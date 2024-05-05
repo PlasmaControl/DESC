@@ -27,7 +27,7 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     ForceBalance,
@@ -1005,8 +1005,8 @@ def test_optimize_multiple_things_different_order():
         NFP=eq.NFP,
     )
     constraints = (
-        FixParameter(eq),  # don't let eq vary
-        FixParameter(  # only let the minor radius of the surface vary
+        FixParameters(eq),  # don't let eq vary
+        FixParameters(  # only let the minor radius of the surface vary
             surf, params={"R_lmn": np.array(surf.R_basis.get_idx(M=0, N=0))}
         ),
     )
@@ -1045,8 +1045,8 @@ def test_optimize_multiple_things_different_order():
 
     # fresh start
     constraints = (
-        FixParameter(eq),  # don't let eq vary
-        FixParameter(  # only let the minor radius of the surface vary
+        FixParameters(eq),  # don't let eq vary
+        FixParameters(  # only let the minor radius of the surface vary
             surf, params={"R_lmn": np.array(surf.R_basis.get_idx(M=0, N=0))}
         ),
     )
@@ -1085,7 +1085,7 @@ def test_optimize_with_single_constraint():
     eq = Equilibrium()
     optimizer = Optimizer("lsq-exact")
     objectective = ObjectiveFunction(GenericObjective("|B|", eq), use_jit=False)
-    constraints = FixParameter(
+    constraints = FixParameters(
         eq,
         {
             "R_lmn": True,

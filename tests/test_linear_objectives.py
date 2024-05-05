@@ -40,7 +40,7 @@ from desc.objectives import (
     FixModeZ,
     FixOmniMap,
     FixOmniWell,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -353,7 +353,7 @@ def test_factorize_linear_constraints_asserts():
         _ = factorize_linear_constraints(objective, constraint)
 
     # constraining a foreign thing
-    constraint = ObjectiveFunction(FixParameter(surf))
+    constraint = ObjectiveFunction(FixParameters(surf))
     constraint.build(verbose=0)
     with pytest.raises(UserWarning):
         _ = factorize_linear_constraints(objective, constraint)
@@ -800,39 +800,21 @@ def test_FixSumModes_passed_target_too_long():
 
 
 @pytest.mark.unit
-def test_FixMode_False_or_None_modes():
-    """Test Fixing Modes without specifying modes or All modes."""
-    eq = Equilibrium(L=3, M=4)
-    with pytest.raises(ValueError):
-        FixModeR(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeR(eq, modes=None, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeZ(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeZ(eq, modes=None, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeLambda(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeLambda(eq, modes=None, target=np.array([[0, 1]]))
-
-
-@pytest.mark.unit
 def test_FixSumModes_False_or_None_modes():
     """Test Fixing Sum Modes without specifying modes or All modes."""
     eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixSumModesZ(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesZ(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=None)
     with pytest.raises(ValueError):
-        FixSumModesR(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesR(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=None)
     with pytest.raises(ValueError):
-        FixSumModesLambda(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesLambda(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesLambda(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesLambda(eq, modes=None)
 
 
 def _is_any_instance(things, cls):
@@ -928,8 +910,51 @@ def test_fix_omni_indices():
 
 
 @pytest.mark.unit
+def test_fix_parameters_input_order(DummyStellarator):
+    """Test that FixParameters preserves the input indices and target ordering."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    default_target = eq.Rb_lmn
+
+    # default objective
+    obj = FixBoundaryR(eq)
+    obj.build()
+    np.testing.assert_allclose(obj.target, default_target)
+
+    # manually specify default
+    obj = FixBoundaryR(eq, modes=eq.surface.R_basis.modes)
+    obj.build()
+    np.testing.assert_allclose(obj.target, default_target)
+
+    # reverse order
+    obj = FixBoundaryR(eq, modes=np.flipud(eq.surface.R_basis.modes))
+    obj.build()
+    np.testing.assert_allclose(obj.target, np.flipud(default_target))
+
+    # custom order
+    obj = ObjectiveFunction(
+        FixBoundaryR(eq, modes=np.array([[0, 0, 0], [0, 1, 0], [0, 1, 1]]))
+    )
+    obj.build()
+    np.testing.assert_allclose(obj.target_scaled, np.array([3, 1, 0.3]))
+    np.testing.assert_allclose(obj.compute_scaled_error(obj.x(eq)), np.zeros(obj.dim_f))
+
+    # custom target
+    obj = ObjectiveFunction(
+        FixBoundaryR(
+            eq,
+            modes=np.array([[0, 0, 0], [0, 1, 0], [0, 1, 1]]),
+            target=np.array([0, -1, 0.5]),
+        )
+    )
+    obj.build()
+    np.testing.assert_allclose(
+        obj.compute_scaled_error(obj.x(eq)), np.array([3, 2, -0.2])
+    )
+
+
+@pytest.mark.unit
 def test_fix_subset_of_params_in_collection():
-    """Tests FixParameter fixing a subset of things in the collection."""
+    """Tests FixParameters fixing a subset of things in the collection."""
     tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
     vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
@@ -962,6 +987,6 @@ def test_fix_subset_of_params_in_collection():
         )
     )
 
-    obj = FixParameter(full_coilset, params)
+    obj = FixParameters(full_coilset, params)
     obj.build()
     np.testing.assert_allclose(obj.target, target)

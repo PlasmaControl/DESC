@@ -177,7 +177,7 @@ Objective Functions
     desc.objectives.FixOmniBmax
     desc.objectives.FixOmniMap
     desc.objectives.FixOmniWell
-    desc.objectives.FixParameter
+    desc.objectives.FixParameters
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR

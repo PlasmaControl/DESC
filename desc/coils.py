@@ -6,7 +6,16 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import fori_loop, jit, jnp, scan, tree_stack, tree_unstack, vmap
+from desc.backend import (
+    fori_loop,
+    jit,
+    jnp,
+    scan,
+    tree_leaves,
+    tree_stack,
+    tree_unstack,
+    vmap,
+)
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.geometry import (
@@ -146,6 +155,26 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
+
+    def compute_position(self, params=None, source_grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        x = self.compute("x", grid=source_grid, params=params, **kwargs)["x"]
+        return jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -754,7 +783,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     """
 
-    _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
+    _io_attrs_ = ["_coils", "_NFP", "_sym"]
 
     def __init__(self, *coils, NFP=1, sym=False, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
@@ -778,6 +807,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def coils(self):
         """list: coils in the coilset."""
         return self._coils
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return len(self) * (int(self.sym) + 1) * self.NFP
 
     @property
     def NFP(self):
@@ -811,14 +845,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert len(x) == len(self)
         return x
 
-    def compute(  # noqa: C901 - Simplify this
+    def compute(
         self,
         names,
         grid=None,
         params=None,
         transforms=None,
         data=None,
-        return_only_unique=False,
         **kwargs,
     ):
         """Compute the quantity given by name on grid, for each coil in the coilset.
@@ -838,9 +871,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         data : dict of ndarray or array-like
             Data computed so far, generally output from other compute functions
             If array-like, should be 1 value per coil.
-        return_only_unique : bool
-            Whether to return data only for the unique coils or for every coil
-            after reflection (for stell sym) and rotation (for NFP>1)
 
         Returns
         -------
@@ -854,208 +884,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(names, coil) for coil in self]
         if data is None:
             data = [{}] * len(self)
-        if not isinstance(names, (list, tuple)):
-            names = [names]
-        if "x" not in names and (self.NFP > 1 or self.sym):
-            # need "x" for doing the symmetry and rotation
-            names.append("x")
         # if user supplied initial data for each coil we also need to vmap over that.
         data = vmap(
             lambda d, x: self[0].compute(
                 names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
             )
         )(tree_stack(data), tree_stack(params))
-        data_unstacked = tree_unstack(data)
-        if return_only_unique or (self.NFP == 1 and not self.sym):
-            # if NFP=1 and no sym, then every coil has been computed
-            # already, so just return it now
-            return data_unstacked
-
-        ##### Try other way above this
-
-        native_basis = {
-            FourierRZCoil: "rpz",
-            FourierPlanarCoil: "rpz",
-            FourierXYZCoil: "xyz",
-            SplineXYZCoil: "xyz",
-        }[type(self[0])]
-        basis = kwargs.get("basis", native_basis)
-
-        #### stellarator symmetry flip section ####
-        # vector keys that will need to be rotated/flipped
-        keys_to_be_rotated = {
-            "x",
-            "x_s",
-            "x_ss",
-            "x_sss",
-            "frenet_tangent",
-            "frenet_normal",
-            "frenet_binormal",
-        }
-        # only need to rotate quantities that were actually calculated
-        keys_to_be_rotated = list(
-            keys_to_be_rotated.intersection(set(data_unstacked[0].keys()))
-        )
-        data_to_be_rotated = {}
-        data_sizes = []
-        for coil_data in data_unstacked:
-            data_sizes.append(coil_data["x"].shape[0])
-            for key in coil_data.keys():
-                if key in keys_to_be_rotated:
-                    if key not in data_to_be_rotated.keys():
-                        data_to_be_rotated[key] = coil_data[key]
-                    else:
-                        data_to_be_rotated[key] = jnp.vstack(
-                            [data_to_be_rotated[key], coil_data[key]]
-                        )
-
-        # at this point, the data_to_be_rotated dict has
-        # the stacked data of the original unique coils,
-        # in whatever the native basis is
-
-        if basis == "xyz":
-            coords_xyz = data_to_be_rotated["x"]
-            coords_rpz = xyz2rpz(data_to_be_rotated["x"])
-        else:
-            coords_rpz = data_to_be_rotated["x"]
-            coords_xyz = rpz2xyz(data_to_be_rotated["x"])
-            # easier to think of the symmetry in cartesian
-            # to do the rotation/reflection
-            for key in data_to_be_rotated.keys():
-                if key != "x":
-                    data_to_be_rotated[key] = rpz2xyz_vec(
-                        data_to_be_rotated[key], x=coords_xyz[:, 0], y=coords_xyz[:, 1]
-                    )
-
-        # at this point, the data_to_be_rotate dict has
-        # the stacked data of the original unique coils,
-        # with any vectors being in xyz, and we have coords_xyz/rpz of each of them
-
-        # the following should work assuming it is only a single coilset of coils,
-        # which for a CoilSet object is always true.
-        # if stellarator symmetric, add reflected nodes from the other half field period
-        data_one_FP = data_unstacked.copy()
-        if self.sym:
-            # add the sizes of the flipped coordinates too
-            data_sizes_one_FP = data_sizes + data_sizes[::-1]
-            normal = jnp.array(
-                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
-            )
-            coords_sym = (
-                coords_xyz
-                @ reflection_matrix(normal).T
-                @ reflection_matrix([0, 0, 1]).T
-            )
-            # flip the array
-            # bc it is a reflection and we want the coils like
-            # [1 2 3] -> [1 2 3 flip(3) flip(2) flip(1)]
-            # coords_sym only has the coordinates for the flip coils
-            # [flip(3) flip(2) flip(1)]]
-            coords_sym = jnp.flip(coords_sym, axis=0)
-
-            coords_xyz = jnp.vstack((coords_xyz, coords_sym))
-            coords_rpz = xyz2rpz(coords_xyz)
-
-            # now rotate the vectors
-            for key in data_to_be_rotated.keys():
-                if key != "x":
-                    data_sym = (
-                        data_to_be_rotated[key]
-                        @ reflection_matrix(normal).T
-                        @ reflection_matrix([0, 0, 1]).T
-                    )
-                    data_sym = jnp.vstack(
-                        (
-                            data_to_be_rotated[key],
-                            jnp.flip(data_sym, axis=0),
-                        )
-                    )
-
-                    data_to_be_rotated[key] = jnp.split(
-                        data_sym, jnp.cumsum(jnp.array(data_sizes_one_FP))[:-1]
-                    )
-            # use [::-1] so that we use the last coils dict first,
-            # as we have the coords stacked
-            # like [1 2 3 flip(3) flip(2) flip(1)]
-            for i, coildata in enumerate(data_unstacked[::-1]):
-                # first copy over the dict for the coil
-                data_one_FP.append(coildata.copy())
-                # put in the new rotated vectors
-                for key in data_to_be_rotated.keys():
-                    if key != "x":
-                        data_one_FP[-1][key] = data_to_be_rotated[key][i + len(self)]
-        else:
-            data_sizes_one_FP = data_sizes
-        # now rotate things through the field periods
-        N_coils_per_FP = len(data_one_FP)
-        data_all_coils = []
-        data_this_FP = data_one_FP.copy()
-        # only need to rotate the vectors
-        for i in range(0, self.NFP):
-            # data_to_be_rotated is in xyz, so we will change basis again
-            # so we can do rpz2xyz_vec
-            # on it to rotate it with the correct phi
-            for key in keys_to_be_rotated:
-                if key == "x":
-                    rotated_data = (
-                        coords_rpz
-                        + jnp.vstack(
-                            [
-                                jnp.zeros_like(coords_rpz[:, 0]),
-                                jnp.zeros_like(coords_rpz[:, 0])
-                                + i * 2 * np.pi / self.NFP,
-                                jnp.zeros_like(coords_rpz[:, 0]),
-                            ]
-                        ).T
-                    )
-                    if basis == "xyz":
-                        rotated_data = rpz2xyz(rotated_data)
-                else:
-                    rotated_data = xyz2rpz_vec(
-                        jnp.vstack(data_to_be_rotated[key]),
-                        phi=coords_rpz[:, 1],
-                    )
-                    rotated_data = rpz2xyz_vec(
-                        rotated_data,
-                        phi=coords_rpz[:, 1] + i * 2 * np.pi / self.NFP,
-                    )
-                    if basis == "rpz":
-                        # put back to correct coord system if needed
-                        rotated_data = xyz2rpz_vec(
-                            rotated_data,
-                            phi=coords_rpz[:, 1] + i * 2 * np.pi / self.NFP,
-                        )
-                rotated_data_per_coil_this_FP = jnp.split(
-                    rotated_data, jnp.cumsum(jnp.array(data_sizes_one_FP))[:-1]
-                )
-                for k in range(N_coils_per_FP):
-                    data_this_FP[k][key] = rotated_data_per_coil_this_FP[k]
-            data_all_coils += [dict(d) for d in data_this_FP]
-        # finally, check if the scalar positions are in the computed quantities,
-        # and if so set them to the correct values based off of "x"
-        keys_to_set_manually = {"X", "Y", "Z", "R", "phi"}.intersection(
-            data_all_coils[0].keys()
-        )
-        if not len(keys_to_set_manually):
-            # just return data now if the user never requested
-            # any scalar coordinates
-            return data_all_coils
-        # if not, then we assign them for each coil based off its "x"
-        for coildata in data_all_coils:
-            if basis == "xyz":
-                coords_xyz = coildata["x"]
-                coords_rpz = xyz2rpz(coildata["x"])
-            else:
-                coords_rpz = coildata["x"]
-                coords_xyz = rpz2xyz(coildata["x"])
-            coildata["X"] = coords_xyz[:, 0]
-            coildata["Y"] = coords_xyz[:, 1]
-            coildata["Z"] = coords_xyz[:, 2]
-            coildata["R"] = coords_rpz[:, 0]
-            coildata["phi"] = coords_rpz[:, 1]
-
-        # TODO: handle if "X","Y","Z" or "R","phi","Z" are in the computed quantities
-        return data_all_coils
+        return tree_unstack(data)
 
     def translate(self, *args, **kwargs):
         """Translate the coils along an axis."""
@@ -1068,6 +903,64 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def flip(self, *args, **kwargs):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
+
+    def compute_position(self, params=None, source_grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        if params is None:
+            params = [get_params("x", coil) for coil in self]
+        basis = kwargs.pop("basis", "xyz")
+        data = self.compute("x", grid=source_grid, params=params, basis=basis, **kwargs)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+        if basis.lower() == "rpz":
+            xyz = rpz2xyz(x)
+        else:
+            xyz = x
+
+        # if stellarator symmetric, add reflected coils from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
+
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        rpz = xyz2rpz(xyz)
+
+        # if field period symmetry, add rotated coils from other field periods
+        if self.NFP > 1:
+            rpz0 = rpz
+            for k in range(1, self.NFP):
+                rpz = jnp.vstack(
+                    (rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0]))
+                )
+
+        # ensure phi in [0, 2pi)
+        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
+
+        if basis.lower() == "xyz":
+            x = rpz2xyz(rpz)
+        else:
+            x = rpz
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -1144,58 +1037,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if basis.lower() == "xyz":
             B = rpz2xyz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B
-
-    def compute_minimum_distance(
-        self,
-        params=None,
-        grid=None,
-        transforms=None,
-        **kwargs,
-    ):
-        """Compute minimum distance between coils in the coilset.
-
-        Parameters
-        ----------
-        params : dict or array-like of dict, optional
-            parameters to pass to curves, either the same for all curves,
-            or one for each member
-        grid : Grid, int or None or array-like, optional
-            Grid used to discretize coil, the same for all coils. If an integer, uses
-            that many equally spaced points.
-
-        Returns
-        -------
-        d_min : float
-            the minimum coil-coil distance between coils in the coilset.
-        """
-        if params is None:
-            params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
-            for par, coil in zip(params, self):
-                par["current"] = coil.current
-
-        coil_coords = self.compute(
-            "x",
-            grid=grid,
-            params=params,
-            basis="xyz",
-            transforms=transforms,
-            **kwargs,
-        )
-        # set some large value for initial separation
-        minSeparation2 = 1e20
-        for whichCoil1 in range(len(self)):
-            coords1 = coil_coords[whichCoil1]["x"]
-            for whichCoil2 in range(whichCoil1):
-                coords2 = coil_coords[whichCoil2]["x"]
-
-                d = jnp.linalg.norm(
-                    coords1[:, None, :] - coords2[None, :, :],
-                    axis=-1,
-                )
-
-                minSeparation2 = jnp.min(jnp.array([jnp.min(d), minSeparation2]))
-
-        return minSeparation2
 
     @classmethod
     def linspaced_angular(
@@ -1303,7 +1144,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)
-        data = coils.compute("phi", return_only_unique=True)
+        data = coils.compute("phi")
         for i, cdata in enumerate(data):
             errorif(
                 np.any(cdata["phi"] > maxphi),
@@ -1690,6 +1531,8 @@ class MixedCoilSet(CoilSet):
 
     """
 
+    _io_attrs_ = CoilSet._io_attrs_
+
     def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
@@ -1697,6 +1540,11 @@ class MixedCoilSet(CoilSet):
         self._NFP = 1
         self._sym = False
         self._name = str(name)
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return sum([c.num_coils if hasattr(c, "num_coils") else 1 for c in self])
 
     def compute(
         self,
@@ -1747,6 +1595,34 @@ class MixedCoilSet(CoilSet):
                 self.coils, grid, params, transforms, data
             )
         ]
+
+    def compute_position(self, params=None, source_grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        # TODO: catch error if coils have different default grids
+        params = self._make_arraylike(params)
+        source_grid = self._make_arraylike(source_grid)
+        x = jnp.vstack(
+            [
+                coil.compute_position(par, grd)
+                for coil, par, grd in zip(self.coils, params, source_grid)
+            ]
+        )
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None

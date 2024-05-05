@@ -5,7 +5,6 @@ import numpy as np
 from desc.backend import (
     fori_loop,
     jnp,
-    tree_flatten,
     tree_leaves,
     tree_map,
     tree_structure,
@@ -166,9 +165,9 @@ class _CoilObjective(_Objective):
         else:
             # this case covers an inputted list of grids that matches the size
             # of the inputted coils. Can be a 1D list or nested list.
-            flattened_grid = tree_flatten(
+            flattened_grid = tree_leaves(
                 self._grid, is_leaf=lambda x: isinstance(x, _Grid)
-            )[0]
+            )
             self._grid = tree_unflatten(coil_structure, flattened_grid)
 
         timer = Timer()
@@ -217,7 +216,7 @@ class _CoilObjective(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None, **kwargs):
+    def compute(self, params, constants=None):
         """Compute data of coil for given data key.
 
         Parameters
@@ -242,7 +241,6 @@ class _CoilObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             grid=self._grid,
-            basis=kwargs.get("basis", "xyz"),
         )
 
         return data
@@ -343,10 +341,10 @@ class CoilLength(_CoilObjective):
             self._normalization = self._scales["a"]
 
         # TODO: repeated code but maybe it's fine
-        flattened_coils = tree_flatten(
+        flattened_coils = tree_leaves(
             self._coils,
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
-        )[0]
+        )
         flattened_coils = (
             [flattened_coils[0]]
             if not isinstance(self._coils, CoilSet)
@@ -372,7 +370,7 @@ class CoilLength(_CoilObjective):
             Coil length.
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([dat["length"] for dat in data])
         return out
 
@@ -488,7 +486,7 @@ class CoilCurvature(_CoilObjective):
             1D array of coil curvature values.
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["curvature"] for dat in data])
         return out
 
@@ -605,21 +603,21 @@ class CoilTorsion(_CoilObjective):
             Coil torsion.
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["torsion"] for dat in data])
         return out
 
 
-class CoilsetMinDistance(_CoilObjective):
-    """Target the min distance btwn coils in the coilset.
+class CoilsetMinDistance(_Objective):
+    """Target the minimum distance between coils in a coilset.
 
-    Will yield one value per coil in the coilset, which is the
-    minimumm distance to the neighboring coils for that coilset.
+    Will yield one value per coil in the coilset, which is the minimumm distance to
+    another coil in that coilset.
 
     Parameters
     ----------
     coils : CoilSet
-        Coil(s) that are to be optimized
+        Coils that are to be optimized.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
@@ -647,14 +645,15 @@ class CoilsetMinDistance(_CoilObjective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid used to discritize each coil. Default = LinearGrid(N=16)
     name : str, optional
         Name of the objective function.
+
     """
 
     _scalar = False
     _units = "(m)"
-    _print_value_fmt = "CoilSet Minimum Distance: {:10.3e} "
+    _print_value_fmt = "Minimum coil-coil distance: {:10.3e} "
 
     def __init__(
         self,
@@ -670,12 +669,10 @@ class CoilsetMinDistance(_CoilObjective):
         name="coilset minimum distance",
     ):
         if target is None and bounds is None:
-            target = 0
-        self._coils = coils
-
+            bounds = (0, np.inf)
+        self._grid = grid
         super().__init__(
-            coils,
-            ["x"],
+            things=coils,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -683,7 +680,6 @@ class CoilsetMinDistance(_CoilObjective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
-            grid=grid,
             name=name,
         )
 
@@ -698,60 +694,60 @@ class CoilsetMinDistance(_CoilObjective):
             Level of output.
 
         """
-        from desc.coils import CoilSet, _Coil
+        self._coilset = self.things[0]
+        if self._grid is None:
+            self._grid = LinearGrid(N=16)
+        else:
+            self._grid = self._grid
+
+        num_nodes = self._grid.num_nodes
+        perm_idx = np.tile(np.arange(num_nodes), 2)
+        self._perms = [perm_idx[k : k + num_nodes] for k in range(num_nodes)]
+
+        self._dim_f = self._coilset.num_coils
+
+        if self._normalize:
+            coils = tree_leaves(
+                self._coilset, is_leaf=lambda x: not hasattr(x, "__len__")
+            )
+            scales = [compute_scaling_factors(coil)["a"] for coil in coils]
+            self._normalization = np.mean(scales)  # mean length of coils
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-        if self._normalize:
-            self._normalization = self._scales["a"]
-
-        # TODO: repeated code but maybe it's fine
-        flattened_coils = tree_flatten(
-            self._coils,
-            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
-        )[0]
-        flattened_coils = (
-            [flattened_coils[0]]
-            if not isinstance(self._coils, CoilSet)
-            else flattened_coils
-        )
-        self._dim_f = len(flattened_coils)
-        self._constants["quad_weights"] = 1
-
     def compute(self, params, constants=None):
-        """Compute coil torsion.
+        """Compute minimum distances between coils.
 
         Parameters
         ----------
         params : dict
-            Dictionary of the coil's degrees of freedom.
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
 
         Returns
         -------
         f : array of floats
-            Distance to nearest coil for each coil in the coilset.
+            Minimum distance to another coil for each coil in the coilset.
+
         """
-        data = super().compute(params, constants=constants, basis="xyz")
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        # include all permutations of grid nodes between coils
+        xyz = self._coilset.compute_position(source_grid=self._grid)
+        pts1 = jnp.tile(xyz, (1, len(self._perms), 1))
+        pts2 = jnp.concatenate([xyz[:, p, :] for p in self._perms], axis=1)
 
-        pts = jnp.dstack([d["x"].T for d in data]).T  # shape (ncoil, npts, 3)
-        ncoil = pts.shape[0]
-
-        def body(i):
-            dx = pts[i] - pts
-            dist = safenorm(dx, axis=-1)
-            # ignore distance to pts within each coil
-            mask = jnp.ones(ncoil)
-            mask = mask.at[i].set(0)[:, None]
+        def body(k):
+            dist = safenorm(pts1[k] - pts2, axis=-1)  # distances between pts
+            mask = jnp.ones(self.dim_f).at[k].set(0)[:, None]  # exclude same coil
             return jnp.min(dist, where=mask, initial=jnp.inf)
 
         min_dist_per_coil = fori_loop(
-            0, ncoil, lambda i, mind: mind.at[i].set(body(i)), jnp.zeros(ncoil)
+            0,
+            self.dim_f,
+            lambda k, min_dist: min_dist.at[k].set(body(k)),
+            jnp.zeros(self.dim_f),
         )
-
         return min_dist_per_coil
 
 

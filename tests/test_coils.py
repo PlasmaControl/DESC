@@ -514,7 +514,7 @@ def test_symmetry_position(DummyCoilSet):
     x_sym = coilset_sym.compute_position(basis="rpz")
     x_asym = coilset_asym.compute_position(basis="rpz")
     x_mixed = coilset_mixed.compute_position(basis="rpz")
-    # the phi is can be negative for the mixed coilset so make it positive to agree
+    # the phi can be negative for the mixed coilset so make it positive to agree
     # with the others
     x_mixed = np.array(x_mixed)
     x_mixed[:, :, 1] = np.where(

@@ -1594,7 +1594,7 @@ class MixedCoilSet(CoilSet):
         source_grid = self._make_arraylike(source_grid)
         x = jnp.vstack(
             [
-                coil.compute_position(par, grd)
+                coil.compute_position(par, grd, **kwargs)
                 for coil, par, grd in zip(self.coils, params, source_grid)
             ]
         )

@@ -499,17 +499,29 @@ def test_symmetry_position(DummyCoilSet):
     coilset_asym = load(
         load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
     )
+    coilset_mixed = MixedCoilSet(*coilset_asym)
     grid = LinearGrid(L=0, M=0, N=30)
 
-    # check that positions of both CoilSets are the same
+    # check that positions of CoilSets are the same
     x_sym = coilset_sym.compute_position(basis="xyz", source_grid=grid)
     x_asym = coilset_asym.compute_position(basis="xyz", source_grid=grid)
-    np.testing.assert_allclose(x_sym, x_asym)
+    x_mixed = coilset_mixed.compute_position(basis="xyz", source_grid=grid)
 
-    # check that positions of both CoilSets are the same
-    x_sym = coilset_sym.compute_position(basis="rpz", source_grid=grid)
-    x_asym = coilset_asym.compute_position(basis="rpz", source_grid=grid)
     np.testing.assert_allclose(x_sym, x_asym)
+    np.testing.assert_allclose(x_sym, x_mixed)
+
+    # check that positions of CoilSets are the same
+    x_sym = coilset_sym.compute_position(basis="rpz")
+    x_asym = coilset_asym.compute_position(basis="rpz")
+    x_mixed = coilset_mixed.compute_position(basis="rpz")
+    # the phi is can be negative for the mixed coilset so make it positive to agree
+    # with the others
+    x_mixed = np.array(x_mixed)
+    x_mixed[:, :, 1] = np.where(
+        x_mixed[:, :, 1] < 0, x_mixed[:, :, 1] + 2 * np.pi, x_mixed[:, :, 1]
+    )
+    np.testing.assert_allclose(x_sym, x_asym)
+    np.testing.assert_allclose(x_sym, x_mixed)
 
 
 @pytest.mark.unit

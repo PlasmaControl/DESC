@@ -499,10 +499,16 @@ def test_symmetry_position(DummyCoilSet):
     coilset_asym = load(
         load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
     )
+    grid = LinearGrid(L=0, M=0, N=30)
 
     # check that positions of both CoilSets are the same
-    x_sym = coilset_sym.compute_position()
-    x_asym = coilset_asym.compute_position()
+    x_sym = coilset_sym.compute_position(basis="xyz", source_grid=grid)
+    x_asym = coilset_asym.compute_position(basis="xyz", source_grid=grid)
+    np.testing.assert_allclose(x_sym, x_asym)
+
+    # check that positions of both CoilSets are the same
+    x_sym = coilset_sym.compute_position(basis="rpz", source_grid=grid)
+    x_asym = coilset_asym.compute_position(basis="rpz", source_grid=grid)
     np.testing.assert_allclose(x_sym, x_asym)
 
 

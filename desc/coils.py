@@ -174,7 +174,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         x = self.compute("x", grid=source_grid, params=params, **kwargs)["x"]
-        return jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
+        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
+        basis = kwargs.pop("basis", "xyz")
+        if basis.lower() == "rpz":
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None

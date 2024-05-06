@@ -4,6 +4,7 @@ from scipy.interpolate import interp1d
 import os
 import time
 import math
+import multiprocessing
 from desc.backend import jnp,put
 
 from .objective_funs import ObjectiveFunction, _Objective
@@ -52,11 +53,12 @@ class TERPSICHORE(_Objective):
 
 
     # Need to sure up the paths
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", wout_filename="wout_default.nc", path=None, bounds=None,normalize=False, submit_script_name="terps_job.submit", normalize_target=False, awall=2.0, deltajp=1.e-2, modelk=0, al0=-5.e-1, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, min_moden=-8, max_moden=11, nsurf=128):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", wout_filename="wout_default.nc", try_parallel=True, path=None, bounds=None,normalize=False, submit_script_name="terps_job.submit", normalize_target=False, awall=2.0, deltajp=1.e-2, modelk=0, al0=-5.e-1, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, min_moden=-8, max_moden=11, nsurf=128):
         
         if target is None and bounds is None:
             target = 0
         self.eq = eq
+        self.try_parallel = try_parallel
         self.nsurf = nsurf # No functionality unless using dynamic allocation TERPS
         self.awall = awall
         self.deltajp = deltajp
@@ -144,9 +146,9 @@ class TERPSICHORE(_Objective):
         if constants is None:
             constants = self.constants
 
-        self.write_vmec()   # Write VMEC file from DESC equilibrium
-        self.compute_fort18()
-        self.write_terps_io()
+        #self.write_vmec()   # Write VMEC file from DESC equilibrium
+        #self.compute_fort18()
+        #self.write_terps_io()
         self.run_terps()
         self.terps_outfile = os.path.join(self.path,'fort.16') # Let's change the name of this at some point
         self.parse_terps_outfile()
@@ -213,7 +215,7 @@ class TERPSICHORE(_Objective):
                 terps_subprocess.terminate()
             f_slurm.seek(0)
             line = f_slurm.readline()
-            while line:
+v            while line:
                 if 'PARAMETER LSSL' in line:
                     self.lssl = int(line.split("TO:")[1])
                     break
@@ -235,10 +237,39 @@ class TERPSICHORE(_Objective):
             return True
         '''
         
-
+#    def processor_work(self, task_id):
         
+#        # stuff
+
     def run_terps(self):
 
+        # Get jobID
+        job_id = os.environ.get('SLURM_JOB_ID')
+        print(job_id)        
+        
+        #time.sleep(60)
+        # Get number processors
+        #cmd = ['squeue', '-l', '-j', job_id]
+        #cmd = ['squeue', '-h', '-j', job_id, '-o', '"%.18i %.9P %.8j %.8u %.2t %.10M %.6D %.20R %C"']#, '|', 'awk', "'{sum+=$NF} END {print sum}'"]
+        #cmd = ['squeue']
+        #cmd = ['/usr/bin/seff', job_id]
+        #cmd = ['seff', job_id]
+        job_check = subprocess.run(['seff'], stdout=subprocess.PIPE)
+        out_text = job_check.stdout.decode('utf-8')
+        print(out_text.split("\n"))
+        #jobID = out_text.split()[-1]
+        #slurm_file = os.path.join(self.path,"terps_{}.log".format(jobID))
+        exit()
+        
+        # Figure out number of parallel jobs to run
+
+        pool = multiprocessing.Pool(nproc)
+        pool.map(processor_task, range(nproc))
+
+        pool.close()
+        pool.join()
+        
+        
         sleep_time = 1 # seconds
         stop_time = 60 # seconds (kill the infinite loop if TERPS ran into an error and won't be printing growth rate)
         

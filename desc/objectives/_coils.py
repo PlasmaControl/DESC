@@ -666,10 +666,10 @@ class CoilsetMinDistance(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="coilset minimum distance",
+        name="coil-coil minimum distance",
     ):
         if target is None and bounds is None:
-            bounds = (0, np.inf)
+            bounds = (1, np.inf)
         self._grid = grid
         super().__init__(
             things=coils,
@@ -694,13 +694,12 @@ class CoilsetMinDistance(_Objective):
             Level of output.
 
         """
-        self._coilset = self.things[0]
+        coilset = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(N=16)
-        else:
-            self._grid = self._grid
 
-        self._dim_f = self._coilset.num_coils
+        self._constants = {"coilset": coilset}
+        self._dim_f = coilset.num_coils
 
         if self._normalize:
             coils = tree_leaves(
@@ -728,7 +727,9 @@ class CoilsetMinDistance(_Objective):
             Minimum distance to another coil for each coil in the coilset.
 
         """
-        pts = self._coilset._compute_position(grid=self._grid)
+        if constants is None:
+            constants = self.constants
+        pts = constants["coilset"]._compute_position(params=params, grid=self._grid)
 
         def body(k):
             # distances between all pts; shape(ncoils,num_nodes,num_nodes)

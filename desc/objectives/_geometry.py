@@ -514,7 +514,7 @@ class PlasmaVesselDistance(_Objective):
     at every iteration, for example if the winding surface you compare to is part of the
     optimization and thus changing.
     If the bounding surface is fixed, set surface_fixed=True to precompute the surface
-    coordinates and improve the efficiency of the calculation
+    coordinates and improve the efficiency of the calculation.
 
     NOTE: for best results, use this objective in combination with either MeanCurvature
     or PrincipalCurvature, to penalize the tendency for the optimizer to only move the
@@ -530,7 +530,7 @@ class PlasmaVesselDistance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.

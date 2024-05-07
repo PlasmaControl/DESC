@@ -6,6 +6,7 @@ from ._coils import (
     CoilLength,
     CoilsetMinDistance,
     CoilTorsion,
+    PlasmaCoilMinDistance,
     QuadraticFlux,
     ToroidalFlux,
 )

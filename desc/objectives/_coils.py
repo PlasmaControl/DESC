@@ -746,6 +746,152 @@ class CoilsetMinDistance(_Objective):
         return min_dist_per_coil
 
 
+class PlasmaCoilMinDistance(_Objective):
+    """Target the minimum distance between the plasma and coils.
+
+    Will yield one value per coil in the coilset, which is the minimumm distance from
+    that coil to the plasma boundary surface.
+
+    NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
+    computed at every iteration, for example if the equilibrium is changing in a
+    single-stage optimization.
+    If the plasma boundary is fixed, set eq_fixed=True to precompute the last closed
+    flux surface coordinates and improve the efficiency of the calculation.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    coils : CoilSet
+        Coils that are to be optimized.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. If array, it has to
+        be flattened according to the number of inputs.
+    bounds : tuple of float, ndarray, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Operates over all coils, not each individial coil.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    plasma_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate plasma geometry at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    coil_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate coilset geometry at.
+        Defaults to ``LinearGrid(N=16)``.
+    eq_fixed: bool, optional
+        Whether the equilibrium is fixed or not. If True, the last closed flux surface
+        is fixed and its coordinates are precomputed, which saves on computation time
+        during optimization, and self.things = [coils] only.
+        If False, the surface coordinates are computed at every iteration.
+        False by default, so that self.things = [coils, eq].
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _units = "(m)"
+    _print_value_fmt = "Minimum plasma-coil distance: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        coils,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        plasma_grid=None,
+        coil_grid=None,
+        eq_fixed=False,
+        name="plasma-coil minimum distance",
+    ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
+        self._eq = eq
+        self._plasma_grid = plasma_grid
+        self._coil_grid = coil_grid
+        self._eq_fixed = eq_fixed
+        super().__init__(
+            things=[coils, eq] if not eq_fixed else [coils],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        coilset = self.things[0]
+        eq = self._eq if self._eq_fixed else self.things[1]
+        if self._plasma_grid is None:
+            self._plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid)
+        if self._coil_grid is None:
+            self._coil_grid = LinearGrid(N=16)
+
+        self._constants = {"coilset": coilset}
+        self._dim_f = coilset.num_coils
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute minimum distances between coils.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Minimum distance to another coil for each coil in the coilset.
+
+        """
+        return jnp.zeros(self.dim_f)  # TODO: write this
+
+
 class QuadraticFlux(_Objective):
     """Target B*n = 0 on LCFS.
 

@@ -1,7 +1,5 @@
 """Objectives for targeting geometrical quantities."""
 
-import warnings
-
 import numpy as np
 
 from desc.backend import jnp
@@ -9,7 +7,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -651,10 +649,16 @@ class PlasmaVesselDistance(_Objective):
             plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
-        if not np.allclose(surface_grid.nodes[:, 0], 1):
-            warnings.warn("Surface grid includes off-surface pts, should be rho=1")
-        if not np.allclose(plasma_grid.nodes[:, 0], 1):
-            warnings.warn("Plasma grid includes interior points, should be rho=1")
+        warnif(
+            not np.allclose(surface_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Surface grid includes off-surface pts, should be rho=1.",
+        )
+        warnif(
+            not np.allclose(plasma_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Plasma grid includes interior points, should be rho=1.",
+        )
 
         self._dim_f = surface_grid.num_nodes
         self._equil_data_keys = ["R", "phi", "Z"]

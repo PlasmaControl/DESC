@@ -11,7 +11,7 @@ from desc.backend import (
     tree_unflatten,
 )
 from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
 from desc.singularities import compute_B_plasma
@@ -695,11 +695,10 @@ class CoilsetMinDistance(_Objective):
 
         """
         coilset = self.things[0]
-        if self._grid is None:
-            self._grid = LinearGrid(N=16)
+        grid = self._grid or LinearGrid(N=16)
 
-        self._constants = {"coilset": coilset}
         self._dim_f = coilset.num_coils
+        self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}
 
         if self._normalize:
             coils = tree_leaves(
@@ -729,7 +728,9 @@ class CoilsetMinDistance(_Objective):
         """
         if constants is None:
             constants = self.constants
-        pts = constants["coilset"]._compute_position(params=params, grid=self._grid)
+        pts = constants["coilset"]._compute_position(
+            params=params, grid=constants["grid"]
+        )
 
         def body(k):
             # distances between all pts; shape(ncoils,num_nodes,num_nodes)
@@ -746,8 +747,8 @@ class CoilsetMinDistance(_Objective):
         return min_dist_per_coil
 
 
-class PlasmaCoilMinDistance(_Objective):
-    """Target the minimum distance between the plasma and coils.
+class PlasmaCoilsetMinDistance(_Objective):
+    """Target the minimum distance between the plasma and coilset.
 
     Will yield one value per coil in the coilset, which is the minimumm distance from
     that coil to the plasma boundary surface.
@@ -829,7 +830,6 @@ class PlasmaCoilMinDistance(_Objective):
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
-        self._eq = eq
         self._plasma_grid = plasma_grid
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
@@ -858,13 +858,49 @@ class PlasmaCoilMinDistance(_Objective):
         """
         coilset = self.things[0]
         eq = self._eq if self._eq_fixed else self.things[1]
-        if self._plasma_grid is None:
-            self._plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid)
-        if self._coil_grid is None:
-            self._coil_grid = LinearGrid(N=16)
+        plasma_grid = self._plasma_grid or LinearGrid(M=eq.M_grid, N=eq.N_grid)
+        coil_grid = self._coil_grid or LinearGrid(N=16)
+        warnif(
+            not np.allclose(plasma_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Plasma grid includes interior points, should be rho=1.",
+        )
 
-        self._constants = {"coilset": coilset}
         self._dim_f = coilset.num_coils
+        self._eq_data_keys = ["R", "phi", "Z"]
+
+        eq_profiles = get_profiles(
+            self._eq_data_keys,
+            obj=eq,
+            grid=plasma_grid,
+            has_axis=plasma_grid.axis.size,
+        )
+        eq_transforms = get_transforms(
+            self._eq_data_keys,
+            obj=eq,
+            grid=plasma_grid,
+            has_axis=plasma_grid.axis.size,
+        )
+
+        self._constants = {
+            "coilset": coilset,
+            "coil_grid": coil_grid,
+            "equil_profiles": eq_profiles,
+            "equil_transforms": eq_transforms,
+            "quad_weights": 1.0,
+        }
+
+        if self._eq_fixed:
+            # precompute the equilibrium surface coordinates
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=eq.params_dict,
+                transforms=eq_transforms,
+                profiles=eq_profiles,
+            )
+            plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            self._constants["plasma_coords"] = plasma_coords
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -872,7 +908,7 @@ class PlasmaCoilMinDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, coils_params, eq_params=None, constants=None):
         """Compute minimum distances between coils.
 
         Parameters
@@ -889,7 +925,26 @@ class PlasmaCoilMinDistance(_Objective):
             Minimum distance to another coil for each coil in the coilset.
 
         """
-        return jnp.zeros(self.dim_f)  # TODO: write this
+        if constants is None:
+            constants = self.constants
+
+        coils_coords = constants["coilset"]._compute_position(
+            params=coils_params, grid=constants["coil_grid"]
+        )  # shape(ncoils,coils_grid.num_nodes,3)
+
+        if self._eq_fixed:
+            plasma_coords = constants["plasma_coords"]  # shape(plasma_grid.num_nodes,3)
+        else:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=eq_params,
+                transforms=constants["eq_transforms"],
+                profiles=constants["eq_profiles"],
+            )
+            plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+
+        return coils_coords - plasma_coords  # FIXME
 
 
 class QuadraticFlux(_Objective):

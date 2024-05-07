@@ -1,5 +1,7 @@
 """Tests for bootstrap current functions."""
 
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -7,7 +9,8 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
-from desc.compute._bootstrap import _trapped_fraction, j_dot_B_Redl
+from desc.compat import rescale
+from desc.compute._bootstrap import _trapped_fraction, compute_J_dot_B_Redl
 from desc.compute._field import (
     _1_over_B_fsa,
     _B2_fsa,
@@ -17,6 +20,7 @@ from desc.compute._field import (
 )
 from desc.compute._geometry import _V_r_of_r, _V_rr_of_r
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import (
@@ -87,9 +91,7 @@ class TestBootstrapCompute:
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"],
-                grid.expand(
-                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])
-                ),
+                grid.expand(np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])),
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
@@ -258,9 +260,7 @@ class TestBootstrapCompute:
 
         # Sauter eq (18d)-(18e):
         ln_Lambda_e = 31.3 - np.log(np.sqrt(ne_rho) / Te_rho)
-        ln_Lambda_ii = 30.0 - np.log(
-            (Zeff_rho**3) * np.sqrt(ni_rho) / (Ti_rho**1.5)
-        )
+        ln_Lambda_ii = 30.0 - np.log((Zeff_rho**3) * np.sqrt(ni_rho) / (Ti_rho**1.5))
 
         # Sauter eq (18b)-(18c):
         nu_e = abs(
@@ -421,7 +421,7 @@ class TestBootstrapCompute:
             "Te_r": Te(rho, dr=1),
             "Ti_r": Ti(rho, dr=1),
         }
-        J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+        J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
         atol = 1e-13
         rtol = 1e-13
@@ -527,7 +527,7 @@ class TestBootstrapCompute:
                 "Te_r": Te(rho, dr=1),
                 "Ti_r": Ti(rho, dr=1),
             }
-            J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+            J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
             # Make sure L31, L32, and alpha are within the right range:
             np.testing.assert_array_less(J_dot_B_data["L31"], 1.05)
@@ -664,7 +664,7 @@ class TestBootstrapCompute:
                     "Te_r": Te(rho, dr=1),
                     "Ti_r": Ti(rho, dr=1),
                 }
-                J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+                J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
                 L31s[j_nu_star, :] = J_dot_B_data["L31"]
                 L32s[j_nu_star, :] = J_dot_B_data["L32"]
@@ -1198,54 +1198,6 @@ class TestBootstrapObjectives:
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
         np.testing.assert_allclose(results, expected, rtol=2e-3)
 
-    @pytest.mark.unit
-    @pytest.mark.solve
-    def test_BootstrapRedlConsistency_resolution(self, DSHAPE_current):
-        """Confirm that the objective function is ~independent of grid resolution."""
-        helicity = (1, 0)
-
-        eq = desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
-        eq.electron_density = PowerSeriesProfile(
-            2.0e19 * np.array([1, -0.85]), modes=[0, 4]
-        )
-        eq.electron_temperature = PowerSeriesProfile(
-            1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
-        )
-        eq.ion_temperature = PowerSeriesProfile(
-            1.1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
-        )
-        eq.atomic_number = 1.4
-
-        def test(grid_type, kwargs, L, M, N):
-            grid = grid_type(L=L, M=M, N=N, NFP=eq.NFP, **kwargs)
-            obj = ObjectiveFunction(
-                BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
-            )
-            obj.build()
-            scalar_objective = obj.compute_scalar(obj.x(eq))
-            print(f"grid_type:{grid_type} L:{L} M:{M} N:{N} obj:{scalar_objective}")
-            return scalar_objective
-
-        results = []
-
-        # Loop over grid types. For LinearGrid we need to drop the
-        # point at rho=0 to avoid a divide-by-0
-        grid_types = [LinearGrid, QuadratureGrid]
-        kwargss = [{"axis": False}, {}]
-
-        # Loop over grid resolutions:
-        Ls = [150, 300, 150, 150]
-        Ms = [10, 10, 20, 10]
-        Ns = [0, 0, 0, 2]
-
-        for grid_type, kwargs in zip(grid_types, kwargss):
-            for L, M, N in zip(Ls, Ms, Ns):
-                results.append(test(grid_type, kwargs, L, M, N))
-
-        results = np.array(results)
-        np.testing.assert_allclose(results, np.mean(results), rtol=0.04)
-
     @pytest.mark.regression
     def test_bootstrap_consistency_iota(self, TmpDir):
         """Try optimizing for bootstrap consistency in axisymmetry, at fixed shape.
@@ -1494,14 +1446,18 @@ def test_bootstrap_objective_build():
         L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e25
     )
     # density too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3, M=3, N=3, NFP=2, electron_temperature=1e5, electron_density=1e21
     )
     # electron temperature too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1512,8 +1468,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e5,
     )
     # ion temperature too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1524,8 +1482,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e3,
     )
     # density too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1536,8 +1496,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e3,
     )
     # electron temperature too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1548,8 +1510,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1,
     )
     # ion temperature too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
 
     eq = Equilibrium(
         L=4,
@@ -1571,4 +1535,92 @@ def test_bootstrap_objective_build():
             obj.constants["transforms"]["grid"].unique_rho_idx, 0
         ],
         np.array([0.125, 0.375, 0.625, 0.875]),
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_bootstrap_optimization_comparison_qa():
+    """Test that both methods of bootstrap optimization agree."""
+    # this same example is used in docs/notebooks/tutorials/bootstrap_current
+
+    # initial equilibrium
+    eq0 = get("precise_QA")
+    eq0 = rescale(eq0, L=("R0", 10), B=("B0", 5.86))
+    eq0.pressure = None
+    eq0.atomic_number = PowerSeriesProfile(np.array([1]), sym=True)
+    eq0.electron_density = (
+        PowerSeriesProfile(np.array([1.0, 0.0, 0.0, 0.0, 0.0, -1.0]), sym=True)
+        * 2.38e20
+    )
+    eq0.electron_temperature = (
+        PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
+    )
+    eq0.ion_temperature = PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
+    eq0.current = PowerSeriesProfile(np.zeros((eq0.L + 1,)), sym=False)
+    eq0, _ = eq0.solve(objective="force", optimizer="lsq-exact", verbose=3)
+    eq1 = eq0.copy()
+    eq2 = eq0.copy()
+
+    grid = LinearGrid(
+        M=eq0.M_grid,
+        N=eq0.N_grid,
+        NFP=eq0.NFP,
+        sym=eq0.sym,
+        rho=np.linspace(1 / eq0.L_grid, 1, eq0.L_grid) - 1 / (2 * eq0.L_grid),
+    )
+
+    # method 1
+    objective = ObjectiveFunction(
+        BootstrapRedlConsistency(eq=eq1, grid=grid, helicity=(1, 0)),
+    )
+    constraints = (
+        FixAtomicNumber(eq=eq1),
+        FixBoundaryR(eq=eq1),
+        FixBoundaryZ(eq=eq1),
+        FixCurrent(eq=eq1, indices=[0, 1]),
+        FixElectronDensity(eq=eq1),
+        FixElectronTemperature(eq=eq1),
+        FixIonTemperature(eq=eq1),
+        FixPsi(eq=eq1),
+        ForceBalance(eq=eq1),
+    )
+    eq1, _ = eq1.optimize(
+        objective=objective,
+        constraints=constraints,
+        optimizer="proximal-lsq-exact",
+        maxiter=4,
+        gtol=1e-16,
+        verbose=3,
+    )
+
+    # method 2
+    niters = 3
+    for k in range(niters):
+        eq2 = eq2.copy()
+        data = eq2.compute("current Redl", grid)
+        current = grid.compress(data["current Redl"])
+        rho = grid.compress(data["rho"])
+        XX = np.fliplr(np.vander(rho, eq2.L + 1)[:, :-2])
+        eq2.c_l = np.pad(np.linalg.lstsq(XX, current, rcond=None)[0], (2, 0))
+        eq2, _ = eq2.solve(objective="force", optimizer="lsq-exact", verbose=3)
+
+    grid = LinearGrid(
+        M=eq0.M_grid,
+        N=eq0.N_grid,
+        NFP=eq0.NFP,
+        sym=eq0.sym,
+        rho=np.linspace(0.25, 0.9, 14),
+    )
+    data1 = eq1.compute(["<J*B> Redl", "<J*B>"], grid)
+    data2 = eq2.compute(["<J*B> Redl", "<J*B>"], grid)
+
+    np.testing.assert_allclose(
+        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=2.1e-2
+    )
+    np.testing.assert_allclose(
+        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=1.8e-2
+    )
+    np.testing.assert_allclose(
+        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.8e-2
     )

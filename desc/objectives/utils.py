@@ -3,12 +3,10 @@
 Functions in this module should not depend on any other submodules in desc.objectives.
 """
 
-import warnings
-
 import numpy as np
 
 from desc.backend import cond, jnp, logsumexp, put
-from desc.utils import Index, flatten_list, svd_inv_null
+from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
 def _tree_zeros_like(x):
@@ -23,7 +21,7 @@ def _tree_zeros_like(x):
         return jnp.atleast_1d(jnp.zeros_like(x))
 
 
-def factorize_linear_constraints(constraints, objective):  # noqa: C901
+def factorize_linear_constraints(objective, constraint):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -32,110 +30,107 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
 
     Parameters
     ----------
-    constraints : tuple of Objectives
-        linear objectives/constraints to factorize for projection method.
     objective : ObjectiveFunction
-        Objective being optimized.
+        Objective function to optimize.
+    constraint : ObjectiveFunction
+        Objective function of linear constraints to enforce.
 
     Returns
     -------
     xp : ndarray
-        particular solution to Ax=b
+        Particular solution to Ax=b.
     A : ndarray ndarray
-        Combined constraint matrix, such that A @ x[unfixed_idx] == b
+        Combined constraint matrix, such that A @ x[unfixed_idx] == b.
     b : list of ndarray
-        Combined rhs vector
+        Combined RHS vector.
     Z : ndarray
-        Null space operator for full combined A such that A @ Z == 0
+        Null space operator for full combined A such that A @ Z == 0.
     unfixed_idx : ndarray
-        indices of x that correspond to non-fixed values
+        Indices of x that correspond to non-fixed values.
     project, recover : function
-        functions to project full vector x into reduced vector y,
-        and recovering x from y.
+        Functions to project full vector x into reduced vector y,
+        and to recover x from y.
 
     """
-    for con in constraints:
+    for con in constraint.objectives:
+        errorif(
+            not con.linear,
+            ValueError,
+            "Cannot handle nonlinear constraint {con}.",
+        )
+        errorif(
+            con.bounds is not None,
+            ValueError,
+            f"Linear constraint {con} must use target instead of bounds.",
+        )
         for thing in con.things:
-            if thing not in objective.things:
-                warnings.warn(
-                    f"Optimizable object {thing} is constrained by {con}"
-                    + " but not included in Objective"
-                )
-    # set state vector
-    xp = jnp.zeros(objective.dim_x)  # particular solution to Ax=b
-    A = []
-    b = []
+            warnif(
+                thing not in objective.things,
+                UserWarning,
+                f"Optimizable object {thing} is constrained by {con}"
+                + " but not included in objective.",
+            )
 
     from desc.optimize import ProximalProjection
 
-    prox_flag = isinstance(objective, ProximalProjection)
+    # particular solution to Ax=b
+    xp = jnp.zeros(objective.dim_x)
 
-    # linear constraint matrices for each objective
-    for con in constraints:
-        if con.bounds is not None:
-            raise ValueError(
-                f"Linear constraint {con} must use target instead of bounds."
-            )
-        A_per_thing = []
-        xz = _tree_zeros_like([t.params_dict for t in con.things])
-        # computing A matrix for each constraint for each thing in the optimization
-        for thing in objective.things:
-            if thing in con.things:
-                # for now we implicitly assume that each linear constraint is bound to
-                # only 1  thing, to generalize we need to make jac_scaled work for all
-                # positional args not just the first one.
-                A_ = con.jac_scaled(*xz)
-            else:
-                A_ = {
-                    arg: jnp.zeros((con.dim_f, dimx))
-                    for arg, dimx in thing.dimensions.items()
-                }
-            args = objective._args if prox_flag else thing.optimizable_params
-            A_per_thing.append(jnp.hstack([A_[arg] for arg in args]))
-        # using obj.compute instead of obj.target to allow for correct scale/weight
-        b_ = -con.compute_scaled_error(*xz)
-        A.append(A_per_thing)
-        b.append(b_)
+    # linear constraints Ax=b
+    x0 = jnp.zeros(constraint.dim_x)
+    A = constraint.jac_scaled(x0)
+    b = -constraint.compute_scaled_error(x0)
 
-    A_full = jnp.vstack([jnp.hstack(Ai) for Ai in A])
-    b_full = jnp.concatenate(b)
+    if isinstance(objective, ProximalProjection):
+        # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        c = 0
+        cols = np.array([], dtype=int)
+        for t in objective.things:
+            if t is objective._eq:
+                for arg, dim in objective._eq.dimensions.items():
+                    if arg in objective._args:  # these Equilibrium args are kept
+                        cols = np.append(cols, np.arange(c, c + dim))
+                    c += dim  # other Equilibrium args are removed
+            else:  # non-Equilibrium args are always included
+                cols = np.append(cols, np.arange(c, c + t.dim_x))
+                c += t.dim_x
+        A = A[:, cols]
+    assert A.shape[1] == xp.size
+
     # fixed just means there is a single element in A, so A_ij*x_j = b_i
-    fixed_rows = np.where(np.count_nonzero(A_full, axis=1) == 1)[0]
+    fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
     # indices of x that are fixed = cols of A where rows have 1 nonzero val.
-    _, fixed_idx = np.where(A_full[fixed_rows])
-    unfixed_rows = np.setdiff1d(np.arange(A_full.shape[0]), fixed_rows)
-    unfixed_idx = np.setdiff1d(np.arange(xp.size), fixed_idx)
+    _, fixed_idx = np.where(A[fixed_rows])
+    unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
+    unfixed_idx = np.setdiff1d(np.arange(objective.dim_x), fixed_idx)
     if len(fixed_rows):
         # something like 0.5 x1 = 2 is the same as x1 = 4
-        b_full = put(
-            b_full, fixed_rows, b_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)
-        )
-        A_full = put(
-            A_full,
+        b = put(b, fixed_rows, b[fixed_rows] / np.sum(A[fixed_rows], axis=1))
+        A = put(
+            A,
             Index[fixed_rows, :],
-            A_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)[:, None],
+            A[fixed_rows] / np.sum(A[fixed_rows], axis=1)[:, None],
         )
-        xp = put(xp, fixed_idx, b_full[fixed_rows])
-        # some values might be fixed, but they still show up in other constraints
-        # this is where the fixed cols have >1 nonzero val
-        # for fixed variables, we delete that row and col of A, but that means
+        xp = put(xp, fixed_idx, b[fixed_rows])
+        # Some values might be fixed, but they still show up in other constraints
+        # this is where the fixed cols have >1 nonzero val.
+        # For fixed variables, we delete that row and col of A, but that means
         # we need to subtract the fixed value from b so that the equation is balanced.
-        # eg 2 x1 + 3 x2 + 1 x3= 4 ;    4 x1 = 2
+        # e.g., 2 x1 + 3 x2 + 1 x3 = 4 ; 4 x1 = 2
         # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
-        b_full = put(
-            b_full,
+        b = put(
+            b,
             unfixed_rows,
-            b_full[unfixed_rows]
-            - A_full[unfixed_rows][:, fixed_idx] @ b_full[fixed_rows],
+            b[unfixed_rows] - A[unfixed_rows][:, fixed_idx] @ b[fixed_rows],
         )
-    A_full = A_full[unfixed_rows][:, unfixed_idx]
-    b_full = b_full[unfixed_rows]
-    if A_full.size:
-        Ainv_full, Z = svd_inv_null(A_full)
+    A = A[unfixed_rows][:, unfixed_idx]
+    b = b[unfixed_rows]
+    if A.size:
+        Ainv_full, Z = svd_inv_null(A)
     else:
-        Ainv_full = A_full.T
-        Z = np.eye(A_full.shape[1])
-    xp = put(xp, unfixed_idx, Ainv_full @ b_full)
+        Ainv_full = A.T
+        Z = np.eye(A.shape[1])
+    xp = put(xp, unfixed_idx, Ainv_full @ b)
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
@@ -148,22 +143,49 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
     # check that all constraints are actually satisfiable
-    xp_ = objective.unpack_state(xp, False)
-    for con in constraints:
-        xpi = [xp_[i] for i, t in enumerate(objective.things) if t in con.things]
+    params = objective.unpack_state(xp, False)
+    for con in constraint.objectives:
+        xpi = [params[i] for i, t in enumerate(objective.things) if t in con.things]
         y1 = con.compute_unscaled(*xpi)
         y2 = con.target
         y1, y2 = np.broadcast_arrays(y1, y2)
+
+        # If the error is very large, likely want to error out as
+        # it probably is due to a real mistake instead of just numerical
+        # roundoff errors.
         np.testing.assert_allclose(
             y1,
             y2,
-            atol=2e-14,
-            rtol=5e-14,
-            err_msg="Incompatible constraints detected, cannot satisfy "
-            + f"constraint {con}",
+            atol=1e-6,
+            rtol=1e-1,
+            err_msg="Incompatible constraints detected, cannot satisfy constraint "
+            + f"{con}.",
         )
 
-    return xp, A_full, b_full, Z, unfixed_idx, project, recover
+        # else check with tighter tols and throw an error, these tolerances
+        # could be tripped due to just numerical roundoff or poor scaling between
+        # constraints, so don't want to error out but we do want to warn the user.
+        atol = 3e-14
+        rtol = 3e-14
+
+        try:
+            np.testing.assert_allclose(
+                y1,
+                y2,
+                atol=atol,
+                rtol=rtol,
+                err_msg="Incompatible constraints detected, cannot satisfy constraint "
+                + f"{con}.",
+            )
+        except AssertionError as e:
+            warnif(
+                True,
+                UserWarning,
+                str(e) + "\n This may indicate incompatible constraints, "
+                "or be due to floating point error.",
+            )
+
+    return xp, A, b, Z, unfixed_idx, project, recover
 
 
 def softmax(arr, alpha):
@@ -190,6 +212,7 @@ def softmax(arr, alpha):
     -------
     softmax : float
         The soft-maximum of the array.
+
     """
     arr_times_alpha = alpha * arr
     min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
@@ -222,6 +245,7 @@ def softmin(arr, alpha):
     -------
     softmin: float
         The soft-minimum of the array.
+
     """
     return -softmax(-arr, alpha)
 
@@ -240,15 +264,12 @@ def combine_args(*objectives):
     -------
     objectives : ObjectiveFunction
         Original ObjectiveFunctions modified to take the same state vector.
+
     """
-    things = flatten_list([obj.things for obj in objectives])
+    # unique list of things from all objectives
+    things = unique_list(flatten_list([obj.things for obj in objectives]))[0]
     for obj in objectives:
-        extras = []
-        for thing in things:
-            if thing not in obj.things:
-                extras.append(thing)
-        obj._extra_things = extras
-        obj._set_things(obj._all_things)
+        obj._set_things(things)  # obj.things will have same order for all objectives
     return objectives
 
 

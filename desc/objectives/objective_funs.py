@@ -1,21 +1,15 @@
 """Base classes for objectives."""
 
 from abc import ABC, abstractmethod
+from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, use_jax
+from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
-from desc.utils import (
-    Timer,
-    errorif,
-    flatten_list,
-    is_broadcastable,
-    setdefault,
-    unique_list,
-)
+from desc.utils import Timer, flatten_list, is_broadcastable, setdefault, unique_list
 
 
 class ObjectiveFunction(IOAble):
@@ -27,42 +21,92 @@ class ObjectiveFunction(IOAble):
         List of objectives to be minimized.
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
-    deriv_mode : {"batched", "looped"}
-        method for computing derivatives. "batched" is generally faster, "looped" may
-        use less memory.
-    verbose : int, optional
-        Level of output.
+    deriv_mode : {"auto", "batched", "blocked", "looped"}
+        Method for computing Jacobian matrices. "batched" uses forward mode, applied to
+        the entire objective at once, and is generally the fastest for vector valued
+        objectives, though most memory intensive. "blocked" builds the Jacobian for each
+        objective separately, using each objective's preferred AD mode. Generally the
+        most efficient option when mixing scalar and vector valued objectives.
+        "looped" uses forward mode jacobian vector products in a loop to build the
+        Jacobian column by column. Generally the slowest, but most memory efficient.
+        "auto" defaults to "batched" if all sub-objectives are set to "fwd",
+        otherwise "blocked".
+    name : str
+        Name of the objective function.
 
     """
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(self, objectives, use_jit=True, deriv_mode="batched", verbose=1):
+    def __init__(
+        self, objectives, use_jit=True, deriv_mode="auto", name="ObjectiveFunction"
+    ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
         assert all(
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        assert deriv_mode in {"batched", "looped"}
+        assert deriv_mode in {"auto", "batched", "looped", "blocked"}
 
         self._objectives = objectives
         self._use_jit = use_jit
         self._deriv_mode = deriv_mode
         self._built = False
         self._compiled = False
+        self._name = name
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
-        if self._deriv_mode in {"batched", "looped"}:
+        if self._deriv_mode == "auto":
+            if all((obj._deriv_mode == "fwd") for obj in self.objectives):
+                self._deriv_mode = "batched"
+            else:
+                self._deriv_mode = "blocked"
+        if self._deriv_mode in {"batched", "looped", "blocked"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
         if self._deriv_mode == "batched":
             self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
+            self._jac_scaled_error = Derivative(self.compute_scaled_error, mode="fwd")
             self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
         if self._deriv_mode == "looped":
             self._jac_scaled = Derivative(self.compute_scaled, mode="looped")
+            self._jac_scaled_error = Derivative(
+                self.compute_scaled_error, mode="looped"
+            )
             self._jac_unscaled = Derivative(self.compute_unscaled, mode="looped")
+        if self._deriv_mode == "blocked":
+            # could also do something similar for grad and hess, but probably not
+            # worth it. grad is already super cheap to eval all at once, and blocked
+            # hess would only be block diag which may miss important interactions.
+
+            def jac_(op, x, constants=None):
+                if constants is None:
+                    constants = self.constants
+                xs_splits = np.cumsum([t.dim_x for t in self.things])
+                xs = jnp.split(x, xs_splits)
+                J = []
+                for obj, const in zip(self.objectives, constants):
+                    # get the xs that go to that objective
+                    xi = [x for x, t in zip(xs, self.things) if t in obj.things]
+                    Ji_ = getattr(obj, op)(
+                        *xi, constants=const
+                    )  # jac wrt to just those things
+                    Ji = []  # jac wrt all things
+                    for thing in self.things:
+                        if thing in obj.things:
+                            i = obj.things.index(thing)
+                            Ji += [Ji_[i]]
+                        else:
+                            Ji += [jnp.zeros((obj.dim_f, thing.dim_x))]
+                    Ji = jnp.hstack(Ji)
+                    J += [Ji]
+                return jnp.vstack(J)
+
+            self._jac_scaled = partial(jac_, "jac_scaled")
+            self._jac_scaled_error = partial(jac_, "jac_scaled_error")
+            self._jac_unscaled = partial(jac_, "jac_unscaled")
 
     def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
@@ -75,77 +119,30 @@ class ObjectiveFunction(IOAble):
 
         self._use_jit = True
 
-        try:
-            del self.compute_scaled
-        except AttributeError:
-            pass
-        self.compute_scaled = jit(self.compute_scaled)
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_scaled_error",
+            "jac_unscaled",
+            "hess",
+            "grad",
+            "jvp_scaled",
+            "jvp_scaled_error",
+            "jvp_unscaled",
+            "vjp_scaled",
+            "vjp_scaled_error",
+            "vjp_unscaled",
+        ]
 
-        try:
-            del self.compute_scaled_error
-        except AttributeError:
-            pass
-        self.compute_scaled_error = jit(self.compute_scaled_error)
-
-        try:
-            del self.compute_unscaled
-        except AttributeError:
-            pass
-        self.compute_unscaled = jit(self.compute_unscaled)
-
-        try:
-            del self.compute_scalar
-        except AttributeError:
-            pass
-        self.compute_scalar = jit(self.compute_scalar)
-
-        try:
-            del self.jac_scaled
-        except AttributeError:
-            pass
-        self.jac_scaled = jit(self.jac_scaled)
-
-        try:
-            del self.jac_unscaled
-        except AttributeError:
-            pass
-        self.jac_unscaled = jit(self.jac_unscaled)
-
-        try:
-            del self.hess
-        except AttributeError:
-            pass
-        self.hess = jit(self.hess)
-
-        try:
-            del self.grad
-        except AttributeError:
-            pass
-        self.grad = jit(self.grad)
-
-        try:
-            del self.jvp_scaled
-        except AttributeError:
-            pass
-        self.jvp_scaled = jit(self.jvp_scaled)
-
-        try:
-            del self.jvp_unscaled
-        except AttributeError:
-            pass
-        self.jvp_unscaled = jit(self.jvp_unscaled)
-
-        try:
-            del self.vjp_scaled
-        except AttributeError:
-            pass
-        self.vjp_scaled = jit(self.vjp_scaled)
-
-        try:
-            del self.vjp_unscaled
-        except AttributeError:
-            pass
-        self.vjp_unscaled = jit(self.vjp_unscaled)
+        for method in methods:
+            try:
+                delattr(self, method)
+            except AttributeError:
+                pass
+            setattr(self, method, jit(getattr(self, method)))
 
         for obj in self._objectives:
             if obj._use_jit:
@@ -170,9 +167,10 @@ class ObjectiveFunction(IOAble):
         # build objectives
         self._dim_f = 0
         for objective in self.objectives:
-            if verbose > 0:
-                print("Building objective: " + objective.name)
-            objective.build(use_jit=self.use_jit, verbose=verbose)
+            if not objective.built:
+                if verbose > 0:
+                    print("Building objective: " + objective.name)
+                objective.build(use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
             self._scalar = True
@@ -204,13 +202,19 @@ class ObjectiveFunction(IOAble):
         Sets ``self._flatten`` as a function to return unique flattened list of things
         and ``self._unflatten`` to recreate full nested list of things
         from unique flattened version.
-        """
-        from jax.tree_util import tree_flatten, tree_unflatten
 
-        things = setdefault(things, [obj.things for obj in self.objectives])
+        """
+        # This is a unique list of the things the ObjectiveFunction knows about.
+        # By default it is only the things that each sub-Objective needs,
+        # but it can be set to include extra things from other objectives.
+        self._things = setdefault(
+            things,
+            unique_list(flatten_list([obj.things for obj in self.objectives]))[0],
+        )
+        things_per_objective = [self._things for _ in self.objectives]
 
         flat_, treedef_ = tree_flatten(
-            things, is_leaf=lambda x: isinstance(x, Optimizable)
+            things_per_objective, is_leaf=lambda x: isinstance(x, Optimizable)
         )
         unique_, inds_ = unique_list(flat_)
 
@@ -225,7 +229,7 @@ class ObjectiveFunction(IOAble):
             )
             assert treedef == treedef_
             assert len(flat) == len(flat_)
-            unique, inds = unique_list(flat)
+            unique, _ = unique_list(flat)
             return unique
 
         self._unflatten = unflatten
@@ -376,7 +380,7 @@ class ObjectiveFunction(IOAble):
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
 
-        x = jnp.atleast_1d(x)
+        x = jnp.atleast_1d(jnp.asarray(x))
         if x.size != self.dim_x:
             raise ValueError(
                 "Input vector dimension is invalid, expected "
@@ -387,45 +391,73 @@ class ObjectiveFunction(IOAble):
         xs = jnp.split(x, xs_splits)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
         if per_objective:
+            # params is a list of lists of dicts, for each thing and for each objective
             params = self._unflatten(params)
+            # this filters out the params of things that are unused by each objective
+            params = [
+                [par for par, thing in zip(param, self.things) if thing in obj.things]
+                for param, obj in zip(params, self.objectives)
+            ]
         return params
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
         things = things or self.things
-        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
+        assert all([type(t1) is type(t2) for t1, t2 in zip(things, self.things)])
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
 
     def grad(self, x, constants=None):
-        """Compute gradient vector of scalar form of the objective wrt x."""
+        """Compute gradient vector of self.compute_scalar wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_1d(self._grad(x, constants).squeeze())
 
     def hess(self, x, constants=None):
-        """Compute Hessian matrix of scalar form of the objective wrt x."""
+        """Compute Hessian matrix of self.compute_scalar wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._hess(x, constants).squeeze())
 
     def jac_scaled(self, x, constants=None):
-        """Compute Jacobian matrix of vector form of the objective wrt x."""
+        """Compute Jacobian matrix of self.compute_scaled wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_scaled(x, constants).squeeze())
 
+    def jac_scaled_error(self, x, constants=None):
+        """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
+        if constants is None:
+            constants = self.constants
+        return jnp.atleast_2d(self._jac_scaled_error(x, constants).squeeze())
+
     def jac_unscaled(self, x, constants=None):
-        """Compute Jacobian matrix of vector form of the objective wrt x, unweighted."""
+        """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_unscaled(x, constants).squeeze())
 
-    def jvp_scaled(self, v, x):
-        """Compute Jacobian-vector product of the objective function.
+    def _jvp(self, v, x, constants=None, op="compute_scaled"):
+        v = v if isinstance(v, (tuple, list)) else (v,)
 
-        Uses the scaled form of the objective.
+        fun = lambda x: getattr(self, op)(x, constants)
+        if len(v) == 1:
+            jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
+            return jnp.vectorize(jvpfun, signature="(n)->(k)")(v[0])
+        elif len(v) == 2:
+            jvpfun = lambda dx1, dx2: Derivative.compute_jvp2(fun, 0, 0, dx1, dx2, x)
+            return jnp.vectorize(jvpfun, signature="(n),(n)->(k)")(v[0], v[1])
+        elif len(v) == 3:
+            jvpfun = lambda dx1, dx2, dx3: Derivative.compute_jvp3(
+                fun, 0, 0, 0, dx1, dx2, dx3, x
+            )
+            return jnp.vectorize(jvpfun, signature="(n),(n),(n)->(k)")(v[0], v[1], v[2])
+        else:
+            raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
+
+    def jvp_scaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_scaled.
 
         Parameters
         ----------
@@ -434,25 +466,14 @@ class ObjectiveFunction(IOAble):
             The number of vectors given determines the order of derivative taken.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
-        if not isinstance(v, tuple):
-            v = (v,)
-        if len(v) == 1:
-            return Derivative.compute_jvp(self.compute_scaled, 0, v[0], x)
-        elif len(v) == 2:
-            return Derivative.compute_jvp2(self.compute_scaled, 0, 0, v[0], v[1], x)
-        elif len(v) == 3:
-            return Derivative.compute_jvp3(
-                self.compute_scaled, 0, 0, 0, v[0], v[1], v[2], x
-            )
-        else:
-            raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
+        return self._jvp(v, x, constants, "compute_scaled")
 
-    def jvp_unscaled(self, v, x):
-        """Compute Jacobian-vector product of the objective function.
-
-        Uses the unscaled form of the objective.
+    def jvp_scaled_error(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_scaled_error.
 
         Parameters
         ----------
@@ -461,25 +482,34 @@ class ObjectiveFunction(IOAble):
             The number of vectors given determines the order of derivative taken.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
-        if not isinstance(v, tuple):
-            v = (v,)
-        if len(v) == 1:
-            return Derivative.compute_jvp(self.compute_unscaled, 0, v[0], x)
-        elif len(v) == 2:
-            return Derivative.compute_jvp2(self.compute_unscaled, 0, 0, v[0], v[1], x)
-        elif len(v) == 3:
-            return Derivative.compute_jvp3(
-                self.compute_unscaled, 0, 0, 0, v[0], v[1], v[2], x
-            )
-        else:
-            raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
+        return self._jvp(v, x, constants, "compute_scaled_error")
 
-    def vjp_scaled(self, v, x):
-        """Compute vector-Jacobian product of the objective function.
+    def jvp_unscaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_unscaled.
 
-        Uses the scaled form of the objective.
+        Parameters
+        ----------
+        v : tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            The number of vectors given determines the order of derivative taken.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        return self._jvp(v, x, constants, "compute_unscaled")
+
+    def _vjp(self, v, x, constants=None, op="compute_scaled"):
+        fun = lambda x: getattr(self, op)(x, constants)
+        return Derivative.compute_vjp(fun, 0, v, x)
+
+    def vjp_scaled(self, v, x, constants=None):
+        """Compute vector-Jacobian product of self.compute_scaled.
 
         Parameters
         ----------
@@ -487,14 +517,14 @@ class ObjectiveFunction(IOAble):
             Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
-        return Derivative.compute_vjp(self.compute_scaled, 0, v, x)
+        return self._vjp(v, x, constants, "compute_scaled")
 
-    def vjp_unscaled(self, v, x):
-        """Compute vector-Jacobian product of the objective function.
-
-        Uses the unscaled form of the objective.
+    def vjp_scaled_error(self, v, x, constants=None):
+        """Compute vector-Jacobian product of self.compute_scaled_error.
 
         Parameters
         ----------
@@ -502,9 +532,26 @@ class ObjectiveFunction(IOAble):
             Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
-        return Derivative.compute_vjp(self.compute_unscaled, 0, v, x)
+        return self._vjp(v, x, constants, "compute_scaled_error")
+
+    def vjp_unscaled(self, v, x, constants=None):
+        """Compute vector-Jacobian product of self.compute_unscaled.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        return self._vjp(v, x, constants, "compute_unscaled")
 
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -532,8 +579,7 @@ class ObjectiveFunction(IOAble):
         elif mode == "auto":
             mode = "lsq"
         self._compile_mode = mode
-        # variable values are irrelevant for compilation
-        x = np.zeros((self.dim_x,))
+        x = self.x()
 
         if verbose > 0:
             print(
@@ -621,6 +667,11 @@ class ObjectiveFunction(IOAble):
         return self._dim_f
 
     @property
+    def name(self):
+        """Name of objective function (str)."""
+        return self._name
+
+    @property
     def target_scaled(self):
         """ndarray: target vector."""
         target = []
@@ -664,47 +715,9 @@ class ObjectiveFunction(IOAble):
         )
 
     @property
-    def _all_things(self):
-        """list: all things known to this objective, used and unused."""
-        if not hasattr(self, "_extra_things"):
-            self._extra_things = []
-        return [obj.things for obj in self.objectives] + self._extra_things
-
-    @property
     def things(self):
-        """list: Optimizable things that this objective is tied to."""
-        errorif(
-            not hasattr(self, "_flatten"),
-            RuntimeError,
-            "ObjectiveFunction must be built with ObjectiveFunction.build() first",
-        )
-        return self._flatten(self._all_things)
-
-    @things.setter
-    def things(self, new):
-        if not isinstance(new, (tuple, list)):
-            new = [new]
-        assert all(isinstance(x, Optimizable) for x in new)
-        # in general this is a hard problem, since we don't really know which object
-        # to replace with which if there are multiple of the same type, but we can
-        # do our best and throw an error if we can't figure it out here.
-        expected_types = [type(a) for a in self.things]
-        got_types = [type(a) for a in new]
-        errorif(
-            expected_types != got_types,
-            TypeError,
-            "Cannot unambiguously parse Optimizable objects to individual Objectives, "
-            + f"expected types {expected_types} but got types {got_types}. "
-            + "Try setting Objective.things on each sub Objective individually then "
-            + "call ObjectiveFunction.build().",
-        )
-        # now we know that new and self.things contains instances of unique classes, so
-        # we should be able to just replace like with like
-        things = self._unflatten(new)
-        for obj, t in zip(self.objectives, things[: -len(self._extra_things)]):
-            obj.things = t
-            # can maybe improve this later to not rebuild if resolution is the same
-            obj._built = False
+        """list: Unique list of optimizable things that this objective is tied to."""
+        return self._things
 
 
 class _Objective(IOAble, ABC):
@@ -733,8 +746,13 @@ class _Objective(IOAble, ABC):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     name : str, optional
-        Name of the objective function.
+        Name of the objective.
 
     """
 
@@ -745,11 +763,13 @@ class _Objective(IOAble, ABC):
     _equilibrium = False
     _io_attrs_ = [
         "_target",
+        "_bounds",
         "_weight",
         "_name",
         "_normalize",
         "_normalize_target",
         "_normalization",
+        "_deriv_mode",
     ]
 
     def __init__(
@@ -761,9 +781,9 @@ class _Objective(IOAble, ABC):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         name=None,
     ):
-
         if self._scalar:
             assert self._coordinates == ""
         assert np.all(np.asarray(weight) > 0)
@@ -772,6 +792,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
+        assert deriv_mode in {"auto", "fwd", "rev"}
 
         self._target = target
         self._bounds = bounds
@@ -779,6 +800,7 @@ class _Objective(IOAble, ABC):
         self._normalize = normalize
         self._normalize_target = normalize_target
         self._normalization = 1
+        self._deriv_mode = deriv_mode
         self._name = name
         self._use_jit = None
         self._built = False
@@ -793,62 +815,50 @@ class _Objective(IOAble, ABC):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
-        self._grad = Derivative(self.compute_scalar, mode="grad")
-        self._hess = Derivative(self.compute_scalar, mode="hess")
-        self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
-        self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
+        argnums = tuple(range(len(self.things)))
+        # derivatives return tuple, one for each thing
+        self._grad = Derivative(self.compute_scalar, argnums, mode="grad")
+        self._hess = Derivative(self.compute_scalar, argnums, mode="hess")
+        if self._deriv_mode == "auto":
+            # choose based on shape of jacobian. fwd mode is more memory efficient
+            # so we prefer that unless the jacobian is really wide
+            self._deriv_mode = (
+                "fwd"
+                if self.dim_f >= 0.5 * sum(t.dim_x for t in self.things)
+                else "rev"
+            )
+        self._jac_scaled = Derivative(
+            self.compute_scaled, argnums, mode=self._deriv_mode
+        )
+        self._jac_scaled_error = Derivative(
+            self.compute_scaled_error, argnums, mode=self._deriv_mode
+        )
+        self._jac_unscaled = Derivative(
+            self.compute_unscaled, argnums, mode=self._deriv_mode
+        )
 
     def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
         self._use_jit = True
 
-        try:
-            del self.compute_scaled
-        except AttributeError:
-            pass
-        self.compute_scaled = jit(self.compute_scaled)
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_scaled_error",
+            "jac_unscaled",
+            "hess",
+            "grad",
+        ]
 
-        try:
-            del self.compute_scaled_error
-        except AttributeError:
-            pass
-        self.compute_scaled_error = jit(self.compute_scaled_error)
-
-        try:
-            del self.compute_unscaled
-        except AttributeError:
-            pass
-        self.compute_unscaled = jit(self.compute_unscaled)
-
-        try:
-            del self.compute_scalar
-        except AttributeError:
-            pass
-        self.compute_scalar = jit(self.compute_scalar)
-
-        try:
-            del self.jac_scaled
-        except AttributeError:
-            pass
-        self.jac_scaled = jit(self.jac_scaled)
-
-        try:
-            del self.jac_unscaled
-        except AttributeError:
-            pass
-        self.jac_unscaled = jit(self.jac_unscaled)
-
-        try:
-            del self.hess
-        except AttributeError:
-            pass
-        self.hess = jit(self.hess)
-
-        try:
-            del self.grad
-        except AttributeError:
-            pass
-        self.grad = jit(self.grad)
+        for method in methods:
+            try:
+                delattr(self, method)
+            except AttributeError:
+                pass
+            setattr(self, method, jit(getattr(self, method)))
 
     def _check_dimensions(self):
         """Check that len(target) = len(bounds) = len(weight) = dim_f."""
@@ -876,17 +886,15 @@ class _Objective(IOAble, ABC):
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):
-            if self._coordinates == "":
-                w = jnp.ones((self.dim_f,))
-            elif self._coordinates == "rtz":
-                w = self._constants["transforms"]["grid"].weights
-                w *= jnp.sqrt(self._constants["transforms"]["grid"].num_nodes)
+            grid = self._constants["transforms"]["grid"]
+            if self._coordinates == "rtz":
+                w = grid.weights
+                w *= jnp.sqrt(grid.num_nodes)
             elif self._coordinates == "r":
-                w = self._constants["transforms"]["grid"].compress(
-                    self._constants["transforms"]["grid"].spacing[:, 0],
-                    surface_label="rho",
-                )
+                w = grid.compress(grid.spacing[:, 0], surface_label="rho")
                 w = jnp.sqrt(w)
+            else:
+                w = jnp.ones((self.dim_f,))
             if w.size:
                 w = jnp.tile(w, self.dim_f // w.size)
             self._constants["quad_weights"] = w
@@ -907,8 +915,18 @@ class _Objective(IOAble, ABC):
     def compute(self, *args, **kwargs):
         """Compute the objective function."""
 
+    def _maybe_array_to_params(self, *args):
+        argsout = tuple()
+        for arg, thing in zip(args, self.things):
+            if isinstance(arg, (np.ndarray, jnp.ndarray)):
+                argsout += (thing.unpack_params(arg),)
+            else:
+                argsout += (arg,)
+        return argsout
+
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
+        args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
@@ -916,6 +934,7 @@ class _Objective(IOAble, ABC):
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
+        args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
@@ -923,6 +942,7 @@ class _Objective(IOAble, ABC):
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
+        args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
@@ -971,20 +991,79 @@ class _Objective(IOAble, ABC):
         return f.squeeze()
 
     def grad(self, *args, **kwargs):
-        """Compute gradient vector of scalar form of the objective wrt x."""
+        """Compute gradient vector of self.compute_scalar wrt x."""
         return self._grad(*args, **kwargs)
 
     def hess(self, *args, **kwargs):
-        """Compute Hessian matrix of scalar form of the objective wrt x."""
+        """Compute Hessian matrix of self.compute_scalar wrt x."""
         return self._hess(*args, **kwargs)
 
     def jac_scaled(self, *args, **kwargs):
-        """Compute Jacobian matrix of vector form of the objective wrt x."""
+        """Compute Jacobian matrix of self.compute_scaled wrt x."""
         return self._jac_scaled(*args, **kwargs)
 
+    def jac_scaled_error(self, *args, **kwargs):
+        """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
+        return self._jac_scaled_error(*args, **kwargs)
+
     def jac_unscaled(self, *args, **kwargs):
-        """Compute Jacobian matrix of vector form of the objective wrt x, unweighted."""
+        """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         return self._jac_unscaled(*args, **kwargs)
+
+    def _jvp(self, v, x, constants=None, op="compute_scaled"):
+        v = v if isinstance(v, (tuple, list)) else (v,)
+        x = x if isinstance(x, (tuple, list)) else (x,)
+        assert len(x) == len(v)
+
+        fun = lambda *x: getattr(self, op)(*x, constants=constants)
+        jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
+        sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
+        return jnp.vectorize(jvpfun, signature=sig)(*v)
+
+    def jvp_scaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_scaled.
+
+        Parameters
+        ----------
+        v : tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+        x : tuple of ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        return self._jvp(v, x, constants, "compute_scaled")
+
+    def jvp_scaled_error(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_scaled_error.
+
+        Parameters
+        ----------
+        v : tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+        x : tuple of ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        return self._jvp(v, x, constants, "compute_scaled_error")
+
+    def jvp_unscaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_unscaled.
+
+        Parameters
+        ----------
+        v : tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+        x : tuple of ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        return self._jvp(v, x, constants, "compute_unscaled")
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -1043,19 +1122,19 @@ class _Objective(IOAble, ABC):
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmax / self.normalization)
+                    + self._print_value_fmt.format(fmax / jnp.mean(self.normalization))
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmin / self.normalization)
+                    + self._print_value_fmt.format(fmin / jnp.mean(self.normalization))
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmean / self.normalization)
+                    + self._print_value_fmt.format(fmean / jnp.mean(self.normalization))
                     + "(normalized)"
                 )
 
@@ -1140,7 +1219,7 @@ class _Objective(IOAble, ABC):
 
     @property
     def name(self):
-        """Name of objective function (str)."""
+        """Name of objective (str)."""
         return self._name
 
     @property
@@ -1155,7 +1234,7 @@ class _Objective(IOAble, ABC):
         if not isinstance(new, (tuple, list)):
             new = [new]
         assert all(isinstance(x, Optimizable) for x in new)
-        assert all(type(a) == type(b) for a, b in zip(new, self.things))
+        assert all(type(a) is type(b) for a, b in zip(new, self.things))
         self._things = list(new)
         # can maybe improve this later to not rebuild if resolution is the same
         self._built = False

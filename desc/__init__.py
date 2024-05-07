@@ -1,5 +1,6 @@
 """DESC: a 3D MHD equilibrium solver and stellarator optimization suite."""
 
+import importlib
 import os
 import re
 import warnings
@@ -13,6 +14,36 @@ __version__ = get_versions()["version"]
 del get_versions
 
 colorama.init()
+
+
+__all__ = [
+    "basis",
+    "coils",
+    "compute",
+    "continuation",
+    "derivatives",
+    "equilibrium",
+    "examples",
+    "geometry",
+    "grid",
+    "io",
+    "magnetic_fields",
+    "objectives",
+    "optimize",
+    "perturbations",
+    "plotting",
+    "profiles",
+    "random",
+    "transform",
+    "vmec",
+]
+
+
+def __getattr__(name):
+    if name in __all__:
+        return importlib.import_module("." + name, __name__)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 _BANNER = r"""
  ____  ____  _____   ___
@@ -56,10 +87,10 @@ def set_device(kind="cpu"):
         config["avail_mem"] = cpu_mem
 
     if kind == "metal":
-        # import jax.config as jax_config
-        # jax_config.update("jax_enable_x64", True)
-        # jax_config.update('jax_platform_name', 'METAL')
-        # os.environ["JAX_PLATFORM_NAME"] = "METAL"
+        from jax import config as jax_config
+        jax_config.update("jax_enable_x64", True)
+        jax_config.update('jax_platform_name', 'METAL')
+        os.environ["JAX_PLATFORM_NAME"] = "METAL"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         import psutil
 

@@ -464,7 +464,7 @@ def solve_continuation_automatic(  # noqa: C901
     ----------
     eq : Equilibrium
         Unsolved Equilibrium with the final desired boundary, profiles, resolution.
-    objective : {"force", "energy", "vacuum"}
+    objective : {"force", "energy"}
         function to solve for equilibrium solution
     optimizer : str or Optimizer (optional)
         optimizer to use
@@ -531,35 +531,71 @@ def solve_continuation_automatic(  # noqa: C901
         checkpoint_path,
     )
 
-    eqfam = _add_pressure(
-        eq,
-        eqfam,
-        pres_step,
-        objective,
-        optimizer,
-        pert_order,
-        ftol,
-        xtol,
-        gtol,
-        maxiter,
-        verbose,
-        checkpoint_path,
-    )
+    # for zero current we want to do shaping before pressure to avoid having a
+    # tokamak with zero current but finite pressure (non-physical)
+    if eq.current is not None and np.all(eq.current(np.linspace(0, 1, 20)) == 0):
+        eqfam = _add_shaping(
+            eq,
+            eqfam,
+            bdry_step,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
+        )
 
-    eqfam = _add_shaping(
-        eq,
-        eqfam,
-        bdry_step,
-        objective,
-        optimizer,
-        pert_order,
-        ftol,
-        xtol,
-        gtol,
-        maxiter,
-        verbose,
-        checkpoint_path,
-    )
+        eqfam = _add_pressure(
+            eq,
+            eqfam,
+            pres_step,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
+        )
+
+    # for other cases such as fixed iota or nonzero current we do pressure first
+    # since its cheaper to do it without the 3d modes
+    else:
+        eqfam = _add_pressure(
+            eq,
+            eqfam,
+            pres_step,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
+        )
+
+        eqfam = _add_shaping(
+            eq,
+            eqfam,
+            bdry_step,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
+        )
     eq.params_dict = eqfam[-1].params_dict
     eqfam[-1] = eq
     timer.stop("Total time")
@@ -601,7 +637,7 @@ def solve_continuation(  # noqa: C901
     ----------
     eqfam : EquilibriaFamily or list of Equilibria
         Equilibria to solve for at each step.
-    objective : {"force", "energy", "vacuum"}
+    objective : {"force", "energy"}
         function to solve for equilibrium solution
     optimizer : str or Optimizer (optional)
         optimizer to use

@@ -1,6 +1,6 @@
-=================
-API Documentation
-=================
+====================
+Alphabetical Listing
+====================
 
 Basis
 *****
@@ -32,6 +32,17 @@ Coils
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
 
+Compatibility
+*************
+
+.. autosummary::
+    :toctree: _api/compat
+    :recursive:
+
+    desc.compat.ensure_positive_jacobian
+    desc.compat.flip_helicity
+    desc.compat.rescale
+
 Continuation
 ************
 .. autosummary::
@@ -40,7 +51,6 @@ Continuation
 
     desc.continuation.solve_continuation
     desc.continuation.solve_continuation_automatic
-
 
 Derivatives
 ***********
@@ -54,7 +64,6 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     desc.derivatives.AutoDiffDerivative
     desc.derivatives.FiniteDiffDerivative
 
-
 Equilibrium
 ***********
 
@@ -66,7 +75,6 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
-
 Examples
 ********
 
@@ -76,7 +84,6 @@ Examples
 
     desc.examples.get
     desc.examples.listall
-
 
 Geometry
 ********
@@ -116,9 +123,7 @@ IO
     :recursive:
     :template: class.rst
 
-    desc.io.InputReader
     desc.io.load
-
 
 Magnetic Fields
 ***************
@@ -128,13 +133,17 @@ Magnetic Fields
     :recursive:
     :template: class.rst
 
+    desc.magnetic_fields.CurrentPotentialField
+    desc.magnetic_fields.FourierCurrentPotentialField
+    desc.magnetic_fields.DommaschkPotentialField
+    desc.magnetic_fields.OmnigenousField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
     desc.magnetic_fields.VerticalMagneticField
-    desc.magnetic_fields.PoloidalMagneticField
-    desc.magnetic_fields.SplineMagneticField
-    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
 
@@ -148,6 +157,7 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.BootstrapRedlConsistency
+    desc.objectives.BoundaryError
     desc.objectives.BScaleLength
     desc.objectives.CurrentDensity
     desc.objectives.Elongation
@@ -164,6 +174,9 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixOmniBmax
+    desc.objectives.FixOmniMap
+    desc.objectives.FixOmniWell
     desc.objectives.FixParameter
     desc.objectives.FixPressure
     desc.objectives.FixPsi
@@ -180,11 +193,13 @@ Objective Functions
     desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
+    desc.objectives.LinearObjectiveFromUser
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
+    desc.objectives.Omnigenity
     desc.objectives.PlasmaVesselDistance
     desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
@@ -195,9 +210,8 @@ Objective Functions
     desc.objectives.RotationalTransform
     desc.objectives.Shear
     desc.objectives.ToroidalCurrent
+    desc.objectives.VacuumBoundaryError
     desc.objectives.Volume
-
-
 
 Optimize
 ********
@@ -214,7 +228,6 @@ Optimize
    desc.optimize.lsqtr
    desc.optimize.register_optimizer
    desc.optimize.sgd
-
 
 Perturbations
 *************
@@ -245,7 +258,6 @@ Plotting
     desc.plotting.plot_coefficients
     desc.plotting.plot_coils
     desc.plotting.plot_comparison
-    desc.plotting.plot_field_lines_sfl
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
@@ -262,6 +274,7 @@ Profiles
     :template: class.rst
 
     desc.profiles.PowerSeriesProfile
+    desc.profiles.TwoPowerProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
     desc.profiles.ScaledProfile

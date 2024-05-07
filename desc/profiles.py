@@ -5,14 +5,20 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import scipy.optimize
+from interpax import interp1d
 
 from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries, polyder_vec, polyval_vec
 from desc.derivatives import Derivative
 from desc.grid import Grid, _Grid
-from desc.interpolate import interp1d
 from desc.io import IOAble
-from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
+from desc.utils import (
+    combination_permutation,
+    copy_coeffs,
+    errorif,
+    multinomial_coefficients,
+    warnif,
+)
 
 
 class _Profile(IOAble, ABC):
@@ -194,7 +200,7 @@ class _Profile(IOAble, ABC):
     def __call__(self, grid, params=None, dr=0, dt=0, dz=0):
         """Evaluate the profile at a given set of points."""
         if not isinstance(grid, _Grid):
-            grid = jnp.atleast_1d(grid)
+            grid = jnp.atleast_1d(jnp.asarray(grid))
             if grid.ndim == 1:
                 grid = jnp.array([grid, jnp.zeros_like(grid), jnp.zeros_like(grid)]).T
             grid = Grid(grid, sort=False)
@@ -585,7 +591,7 @@ class PowerSeriesProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == self._basis.num_modes:
             self._params = jnp.asarray(new)
         else:
@@ -645,9 +651,9 @@ class PowerSeriesProfile(_Profile):
         if self.sym:
             # need to pad with odd numbered modes
             params = jnp.array([params, jnp.zeros_like(params)]).flatten(order="F")
-        r = grid.nodes[grid.unique_rho_idx, 0]
+        r = grid.nodes[:, 0]
         f = polyval_vec(polyder_vec(jnp.atleast_2d(params[::-1]), dr, False), r)[0]
-        return f[grid.inverse_rho_idx]
+        return f
 
     @classmethod
     def from_values(cls, x, y, order=6, rcond=None, w=None, sym="auto", name=""):
@@ -685,6 +691,104 @@ class PowerSeriesProfile(_Profile):
             order = order // 2
         params = jnp.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
         return cls(params, sym=sym, name=name)
+
+
+class TwoPowerProfile(_Profile):
+    """Profile represented by two powers.
+
+    f(x) = a[0]*(1 - x**a[1])**a[2]
+
+    Notes
+    -----
+    df/dx = inf at x = 0 if a[1] < 1
+    df/dx = inf at x = 1 if a[2] < dr
+
+    Parameters
+    ----------
+    params: array-like
+        Coefficients of the two power formula. Must be an array of size 3.
+        Default if not specified is [0, 1, 1].
+    name : str
+        Name of the profile.
+
+    """
+
+    _io_attrs_ = _Profile._io_attrs_
+
+    def __init__(self, params=None, name=""):
+        super().__init__(name)
+
+        if params is None:
+            params = [0, 1, 1]
+        self._params = np.atleast_1d(params)
+
+        errorif(
+            self._params.size != 3, ValueError, "params must be an array of size 3."
+        )
+        warnif(
+            self._params[1] < 1,
+            UserWarning,
+            "Derivatives of this profile will be infinite at rho=0 "
+            + "because params[1] < 1.",
+        )
+        warnif(
+            self._params[2] < 1,
+            UserWarning,
+            "Derivatives of this profile will be infinite at rho=1 "
+            + "because params[2] < 1.",
+        )
+
+    @property
+    def params(self):
+        """ndarray: Parameter values."""
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        new = jnp.atleast_1d(jnp.asarray(new))
+        if new.size == 3:
+            self._params = jnp.asarray(new)
+        else:
+            raise ValueError(f"params should be an array of size 3, got {len(new)}.")
+
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid
+            Locations to compute values at.
+        params : array-like
+            Power law coefficients to use. Must be an array of size 3.
+            If not given, uses the values given by the params attribute.
+        dr, dt, dz : int
+            Derivative order in rho, theta, zeta.
+
+        Returns
+        -------
+        values : ndarray
+            Values of the profile or its derivative at the points specified.
+
+        """
+        if params is None:
+            params = self.params
+        if (dt != 0) or (dz != 0):
+            return jnp.zeros(grid.num_nodes)
+        a, b, c = params
+        r = grid.nodes[:, 0]
+        if dr == 0:
+            f = a * (1 - r**b) ** c
+        elif dr == 1:
+            f = r ** (b - 1) * self.compute(grid, params=[-a * b * c, b, c - 1])
+        elif dr == 2:
+            f = (
+                r ** (b - 2)
+                * ((b * c - 1) * r**b - b + 1)
+                * self.compute(grid, params=[a * b * c, b, c - 2])
+            )
+        else:
+            raise NotImplementedError("dr > 2 not implemented for TwoPowerProfile!")
+        return f
 
 
 class SplineProfile(_Profile):
@@ -733,6 +837,11 @@ class SplineProfile(_Profile):
         return s
 
     @property
+    def knots(self):
+        """ndarray: Knot locations."""
+        return self._knots
+
+    @property
     def params(self):
         """ndarray: Parameters for computation."""
         return self._params
@@ -770,11 +879,11 @@ class SplineProfile(_Profile):
             params = self.params
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
-        xq = grid.nodes[grid.unique_rho_idx, 0]
-        x = self._knots
+        x = self.knots
         f = params
+        xq = grid.nodes[:, 0]
         fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
-        return fq[grid.inverse_rho_idx]
+        return fq
 
 
 class MTanhProfile(_Profile):
@@ -823,7 +932,7 @@ class MTanhProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size >= 5:
             self._params = jnp.asarray(new)
         else:
@@ -912,19 +1021,19 @@ class MTanhProfile(_Profile):
         """
         if params is None:
             params = self.params
+        if dr > 2:
+            raise NotImplementedError("dr > 2 not implemented for MTanhProfile!")
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
-
-        xq = grid.nodes[grid.unique_rho_idx, 0]
 
         ped = params[0]
         offset = params[1]
         sym = params[2]
         width = params[3]
         core_poly = params[4:]
-
+        xq = grid.nodes[:, 0]
         y = MTanhProfile._mtanh(xq, ped, offset, sym, width, core_poly, dx=dr)
-        return y[grid.inverse_rho_idx]
+        return y
 
     @classmethod
     def from_values(
@@ -1090,7 +1199,7 @@ class FourierZernikeProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == self._basis.num_modes:
             self._params = jnp.asarray(new)
         else:

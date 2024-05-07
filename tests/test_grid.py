@@ -5,6 +5,7 @@ import pytest
 from scipy import special
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import (
     ConcentricGrid,
     Grid,
@@ -91,9 +92,11 @@ class TestGrid:
             theta = np.linspace(
                 0,
                 2 * np.pi,
-                (ntheta + endpoint + 1) // 2 * 2 - endpoint
-                if (sym and ntheta > 1)
-                else ntheta,
+                (
+                    (ntheta + endpoint + 1) // 2 * 2 - endpoint
+                    if (sym and ntheta > 1)
+                    else ntheta
+                ),
                 endpoint=endpoint,
             )
             if sym and ntheta > 1:
@@ -488,7 +491,7 @@ class TestGrid:
     def test_concentric_grid_high_res(self):
         """Test that we can create high resolution grids without crashing.
 
-        Verifies solution to GH issue #207.
+        Test for GH issue #207.
         """
         _ = ConcentricGrid(L=32, M=28, N=30)
 
@@ -530,8 +533,6 @@ class TestGrid:
             "iota": np.array([[0, 0]]),
             "surface": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, -r]]),
             "spectral_indexing": "ansi",
-            "bdry_mode": "lcfs",
-            "node_pattern": "quad",
         }
 
         eq = Equilibrium(**inputs)
@@ -622,6 +623,15 @@ class TestGrid:
     @pytest.mark.unit
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
+        L = [3, 3, 5, 3]
+        M = [3, 6, 5, 7]
+        N = [2, 2, 2, 2]
+        NFP = [5, 3, 5, 3]
+        sym = np.array([True, True, False, False])
+        # to test code not tested on grids made with M=.
+        even_number = 4
+        n_theta = even_number - sym
+
         # Currently, midpoint rule is false for LinearGrid made with L=number.
         def test(grid, midpoint_rule=False):
             r = grid.nodes[:, 0]
@@ -653,9 +663,11 @@ class TestGrid:
                 expected_integral,
                 true_integral,
                 rtol=0,
-                atol=midpoint_rule_error_bound / 4
-                if midpoint_rule
-                else right_riemann_error_bound / 3,
+                atol=(
+                    midpoint_rule_error_bound / 4
+                    if midpoint_rule
+                    else right_riemann_error_bound / 3
+                ),
                 err_msg=type(grid),
             )
             np.testing.assert_allclose(
@@ -664,15 +676,6 @@ class TestGrid:
                 rtol=1e-15,
                 err_msg=type(grid),
             )
-
-        L = [3, 3, 5, 3]
-        M = [3, 6, 5, 7]
-        N = [2, 2, 2, 2]
-        NFP = [5, 3, 5, 3]
-        sym = np.array([True, True, False, False])
-        # to test code not tested on grids made with M=.
-        even_number = 4
-        n_theta = even_number - sym
 
         for i in range(len(L)):
             test(LinearGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
@@ -776,3 +779,71 @@ def test_find_least_rational_surfaces():
     max_rational = max(lior)
 
     assert np.all(np.array(lio) > max_rational)
+
+
+@pytest.mark.unit
+def test_custom_jitable_grid_indexing():
+    """Test that unique/inverse indices are set correctly when jitable=True."""
+    eq = get("NCSX")
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    # field lines on two surfaces
+    rho = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
+    theta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
+    zeta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
+    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
+    grid3 = Grid(np.array([rho, theta, zeta]).T, jitable=True, _unique_rho_idx=[0, 10])
+    np.testing.assert_allclose(grid1.nodes, grid2.nodes)
+
+    x = np.random.random(grid1.num_nodes)
+
+    # these shouldn't error
+    _ = grid1.unique_rho_idx
+    _ = grid1.unique_theta_idx
+    _ = grid1.unique_zeta_idx
+    _ = grid1.inverse_rho_idx
+    _ = grid1.inverse_theta_idx
+    _ = grid1.inverse_zeta_idx
+    _ = grid3.unique_rho_idx
+
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_rho_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_theta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_zeta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_rho_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_theta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_zeta_idx
+
+    y1 = grid1.copy_data_from_other(x, grid2, "rho")
+    y2 = grid2.copy_data_from_other(x, grid1, "rho")
+    y3 = grid3.copy_data_from_other(x, grid1, "rho")
+
+    np.testing.assert_allclose(y1, y2)
+    np.testing.assert_allclose(y1, y3)
+
+    # make sure compress/expand done when override_grid=True works as expected
+    b1 = eq.compute(["|B|"], grid=grid1, override_grid=True)["|B|"]
+    with pytest.raises(AttributeError):
+        _ = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
+    b3 = eq.compute(["|B|"], grid=grid3, override_grid=True)["|B|"]
+    np.testing.assert_allclose(b1, b3)
+
+
+@pytest.mark.unit
+def test_custom_jitable_grid_weights():
+    """Test that grid weights are set correctly when jitable=True."""
+    rho = np.random.random(100)
+    theta = np.random.random(100) * 2 * np.pi
+    zeta = np.random.random(100) * 2 * np.pi
+    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
+    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+
+    np.testing.assert_allclose(grid1.spacing, grid2.spacing)
+    np.testing.assert_allclose(grid1.weights, grid2.weights)
+    np.testing.assert_allclose(grid1.weights.sum(), 4 * np.pi**2)
+    np.testing.assert_allclose(grid2.weights.sum(), 4 * np.pi**2)

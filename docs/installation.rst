@@ -10,7 +10,7 @@ In general, to install JAX with GPU support, please refer to the `JAX installati
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`__.
 Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
 
-**NOTE: DESC requires python>=3.8.**
+**NOTE: DESC requires python>=3.9.**
 **If you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used.**
 
 On Your Local Machine
@@ -39,7 +39,7 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.8, <=3.11'
+    conda create --name desc-env 'python>=3.9, <=3.12'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
@@ -91,7 +91,7 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.8, <=3.11'
+    conda create --name desc-env 'python>=3.9, <=3.12'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
@@ -163,36 +163,12 @@ Clone and install DESC
 Della and Stellar Clusters (Princeton)
 ++++++++++++++++++++++++++++++++++++++
 
-**Option 1:** First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters):
+First, install JAX (we base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters:
 
 .. code-block:: sh
 
     module load anaconda3/2023.3
-    conda create --name desc-env python=3.9
-    conda activate desc-env
-    pip install --upgrade "jax[cuda11_pip]<0.4.15" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-Then, install DESC,
-
-.. code-block:: sh
-
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
-    # remove the jax lines from requirements.txt, as we already have installed them above
-    sed -i '/jax/d' ./requirements.txt
-    # then install as usual
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
-
-Option 1 was tested and confirmed to work on the Della and Stellar clusters at Princeton as of 11-6-2023.
-
-**Option 2:** First option may install JAX with higher CuDNN version (CuDNN 8.6) which is not supported by clusters. When you are trying to use GPU and get an error like **`Loaded runtime CuDNN library: 8.2.0 but source was compiled with: 8.6.0.`** Then, you can instead create the environment with following commands,
-
-.. code-block:: sh
-
-    module load anaconda3/2023.3
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.14=cuda112*" -c conda-forge
+    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env "jax==0.4.14" "jaxlib==0.4.14=cuda112*" -c conda-forge
     conda activate desc-env
 
 Then, install DESC,
@@ -208,7 +184,7 @@ Then, install DESC,
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Second option was tested and confirmed to work on the Della and Stellar clusters at Princeton as of 11-14-2023.
+Second option was tested and confirmed to work on the Della cluster as of 12-2-23 and Stellar cluster at Princeton as of 11-14-2023.
 
 On Clusters with IBM Power Architecture
 ***************************************
@@ -228,7 +204,7 @@ Commit `a2fe711ffa3f` (an older version of the `master` branch) was tested to wo
 
     module load anaconda3/2020.11 cudatoolkit/11.1 cudnn/cuda-11.1/8.0.4
 
-    conda create --name desc-env python=3.8
+    conda create --name desc-env python=3.10
     conda activate desc-env
     # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
     conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0,<1.25.0" psutil "scipy>=1.5.0,<1.11.0" termcolor

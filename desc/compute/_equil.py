@@ -14,7 +14,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, dot, surface_averages
+from .utils import cross, dot, safediv, safenorm, surface_averages
 
 
 @register_compute_fun(
@@ -39,8 +39,8 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     # form 0/0 and we may compute the limit as follows.
     data["J^rho"] = (
         transforms["grid"].replace_at_axis(
-            (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],
-            lambda: (data["B_zeta_rt"] - data["B_theta_rz"]) / data["sqrt(g)_r"],
+            safediv(data["B_zeta_t"] - data["B_theta_z"], data["sqrt(g)"]),
+            lambda: safediv(data["B_zeta_rt"] - data["B_theta_rz"], data["sqrt(g)_r"]),
         )
     ) / mu_0
     return data
@@ -104,8 +104,8 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     # form 0/0 and we may compute the limit as follows.
     data["J^zeta"] = (
         transforms["grid"].replace_at_axis(
-            (data["B_theta_r"] - data["B_rho_t"]) / data["sqrt(g)"],
-            lambda: (data["B_theta_rr"] - data["B_rho_rt"]) / data["sqrt(g)_r"],
+            safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"]),
+            lambda: safediv(data["B_theta_rr"] - data["B_rho_rt"], data["sqrt(g)_r"]),
         )
     ) / mu_0
     return data
@@ -285,7 +285,7 @@ def _J_Z(params, transforms, profiles, data, **kwargs):
     data=["J"],
 )
 def _Jmag(params, transforms, profiles, data, **kwargs):
-    data["|J|"] = jnp.linalg.norm(data["J"], axis=-1)
+    data["|J|"] = safenorm(data["J"], axis=-1)
     return data
 
 
@@ -518,7 +518,7 @@ def _F(params, transforms, profiles, data, **kwargs):
     data=["F"],
 )
 def _Fmag(params, transforms, profiles, data, **kwargs):
-    data["|F|"] = jnp.linalg.norm(data["F"], axis=-1)
+    data["|F|"] = safenorm(data["F"], axis=-1)
     return data
 
 
@@ -563,6 +563,27 @@ def _e_sup_helical(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^helical*sqrt(g)",
+    label="\\sqrt{g}(B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta)",
+    units="T \\cdot m^{2}",
+    units_long="Tesla * square meter",
+    description="Helical basis vector weighted by 3-D volume Jacobian",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^theta", "B^zeta", "e^theta*sqrt(g)", "e^zeta", "sqrt(g)"],
+)
+def _e_sup_helical_times_sqrt_g(params, transforms, profiles, data, **kwargs):
+    data["e^helical*sqrt(g)"] = (
+        data["B^zeta"] * data["e^theta*sqrt(g)"].T
+        - (data["sqrt(g)"] * data["B^theta"]) * data["e^zeta"].T
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="|e^helical|",
     label="|B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta|",
     units="T \\cdot m^{-2}",
@@ -577,6 +598,24 @@ def _e_sup_helical(params, transforms, profiles, data, **kwargs):
 )
 def _e_sup_helical_mag(params, transforms, profiles, data, **kwargs):
     data["|e^helical|"] = jnp.linalg.norm(data["e^helical"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="|e^helical*sqrt(g)|",
+    label="|\\sqrt{g}(B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta)|",
+    units="T \\cdot m^{2}",
+    units_long="Tesla * square meter",
+    description="Magnitude of helical basis vector weighted by 3-D volume Jacobian",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^helical*sqrt(g)"],
+)
+def _e_sup_helical_times_sqrt_g_mag(params, transforms, profiles, data, **kwargs):
+    data["|e^helical*sqrt(g)|"] = jnp.linalg.norm(data["e^helical*sqrt(g)"], axis=-1)
     return data
 
 
@@ -678,7 +717,7 @@ def _W_Btor(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["p", "sqrt(g)"],
-    gamma="gamma",
+    gamma="float: Adiabatic index. Default 0",
 )
 def _W_p(params, transforms, profiles, data, **kwargs):
     data["W_p"] = jnp.sum(data["p"] * data["sqrt(g)"] * transforms["grid"].weights) / (

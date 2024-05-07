@@ -1,4 +1,5 @@
 """Tests for linear constraints and objectives."""
+
 import numpy as np
 import pytest
 import scipy.linalg
@@ -9,6 +10,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
     AspectRatio,
     AxisRSelfConsistency,
@@ -29,14 +31,17 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixOmniMap,
+    FixOmniWell,
+    FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    GenericObjective,
     ObjectiveFunction,
-    QuasisymmetryTwoTerm,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
@@ -86,8 +91,6 @@ def test_LambdaGauge_asym():
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
-        "objective": "force",
-        "optimizer": "lsq-exact",
     }
     eq = Equilibrium(**inputs)
     lam_con = FixLambdaGauge(eq)
@@ -102,7 +105,8 @@ def test_LambdaGauge_asym():
         np.testing.assert_allclose(lam, 0, atol=1e-15)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
+@pytest.mark.solve
 def test_bc_on_interior_surfaces():
     """Test applying boundary conditions on internal surface."""
     surf = FourierRZToroidalSurface(rho=0.5)
@@ -133,25 +137,37 @@ def test_constrain_bdry_with_only_one_mode():
 def test_constrain_asserts():
     """Test error checking for incompatible constraints."""
     eqi = Equilibrium(iota=PowerSeriesProfile(0, 0), pressure=PowerSeriesProfile(0, 0))
-    eqc = Equilibrium(current=PowerSeriesProfile(0))
+    eqc = Equilibrium(current=PowerSeriesProfile(1))
+    obj_i = get_equilibrium_objective(eqi, "force")
+    obj_c = get_equilibrium_objective(eqc, "force")
+    obj_i.build()
+    obj_c.build()
     # nonexistent toroidal current can't be constrained
     with pytest.raises(RuntimeError):
-        eqi.solve(constraints=FixCurrent(eq=eqi))
+        con = FixCurrent(eq=eqi)
+        con.build()
     # nonexistent rotational transform can't be constrained
     with pytest.raises(RuntimeError):
-        eqc.solve(constraints=FixIota(eq=eqc))
+        con = FixIota(eq=eqc)
+        con.build()
     # toroidal current and rotational transform can't be constrained simultaneously
     with pytest.raises(ValueError):
-        eqi.solve(constraints=(FixCurrent(eq=eqi), FixIota(eq=eqi)))
-    with pytest.raises(AssertionError):
-        eqi.solve(
-            constraints=(FixPressure(eq=eqi, target=2), FixPressure(eq=eqi, target=1))
-        )
+        con = (FixCurrent(eq=eqi), FixIota(eq=eqi))
+        eqi.solve(constraints=con)
     # cannot use two incompatible constraints
     with pytest.raises(AssertionError):
         con1 = FixCurrent(target=eqc.c_l, eq=eqc)
         con2 = FixCurrent(target=eqc.c_l + 1, eq=eqc)
-        eqc.solve(constraints=(con1, con2))
+        con = ObjectiveFunction((con1, con2))
+        con.build()
+        _ = factorize_linear_constraints(obj_c, con)
+    # if only slightly off, should raise only a warning
+    with pytest.warns(UserWarning):
+        con1 = FixCurrent(target=eqc.c_l, eq=eqc)
+        con2 = FixCurrent(target=eqc.c_l * (1 + 1e-9), eq=eqc)
+        con = ObjectiveFunction((con1, con2))
+        con.build()
+        _ = factorize_linear_constraints(obj_c, con)
 
 
 @pytest.mark.regression
@@ -312,24 +328,35 @@ def test_fixed_axis_and_theta_SFL_solve():
 def test_factorize_linear_constraints_asserts():
     """Test error checking for factorize_linear_constraints."""
     eq = Equilibrium()
-    constraints = get_fixed_boundary_constraints(eq=eq)
-    for con in constraints:
-        con.build(verbose=0)
-    constraints[3].bounds = (0, 1)  # bounds on FixPsi
-
+    surf = eq.get_surface_at(rho=1)
     objective = get_equilibrium_objective(eq, "force")
     objective.build()
+
+    # nonlinear constraint
+    constraint = ObjectiveFunction(AspectRatio(eq=eq))
+    constraint.build(verbose=0)
     with pytest.raises(ValueError):
-        xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            constraints, objective
-        )
+        _ = factorize_linear_constraints(objective, constraint)
+
+    # bounds instead of target
+    constraint = ObjectiveFunction(get_fixed_boundary_constraints(eq=eq))
+    constraint.build(verbose=0)
+    constraint.objectives[3].bounds = (0, 1)
+    with pytest.raises(ValueError):
+        _ = factorize_linear_constraints(objective, constraint)
+
+    # constraining a foreign thing
+    constraint = ObjectiveFunction(FixParameter(surf))
+    constraint.build(verbose=0)
+    with pytest.raises(UserWarning):
+        _ = factorize_linear_constraints(objective, constraint)
 
 
 @pytest.mark.unit
 def test_build_init():
     """Ensure that passing an equilibrium to init builds the objective correctly.
 
-    Related to gh issue #378
+    Test for GH issue #378.
     """
     eq = Equilibrium(M=3, N=1)
 
@@ -341,12 +368,12 @@ def test_build_init():
 
     xz = {key: np.zeros_like(val) for key, val in eq.params_dict.items()}
     arg = "Rb_lmn"
-    A = fbR1.jac_scaled(xz)[arg]
+    A = fbR1.jac_scaled(xz)[0][arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
     arg = "Zb_lmn"
-    A = fbZ1.jac_scaled(xz)[arg]
+    A = fbZ1.jac_scaled(xz)[0][arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 
@@ -381,20 +408,19 @@ def test_kinetic_constraints():
 def test_correct_indexing_passed_modes():
     """Test Indexing when passing in specified modes, related to gh issue #380."""
     n = 1
-
     eq = desc.examples.get("W7-X")
-
-    grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
-    )
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
+            # just need dummy objective for factorizing constraints
+            GenericObjective("0", eq=eq),
         ),
-        verbose=0,
+        use_jit=False,
     )
+    objective.build()
+
     R_modes = np.vstack(
         (
             [0, 0, 0],
@@ -413,13 +439,11 @@ def test_correct_indexing_passed_modes():
         BoundaryZSelfConsistency(eq=eq),
         FixPressure(eq=eq),
     )
-    for con in constraints:
-        con.build(verbose=0)
-    objective.build()
+    constraint = ObjectiveFunction(constraints, use_jit=False)
+    constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints,
-        objective,
+        objective, constraint
     )
 
     x1 = objective.x(eq)
@@ -437,20 +461,16 @@ def test_correct_indexing_passed_modes():
 def test_correct_indexing_passed_modes_and_passed_target():
     """Test Indexing when passing in specified modes, related to gh issue #380."""
     n = 1
-
     eq = desc.examples.get("W7-X")
-
-    grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
-    )
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
-        (
-            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
-        ),
-        verbose=0,
+        (GenericObjective("0", eq=eq),),
+        use_jit=False,
     )
+    objective.build()
+
     R_modes = np.vstack(
         (
             [0, 0, 0],
@@ -462,6 +482,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     idxs = []
     for mode in R_modes:
         idxs.append(eq.surface.R_basis.get_idx(*mode))
+    idxs = np.array(idxs)
     target_R = eq.surface.R_lmn[idxs]
 
     Z_modes = eq.surface.Z_basis.modes[
@@ -470,7 +491,9 @@ def test_correct_indexing_passed_modes_and_passed_target():
     idxs = []
     for mode in Z_modes:
         idxs.append(eq.surface.Z_basis.get_idx(*mode))
+    idxs = np.array(idxs)
     target_Z = eq.surface.Z_lmn[idxs]
+
     constraints = (
         FixBoundaryR(eq=eq, modes=R_modes, normalize=False, target=target_R),
         FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False, target=target_Z),
@@ -478,13 +501,11 @@ def test_correct_indexing_passed_modes_and_passed_target():
         BoundaryZSelfConsistency(eq=eq),
         FixPressure(eq=eq),
     )
-    for con in constraints:
-        con.build(eq, verbose=0)
-    objective.build(eq)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
+    constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints,
-        objective,
+        objective, constraint
     )
 
     x1 = objective.x(eq)
@@ -502,20 +523,17 @@ def test_correct_indexing_passed_modes_and_passed_target():
 def test_correct_indexing_passed_modes_axis():
     """Test Indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
-
     eq = desc.examples.get("W7-X")
-
-    grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
-    )
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    eq.surface = eq.get_surface_at(1.0)
+    eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (
-            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
-        ),
-        verbose=0,
+        (GenericObjective("0", eq=eq),),
+        use_jit=False,
     )
+    objective.build()
+
     R_modes = np.vstack(
         (
             eq.axis.R_basis.modes[np.max(np.abs(eq.axis.R_basis.modes), 1) > n + 1, :],
@@ -523,10 +541,8 @@ def test_correct_indexing_passed_modes_axis():
         )
     )
     R_modes = np.flip(R_modes, 0)
-
     Z_modes = eq.axis.Z_basis.modes[np.max(np.abs(eq.axis.Z_basis.modes), 1) > n + 1, :]
     Z_modes = np.flip(Z_modes, 0)
-
     constraints = (
         FixAxisR(eq=eq, modes=R_modes, normalize=False),
         FixAxisZ(eq=eq, modes=Z_modes, normalize=False),
@@ -544,13 +560,11 @@ def test_correct_indexing_passed_modes_axis():
         FixSumModesZ(eq=eq, modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
         FixPressure(eq=eq),
     )
-    for con in constraints:
-        con.build(verbose=0)
-    objective.build()
+    constraint = ObjectiveFunction(constraints, use_jit=False)
+    constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints,
-        objective,
+        objective, constraint
     )
 
     x1 = objective.x(eq)
@@ -570,18 +584,16 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     n = 1
 
     eq = desc.examples.get("W7-X")
-
-    grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
-    )
+    eq.change_resolution(4, 4, 4, 8, 8, 8)
+    eq.surface = eq.get_surface_at(1.0)
+    eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (
-            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(eq=eq, target=8, weight=1e2),
-        ),
-        verbose=0,
+        (GenericObjective("0", eq=eq),),
+        use_jit=False,
     )
+    objective.build()
+
     R_modes = np.vstack(
         (
             eq.axis.R_basis.modes[np.max(np.abs(eq.axis.R_basis.modes), 1) > n + 1, :],
@@ -592,6 +604,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     idxs = []
     for mode in R_modes:
         idxs.append(eq.axis.R_basis.get_idx(*mode))
+    idxs = np.array(idxs)
     target_R = eq.axis.R_n[idxs]
 
     Z_modes = eq.axis.Z_basis.modes[np.max(np.abs(eq.axis.Z_basis.modes), 1) > n + 1, :]
@@ -599,6 +612,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     idxs = []
     for mode in Z_modes:
         idxs.append(eq.axis.Z_basis.get_idx(*mode))
+    idxs = np.array(idxs)
     target_Z = eq.axis.Z_n[idxs]
 
     constraints = (
@@ -674,13 +688,11 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             normalize=False,
         ),
     )
-    for con in constraints:
-        con.build(verbose=0)
-    objective.build()
+    constraint = ObjectiveFunction(constraints, use_jit=False)
+    constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints,
-        objective,
+        objective, constraint
     )
 
     x1 = objective.x(eq)
@@ -869,3 +881,40 @@ def test_FixNAE_util_correct_objectives():
     assert _is_any_instance(cs, FixIonTemperature)
     assert _is_any_instance(cs, FixAtomicNumber)
     assert _is_any_instance(cs, FixIota)
+
+
+@pytest.mark.unit
+def test_fix_omni_indices():
+    """Test that omnigenity parameters are constrained properly.
+
+    Test for GH issue #768.
+    """
+    NFP = 3
+    field = OmnigenousField(
+        L_B=1, M_B=5, L_x=2, M_x=3, N_x=4, NFP=NFP, helicity=(1, NFP)
+    )
+
+    # no indices
+    constraint = FixOmniWell(field=field, indices=False)
+    constraint.build()
+    assert constraint._idx.size == 0
+    constraint = FixOmniMap(field=field, indices=False)
+    constraint.build()
+    assert constraint._idx.size == 0
+
+    # all indices
+    constraint = FixOmniWell(field=field, indices=True)
+    constraint.build()
+    assert constraint._idx.size == field.B_lm.size
+    constraint = FixOmniMap(field=field, indices=True)
+    constraint.build()
+    assert constraint._idx.size == field.x_lmn.size
+
+    # specified indices
+    indices = np.arange(3, 8)
+    constraint = FixOmniWell(field=field, indices=indices)
+    constraint.build()
+    assert constraint._idx.size == indices.size
+    constraint = FixOmniMap(field=field, indices=indices)
+    constraint.build()
+    assert constraint._idx.size == indices.size

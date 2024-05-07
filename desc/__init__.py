@@ -87,10 +87,10 @@ def set_device(kind="cpu"):
         config["avail_mem"] = cpu_mem
 
     if kind == "metal":
-        # import jax.config as jax_config
-        # jax_config.update("jax_enable_x64", True)
-        # jax_config.update('jax_platform_name', 'METAL')
-        # os.environ["JAX_PLATFORM_NAME"] = "METAL"
+        from jax import config as jax_config
+        jax_config.update("jax_enable_x64", True)
+        jax_config.update('jax_platform_name', 'METAL')
+        os.environ["JAX_PLATFORM_NAME"] = "METAL"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         import psutil
 

@@ -500,9 +500,9 @@ def test_symmetry_position(DummyCoilSet):
         load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
     )
     coilset_mixed = MixedCoilSet(*coilset_asym)
-    grid = LinearGrid(L=0, M=0, N=30)
+    grid = LinearGrid(N=30)
 
-    # check that positions of CoilSets are the same
+    # check that positions of CoilSets are the same with xyz basis
     x_sym = coilset_sym._compute_position(basis="xyz", source_grid=grid)
     x_asym = coilset_asym._compute_position(basis="xyz", source_grid=grid)
     x_mixed = coilset_mixed._compute_position(basis="xyz", source_grid=grid)
@@ -510,10 +510,10 @@ def test_symmetry_position(DummyCoilSet):
     np.testing.assert_allclose(x_sym, x_asym)
     np.testing.assert_allclose(x_sym, x_mixed)
 
-    # check that positions of CoilSets are the same
-    x_sym = coilset_sym._compute_position(basis="rpz")
-    x_asym = coilset_asym._compute_position(basis="rpz")
-    x_mixed = coilset_mixed._compute_position(basis="rpz")
+    # check that positions of CoilSets are the same with rpz basis
+    x_sym = coilset_sym._compute_position(basis="rpz", source_grid=grid)
+    x_asym = coilset_asym._compute_position(basis="rpz", source_grid=grid)
+    x_mixed = coilset_mixed._compute_position(basis="rpz", source_grid=grid)
 
     np.testing.assert_allclose(x_sym, x_asym)
     np.testing.assert_allclose(x_sym, x_mixed)

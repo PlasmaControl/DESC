@@ -156,7 +156,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
 
-    def compute_position(self, params=None, source_grid=None, **kwargs):
+    def _compute_position(self, params=None, source_grid=None, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
@@ -891,7 +891,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
-    def compute_position(self, params=None, source_grid=None, **kwargs):
+    def _compute_position(self, params=None, source_grid=None, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
@@ -1576,7 +1576,7 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
-    def compute_position(self, params=None, source_grid=None, **kwargs):
+    def _compute_position(self, params=None, source_grid=None, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters

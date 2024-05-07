@@ -733,7 +733,7 @@ class CoilsetMinDistance(_Objective):
 
         """
         # include all permutations of grid nodes between coils
-        xyz = self._coilset.compute_position(source_grid=self._grid)
+        xyz = self._coilset._compute_position(source_grid=self._grid)
         pts1 = jnp.tile(xyz, (1, len(self._perms), 1))
         pts2 = jnp.concatenate([xyz[:, p, :] for p in self._perms], axis=1)
 

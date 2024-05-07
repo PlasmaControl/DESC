@@ -2,14 +2,7 @@ import numbers
 
 import numpy as np
 
-from desc.backend import (
-    jnp,
-    tree_flatten,
-    tree_leaves,
-    tree_map,
-    tree_structure,
-    tree_unflatten,
-)
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid, _Grid
@@ -103,11 +96,12 @@ class _CoilObjective(_Objective):
 
         """
         # local import to avoid circular import
-        from desc.coils import CoilSet, MixedCoilSet, _Coil
+        from desc.coils import CoilSet, MixedCoilSet
 
         self._dim_f = 0
         self._quad_weights = jnp.array([])
 
+        # FIXME: Is this necessary? It only gets called on a Grid, never coils/coilset
         def get_dim_f_and_weights(coilset):
             """Get dim_f and quad_weights from grid."""
             if isinstance(coilset, list):
@@ -134,14 +128,12 @@ class _CoilObjective(_Objective):
             else:
                 return [coilset]
 
-        is_single_coil = lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
         # gives structure of coils, e.g. MixedCoilSet(coils, coils) would give a
         # a structure of [[*, *], [*, *]] if n = 2 coils
-        coil_structure = tree_structure(
-            self.things[0],
-            is_leaf=lambda x: is_single_coil(x),
+        coil_leaves, coil_structure = tree_flatten(
+            self.things[0], is_leaf=lambda x: not hasattr(x, "__len__")
         )
-        coil_leaves = tree_leaves(self.things[0], is_leaf=lambda x: is_single_coil(x))
+        self._num_coils = len(coil_leaves)
 
         # check type
         if isinstance(self._grid, numbers.Integral):
@@ -155,18 +147,18 @@ class _CoilObjective(_Objective):
                     N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
                 ),
                 self.things[0],
-                is_leaf=lambda x: is_single_coil(x),
+                is_leaf=lambda x: not hasattr(x, "__len__"),
             )
         elif isinstance(self._grid, _Grid):
             # map inputted single LinearGrid to structure of inputted coils
-            self._grid = [self._grid] * len(coil_leaves)
+            self._grid = [self._grid] * self._num_coils
             self._grid = tree_unflatten(coil_structure, self._grid)
         else:
             # this case covers an inputted list of grids that matches the size
             # of the inputted coils. Can be a 1D list or nested list.
-            flattened_grid = tree_flatten(
+            flattened_grid = tree_leaves(
                 self._grid, is_leaf=lambda x: isinstance(x, _Grid)
-            )[0]
+            )
             self._grid = tree_unflatten(coil_structure, flattened_grid)
 
         timer = Timer()
@@ -178,7 +170,7 @@ class _CoilObjective(_Objective):
             lambda x, y: get_transforms(self._data_keys, obj=x, grid=y),
             self.things[0],
             self._grid,
-            is_leaf=lambda x: is_single_coil(x),
+            is_leaf=lambda x: not hasattr(x, "__len__"),
         )
 
         get_dim_f_and_weights(self._grid)
@@ -211,7 +203,7 @@ class _CoilObjective(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._scales = compute_scaling_factors(coil_leaves[0])
+            self._scales = [compute_scaling_factors(coil) for coil in coil_leaves]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -230,6 +222,7 @@ class _CoilObjective(_Objective):
         -------
         f : float or array of floats
             Coil length.
+
         """
         if constants is None:
             constants = self._constants
@@ -284,6 +277,7 @@ class CoilLength(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+
     """
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
@@ -332,25 +326,13 @@ class CoilLength(_CoilObjective):
             Level of output.
 
         """
-        from desc.coils import CoilSet, _Coil
-
         super().build(use_jit=use_jit, verbose=verbose)
 
-        if self._normalize:
-            self._normalization = self._scales["a"]
-
-        # TODO: repeated code but maybe it's fine
-        flattened_coils = tree_flatten(
-            self._coils,
-            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
-        )[0]
-        flattened_coils = (
-            [flattened_coils[0]]
-            if not isinstance(self._coils, CoilSet)
-            else flattened_coils
-        )
-        self._dim_f = len(flattened_coils)
+        self._dim_f = self._num_coils
         self._constants["quad_weights"] = 1
+
+        if self._normalize:
+            self._normalization = np.mean([scale["a"] for scale in self._scales])
 
     def compute(self, params, constants=None):
         """Compute coil length.
@@ -367,9 +349,10 @@ class CoilLength(_CoilObjective):
         -------
         f : array of floats
             Coil length.
+
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([dat["length"] for dat in data])
         return out
 
@@ -416,6 +399,7 @@ class CoilCurvature(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -466,7 +450,7 @@ class CoilCurvature(_CoilObjective):
         super().build(use_jit=use_jit, verbose=verbose)
 
         if self._normalize:
-            self._normalization = 1 / self._scales["a"]
+            self._normalization = 1 / np.mean([scale["a"] for scale in self._scales])
 
     def compute(self, params, constants=None):
         """Compute coil curvature.
@@ -483,9 +467,10 @@ class CoilCurvature(_CoilObjective):
         -------
         f : array of floats
             1D array of coil curvature values.
+
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["curvature"] for dat in data])
         return out
 
@@ -533,6 +518,7 @@ class CoilTorsion(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -583,7 +569,7 @@ class CoilTorsion(_CoilObjective):
         super().build(use_jit=use_jit, verbose=verbose)
 
         if self._normalize:
-            self._normalization = 1 / self._scales["a"]
+            self._normalization = 1 / np.mean([scale["a"] for scale in self._scales])
 
     def compute(self, params, constants=None):
         """Compute coil torsion.
@@ -600,9 +586,10 @@ class CoilTorsion(_CoilObjective):
         -------
         f : array of floats
             Coil torsion.
+
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["torsion"] for dat in data])
         return out
 
@@ -649,6 +636,7 @@ class CoilCurrentLength(CoilLength):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -697,15 +685,17 @@ class CoilCurrentLength(CoilLength):
         """
         super().build(use_jit=use_jit, verbose=verbose)
 
+        self._dim_f = self._num_coils
+        self._constants["quad_weights"] = 1
+
         if self._normalize:
-            coils = self.things[0]
-            params = tree_flatten(
-                coils.params_dict, is_leaf=lambda x: isinstance(x, dict)
-            )[0]
-            average_current = np.mean([param["current"] for param in params])
-            if not average_current:
-                average_current = 1
-            self._normalization = 1 / (average_current * self._scales["a"])
+            mean_length = np.mean([scale["a"] for scale in self._scales])
+            params = tree_leaves(
+                self.things[0].params_dict, is_leaf=lambda x: isinstance(x, dict)
+            )
+            mean_current = np.mean([np.abs(param["current"]) for param in params])
+            mean_current = np.max((mean_current, 1))
+            self._normalization = mean_current * mean_length
 
     def compute(self, params, constants=None):
         """Compute coil current length (current * length).
@@ -721,9 +711,10 @@ class CoilCurrentLength(CoilLength):
         Returns
         -------
         f : array of floats
+
         """
         lengths = super().compute(params, constants=constants)
-        params = tree_flatten(params, is_leaf=lambda x: isinstance(x, dict))[0]
+        params = tree_leaves(params, is_leaf=lambda x: isinstance(x, dict))
         currents = [param["current"] for param in params]
         out = jnp.asarray(lengths) * jnp.asarray(currents)
         return out
@@ -981,6 +972,7 @@ class ToroidalFlux(_Objective):
         zeta=jnp.array(0.0), NFP=eq.NFP).
     name : str, optional
         Name of the objective function.
+
     """
 
     _coordinates = "rtz"

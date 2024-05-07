@@ -268,7 +268,7 @@ class VMECIO:
         data_quad = eq.compute(
             ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
         )
-        data_axis = eq.compute(["G", "p", "R", "<|B|^2>"], grid=grid_axis)
+        data_axis = eq.compute(["G", "p", "R", "<|B|^2>", "<|B|>"], grid=grid_axis)
         data_lcfs = eq.compute(["G", "I", "R", "Z"], grid=grid_lcfs)
         data_half = eq.compute(
             [
@@ -488,7 +488,7 @@ class VMECIO:
         b0 = file.createVariable("b0", np.float64)
         b0.long_name = "average B_tor on axis"
         b0.units = "T"
-        b0[:] = data_axis["G"][0] / data_axis["R"][0]
+        b0[:] = data_axis["<|B|>"][0]
 
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"

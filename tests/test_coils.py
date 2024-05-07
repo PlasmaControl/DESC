@@ -503,17 +503,17 @@ def test_symmetry_position(DummyCoilSet):
     grid = LinearGrid(N=30)
 
     # check that positions of CoilSets are the same with xyz basis
-    x_sym = coilset_sym._compute_position(basis="xyz", source_grid=grid)
-    x_asym = coilset_asym._compute_position(basis="xyz", source_grid=grid)
-    x_mixed = coilset_mixed._compute_position(basis="xyz", source_grid=grid)
+    x_sym = coilset_sym._compute_position(basis="xyz", grid=grid)
+    x_asym = coilset_asym._compute_position(basis="xyz", grid=grid)
+    x_mixed = coilset_mixed._compute_position(basis="xyz", grid=grid)
 
     np.testing.assert_allclose(x_sym, x_asym)
     np.testing.assert_allclose(x_sym, x_mixed)
 
     # check that positions of CoilSets are the same with rpz basis
-    x_sym = coilset_sym._compute_position(basis="rpz", source_grid=grid)
-    x_asym = coilset_asym._compute_position(basis="rpz", source_grid=grid)
-    x_mixed = coilset_mixed._compute_position(basis="rpz", source_grid=grid)
+    x_sym = coilset_sym._compute_position(basis="rpz", grid=grid)
+    x_asym = coilset_asym._compute_position(basis="rpz", grid=grid)
+    x_mixed = coilset_mixed._compute_position(basis="rpz", grid=grid)
 
     np.testing.assert_allclose(x_sym, x_asym)
     np.testing.assert_allclose(x_sym, x_mixed)

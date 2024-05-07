@@ -728,10 +728,10 @@ class CoilsetMinDistance(_Objective):
             Minimum distance to another coil for each coil in the coilset.
 
         """
-        pts = self._coilset._compute_position(source_grid=self._grid)
+        pts = self._coilset._compute_position(grid=self._grid)
 
         def body(k):
-            # distances between all pts; shape(num_coils,num_nodes,num_nodes)
+            # distances between all pts; shape(ncoils,num_nodes,num_nodes)
             dist = safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
             mask = jnp.ones(self.dim_f).at[k].set(0)[:, None, None]  # exclude same coil
             return jnp.min(dist, where=mask, initial=jnp.inf)

@@ -701,9 +701,7 @@ class CoilsetMinDistance(_Objective):
         self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}
 
         if self._normalize:
-            coils = tree_leaves(
-                self._coilset, is_leaf=lambda x: not hasattr(x, "__len__")
-            )
+            coils = tree_leaves(coilset, is_leaf=lambda x: not hasattr(x, "__len__"))
             scales = [compute_scaling_factors(coil)["a"] for coil in coils]
             self._normalization = np.mean(scales)  # mean length of coils
 

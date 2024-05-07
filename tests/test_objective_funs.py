@@ -56,6 +56,7 @@ from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
+    PlasmaCoilsetMinDistance,
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
@@ -1769,18 +1770,19 @@ class TestComputeScalarResolution:
     ]
     specials = [
         # these require special logic
-        PlasmaVesselDistance,
         BootstrapRedlConsistency,
         BoundaryError,
-        VacuumBoundaryError,
+        CoilCurvature,
+        CoilLength,
+        CoilsetMinDistance,
+        CoilTorsion,
         GenericObjective,
         Omnigenity,
-        CoilLength,
-        CoilTorsion,
-        CoilCurvature,
-        CoilsetMinDistance,
+        PlasmaCoilsetMinDistance,
+        PlasmaVesselDistance,
         QuadraticFlux,
         ToroidalFlux,
+        VacuumBoundaryError,
         # need to avoid blowup near the axis
         MercierStability,
         # don't test these since they depend on what user wants
@@ -2093,17 +2095,18 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
-        PlasmaVesselDistance,
-        ForceBalanceAnisotropic,
         BootstrapRedlConsistency,
         BoundaryError,
-        VacuumBoundaryError,
-        CoilLength,
         CoilCurvature,
+        CoilLength,
         CoilsetMinDistance,
         CoilTorsion,
+        ForceBalanceAnisotropic,
+        PlasmaCoilsetMinDistance,
+        PlasmaVesselDistance,
         QuadraticFlux,
         ToroidalFlux,
+        VacuumBoundaryError,
         # we don't test these since they depend too much on what exactly the user wants
         GenericObjective,
         LinearObjectiveFromUser,

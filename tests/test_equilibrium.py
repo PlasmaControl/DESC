@@ -10,7 +10,7 @@ import pytest
 from desc.__main__ import main
 from desc.backend import sign
 from desc.compute.utils import cross, dot
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import EquilibriaFamily, Equilibrium, contract_equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
@@ -508,3 +508,17 @@ def test_shifted_circle_geometry():
     # Comparing coefficients with their analytical expressions
     np.testing.assert_allclose(gbdrift, gbdrift_an, atol=1.5e-2, rtol=5e-3)
     np.testing.assert_allclose(cvdrift, cvdrift_an, atol=9e-3, rtol=5e-3)
+
+
+def test_contract_equilibrium():
+    """Test contract_equilibrium utility function."""
+    eq = get("HELIOTRON")
+    rho = 0.5
+    eq_half_rho = contract_equilibrium(eq, rho)
+    np.testing.assert_allclose(eq_half_rho.iota(1), eq.iota(rho))
+    np.testing.assert_allclose(eq_half_rho.pressure(1), eq.pressure(rho))
+
+    surf_inner = eq.get_surface_at(rho)
+    np.testing.assert_allclose(surf_inner.R_lmn, eq_half_rho.surface.R_lmn)
+    np.testing.assert_allclose(surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn)
+    np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP)

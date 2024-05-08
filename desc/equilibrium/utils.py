@@ -227,7 +227,8 @@ def contract_equilibrium(eq, inner_rho):
     -------
         eq_inner: New Equilibrium object, contracted from the old one such that
             eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and
-            eq_inner LCFS = eq's rho=inner_rho surface
+            eq_inner LCFS = eq's rho=inner_rho surface.
+            Note that this will not be in force balance, and so must be re-solved.
     """
     # create new profiles for contracted equilibrium
     # pressure
@@ -257,6 +258,5 @@ def contract_equilibrium(eq, inner_rho):
         M_grid=eq.M_grid,
         N_grid=eq.N_grid,
         sym=eq.sym,
-        bdry_mode=eq.bdry_mode,
     )
     return eq_inner

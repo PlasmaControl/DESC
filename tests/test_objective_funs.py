@@ -831,12 +831,13 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_coil_min_distance(self):
-        """Tests coilset minimum distance between coils."""
+        """Tests minimum distance between coils in a coilset."""
 
         def test(coils, mindist, grid=None):
             obj = CoilsetMinDistance(coils, grid=grid)
             obj.build()
             f = obj.compute(params=coils.params_dict)
+            assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
@@ -878,6 +879,73 @@ class TestObjectiveFunction:
         coils_mixed = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
         test(coils_mixed, [0, 0, 0, 0, 1, 0, 1, 2], grid=LinearGrid(zeta=4))
         # TODO: move this coil set to conftest?
+
+    @pytest.mark.unit
+    def test_plasma_coil_min_distance(self):
+        """Tests minimum distance between plasma and a coilset."""
+
+        def test(eq, coils, mindist, plasma_grid=None, coil_grid=None, eq_fixed=False):
+            obj = PlasmaCoilsetMinDistance(
+                eq=eq,
+                coils=coils,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=eq_fixed,
+            )
+            obj.build()
+            f = obj.compute(coils_params=coils.params_dict, eq_params=eq.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, mindist)
+
+        plasma_grid = LinearGrid(M=4, zeta=16)
+        coil_grid = LinearGrid(N=8)
+
+        # planar toroidal coils without symmetry, around fixed circular tokamak
+        R0 = 3
+        a = 1
+        offset = 0.5
+        surf = FourierRZToroidalSurface(
+            R_lmn=np.array([R0, a]),
+            Z_lmn=np.array([0, -a]),
+            modes_R=np.array([[0, 0], [1, 0]]),
+            modes_Z=np.array([[0, 0], [-1, 0]]),
+        )
+        eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
+        coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
+        coils = CoilSet.linspaced_angular(coil, n=8)
+        test(
+            eq,
+            coils,
+            offset,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=True,
+        )
+
+        # planar toroidal coils with symmetry, around unfixed circular tokamak
+        R0 = 5
+        a = 1.5
+        offset = 0.75
+        surf = FourierRZToroidalSurface(
+            R_lmn=np.array([R0, a]),
+            Z_lmn=np.array([0, -a]),
+            modes_R=np.array([[0, 0], [1, 0]]),
+            modes_Z=np.array([[0, 0], [-1, 0]]),
+        )
+        eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
+        coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
+        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils = CoilSet.from_symmetry(coils[1::2], NFP=2, sym=True)
+        test(
+            eq,
+            coils,
+            offset,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=False,
+        )
+
+        # TODO: add more complex test case with a stellarator and/or MixedCoilSet
 
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""

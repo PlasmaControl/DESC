@@ -731,9 +731,10 @@ class CoilsetMinDistance(_Objective):
         )
 
         def body(k):
-            # distances between all pts; shape(ncoils,num_nodes,num_nodes)
+            # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
             dist = safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
-            mask = jnp.ones(self.dim_f).at[k].set(0)[:, None, None]  # exclude same coil
+            # exclude distances between points on the same coil
+            mask = jnp.ones(self.dim_f).at[k].set(0)[:, None, None]
             return jnp.min(dist, where=mask, initial=jnp.inf)
 
         min_dist_per_coil = fori_loop(
@@ -828,6 +829,7 @@ class PlasmaCoilsetMinDistance(_Objective):
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
+        self._eq = eq
         self._plasma_grid = plasma_grid
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
@@ -883,8 +885,8 @@ class PlasmaCoilsetMinDistance(_Objective):
         self._constants = {
             "coilset": coilset,
             "coil_grid": coil_grid,
-            "equil_profiles": eq_profiles,
-            "equil_transforms": eq_transforms,
+            "eq_profiles": eq_profiles,
+            "eq_transforms": eq_transforms,
             "quad_weights": 1.0,
         }
 
@@ -926,12 +928,14 @@ class PlasmaCoilsetMinDistance(_Objective):
         if constants is None:
             constants = self.constants
 
-        coils_coords = constants["coilset"]._compute_position(
+        # coil pts; shape(ncoils,coils_grid.num_nodes,3)
+        coils_pts = constants["coilset"]._compute_position(
             params=coils_params, grid=constants["coil_grid"]
-        )  # shape(ncoils,coils_grid.num_nodes,3)
+        )
 
+        # plasma pts; shape(plasma_grid.num_nodes,3)
         if self._eq_fixed:
-            plasma_coords = constants["plasma_coords"]  # shape(plasma_grid.num_nodes,3)
+            plasma_pts = constants["plasma_coords"]
         else:
             data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
@@ -940,9 +944,20 @@ class PlasmaCoilsetMinDistance(_Objective):
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
-            plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
 
-        return coils_coords - plasma_coords  # FIXME
+        def body(k):
+            # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)
+            dist = safenorm(coils_pts[k][None, :, :] - plasma_pts[:, None, :], axis=-1)
+            return jnp.min(dist, initial=jnp.inf)
+
+        min_dist_per_coil = fori_loop(
+            0,
+            self.dim_f,
+            lambda k, min_dist: min_dist.at[k].set(body(k)),
+            jnp.zeros(self.dim_f),
+        )
+        return min_dist_per_coil
 
 
 class QuadraticFlux(_Objective):

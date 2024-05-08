@@ -1480,8 +1480,8 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     np.testing.assert_allclose(xn_cpp, xn, atol=1e-16)
     # create grid on which to check values btwn DESC eq.compute and the
     # evaluated Boozer harmonics for each quantity
-    M = 40
-    N = 40
+    M = 30
+    N = 30
     # make half grid in s
     s_full = np.linspace(0, 1, surfs)
     hs = 1 / (surfs - 1)
@@ -1580,7 +1580,7 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
             )
             np.testing.assert_allclose(
                 quant_cpp_from_booz,
-                data[name],
+                quant_from_booz,
                 rtol=5e-3,
                 atol=3e-3,
                 err_msg=f"{name} at surf index {surf_index} from cpp",

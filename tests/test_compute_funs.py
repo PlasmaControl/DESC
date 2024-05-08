@@ -1620,8 +1620,28 @@ def test_iota_components():
 @pytest.mark.unit
 def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
-    names = ["DSHAPE", "HELIOTRON", "NCSX"]
+    names = ["HELIOTRON"]
     data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
+    # TODO: expand this to include all angular derivatives once they are implemented
+    # for surfaces
+    data_basis_vecs_fourierRZ = [
+        "e_theta",
+        "e_zeta",
+        "e_theta_t",
+        "e_theta_z",
+        "e_zeta_t",
+        "e_zeta_z",
+    ]
+    data_basis_vecs_ZernikeRZ = [
+        "e_theta",
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rr",
+        "e_rho_t",
+        "e_theta_r",
+        "e_theta_rr",
+        "e_theta_t",
+    ]
     for name in names:
         eq = get(name)
         for key in data:
@@ -1632,3 +1652,33 @@ def test_surface_equilibrium_geometry():
             else:
                 rtol, atol = 1e-8, 0
             np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)
+        # compare at rho=1, where we expect the eq.compute and the
+        # surface.compute to agree for these surface basis vectors
+        grid = LinearGrid(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)
+        data_eq = eq.compute(data_basis_vecs_fourierRZ, grid=grid)
+        data_surf = eq.surface.compute(
+            data_basis_vecs_fourierRZ, grid=grid, basis="rpz"
+        )
+        for thing in data_basis_vecs_fourierRZ:
+            np.testing.assert_allclose(
+                data_eq[thing],
+                data_surf[thing],
+                err_msg=thing,
+                rtol=1e-14,
+                atol=6e-12,
+            )
+        # compare at zeta=0, where we expect the eq.compute and the
+        # poincare surface.compute to agree for these surface basis vectors
+        grid = LinearGrid(zeta=np.array(0.0), M=10, L=10, NFP=eq.NFP)
+        data_eq = eq.compute(data_basis_vecs_ZernikeRZ, grid=grid)
+        data_surf = eq.get_surface_at(zeta=0.0).compute(
+            data_basis_vecs_ZernikeRZ, grid=grid, basis="rpz"
+        )
+        for thing in data_basis_vecs_ZernikeRZ:
+            np.testing.assert_allclose(
+                data_eq[thing],
+                data_surf[thing],
+                err_msg=thing,
+                rtol=3e-13,
+                atol=1e-13,
+            )

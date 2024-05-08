@@ -23,6 +23,7 @@ a surface and computes the normal field strength on that surface.
 
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.DommaschkPotentialField
+    desc.magnetic_fields.MagneticFieldFromUser
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ToroidalMagneticField
     desc.magnetic_fields.VerticalMagneticField

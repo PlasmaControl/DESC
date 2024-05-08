@@ -863,7 +863,7 @@ class TestObjectiveFunction:
         r = 1
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
-        coils_sym = CoilSet.from_symmetry(coils[1::2], NFP=2, sym=True)
+        coils_sym = CoilSet(coils[1::2], NFP=2, sym=True)
         test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGrid(zeta=4))
 
         # mixture of toroidal field coilset, vertical field coilset, and extra coil
@@ -935,7 +935,7 @@ class TestObjectiveFunction:
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
         coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
-        coils = CoilSet.from_symmetry(coils[1::2], NFP=2, sym=True)
+        coils = CoilSet(coils[1::2], NFP=2, sym=True)
         test(
             eq,
             coils,

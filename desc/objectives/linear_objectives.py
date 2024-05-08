@@ -63,7 +63,6 @@ class _FixedObjective(_Objective):
         return target, bounds
 
 
-# Rename to `FixParameters` (plural) instead?
 class FixParameters(_Objective):
     """Fix specific degrees of freedom associated with a given Optimizable thing.
 

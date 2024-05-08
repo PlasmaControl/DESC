@@ -10,7 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp
-from desc.coils import FourierRZCoil
+from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -27,6 +27,7 @@ from desc.objectives import (
     BoundaryError,
     CoilCurvature,
     CoilLength,
+    CoilsetMinDistance,
     CoilTorsion,
     CurrentDensity,
     FixBoundaryR,
@@ -46,6 +47,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
+    PlasmaCoilsetMinDistance,
     PlasmaVesselDistance,
     PrincipalCurvature,
     QuadraticFlux,
@@ -1276,3 +1278,53 @@ def test_quadratic_flux_optimization_with_analytic_field():
     # optimizer should zero out field since that's the easiest way
     # to get to Bnorm = 0
     np.testing.assert_allclose(things[0].B0, 0, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_coilset_geometry_optimization():
+    """Test optimizing coilset for a fixed axisymmetric equilibrium."""
+    # circular tokamak
+    R0 = 4
+    a = 0.75
+    offset = 0.3
+    surf = FourierRZToroidalSurface(
+        R_lmn=np.array([R0, a]),
+        Z_lmn=np.array([0, -a]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+    )
+    eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
+
+    # symmetric coilset with 1 unique coil + 3 virtual coils
+    # initial radius is too small for target plasma-coil distance
+    # initial toroidal position is too close for maximum coil-coil distance
+    coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset / 2])
+    coils = CoilSet.linspaced_angular(coil, angle=np.pi / 8, n=2, endpoint=True)
+    coils = CoilSet(coils[1], NFP=2, sym=True)
+    assert len(coils) == 1
+    assert coils.num_coils == 4
+
+    # optimizing for target coil-plasma distance and maximum coil-coil distance
+    plasma_grid = LinearGrid(M=8, zeta=64)
+    coil_grid = LinearGrid(N=8)
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilsetMinDistance(
+                eq=eq,
+                coils=coils,
+                target=offset,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=True,
+            ),
+            CoilsetMinDistance(coils, target=np.sqrt(2 * R0**2), grid=coil_grid),
+        )
+    )
+    # FIXME: this won't work until PR #956 is merged
+    constraints = ()  # FixParameters(coils, {"current": True})
+    optimizer = Optimizer("scipy-trf")
+    (coils,), _ = optimizer.optimize(
+        things=coils, objective=objective, constraints=constraints, verbose=2
+    )
+    np.testing.assert_allclose(coils[0].r_n, a + offset)
+    # TODO: add check that phi = pi/4

@@ -73,7 +73,8 @@ class FixParameters(_Objective):
     params : nested list of dicts
         Dict keys are the names of parameters to fix (str), and dict values are the
         indices to fix for each corresponding parameter (int array).
-        Use True instead of an int array to fix all indices for that parameter.
+        Use True (False) instead of an int array to fix all (none) of the indices
+        for that parameter.
         Must have the same pytree structure as thing.params_dict.
         The default is to fix all indices of all parameters.
     target : dict of {float, ndarray}, optional

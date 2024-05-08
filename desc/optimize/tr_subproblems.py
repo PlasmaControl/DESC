@@ -204,6 +204,7 @@ def trust_region_step_exact_svd(
         solution minus `trust_radius`".
         """
         denom = s**2 + alpha
+        denom = jnp.where(denom == 0, 1, denom)
         p_norm = jnp.linalg.norm(suf / denom)
         phi = p_norm - trust_radius
         phi_prime = -jnp.sum(suf**2 / denom**3) / p_norm

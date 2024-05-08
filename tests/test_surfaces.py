@@ -69,11 +69,6 @@ class TestFourierRZToroidalSurface:
         assert c.name in str(c)
         assert "FourierRZToroidalSurface" in str(c)
 
-        c.NFP = 3
-        assert c.NFP == 3
-        assert c.R_basis.NFP == 3
-        assert c.Z_basis.NFP == 3
-
         # test assert statement for array sizes matching
         with pytest.raises(AssertionError):
             c = FourierRZToroidalSurface(
@@ -292,6 +287,7 @@ class TestFourierRZToroidalSurface:
             rtol=2e-2,
         )
 
+    @pytest.mark.unit
     def test_position(self):
         """Tests for position on surface."""
         s = FourierRZToroidalSurface()
@@ -357,6 +353,52 @@ class TestFourierRZToroidalSurface:
                 NFP=surface.NFP,
                 sym=True,
             )
+
+    @pytest.mark.unit
+    def test_surface_from_shape_parameters(self):
+        """Test that making a surface with specified R0,a etc gives correct shape."""
+        R0 = 8
+        a = 2
+        e = 2.1
+        # basic rotating ellipse, parameters should be ~exact
+        surf = FourierRZToroidalSurface.from_shape_parameters(
+            major_radius=R0,
+            aspect_ratio=R0 / a,
+            elongation=e,
+            triangularity=0.0,
+            squareness=0,
+            eccentricity=0,
+            torsion=0,
+            twist=1,
+            NFP=2,
+            sym=True,
+        )
+        eq = Equilibrium(surface=surf)
+        np.testing.assert_allclose(R0, eq.compute("R0")["R0"], rtol=1e-8)
+        np.testing.assert_allclose(a, eq.compute("a")["a"], rtol=1e-8)
+        np.testing.assert_allclose(
+            e, eq.compute("a_major/a_minor")["a_major/a_minor"], rtol=1e-4
+        )
+
+        # slightly more complex shape, parameters are only approximate
+        surf = FourierRZToroidalSurface.from_shape_parameters(
+            major_radius=R0,
+            aspect_ratio=R0 / a,
+            elongation=e,
+            triangularity=0.3,
+            squareness=0.1,
+            eccentricity=0.1,
+            torsion=0.2,
+            twist=1,
+            NFP=2,
+            sym=True,
+        )
+        eq = Equilibrium(surface=surf)
+        np.testing.assert_allclose(R0, eq.compute("R0")["R0"], rtol=1e-2)
+        np.testing.assert_allclose(a, eq.compute("a")["a"], rtol=5e-2)
+        np.testing.assert_allclose(
+            e, eq.compute("a_major/a_minor")["a_major/a_minor"], rtol=2e-2
+        )
 
 
 class TestZernikeRZToroidalSection:

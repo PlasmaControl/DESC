@@ -12,7 +12,6 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.profiles import PowerSeriesProfile, SplineProfile, _Profile
-from desc.utils import isnonnegint
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -182,12 +181,6 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis
-
-
-def _assert_nonnegint(x, name=""):
-    assert (x is None) or isnonnegint(
-        x
-    ), f"{name} should be a non-negative integer or None, got {x}"
 
 
 def scale_profile(profile, inner_rho):

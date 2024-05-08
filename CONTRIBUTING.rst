@@ -174,7 +174,7 @@ If the 2nd case is the reason, then you must update the ``master_compute_data.pk
 
    except AssertionError as e:
       error = True
-       print(e)
+      print(e)
 
 with
 
@@ -183,7 +183,7 @@ with
    except AssertionError as e:
       error = False
       update_master_data = True
-       print(e)
+      print(e)
 
 
 -  rerun the test ``pytest tests -k test_compute_everything``, now any compute quantity that is different between the PR and master will be updated with the PR value

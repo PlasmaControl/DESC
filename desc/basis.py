@@ -2116,11 +2116,38 @@ class FiniteElementMesh3D:
 
         for i in range(L - 1):
             for j in range(M - 1):
-                for l in range(N - 1):
+                for k in range(N - 1):
 
-                    # There are MNL tetrahedra in the mesh, we identify each one:
+                    # We know that each rectangular prism in the mesh has 
+                    #six tetrahedra lying in it
 
-                    # Form the tetrahedra, want vertices to have shape (4,3)
+                    # There are MNL rectangular prisms in the grid. 
+                    #Each quad corresponds to ijk
+                    # Pick prism:
+
+                    b_l_1 = j + k * L * M + i * M
+                    b_r_1 = j + 1 + k * L * M + i * M
+                    b_l_2 = j + M + k * L * M + i * M
+                    b_r_2 = j + M + 1 + k * L * M + i * M
+
+                    t_l_1 = j + M * L + k * L * M + i * M
+                    t_r_1 = j + M * L + 1 + k * L * M + i * M
+                    t_l_2 = j + M * L + M + k * L * M + i * M
+                    t_r_2 = j + M * L + M + 1 + k * L * M + i * M
+
+                    # Form the rectangular prisms
+
+                    rectangular_prism_vertices = np.zeros([8, 3])
+                    rectangular_prism_vertices[0] = vertices[b_l_1]
+                    rectangular_prism_vertices[1] = vertices[b_r_1]
+                    rectangular_prism_vertices[2] = vertices[b_l_2]
+                    rectangular_prism_vertices[3] = vertices[b_r_2]
+                    rectangular_prism_vertices[4] = vertices[t_l_1]
+                    rectangular_prism_vertices[5] = vertices[t_r_1]
+                    rectangular_prism_vertices[6] = vertices[t_l_2]
+                    rectangular_prism_vertices[7] = vertices[t_r_2]
+
+                    # Form six tetrahedra out of rectangular prisms
 
                     tetrahedra = []
                     tetrahedron_1_vertices = np.zeros([4, 3])
@@ -2129,8 +2156,6 @@ class FiniteElementMesh3D:
                     tetrahedron_4_vertices = np.zeros([4, 3])
                     tetrahedron_5_vertices = np.zeros([4, 3])
                     tetrahedron_6_vertices = np.zeros([4, 3])
-
-                    # Will use tetrahedra_vertices[0,0] =
 
                     # Grabbing the six tetrahedra in each Rectangular prism:
                     tetrahedron1 = TetrahedronFiniteElement(tetrahedron_1_vertices, K=K)
@@ -2421,8 +2446,8 @@ class FiniteElementMesh2D:
 
         # Setup quadrature points and weights for numerical integration using scikit-fem
         # if K == 1:
-        #     integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
-        #     weights = np.array([1.0])
+        #     Use integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
+        #     Use weights = np.array([1.0])
 
         if K == 1:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
@@ -2433,7 +2458,6 @@ class FiniteElementMesh2D:
                 integration_points[0][0],
             ]
             integration_points = np.vstack([add_row, integration_points])
-            # print(integration_points, integration_points.shape)
 
         if K == 2:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
@@ -2446,7 +2470,7 @@ class FiniteElementMesh2D:
             ]
             integration_points = np.vstack([add_row, integration_points])
             integration_points = np.transpose(integration_points)
-            # print(integration_points, integration_points.shape)
+            # Use print(integration_points, integration_points.shape)
         if K >= 3:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
             weights = weights * 2
@@ -2461,7 +2485,7 @@ class FiniteElementMesh2D:
             ]
             integration_points = np.vstack([add_row, integration_points])
             integration_points = np.transpose(integration_points)
-            # print(integration_points, integration_points.shape)
+            # Use print(integration_points, integration_points.shape)
 
         # Integration points, weights, and number of integration points
 
@@ -2521,7 +2545,7 @@ class FiniteElementMesh2D:
         coordinate_matrix: (rho_theta, Q)
         """
 
-    # Will use triangle_location 
+    # Will use triangle_location
     # and self.find_triangles_corresponding_to_points(rho_theta)[0]
 
     # Will use for i in range(rho_theta.shape[0]):
@@ -2721,6 +2745,7 @@ class TetrahedronFiniteElement:
         """
 
     # Will use eta = self.get_barycentric_coordinates(rho_theta_zeta)
+
 
 class TriangleFiniteElement:
     """Class representing a triangle in a 2D grid of finite elements.
@@ -3345,9 +3370,9 @@ class FiniteElementMesh1D:
         basis = fem.CellBasis(mesh, e)
         vertices = np.ravel(basis.doflocs)
 
-        # K + 1 here so that integral of basis_function * basis_function 
+        # K + 1 here so that integral of basis_function * basis_function
         # is nonsingular, which requires a higher order integration
-        self.nquad = K + 1  
+        self.nquad = K + 1
 
         theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
         self.Theta = theta

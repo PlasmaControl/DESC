@@ -15,12 +15,11 @@ from tests.test_plotting import tol_1d
 from desc.backend import flatnonzero, jnp
 from desc.compute import data_index
 from desc.compute.bounce_integral import (
-    _affine_bijection_forward,
     _filter_not_nan,
     _poly_der,
     _poly_root,
     _poly_val,
-    affine_bijection_reverse,
+    affine_bijection,
     automorphism_arcsin,
     automorphism_sin,
     bounce_integral,
@@ -28,7 +27,7 @@ from desc.compute.bounce_integral import (
     composite_linspace,
     desc_grid_from_field_line_coords,
     get_extrema,
-    grad_affine_bijection_reverse,
+    grad_affine_bijection,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     plot_field_line_with_ripple,
@@ -40,6 +39,12 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.utils import errorif, only1
+
+
+def _affine_bijection_forward(x, a, b):
+    """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
+    y = 2 * (x - a) / (b - a) - 1
+    return y
 
 
 @partial(np.vectorize, signature="(m)->()")
@@ -378,14 +383,14 @@ def test_automorphism():
     a, b = -312, 786
     x = np.linspace(a, b, 10)
     y = _affine_bijection_forward(x, a, b)
-    x_1 = affine_bijection_reverse(y, a, b)
+    x_1 = affine_bijection(y, a, b)
     np.testing.assert_allclose(x_1, x)
     np.testing.assert_allclose(_affine_bijection_forward(x_1, a, b), y)
     np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y, atol=5e-7)
     np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y, atol=5e-7)
 
     np.testing.assert_allclose(
-        grad_affine_bijection_reverse(a, b),
+        grad_affine_bijection(a, b),
         1 / (2 / (b - a)),
     )
     np.testing.assert_allclose(
@@ -462,8 +467,14 @@ def test_bounce_integral_checks():
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
     knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
     grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+    grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
+    data = eq.compute(["iota"], grid=grid_fsa)
+    data = {"iota": grid_desc.copy_data_from_other(data["iota"], grid_fsa)}
     data = eq.compute(
-        ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"], grid=grid_desc, override_grid=False
+        ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
+        grid=grid_desc,
+        override_grid=False,
+        data=data,
     )
     bounce_integrate, spline = bounce_integral(
         data["B^zeta"],
@@ -502,9 +513,9 @@ def _fixed_elliptic(integrand, k, deg):
     x, w = leggauss(deg)
     w = w * grad_automorphism_sin(x)
     x = automorphism_sin(x)
-    Z = affine_bijection_reverse(x, a[..., np.newaxis], b[..., np.newaxis])
+    Z = affine_bijection(x, a[..., np.newaxis], b[..., np.newaxis])
     k = k[..., np.newaxis]
-    quad = np.dot(integrand(Z, k), w) * grad_affine_bijection_reverse(a, b)
+    quad = np.dot(integrand(Z, k), w) * grad_affine_bijection(a, b)
     return quad
 
 

@@ -665,20 +665,14 @@ def plot_field_line_with_ripple(
     return fig, ax
 
 
-def _affine_bijection_forward(x, a, b):
-    """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
-    y = 2 * (x - a) / (b - a) - 1
-    return y
-
-
-def affine_bijection_reverse(x, a, b):
+def affine_bijection(x, a, b):
     """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
     y = (x + 1) / 2 * (b - a) + a
     return y
 
 
-def grad_affine_bijection_reverse(a, b):
-    """Gradient of reverse affine bijection."""
+def grad_affine_bijection(a, b):
+    """Gradient of affine bijection."""
     dy_dx = (b - a) / 2
     return dy_dx
 
@@ -1077,7 +1071,7 @@ def _bounce_quadrature(
 
     # Integrate and complete the change of variable.
     if batched:
-        Z = affine_bijection_reverse(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
+        Z = affine_bijection(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
         result = _interpolatory_quadrature(
             Z,
             w,
@@ -1098,9 +1092,7 @@ def _bounce_quadrature(
 
         def loop(bp):
             bp1, bp2 = bp
-            z = affine_bijection_reverse(
-                x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis]
-            )
+            z = affine_bijection(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
             return None, _interpolatory_quadrature(
                 z,
                 w,
@@ -1120,7 +1112,7 @@ def _bounce_quadrature(
         _, result = imap(loop, (jnp.moveaxis(bp1, -1, 0), jnp.moveaxis(bp2, -1, 0)))
         result = jnp.moveaxis(result, source=0, destination=-1)
 
-    result = result * grad_affine_bijection_reverse(bp1, bp2)
+    result = result * grad_affine_bijection(bp1, bp2)
     assert result.shape == (pitch.shape[0], S, bp1.shape[-1])
     return result
 
@@ -1205,10 +1197,10 @@ def bounce_integral(
     automorphism : (callable, callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
-        The inverse of the supplied automorphism is composed with the affine
-        bijection that maps the bounce points to [-1, 1]. The resulting map
-        defines a change of variable for the bounce integral. The choice made
-        for the automorphism can augment or suppress singularities.
+        The supplied automorphism is composed with the affine bijection that maps
+        [-1, 1] to the bounce points. The resulting map defines a change of
+        variable for the bounce integral. The choice made for the automorphism can
+        augment or suppress singularities.
         Keep this in mind when choosing the quadrature method.
     B_ref : float
         Reference magnetic field strength for normalization.
@@ -1328,8 +1320,7 @@ def bounce_integral(
     if automorphism is not None:
         auto, grad_auto = automorphism
         w = w * grad_auto(x)
-        # Recall x = auto_forward(_affine_bijection_forward(ζ, ζ_b₁, ζ_b₂)).
-        # Apply reverse automorphism to quadrature points.
+        # Recall affine_bijection(auto(x), ζ_b₁, ζ_b₂) = ζ.
         x = auto(x)
 
     def bounce_integrate(integrand, f, pitch, method="akima", batched=True):
@@ -1415,11 +1406,11 @@ def desc_grid_from_field_line_coords(
     eq : Equilibrium
         Equilibrium on which to perform coordinate mapping.
     rho : ndarray
-        Unique flux surface label coordinates.
+        Sorted unique flux surface label coordinates.
     alpha : ndarray
-        Unique field line label coordinates over a constant rho surface.
+        Sorted unique field line label coordinates over a constant rho surface.
     zeta : ndarray
-        Unique field line-following ζ coordinates.
+        Sorted unique field line-following ζ coordinates.
 
     Returns
     -------

@@ -172,19 +172,6 @@ class _Grid(IOAble, ABC):
         # duplicates nodes are scaled down properly regardless of which two columns
         # span the surface.
 
-        # scale areas sum to full area
-        # The following operation is not a general solution to return the weight
-        # removed from the duplicate nodes back to the unique nodes.
-        # (For the 3 predefined grid types this line of code has no effect).
-        # For this reason, duplicates should typically be deleted rather than rescaled.
-        # Note we multiply each column by duplicates^(1/6) to account for the extra
-        # division by duplicates^(1/2) in one of the columns above.
-        if (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum():
-            self._spacing *= (
-                4
-                * np.pi**2
-                / (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum()
-            ) ** (1 / 3)
         return weights
 
     @property
@@ -310,12 +297,22 @@ class _Grid(IOAble, ABC):
     @property
     def spacing(self):
         """ndarray: Node spacing, in (rho,theta,zeta)."""
-        return self.__dict__.setdefault("_spacing", np.array([]).reshape((0, 3)))
+        errorif(
+            not hasattr(self, "_spacing"),
+            AttributeError,
+            "Custom grids must have spacing specified by user.",
+        )
+        return self._spacing
 
     @property
     def weights(self):
         """ndarray: Weight for each node, either exact quadrature or volume based."""
-        return self.__dict__.setdefault("_weights", np.array([]).reshape((0, 3)))
+        errorif(
+            not hasattr(self, "_weights"),
+            AttributeError,
+            "Custom grids must have weights specified by user.",
+        )
+        return self._weights
 
     def __repr__(self):
         """str: string form of the object."""
@@ -487,6 +484,10 @@ class Grid(_Grid):
     ----------
     nodes : ndarray of float, size(num_nodes,3)
         Node coordinates, in (rho,theta,zeta)
+    spacing : ndarray of float, size(num_nodes, 3)
+        Spacing between nodes in each direction.
+    weights : ndarray of float, size(num_nodes, )
+        Quadrature weights for each node.
     sort : bool
         Whether to sort the nodes for use with FFT method.
     spacing : ndarray of shape(num_nodes, 3)
@@ -504,7 +505,7 @@ class Grid(_Grid):
         Parameters
         ----------
         a, b, c : Array, Array, Array
-            Unique values of each coordinate.
+            Sorted unique values of each coordinate.
 
         Returns
         -------
@@ -512,9 +513,10 @@ class Grid(_Grid):
             Meshgrid with indices assigned.
 
         """
-        a, b, c = map(jnp.atleast_1d, (a, b, c))
-        aa, bb, cc = map(jnp.ravel, jnp.meshgrid(a, b, c, indexing="ij"))
-        nodes = jnp.column_stack([aa, bb, cc])
+        a, b, c = jnp.atleast_1d(a, b, c)
+        nodes = jnp.column_stack(
+            list(map(jnp.ravel, jnp.meshgrid(a, b, c, indexing="ij")))
+        )
 
         unique_a_idx = jnp.arange(a.size) * b.size * c.size
         unique_b_idx = jnp.arange(b.size) * c.size
@@ -541,14 +543,32 @@ class Grid(_Grid):
             _inverse_zeta_idx=inverse_c_idx,
         )
 
-    def __init__(self, nodes, sort=False, jitable=False, **kwargs):
+    def __init__(
+        self, nodes, spacing=None, weights=None, sort=False, jitable=False, **kwargs
+    ):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
         self._NFP = 1
         self._sym = False
         self._node_pattern = "custom"
-        self._nodes, self._spacing = self._create_nodes(nodes)
+        self._nodes = self._create_nodes(nodes)
+        if spacing is not None:
+            spacing = (
+                jnp.atleast_2d(jnp.asarray(spacing))
+                .reshape(self.nodes.shape)
+                .astype(float)
+            )
+            self._spacing = spacing
+        if weights is None and spacing is not None:
+            self._weights = self._spacing.prod(axis=1)
+        elif weights is not None:
+            weights = (
+                jnp.atleast_1d(jnp.asarray(weights))
+                .reshape(self.nodes.shape[0])
+                .astype(float)
+            )
+            self._weights = weights
         if sort:
             self._sort_nodes()
         if jitable:
@@ -558,8 +578,6 @@ class Grid(_Grid):
             r = jnp.where(r == 0, 1e-12, r)
             self._nodes = jnp.array([r, t, z]).T
             self._axis = np.array([], dtype=int)
-            # don't do anything fancy with weights
-            self._weights = self._spacing.prod(axis=1)
             # allow for user supplied indices/inverse indices for special cases
             for attr in [
                 "_unique_rho_idx",
@@ -572,7 +590,6 @@ class Grid(_Grid):
                 if attr in kwargs:
                     setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
         else:
-            self._enforce_symmetry()
             self._axis = self._find_axis()
             (
                 self._unique_rho_idx,
@@ -582,12 +599,24 @@ class Grid(_Grid):
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
-            self._weights = self._scale_weights()
 
         self._L = self.num_nodes
         self._M = self.num_nodes
         self._N = self.num_nodes
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
+
+    def _sort_nodes(self):
+        """Sort nodes for use with FFT."""
+        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
+        self._nodes = self.nodes[sort_idx]
+        try:
+            self._spacing = self.spacing[sort_idx]
+        except AttributeError:
+            pass
+        try:
+            self._weights = self.weights[sort_idx]
+        except AttributeError:
+            pass
 
     def _create_nodes(self, nodes):
         """Allow for custom node creation.
@@ -601,8 +630,6 @@ class Grid(_Grid):
         -------
         nodes : ndarray of float, size(num_nodes,3)
             Node coordinates, in (rho,theta,zeta).
-        spacing : ndarray of float, size(num_nodes,3)
-            Node spacing, in (rho,theta,zeta).
 
         """
         nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
@@ -611,12 +638,7 @@ class Grid(_Grid):
         # This may cause the surface_integrals() function to fail recognizing
         # surfaces outside the interval [0, 2pi] as duplicates. However, most
         # surface integral computations are done with LinearGrid anyway.
-        spacing = (  # make weights sum to 4pi^2
-            jnp.ones_like(nodes)
-            * jnp.array([1, 2 * np.pi, 2 * np.pi])
-            / nodes.shape[0] ** (1 / 3)
-        )
-        return nodes, spacing
+        return nodes
 
 
 class LinearGrid(_Grid):

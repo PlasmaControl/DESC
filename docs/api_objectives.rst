@@ -126,7 +126,7 @@ Fixing degrees of freedom
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
-    desc.objectives.FixParameter
+    desc.objectives.FixParameters
 
 
 User defined objectives

@@ -522,3 +522,12 @@ def test_contract_equilibrium():
     np.testing.assert_allclose(surf_inner.R_lmn, eq_half_rho.surface.R_lmn)
     np.testing.assert_allclose(surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn)
     np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP)
+
+    # test |B| and |F|
+    data_keys = ["|B|", "|F|"]
+    contract_grid = LinearGrid(rho=np.array(0, 1.0, 20), M=eq.M, N=eq.N, NFP=eq.NFP)
+    grid = LinearGrid(rho=np.array(0, rho, 20), M=eq.M, N=eq.N, NFP=eq.NFP)
+    contract_data = eq_half_rho.compute(data_keys, grid=contract_grid)
+    data = eq.compute(data_keys, grid=grid)
+    np.testing.assert_allclose(contract_data["|B|"], data["|B|"])
+    np.testing.assert_allclose(contract_data["|F|"], data["|F|"], rtol=1e-4)

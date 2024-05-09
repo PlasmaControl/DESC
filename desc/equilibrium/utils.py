@@ -11,7 +11,9 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
+from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile, _Profile
+from desc.utils import errorif
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -230,6 +232,7 @@ def contract_equilibrium(eq, inner_rho):
             eq_inner LCFS = eq's rho=inner_rho surface.
             Note that this will not be in force balance, and so must be re-solved.
     """
+    errorif(not (inner_rho < 1 and inner_rho > 0), ValueError, "inner_rho should be <1")
     # create new profiles for contracted equilibrium
     # pressure
     pressure = scale_profile(eq.pressure, inner_rho)
@@ -241,6 +244,7 @@ def contract_equilibrium(eq, inner_rho):
         current = scale_profile(eq.current, inner_rho)
 
     surf_inner = eq.get_surface_at(rho=inner_rho)
+    surf_inner.rho = 1.0
     from .equilibrium import Equilibrium
 
     eq_inner = Equilibrium(
@@ -259,4 +263,18 @@ def contract_equilibrium(eq, inner_rho):
         N_grid=eq.N_grid,
         sym=eq.sym,
     )
+    inner_grid = LinearGrid(
+        rho=np.linspace(0, inner_rho, eq.L_grid * 2),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        axis=True,
+    )
+    inner_data = eq.compute(["R", "Z", "lambda"], grid=inner_grid)
+    nodes = inner_grid.nodes
+    nodes[:, 0] = nodes[:, 0] / inner_rho
+    eq_inner.set_initial_guess(
+        nodes, inner_data["R"], inner_data["Z"], inner_data["lambda"]
+    )
+
     return eq_inner

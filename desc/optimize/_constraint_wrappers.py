@@ -681,6 +681,13 @@ class ProximalProjection(ObjectiveFunction):
             if t is self._eq:
                 xi_splits = np.cumsum([self._eq.dimensions[arg] for arg in self._args])
                 p = {arg: xis for arg, xis in zip(self._args, jnp.split(xi, xi_splits))}
+                p.update(  # add in dummy values for missing parameters
+                    {
+                        arg: jnp.zeros_like(xis)
+                        for arg, xis in t.params_dict.items()
+                        if arg not in self._args  # R_lmn, Z_lmn, L_lmn, Ra_n, Za_n
+                    }
+                )
                 params += [p]
             else:
                 params += [t.unpack_params(xi)]

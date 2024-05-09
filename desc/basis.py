@@ -1205,17 +1205,20 @@ class FiniteElementBasis(_FE_Basis):
         if self.L == 0 and self.N == 0:
             # Get all IQ basis functions from each of the points,
             # and most will be zeros at a given point because of local support.
+            # print(t)
+            # exit()
             basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
             basis_functions = np.reshape(basis_functions, (len(t), -1))
             inds = i * self.Q + q
         elif self.N == 0:
             # Tessellate the domain and find the basis functions for theta, zeta
             Rho_Theta = np.array([np.ravel(r), np.ravel(t)]).T
+            # print('Rho, Theta = ', Rho_Theta)
             (
                 intervals,
                 basis_functions,
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
-
+            
             # Sum the basis functions from each triangle node
             basis_functions = np.reshape(basis_functions, (len(t), -1))
             inds = i * self.Q + q
@@ -2393,8 +2396,19 @@ class FiniteElementMesh2D:
             element = fem.ElementTriP1()
 
         else:
-
             element = fem.ElementTriP2()
+            
+        basis = fem.CellBasis(mesh, element)
+        
+        from skfem.helpers import dot
+        @fem.BilinearForm
+        def assembly(u, v, _):
+            return dot(u, v)
+        
+        self.assembly_matrix = assembly.assemble(basis).todense()
+        
+        # Rewrite vertices... not sure if this changes the order?
+        # vertices = basis.doflocs.T
 
         # Will fix this next section later
         # Compute the triangle elements for all 2ML triangles
@@ -2445,11 +2459,11 @@ class FiniteElementMesh2D:
         self.triangles = triangles
 
         # Setup quadrature points and weights for numerical integration using scikit-fem
+        print(fem.quadrature.get_quadrature(element, 2))
         # if K == 1:
-        #     Use integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
-        #     Use weights = np.array([1.0])
-
-        if K == 1:
+        #     integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
+        #     weights = np.array([1.0])
+        if K == 1 or K == 2:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
             weights = weights * 2
             add_row = [
@@ -2459,7 +2473,7 @@ class FiniteElementMesh2D:
             ]
             integration_points = np.vstack([add_row, integration_points])
 
-        if K == 2:
+        if K == 3:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
             weights = weights * 2
             add_row = [
@@ -2471,7 +2485,7 @@ class FiniteElementMesh2D:
             integration_points = np.vstack([add_row, integration_points])
             integration_points = np.transpose(integration_points)
             # Use print(integration_points, integration_points.shape)
-        if K >= 3:
+        if K >= 4:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
             weights = weights * 2
             add_row = [
@@ -3368,6 +3382,13 @@ class FiniteElementMesh1D:
         else:
             e = fem.ElementLineP2()
         basis = fem.CellBasis(mesh, e)
+        
+        from skfem.helpers import dot
+        @fem.BilinearForm
+        def assembly(u, v, _):
+            return dot(u, v)
+        
+        self.assembly_matrix = assembly.assemble(basis).todense()
         vertices = np.ravel(basis.doflocs)
 
         # K + 1 here so that integral of basis_function * basis_function
@@ -3395,6 +3416,8 @@ class FiniteElementMesh1D:
         integration_points = []
         weights = []
         # Ordered these from smallest to largest
+        # print('K = ', K, ' ', fem.quadrature.get_quadrature(e, 1))
+        # exit()
         if self.nquad == 1:
             integration_points = [0.0]
             weights = [2.0]
@@ -3455,7 +3478,9 @@ class FiniteElementMesh1D:
                 v1 = interval.vertices[0]
                 v2 = interval.vertices[1]
                 if v >= v1 and v <= v2:
+                    # print(i, j, v1, v, v2)
                     bfs, _ = interval.get_basis_functions(v)
+                    # print(bfs)
                     basis_functions[i, j, :] = bfs
                     break
         return basis_functions
@@ -3506,6 +3531,7 @@ class FiniteElementMesh1D:
             for i in range(nquad):
                 theta1 = interval.vertices[0]
                 theta2 = interval.vertices[1]
+                # print(i, self.integration_points[i])
                 quadrature_points[q] = (theta2 - theta1) * (
                     self.integration_points[i] + 1
                 ) / 2.0 + theta1

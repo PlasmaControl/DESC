@@ -1072,8 +1072,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
             Surface average of the input over each surface in the grid.
 
         """
-        q = jnp.atleast_1d(q)
-        sqrt_g = jnp.atleast_1d(sqrt_g)
+        q, sqrt_g = jnp.atleast_1d(q, sqrt_g)
         numerator = integrate((sqrt_g * q.T).T)
         # memory optimization to call expand() at most once
         if denominator is None:

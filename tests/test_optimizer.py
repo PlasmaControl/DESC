@@ -27,7 +27,7 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     ForceBalance,
@@ -895,9 +895,7 @@ def test_constrained_AL_lsq():
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
         FixPressure(eq=eq),  # fix pressure profile
-        FixParameter(
-            eq, "i_l", bounds=(eq.i_l * 0.9, eq.i_l * 1.1)
-        ),  # linear inequality
+        FixIota(eq, bounds=(eq.i_l * 0.9, eq.i_l * 1.1)),  # linear inequality
         FixPsi(eq=eq, bounds=(eq.Psi * 0.99, eq.Psi * 1.01)),  # linear inequality
     )
     # some random constraints to keep the shape from getting wacky
@@ -1007,10 +1005,10 @@ def test_optimize_multiple_things_different_order():
         NFP=eq.NFP,
     )
     constraints = (
-        # don't let eq vary
-        FixParameter(eq),
-        # only let the minor radius of the surface vary
-        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+        FixParameters(eq),  # don't let eq vary
+        FixParameters(  # only let the minor radius of the surface vary
+            surf, params={"R_lmn": np.array(surf.R_basis.get_idx(M=0, N=0))}
+        ),
     )
 
     target_dist = 1
@@ -1029,7 +1027,7 @@ def test_optimize_multiple_things_different_order():
     optimizer = Optimizer("lsq-exact")
 
     # ensure it runs when (eq,surf) are passed
-    (eq1, surf1), result = optimizer.optimize(
+    (eq1, surf1), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=15, copy=True
     )
     # ensure surface changed correctly
@@ -1047,10 +1045,10 @@ def test_optimize_multiple_things_different_order():
 
     # fresh start
     constraints = (
-        # don't let eq vary
-        FixParameter(eq),
-        # only let the minor radius of the surface vary
-        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+        FixParameters(eq),  # don't let eq vary
+        FixParameters(  # only let the minor radius of the surface vary
+            surf, params={"R_lmn": np.array(surf.R_basis.get_idx(M=0, N=0))}
+        ),
     )
     obj = PlasmaVesselDistance(
         surface=surf,
@@ -1063,7 +1061,7 @@ def test_optimize_multiple_things_different_order():
     objective = ObjectiveFunction((obj,))
     # ensure it runs when (surf,eq) are passed which is opposite
     # the order of objective.things
-    (surf2, eq2), result = optimizer.optimize(
+    (surf2, eq2), _ = optimizer.optimize(
         (surf, eq), objective, constraints, verbose=3, maxiter=15, copy=True
     )
 
@@ -1087,8 +1085,18 @@ def test_optimize_with_single_constraint():
     eq = Equilibrium()
     optimizer = Optimizer("lsq-exact")
     objectective = ObjectiveFunction(GenericObjective("|B|", eq), use_jit=False)
-    constraints = FixParameter(  # Psi is not constrained
-        eq, ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "c_l"]
+    constraints = FixParameters(
+        eq,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "Rb_lmn": True,
+            "Zb_lmn": True,
+            "p_l": True,
+            "c_l": True,
+            "Psi": False,  # Psi is not constrained
+        },
     )
 
     # test depends on verbose > 0

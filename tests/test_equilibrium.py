@@ -371,6 +371,7 @@ def test_backward_compatible_load_and_resolve():
     eq.solve(maxiter=1, objective=obj)
 
 
+@pytest.mark.unit
 def test_contract_equilibrium():
     """Test contract_equilibrium utility function."""
     eq = get("HELIOTRON")

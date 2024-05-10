@@ -74,6 +74,8 @@ def convert_spectral_to_FE(
 
     """
     # Assume uniform grid
+    t1 = time.time()
+
     N = R_basis.N
     I = Rprime_basis.I_2ML
     Q = Rprime_basis.Q
@@ -82,17 +84,10 @@ def convert_spectral_to_FE(
     nmodes = I * Q  # Number of total basis functions
     mesh = Rprime_basis.mesh
     nquad = mesh.nquad
-    # print(I, Q, L, M)
 
     # Get the quadrature points and reshape things to always be
     # a set of 3D points that can be used with FiniteElementBasis.evaluate()
     quadpoints_mesh = np.array(mesh.return_quadrature_points())
-    # print(quadpoints_mesh, quadpoints_mesh.shape)
-    # from matplotlib import pyplot as plt
-    # plt.figure()
-    # plt.scatter(quadpoints_mesh[:, 0], quadpoints_mesh[:, 1])
-    # plt.show()
-    # print(quadpoints_mesh, quadpoints_mesh.shape)
     if L == 0 and N == 0:
         quadpoints = (
             np.array(
@@ -103,86 +98,41 @@ def convert_spectral_to_FE(
         quadpoints = np.hstack((quadpoints_mesh, np.zeros((I * nquad, 1))))
     else:
         quadpoints = quadpoints_mesh  # transpose here?
-        
-    # print(quadpoints)
-    # print("quadpoints_shape = ", quadpoints.shape)
 
     # Compute the A matrix in Ax = b, should be exactly the same
     # as in the 2D case.
-    t1 = time.time()
-    R_pre_evaluated = R_basis.evaluate(nodes=quadpoints)
-    Z_pre_evaluated = Z_basis.evaluate(nodes=quadpoints)
-    L_pre_evaluated = L_basis.evaluate(nodes=quadpoints)
-    Rprime_pre_evaluated = Rprime_basis.evaluate(nodes=quadpoints)
+    
+    # Actually only need to do this once since assembly matrix is the
+    # same for R, Z, and L variables and same for the Fourier-Zernike basis
     IQ = I * Q
-    print('Rprime = ', Rprime_pre_evaluated, Rprime_pre_evaluated.shape, IQ)
-    # exit()
-    Zprime_pre_evaluated = Zprime_basis.evaluate(nodes=quadpoints)
-    Lprime_pre_evaluated = Lprime_basis.evaluate(nodes=quadpoints)
-    # exit()
+    Fourier_basis_pre_evaluated = R_basis.evaluate(nodes=quadpoints)
+    t2 = time.time()
+    print("Time to evaluate Fourier basis = ", t2 - t1)
 
-    Bjb_Z = mesh.integrate(
+    t1 = time.time()
+    FE_basis_pre_evaluated = Rprime_basis.evaluate(nodes=quadpoints)
+    t2 = time.time()
+    print("Time to evaluate FE basis = ", t2 - t1)
+    t1 = time.time()
+    FE_assembly_matrix = mesh.integrate(
         (
-            Zprime_pre_evaluated[:, np.newaxis, :IQ]
-            * Zprime_pre_evaluated[:, :IQ, np.newaxis]
+            FE_basis_pre_evaluated[:, np.newaxis, :IQ]
+            * FE_basis_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
     ).reshape(IQ, IQ)
-    Bjb_R = mesh.integrate(
-        (
-            Rprime_pre_evaluated[:, np.newaxis, :IQ]
-            * Rprime_pre_evaluated[:, :IQ, np.newaxis]
-        ).reshape(I * nquad, -1)
-    ).reshape(IQ, IQ)
-    # Try uniform integration
-    # rho_uniform = np.linspace(0, 1, L)
-    # theta_uniform = np.linspace(0, 2 * np.pi, M)
-    # quadpoints_uniform = np.array(np.meshgrid(rho_uniform, 
-    #                                  theta_uniform,
-    #                                  np.zeros(1),
-    #                                  indexing='ij')).reshape(3, -1).T
-    # print(quadpoints_uniform.shape)
-    # exit()
-    # print(quadpoints)
-    # print(quadpoints_uniform)
-    # # exit()
-    # drho = rho_uniform[1] - rho_uniform[0]
-    # dtheta = theta_uniform[1] - theta_uniform[0]
-    # Rprime_uniform = Rprime_basis.evaluate(nodes=quadpoints_uniform)
-    # print(Rprime_uniform, quadpoints_uniform.shape)
-    # print(Bjb_R)
-    # exit()
-    # RR = np.array(Rprime_uniform[:, np.newaxis, :IQ] * Rprime_uniform[:, :IQ, np.newaxis])
-    # print(RR.shape)
-    # Bjb_R = (np.sum(RR, axis=0) * drho * dtheta).reshape(IQ, IQ)
-    # Bjb_R = mesh.integrate(
-    #     (
-    #         Rprime_pre_evaluated[:, np.newaxis, :IQ]
-    #         * Rprime_pre_evaluated[:, :IQ, np.newaxis]
-    #     ).reshape(I * nquad, -1)
-    # ).reshape(IQ, IQ)
-    Bjb_L = mesh.integrate(
-        (
-            Lprime_pre_evaluated[:, np.newaxis, :IQ]
-            * Lprime_pre_evaluated[:, :IQ, np.newaxis]
-        ).reshape(I * nquad, -1)
-    ).reshape(IQ, IQ)
-
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)
 
     t1 = time.time()
-
     # Evaluate sum_lmn R_lmn * FourierZernike_lmn
-    R_sum_pre_evaluated = R_pre_evaluated @ np.ravel(R_lmn)
-    Z_sum_pre_evaluated = Z_pre_evaluated @ np.ravel(Z_lmn)
-    L_sum_pre_evaluated = L_pre_evaluated @ np.ravel(L_lmn)
-    # print('here =', R_lmn.shape, Z_lmn.shape, L_lmn.shape)
+    R_sum_pre_evaluated = Fourier_basis_pre_evaluated @ np.ravel(R_lmn)
+    Z_sum_pre_evaluated = Fourier_basis_pre_evaluated @ np.ravel(Z_lmn)
+    L_sum_pre_evaluated = Fourier_basis_pre_evaluated @ np.ravel(L_lmn)
 
     # Multiply FE and summed FourierZernike basis elements
-    ZZ = Z_sum_pre_evaluated[:, np.newaxis] * Zprime_pre_evaluated
-    RR = R_sum_pre_evaluated[:, np.newaxis] * Rprime_pre_evaluated
-    LL = L_sum_pre_evaluated[:, np.newaxis] * Lprime_pre_evaluated
-    # print('here =', RR.shape, ZZ.shape, LL.shape)
+    ZZ = Z_sum_pre_evaluated[:, np.newaxis] * FE_basis_pre_evaluated
+    RR = R_sum_pre_evaluated[:, np.newaxis] * FE_basis_pre_evaluated
+    LL = L_sum_pre_evaluated[:, np.newaxis] * FE_basis_pre_evaluated
 
     Aj_Z = mesh.integrate(
         (ZZ).reshape(I * nquad, -1),
@@ -196,49 +146,25 @@ def convert_spectral_to_FE(
     t2 = time.time()
     print("Time to construct vector b = ", t2 - t1)
 
+    t1 = time.time()
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
     # this linear system of equations. Use a sparse LU because Bjb is
     # generally very sparse because of finite element local support.
     Aj_R = np.array(Aj_R)
     Aj_Z = np.array(Aj_Z)
     Aj_L = np.array(Aj_L)
-    # for i in range(len(Aj_R)):
-    print(mesh.assembly_matrix)
-    print(Bjb_R)
     Rprime_lmn = np.zeros(Aj_R.shape)
     Zprime_lmn = np.zeros(Aj_Z.shape)
     Lprime_lmn = np.zeros(Aj_L.shape)
-    # for i in range(mesh.I_2ML - 1):
-    #     # print(i, Bjb_R[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q])
-    #     Rprime_lmn[i * mesh.nquad: (i + 1) * mesh.nquad] = np.linalg.pinv(
-    #         Bjb_R[i * mesh.nquad: (i + 1) * mesh.nquad, i * mesh.nquad: (i + 1) * mesh.nquad]
-    #         ) @ Aj_R[i * mesh.nquad: (i + 1) * mesh.nquad]
-    #     Zprime_lmn[i * mesh.nquad: (i + 1) * mesh.nquad] = np.linalg.pinv(
-    #         Bjb_Z[i * mesh.nquad: (i + 1) * mesh.nquad, i * mesh.nquad: (i + 1) * mesh.nquad]
-    #         ) @ Aj_Z[i * mesh.nquad: (i + 1) * mesh.nquad]
-    #     Lprime_lmn[i * mesh.nquad: (i + 1) * mesh.nquad] = np.linalg.pinv(
-    #         Bjb_L[i * mesh.nquad: (i + 1) * mesh.nquad, i * mesh.nquad: (i + 1) * mesh.nquad]
-    #         ) @ Aj_L[i * mesh.nquad: (i + 1) * mesh.nquad]
-    Rprime_lmn = np.linalg.inv(Bjb_R) @ Aj_R
-    Zprime_lmn = np.linalg.inv(Bjb_Z) @ Aj_Z
-    Lprime_lmn = np.linalg.inv(Bjb_L) @ Aj_L
-    u, s, v = np.linalg.svd(Bjb_R)
-    # print(Rprime_lmn, Zprime_lmn)
-    # exit()
-    from matplotlib import pyplot as plt 
-    
-    plt.figure()
-    plt.semilogy(s)
-    # plt.show()
-    # lu = splu(Bjb_R)
-    # Rprime = lu.solve(Aj_R)
-    # Rprime_lmn = Rprime.reshape(nmodes)
-    # lu = splu(Bjb_Z)
-    # Zprime = lu.solve(Aj_Z)
-    # Zprime_lmn = Zprime.reshape(nmodes)
-    # lu = splu(Bjb_L)
-    # Lprime = lu.solve(Aj_L)
-    # Lprime_lmn = Lprime.reshape(nmodes)
+
+    # Sparse LU solve since Bjb_R is sparse
+    lu = splu(FE_assembly_matrix)
+    Rprime = lu.solve(Aj_R)
+    Rprime_lmn = Rprime.reshape(nmodes)
+    Zprime = lu.solve(Aj_Z)
+    Zprime_lmn = Zprime.reshape(nmodes)
+    Lprime = lu.solve(Aj_L)
+    Lprime_lmn = Lprime.reshape(nmodes)
     t2 = time.time()
     print("Time to solve Ax = b, ", t2 - t1)
     return Rprime_lmn, Zprime_lmn, Lprime_lmn

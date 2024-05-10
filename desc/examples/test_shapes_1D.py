@@ -13,22 +13,29 @@ Making a single triangle can be done with e.g.,
 import numpy as np
 from matplotlib import pyplot as plt
 
-from desc.basis import (
-    FiniteElementBasis,
-    FourierZernikeBasis,
-)
+from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-L = 2
-M = 100
+M = 4  # Note M > 2 required
 N = 0
-K = 2
+L = 0
+K = 1
+mesh = FiniteElementMesh1D(M, K=K)
+integral = mesh.integrate(np.ones((M * mesh.nquad, 1000)))
+length_total = 0.0
+for interval in mesh.intervals:
+    length_total += interval.length
+assert np.allclose(integral, 2 * np.pi)
 
-# Make a surface in (R, phi=0, Z) plane.
-# Plot original boundary
-theta = np.linspace(0, 2 * np.pi, 400, endpoint=False)
+quadpoints = mesh.return_quadrature_points()
+integral = mesh.integrate(np.array([np.cos(quadpoints)]).T)
+assert np.allclose(integral, 0.0)
+integral = mesh.integrate(np.array([np.cos(quadpoints) ** 2]).T)
+assert np.allclose(integral, np.pi)
 
-# Define the bases
+# Define an interval in theta
+theta = np.linspace(0, 2 * np.pi, endpoint=False)
+# Initialize the FourierZernike bases
 R_basis = FourierZernikeBasis(
     L=L,
     M=M,
@@ -55,23 +62,12 @@ L_indexing = M + 1
 R_lmn = np.zeros((num_modes, 2 * N + 1))
 R_lmn[0, 0] = 2.0
 R_lmn[2, 0] = 1.0
-R_lmn = R_lmn.reshape(-1) 
 Z_lmn = np.zeros((num_modes, 2 * N + 1))
 Z_lmn[0, 0] = 2.0
 Z_lmn[1, 0] = 5.0
-Z_lmn = Z_lmn.reshape(-1)  # num_modes * (2 * N + 1))
+R_lmn = R_lmn.reshape(num_modes * (2 * N + 1))
+Z_lmn = Z_lmn.reshape(num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
-amp = 1
-R_lmn[np.isclose(R_lmn, 0.0)] = (
-    (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
-    * amp
-    / np.arange(1, len(R_lmn[np.isclose(R_lmn, 0.0)]) + 1)
-)
-Z_lmn[np.isclose(Z_lmn, 0.0)] = (
-    (np.random.rand(np.sum(np.isclose(Z_lmn, 0.0))) - 0.5)
-    * amp
-    / np.arange(1, len(R_lmn[np.isclose(Z_lmn, 0.0)]) + 1)
-)
 
 # Set the coefficients in the basis class
 R_basis.R_lmn = R_lmn
@@ -79,23 +75,18 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-L_FE = 2
-rho = np.linspace(0.5, 1, L_FE, endpoint=True)
 nodes = (
-    np.array(np.meshgrid(rho, theta, np.zeros(1), indexing="ij"))
-    .reshape(3, len(theta) * len(rho))
+    np.array(np.meshgrid(np.ones(1), theta, np.zeros(1), indexing="ij"))
+    .reshape(3, len(theta))
     .T
 )
-# print(R_basis.evaluate(nodes=nodes).shape, R_lmn.shape, nodes.shape)
-R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
-Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
-plt.figure(10)
-plt.plot(R, Z, "ro", label="DESC rep")
+R_fourier = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
+Z_fourier = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 
-# print(M, L, N, K)
-Rprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
-Zprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
-Lprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
+# Initialize a FE basis
+Rprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
+Zprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
+Lprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
 
 # Convert to the finite element basis
 Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
@@ -111,13 +102,17 @@ Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
 )
 Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
-
-# Replot the surface in the finite element basis
-nmodes = len(Rprime_basis.modes)
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
-plt.figure(10)
-plt.plot(R, Z, "ko", label="FE rep")
-plt.legend()
+
+# Plot original boundary and difference between Fourier and FE
+# representation of 1D surface in theta
+plt.figure()
+plt.plot(2 + np.cos(theta), 2 + 5 * np.sin(theta))
+plt.plot(R_fourier, Z_fourier, "ro")
+plt.plot(R, Z, "ko")
 plt.grid()
+
+# Plot intervals and basis functions
+mesh.plot_intervals()
 plt.show()

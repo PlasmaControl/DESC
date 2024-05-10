@@ -94,16 +94,20 @@ R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 plt.figure(11)
 plt.plot(R, Z, "ro", label="DESC rep")
+
+# 3D plot not working yet, need to plot 3D points in cylindrical coords
+from mpl_toolkits import mplot3d
+nodes = (
+    np.array(np.meshgrid(rho, theta, zeta, indexing="ij"))
+    .reshape(3, len(rho) * nt ** 2)
+    .T
+)
+R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
+Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
+fig = plt.figure(12)
+ax3 = mplot3d.Axes3D(fig)
+ax3.scatter(R, zeta, Z, label="DESC rep")
 plt.show()
-# nodes = (
-#     np.array(np.meshgrid(rho, theta, zeta, indexing="ij"))
-#     .reshape(3, len(rho) * nt ** 2)
-#     .T
-# )
-# R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
-# Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
-# plt.figure(12)
-# plt.plot(R, Z, "ro", label="DESC rep")
 
 Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
 Zprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)

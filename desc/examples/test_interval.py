@@ -105,6 +105,7 @@ Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+print(R, Z)
 
 # Plot original boundary and difference between Fourier and FE
 # representation of 1D surface in theta

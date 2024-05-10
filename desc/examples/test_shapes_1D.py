@@ -19,15 +19,14 @@ from desc.basis import (
 )
 from desc.geometry import convert_spectral_to_FE
 
-plt.figure()
 L = 2
-M = 2
+M = 100
 N = 0
-K = 1
+K = 2
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
-theta = np.linspace(0, 2 * np.pi, 400, endpoint=True)
+theta = np.linspace(0, 2 * np.pi, 400, endpoint=False)
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -56,22 +55,23 @@ L_indexing = M + 1
 R_lmn = np.zeros((num_modes, 2 * N + 1))
 R_lmn[0, 0] = 2.0
 R_lmn[2, 0] = 1.0
+R_lmn = R_lmn.reshape(-1) 
 Z_lmn = np.zeros((num_modes, 2 * N + 1))
 Z_lmn[0, 0] = 2.0
 Z_lmn[1, 0] = 5.0
-Z_lmn = Z_lmn.reshape(num_modes * (2 * N + 1))
+Z_lmn = Z_lmn.reshape(-1)  # num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
-# amp = 2
-# R_lmn[np.isclose(R_lmn, 0.0)] = (
-#     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
-#     * amp
-#     / np.arange(1, len(R_lmn[np.isclose(R_lmn, 0.0)]) + 1)
-# )
-# Z_lmn[np.isclose(Z_lmn, 0.0)] = (
-#     (np.random.rand(np.sum(np.isclose(Z_lmn, 0.0))) - 0.5)
-#     * amp
-#     / np.arange(1, len(R_lmn[np.isclose(Z_lmn, 0.0)]) + 1)
-# )
+amp = 1
+R_lmn[np.isclose(R_lmn, 0.0)] = (
+    (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
+    * amp
+    / np.arange(1, len(R_lmn[np.isclose(R_lmn, 0.0)]) + 1)
+)
+Z_lmn[np.isclose(Z_lmn, 0.0)] = (
+    (np.random.rand(np.sum(np.isclose(Z_lmn, 0.0))) - 0.5)
+    * amp
+    / np.arange(1, len(R_lmn[np.isclose(Z_lmn, 0.0)]) + 1)
+)
 
 # Set the coefficients in the basis class
 R_basis.R_lmn = R_lmn
@@ -80,7 +80,7 @@ L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
 L_FE = 2
-rho = np.linspace(0.1, 1, L_FE)
+rho = np.linspace(0.5, 1, L_FE, endpoint=True)
 nodes = (
     np.array(np.meshgrid(rho, theta, np.zeros(1), indexing="ij"))
     .reshape(3, len(theta) * len(rho))
@@ -89,10 +89,10 @@ nodes = (
 # print(R_basis.evaluate(nodes=nodes).shape, R_lmn.shape, nodes.shape)
 R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
-print("R_lmn, Z_lmn = ", R_lmn, Z_lmn)
+plt.figure(10)
 plt.plot(R, Z, "ro", label="DESC rep")
 
-print(M, L, N, K)
+# print(M, L, N, K)
 Rprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
 Zprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
 Lprime_basis = FiniteElementBasis(L=L_FE, M=M, N=N, K=K)
@@ -116,6 +116,7 @@ Zprime_basis.Z_lmn = Zprime_lmn
 nmodes = len(Rprime_basis.modes)
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+plt.figure(10)
 plt.plot(R, Z, "ko", label="FE rep")
 plt.legend()
 plt.grid()

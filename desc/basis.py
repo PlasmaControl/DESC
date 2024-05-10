@@ -1219,6 +1219,8 @@ class FiniteElementBasis(_FE_Basis):
                 basis_functions,
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
             
+            print('here =', t, Rho_Theta.shape, basis_functions.shape)
+            # exit()
             # Sum the basis functions from each triangle node
             basis_functions = np.reshape(basis_functions, (len(t), -1))
             inds = i * self.Q + q
@@ -2406,6 +2408,7 @@ class FiniteElementMesh2D:
             return dot(u, v)
         
         self.assembly_matrix = assembly.assemble(basis).todense()
+        print(self.assembly_matrix)
         
         # Rewrite vertices... not sure if this changes the order?
         # vertices = basis.doflocs.T
@@ -2459,11 +2462,14 @@ class FiniteElementMesh2D:
         self.triangles = triangles
 
         # Setup quadrature points and weights for numerical integration using scikit-fem
-        print(fem.quadrature.get_quadrature(element, 2))
+        # print(fem.quadrature.get_quadrature(element, 2))
         # if K == 1:
         #     integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
         #     weights = np.array([1.0])
-        if K == 1 or K == 2:
+        
+        # K = 1 still requires quadrature rule with 3 points so that the 
+        # assembly matrix integrals are nonsingular
+        if K == 1:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
             weights = weights * 2
             add_row = [
@@ -2472,20 +2478,22 @@ class FiniteElementMesh2D:
                 integration_points[0][0],
             ]
             integration_points = np.vstack([add_row, integration_points])
-
-        if K == 3:
-            [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
-            weights = weights * 2
-            add_row = [
-                integration_points[0][0],
-                integration_points[0][1],
-                integration_points[0][1],
-                integration_points[0][2],
-            ]
-            integration_points = np.vstack([add_row, integration_points])
-            integration_points = np.transpose(integration_points)
+        # if K == 2:
+        #     [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
+        #     weights = weights * 2
+        #     add_row = [
+        #         integration_points[0][0],
+        #         integration_points[0][1],
+        #         integration_points[0][1],
+        #         integration_points[0][2],
+        #     ]
+        #     integration_points = np.vstack([add_row, integration_points])
+        #     integration_points = np.transpose(integration_points)
             # Use print(integration_points, integration_points.shape)
-        if K >= 4:
+            
+        # K >= 2 appears to need pretty high-order quadrature rule for
+        # assembly matrix integrals to be nonsingular
+        if K >= 2:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
             weights = weights * 2
             add_row = [
@@ -2597,7 +2605,7 @@ class FiniteElementMesh2D:
             triangle_indices.
         """
         triangle_indices = np.zeros(rho_theta.shape[0])
-        basis_functions = np.zeros((rho_theta.shape[0], rho_theta.shape[0] * self.Q))
+        basis_functions = np.zeros((rho_theta.shape[0], self.I_2ML * self.Q))
         for i in range(rho_theta.shape[0]):
             v = rho_theta[i, :]
             for j, triangle in enumerate(self.triangles):
@@ -2608,9 +2616,10 @@ class FiniteElementMesh2D:
                 b = -(np.cross(v, v2) - np.cross(v1, v2)) / np.cross(v2, v3)
                 if a >= 0 and b >= 0 and (a + b) <= 1:
                     triangle_indices[i] = j
-                    basis_functions[i, i * self.Q : (i + 1) * self.Q], _ = (
+                    basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
                         triangle.get_basis_functions(v.reshape(1, 2))
                     )
+                    # print(i, j, v, basis_functions[i, j * self.Q : (j + 1) * self.Q])
                     break  # found the right triangle, so break out of j loop
         return triangle_indices, basis_functions
 
@@ -3389,6 +3398,7 @@ class FiniteElementMesh1D:
             return dot(u, v)
         
         self.assembly_matrix = assembly.assemble(basis).todense()
+        print(self.assembly_matrix)
         vertices = np.ravel(basis.doflocs)
 
         # K + 1 here so that integral of basis_function * basis_function

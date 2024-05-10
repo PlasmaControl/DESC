@@ -82,6 +82,7 @@ def convert_spectral_to_FE(
     nmodes = I * Q  # Number of total basis functions
     mesh = Rprime_basis.mesh
     nquad = mesh.nquad
+    # print(I, Q, L, M)
 
     # Get the quadrature points and reshape things to always be
     # a set of 3D points that can be used with FiniteElementBasis.evaluate()
@@ -103,8 +104,8 @@ def convert_spectral_to_FE(
     else:
         quadpoints = quadpoints_mesh  # transpose here?
         
-    print(quadpoints)
-    print("quadpoints_shape = ", quadpoints.shape)
+    # print(quadpoints)
+    # print("quadpoints_shape = ", quadpoints.shape)
 
     # Compute the A matrix in Ax = b, should be exactly the same
     # as in the 2D case.
@@ -113,11 +114,12 @@ def convert_spectral_to_FE(
     Z_pre_evaluated = Z_basis.evaluate(nodes=quadpoints)
     L_pre_evaluated = L_basis.evaluate(nodes=quadpoints)
     Rprime_pre_evaluated = Rprime_basis.evaluate(nodes=quadpoints)
+    IQ = I * Q
+    print('Rprime = ', Rprime_pre_evaluated, Rprime_pre_evaluated.shape, IQ)
+    # exit()
     Zprime_pre_evaluated = Zprime_basis.evaluate(nodes=quadpoints)
     Lprime_pre_evaluated = Lprime_basis.evaluate(nodes=quadpoints)
     # exit()
-    IQ = I * Q
-    print('Rprime = ', Rprime_pre_evaluated)
 
     Bjb_Z = mesh.integrate(
         (
@@ -171,13 +173,16 @@ def convert_spectral_to_FE(
     t1 = time.time()
 
     # Evaluate sum_lmn R_lmn * FourierZernike_lmn
-    R_sum_pre_evaluated = R_pre_evaluated @ R_lmn
-    Z_sum_pre_evaluated = Z_pre_evaluated @ Z_lmn
-    L_sum_pre_evaluated = L_pre_evaluated @ L_lmn
+    R_sum_pre_evaluated = R_pre_evaluated @ np.ravel(R_lmn)
+    Z_sum_pre_evaluated = Z_pre_evaluated @ np.ravel(Z_lmn)
+    L_sum_pre_evaluated = L_pre_evaluated @ np.ravel(L_lmn)
+    # print('here =', R_lmn.shape, Z_lmn.shape, L_lmn.shape)
+
     # Multiply FE and summed FourierZernike basis elements
     ZZ = Z_sum_pre_evaluated[:, np.newaxis] * Zprime_pre_evaluated
     RR = R_sum_pre_evaluated[:, np.newaxis] * Rprime_pre_evaluated
     LL = L_sum_pre_evaluated[:, np.newaxis] * Lprime_pre_evaluated
+    # print('here =', RR.shape, ZZ.shape, LL.shape)
 
     Aj_Z = mesh.integrate(
         (ZZ).reshape(I * nquad, -1),
@@ -200,30 +205,31 @@ def convert_spectral_to_FE(
     # for i in range(len(Aj_R)):
     print(mesh.assembly_matrix)
     print(Bjb_R)
-    print(Bjb_Z)
     Rprime_lmn = np.zeros(Aj_R.shape)
     Zprime_lmn = np.zeros(Aj_Z.shape)
     Lprime_lmn = np.zeros(Aj_L.shape)
-    for i in range(mesh.M - 1):
-        # print(i, Bjb_R[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q])
-        Rprime_lmn[i * mesh.Q: (i + 1) * mesh.Q] = np.linalg.pinv(
-            Bjb_R[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q]
-            ) @ Aj_R[i * mesh.Q: (i + 1) * mesh.Q]
-        Zprime_lmn[i * mesh.Q: (i + 1) * mesh.Q] = np.linalg.pinv(
-            Bjb_Z[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q]
-            ) @ Aj_Z[i * mesh.Q: (i + 1) * mesh.Q]
-        Lprime_lmn[i * mesh.Q: (i + 1) * mesh.Q] = np.linalg.pinv(
-            Bjb_L[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q]
-            ) @ Aj_L[i * mesh.Q: (i + 1) * mesh.Q]
-    # Zprime_lmn = np.linalg.pinv(Bjb_Z) @ Aj_Z
-    # Lprime_lmn = np.linalg.pinv(Bjb_L) @ Aj_L
-    u, s, v = np.linalg.svd(Bjb_R[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q])
-    
+    # for i in range(mesh.I_2ML - 1):
+    #     # print(i, Bjb_R[i * mesh.Q: (i + 1) * mesh.Q, i * mesh.Q: (i + 1) * mesh.Q])
+    #     Rprime_lmn[i * mesh.nquad: (i + 1) * mesh.nquad] = np.linalg.pinv(
+    #         Bjb_R[i * mesh.nquad: (i + 1) * mesh.nquad, i * mesh.nquad: (i + 1) * mesh.nquad]
+    #         ) @ Aj_R[i * mesh.nquad: (i + 1) * mesh.nquad]
+    #     Zprime_lmn[i * mesh.nquad: (i + 1) * mesh.nquad] = np.linalg.pinv(
+    #         Bjb_Z[i * mesh.nquad: (i + 1) * mesh.nquad, i * mesh.nquad: (i + 1) * mesh.nquad]
+    #         ) @ Aj_Z[i * mesh.nquad: (i + 1) * mesh.nquad]
+    #     Lprime_lmn[i * mesh.nquad: (i + 1) * mesh.nquad] = np.linalg.pinv(
+    #         Bjb_L[i * mesh.nquad: (i + 1) * mesh.nquad, i * mesh.nquad: (i + 1) * mesh.nquad]
+    #         ) @ Aj_L[i * mesh.nquad: (i + 1) * mesh.nquad]
+    Rprime_lmn = np.linalg.inv(Bjb_R) @ Aj_R
+    Zprime_lmn = np.linalg.inv(Bjb_Z) @ Aj_Z
+    Lprime_lmn = np.linalg.inv(Bjb_L) @ Aj_L
+    u, s, v = np.linalg.svd(Bjb_R)
+    # print(Rprime_lmn, Zprime_lmn)
+    # exit()
     from matplotlib import pyplot as plt 
     
     plt.figure()
     plt.semilogy(s)
-    plt.show()
+    # plt.show()
     # lu = splu(Bjb_R)
     # Rprime = lu.solve(Aj_R)
     # Rprime_lmn = Rprime.reshape(nmodes)

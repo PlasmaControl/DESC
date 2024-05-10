@@ -63,7 +63,6 @@ class _FixedObjective(_Objective):
         return target, bounds
 
 
-# Rename to `FixParameters` (plural) instead?
 class FixParameters(_Objective):
     """Fix specific degrees of freedom associated with a given Optimizable thing.
 
@@ -73,7 +72,9 @@ class FixParameters(_Objective):
         Object whose degrees of freedom are being fixed.
     params : nested list of dicts
         Dict keys are the names of parameters to fix (str), and dict values are the
-        indices to fix for each corresonding parameter (int array).
+        indices to fix for each corresponding parameter (int array).
+        Use True (False) instead of an int array to fix all (none) of the indices
+        for that parameter.
         Must have the same pytree structure as thing.params_dict.
         The default is to fix all indices of all parameters.
     target : dict of {float, ndarray}, optional

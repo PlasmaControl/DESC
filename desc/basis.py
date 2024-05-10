@@ -1,4 +1,5 @@
 """Classes for spectral bases and functions for evaluation."""
+
 import functools
 import warnings
 from abc import ABC, abstractmethod
@@ -6,25 +7,25 @@ from math import factorial
 
 import mpmath
 import numpy as np
+import skfem as fem
 from matplotlib import pyplot as plt
-from scipy.interpolate import BSpline
 
-from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
+from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign, switch
 from desc.io import IOAble
-from desc.utils import flatten_list
+from desc.utils import check_nonnegint, check_posint, flatten_list
 
 __all__ = [
     "PowerSeries",
     "FourierSeries",
-    "Bspline",
     "FiniteElementBasis",
-    "DoubleFiniteElementBasis",
     "DoubleFourierSeries",
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
     "FiniteElementMesh1D",
     "FiniteElementMesh2D",
+    "FiniteElementMesh3D",
+    "ChebyshevPolynomial",
 ]
 
 
@@ -157,8 +158,8 @@ class _Basis(IOAble, ABC):
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -176,30 +177,15 @@ class _Basis(IOAble, ABC):
         """int: Maximum radial resolution."""
         return self.__dict__.setdefault("_L", 0)
 
-    @L.setter
-    def L(self, L):
-        assert int(L) == L, "Basis Resolution must be an integer!"
-        self._L = int(L)
-
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
         return self.__dict__.setdefault("_M", 0)
 
-    @M.setter
-    def M(self, M):
-        assert int(M) == M, "Basis Resolution must be an integer!"
-        self._M = int(M)
-
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
         return self.__dict__.setdefault("_N", 0)
-
-    @N.setter
-    def N(self, N):
-        assert int(N) == N, "Basis Resolution must be an integer!"
-        self._N = int(N)
 
     @property
     def NFP(self):
@@ -215,10 +201,6 @@ class _Basis(IOAble, ABC):
     def modes(self):
         """ndarray: Mode numbers [l,m,n]."""
         return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
-
-    @modes.setter
-    def modes(self, modes):
-        self._modes = modes
 
     @property
     def num_modes(self):
@@ -246,8 +228,7 @@ class _FE_Basis(IOAble, ABC):
     """Basis is an abstract base class for finite-element basis sets."""
 
     _io_attrs_ = [
-        "_L",
-        "_I_2MN",
+        "_I_2ML",
         "_Q",
         "_NFP",
         "_modes",
@@ -268,23 +249,18 @@ class _FE_Basis(IOAble, ABC):
     def _create_idx(self):
         """Create index for use with self.get_idx()."""
         self._idx = {}
-        for idx, (L, I_2MN, Q) in enumerate(self.modes):
-            if L not in self._idx:
-                self._idx[L] = {}
-            if I_2MN not in self._idx[L]:
-                self._idx[L][I_2MN] = {}
-            self._idx[L][I_2MN][Q] = idx
+        for idx, (I_2ML, Q) in enumerate(self.modes):
+            self._idx[I_2ML] = {}
+            self._idx[I_2ML][Q] = idx
 
-    def get_idx(self, L=0, I_2MN=0, Q=0, error=True):
+    def get_idx(self, I_2ML=0, Q=0, error=True):
         """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
         Parameters
         ----------
-        L : int
-            Radial mode number.
-        I_2MN : int
+        I_2ML : int
             Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-            plane. If have (M x N) points in the grid, I_2MN = 2NM.
+            plane. If have (M x N) points in the grid, I_2ML = 2NM.
         Q : int
             Number of basis functions. For order K triangle FE, should be
             q = (K + 1)(K + 2) / 2.
@@ -298,13 +274,11 @@ class _FE_Basis(IOAble, ABC):
 
         """
         try:
-            return self._idx[L][I_2MN][Q]
+            return self._idx[I_2ML][Q]
         except KeyError as e:
             if error:
                 raise ValueError(
-                    "mode ({}, {}, {}) is not in basis {}".format(
-                        L, I_2MN, Q, str(self)
-                    )
+                    "mode ({}, {}) is not in basis {}".format(I_2ML, Q, str(self))
                 ) from e
             else:
                 return np.array([]).astype(int)
@@ -325,7 +299,7 @@ class _FE_Basis(IOAble, ABC):
             node coordinates, in (rho,theta,zeta)
         derivatives : ndarray of int, shape(3,)
             order of derivatives to compute in (rho,theta,zeta)
-        modes : ndarray of in, shape(num_modes,3), optional
+        modes : ndarray of in, shape(num_modes,2), optional
             basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
             whether to workload by only calculating for unique values of nodes, modes
@@ -352,18 +326,18 @@ class _FE_Basis(IOAble, ABC):
 
     @L.setter
     def L(self, L):
-        assert int(L) == L, "Basis Resolution must be an integer!"
+        assert int(L) == L, "Radial Resolution must be an integer!"
         self._L = int(L)
 
     @property
-    def I_2MN(self):
+    def I_2ML(self):
         """int:  Maximum triangle index."""
-        return self.__dict__.setdefault("_I_2MN", 0)
+        return self.__dict__.setdefault("_I_2ML", 0)
 
-    @I_2MN.setter
-    def I_2MN(self, I_2MN):
-        assert int(I_2MN) == I_2MN, "Number of triangles must be an integer!"
-        self._I_2MN = int(I_2MN)
+    @I_2ML.setter
+    def I_2ML(self, I_2ML):
+        assert int(I_2ML) == I_2ML, "Number of triangles must be an integer!"
+        self._I_2ML = int(I_2ML)
 
     @property
     def Q(self):
@@ -407,7 +381,7 @@ class _FE_Basis(IOAble, ABC):
             + str(hex(id(self)))
             + " (L={}, M={}, N={}, NFP={}, sym={})".format(
                 self.L,
-                self.I_2MN,
+                self.I_2ML,
                 self.Q,
                 self.NFP,
                 self.sym,
@@ -431,9 +405,9 @@ class PowerSeries(_Basis):
     """
 
     def __init__(self, L, sym="even"):
-        self.L = L
-        self.M = 0
-        self.N = 0
+        self._L = check_nonnegint(L, "L", False)
+        self._M = 0
+        self._N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -442,7 +416,7 @@ class PowerSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L):
         """Get mode numbers for power series.
 
         Parameters
@@ -475,8 +449,8 @@ class PowerSeries(_Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -520,7 +494,7 @@ class PowerSeries(_Basis):
 
         """
         if L != self.L:
-            self.L = L
+            self._L = check_nonnegint(L, "L", False)
             self._modes = self._get_modes(self.L)
             self._set_up()
 
@@ -544,10 +518,10 @@ class FourierSeries(_Basis):
     """
 
     def __init__(self, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = 0
-        self.N = N
-        self._NFP = NFP
+        self._L = 0
+        self._M = 0
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -555,7 +529,7 @@ class FourierSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, N=0):
+    def _get_modes(self, N):
         """Get mode numbers for Fourier series.
 
         Parameters
@@ -637,162 +611,13 @@ class FourierSeries(_Basis):
             Whether to enforce stellarator symmetry.
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
-            self.N = N
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
-
-
-class DoubleFiniteElementBasis(_FE_Basis):
-    """2D basis set for use on a single flux surface.
-
-    Finite elements (Lagrange polynomials)
-    in both the poloidal and toroidal coordinates.
-
-    Parameters
-    ----------
-    I_2MN : int
-        Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-        plane. If have (M x N) points in the grid, I_2MN = 2NM.
-    Q : int
-        Number of basis functions. For order K triangle FE, should be
-        q = (K + 1)(K + 2) / 2.
-    NFP : int
-        Number of field periods.
-    sym : {``'cos'``, ``'sin'``, ``False``}
-        * ``'cos'`` for cos(m*t-n*z) symmetry
-        * ``'sin'`` for sin(m*t-n*z) symmetry
-        * ``False`` for no symmetry (Default)
-
-    """
-
-    def __init__(self, I_2MN, Q, NFP=1, sym=False):
-        self.L = 0
-        self.I_2MN = I_2MN
-        self.Q = Q
-        self._NFP = NFP
-        self._sym = sym
-        self._modes = self._get_modes(M=self.M, N=self.N)
-
-        super().__init__()
-
-    def _get_modes(self, I=0, Q=0):
-        """Get mode numbers for Lagrange polynomial representation.
-
-        For FE basis, this is trivial because I_2MN = 0, ..., 2NM - 1 and
-        Q = 0, ..., (K + 1)(K + 2) / 2, for a 2D tessellation of a
-        N x M grid and using order K triangle finite element.
-
-        Parameters
-        ----------
-        I_2MN : int
-            Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-            plane. If have (M x N) points in the grid, I_2MN = 2NM.
-        Q : int
-            Number of basis functions. For order K triangle FE, should be
-            Q = (K + 1)(K + 2) / 2.
-
-        Returns
-        -------
-        modes : ndarray of int, shape(num_modes, 3)
-            Array of mode numbers [l,i,q].
-            Each row is one basis function with modes (l,m,n).
-
-        """
-        i = np.arange(I)
-        q = np.arange(Q)
-        i, q = np.meshgrid(i, q)
-        ii = i.reshape((-1, 1), order="F")
-        qq = q.reshape((-1, 1), order="F")
-        z = np.zeros_like(ii)
-        y = np.hstack([z, ii, qq])
-        return y
-
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
-        """Evaluate basis functions at specified nodes.
-
-        Parameters
-        ----------
-        nodes : ndarray of float, size(num_nodes, 3)
-            Node coordinates, in (rho, theta, zeta).
-        derivatives : ndarray of int, shape(num_derivatives, 3)
-            Order of derivatives to compute in (rho, theta, zeta).
-        modes : ndarray of in, shape(num_modes, 3), optional
-            Basis modes to evaluate (if None, full basis is used).
-        unique : bool, optional
-            Whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff.
-
-        Returns
-        -------
-        y : ndarray, shape(num_nodes, num_modes)
-            Basis functions evaluated at nodes.
-
-        """
-        if modes is None:
-            modes = self.modes
-        if derivatives[0] != 0:
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
-        if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
-
-        r, t, z = nodes.T
-        l, m, n = modes.T
-
-        if unique:
-            _, tidx, toutidx = np.unique(
-                t, return_index=True, return_inverse=True, axis=0
-            )
-            _, zidx, zoutidx = np.unique(
-                z, return_index=True, return_inverse=True, axis=0
-            )
-            _, midx, moutidx = np.unique(
-                m, return_index=True, return_inverse=True, axis=0
-            )
-            _, nidx, noutidx = np.unique(
-                n, return_index=True, return_inverse=True, axis=0
-            )
-            t = t[tidx]
-            z = z[zidx]
-            m = m[midx]
-            n = n[nidx]
-
-        poloidal = Bspline(t[:, np.newaxis], m, dt=derivatives[1])
-        toroidal = Bspline(z[:, np.newaxis], n, dt=derivatives[2])
-        if unique:
-            poloidal = poloidal[toutidx][:, moutidx]
-            toroidal = toroidal[zoutidx][:, noutidx]
-
-        return poloidal * toroidal
-
-    def change_resolution(self, I_2MN, Q, NFP=None, sym=None):
-        """Change resolution of the basis to the given resolutions.
-
-        Parameters
-        ----------
-        I_2MN : int
-            Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-            plane. If have (M x N) points in the grid, I_2MN = 2NM.
-        Q : int
-            Number of basis functions. For order K triangle FE, should be
-            q = (K + 1)(K + 2) / 2.
-        NFP : int
-            Number of field periods.
-        sym : bool
-            Whether to enforce stellarator symmetry.
-
-        Returns
-        -------
-        None
-
-        """
-        # Do nothing right now since we need to implement local mesh
-        # refinement here. Global mesh refinement should be done by just
-        # setting I and K to larger values in the input reader
 
 
 class DoubleFourierSeries(_Basis):
@@ -816,10 +641,10 @@ class DoubleFourierSeries(_Basis):
     """
 
     def __init__(self, M, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = 0
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -827,7 +652,7 @@ class DoubleFourierSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, M=0, N=0):
+    def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
 
         Parameters
@@ -933,10 +758,11 @@ class DoubleFourierSeries(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if M != self.M or N != self.N or sym != self.sym:
-            self.M = M
-            self.N = N
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
@@ -965,7 +791,6 @@ class ZernikePolynomial(_Basis):
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
         decreasing size, ending in a triangle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
-        to the bottom of the pyramid, increasing L while keeping M constant,
         giving a "house" shape.
 
         ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
@@ -976,9 +801,9 @@ class ZernikePolynomial(_Basis):
     """
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = 0
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = spectral_indexing
@@ -989,7 +814,7 @@ class ZernikePolynomial(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -1027,9 +852,6 @@ class ZernikePolynomial(_Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -1116,7 +938,7 @@ class ZernikePolynomial(_Basis):
             lm = lm[lmidx]
             m = m[midx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r, lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
 
         if unique:
@@ -1143,8 +965,8 @@ class ZernikePolynomial(_Basis):
 
         """
         if L != self.L or M != self.M or sym != self.sym:
-            self.L = L
-            self.M = M
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
@@ -1175,10 +997,10 @@ class ChebyshevDoubleFourierBasis(_Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False):
-        self.L = L
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -1186,7 +1008,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0, M=0, N=0):
+    def _get_modes(self, L, M, N):
         """Get mode numbers for Chebyshev-Fourier series.
 
         Parameters
@@ -1231,8 +1053,8 @@ class ChebyshevDoubleFourierBasis(_Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -1275,11 +1097,12 @@ class ChebyshevDoubleFourierBasis(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self._L = L
-            self._M = M
-            self._N = N
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
@@ -1288,19 +1111,21 @@ class ChebyshevDoubleFourierBasis(_Basis):
 class FiniteElementBasis(_FE_Basis):
     """3D finite element basis set for analytic functions in a toroidal volume.
 
-    Jacobi polynomials in the radial coordinate (same as Zernike, with m = 0)
-    and B-spline finite element basis in the toroidal & poloidal coordinates
+    Class for making a 1D, 2D, or 3D set of finite elements on the
+    (rho, theta, zeta) grid. 1D finite elements are made on a pure
+    theta grid, and 2D finite elements are made in a toroidal cross-section,
+    i.e. a grid in (rho, theta).
 
     Parameters
     ----------
     L : int
-        Maximum radial resolution. Use L=-1 for default based on M.
+        Number of grid points radially
     M : int
-        Number of grid points poloidally (= number of poloidal basis functions)
+        Number of grid points poloidally
     N : int
-        Number of grid points toroidally ( =number of toroidal basis functions)
+        Number of grid points toroidally
     K : int
-        Order of the finite elements in each triangle.
+        Order of the finite elements in each interval/triangle/tetrahedron.
     NFP : int
         Number of field periods.
     sym : {``'cos'``, ``'sin'``, ``False``}
@@ -1310,57 +1135,44 @@ class FiniteElementBasis(_FE_Basis):
     """
 
     def __init__(self, L, M, N, K=1, NFP=1, sym=False):
-        self.L = max(2, L)
-        if L % 2 != 0:
-            raise ValueError(
-                "L must be an even number for the Zernike polynomials with"
-                "m = 0 to be well-defined at the rho=0 axis"
-            )
+        self.L = L
         self.M = M
         self.N = N
         self.K = K
         self._NFP = NFP
         self._sym = sym
-        if N == 0:
+        if L == 0 and N == 0:
             self.mesh = FiniteElementMesh1D(M, K=K)
-            self.I_2MN = M - 1
-            self.Q = K + 1  # + 1 here if want the constant basis function
-        else:
-            self.mesh = FiniteElementMesh2D(M, N, K=K)
-            self.I_2MN = 2 * (M - 1) * N
+            self.I_2ML = M - 1
+            self.Q = K + 1
+        elif N == 0:
+            self.mesh = FiniteElementMesh2D(L, M, K=K)
+            self.I_2ML = 2 * (M - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) / 2.0)
-        self.nmodes = (self.L + 3) // 2 * self.I_2MN * self.Q
+        else:
+            self.mesh = FiniteElementMesh3D(L, M, N, K=K)
+            self.I_2ML = 6 * (M - 1) * (N - 1) * (L - 1)
+            self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
+        self.nmodes = self.I_2ML * self.Q
         self._modes = self._get_modes()
         super().__init__()
 
     def _get_modes(self):
-        """Get mode numbers for mixed spectral-FE basis functions.
-
-        Parameters
-        ----------
-        L : int
-            Maximum radial resolution.
-        I_2MN : int
-            Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-            plane. If have (M x N) points in the grid, I_2MN = 2NM.
-        Q : int
-            Number of basis functions. For order K triangle FE, should be
-            q = (K + 1)(K + 2) / 2.
+        """Get mode numbers for a pure finite element basis.
 
         Returns
         -------
-        modes : ndarray of int, shape(num_modes,3)
-            Array of mode numbers [l,i,j].
-            Each row is one basis function with modes (l,i,j).
+        modes : ndarray of int, shape(num_modes, 2)
+            Array of mode numbers [i, q].
+            Each row is one basis function with modes (i, q).
 
         """
         lij_mesh = np.meshgrid(
-            np.arange(0, self.L + 1, 2),
-            np.arange(self.I_2MN),
+            np.arange(self.I_2ML),
             np.arange(self.Q),
             indexing="ij",
         )
-        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (3, self.nmodes)).T
+        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (2, self.nmodes)).T
         return np.unique(lij_mesh, axis=0)
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None, n=-1):
@@ -1372,7 +1184,7 @@ class FiniteElementBasis(_FE_Basis):
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
-        modes : ndarray of int, shape(num_modes,3), optional
+        modes : ndarray of int, shape(num_modes,2), optional
             Basis modes to evaluate (if None, full basis is used).
 
         Returns
@@ -1388,40 +1200,40 @@ class FiniteElementBasis(_FE_Basis):
 
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
-        l, i, j = modes.T
-        lm = np.array([l, np.zeros(modes.shape[0])]).T
+        i, q = modes.T
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        # Rescale all the radial basis functions by r ** (n + 1)?
-
-        if self.N > 0:
-            # Tessellate the domain and find the basis functions for theta, zeta
-            Theta, Zeta = np.meshgrid(t, z, indexing="ij")
-            Theta_Zeta = np.array([np.ravel(Theta), np.ravel(Zeta)]).T
-            FE_mesh = FiniteElementMesh2D(M=self.M, N=self.N, K=self.K)
-
-            # Get the q = 0, 1, ..., Q basis functions from each of the points
-            # (theta_i, zeta_i) from t, z arrays
-            intervals, basis_functions = FE_mesh.find_triangles_corresponding_to_points(
-                Theta_Zeta
-            )
-
-            # Sum the basis functions from each triangle node
-            poloidal_toroidal = basis_functions.reshape(
-                Theta.shape[0] * Theta.shape[1], self.Q
-            )[i, j]
-        else:
+        if self.L == 0 and self.N == 0:
             # Get all IQ basis functions from each of the points,
             # and most will be zeros at a given point because of local support.
-            poloidal_toroidal = self.mesh.full_basis_functions_corresponding_to_points(
-                t
-            )
-            print(poloidal_toroidal.shape)
-            poloidal_toroidal = np.reshape(poloidal_toroidal, (len(t), -1))
-            poloidal_toroidal = np.tile(poloidal_toroidal, (self.L + 3) // 2)
-            inds = (l + 1) // 2 * (self.M - 1) * self.Q + i * self.Q + j
+            # print(t)
+            # exit()
+            basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
+            basis_functions = np.reshape(basis_functions, (len(t), -1))
+            inds = i * self.Q + q
+        elif self.N == 0:
+            # Tessellate the domain and find the basis functions for theta, zeta
+            Rho_Theta = np.array([np.ravel(r), np.ravel(t)]).T
+            # print('Rho, Theta = ', Rho_Theta)
+            (
+                intervals,
+                basis_functions,
+            ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
+            
+            # Sum the basis functions from each triangle node
+            basis_functions = np.reshape(basis_functions, (len(t), -1))
+            inds = i * self.Q + q
+        else:
+            Rho, Theta, Zeta = np.meshgrid(r, t, z, indexing="ij")
+            Rho_Theta_Zeta = np.array(
+                [np.ravel(Rho), np.ravel(Theta), np.ravel(Zeta)]
+            ).T
+            (
+                intervals,
+                basis_functions,
+            ) = self.mesh.find_tetrahedron_corresponding_to_points(Rho_Theta_Zeta)
+            inds = i * self.Q + q
 
-        return (radial * poloidal_toroidal)[:, inds]
+        return basis_functions[:, inds]
 
     def change_resolution(self, L, M, N):
         """Change resolution of the basis to the given resolutions.
@@ -1489,10 +1301,10 @@ class FourierZernikeBasis(_Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
@@ -1502,7 +1314,7 @@ class FourierZernikeBasis(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, N, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -1542,9 +1354,6 @@ class FourierZernikeBasis(_Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -1643,7 +1452,7 @@ class FourierZernikeBasis(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r, lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
         if unique:
@@ -1674,15 +1483,108 @@ class FourierZernikeBasis(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self.L = L
-            self.M = M
-            self.N = N
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
+            self._set_up()
+
+
+class ChebyshevPolynomial(_Basis):
+    """Shifted Chebyshev polynomial of the first kind.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+
+    """
+
+    def __init__(self, L):
+        self._L = check_nonnegint(L, "L", False)
+        self._M = 0
+        self._N = 0
+        self._NFP = 1
+        self._sym = False
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L)
+
+        super().__init__()
+
+    def _get_modes(self, L):
+        """Get mode numbers for shifted Chebyshev polynomials of the first kind.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        l = np.arange(L + 1).reshape((-1, 1))
+        z = np.zeros((L + 1, 2))
+        return np.hstack([l, z])
+
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            basis functions evaluated at nodes
+
+        """
+        if modes is None:
+            modes = self.modes
+        if (derivatives[1] != 0) or (derivatives[2] != 0):
+            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        r, t, z = nodes.T
+        l, m, n = modes.T
+
+        radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
+        return radial
+
+    def change_resolution(self, L):
+        """Change resolution of the basis to the given resolution.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+
+        """
+        if L != self.L:
+            self._L = check_nonnegint(L, "L", False)
+            self._modes = self._get_modes(self.L)
             self._set_up()
 
 
@@ -1715,7 +1617,6 @@ def polyder_vec(p, m, exact=False):
 
 
 def _polyder_exact(p, m):
-    factorial = np.math.factorial
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
     order = p.shape[1] - 1
@@ -1733,7 +1634,7 @@ def _polyder_exact(p, m):
 
 @jit
 def _polyder_jax(p, m):
-    p = jnp.atleast_2d(p)
+    p = jnp.atleast_2d(jnp.asarray(p))
     m = jnp.asarray(m).astype(int)
     order = p.shape[1] - 1
     D = jnp.arange(order, -1, -1)
@@ -1792,8 +1693,8 @@ def _polyval_exact(p, x, prec):
 
 @jit
 def _polyval_jax(p, x):
-    p = jnp.atleast_2d(p)
-    x = jnp.atleast_1d(x).flatten()
+    p = jnp.atleast_2d(jnp.asarray(p))
+    x = jnp.atleast_1d(jnp.asarray(x)).flatten()
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
     nx = len(x)  # number of coordinates
@@ -1906,83 +1807,149 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-# @functools.partial(jit, static_argnums=3)
+@custom_jvp
+@jit
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
-    Evaluates basis functions using JAX and a stable
-    evaluation scheme based on jacobi polynomials and
-    binomial coefficients. Generally faster for L>24
-    and differentiable, but slower for low resolution.
+    Calculates Radial part of Zernike Polynomials using Jacobi recursion relation
+    by getting rid of the redundant calculations for appropriate modes.
+    https://en.wikipedia.org/wiki/Jacobi_polynomials#Recurrence_relations
+
+    For the derivatives, the following formula is used with above recursion relation,
+    https://en.wikipedia.org/wiki/Jacobi_polynomials#Derivatives
+
+    Used formulas are also in the zerike_eval.ipynb notebook in docs.
+
+    This function can be made faster. However, JAX reverse mode AD causes problems.
+    In future, we may use vmap() instead of jnp.vectorize() to be able to set dr as
+    static argument, and not calculate every derivative even thoguh not asked.
 
     Parameters
     ----------
-    r : ndarray, shape(N,)
+    r : ndarray, shape(N,) or scalar
         radial coordinates to evaluate basis
-    l : ndarray of int, shape(K,)
+    l : ndarray of int, shape(K,) or integer
         radial mode number(s)
-    m : ndarray of int, shape(K,)
+    m : ndarray of int, shape(K,) or integer
         azimuthal mode number(s)
     dr : int
         order of derivative (Default = 0)
 
     Returns
     -------
-    y : ndarray, shape(N,K)
+    out : ndarray, shape(N,K)
         basis function(s) evaluated at specified points
 
     """
+    dr = jnp.asarray(dr).astype(int)
+
+    branches = [
+        _zernike_radial_vectorized,
+        _zernike_radial_vectorized_d1,
+        _zernike_radial_vectorized_d2,
+        _zernike_radial_vectorized_d3,
+        _zernike_radial_vectorized_d4,
+    ]
+    return switch(dr, branches, r, l, m, dr)
+
+
+@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
+def _zernike_radial_vectorized(r, l, m, dr):
+    """Calculation of Radial part of Zernike polynomials."""
+
+    def body_inner(N, args):
+        alpha, out, P_past = args
+        P_n2 = P_past[0]  # Jacobi at N-2
+        P_n1 = P_past[1]  # Jacobi at N-1
+        P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
+
+        # Calculate Radial part of Zernike for N,alpha
+        result = (-1) ** N * r**alpha * P_n
+        # Check if the calculated values is in the given modes
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
+
+        # Shift past values if needed
+        # For derivative order dx, if N is smaller than 2+dx, then only the initial
+        # value calculated by find_init_jacobi function will be used. So, if you update
+        # P_n's, preceeding values will be wrong.
+        mask = N >= 2
+        P_n2 = jnp.where(mask, P_n1, P_n2)
+        P_n1 = jnp.where(mask, P_n, P_n1)
+        # Form updated P_past matrix
+        P_past = P_past.at[0].set(P_n2)
+        P_past = P_past.at[1].set(P_n1)
+
+        return (alpha, out, P_past)
+
+    def body(alpha, out):
+        # find l values with m values equal to alpha
+        l_alpha = jnp.where(m == alpha, l, 0)
+        # find the maximum among them
+        L_max = jnp.max(l_alpha)
+        # Maximum possible value for n for loop bound
+        N_max = (L_max - alpha) // 2
+
+        # First 2 Jacobi Polynomials (they don't need recursion)
+        # P_past stores last 2 Jacobi polynomials (and required derivatives)
+        # evaluated at given r points
+        P_past = jnp.zeros(2)
+        P_past = P_past.at[0].set(jacobi_poly_single(r_jacobi, 0, alpha, beta=0))
+        # Jacobi for n=1
+        P_past = P_past.at[1].set(jacobi_poly_single(r_jacobi, 1, alpha, beta=0))
+
+        # Loop over every n value
+        _, out, _ = fori_loop(
+            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
+        )
+        return out
+
+    # Make inputs 1D arrays in case they aren't
+    m = jnp.atleast_1d(m)
+    l = jnp.atleast_1d(l)
+
+    # From the vectorization, the overall output will be (r.size, m.size)
+    out = jnp.zeros(m.size)
+    r_jacobi = 1 - 2 * r**2
     m = jnp.abs(m)
-    alpha = m
-    beta = 0
-    n = (l - m) // 2
-    s = (-1) ** n
-    jacobi_arg = 1 - 2 * r**2
-    if dr == 0:
-        out = r**m * _jacobi(n, alpha, beta, jacobi_arg, 0)
-    elif dr == 1:
-        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
-        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
-        out = m * r ** jnp.maximum(m - 1, 0) * f - 4 * r ** (m + 1) * df
-    elif dr == 2:
-        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
-        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
-        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
-        out = (
-            (m - 1) * m * r ** jnp.maximum(m - 2, 0) * f
-            - 4 * (2 * m + 1) * r**m * df
-            + 16 * r ** (m + 2) * d2f
-        )
-    elif dr == 3:
-        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
-        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
-        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
-        d3f = _jacobi(n, alpha, beta, jacobi_arg, 3)
-        out = (
-            (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 3, 0) * f
-            - 12 * m**2 * r ** jnp.maximum(m - 1, 0) * df
-            + 48 * (m + 1) * r ** (m + 1) * d2f
-            - 64 * r ** (m + 3) * d3f
-        )
-    elif dr == 4:
-        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
-        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
-        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
-        d3f = _jacobi(n, alpha, beta, jacobi_arg, 3)
-        d4f = _jacobi(n, alpha, beta, jacobi_arg, 4)
-        out = (
-            (m - 3) * (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 4, 0) * f
-            - 8 * m * (2 * m**2 - 3 * m + 1) * r ** jnp.maximum(m - 2, 0) * df
-            + 48 * (2 * m**2 + 2 * m + 1) * r**m * d2f
-            - 128 * (2 * m + 3) * r ** (m + 2) * d3f
-            + 256 * r ** (m + 4) * d4f
-        )
-    else:
-        raise NotImplementedError(
-            "Analytic radial derivatives of Zernike polynomials for order>4 "
-            + "have not been implemented."
-        )
-    return s * jnp.where((l - m) % 2 == 0, out, 0)
+    n = ((l - m) // 2).astype(int)
+
+    M_max = jnp.max(m)
+    # Loop over every different m value. There is another nested
+    # loop which will execute necessary n values.
+    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
+    return out
+
+
+def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
+    """Evaluate Jacobi for single alpha and n pair."""
+    c = 2 * n + alpha + beta
+    a1 = 2 * n * (c - n) * (c - 2)
+    a2 = (c - 1) * (c * (c - 2) * x + (alpha - beta) * (alpha + beta))
+    a3 = 2 * (n + alpha - 1) * (n + beta - 1) * c
+
+    # Check if a1 is 0, to prevent division by 0
+    a1 = jnp.where(a1 == 0, 1e-6, a1)
+    P_n = (a2 * P_n1 - a3 * P_n2) / a1
+    # Checks for special cases
+    P_n = jnp.where(n < 0, 0, P_n)
+    P_n = jnp.where(n == 0, 1, P_n)
+    P_n = jnp.where(n == 1, (alpha + 1) + (alpha + beta + 2) * (x - 1) / 2, P_n)
+    return P_n
+
+
+@zernike_radial.defjvp
+def _zernike_radial_jvp(x, xdot):
+    (r, l, m, dr) = x
+    (rdot, ldot, mdot, drdot) = xdot
+    f = zernike_radial(r, l, m, dr)
+    df = zernike_radial(r, l, m, dr + 1)
+    # in theory l, m, dr aren't differentiable (they're integers)
+    # but marking them as non-diff argnums seems to cause escaped tracer values.
+    # probably a more elegant fix, but just setting those derivatives to zero seems
+    # to work fine.
+    return f, (df.T * rdot).T + 0 * ldot + 0 * mdot + 0 * drdot
 
 
 def power_coeffs(l):
@@ -2060,45 +2027,6 @@ def chebyshev(r, l, dr=0):
         )
 
 
-# @jit
-def Bspline(theta, i, k=1, dt=0):
-    """Bspline in theta coordinate.
-
-    Parameters
-    ----------
-    theta : ndarray, shape(N,)
-        poloidal/toroidal coordinates to evaluate basis
-    i : ndarray of int, shape(K,)
-        Basis element indices for the basis elements we want to compute
-    k : int
-        Order of the B-spline (Default = 1)
-    dt : int
-        order of derivative (Default = 0)
-    resolution: int
-        Resolution of the overall Bspline mesh (Default = 100)
-
-    Returns
-    -------
-    y : ndarray, shape(N, K)
-        basis function(s) evaluated at specified points
-
-    """
-    if np.all(theta == theta[0, 0]):
-        return np.ones((len(theta), len(i)))
-    B = BSpline(theta[:, 0], np.ones(len(theta)), k, extrapolate="periodic")
-    Bderiv = B.derivative(dt)
-    Bderiv_stacked = np.zeros((len(theta), len(i)))
-    q = 0
-    for ii in i:
-        # Get Bderiv basis element ii from associated knots
-        # and then evaluate it throughout the domain
-        Bderiv_stacked[:, q] = (
-            Bderiv.basis_element(theta[ii : ii + k + 2, 0], extrapolate="True")
-        )(theta[:, 0])
-        q = q + 1
-    return Bderiv_stacked
-
-
 @jit
 def fourier(theta, m, NFP=1, dt=0):
     """Fourier series.
@@ -2127,122 +2055,6 @@ def fourier(theta, m, NFP=1, dt=0):
     return m_abs**dt * jnp.sin(m_abs * theta + shift)
 
 
-@jit
-@jnp.vectorize
-def _binom(n, k):
-    """Binomial coefficient.
-
-    Implementation is only correct for positive integer n,k and n>=k
-
-    Parameters
-    ----------
-    n : int, array-like
-        number of things to choose from
-    k : int, array-like
-        number of things chosen
-
-    Returns
-    -------
-    val : int, float, array-like
-        number of possible combinations
-    """
-    # adapted from scipy:
-    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
-    # scipy/special/orthogonal_eval.pxd#L68
-
-    n, k = map(jnp.asarray, (n, k))
-
-    def _binom_body_fun(i, b_n):
-        b, n = b_n
-        num = n + 1 - i
-        den = i
-        return (b * num / den, n)
-
-    kx = k.astype(int)
-    b, n = fori_loop(1, 1 + kx, _binom_body_fun, (1.0, n))
-    return b
-
-
-@custom_jvp
-@jit
-@jnp.vectorize
-def _jacobi(n, alpha, beta, x, dx=0):
-    """Jacobi polynomial evaluation.
-
-    Implementation is only correct for non-negative integer coefficients,
-    returns 0 otherwise.
-
-    Parameters
-    ----------
-    n : int, array_like
-        Degree of the polynomial.
-    alpha : int, array_like
-        Parameter
-    beta : int, array_like
-        Parameter
-    x : float, array_like
-        Points at which to evaluate the polynomial
-
-    Returns
-    -------
-    P : ndarray
-        Values of the Jacobi polynomial
-    """
-    # adapted from scipy:
-    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
-    # scipy/special/orthogonal_eval.pxd#L144
-
-    def _jacobi_body_fun(kk, d_p_a_b_x):
-        d, p, alpha, beta, x = d_p_a_b_x
-        k = kk + 1.0
-        t = 2 * k + alpha + beta
-        d = (
-            (t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d
-        ) / (2 * (k + alpha + 1) * (k + alpha + beta + 1) * t)
-        p = d + p
-        return (d, p, alpha, beta, x)
-
-    n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
-
-    # coefficient for derivative
-    c = (
-        gammaln(alpha + beta + n + 1 + dx)
-        - dx * jnp.log(2)
-        - gammaln(alpha + beta + n + 1)
-    )
-    c = jnp.exp(c)
-    # taking derivative is same as coeff*jacobi but for shifted n,a,b
-    n -= dx
-    alpha += dx
-    beta += dx
-
-    d = (alpha + beta + 2) * (x - 1) / (2 * (alpha + 1))
-    p = d + 1
-    d, p, alpha, beta, x = fori_loop(
-        0, jnp.maximum(n - 1, 0).astype(int), _jacobi_body_fun, (d, p, alpha, beta, x)
-    )
-    out = _binom(n + alpha, n) * p
-    # should be complex for n<0, but it gets replaced elsewhere so just return 0 here
-    out = jnp.where(n < 0, 0, out)
-    # other edge cases
-    out = jnp.where(n == 0, 1.0, out)
-    out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
-    return c * out
-
-
-@_jacobi.defjvp
-def _jacobi_jvp(x, xdot):
-    (n, alpha, beta, x, dx) = x
-    (ndot, alphadot, betadot, xdot, dxdot) = xdot
-    f = _jacobi(n, alpha, beta, x, dx)
-    df = _jacobi(n, alpha, beta, x, dx + 1)
-    # in theory n, alpha, beta, dx aren't differentiable (they're integers)
-    # but marking them as non-diff argnums seems to cause escaped tracer values.
-    # probably a more elegant fix, but just setting those derivatives to zero seems
-    # to work fine.
-    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
-
-
 def zernike_norm(l, m):
     """Norm of a Zernike polynomial with l, m indexing.
 
@@ -2260,100 +2072,500 @@ def zernike_norm(l, m):
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
 
 
-class FiniteElementMesh2D:
-    """Class representing a 2D mesh in (theta, zeta).
+class FiniteElementMesh3D:
+    """Class representing a 3D mesh in (rho, theta, zeta) using scikit-fem.
 
-    This class represents a set of I_2MN = 2MN triangles obtained by tessellation
-    of a UNIFORM rectangular N x M mesh in the (theta, zeta) plane.
+    Parameters
+    ----------
+    L : int
+        Number of mesh points in the rho direction.
+    M : int
+        Number of mesh points in the theta direction.
+    N:  int
+        Number of mesh points in the zeta direction
+    K: integer
+        The order of the finite elements to use, which gives (K+1)(K+2)(K+3) / 6
+        basis functions.
+    """
+
+    def __init__(self, L, M, N, K=1):
+        self.M = M
+        self.L = L
+        self.N = N
+        self.I_6LMN = 6 * L * M * N  # Considering how to incorporate n_p
+        self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
+        self.K = K
+
+        if K == 1:
+            mesh = fem.MeshTet1.init_tensor(
+                np.linspace(0, 1, L),
+                np.linspace(0, 2 * np.pi, M),
+                np.linspace(0, 2 * np.pi, N),
+            )
+
+        else:
+            mesh = fem.MeshTet2.init_tensor(
+                np.linspace(0, 1, L),
+                np.linspace(0, 2 * np.pi, M),
+                np.linspace(0, 2 * np.pi, N),
+            )
+        vertices = mesh.doflocs
+
+        vertices = vertices.T
+
+        # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
+        tetrahedra = []
+        # Pick four points of tetrahedral elements:
+
+        for i in range(L - 1):
+            for j in range(M - 1):
+                for k in range(N - 1):
+
+                    # We know that each rectangular prism in the mesh has 
+                    #six tetrahedra lying in it
+
+                    # There are MNL rectangular prisms in the grid. 
+                    #Each quad corresponds to ijk
+                    # Pick prism:
+
+                    b_l_1 = j + k * L * M + i * M
+                    b_r_1 = j + 1 + k * L * M + i * M
+                    b_l_2 = j + M + k * L * M + i * M
+                    b_r_2 = j + M + 1 + k * L * M + i * M
+
+                    t_l_1 = j + M * L + k * L * M + i * M
+                    t_r_1 = j + M * L + 1 + k * L * M + i * M
+                    t_l_2 = j + M * L + M + k * L * M + i * M
+                    t_r_2 = j + M * L + M + 1 + k * L * M + i * M
+
+                    # Form the rectangular prisms
+
+                    rectangular_prism_vertices = np.zeros([8, 3])
+                    rectangular_prism_vertices[0] = vertices[b_l_1]
+                    rectangular_prism_vertices[1] = vertices[b_r_1]
+                    rectangular_prism_vertices[2] = vertices[b_l_2]
+                    rectangular_prism_vertices[3] = vertices[b_r_2]
+                    rectangular_prism_vertices[4] = vertices[t_l_1]
+                    rectangular_prism_vertices[5] = vertices[t_r_1]
+                    rectangular_prism_vertices[6] = vertices[t_l_2]
+                    rectangular_prism_vertices[7] = vertices[t_r_2]
+
+                    # Form six tetrahedra out of rectangular prisms
+
+                    tetrahedra = []
+                    tetrahedron_1_vertices = np.zeros([4, 3])
+                    tetrahedron_2_vertices = np.zeros([4, 3])
+                    tetrahedron_3_vertices = np.zeros([4, 3])
+                    tetrahedron_4_vertices = np.zeros([4, 3])
+                    tetrahedron_5_vertices = np.zeros([4, 3])
+                    tetrahedron_6_vertices = np.zeros([4, 3])
+
+                    # Grabbing the six tetrahedra in each Rectangular prism:
+                    tetrahedron1 = TetrahedronFiniteElement(tetrahedron_1_vertices, K=K)
+                    tetrahedron2 = TetrahedronFiniteElement(tetrahedron_2_vertices, K=K)
+                    tetrahedron3 = TetrahedronFiniteElement(tetrahedron_3_vertices, K=K)
+                    tetrahedron4 = TetrahedronFiniteElement(tetrahedron_4_vertices, K=K)
+                    tetrahedron5 = TetrahedronFiniteElement(tetrahedron_5_vertices, K=K)
+                    tetrahedron6 = TetrahedronFiniteElement(tetrahedron_6_vertices, K=K)
+                    tetrahedra.append(tetrahedron1)
+                    tetrahedra.append(tetrahedron2)
+                    tetrahedra.append(tetrahedron3)
+                    tetrahedra.append(tetrahedron4)
+                    tetrahedra.append(tetrahedron5)
+                    tetrahedra.append(tetrahedron6)
+                    self.vertices = vertices
+                    self.tetrahedra = tetrahedra
+
+    def visualize():
+        """Visualize 3D Mesh."""
+        mesh = fem.MeshTet2()
+        from skfem.visuals.matplotlib import draw, draw_mesh3d
+
+        ax = draw(mesh)
+        return draw_mesh3d(mesh, color="pink", ax=ax)
+
+        # Add later visualize().show()
+
+    def get_barycentric_coordinates(self, rho_theta_zeta, K):
+        """Gets the barycentric coordinates, given a mesh in rho, theta, zeta.
+
+        Parameters
+        ----------
+        rho_theta_zeta : 3D ndarray, shape (num_points, 3)
+            Set of points for which we want to find the tetrahedra that
+            they lie inside of in the mesh.
+        K : Order of the finite element
+
+
+        Returns
+        -------
+        coordinate_matrix: Matrix of volume coordinates for mesh
+        """
+        # nodes should be (4,3)
+
+        tetrahedra_location = self.find_tetrahedron_corresponding_to_points(
+            rho_theta_zeta
+        )[0]
+
+        # Initialize coordinate matrix, shape (num_points,4)
+        coordinate_matrix = np.zeros(rho_theta_zeta[0], 4)
+        # Looping through points
+
+        for i in range(rho_theta_zeta.shape[0]):
+            # grab_tetrahedron corresponding to point
+            idx = tetrahedra_location[i]
+            tetrahedron_with_point = self.tetrahedra[idx]
+            nodes = tetrahedron_with_point
+            A = np.ones((4, 4))
+            for j in range(3):
+                for l in range(4):
+                    A[j][l] = nodes[l][j]
+
+            X_vec = np.array(
+                [
+                    [rho_theta_zeta[i][0]],
+                    [rho_theta_zeta[i][1]],
+                    [rho_theta_zeta[i][2]],
+                    [1],
+                ]
+            )
+            coordinate_matrix[i] = np.dot((np.linalg.inv(A)), X_vec)
+
+        return coordinate_matrix
+
+    # Working on basis functions in separate document
+
+    def integrate(self, f):
+        """Integrates a function over the 3D mesh in (rho, theta, zeta).
+
+        This function allows one to integrate any set of functions of rho, theta
+        zeta over the full 3D mesh. Uses numerical quadrature formula for tetrahedra
+        in the barycentric coordinates.
+
+        Parameters
+        ----------
+        f : 3D ndarray, shape ()
+
+        Returns
+        -------
+        integral: 1D ndarray, shape (num_functions)
+            Value of the integral over the mesh for each component of f
+        """
+
+    def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta):
+        """Given a point on the mesh, find which tetrahedron it lies inside.
+
+        Parameters
+        ----------
+        rho_theta_zeta : 3D ndarray, shape (num_points, 3)
+            Set of points for which we want to find the tetrahedra that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        tetrahedra_indices : 1D ndarray, shape (num_points)
+            Set of indices that specify the tetrahedra where each point lies.
+        basis_functions : 2D ndarray, shape (num_points, Q)
+            The basis functions corresponding to the tetrahedra in
+            tetrahedra_indices.
+
+        """
+        tetrahedra_indices = np.zeros(rho_theta_zeta.shape[0])
+        basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
+        for i in range(rho_theta_zeta.shape[0]):
+            v = rho_theta_zeta[i, :]
+            for j, tetrahedron in enumerate(self.tetrahedra):
+                v1 = self.tetrahedra.vertices[0, :]
+                v2 = self.tetrahedra.vertices[1, :]
+                v3 = self.tetrahedra.vertices[2, :]
+                v4 = self.tetrahedra.vertices[3, :]
+                P = self.tetrahedra_indices[i]
+                D0 = np.array(
+                    [
+                        [v1[0], v1[1], v1[2], 1],
+                        [v2[0], v2[1], v2[2], 1],
+                        [v3[0], v3[1], v3[2], 1],
+                        [v4[0], v4[1], v4[2], 1],
+                    ]
+                )
+                D1 = np.array(
+                    [
+                        [P[0], P[1], P[2], 1],
+                        [v2[0], v2[1], v2[2], 1],
+                        [v3[0], v3[1], v3[2], 1],
+                        [v4[0], v4[1], v4[2], 1],
+                    ]
+                )
+                D2 = np.array(
+                    [
+                        [v1[0], v1[1], v1[2], 1],
+                        [P[0], P[1], P[2], 1],
+                        [v3[0], v3[1], v3[2], 1],
+                        [v4[0], v4[1], v4[2], 1],
+                    ]
+                )
+                D3 = np.array(
+                    [
+                        [v1[0], v1[1], v1[2], 1],
+                        [v2[0], v2[1], v2[2], 1],
+                        [P[0], P[1], P[2], 1],
+                        [v4[0], v4[1], v4[2], 1],
+                    ]
+                )
+                D4 = np.array(
+                    [
+                        [v1[0], v1[1], v1[2], 1],
+                        [v2[0], v2[1], v2[2], 1],
+                        [v3[0], v3[1], v3[2], 1],
+                        [P[0], P[1], P[2], 1],
+                    ]
+                )
+
+                Det0 = np.linalg.det(D0)
+                Det1 = np.linalg.det(D1)
+                Det2 = np.linalg.det(D2)
+                Det3 = np.linal.det(D3)
+                Det4 = np.linalg.det(D4)
+
+                # Check whether point lies inside tetrahedra:
+
+                if (
+                    np.sign(Det0) == np.sign(Det1)
+                    and np.sign(Det0) == np.sign(Det2)
+                    and np.sign(Det0) == np.sign(Det3)
+                    and np.sign(Det0) == np.sign(Det4)
+                ):
+                    tetrahedra_indices[i] = j
+                    basis_functions[i, :], _ = self.tetrahedra.get_basis_functions(v)
+        return tetrahedra_indices, basis_functions
+
+
+class FiniteElementMesh2D:
+    """Class representing a 2D mesh in (rho, theta).
+
+    This class represents a set of I_2ML = 2ML triangles obtained by tessellation
+    of a UNIFORM rectangular L x M mesh in the (rho, theta) plane.
     The point of this class is to pre-define all the triangles and their
-    associated basis functions so that, given a new point (theta_i, zeta_i),
+    associated basis functions so that, given a new point (rho_i, theta_i),
     we can quickly return which triangle contains this point & its associated
     basis functions.
 
     Parameters
     ----------
+    L : int
+        Number of mesh points in the rho direction.
     M : int
         Number of mesh points in the theta direction.
-    N : int
-        Number of mesh points in the zeta direction.
     K: integer
-        The order of the finite elements to use, which gives (K+1)(K+2) / 2
-        basis functions.
+        The order of the finite elements to use
     """
 
-    def __init__(self, M, N, K=1):
+    def __init__(self, L, M, K=1):
         self.M = M
-        self.N = N
-        self.I_2MN = 2 * M * N
+        self.L = L
+        self.I_2ML = 2 * (M - 1) * (L - 1)
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
 
-        theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
-        zeta = np.linspace(0, 2 * np.pi, N, endpoint=False)
-        Theta, Zeta = np.meshgrid(theta, zeta, indexing="ij")
-        self.Theta = Theta
-        self.Zeta = Zeta
+        # rho_theta mesh
+        # Go back later to fix visualization
+        # Ensuring 2ML triangles
+        mesh = fem.MeshLine(np.linspace(0, 1, L)) * fem.MeshLine(
+            np.linspace(0, 2 * np.pi, M)
+        )
 
-        # Compute the vertices for all 2NM triangles
-        vertices = np.zeros((2 * N * M, 3, 2))
+        # Turn squares into triangles
+        mesh = mesh.to_meshtri()
+
+        vertices = mesh.doflocs
+
+        # Turning vertices into shape(number of points, number of coordinates)
+        vertices = vertices.T
+
+        # Vertices are enumerated as starting at the bottom, going up M points, and then
+        # starting at the bottom again and repeating this process.
+
+        # Plotting the 2D Mesh
+        from skfem.visuals.matplotlib import draw, draw_mesh2d
+
+        ax = draw(mesh)
+        p = draw_mesh2d(mesh, ax=ax)
+        p.show
+
+        if K == 1:
+            element = fem.ElementTriP1()
+
+        else:
+            element = fem.ElementTriP2()
+            
+        basis = fem.CellBasis(mesh, element)
+        
+        from skfem.helpers import dot
+        @fem.BilinearForm
+        def assembly(u, v, _):
+            return dot(u, v)
+        
+        self.assembly_matrix = assembly.assemble(basis).todense()
+        
+        # Rewrite vertices... not sure if this changes the order?
+        # vertices = basis.doflocs.T
+
+        # Will fix this next section later
+        # Compute the triangle elements for all 2ML triangles
         triangles = []
-        for i in range(M):
-            for j in range(N):
-                # Deal with the periodic boundary conditions...
-                if i + 1 != M and j + 1 != N:
-                    rect_x1 = np.array([Theta[i, j], Zeta[i, j]])
-                    rect_x2 = np.array([Theta[i + 1, j], Zeta[i, j]])
-                    rect_x3 = np.array([Theta[i, j], Zeta[i, j + 1]])
-                    rect_x4 = np.array([Theta[i + 1, j], Zeta[i, j + 1]])
-                elif i + 1 == M and j + 1 != N:
-                    rect_x1 = np.array([Theta[i, j], Zeta[i, j]])
-                    rect_x2 = np.array([2 * np.pi, Zeta[i, j]])
-                    rect_x3 = np.array([Theta[i, j], Zeta[i, j + 1]])
-                    rect_x4 = np.array([2 * np.pi, Zeta[i, j + 1]])
-                elif i + 1 != M and j + 1 == N:
-                    rect_x1 = np.array([Theta[i, j], Zeta[i, j]])
-                    rect_x2 = np.array([Theta[i + 1, j], Zeta[i, j]])
-                    rect_x3 = np.array([Theta[i, j], 2 * np.pi])
-                    rect_x4 = np.array([Theta[i + 1, j], 2 * np.pi])
-                elif i + 1 == M and j + 1 == N:
-                    rect_x1 = np.array([Theta[i, j], Zeta[i, j]])
-                    rect_x2 = np.array([2 * np.pi, Zeta[i, j]])
-                    rect_x3 = np.array([Theta[i, j], 2 * np.pi])
-                    rect_x4 = np.array([2 * np.pi, 2 * np.pi])
+        for i in range(L - 1):
+            for j in range(M - 1):
 
-                # Split the (i, j)-th rectangle into two equal-sized triangles
-                vertices[(i + j * M) * 2, 0, :] = rect_x1
-                vertices[(i + j * M) * 2, 1, :] = rect_x2
-                vertices[(i + j * M) * 2, 2, :] = rect_x3
-                vertices[(i + j * M) * 2 + 1, 0, :] = rect_x4
-                vertices[(i + j * M) * 2 + 1, 1, :] = rect_x3
-                vertices[(i + j * M) * 2 + 1, 2, :] = rect_x2
-                triangle1 = TriangleFiniteElement(vertices[(i + j * M) * 2, :, :], K=K)
-                triangle2 = TriangleFiniteElement(
-                    vertices[(i + j * M) * 2 + 1, :, :], K=K
-                )
+                # Deal with the periodic boundary conditions...??
+
+                # There are ML quadrilaterals in the grid. Each quad corresponds to ij
+                # Pick quad:
+
+                b_l = i + j + 1 + i * (M - 1)
+                b_r = b_l + M
+                t_l = b_l + 1
+                t_r = b_r + 1
+
+                # Form the triangles, want vertices to have shape (3,2)
+
+                triangle_1_vertices = np.zeros([3, 2])
+                triangle_1_vertices[0, 0] = vertices[b_l - 1, 0]
+                triangle_1_vertices[0, 1] = vertices[b_l - 1, 1]
+
+                triangle_1_vertices[1, 0] = vertices[t_l - 1, 0]
+                triangle_1_vertices[1, 1] = vertices[t_l - 1, 1]
+
+                triangle_1_vertices[2, 0] = vertices[b_r - 1, 0]
+                triangle_1_vertices[2, 1] = vertices[b_r - 1, 1]
+
+                triangle_2_vertices = np.zeros([3, 2])
+                triangle_2_vertices[0, 0] = vertices[b_r - 1, 0]
+                triangle_2_vertices[0, 1] = vertices[b_r - 1, 1]
+
+                triangle_2_vertices[1, 0] = vertices[t_l - 1, 0]
+                triangle_2_vertices[1, 1] = vertices[t_l - 1, 1]
+
+                triangle_2_vertices[2, 0] = vertices[t_r - 1, 0]
+                triangle_2_vertices[2, 1] = vertices[t_r - 1, 1]
+
+                print(triangle_1_vertices, triangle_2_vertices)
+
+                # Grabbing the two triangles in each quadrilateral:
+                triangle1 = TriangleFiniteElement(triangle_1_vertices, K=K)
+                triangle2 = TriangleFiniteElement(triangle_2_vertices, K=K)
                 triangles.append(triangle1)
                 triangles.append(triangle2)
         self.vertices = vertices
         self.triangles = triangles
 
-        # Setup quadrature points and weights for numerical integration
-        integration_points = []
-        weights = []
-        if self.K == 1:
-            integration_points.append([1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0])
-            weights.append([1])
-        elif self.K == 2:
-            integration_points.append([1.0 / 2.0, 1.0 / 2.0, 0.0])
-            integration_points.append([1.0 / 2.0, 0.0, 1.0 / 2.0])
-            integration_points.append([0.0, 1.0 / 2.0, 1.0 / 2.0])
-            weights.append([1.0 / 3.0])
-            weights.append([1.0 / 3.0])
-            weights.append([1.0 / 3.0])
+        # Setup quadrature points and weights for numerical integration using scikit-fem
+        print(fem.quadrature.get_quadrature(element, 2))
+        # if K == 1:
+        #     integration_points = np.array([1 / 3, 1 / 3, 1 / 3]).reshape(1, 3)
+        #     weights = np.array([1.0])
+        if K == 1 or K == 2:
+            [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
+            weights = weights * 2
+            add_row = [
+                integration_points[0][1],
+                integration_points[0][0],
+                integration_points[0][0],
+            ]
+            integration_points = np.vstack([add_row, integration_points])
+
+        if K == 3:
+            [integration_points, weights] = fem.quadrature.get_quadrature(element, 3)
+            weights = weights * 2
+            add_row = [
+                integration_points[0][0],
+                integration_points[0][1],
+                integration_points[0][1],
+                integration_points[0][2],
+            ]
+            integration_points = np.vstack([add_row, integration_points])
+            integration_points = np.transpose(integration_points)
+            # Use print(integration_points, integration_points.shape)
+        if K >= 4:
+            [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
+            weights = weights * 2
+            add_row = [
+                integration_points[0][0],
+                integration_points[0][1],
+                integration_points[0][2],
+                integration_points[0][1],
+                integration_points[0][2],
+                integration_points[1][1],
+                integration_points[1][2],
+            ]
+            integration_points = np.vstack([add_row, integration_points])
+            integration_points = np.transpose(integration_points)
+            # Use print(integration_points, integration_points.shape)
+
+        # Integration points, weights, and number of integration points
 
         self.integration_points = np.array(integration_points)
-        self.weights = np.ravel(np.array(weights))
-        self.nquad = len(self.integration_points)
+        self.weights = np.array(weights)
+        self.nquad = self.integration_points.shape[0]
+
+    def get_barycentric_coordinates(self, rho_theta, K=1):
+        """Gets the barycentric coordinates on rho_theta mesh.
+
+        Return the triangle basis functions,
+        evaluated at the 2D rho and theta mesh points.
+
+        Parameters
+        ----------
+        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
+        Coordinates of the original grid, lying inside this triangle.
+
+        Returns
+        -------
+        coordinate_matrix: (rho_theta, Q)
+        """
+        triangle_location = self.find_triangles_corresponding_to_points(rho_theta)[0]
+
+        # Initialize coordinate matrix, shape (num_points,3)
+        coordinate_matrix = np.zeros(rho_theta[0], 3)
+        # Looping through points
+
+        for i in range(rho_theta.shape[0]):
+            # grab triangle corresponding to point
+            idx = triangle_location[i]
+            triangle_with_point = self.triangle[idx]
+            nodes = triangle_with_point
+            A = np.ones((3, 3))
+            for j in range(2):
+                for l in range(3):
+                    A[j][l] = nodes[l][j]
+
+            X_vec = np.array([[rho_theta[i][0]], [rho_theta[i][1]], [1]])
+            coordinate_matrix[i] = np.dot((np.linalg.inv(A)), X_vec)
+
+        return coordinate_matrix
+
+    def get_basis_functions(self, rho_theta, K=1):
+        """Gets the barycentric basis functions on rho_theta mesh.
+
+        Return the triangle basis functions, evaluated at the 2D rho
+        and theta mesh points.
+
+        Parameters
+        ----------
+        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
+        Coordinates of the original grid, lying inside this triangle.
+
+        Returns
+        -------
+        coordinate_matrix: (rho_theta, Q)
+        """
+
+    # Will use triangle_location
+    # and self.find_triangles_corresponding_to_points(rho_theta)[0]
+
+    # Will use for i in range(rho_theta.shape[0]):
+    # grab triangle corresponding to point
+    # Will use idx = triangle_location[i]
+    # Will use   triangle_with_point = self.triangle[idx]
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""
@@ -2367,12 +2579,12 @@ class FiniteElementMesh2D:
                 plt.plot(quadpoints[:, 0], quadpoints[:, 1], "ko")
         plt.show()
 
-    def find_triangles_corresponding_to_points(self, theta_zeta):
+    def find_triangles_corresponding_to_points(self, rho_theta):
         """Given a point on the mesh, find which triangle it lies inside.
 
         Parameters
         ----------
-        theta_zeta : 2D ndarray, shape (num_points, 2)
+        rho_theta : 2D ndarray, shape (num_points, 2)
             Set of points for which we want to find the triangles that
             they lie inside of in the mesh.
 
@@ -2384,19 +2596,22 @@ class FiniteElementMesh2D:
             The basis functions corresponding to the triangles in
             triangle_indices.
         """
-        triangle_indices = np.zeros(theta_zeta.shape[0])
-        basis_functions = np.zeros((theta_zeta.shape[0], self.Q))
-        for i in range(theta_zeta.shape[0]):
-            v = theta_zeta[i, :]
+        triangle_indices = np.zeros(rho_theta.shape[0])
+        basis_functions = np.zeros((rho_theta.shape[0], rho_theta.shape[0] * self.Q))
+        for i in range(rho_theta.shape[0]):
+            v = rho_theta[i, :]
             for j, triangle in enumerate(self.triangles):
                 v1 = triangle.vertices[0, :]
-                v2 = triangle.vertices[1, :]
-                v3 = triangle.vertices[2, :]
+                v2 = triangle.vertices[1, :] - triangle.vertices[0, :]
+                v3 = triangle.vertices[2, :] - triangle.vertices[0, :]
                 a = (np.cross(v, v3) - np.cross(v1, v3)) / np.cross(v2, v3)
                 b = -(np.cross(v, v2) - np.cross(v1, v2)) / np.cross(v2, v3)
                 if a >= 0 and b >= 0 and (a + b) <= 1:
                     triangle_indices[i] = j
-                    basis_functions[i, :], _ = triangle.get_basis_functions(v)
+                    basis_functions[i, i * self.Q : (i + 1) * self.Q], _ = (
+                        triangle.get_basis_functions(v.reshape(1, 2))
+                    )
+                    break  # found the right triangle, so break out of j loop
         return triangle_indices, basis_functions
 
     def return_quadrature_points(self):
@@ -2404,13 +2619,13 @@ class FiniteElementMesh2D:
 
         Returns
         -------
-        quadrature points: 2D ndarray, shape (nquad * 2NM, 2)
-            Points in (theta, zeta) representing the quadrature point
-            locations for integration in barycentric coordinates.
+        quadrature points: 2D ndarray, shape (nquad * 2ML, 2)
+            Points in (rho, theta) representing the quadrature point
+            locations for integration, return in real-space coordinates.
 
         """
         nquad = self.nquad
-        quadrature_points = np.zeros((self.I_2MN * nquad, 2))
+        quadrature_points = np.zeros((self.I_2ML * nquad, 2))
         q = 0
         for triangle in self.triangles:
             for i in range(nquad):
@@ -2432,17 +2647,17 @@ class FiniteElementMesh2D:
         return quadrature_points
 
     def integrate(self, f):
-        """Integrates a function over the 2D mesh in (theta, zeta).
+        """Integrates a function over the 2D mesh in (rho, theta).
 
-        This function allows one to integrate any set of functions of theta,
-        zeta over the full 2D N x M mesh. Uses numerical quadrature
+        This function allows one to integrate any set of functions of rho,
+        theta over the full 2D L x M mesh. Uses numerical quadrature
         formula for triangles in the barycentric coordinates. Note that
         for K = 1, a single-point quadrature in the triangle is adequate.
 
         Parameters
         ----------
-        f : 2D ndarray, shape (nquad * 2NM, num_functions)
-            Vector function defined on the N x M mesh in (theta, zeta)
+        f : 2D ndarray, shape (nquad * 2ML, num_functions)
+            Vector function defined on the L x M mesh in (rho, theta)
             that we would like to integrate component-wise with respect
             to the basis functions. For integration over the barycentric
             coordinates, we need f to be prescribed at the quadrature points
@@ -2461,207 +2676,89 @@ class FiniteElementMesh2D:
             integral = 0.0
         for i, triangle in enumerate(self.triangles):
             integral += np.dot(
-                triangle.area2 * self.weights,
+                abs(triangle.area2) * self.weights,
                 f[i * nquad : (i + 1) * nquad, :],
             )
         return integral / 2.0
 
 
-class FiniteElementMesh1D:
-    """Class representing a 1D mesh in theta.
-
-    This class represents a 1D FE basis coming from a
-    set of M uniform points sampled in theta.
+class TetrahedronFiniteElement:
+    """Class representing a triangle in a 3D grid of finite elements.
 
     Parameters
     ----------
-    M : int
-        Number of mesh points in the theta direction.
+    vertices: array-like, shape(4,3)
+        The four vertices of the triangle in (rho_i,theta_i, zeta_i)
     K: integer
-        The order of the finite elements to use, which gives (K+1)(K+2) / 2
+        The order of the finite elements to use, which gives (K+1)(K+2)(K+3) / 6
         basis functions.
     """
 
-    def __init__(self, M, K=1, nquad=2):
-        self.M = M
-        self.Q = K + 1
+    def __init__(self, vertices, K=1):
+        self.vertices = vertices
+
+        self.Q = int(((K + 1) * (K + 2) * (K + 3)) / 6)
         self.K = K
 
-        # can exactly integrate 2 * nquad - 1 degree polynomials
-        self.nquad = max(nquad, K + 1)
+        # Write something to check whether basis functions vanish at the right spots
 
-        theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
-        self.Theta = theta
+        assert self.nodes.shape[0] == self.Q
 
-        # Compute the basis functions at each node
-        vertices = np.zeros((M - 1, 2))
-        intervals = []
-        for i in range(M - 1):
-            # Deal with the periodic boundary conditions...
-            vertices[i, 0] = theta[i]
-            vertices[i, 1] = theta[i + 1]
-            interval = IntervalFiniteElement(vertices[i, :], K=K)
-            intervals.append(interval)
-
-        # Have M vertices and M-1 intervals
-        self.vertices = vertices
-        self.intervals = intervals
-
-        # Setup quadrature points and weights for numerical integration
-        # Using Gauss-Legendre quadrature
-        integration_points = []
-        weights = []
-        # Ordered these from smallest to largest
-        if self.nquad == 1:
-            integration_points = [0.0]
-            weights = [2.0]
-        elif self.nquad == 2:
-            integration_points = [-1.0 / np.sqrt(3), 1.0 / np.sqrt(3)]
-            weights = [1.0, 1.0]
-        elif self.nquad == 3:
-            integration_points = [-np.sqrt(0.6), 0.0, np.sqrt(0.6)]
-            weights = [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0]
-        elif self.nquad == 4:
-            integration_points = [
-                -np.sqrt(3 + np.sqrt(4.8)) / 7.0,
-                -np.sqrt(3 - np.sqrt(4.8)) / 7.0,
-                np.sqrt(3 - np.sqrt(4.8)) / 7.0,
-                np.sqrt(3 + np.sqrt(4.8)) / 7.0,
-            ]
-            weights = [
-                0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
-                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
-                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
-                0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
-            ]
-
-        self.integration_points = np.array(integration_points)
-        self.weights = np.ravel(np.array(weights))
-
-    def plot_intervals(self, plot_quadrature_points=False):
-        """Plot all the intervals in the 1D mesh."""
-        plt.figure(100)
-        for i, interval in enumerate(self.intervals):
-            interval.plot_interval()
-        if plot_quadrature_points:
-            quadpoints = self.return_quadrature_points()
-            for i in range(self.Q):
-                plt.subplot(1, self.Q, i + 1)
-                plt.plot(quadpoints, np.zeros(len(quadpoints)), "ko")
-        plt.show()
-
-    def full_basis_functions_corresponding_to_points(self, theta):
-        """Given points on the mesh, find all (I, Q) basis functions values.
+    def find_tetrahedron_corresponding_to_points(self, rho_theta_zeta):
+        """Given a point on the mesh, find which tetrahdron it lies inside.
 
         Parameters
         ----------
-        theta : 1D ndarray, shape (num_points)
-            Set of points for which we want to find the intervals that
+        rho_theta_zeta = 3D ndarray, shape(nrho * ntheta * nzeta, 3)
+            Set of points for which we want to find the tetrahedron that
             they lie inside of in the mesh.
 
         Returns
         -------
-        basis_functions : 3D ndarray, shape (num_points, I, Q)
-            All of the IQ basis functions evaluated at the points.
-            Most will be zero at a given point.
-        """
-        basis_functions = np.zeros((theta.shape[0], self.M - 1, self.Q))
-        for i in range(theta.shape[0]):
-            v = theta[i]
-            for j, interval in enumerate(self.intervals):
-                v1 = interval.vertices[0]
-                v2 = interval.vertices[1]
-                if v >= v1 and v <= v2:
-                    bfs, _ = interval.get_basis_functions(v)
-                    basis_functions[i, j, :] = bfs
-                    break
-        return basis_functions
-
-    def find_intervals_corresponding_to_points(self, theta):
-        """Given a point on the mesh, find which interval it lies inside.
-
-        Parameters
-        ----------
-        theta : 1D ndarray, shape (num_points)
-            Set of points for which we want to find the intervals that
-            they lie inside of in the mesh.
-
-        Returns
-        -------
-        interval_indices : 1D ndarray, shape (num_points)
-            Set of indices that specific the intervals where each point lies.
+        tetrahedron_indices : 1D ndarray, shape (num_points)
+            Set of indices that specific the tetrahedron where each point lies.
         basis_functions : 2D ndarray, shape (num_points, Q)
-            The basis functions corresponding to the intervals in
-            interval_indices.
+            The basis functions corresponding to the tetrahedron in
+            tetrahedron_indices.
         """
-        interval_indices = np.zeros(theta.shape[0])
-        basis_functions = np.zeros((theta.shape[0], self.Q))
-        for i in range(theta.shape[0]):
-            v = theta[i]
-            for j, interval in enumerate(self.intervals):
-                v1 = interval.vertices[0]
-                v2 = interval.vertices[1]
-                if v >= v1 and v <= v2:
-                    interval_indices[i] = j
-                    basis_functions[i, :], _ = interval.get_basis_functions(v)
-        return interval_indices, basis_functions
 
-    def return_quadrature_points(self):
-        """Get quadrature points for numerical integration over the mesh.
-
-        Returns
-        -------
-        quadrature points: 1D ndarray, shape (nquad * (M - 1))
-            Points in theta representing the quadrature point
-            locations for integration in barycentric coordinates.
-
-        """
-        nquad = self.nquad
-        quadrature_points = np.zeros((self.M - 1) * nquad)
-        q = 0
-        for interval in self.intervals:
-            for i in range(nquad):
-                theta1 = interval.vertices[0]
-                theta2 = interval.vertices[1]
-                quadrature_points[q] = (theta2 - theta1) * (
-                    self.integration_points[i] + 1
-                ) / 2.0 + theta1
-                q = q + 1
-
-        return quadrature_points
-
-    def integrate(self, f):
-        """Integrates a function over the 1D mesh in theta.
-
-        This function allows one to integrate any set of functions of theta
-        ver the full 1D mesh. Uses Gauss-Legendre quadrature
-        formula for in the barycentric coordinates.
+    def get_barycentric_coordinates(self, rho_theta_zeta):
+        """Gets the barycentic coordinates, given a mesh in rho, theta, zeta.
 
         Parameters
         ----------
-        f : 1D ndarray, shape (nquad * M, num_functions)
-            Vector function defined on the mesh in theta
-            that we would like to integrate component-wise with respect
-            to the basis functions. For integration over the barycentric
-            coordinates, we need f to be prescribed at the quadrature points
-            in a barycentric coordinate system.
+        rho_theta_zeta = 3D ndarray, shape(nrho * ntheta * nzeta, 3)
+            Coordinates of the origininal grid, lying inside this tetrahedron.
 
         Returns
         -------
-        integral: 1D ndarray, shape (num_functions)
-            Value of the integral over the mesh for each component of f.
+        eta_u = 3D array, shape (nrho * ntheta * nzeta, 4)
+            Barycentric coordinates defined by the tetrahedron and evaluated at the
+            points (rho, theta, zeta)
+        """
+
+    # We'll use tetrahedra_indices = self.find_tetrahedron_corresponding_to_points
+
+    def get_basis_functions(self, rho_theta_zeta):
+        """
+        Gets the barycentric basis functions.
+
+        Return the tetrahedron basis functions, evaluated at the 3D rho, theta,
+        and zeta mesh points provided to the function.
+
+
+        Parameters
+        ----------
+        rho_theta_zeta = 3D ndarray, shape(nrho * ntheta * nzeta, 3)
+            Coordinates of the origininal grid, lying inside this tetrahedron.
+
+        Returns
+        -------
+        psi_q = (rho_theta_zeta, Q)
 
         """
-        nquad = self.nquad
-        if f.shape[1] > 1:
-            integral = np.zeros(f.shape[1])
-        else:
-            integral = 0.0
-        for i, interval in enumerate(self.intervals):
-            integral += (
-                interval.jacobian * self.weights @ f[i * nquad : (i + 1) * nquad, :]
-            )
-        return integral
+
+    # Will use eta = self.get_barycentric_coordinates(rho_theta_zeta)
 
 
 class TriangleFiniteElement:
@@ -2774,29 +2871,29 @@ class TriangleFiniteElement:
         # Check we have the same number of basis functions as nodes.
         assert self.nodes.shape[0] == self.Q
 
-    def get_basis_functions(self, theta_zeta):
+    def get_basis_functions(self, rho_theta):
         """
         Gets the barycentric basis functions.
 
-        Return the triangle basis functions, evaluated at the 2D theta
-        and zeta mesh points provided to the function.
+        Return the triangle basis functions, evaluated at the 2D rho
+        and theta mesh points provided to the function.
 
         Parameters
         ----------
-        theta_zeta : 2D ndarray, shape (ntheta * nzeta, 2)
+        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
             Coordinates of the original grid, lying inside this triangle.
 
         Returns
         -------
-        psi_q : (theta_zeta, Q)
+        psi_q : (rho_theta, Q)
 
         """
-        eta, theta_zeta_in_triangle = self.get_barycentric_coordinates(theta_zeta)
-        theta_zeta = theta_zeta_in_triangle
+        eta, rho_theta_in_triangle = self.get_barycentric_coordinates(rho_theta)
+        rho_theta = rho_theta_in_triangle
         K = self.K
 
         # Compute the vertex basis functions first
-        basis_functions = np.zeros((theta_zeta.shape[0], self.Q))
+        basis_functions = np.zeros((rho_theta.shape[0], self.Q))
         for i in range(3):
             inds_x0 = np.ravel(
                 np.where(
@@ -2929,7 +3026,7 @@ class TriangleFiniteElement:
             assert np.allclose(basis_functions[:, 3], 4 * eta[:, 0] * eta[:, 1])
             assert np.allclose(basis_functions[:, 4], 4 * eta[:, 2] * eta[:, 0])
             assert np.allclose(basis_functions[:, 5], 4 * eta[:, 1] * eta[:, 2])
-        return basis_functions, theta_zeta_in_triangle
+        return basis_functions, rho_theta_in_triangle
 
     def lagrange_polynomial(self, eta_i, eta_nodes_i, order, inds_minus_q, q):
         """
@@ -2968,36 +3065,36 @@ class TriangleFiniteElement:
         lp = numerator / denom
         return lp
 
-    def get_barycentric_coordinates(self, theta_zeta):
+    def get_barycentric_coordinates(self, rho_theta):
         """
-        Gets the barycentric coordinates, given a mesh in theta, zeta.
+        Gets the barycentric coordinates, given a mesh in rho, theta.
 
         Parameters
         ----------
-        theta_zeta : 2D ndarray, shape (ntheta * nzeta, 2)
+        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
             Coordinates of the original grid, lying inside this triangle.
 
         Returns
         -------
-        eta_u: 2D array, shape (ntheta * nzeta, 3)
+        eta_u: 2D array, shape (nrho * ntheta, 3)
             Barycentric coordinates defined by the triangle and evaluated
             at the points (theta, zeta).
         """
         # Get the Barycentric coordinates
         eta1 = (
-            self.a[0] * np.ones(len(theta_zeta[:, 0]))
-            + self.b[0] * theta_zeta[:, 0]
-            + self.c[0] * theta_zeta[:, 1]
+            self.a[0] * np.ones(len(rho_theta[:, 0]))
+            + self.b[0] * rho_theta[:, 0]
+            + self.c[0] * rho_theta[:, 1]
         ) / self.area2
         eta2 = (
-            self.a[1] * np.ones(len(theta_zeta[:, 0]))
-            + self.b[1] * theta_zeta[:, 0]
-            + self.c[1] * theta_zeta[:, 1]
+            self.a[1] * np.ones(len(rho_theta[:, 0]))
+            + self.b[1] * rho_theta[:, 0]
+            + self.c[1] * rho_theta[:, 1]
         ) / self.area2
         eta3 = (
-            self.a[2] * np.ones(len(theta_zeta[:, 0]))
-            + self.b[2] * theta_zeta[:, 0]
-            + self.c[2] * theta_zeta[:, 1]
+            self.a[2] * np.ones(len(rho_theta[:, 0]))
+            + self.b[2] * rho_theta[:, 0]
+            + self.c[2] * rho_theta[:, 1]
         ) / self.area2
 
         # zero out numerical errors or weird minus signs like -0
@@ -3008,7 +3105,7 @@ class TriangleFiniteElement:
 
         # Check that all the points are indeed inside the triangle
         eta_final = []
-        theta_zeta_in_triangle = []
+        rho_theta_in_triangle = []
         for i in range(eta.shape[0]):
             if eta1[i] < 0 or eta2[i] < 0 or eta3[i] < 0:
                 warnings.warn(
@@ -3018,12 +3115,12 @@ class TriangleFiniteElement:
                 )
             else:
                 eta_final.append(eta[i, :])
-                theta_zeta_in_triangle.append(theta_zeta[i, :])
-        return np.array(eta_final), np.array(theta_zeta_in_triangle)
+                rho_theta_in_triangle.append(rho_theta[i, :])
+        return np.array(eta_final), np.array(rho_theta_in_triangle)
 
     def plot_triangle(self):
         """
-        Plot the triangle in (theta, zeta) and (eta1, eta2, eta3) coordinates.
+        Plot the triangle in (rho, theta) and (eta1, eta2, eta3) coordinates.
 
         Also plots all of the basis functions.
 
@@ -3034,17 +3131,17 @@ class TriangleFiniteElement:
             integration should also be plotted on the mesh.
         """
         # Define uniform grid in (theta, zeta)
-        theta = np.linspace(
+        rho = np.linspace(
             np.min(self.vertices[:, 0]), np.max(self.vertices[:, 0]), endpoint=True
         )
-        zeta = np.linspace(
+        theta = np.linspace(
             np.min(self.vertices[:, 1]), np.max(self.vertices[:, 1]), endpoint=True
         )
-        Theta, Zeta = np.meshgrid(theta, zeta, indexing="ij")
-        Theta_Zeta = np.array([np.ravel(Theta), np.ravel(Zeta)]).T
+        Rho, Theta = np.meshgrid(rho, theta, indexing="ij")
+        Rho_Theta = np.array([np.ravel(Rho), np.ravel(Theta)]).T
 
         # Get the basis functions in the triangle
-        psi_q, theta_zeta_in_triangle = self.get_basis_functions(Theta_Zeta)
+        psi_q, rho_theta_in_triangle = self.get_basis_functions(Rho_Theta)
 
         for i in range(self.Q):
             plt.subplot(1, self.Q, i + 1)
@@ -3055,18 +3152,18 @@ class TriangleFiniteElement:
 
             # Plot the ith basis function
             plt.scatter(
-                theta_zeta_in_triangle[:, 0],
-                theta_zeta_in_triangle[:, 1],
+                rho_theta_in_triangle[:, 0],
+                rho_theta_in_triangle[:, 1],
                 c=psi_q[:, i],
                 vmin=0,
                 vmax=1,
                 s=2,
             )
-            plt.xlim(0, 2 * np.pi)
+            plt.xlim(0, 1)
             plt.ylim(0, 2 * np.pi)
             tstring = r"$\psi_{" + str(i) + r"}(\theta, \zeta)$"
-            plt.ylabel(r"$\zeta$")
-            plt.xlabel(r"$\theta$")
+            plt.ylabel(r"$\theta$")
+            plt.xlabel(r"$\rho$")
             plt.title(tstring)
 
 
@@ -3257,3 +3354,638 @@ class IntervalFiniteElement:
             plt.xlim(0, 2 * np.pi)
             plt.ylabel(r"$\psi_q(\theta)$")
             plt.xlabel(r"$\theta$")
+
+
+class FiniteElementMesh1D:
+    """Class representing a 1D mesh in theta.
+
+    This class represents a 1D FE basis coming from a
+    set of M uniform points sampled in theta.
+
+    Parameters
+    ----------
+    M : int
+        Number of mesh points in the theta direction.
+    K: integer
+        The order of the finite elements to use, which gives (K+1)(K+2) / 2
+        basis functions.
+    """
+
+    def __init__(self, M, K=1, nquad=2):
+        self.M = M
+        self.Q = K + 1
+        self.K = K
+        mesh = fem.MeshLine(np.linspace(0, 2 * np.pi, M, endpoint=True))
+
+        if K == 1:
+            e = fem.ElementLineP1()
+        else:
+            e = fem.ElementLineP2()
+        basis = fem.CellBasis(mesh, e)
+        
+        from skfem.helpers import dot
+        @fem.BilinearForm
+        def assembly(u, v, _):
+            return dot(u, v)
+        
+        self.assembly_matrix = assembly.assemble(basis).todense()
+        vertices = np.ravel(basis.doflocs)
+
+        # K + 1 here so that integral of basis_function * basis_function
+        # is nonsingular, which requires a higher order integration
+        self.nquad = K + 1
+
+        theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
+        self.Theta = theta
+
+        # Compute the basis functions at each node
+        intervals = []
+        for i in range(M - 1):
+            # Deal with the periodic boundary conditions...
+            interval = IntervalFiniteElement(
+                np.array([vertices[i], vertices[i + 1]]).T, K=K
+            )
+            intervals.append(interval)
+
+        # Have M vertices and M-1 intervals
+        self.vertices = vertices
+        self.intervals = intervals
+
+        # Setup quadrature points and weights for numerical integration
+        # Using Gauss-Legendre quadrature
+        integration_points = []
+        weights = []
+        # Ordered these from smallest to largest
+        # print('K = ', K, ' ', fem.quadrature.get_quadrature(e, 1))
+        # exit()
+        if self.nquad == 1:
+            integration_points = [0.0]
+            weights = [2.0]
+        elif self.nquad == 2:
+            integration_points = [-1.0 / np.sqrt(3), 1.0 / np.sqrt(3)]
+            weights = [1.0, 1.0]
+        elif self.nquad == 3:
+            integration_points = [-np.sqrt(0.6), 0.0, np.sqrt(0.6)]
+            weights = [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0]
+        elif self.nquad == 4:
+            integration_points = [
+                -np.sqrt(3 + np.sqrt(4.8)) / 7.0,
+                -np.sqrt(3 - np.sqrt(4.8)) / 7.0,
+                np.sqrt(3 - np.sqrt(4.8)) / 7.0,
+                np.sqrt(3 + np.sqrt(4.8)) / 7.0,
+            ]
+            weights = [
+                0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
+                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
+                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
+                0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
+            ]
+
+        self.integration_points = np.array(integration_points)
+        self.weights = np.ravel(np.array(weights))
+
+    def plot_intervals(self, plot_quadrature_points=False):
+        """Plot all the intervals in the 1D mesh."""
+        plt.figure(100)
+        for i, interval in enumerate(self.intervals):
+            interval.plot_interval()
+        if plot_quadrature_points:
+            quadpoints = self.return_quadrature_points()
+            for i in range(self.Q):
+                plt.subplot(1, self.Q, i + 1)
+                plt.plot(quadpoints, np.zeros(len(quadpoints)), "ko")
+        plt.show()
+
+    def full_basis_functions_corresponding_to_points(self, theta):
+        """Given points on the mesh, find all (I, Q) basis functions values.
+
+        Parameters
+        ----------
+        theta : 1D ndarray, shape (num_points)
+            Set of points for which we want to find the intervals that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        basis_functions : 3D ndarray, shape (num_points, I, Q)
+            All of the IQ basis functions evaluated at the points.
+            Most will be zero at a given point.
+        """
+        basis_functions = np.zeros((theta.shape[0], self.M - 1, self.Q))
+        for i in range(theta.shape[0]):
+            v = theta[i]
+            for j, interval in enumerate(self.intervals):
+                v1 = interval.vertices[0]
+                v2 = interval.vertices[1]
+                if v >= v1 and v <= v2:
+                    # print(i, j, v1, v, v2)
+                    bfs, _ = interval.get_basis_functions(v)
+                    # print(bfs)
+                    basis_functions[i, j, :] = bfs
+                    break
+        return basis_functions
+
+    def find_intervals_corresponding_to_points(self, theta):
+        """Given a point on the mesh, find which interval it lies inside.
+
+        Parameters
+        ----------
+        theta : 1D ndarray, shape (num_points)
+            Set of points for which we want to find the intervals that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        interval_indices : 1D ndarray, shape (num_points)
+            Set of indices that specific the intervals where each point lies.
+        basis_functions : 2D ndarray, shape (num_points, Q)
+            The basis functions corresponding to the intervals in
+            interval_indices.
+        """
+        interval_indices = np.zeros(theta.shape[0])
+        basis_functions = np.zeros((theta.shape[0], self.Q))
+        for i in range(theta.shape[0]):
+            v = theta[i]
+            for j, interval in enumerate(self.intervals):
+                v1 = interval.vertices[0]
+                v2 = interval.vertices[1]
+                if v >= v1 and v <= v2:
+                    interval_indices[i] = j
+                    basis_functions[i, :], _ = interval.get_basis_functions(v)
+        return interval_indices, basis_functions
+
+    def return_quadrature_points(self):
+        """Get quadrature points for numerical integration over the mesh.
+
+        Returns
+        -------
+        quadrature points: 1D ndarray, shape (nquad * (M - 1))
+            Points in theta representing the quadrature point
+            locations for integration in barycentric coordinates.
+
+        """
+        nquad = self.nquad
+        quadrature_points = np.zeros((self.M - 1) * nquad)
+        q = 0
+        for interval in self.intervals:
+            for i in range(nquad):
+                theta1 = interval.vertices[0]
+                theta2 = interval.vertices[1]
+                # print(i, self.integration_points[i])
+                quadrature_points[q] = (theta2 - theta1) * (
+                    self.integration_points[i] + 1
+                ) / 2.0 + theta1
+                q = q + 1
+
+        return quadrature_points
+
+    def integrate(self, f):
+        """Integrates a function over the 1D mesh in theta.
+
+        This function allows one to integrate any set of functions of theta
+        ver the full 1D mesh. Uses Gauss-Legendre quadrature
+        formula for in the barycentric coordinates.
+
+        Parameters
+        ----------
+        f : 1D ndarray, shape (nquad * M, num_functions)
+            Vector function defined on the mesh in theta
+            that we would like to integrate component-wise with respect
+            to the basis functions. For integration over the barycentric
+            coordinates, we need f to be prescribed at the quadrature points
+            in a barycentric coordinate system.
+
+        Returns
+        -------
+        integral: 1D ndarray, shape (num_functions)
+            Value of the integral over the mesh for each component of f.
+
+        """
+        nquad = self.nquad
+        if f.shape[1] > 1:
+            integral = np.zeros(f.shape[1])
+        else:
+            integral = 0.0
+        for i, interval in enumerate(self.intervals):
+            integral += (
+                interval.jacobian * self.weights @ f[i * nquad : (i + 1) * nquad, :]
+            )
+        return integral
+
+
+def find_intermadiate_jacobi(dx, args):
+    """Finds Jacobi function and its derivatives for nth loop."""
+    r_jacobi, N, alpha, P_n1, P_n2, P_n = args
+    P_n = P_n.at[dx].set(
+        jacobi_poly_single(r_jacobi, N - dx, alpha + dx, dx, P_n1[dx], P_n2[dx])
+    )
+    return (r_jacobi, N, alpha, P_n1, P_n2, P_n)
+
+
+def update_zernike_output(i, args):
+    """Updates Zernike radial output, if the mode is in the inputs."""
+    m, n, alpha, N, result, out = args
+    idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
+
+    def falseFun(args):
+        _, _, out = args
+        return out
+
+    def trueFun(args):
+        idx, result, out = args
+        out = out.at[idx].set(result)
+        return out
+
+    out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
+    return (m, n, alpha, N, result, out)
+
+
+def find_initial_jacobi(dx, args):
+    """Finds initial values of Jacobi Polynomial and derivatives."""
+    r_jacobi, alpha, P_past = args
+    # Jacobi for n=0
+    P_past = P_past.at[0, dx].set(jacobi_poly_single(r_jacobi, 0, alpha + dx, beta=dx))
+    # Jacobi for n=1
+    P_past = P_past.at[1, dx].set(jacobi_poly_single(r_jacobi, 1, alpha + dx, beta=dx))
+    return (r_jacobi, alpha, P_past)
+
+
+@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
+def _zernike_radial_vectorized_d1(r, l, m, dr):
+    """First derivative calculation of Radial part of Zernike polynomials."""
+
+    def body_inner(N, args):
+        alpha, out, P_past = args
+        P_n2 = P_past[0]  # Jacobi at N-2
+        P_n1 = P_past[1]  # Jacobi at N-1
+        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
+
+        # Calculate Jacobi polynomial and derivatives for (alpha,N)
+        _, _, _, _, _, P_n = fori_loop(
+            0,
+            MAXDR + 1,
+            find_intermadiate_jacobi,
+            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
+        )
+        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
+        # doesn't have Gamma function directly, that's why we calculate Logarithm of
+        # Gamma function and then exponentiate it.
+        coef = jnp.exp(
+            gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
+        )
+        # 1th Derivative of Zernike Radial
+        result = (-1) ** N * (
+            alpha * r ** jnp.maximum(alpha - 1, 0) * P_n[0]
+            - coef[1] * 4 * r ** (alpha + 1) * P_n[1]
+        )
+        # Check if the calculated values is in the given modes
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
+
+        # Shift past values if needed
+        # For derivative order dx, if N is smaller than 2+dx, then only the initial
+        # value calculated by find_init_jacobi function will be used. So, if you update
+        # P_n's, preceeding values will be wrong.
+        mask = N >= 2 + dxs
+        P_n2 = jnp.where(mask, P_n1, P_n2)
+        P_n1 = jnp.where(mask, P_n, P_n1)
+        # Form updated P_past matrix
+        P_past = P_past.at[0, :].set(P_n2)
+        P_past = P_past.at[1, :].set(P_n1)
+
+        return (alpha, out, P_past)
+
+    def body(alpha, out):
+        # find l values with m values equal to alpha
+        l_alpha = jnp.where(m == alpha, l, 0)
+        # find the maximum among them
+        L_max = jnp.max(l_alpha)
+        # Maximum possible value for n for loop bound
+        N_max = (L_max - alpha) // 2
+
+        # First 2 Jacobi Polynomials (they don't need recursion)
+        # P_past stores last 2 Jacobi polynomials (and required derivatives)
+        # evaluated at given r points
+        P_past = jnp.zeros((2, MAXDR + 1))
+        _, _, P_past = fori_loop(
+            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
+        )
+
+        # Loop over every n value
+        _, out, _ = fori_loop(
+            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
+        )
+        return out
+
+    # Make inputs 1D arrays in case they aren't
+    m = jnp.atleast_1d(m)
+    l = jnp.atleast_1d(l)
+    dr = jnp.asarray(dr).astype(int)
+
+    # From the vectorization, the overall output will be (r.size, m.size)
+    out = jnp.zeros(m.size)
+    r_jacobi = 1 - 2 * r**2
+    m = jnp.abs(m)
+    n = ((l - m) // 2).astype(int)
+
+    # This part can be better implemented. Try to make dr as static argument
+    # jnp.vectorize doesn't allow it to be static
+    MAXDR = 1
+    dxs = jnp.arange(0, MAXDR + 1)
+
+    M_max = jnp.max(m)
+    # Loop over every different m value. There is another nested
+    # loop which will execute necessary n values.
+    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
+    return out
+
+
+@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
+def _zernike_radial_vectorized_d2(r, l, m, dr):
+    """Second derivative calculation of Radial part of Zernike polynomials."""
+
+    def body_inner(N, args):
+        alpha, out, P_past = args
+        P_n2 = P_past[0]  # Jacobi at N-2
+        P_n1 = P_past[1]  # Jacobi at N-1
+        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
+
+        # Calculate Jacobi polynomial and derivatives for (alpha,N)
+        _, _, _, _, _, P_n = fori_loop(
+            0,
+            MAXDR + 1,
+            find_intermadiate_jacobi,
+            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
+        )
+
+        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
+        # doesn't have Gamma function directly, that's why we calculate Logarithm of
+        # Gamma function and then exponentiate it.
+        coef = jnp.exp(
+            gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
+        )
+
+        result = (-1) ** N * (
+            (alpha - 1) * alpha * r ** jnp.maximum(alpha - 2, 0) * P_n[0]
+            - coef[1] * 4 * (2 * alpha + 1) * r**alpha * P_n[1]
+            + coef[2] * 16 * r ** (alpha + 2) * P_n[2]
+        )
+        # Check if the calculated values is in the given modes
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
+
+        # Shift past values if needed
+        # For derivative order dx, if N is smaller than 2+dx, then only the initial
+        # value calculated by find_init_jacobi function will be used. So, if you update
+        # P_n's, preceeding values will be wrong.
+        mask = N >= 2 + dxs
+        P_n2 = jnp.where(mask, P_n1, P_n2)
+        P_n1 = jnp.where(mask, P_n, P_n1)
+        # Form updated P_past matrix
+        P_past = P_past.at[0, :].set(P_n2)
+        P_past = P_past.at[1, :].set(P_n1)
+
+        return (alpha, out, P_past)
+
+    def body(alpha, out):
+        # find l values with m values equal to alpha
+        l_alpha = jnp.where(m == alpha, l, 0)
+        # find the maximum among them
+        L_max = jnp.max(l_alpha)
+        # Maximum possible value for n for loop bound
+        N_max = (L_max - alpha) // 2
+
+        # First 2 Jacobi Polynomials (they don't need recursion)
+        # P_past stores last 2 Jacobi polynomials (and required derivatives)
+        # evaluated at given r points
+        P_past = jnp.zeros((2, MAXDR + 1))
+        _, _, P_past = fori_loop(
+            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
+        )
+
+        # Loop over every n value
+        _, out, _ = fori_loop(
+            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
+        )
+        return out
+
+    # Make inputs 1D arrays in case they aren't
+    m = jnp.atleast_1d(m)
+    l = jnp.atleast_1d(l)
+    dr = jnp.asarray(dr).astype(int)
+
+    # From the vectorization, the overall output will be (r.size, m.size)
+    out = jnp.zeros(m.size)
+    r_jacobi = 1 - 2 * r**2
+    m = jnp.abs(m)
+    n = ((l - m) // 2).astype(int)
+
+    # This part can be better implemented. Try to make dr as static argument
+    # jnp.vectorize doesn't allow it to be static
+    MAXDR = 2
+    dxs = jnp.arange(0, MAXDR + 1)
+
+    M_max = jnp.max(m)
+    # Loop over every different m value. There is another nested
+    # loop which will execute necessary n values.
+    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
+    return out
+
+
+@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
+def _zernike_radial_vectorized_d3(r, l, m, dr):
+    """Third derivative calculation of Radial part of Zernike polynomials."""
+
+    def body_inner(N, args):
+        alpha, out, P_past = args
+        P_n2 = P_past[0]  # Jacobi at N-2
+        P_n1 = P_past[1]  # Jacobi at N-1
+        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
+
+        # Calculate Jacobi polynomial and derivatives for (alpha,N)
+        _, _, _, _, _, P_n = fori_loop(
+            0,
+            MAXDR + 1,
+            find_intermadiate_jacobi,
+            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
+        )
+
+        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
+        # doesn't have Gamma function directly, that's why we calculate Logarithm of
+        # Gamma function and then exponentiate it.
+        coef = jnp.exp(
+            gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
+        )
+
+        # 3rd Derivative of Zernike Radial
+        result = (-1) ** N * (
+            (alpha - 2) * (alpha - 1) * alpha * r ** jnp.maximum(alpha - 3, 0) * P_n[0]
+            - coef[1] * 12 * alpha**2 * r ** jnp.maximum(alpha - 1, 0) * P_n[1]
+            + coef[2] * 48 * (alpha + 1) * r ** (alpha + 1) * P_n[2]
+            - coef[3] * 64 * r ** (alpha + 3) * P_n[3]
+        )
+        # Check if the calculated values is in the given modes
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
+
+        # Shift past values if needed
+        # For derivative order dx, if N is smaller than 2+dx, then only the initial
+        # value calculated by find_init_jacobi function will be used. So, if you update
+        # P_n's, preceeding values will be wrong.
+        mask = N >= 2 + dxs
+        P_n2 = jnp.where(mask, P_n1, P_n2)
+        P_n1 = jnp.where(mask, P_n, P_n1)
+        # Form updated P_past matrix
+        P_past = P_past.at[0, :].set(P_n2)
+        P_past = P_past.at[1, :].set(P_n1)
+
+        return (alpha, out, P_past)
+
+    def body(alpha, out):
+        # find l values with m values equal to alpha
+        l_alpha = jnp.where(m == alpha, l, 0)
+        # find the maximum among them
+        L_max = jnp.max(l_alpha)
+        # Maximum possible value for n for loop bound
+        N_max = (L_max - alpha) // 2
+
+        # First 2 Jacobi Polynomials (they don't need recursion)
+        # P_past stores last 2 Jacobi polynomials (and required derivatives)
+        # evaluated at given r points
+        P_past = jnp.zeros((2, MAXDR + 1))
+        _, _, P_past = fori_loop(
+            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
+        )
+
+        # Loop over every n value
+        _, out, _ = fori_loop(
+            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
+        )
+        return out
+
+    # Make inputs 1D arrays in case they aren't
+    m = jnp.atleast_1d(m)
+    l = jnp.atleast_1d(l)
+    dr = jnp.asarray(dr).astype(int)
+
+    # From the vectorization, the overall output will be (r.size, m.size)
+    out = jnp.zeros(m.size)
+    r_jacobi = 1 - 2 * r**2
+    m = jnp.abs(m)
+    n = ((l - m) // 2).astype(int)
+
+    # This part can be better implemented. Try to make dr as static argument
+    # jnp.vectorize doesn't allow it to be static
+    MAXDR = 3
+    dxs = jnp.arange(0, MAXDR + 1)
+
+    M_max = jnp.max(m)
+    # Loop over every different m value. There is another nested
+    # loop which will execute necessary n values.
+    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
+    return out
+
+
+@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
+def _zernike_radial_vectorized_d4(r, l, m, dr):
+    """Fourth derivative calculation of Radial part of Zernike polynomials."""
+
+    def body_inner(N, args):
+        alpha, out, P_past = args
+        P_n2 = P_past[0]  # Jacobi at N-2
+        P_n1 = P_past[1]  # Jacobi at N-1
+        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
+
+        # Calculate Jacobi polynomial and derivatives for (alpha,N)
+        _, _, _, _, _, P_n = fori_loop(
+            0,
+            MAXDR + 1,
+            find_intermadiate_jacobi,
+            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
+        )
+
+        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
+        # doesn't have Gamma function directly, that's why we calculate Logarithm of
+        # Gamma function and then exponentiate it.
+        coef = jnp.exp(
+            gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
+        )
+
+        # 4th Derivative of Zernike Radial
+        result = (-1) ** N * (
+            (alpha - 3)
+            * (alpha - 2)
+            * (alpha - 1)
+            * alpha
+            * r ** jnp.maximum(alpha - 4, 0)
+            * P_n[0]
+            - coef[1]
+            * 8
+            * alpha
+            * (2 * alpha**2 - 3 * alpha + 1)
+            * r ** jnp.maximum(alpha - 2, 0)
+            * P_n[1]
+            + coef[2] * 48 * (2 * alpha**2 + 2 * alpha + 1) * r**alpha * P_n[2]
+            - coef[3] * 128 * (2 * alpha + 3) * r ** (alpha + 2) * P_n[3]
+            + coef[4] * 256 * r ** (alpha + 4) * P_n[4]
+        )
+        # Check if the calculated values is in the given modes
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask, result, out)
+
+        # Shift past values if needed
+        # For derivative order dx, if N is smaller than 2+dx, then only the initial
+        # value calculated by find_init_jacobi function will be used. So, if you update
+        # P_n's, preceeding values will be wrong.
+        mask = N >= 2 + dxs
+        P_n2 = jnp.where(mask, P_n1, P_n2)
+        P_n1 = jnp.where(mask, P_n, P_n1)
+        # Form updated P_past matrix
+        P_past = P_past.at[0, :].set(P_n2)
+        P_past = P_past.at[1, :].set(P_n1)
+
+        return (alpha, out, P_past)
+
+    def body(alpha, out):
+        # find l values with m values equal to alpha
+        l_alpha = jnp.where(m == alpha, l, 0)
+        # find the maximum among them
+        L_max = jnp.max(l_alpha)
+        # Maximum possible value for n for loop bound
+        N_max = (L_max - alpha) // 2
+
+        # First 2 Jacobi Polynomials (they don't need recursion)
+        # P_past stores last 2 Jacobi polynomials (and required derivatives)
+        # evaluated at given r points
+        P_past = jnp.zeros((2, MAXDR + 1))
+        _, _, P_past = fori_loop(
+            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
+        )
+
+        # Loop over every n value
+        _, out, _ = fori_loop(
+            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
+        )
+        return out
+
+    # Make inputs 1D arrays in case they aren't
+    m = jnp.atleast_1d(m)
+    l = jnp.atleast_1d(l)
+    dr = jnp.asarray(dr).astype(int)
+
+    # From the vectorization, the overall output will be (r.size, m.size)
+    out = jnp.zeros(m.size)
+    r_jacobi = 1 - 2 * r**2
+    m = jnp.abs(m)
+    n = ((l - m) // 2).astype(int)
+
+    # This part can be better implemented. Try to make dr as static argument
+    # jnp.vectorize doesn't allow it to be static
+    MAXDR = 4
+    dxs = jnp.arange(0, MAXDR + 1)
+
+    M_max = jnp.max(m)
+    # Loop over every different m value. There is another nested
+    # loop which will execute necessary n values.
+    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
+    return out

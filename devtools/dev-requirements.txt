@@ -7,26 +7,26 @@ sphinx > 3.0.0
 sphinx-argparse
 sphinx_copybutton
 sphinx-rtd-theme >= 1.0, < 2.0
-sphinx-github-style >= 1.0, <= 1.1
+sphinx-github-style >= 1.0, < 2.0
 
 
 # linting
-black == 22.10.0
-flake8 >= 5.0.0, <=6.0.0
-flake8-docstrings >= 1.0.0, <=2.0.0
-flake8-eradicate >= 1.0.0, <=2.0.0
-flake8-isort >=5.0.0, <= 6.0.0
+black == 24.3.0
+flake8 >= 5.0.0, <6.0.0
+flake8-docstrings >= 1.0.0, <2.0.0
+flake8-eradicate >= 1.0.0, <2.0.0
+flake8-isort >=5.0.0, < 6.0.0
 pre-commit
 
 # testing and benchmarking
 markupsafe == 2.0.1
 nbmake
-pytest >= 5.0.0
+pytest ~= 8.0.0
 pytest-benchmark
 pytest-cov >= 2.6.0
 pytest-monitor
 pytest-mpl == 0.16.1
-pytest-split
+pytest-split == 0.8.2
 qicna @ git+https://github.com/rogeriojorge/pyQIC/
 qsc
 shapely >= 1.8.2

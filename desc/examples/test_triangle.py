@@ -15,18 +15,20 @@ import numpy as np
 from desc.basis import FiniteElementMesh2D
 
 # Try triangulating whole mesh
-M = 4
-N = 4
-mesh = FiniteElementMesh2D(M, N, K=2)
-mesh.plot_triangles(plot_quadrature_points=False)
-integral = mesh.integrate(np.ones((2 * M * N * mesh.nquad, 10000)))
+M = 2
+L = 2
+mesh = FiniteElementMesh2D(L, M, K=1)
+mesh.plot_triangles(plot_quadrature_points=True)
+integral = mesh.integrate(np.ones((2 * M * L * mesh.nquad, 10000)))
 area2_total = 0.0
 for triangle in mesh.triangles:
     area2_total += triangle.area2
-assert np.allclose(integral, 4 * np.pi**2)
+print(integral, area2_total)
+assert np.allclose(integral, 2 * np.pi)
 
 quadpoints = mesh.return_quadrature_points()
 integral = mesh.integrate(
-    np.array([np.cos(quadpoints[:, 0]), np.sin(quadpoints[:, 1])]).T
+    np.array([np.cos(quadpoints[:, 1]), np.sin(quadpoints[:, 1])]).T
 )
+print(integral)
 assert np.allclose(integral, 0.0)

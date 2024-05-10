@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from scipy.constants import mu_0
+
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
@@ -144,11 +146,38 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
     # The limit eventually reduces to a form where the technique used to compute
     # lim |e_theta x e_zeta|_r can be applied.
     data["|e_theta x e_zeta|_rr"] = transforms["grid"].replace_at_axis(
-        safediv(
-            norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a
-        ),
+        safediv(norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a),
         lambda: safediv(dot(a_r, a_rr), norm_a_r),
     )
+    return data
+
+
+@register_compute_fun(
+    name="|e_theta x e_zeta|_z",
+    label="\\partial_{\\zeta}|e_{\\theta} \\times e_{\\zeta}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant rho surface,"
+    "derivative wrt toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_z", "e_zeta", "e_zeta_z", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _e_theta_x_e_zeta_z(params, transforms, profiles, data, **kwargs):
+    data["|e_theta x e_zeta|_z"] = dot(
+        (
+            cross(data["e_theta_z"], data["e_zeta"])
+            + cross(data["e_theta"], data["e_zeta_z"])
+        ),
+        cross(data["e_theta"], data["e_zeta"]),
+    ) / (data["|e_theta x e_zeta|"])
     return data
 
 
@@ -263,9 +292,7 @@ def _e_rho_x_e_theta_rr(params, transforms, profiles, data, **kwargs):
     # The limit eventually reduces to a form where the technique used to compute
     # lim |e_rho x e_theta|_r can be applied.
     data["|e_rho x e_theta|_rr"] = transforms["grid"].replace_at_axis(
-        safediv(
-            norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a
-        ),
+        safediv(norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a),
         lambda: safediv(dot(a_r, a_rr), norm_a_r),
     )
     return data
@@ -1797,4 +1824,80 @@ def _gradtheta(params, transforms, profiles, data, **kwargs):
 )
 def _gradzeta(params, transforms, profiles, data, **kwargs):
     data["|grad(zeta)|"] = jnp.sqrt(data["g^zz"])
+    return data
+
+
+@register_compute_fun(
+    name="gbdrift",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="\\mathrm{gbdrift} = 1/B^{2} (\\mathbf{b}\\times\\nabla B) \\cdot"
+    + "\\nabla \\alpha",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Binormal component of the geometric part of the gradB drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|", "b", "grad(alpha)", "grad(|B|)"],
+)
+def _gbdrift(params, transforms, profiles, data, **kwargs):
+    data["gbdrift"] = (
+        1
+        / data["|B|"] ** 2
+        * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="cvdrift",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="\\mathrm{cvdrift} = 1/B^{3} (\\mathbf{b}\\times\\nabla(p + B^2/2))"
+    + "\\cdot \\nabla \\alpha",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Binormal component of the geometric part of the curvature drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["p_r", "psi_r", "|B|", "gbdrift"],
+)
+def _cvdrift(params, transforms, profiles, data, **kwargs):
+    dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
+    data["cvdrift"] = 1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
+    return data
+
+
+@register_compute_fun(
+    name="cvdrift0",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla B)"
+    + "\\cdot \\nabla \\rho",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Radial component of the geometric part of the curvature drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|", "b", "e^rho", "grad(|B|)"],
+)
+def _cvdrift0(params, transforms, profiles, data, **kwargs):
+    data["cvdrift0"] = (
+        1 / data["|B|"] ** 2 * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
+    )
     return data

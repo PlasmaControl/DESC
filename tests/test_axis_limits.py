@@ -57,7 +57,10 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
+    "gbdrift",
+    "cvdrift",
     "grad(alpha)",
+    "cvdrift0",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -65,6 +68,8 @@ not_finite_limits = {
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
     "D_current",
+    "n_rho_z",
+    "|e_theta x e_zeta|_z",
     "e^rho_rr",
     "e^theta_rr",
     "e^zeta_rr",
@@ -83,8 +88,10 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
+    "cvdrift0",
 }
 
 
@@ -302,9 +309,13 @@ class TestAxisLimits:
         # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)
         kwargs = dict(weaker_tolerance, **zero_map)
         # fixed iota
-        assert_is_continuous(get("W7-X"), kwargs=kwargs)
+        eq = get("W7-X")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("NCSX"), kwargs=kwargs)
+        eq = get("NCSX")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -337,8 +348,12 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 1], B[0, 1])
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
-        test(get("W7-X"))
-        test(get("NCSX"))
+        eq = get("W7-X")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
+        eq = get("NCSX")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
 
 
 def _reverse_mode_unsafe_names():
@@ -378,10 +393,10 @@ def _reverse_mode_unsafe_names():
             unsafe_names.append(name)
 
     unsafe_names = sorted(unsafe_names)
-    print("Unsafe names: ", unsafe_names)
     return unsafe_names
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
 def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""
@@ -389,7 +404,7 @@ def test_reverse_mode_ad_axis(name):
     grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
     eq.change_resolution(2, 2, 2, 4, 4, 4)
 
-    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), verbose=0)
+    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), use_jit=False)
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))

@@ -499,11 +499,24 @@ def test_symmetry_position(DummyCoilSet):
     coilset_asym = load(
         load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
     )
+    coilset_mixed = MixedCoilSet(*coilset_asym)
+    grid = LinearGrid(N=30)
 
-    # check that positions of both CoilSets are the same
-    x_sym = coilset_sym.compute_position()
-    x_asym = coilset_asym.compute_position()
+    # check that positions of CoilSets are the same with xyz basis
+    x_sym = coilset_sym._compute_position(basis="xyz", grid=grid)
+    x_asym = coilset_asym._compute_position(basis="xyz", grid=grid)
+    x_mixed = coilset_mixed._compute_position(basis="xyz", grid=grid)
+
     np.testing.assert_allclose(x_sym, x_asym)
+    np.testing.assert_allclose(x_sym, x_mixed)
+
+    # check that positions of CoilSets are the same with rpz basis
+    x_sym = coilset_sym._compute_position(basis="rpz", grid=grid)
+    x_asym = coilset_asym._compute_position(basis="rpz", grid=grid)
+    x_mixed = coilset_mixed._compute_position(basis="rpz", grid=grid)
+
+    np.testing.assert_allclose(x_sym, x_asym)
+    np.testing.assert_allclose(x_sym, x_mixed)
 
 
 @pytest.mark.unit

@@ -156,16 +156,16 @@ class _Coil(_MagneticField, Optimizable, ABC):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
 
-    def compute_position(self, params=None, source_grid=None, **kwargs):
+    def _compute_position(self, params=None, grid=None, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
         ----------
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
-        source_grid : Grid, int or None, optional
-            Grid used to discretize coils. If an integer, uses that many equally spaced
-            points. Should NOT include endpoint at 2pi.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
 
         Returns
         -------
@@ -173,8 +173,12 @@ class _Coil(_MagneticField, Optimizable, ABC):
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        x = self.compute("x", grid=source_grid, params=params, **kwargs)["x"]
-        return jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
+        x = self.compute("x", grid=grid, params=params, **kwargs)["x"]
+        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
+        basis = kwargs.pop("basis", "xyz")
+        if basis.lower() == "rpz":
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -904,16 +908,16 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
-    def compute_position(self, params=None, source_grid=None, **kwargs):
+    def _compute_position(self, params=None, grid=None, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
         ----------
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
-        source_grid : Grid, int or None, optional
-            Grid used to discretize coils. If an integer, uses that many equally spaced
-            points. Should NOT include endpoint at 2pi.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
 
         Returns
         -------
@@ -924,7 +928,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if params is None:
             params = [get_params("x", coil) for coil in self]
         basis = kwargs.pop("basis", "xyz")
-        data = self.compute("x", grid=source_grid, params=params, basis=basis, **kwargs)
+        data = self.compute("x", grid=grid, params=params, basis=basis, **kwargs)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
 
@@ -1596,16 +1600,17 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
-    def compute_position(self, params=None, source_grid=None, **kwargs):
+    def _compute_position(self, params=None, grid=None, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
         ----------
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
-        source_grid : Grid, int or None, optional
-            Grid used to discretize coils. If an integer, uses that many equally spaced
-            points. Should NOT include endpoint at 2pi.
+        grid : Grid or int or array-like, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+            If array-like, should be 1 value per coil.
 
         Returns
         -------
@@ -1613,13 +1618,18 @@ class MixedCoilSet(CoilSet):
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        # TODO: catch error if coils have different default grids
+        errorif(
+            grid is None,
+            ValueError,
+            "grid must be supplied to MixedCoilSet._compute_position, since the "
+            + "default grid for each coil could have a different number of nodes.",
+        )
         params = self._make_arraylike(params)
-        source_grid = self._make_arraylike(source_grid)
+        grid = self._make_arraylike(grid)
         x = jnp.vstack(
             [
-                coil.compute_position(par, grd)
-                for coil, par, grd in zip(self.coils, params, source_grid)
+                coil._compute_position(par, grd, **kwargs)
+                for coil, par, grd in zip(self.coils, params, grid)
             ]
         )
         return x

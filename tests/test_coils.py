@@ -923,9 +923,9 @@ def test_save_h5_for_mixed_coilset(tmpdir_factory):
     output_dir = tmpdir_factory.mktemp("coilset_save")
     output_path = output_dir.join("DummyMixedCoilSet.h5")
 
-    tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
+    tf_coil = FourierPlanarCoil(current=20, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
-    vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+    vf_coil = FourierRZCoil(current=100, R_n=3, Z_n=-1)
     vf_coilset = CoilSet.linspaced_linear(
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )

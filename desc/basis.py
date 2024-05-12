@@ -2110,6 +2110,14 @@ class FiniteElementMesh3D:
 
         vertices = vertices.T
 
+        if K == 1:
+            element = fem.ElementTetP1()
+
+        else:
+            element = fem.ElementTetP2()
+
+        basis = fem.CellBasis(mesh, element)
+
         # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
         tetrahedra = []
         # Pick four points of tetrahedral elements:
@@ -2118,11 +2126,11 @@ class FiniteElementMesh3D:
             for j in range(M - 1):
                 for k in range(N - 1):
 
-                    # We know that each rectangular prism in the mesh has 
-                    #six tetrahedra lying in it
+                    # We know that each rectangular prism in the mesh has
+                    # six tetrahedra lying in it
 
-                    # There are MNL rectangular prisms in the grid. 
-                    #Each quad corresponds to ijk
+                    # There are MNL rectangular prisms in the grid.
+                    # Each quad corresponds to ijk
                     # Pick prism:
 
                     b_l_1 = j + k * L * M + i * M
@@ -2172,6 +2180,42 @@ class FiniteElementMesh3D:
                     tetrahedra.append(tetrahedron6)
                     self.vertices = vertices
                     self.tetrahedra = tetrahedra
+
+                    # Setup quadrature points and weights 
+                    #for numerical integration using scikit-fem
+
+                    # When K=1, scikit goes direcly to the K=2 case
+                    if K == 1 or K == 2:
+                        [integration_points, weights] = fem.quadrature.get_quadrature(
+                            element, 1
+                        )
+                        # weights = weights * 2
+                        add_row = [
+                            integration_points[0][1],
+                            integration_points[0][0],
+                            integration_points[0][1],
+                            integration_points[0][1],
+                        ]
+                        integration_points = np.vstack([integration_points, add_row])
+
+                    if K == 3:
+                        [integration_points, weights] = fem.quadrature.get_quadrature(
+                            element, 3
+                        )
+                        # weights = weights * 2
+                        add_row = [
+                            integration_points[0][0],
+                            integration_points[0][2],
+                            integration_points[0][1],
+                            integration_points[0][2],
+                            integration_points[0][2],
+                        ]
+                        integration_points = np.vstack([integration_points, add_row]).T
+
+                    # Integration points, weights, and number of integration points
+                    self.integration_points = np.array(integration_points)
+                    self.weights = np.array(weights)
+                    self.nquad = self.integration_points.shape[0]
 
     def visualize():
         """Visualize 3D Mesh."""
@@ -2248,6 +2292,18 @@ class FiniteElementMesh3D:
         integral: 1D ndarray, shape (num_functions)
             Value of the integral over the mesh for each component of f
         """
+
+        nquad = self.nquad
+        if f.shape[1] > 1:
+            integral = np.zeros(f.shape[1])
+        else:
+            integral = 0.0
+        for i, tetrahedron in enumerate(self.tetrahedra):
+            integral += np.dot(
+                abs(tetrahedron.area2) * self.weights,
+                f[i * nquad : (i + 1) * nquad, :],
+            )
+        return integral / 2.0
 
     def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta):
         """Given a point on the mesh, find which tetrahedron it lies inside.
@@ -2394,14 +2450,16 @@ class FiniteElementMesh2D:
 
         else:
             element = fem.ElementTriP2()
-            
+
         basis = fem.CellBasis(mesh, element)
-        
+
         # record the nodal assembly matrix if need to check these integrals
         from skfem.helpers import dot
+
         @fem.BilinearForm
         def assembly(u, v, _):
             return dot(u, v)
+
         self.assembly_matrix = assembly.assemble(basis).todense()
 
         # Will fix this next section later
@@ -2451,8 +2509,8 @@ class FiniteElementMesh2D:
         self.triangles = triangles
 
         # Setup quadrature points and weights for numerical integration using scikit-fem
-        
-        # K = 1 still requires quadrature rule with 3 points so that the 
+
+        # K = 1 still requires quadrature rule with 3 points so that the
         # assembly matrix integrals are nonsingular
         if K == 1:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
@@ -2463,7 +2521,7 @@ class FiniteElementMesh2D:
                 integration_points[0][0],
             ]
             integration_points = np.vstack([add_row, integration_points])
-            
+
         # K >= 2 appears to need pretty high-order quadrature rule for
         # assembly matrix integrals to be nonsingular
         if K >= 2:
@@ -2591,9 +2649,9 @@ class FiniteElementMesh2D:
                         triangle.get_basis_functions(v.reshape(1, 2))
                     )
                     break  # found the right triangle, so break out of j loop
-                    
+
         # Some possible code to vectorize this function in future
-        # v = rho_theta 
+        # v = rho_theta
         # v1 = self.vertices[0, :, :]  # shape (num_triangles, 2)
         # v2 = self.vertices[1, :, :]
         # v3 = self.vertices[2, :, :]
@@ -2685,7 +2743,7 @@ class TetrahedronFiniteElement:
 
     Parameters
     ----------
-    vertices: array-like, shape(4,3)
+    vertices: array-like, shape (4,3)
         The four vertices of the triangle in (rho_i,theta_i, zeta_i)
     K: integer
         The order of the finite elements to use, which gives (K+1)(K+2)(K+3) / 6
@@ -2697,6 +2755,15 @@ class TetrahedronFiniteElement:
 
         self.Q = int(((K + 1) * (K + 2) * (K + 3)) / 6)
         self.K = K
+
+        D = np.array(
+            [vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
+            [vertices[1, 0], vertices[1, 1], vertices[1, 2], 1],
+            [vertices[2, 0], vertices[2, 1], vertices[2, 2], 1],
+            [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1],
+        )
+
+        self.volume = np.linalg.det(D) / 6
 
         # Write something to check whether basis functions vanish at the right spots
 
@@ -2719,6 +2786,16 @@ class TetrahedronFiniteElement:
             The basis functions corresponding to the tetrahedron in
             tetrahedron_indices.
         """
+        
+        # Here, I am going to use the element_finder. Still figuring out how to access 
+        # the elements of the mesh individually
+        indices =  np.zeros(rho_theta_zeta.shape[0],1)
+        mesh = self.mesh
+        
+        for i in range(rho_theta_zeta.shape[0]):
+            indices[i][0] = mesh.element_finder()([self.vertices[1][0]], [self.vertices[1][1]], [self.vertices[1][2]])
+            
+            
 
     def get_barycentric_coordinates(self, rho_theta_zeta):
         """Gets the barycentic coordinates, given a mesh in rho, theta, zeta.
@@ -3381,12 +3458,14 @@ class FiniteElementMesh1D:
             e = fem.ElementLineP2()
         basis = fem.CellBasis(mesh, e)
         vertices = np.ravel(basis.doflocs)
-        
+
         # record the nodal assembly matrix if need to check these integrals
         from skfem.helpers import dot
+
         @fem.BilinearForm
         def assembly(u, v, _):
             return dot(u, v)
+
         self.assembly_matrix = assembly.assemble(basis).todense()
 
         # K + 1 here so that integral of basis_function * basis_function

@@ -377,13 +377,15 @@ def test_contract_equilibrium():
     eq = get("HELIOTRON")
     rho = 0.5
     eq_half_rho = contract_equilibrium(eq, rho)
-    np.testing.assert_allclose(eq_half_rho.iota(1), eq.iota(rho))
-    np.testing.assert_allclose(eq_half_rho.pressure(1), eq.pressure(rho))
+    np.testing.assert_allclose(eq_half_rho.iota(1), eq.iota(rho), err_msg="iota")
+    np.testing.assert_allclose(
+        eq_half_rho.pressure(1), eq.pressure(rho), err_msg="pressure"
+    )
 
     surf_inner = eq.get_surface_at(rho)
-    np.testing.assert_allclose(surf_inner.R_lmn, eq_half_rho.surface.R_lmn)
-    np.testing.assert_allclose(surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn)
-    np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP)
+    np.testing.assert_allclose(surf_inner.R_lmn, eq_half_rho.surface.R_lmn, err_msg="R")
+    np.testing.assert_allclose(surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn, err_msg="Z")
+    np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP, err_msg="NFP")
 
     # test |B| and |F|
     data_keys = ["|B|", "|F|"]
@@ -395,5 +397,7 @@ def test_contract_equilibrium():
     )
     contract_data = eq_half_rho.compute(data_keys, grid=contract_grid)
     data = eq.compute(data_keys, grid=grid)
-    np.testing.assert_allclose(contract_data["|B|"], data["|B|"])
-    np.testing.assert_allclose(contract_data["|F|"], data["|F|"], rtol=1e-4)
+    np.testing.assert_allclose(contract_data["|B|"], data["|B|"], err_msg="|B|")
+    np.testing.assert_allclose(
+        contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
+    )

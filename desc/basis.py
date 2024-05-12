@@ -2093,15 +2093,16 @@ class FiniteElementMesh3D:
         self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
         self.K = K
 
+        # Trying a Hex Mesh, and then adding in the tetraehdra to each prism
         if K == 1:
-            mesh = fem.MeshTet1.init_tensor(
+            mesh = fem.MeshHex.init_tensor(
                 np.linspace(0, 1, L),
                 np.linspace(0, 2 * np.pi, M),
                 np.linspace(0, 2 * np.pi, N),
             )
 
         else:
-            mesh = fem.MeshTet2.init_tensor(
+            mesh = fem.MeshHex.init_tensor(
                 np.linspace(0, 1, L),
                 np.linspace(0, 2 * np.pi, M),
                 np.linspace(0, 2 * np.pi, N),
@@ -2155,7 +2156,8 @@ class FiniteElementMesh3D:
                     rectangular_prism_vertices[6] = vertices[t_l_2]
                     rectangular_prism_vertices[7] = vertices[t_r_2]
 
-                    # Form six tetrahedra out of rectangular prisms
+                    # Form five tetrahedra out of rectangular prisms. 
+                    # Basing this on the way MeshTet functions
 
                     tetrahedra = []
                     tetrahedron_1_vertices = np.zeros([4, 3])
@@ -2163,7 +2165,31 @@ class FiniteElementMesh3D:
                     tetrahedron_3_vertices = np.zeros([4, 3])
                     tetrahedron_4_vertices = np.zeros([4, 3])
                     tetrahedron_5_vertices = np.zeros([4, 3])
-                    tetrahedron_6_vertices = np.zeros([4, 3])
+
+                    tetrahedron_1_vertices[0] = rectangular_prism_vertices[0]
+                    tetrahedron_1_vertices[1] = rectangular_prism_vertices[1]
+                    tetrahedron_1_vertices[2] = rectangular_prism_vertices[2]
+                    tetrahedron_1_vertices[3] = rectangular_prism_vertices[4]
+
+                    tetrahedron_2_vertices[0] = rectangular_prism_vertices[1]
+                    tetrahedron_2_vertices[1] = rectangular_prism_vertices[2]
+                    tetrahedron_2_vertices[2] = rectangular_prism_vertices[3]
+                    tetrahedron_2_vertices[3] = rectangular_prism_vertices[7]
+
+                    tetrahedron_3_vertices[0] = rectangular_prism_vertices[4]
+                    tetrahedron_3_vertices[1] = rectangular_prism_vertices[7]
+                    tetrahedron_3_vertices[2] = rectangular_prism_vertices[5]
+                    tetrahedron_3_vertices[3] = rectangular_prism_vertices[1]
+
+                    tetrahedron_4_vertices[0] = rectangular_prism_vertices[4]
+                    tetrahedron_4_vertices[1] = rectangular_prism_vertices[6]
+                    tetrahedron_4_vertices[2] = rectangular_prism_vertices[7]
+                    tetrahedron_4_vertices[3] = rectangular_prism_vertices[2]
+
+                    tetrahedron_5_vertices[0] = rectangular_prism_vertices[4]
+                    tetrahedron_5_vertices[1] = rectangular_prism_vertices[1]
+                    tetrahedron_5_vertices[2] = rectangular_prism_vertices[7]
+                    tetrahedron_5_vertices[3] = rectangular_prism_vertices[2]
 
                     # Grabbing the six tetrahedra in each Rectangular prism:
                     tetrahedron1 = TetrahedronFiniteElement(tetrahedron_1_vertices, K=K)
@@ -2171,18 +2197,16 @@ class FiniteElementMesh3D:
                     tetrahedron3 = TetrahedronFiniteElement(tetrahedron_3_vertices, K=K)
                     tetrahedron4 = TetrahedronFiniteElement(tetrahedron_4_vertices, K=K)
                     tetrahedron5 = TetrahedronFiniteElement(tetrahedron_5_vertices, K=K)
-                    tetrahedron6 = TetrahedronFiniteElement(tetrahedron_6_vertices, K=K)
                     tetrahedra.append(tetrahedron1)
                     tetrahedra.append(tetrahedron2)
                     tetrahedra.append(tetrahedron3)
                     tetrahedra.append(tetrahedron4)
                     tetrahedra.append(tetrahedron5)
-                    tetrahedra.append(tetrahedron6)
                     self.vertices = vertices
                     self.tetrahedra = tetrahedra
 
-                    # Setup quadrature points and weights 
-                    #for numerical integration using scikit-fem
+                    # Setup quadrature points and weights
+                    # for numerical integration using scikit-fem
 
                     # When K=1, scikit goes direcly to the K=2 case
                     if K == 1 or K == 2:
@@ -2786,16 +2810,16 @@ class TetrahedronFiniteElement:
             The basis functions corresponding to the tetrahedron in
             tetrahedron_indices.
         """
-        
-        # Here, I am going to use the element_finder. Still figuring out how to access 
+
+        # Here, I am going to use the element_finder. Still figuring out how to access
         # the elements of the mesh individually
-        indices =  np.zeros(rho_theta_zeta.shape[0],1)
+        indices = np.zeros(rho_theta_zeta.shape[0], 1)
         mesh = self.mesh
-        
+
         for i in range(rho_theta_zeta.shape[0]):
-            indices[i][0] = mesh.element_finder()([self.vertices[1][0]], [self.vertices[1][1]], [self.vertices[1][2]])
-            
-            
+            indices[i][0] = mesh.element_finder()(
+                [self.vertices[1][0]], [self.vertices[1][1]], [self.vertices[1][2]]
+            )
 
     def get_barycentric_coordinates(self, rho_theta_zeta):
         """Gets the barycentic coordinates, given a mesh in rho, theta, zeta.

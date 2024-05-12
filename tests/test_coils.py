@@ -17,6 +17,7 @@ from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 
 
@@ -913,6 +914,29 @@ def test_save_makegrid_coils_assert_NFP(tmpdir_factory):
     assert len(coilset) % 3 != 0
     with pytest.raises(AssertionError):
         coilset.save_in_makegrid_format(str(path), NFP=3)
+
+
+@pytest.mark.unit
+def test_save_h5_for_mixed_coilset(tmpdir_factory):
+    """Test saving MixedCoilSet containing coilsets and a coil."""
+    output_dir = tmpdir_factory.mktemp("coilset_save")
+    output_path = output_dir.join("DummyMixedCoilSet.h5")
+
+    tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
+    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+    vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+    vf_coilset = CoilSet.linspaced_linear(
+        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+    )
+    xyz_coil = FourierXYZCoil()
+    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+
+    with pytest.warns(RuntimeWarning):
+        full_coilset.save(output_path)
+    with pytest.warns(RuntimeWarning):
+        coils = load(output_path)
+
+    assert coils.equiv(full_coilset)
 
 
 @pytest.mark.unit

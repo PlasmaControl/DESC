@@ -919,6 +919,7 @@ def test_save_makegrid_coils_assert_NFP(tmpdir_factory):
 @pytest.mark.unit
 def test_save_h5_for_mixed_coilset(tmpdir_factory):
     """Test saving MixedCoilSet containing coilsets and a coil."""
+    # tests fix in PR #1016
     output_dir = tmpdir_factory.mktemp("coilset_save")
     output_path = output_dir.join("DummyMixedCoilSet.h5")
 

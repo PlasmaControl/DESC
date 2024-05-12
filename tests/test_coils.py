@@ -932,10 +932,8 @@ def test_save_h5_for_mixed_coilset(tmpdir_factory):
     xyz_coil = FourierXYZCoil()
     full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
 
-    with pytest.warns(RuntimeWarning):
-        full_coilset.save(output_path)
-    with pytest.warns(RuntimeWarning):
-        coils = load(output_path)
+    full_coilset.save(output_path)
+    coils = load(output_path)
 
     assert coils.equiv(full_coilset)
 

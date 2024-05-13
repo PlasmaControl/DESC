@@ -458,17 +458,19 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     Parameters
     ----------
     current : float
-        current through the coil, in Amperes
+        Current through the coil, in Amperes.
     center : array-like, shape(3,)
-        x,y,z coordinates of center of coil
+        Coordinates of center of curve, in system determined by basis.
     normal : array-like, shape(3,)
-        x,y,z components of normal vector to planar surface
+        Components of normal vector to planar surface, in system determined by basis.
     r_n : array-like
-        fourier coefficients for radius from center as function of polar angle
+        Fourier coefficients for radius from center as function of polar angle
     modes : array-like
         mode numbers associated with r_n
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        name for this coil
+        Name for this coil.
 
     Examples
     --------
@@ -514,9 +516,10 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         normal=[0, 1, 0],
         r_n=2,
         modes=None,
+        basis="xyz",
         name="",
     ):
-        super().__init__(current, center, normal, r_n, modes, name)
+        super().__init__(current, center, normal, r_n, modes, basis, name)
 
 
 class SplineXYZCoil(_Coil, SplineXYZCurve):

@@ -2611,6 +2611,79 @@ class FixCurveRotation(FixParameters):
         )
 
 
+class FixCurrents(FixParameters):
+    """Fixes currents in a Coil or CoilSet.
+
+    Parameters
+    ----------
+    coil : Coil
+        Coil(s) that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Default is ``target=eq.Psi``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Default is ``target=eq.Psi``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(A)"
+    _print_value_fmt = "Fixed current error: {:10.3e} "
+
+    def __init__(
+        self,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed currents",
+    ):
+        super().__init__(
+            thing=coil,
+            params={"current": True},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        coil = self.things[0]
+        if self._normalize:
+            params = tree_leaves(
+                coil.params_dict, is_leaf=lambda x: isinstance(x, dict)
+            )
+            mean_current = np.mean([np.abs(param["current"]) for param in params])
+            self._normalization = np.max((mean_current, 1))
+        super().build(use_jit=use_jit, verbose=verbose)
+
+
 class FixOmniWell(FixParameters):
     """Fixes OmnigenousField.B_lm coefficients.
 

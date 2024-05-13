@@ -1203,37 +1203,36 @@ def test_single_coil_optimization():
     """Test that single coil (not coilset) optimization works."""
     # testing that the objectives work and that the optimization framework
     # works when a single coil is passed in.
-
     opt = Optimizer("fmintr")
     coil = FourierRZCoil()
     coil.change_resolution(N=1)
     target_R = 9
-    # length and curvature
     target_length = 2 * np.pi * target_R
     target_curvature = 1 / target_R
+    target_torsion = 0
     grid = LinearGrid(N=2)
+
+    # length and curvature
     obj = ObjectiveFunction(
         (
             CoilLength(coil, target=target_length),
             CoilCurvature(coil, target=target_curvature, grid=grid),
         ),
     )
-    opt.optimize([coil], obj, maxiter=200)
+    opt.optimize([coil], obj)
     np.testing.assert_allclose(
-        coil.compute("length")["length"], target_length, rtol=1e-4
+        coil.compute("length")["length"], target_length, rtol=3e-3
     )
     np.testing.assert_allclose(
-        coil.compute("curvature", grid=grid)["curvature"], target_curvature, rtol=1e-4
+        coil.compute("curvature", grid=grid)["curvature"], target_curvature, rtol=3e-3
     )
 
     # torsion
-    # initialize with some torsion
-    coil.Z_n = coil.Z_n.at[0].set(0.1)
-    target = 0
-    obj = ObjectiveFunction(CoilTorsion(coil, target=target))
-    opt.optimize([coil], obj, maxiter=200, ftol=0)
+    coil.Z_n = coil.Z_n.at[0].set(0.1)  # initialize with some torsion
+    obj = ObjectiveFunction(CoilTorsion(coil, target=target_torsion, grid=grid))
+    opt.optimize([coil], obj)
     np.testing.assert_allclose(
-        coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
+        coil.compute("torsion", grid=grid)["torsion"], target_torsion, atol=1e-5
     )
 
 

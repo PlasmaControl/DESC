@@ -608,7 +608,16 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         name="",
         discontinuous_indices=None,
     ):
-        super().__init__(current, X, Y, Z, knots, method, name)
+        super().__init__(
+            current,
+            X,
+            Y,
+            Z,
+            knots,
+            method,
+            name,
+            discontinuous_indices=discontinuous_indices,
+        )
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -716,7 +725,13 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             New representation of the coil parameterized by splines in X,Y,Z.
 
         """
-        curve = super().from_values(coords, knots, method, basis=basis)
+        curve = super().from_values(
+            coords,
+            knots,
+            method,
+            basis=basis,
+            discontinuous_indices=discontinuous_indices,
+        )
         return cls(
             current,
             X=curve.X,

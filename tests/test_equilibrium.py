@@ -9,7 +9,12 @@ import pytest
 
 from desc.__main__ import main
 from desc.backend import sign
-from desc.equilibrium import EquilibriaFamily, Equilibrium, contract_equilibrium
+from desc.equilibrium import (
+    EquilibriaFamily,
+    Equilibrium,
+    contract_equilibrium,
+    scale_profile,
+)
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
@@ -401,3 +406,18 @@ def test_contract_equilibrium():
     np.testing.assert_allclose(
         contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
     )
+
+
+@pytest.mark.unit
+def test_scale_profile():
+    """Test scale_profile utility function."""
+    eq = get("SOLOVEV")
+    p = eq.pressure
+    p_spline = p.to_spline(method="cubic2")
+    inner_rho = 0.5
+    p_scaled_spline = scale_profile(p_spline, inner_rho=inner_rho)
+    p_scaled_power = scale_profile(p, inner_rho=inner_rho)
+
+    rho = np.linspace(0, 1, 10, endpoint=True)
+    np.testing.assert_allclose(p_scaled_power(rho), p_scaled_spline(rho))
+    np.testing.assert_allclose(p(rho / 2), p_scaled_power(rho))

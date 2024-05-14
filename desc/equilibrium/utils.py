@@ -206,10 +206,12 @@ def scale_profile(profile, inner_rho):
             modes_list.append(l)
         new_profile = PowerSeriesProfile(params=params_list, modes=modes_list)
     elif isinstance(profile, SplineProfile):
-        n_knots = profile.params.size()
+        n_knots = profile.params.size
         new_knots = np.linspace(0, 1, n_knots, endpoint=True)
-        new_vals = profile(np.linspace(0, inner_rho, endpoint=True))
-        new_profile = SplineProfile(params=new_vals, knots=new_knots)
+        new_vals = profile(np.linspace(0, inner_rho, n_knots, endpoint=True))
+        new_profile = SplineProfile(
+            values=new_vals, knots=new_knots, method=profile._method
+        )
     else:
         raise NotImplementedError(
             f"Expected PowerSeriesProfile or SplineProfile, got {type(profile)}"

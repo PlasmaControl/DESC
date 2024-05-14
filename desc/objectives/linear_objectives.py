@@ -2611,8 +2611,8 @@ class FixCurveRotation(FixParameters):
         )
 
 
-class FixCurrents(FixParameters):
-    """Fixes currents in a Coil or CoilSet.
+class FixCoilCurrent(FixParameters):
+    """Fixes current(s) in a Coil or CoilSet.
 
     Parameters
     ----------
@@ -2640,7 +2640,7 @@ class FixCurrents(FixParameters):
     """
 
     _units = "(A)"
-    _print_value_fmt = "Fixed current error: {:10.3e} "
+    _print_value_fmt = "Fixed coil current error: {:10.3e} "
 
     def __init__(
         self,
@@ -2650,7 +2650,7 @@ class FixCurrents(FixParameters):
         weight=1,
         normalize=True,
         normalize_target=True,
-        name="fixed currents",
+        name="fixed coil current",
     ):
         super().__init__(
             thing=coil,

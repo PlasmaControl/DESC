@@ -54,7 +54,6 @@ from desc.objectives import (
     QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
-    ToroidalFlux,
     VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
@@ -1301,9 +1300,12 @@ def test_second_stage_optimization():
 @pytest.mark.unit
 def test_coilset_geometry_optimization():
     """Test optimizing coilset around a fixed axisymmetric equilibrium."""
+    R0 = 5  # major radius of plasma
+    a = 1.2  # minor radius of plasma
+    phi0 = np.pi / 12  # initial angle of coil
+    offset = 0.75  # target plasma-coil distance
+
     # circular tokamak
-    R0 = 5
-    a = 1
     surf = FourierRZToroidalSurface(
         R_lmn=np.array([R0, a]),
         Z_lmn=np.array([0, -a]),
@@ -1311,44 +1313,55 @@ def test_coilset_geometry_optimization():
         modes_Z=np.array([[0, 0], [-1, 0]]),
     )
     eq = Equilibrium(Psi=3, surface=surf, NFP=1, M=2, N=0, sym=True)
-    eq, _ = eq.solve(verbose=2)
 
     # symmetric coilset with 1 unique coil + 7 virtual coils
-    offset = 1
+    # initial radius is too large for target plasma-coil distance
+    # initial toroidal angle is too small for target coil-coil distance
     coil = FourierPlanarCoil(
-        current=1e6, center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + 2 * offset]
+        current=1e6,
+        center=[R0, phi0, 0],
+        normal=[0, 1, 0],
+        r_n=[a + 2 * offset],
+        basis="rpz",
     )
-    coils = CoilSet.linspaced_angular(coil, angle=np.pi / 12, n=2, endpoint=True)
-    coils = CoilSet(coils[1], NFP=4, sym=True)
+    coils = CoilSet(coil, NFP=4, sym=True)
     assert len(coils) == 1
     assert coils.num_coils == 8
 
     # optimizing for target coil-plasma distance and maximum coil-coil distance
-    coil_grid = LinearGrid(N=8)
     plasma_grid = LinearGrid(M=8, zeta=64)
-    flux_grid = LinearGrid(L=8, M=8, zeta=jnp.array([0.0]))
+    coil_grid = LinearGrid(N=8)
     objective = ObjectiveFunction(
         (
             PlasmaCoilsetMinDistance(
                 eq=eq,
                 coils=coils,
                 target=offset,
+                weight=2,
                 plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=True,
             ),
             CoilsetMinDistance(
-                coils, target=0.4 * 2 * np.pi * R0 / coils.num_coils, grid=coil_grid
+                coils,
+                target=2 * np.pi * (R0 - offset) / coils.num_coils,
+                grid=coil_grid,
             ),
         )
     )
-    constraints = ToroidalFlux(
-        eq=eq, field=coils, eval_grid=flux_grid, field_grid=coil_grid
+    # TODO: use FixCoilCurrent instead
+    # only 2 free optimization variables are coil center position phi and radius r_n
+    constraints = FixParameters(
+        coils, {"current": True, "center": np.array([0, 2]), "normal": True}
     )
-    optimizer = Optimizer("lsq-auglag")
-    (coils,), _ = optimizer.optimize(
+    optimizer = Optimizer("scipy-trf")
+    [coils], _ = optimizer.optimize(
         things=coils, objective=objective, constraints=constraints, verbose=2
     )
 
-    f = objective.compute_scaled_error(objective.x(coils))
-    np.testing.assert_array_less(np.abs(f), 5e-2)
+    assert coils[0].current == 1e6  # current was fixed
+    np.testing.assert_allclose(  # check coils are equally spaced in toroidal angle phi
+        coils[0].center, [R0, np.pi / coils.num_coils, 0], rtol=1e-5
+    )
+    np.testing.assert_allclose(coils[0].normal, [0, 1, 0])  # normal was fixed
+    np.testing.assert_allclose(coils[0].r_n, a + offset, rtol=1e-2)  # check coil radius

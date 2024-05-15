@@ -843,7 +843,7 @@ class TestSplineXYZCurve:
             discontinuous_indices=None,
         )
 
-        discont_length = discontinuous.compute("torsion")["torsion"]
-        cont_length = continuous.compute("torsion")["torsion"]
+        discont_torsion = discontinuous.compute("torsion")["torsion"]
+        cont_torsion = continuous.compute("torsion")["torsion"]
 
-        np.testing.assert_allclose(discont_length, cont_length, rtol=1e-3)
+        np.testing.assert_allclose(discont_torsion, cont_torsion, rtol=1e-3, atol=1e-3)

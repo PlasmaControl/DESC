@@ -306,8 +306,7 @@ class TestAxisLimits:
             "alpha_r": {"rtol": 1e-3},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
-        # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)
-        kwargs = dict(weaker_tolerance, **zero_map)
+        kwargs = weaker_tolerance | zero_map
         # fixed iota
         eq = get("W7-X")
         eq.change_resolution(4, 4, 4, 8, 8, 8)

@@ -29,6 +29,7 @@ from desc.objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
     FixElectronDensity,
     FixElectronTemperature,
@@ -955,6 +956,7 @@ def test_fix_parameters_input_order(DummyStellarator):
 @pytest.mark.unit
 def test_fix_subset_of_params_in_collection():
     """Tests FixParameters fixing a subset of things in the collection."""
+    # TODO: use DummyMixedCoilSet from PR #1016
     tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
     vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
@@ -990,3 +992,31 @@ def test_fix_subset_of_params_in_collection():
     obj = FixParameters(full_coilset, params)
     obj.build()
     np.testing.assert_allclose(obj.target, target)
+
+
+@pytest.mark.unit
+def test_fix_coil_current():
+    """Tests FixCoilCurrent."""
+    # TODO: use DummyCoilSet from PR #1016
+    coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
+    coilset = CoilSet.linspaced_angular(coil, n=4)
+
+    currents = [1e6, 2e6, 3e6, 4e6]
+    indices = [0, 2]
+    coilset.current = currents
+
+    with pytest.raises(ValueError):
+        obj = FixCoilCurrent(coil=coil, indices=[0])
+
+    # fix all coil currents
+    obj = FixCoilCurrent(coil=coilset)
+    obj.build()
+    assert obj.dim_f == len(currents)
+    np.testing.assert_allclose(obj.target, currents)
+
+    # only fix currents of some coils in coil set
+    obj = FixCoilCurrent(coil=coilset, indices=indices)
+    obj.build()
+    assert obj.dim_f == len(indices)
+    np.testing.assert_allclose(obj.target, np.array(currents)[np.array(indices)])
+    # TODO: use in an optimization for CoilCurrentLength from PR #995?

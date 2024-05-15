@@ -2634,6 +2634,11 @@ class FixCoilCurrent(FixParameters):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    indices : ndarray or bool, optional
+        Indices of the coils within a CoilSet to fix.
+        For example, ``indices=[0, 2]`` will fix the current of the first and third
+        coils in `coil.coils`. Can only be specified if `coil` is of type `CoilSet`.
+        If True/False fixes all/none of the coil currents.
     name : str, optional
         Name of the objective function.
 
@@ -2650,11 +2655,26 @@ class FixCoilCurrent(FixParameters):
         weight=1,
         normalize=True,
         normalize_target=True,
+        indices=True,
         name="fixed coil current",
     ):
+        if hasattr(coil, "_coils"):  # CoilSet
+            if isinstance(indices, bool):
+                params = {"current": indices}
+            else:  # fix only coil currents specified by indices
+                params = [
+                    {"current": bool(k in list(indices))} for k in range(len(coil))
+                ]
+        else:  # Coil
+            errorif(
+                not isinstance(indices, bool),
+                ValueError,
+                "indices must be a bool for a single Coil (not a CoilSet)",
+            )
+            params = {"current": indices}
         super().__init__(
             thing=coil,
-            params={"current": True},
+            params=params,
             target=target,
             bounds=bounds,
             weight=weight,

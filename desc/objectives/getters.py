@@ -247,15 +247,6 @@ def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
-    #     TODO: Make this similar to master
-    # Section self-consistency constraints
-    if not is_any_instance(constraints, SectionRSelfConsistency):
-        constraints += (SectionRSelfConsistency(eq=thing),)
-    if not is_any_instance(constraints, SectionZSelfConsistency):
-        constraints += (SectionZSelfConsistency(eq=thing),)
-    if not is_any_instance(constraints, SectionLambdaSelfConsistency):
-        constraints += (SectionLambdaSelfConsistency(eq=thing),)
-
     if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
         constraints, BoundaryRSelfConsistency
     ):
@@ -274,10 +265,18 @@ def maybe_add_self_consistency(thing, constraints):
         constraints, AxisZSelfConsistency
     ):
         constraints += (AxisZSelfConsistency(eq=thing),)
-
-        # Lambda gauge constraint for theta=0
-        if not is_any_instance(constraints, FixLambdaGauge):
-            constraints += (FixLambdaGauge(eq=thing),)
+    if {"R_lmn", "Rp_lmn"} <= params and not is_any_instance(
+        constraints, SectionRSelfConsistency
+    ):
+        constraints += (SectionRSelfConsistency(eq=thing),)
+    if {"Z_lmn", "Zp_lmn"} <= params and not is_any_instance(
+        constraints, SectionZSelfConsistency
+    ):
+        constraints += (SectionZSelfConsistency(eq=thing),)
+    if {"L_lmn", "Lp_lmn"} <= params and not is_any_instance(
+        constraints, SectionLambdaSelfConsistency
+    ):
+        constraints += (SectionLambdaSelfConsistency(eq=thing),)
 
     # Curve
     if {"shift"} <= params and not is_any_instance(constraints, FixCurveShift):

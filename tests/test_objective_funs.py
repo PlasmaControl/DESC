@@ -2160,7 +2160,8 @@ class TestComputeScalarResolution:
 
     @pytest.mark.regression
     @pytest.mark.parametrize(
-        "objective", [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilsetMinDistance]
+        "objective",
+        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilsetMinDistance],
     )
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
@@ -2338,7 +2339,8 @@ class TestObjectiveNaNGrad:
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "objective", [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilsetMinDistance]
+        "objective",
+        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilsetMinDistance],
     )
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""

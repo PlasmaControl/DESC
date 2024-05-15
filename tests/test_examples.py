@@ -1307,7 +1307,7 @@ def test_optimize_with_fourier_planar_coil():
     optimizer = Optimizer("fmintr")
     (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
     np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
-    
+
     # in MixedCoilSet
     c = MixedCoilSet(FourierRZCoil(), FourierPlanarCoil())
     objective = ObjectiveFunction(CoilLength(c, target=11))

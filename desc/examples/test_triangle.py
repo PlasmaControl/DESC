@@ -15,8 +15,8 @@ import numpy as np
 from desc.basis import FiniteElementMesh2D
 
 # Try triangulating whole mesh
-M = 2
-L = 2
+M = 5
+L = 4
 mesh = FiniteElementMesh2D(L, M, K=1)
 mesh.plot_triangles(plot_quadrature_points=True)
 integral = mesh.integrate(np.ones((2 * M * L * mesh.nquad, 10000)))

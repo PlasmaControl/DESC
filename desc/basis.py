@@ -2089,7 +2089,7 @@ class FiniteElementMesh3D:
         self.M = M
         self.L = L
         self.N = N
-        self.I_6LMN = 6 * L * M * N  # Considering how to incorporate n_p
+        self.I_5LMN = 5 * L * M * N  # Considering how to incorporate n_p
         self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
         self.K = K
 
@@ -2116,8 +2116,6 @@ class FiniteElementMesh3D:
 
         else:
             element = fem.ElementTetP2()
-
-        basis = fem.CellBasis(mesh, element)
 
         # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
         tetrahedra = []
@@ -2299,6 +2297,70 @@ class FiniteElementMesh3D:
         return coordinate_matrix
 
     # Working on basis functions in separate document
+
+    def return_quadrature_points(self):
+        """Get quadrature points for numerical integration over the mesh.
+
+        Returns
+        -------
+        quadrature points: 2D ndarray, shape (nquad * 5MLN, 2)
+            Points in (rho, theta, zeta) representing the quadrature point
+            locations for integration, return in real-space coordinates.
+        """
+        # Going to continue thinking through this
+        nquad = self.nquad
+        quadrature_points = np.zeros((self.I_5LMN * nquad, 3))
+        q = 0
+
+    def regular_tetrahedra_integration(self, f, vertices, K):
+        """Considering incorporating this function to incorporate higher order quadrature.
+
+        Returns
+        -------
+        integral: 1D ndarray, shape (num_functions)
+            Value of the integral given basis function f
+        """
+        if K == 8:
+            o_1 = 2
+            o_2 = 2
+            o_3 = 2
+
+        [p_1, w_1] = np.polynomial.legendre.leggauss(o_1)
+        [p_2, w_2] = np.polynomial.legendre.leggauss(o_2)
+        [p_3, w_3] = np.polynomial.legendre.leggauss(o_3)
+
+        A_1 = np.array(
+            [vertices[2][0], vertices[1][0], vertices[3][0]],
+            [vertices[2][1], vertices[1][1], vertices[3][1]],
+            [vertices[2][2], vertices[1][2], vertices[3][2]],
+        )
+        A_2 = np.array(
+            [[vertices[0][0], vertices[0][0], vertices[0][0]]],
+            [
+                [vertices[0][1], vertices[0][1], vertices[0][1]],
+                [[vertices[0][2], vertices[0][2], vertices[0][2]]],
+            ],
+        )
+        A = A_1 - A_2
+
+        J = np.abs(np.linalg.det(A))
+
+        S = 0
+        for i in range(o_1):
+            for j in range(o_2):
+                for k in range(o_3):
+                    x_coor = ((1 + p_1[i]) * (1 + p_2[j]) * (1 + p_3[k])) / 8
+                    y_coor = ((1 + p_1[i]) * (1 + p_2[j]) * (1 - p_3[k])) / 8
+                    z_coor = ((1 + p_1[i]) * (1 - p_2[j])) / 4
+                    X = np.array([[x_coor], [y_coor], [z_coor]])
+                    X_new = np.dot(A, X)
+                    x = X_new[0]
+                    y = X_new[1]
+                    z = X_new[2]
+                    S = S + J * (1 / 8) * (((1 + p_1[i]) ** 2) / 4) * (
+                        (1 + p_2[j]) / 2
+                    ) * w_1[i] * w_2[j] * w_3[k] * f(x, y, z)
+        return S
 
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
@@ -2547,7 +2609,7 @@ class FiniteElementMesh2D:
 
         # K >= 2 appears to need pretty high-order quadrature rule for
         # assembly matrix integrals to be nonsingular
-        if K >= 2:
+        if K == 4:
             [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
             weights = weights * 2
             add_row = [
@@ -2561,6 +2623,10 @@ class FiniteElementMesh2D:
             ]
             integration_points = np.vstack([add_row, integration_points])
             integration_points = np.transpose(integration_points)
+
+        # Sciki-fem still only seems to provide a partial list of points,
+        # which makes higher order quadrature
+        # a bit tricky. Going to attempt to implement this now using numpy.
 
         # Integration points, weights, and number of integration points
         self.integration_points = np.array(integration_points)
@@ -2828,9 +2894,43 @@ class TetrahedronFiniteElement:
             + (vertices[2, 2] - vertices[3, 2]) ** 2
         )
 
-        # Will continue work on this secction
-
+        # We construct equally spaced nodes for order K tetrahedron,
+        # which gives Q nodes.
         nodes = []
+
+        # Start with vertices of tetrahedron
+
+        node_mapping = []
+        for i in range(4):
+            nodes.append(vertices[i, :])
+            node_tuple = [0, 0, 0, 0]
+            node_tuple[i] = K
+            node_mapping.append(node_tuple)
+
+        # If K = 1, we are done. Else, will handle K = 2 separately
+
+        if K == 2:
+            # We create one additional midpoint node
+            # on each of the six tetrahedron edges
+            # for a total of 6 more nodes
+
+            midpoints = np.zeros([6, 3])
+
+            for i in range(3):
+                midpoints[i] = (vertices[i, :] + vertices[i + 1, :]) / 2
+
+            midpoints[3] = (vertices[0, :] + vertices[2, :]) / 2
+            midpoints[4] = (vertices[0, :] + vertices[3, :]) / 2
+            midpoints[5] = (vertices[1, :] + vertices[3, :]) / 2
+
+            # Now, we add all of these nodes to our list of nodes
+
+            for j in range(6):
+                nodes.append(midpoints[j, :])
+            node_tuple = [K, K, K, K]
+            node_mapping.append(node_tuple)
+
+            # Next, we need to place the interior nodes
 
         self.nodes = np.array(nodes)
         self.eta_nodes, _ = self.get_barycentric_coordinates(self.nodes)
@@ -2850,7 +2950,7 @@ class TetrahedronFiniteElement:
 
         Returns
         -------
-        eta = 3D array, shape (nrho * ntheta * nzeta, 4)
+        eta_final = 3D array, shape (nrho * ntheta * nzeta, 4)
             Barycentric coordinates defined by the tetrahedron and evaluated at the
             points (rho, theta, zeta)
         """
@@ -2904,7 +3004,7 @@ class TetrahedronFiniteElement:
             for j in range(4):
                 if eta_1[j] < 0 or eta_2[j] < 0 or eta_3[j] < 0 or eta_4[j] < 0:
                     warnings.warn()
-                    "Found rho_theta_zeta points outside the triangle ... "
+                    "Found rho_theta_zeta points outside the tetrahedron ... "
                     "Not using these points to evaluate the barycentric "
                     "coordinates."
 
@@ -2945,7 +3045,11 @@ class TetrahedronFiniteElement:
 
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
 
+        # Now, we have the rho_theta_zeta points that lie in the tetrahedron
+
         # Compute the vertex basis functions first
+
+        self.vertices
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
 

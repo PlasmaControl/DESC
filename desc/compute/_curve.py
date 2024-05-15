@@ -690,7 +690,6 @@ def get_XYZ_in_interval(X, Y, Z, knots, istart, istop):
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
-        "method": [],
         "intervals": [],
     },
     profiles=[],
@@ -704,6 +703,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 0
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    method = kwargs["method"]
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -718,7 +718,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             knots,
             xq,
             derivative,
-            transforms["method"],
+            method,
         )
 
         xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
@@ -743,7 +743,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             params["knots"],
             xq,
             derivative,
-            method=transforms["method"],
+            method=method,
             period=2 * jnp.pi,
         )
         fq = jnp.array(fq)
@@ -767,7 +767,6 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
-        "method": [],
         "intervals": [],
     },
     profiles=[],
@@ -780,6 +779,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 1
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    method = kwargs["method"]
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -794,7 +794,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             knots,
             xq,
             derivative,
-            transforms["method"],
+            method,
         )
 
         xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
@@ -819,7 +819,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             params["knots"],
             xq,
             derivative,
-            method=transforms["method"],
+            method=method,
             period=2 * jnp.pi,
         )
         fq = jnp.array(fq)
@@ -844,7 +844,6 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
-        "method": [],
         "intervals": [],
     },
     profiles=[],
@@ -857,6 +856,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 2
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    method = kwargs["method"]
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -871,7 +871,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             knots,
             xq,
             derivative,
-            transforms["method"],
+            method,
         )
 
         xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
@@ -896,7 +896,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             params["knots"],
             xq,
             derivative,
-            method=transforms["method"],
+            method=method,
             period=2 * jnp.pi,
         )
         fq = jnp.array(fq)
@@ -920,7 +920,6 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
     transforms={
-        "method": [],
         "intervals": [],
     },
     profiles=[],
@@ -933,6 +932,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 3
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    method = kwargs["method"]
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -947,7 +947,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             knots,
             xq,
             derivative,
-            transforms["method"],
+            method,
         )
 
         xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
@@ -972,7 +972,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             params["knots"],
             xq,
             derivative,
-            method=transforms["method"],
+            method=method,
             period=2 * jnp.pi,
         )
         fq = jnp.array(fq)

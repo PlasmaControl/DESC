@@ -168,15 +168,16 @@ def _Z_Curve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve",
     dim=3,
     params=["r_n", "center", "normal", "rotmat", "shift"],
-    transforms={"r": [[0, 0, 0]], "basis": []},
+    transforms={"r": [[0, 0, 0]]},
     profiles=[],
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
-    if transforms["basis"].lower() == "rpz":
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
         center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:
@@ -209,15 +210,16 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, first derivative",
     dim=3,
     params=["r_n", "center", "normal", "rotmat", "shift"],
-    transforms={"r": [[0, 0, 0], [0, 0, 1]], "basis": []},
+    transforms={"r": [[0, 0, 0], [0, 0, 1]]},
     profiles=[],
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
-    if transforms["basis"].lower() == "rpz":
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
         center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:
@@ -259,15 +261,16 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, second derivative",
     dim=3,
     params=["r_n", "center", "normal", "rotmat", "shift"],
-    transforms={"r": [[0, 0, 0], [0, 0, 1], [0, 0, 2]], "basis": []},
+    transforms={"r": [[0, 0, 0], [0, 0, 1], [0, 0, 2]]},
     profiles=[],
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
-    if transforms["basis"].lower() == "rpz":
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
         center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:
@@ -314,15 +317,16 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, third derivative",
     dim=3,
     params=["r_n", "center", "normal", "rotmat", "shift"],
-    transforms={"r": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]], "basis": []},
+    transforms={"r": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]},
     profiles=[],
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
-    if transforms["basis"].lower() == "rpz":
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
         center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:

@@ -662,7 +662,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = "cubic"
+    method = kwargs["method"]
 
     is_discontinuous = len(transforms["intervals"][0])
 

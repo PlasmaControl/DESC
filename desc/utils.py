@@ -652,3 +652,71 @@ def print_modes_coefs(thing, coord):
 def is_any_instance(things, cls):
     """Check if any of things is an instance of cls."""
     return any([isinstance(t, cls) for t in things])
+
+
+def broadcast_tree(tree_in, tree_out, dtype=int):
+    """Broadcast tree_in to the same pytree structure as tree_out.
+
+    Both trees must be nested lists of dicts with string keys and array values.
+    Or the values can be bools, where False broadcasts to an empty array and True
+    broadcasts to the corresponding array from tree_out.
+
+    Parameters
+    ----------
+    tree_in : pytree
+        Tree to broadcast.
+    tree_out : pytree
+        Tree with structure to broadcast to.
+    dtype : optional
+        Data type of array values. Default = int.
+
+    Returns
+    -------
+    tree : pytree
+        Tree with the leaves of tree_in broadcast to the structure of tree_out.
+
+    """
+    # both trees at leaf layer
+    if isinstance(tree_in, dict) and isinstance(tree_out, dict):
+        tree_new = {}
+        for key, value in tree_in.items():
+            errorif(
+                key not in tree_out.keys(),
+                ValueError,
+                f"dict key '{key}' of tree_in must be a subset of those in tree_out: "
+                + f"{list(tree_out.keys())}",
+            )
+            if isinstance(value, bool):
+                if value:
+                    tree_new[key] = np.atleast_1d(tree_out[key]).astype(dtype=dtype)
+                else:
+                    tree_new[key] = np.array([], dtype=dtype)
+            else:
+                tree_new[key] = np.atleast_1d(value).astype(dtype=dtype)
+        for key, value in tree_out.items():
+            if key not in tree_new.keys():
+                tree_new[key] = np.array([], dtype=dtype)
+            errorif(
+                not np.all(np.isin(tree_new[key], value)),
+                ValueError,
+                f"dict value {tree_new[key]} of tree_in must be a subset "
+                + f"of those in tree_out: {value}",
+            )
+        return tree_new
+    # tree_out is deeper than tree_in
+    elif isinstance(tree_in, dict) and isinstance(tree_out, list):
+        return [broadcast_tree(tree_in.copy(), branch) for branch in tree_out]
+    # both trees at branch layer
+    elif isinstance(tree_in, list) and isinstance(tree_out, list):
+        errorif(
+            len(tree_in) != len(tree_out),
+            ValueError,
+            "tree_in must have the same number of branches as tree_out",
+        )
+        return [broadcast_tree(tree_in[k], tree_out[k]) for k in range(len(tree_out))]
+    # tree_in is deeper than tree_out
+    elif isinstance(tree_in, list) and isinstance(tree_out, dict):
+        raise ValueError("tree_in cannot have a deeper structure than tree_out")
+    # invalid tree structure
+    else:
+        raise ValueError("trees must be nested lists of dicts")

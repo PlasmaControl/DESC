@@ -1097,7 +1097,7 @@ class PiecewiseOmnigenity(_Objective):
             rho = 1.0
         if self._eq_grid is None:
             eq_grid = LinearGrid(
-                rho=rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
+                rho=rho, M=4 * M_booz, N=4 * N_booz, NFP=eq.NFP, sym=False
             )
         else:
             eq_grid = self._eq_grid

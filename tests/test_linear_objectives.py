@@ -963,7 +963,7 @@ def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
     ]
     target = np.concatenate(
         (
-            np.array([1, 2, 0, 0, 1, 1]),
+            np.array([3, 2, 0, 0, 1, 1]),
             np.eye(3).flatten(),
             np.array([0, 0, 0]),
             np.eye(3).flatten(),

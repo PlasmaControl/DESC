@@ -281,11 +281,11 @@ def DummyMixedCoilSet(tmpdir_factory):
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )
     xyz_coil = FourierXYZCoil()
-    _ = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
 
-    # full_coilset.save(output_path)  FIXME: MixedCoilSet save error
-    DummyCoilSet_out = {"output_path": output_path}
-    return DummyCoilSet_out
+    full_coilset.save(output_path)
+    DummyMixedCoilSet_out = {"output_path": output_path}
+    return DummyMixedCoilSet_out
 
 
 @pytest.fixture(scope="session")

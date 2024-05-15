@@ -570,7 +570,7 @@ class FourierPlanarCurve(Curve):
 
     """
 
-    _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "basis"]
+    _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
     # The curve is computed in this frame and then shifted/rotated to the correct frame.
@@ -599,7 +599,7 @@ class FourierPlanarCurve(Curve):
 
         self.normal = normal
         self.center = center
-        self.basis = basis
+        self._basis = basis
 
     @property
     def r_basis(self):
@@ -633,7 +633,7 @@ class FourierPlanarCurve(Curve):
         else:
             raise ValueError(
                 "center should be a 3 element vector in "
-                + self.basis
+                + self._basis
                 + " coordinates, got {}".format(new)
             )
 
@@ -650,7 +650,7 @@ class FourierPlanarCurve(Curve):
         else:
             raise ValueError(
                 "normal should be a 3 element vector in "
-                + self.basis
+                + self._basis
                 + " coordinates, got {}".format(new)
             )
 
@@ -688,6 +688,54 @@ class FourierPlanarCurve(Curve):
             idx = self.r_basis.get_idx(0, 0, nn)
             if rr is not None:
                 self.r_n = put(self.r_n, idx, rr)
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        override_grid=True,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        return super().compute(
+            names=names,
+            grid=grid,
+            params=params,
+            transforms=transforms,
+            data=data,
+            override_grid=override_grid,
+            basis_in=self._basis,
+            **kwargs,
+        )
 
 
 class SplineXYZCurve(Curve):

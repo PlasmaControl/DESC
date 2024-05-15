@@ -27,10 +27,10 @@ from .linear_objectives import (
     FixSectionLambda,
     FixSectionR,
     FixSectionZ,
+    FixSheetCurrent,
     SectionLambdaSelfConsistency,
     SectionRSelfConsistency,
     SectionZSelfConsistency,
-    FixSheetCurrent,
 )
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
@@ -247,7 +247,7 @@ def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
-#     TODO: Make this similar to master
+    #     TODO: Make this similar to master
     # Section self-consistency constraints
     if not is_any_instance(constraints, SectionRSelfConsistency):
         constraints += (SectionRSelfConsistency(eq=thing),)

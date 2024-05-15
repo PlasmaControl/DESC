@@ -10,7 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp
-from desc.coils import FourierRZCoil
+from desc.coils import FourierPlanarCoil, FourierRZCoil
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -1300,6 +1300,16 @@ def test_second_stage_optimization():
 def test_optimize_with_fourier_planar_curve():
     """Test optimizing a FourierPlanarCurve."""
     c = FourierPlanarCurve()
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
+
+
+@pytest.mark.unit
+def test_optimize_with_fourier_planar_coil():
+    """Test optimizing a FourierPlanarCoil."""
+    c = FourierPlanarCoil()
     objective = ObjectiveFunction(CoilLength(c, target=11))
     optimizer = Optimizer("fmintr")
     (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)

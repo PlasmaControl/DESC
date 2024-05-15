@@ -97,8 +97,12 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         A = A[:, cols]
     assert A.shape[1] == xp.size
 
+    # will store the global index of the unfixed rows with shifted indices by 1
     indices_row = np.arange(1, A.shape[0] + 1)
+    # will store the global index of the unfixed idx with shifted indices by 1
     indices_idx = np.arange(1, A.shape[1] + 1)
+
+    # while loop has problems updating JAX arrays, convert them to numpy arrays
     A = np.array(A)
     b = np.array(b)
     while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
@@ -110,8 +114,11 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
         unfixed_idx = np.setdiff1d(np.arange(A.shape[1]), fixed_idx)
 
-        # find the global index of the unfixed variables
+        # find the global index of the fixed variables of this iteration
         global_fixed_idx = indices_idx[fixed_idx] - 1
+        # find the global index of the unfixed variables by removing the fixed variables
+        # from the indices arrays. This is done by setting the fixed indices to 0 and
+        # removing the 0s.
         indices_idx[fixed_idx] = 0  # set fixed indices to 0
         indices_idx = indices_idx[
             np.nonzero(indices_idx)
@@ -144,6 +151,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
             )
         A = A[unfixed_rows][:, unfixed_idx]
         b = b[unfixed_rows]
+    # from now on, we need to use the global indices of the unfixed variables
     unfixed_idx = indices_idx - 1
     if A.size:
         Ainv_full, Z = svd_inv_null(A)

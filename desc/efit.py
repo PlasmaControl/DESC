@@ -42,7 +42,8 @@ class EFITIO:
             If None, spline profiles will be used. Otherwise they are fit
             to even power series in rho.
         bdry_dist : float
-            Deviation from separatrix. If bdry_dist == 1, then the boundary
+            Deviation from separatrix (boundary distance) in terms of the
+            normalized poloidal flux. If bdry_dist == 1, then the boundary
             is the actual separatrix read from the geqdsk file.
             bdry_dist = 0 corresponds to the magnetic axis.
             Typical values should be 0.95 < bdry_dist < 1.0
@@ -84,7 +85,7 @@ class EFITIO:
             # points in the horizontal direction (width) and vertical direction (height)
             g["nw"] = int("".join([c for c in line0[-2] if c.isdigit()]))
             g["nh"] = int("".join([c for c in line0[-1] if c.isdigit()]))
-            if len(line0) == 8:
+            if len(line0) == 8:  # EFIT file information
                 g["efit"] = line0[4]
             else:
                 g["efit"] = None
@@ -206,7 +207,9 @@ class EFITIO:
         Psi_b = psi[-1]  # boundary flux
 
         pressure_psi = SplineProfile(g["pres"], psi)
-        iota_psi = SplineProfile(1 / g["q"], psi)
+        iota_psi = SplineProfile(
+            1 / g["q"], psi
+        )  # tokmaks only right nowle(1 / g["q"], psi)
 
         # Defining splines and recalculating important quantities if
         # bdry_dist less than 1. Also works for bdry_dist equal to 1.
@@ -277,16 +280,14 @@ class EFITIO:
 
         Parameters
         ----------
+        eq: Equilibrium
+            DESC equilibrium object
         outfile : str or path-like
             name of the DESC input file to create
-        infile : str or path-like
-            path of the DESC output equilibrium file
         objective : str
             objective type used in the input file
         optimizer : str
             type of optimizer
-        header : str
-            text to print at the top of the file
         ftol : float
             relative tolerance of the objective function f
         xtol : float
@@ -297,8 +298,6 @@ class EFITIO:
             maximum number of optimizer iterations per continuation step
         threshold : float
             Fourier coefficients below this value will be set to 0.
-        outfile : str or path-like
-            Name of the DESC input file to create
         """
         with open(outfile, "w+") as f:
             header = "# DESC input file generated from an geqdsk file\n# "
@@ -360,7 +359,7 @@ class EFITIO:
 
             f.write("\n# fixed-boundary surface shape\n")
 
-            # boundary parameters (eqdsk equilibria are alwaws up-down asymmetric)
+            # boundary parameters (eqdsk equilibria are always up-down asymmetric)
             # so we keep all the modes
             for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
                 if abs(eq.Rb_lmn[k]) > threshold or abs(eq.Zb_lmn[k]) > threshold:

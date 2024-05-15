@@ -833,6 +833,7 @@ class TestSplineXYZCurve:
             Z=np.zeros_like(phi),
             knots="arclength",
             discontinuous_indices=discontinuous_indices,
+            method="linear",
         )
 
         continuous = SplineXYZCurve(
@@ -841,6 +842,7 @@ class TestSplineXYZCurve:
             Z=np.zeros_like(phi),
             knots="arclength",
             discontinuous_indices=None,
+            method="linear",
         )
 
         discont_torsion = discontinuous.compute("torsion")["torsion"]

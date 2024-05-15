@@ -697,13 +697,15 @@ def get_XYZ_in_interval(X, Y, Z, knots, istart, istop):
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    method="{'cubic', 'linear'}: Interpolation type, Default 'cubic'",
 )
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     derivative = 0
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = kwargs["method"]
+    # FIXME: always defaults to "cubic"
+    method = kwargs.get("method", "cubic")
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -774,12 +776,14 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     data=["s", "x"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    method="{'cubic', 'linear'}: Interpolation type, Default 'cubic'",
 )
 def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 1
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = kwargs["method"]
+    # FIXME: always defaults to "cubic"
+    method = kwargs.get("method", "cubic")
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -851,12 +855,14 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     data=["s", "x"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    method="{'cubic', 'linear'}: Interpolation type, Default 'cubic'",
 )
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 2
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = kwargs["method"]
+    # FIXME: always defaults to "cubic"
+    method = kwargs.get("method", "cubic")
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -927,12 +933,14 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     data=["s", "x"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    method="{'cubic', 'linear'}: Interpolation type, Default 'cubic'",
 )
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 3
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = kwargs["method"]
+    # FIXME: always defaults to "cubic"
+    method = kwargs.get("method", "cubic")
 
     is_discontinuous = len(transforms["intervals"][0])
 

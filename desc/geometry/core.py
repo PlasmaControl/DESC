@@ -166,8 +166,6 @@ class Curve(IOAble, Optimizable, ABC):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        kwargs["method"] = getattr(self, "method", None)
-
         data = compute_fun(
             self,
             names,

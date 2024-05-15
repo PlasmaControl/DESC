@@ -101,21 +101,6 @@ class _CoilObjective(_Objective):
         self._dim_f = 0
         self._quad_weights = jnp.array([])
 
-        # FIXME: Is this necessary? It only gets called on a Grid, never coils/coilset
-        def get_dim_f_and_weights(coilset):
-            """Get dim_f and quad_weights from grid."""
-            if isinstance(coilset, list):
-                [get_dim_f_and_weights(x) for x in coilset]
-            elif isinstance(coilset, MixedCoilSet):
-                [get_dim_f_and_weights(x) for x in coilset]
-            elif isinstance(coilset, CoilSet):
-                get_dim_f_and_weights(coilset.coils)
-            elif isinstance(coilset, _Grid):
-                self._dim_f += coilset.num_zeta
-                self._quad_weights = jnp.concatenate(
-                    (self._quad_weights, coilset.spacing[:, 2])
-                )
-
         def to_list(coilset):
             """Turn a MixedCoilSet container into a list of what it's containing."""
             if isinstance(coilset, list):
@@ -173,7 +158,10 @@ class _CoilObjective(_Objective):
             is_leaf=lambda x: not hasattr(x, "__len__"),
         )
 
-        get_dim_f_and_weights(self._grid)
+        grids = tree_leaves(self._grid, is_leaf=lambda x: hasattr(x, "num_nodes"))
+        self._dim_f = np.sum([grid.num_nodes for grid in grids])
+        self._quad_weights = np.concatenate([grid.spacing[:, 2] for grid in grids])
+
         # get only needed grids (1 per CoilSet) and flatten that list
         self._grid = tree_leaves(
             to_list(self._grid), is_leaf=lambda x: isinstance(x, _Grid)

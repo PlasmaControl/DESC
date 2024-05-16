@@ -635,8 +635,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _splinexyz_helper(params, transforms, data, kwargs, derivative):
-    xq = data["s"]
+def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
     is_discontinuous = len(transforms["intervals"][0])
@@ -695,19 +694,20 @@ def _splinexyz_helper(params, transforms, data, kwargs, derivative):
         return fq
 
     if is_discontinuous:
+        # X, Y, Z, knots used in body()
         # manually add endpoint for discontinuous
-        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
-        X = jnp.append(params["X"], params["X"][0])
-        Y = jnp.append(params["Y"], params["Y"][0])
-        Z = jnp.append(params["Z"], params["Z"][0])
+        knots = jnp.append(p_knots, p_knots[0] + 2 * jnp.pi)
+        X = jnp.append(f[0], f[0][0])
+        Y = jnp.append(f[1], f[1][0])
+        Z = jnp.append(f[2], f[2][0])
         # query points for Xq, Yq, Zq
         fq = jnp.zeros((3, len(xq)))
         fq = fori_loop(0, len(transforms["intervals"]), body, fq)
     else:
         # regular interpolation
         fq = inner_body(
-            [params["X"], params["Y"], params["Z"]],
-            params["knots"],
+            f,
+            p_knots,
             period=2 * jnp.pi,
         )
         fq = jnp.array(fq)
@@ -738,8 +738,11 @@ def _splinexyz_helper(params, transforms, data, kwargs, derivative):
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     derivative = 0
+    xq = data["s"]
+    knots = params["knots"]
+    f = [params["X"], params["Y"], params["Z"]]
 
-    coords = _splinexyz_helper(params, transforms, data, kwargs, derivative)
+    coords = _splinexyz_helper(f, knots, transforms, xq, kwargs, derivative)
 
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
@@ -770,7 +773,11 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 1
-    coords_s = _splinexyz_helper(params, transforms, data, kwargs, derivative)
+    xq = data["s"]
+    knots = params["knots"]
+    f = [params["X"], params["Y"], params["Z"]]
+
+    coords_s = _splinexyz_helper(f, knots, transforms, xq, kwargs, derivative)
     coords_s = coords_s @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -801,7 +808,11 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 2
-    coords_ss = _splinexyz_helper(params, transforms, data, kwargs, derivative)
+    xq = data["s"]
+    knots = params["knots"]
+    f = [params["X"], params["Y"], params["Z"]]
+
+    coords_ss = _splinexyz_helper(f, knots, transforms, xq, kwargs, derivative)
     coords_ss = coords_ss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -831,7 +842,11 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 3
-    coords_sss = _splinexyz_helper(params, transforms, data, kwargs, derivative)
+    xq = data["s"]
+    knots = params["knots"]
+    f = [params["X"], params["Y"], params["Z"]]
+
+    coords_sss = _splinexyz_helper(f, knots, transforms, xq, kwargs, derivative)
     coords_sss = coords_sss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":

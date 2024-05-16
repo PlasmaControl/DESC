@@ -1216,7 +1216,7 @@ class BConsistencyError(_Objective):
         B_nxB = B_nxB_alone + eval_data["B"] / 2
 
         g = eval_data["|e_theta x e_zeta|"]
-        B_err = (g * (B_nxB - eval_data["B"]).T).T.flatten(order="F")
+        B_err = (g * (B_nxB).T).T.flatten(order="F")
 
         return B_err
 

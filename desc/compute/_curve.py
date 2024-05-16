@@ -635,38 +635,40 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def inner_body(f, knots, xq, derivative, method, period=None):
-    """Interpolation for spline curves."""
-    Xq = interp1d(
-        xq,
-        knots,
-        f[0],
-        method=method,
-        derivative=derivative,
-        period=period,
-    )
-    Yq = interp1d(
-        xq,
-        knots,
-        f[1],
-        method=method,
-        derivative=derivative,
-        period=period,
-    )
-    Zq = interp1d(
-        xq,
-        knots,
-        f[2],
-        method=method,
-        derivative=derivative,
-        period=period,
-    )
+def _splinexyz_helper(params, transforms, data, kwargs, derivative):
+    xq = data["s"]
+    method = kwargs.get("method", "cubic")
+    transforms["intervals"] = jnp.asarray(transforms["intervals"])
+    is_discontinuous = len(transforms["intervals"][0])
 
-    return [Xq, Yq, Zq]
+    def inner_body(f, knots, period=None):
+        """Interpolation for spline curves."""
+        Xq = interp1d(
+            xq,
+            knots,
+            f[0],
+            method=method,
+            derivative=derivative,
+            period=period,
+        )
+        Yq = interp1d(
+            xq,
+            knots,
+            f[1],
+            method=method,
+            derivative=derivative,
+            period=period,
+        )
+        Zq = interp1d(
+            xq,
+            knots,
+            f[2],
+            method=method,
+            derivative=derivative,
+            period=period,
+        )
 
-
-def get_XYZ_in_interval(X, Y, Z, knots, istart, istop):
-    """Get X, Y, and Z in given interval."""
+        return [Xq, Yq, Zq]
 
     def get_interval(arr, knots, istart, istop):
         arr_temp = jnp.where(knots > knots[istop], arr[istop], arr)
@@ -674,11 +676,45 @@ def get_XYZ_in_interval(X, Y, Z, knots, istart, istop):
 
         return arr_temp
 
-    X_in_interval = get_interval(X, knots, istart, istop)
-    Y_in_interval = get_interval(Y, knots, istart, istop)
-    Z_in_interval = get_interval(Z, knots, istart, istop)
+    def body(i, fq):
+        istart, istop = transforms["intervals"][i]
+        # catch end-point
+        istop = jnp.where(istop == 0, -1, istop)
 
-    return [X_in_interval, Y_in_interval, Z_in_interval]
+        f_in_interval = [get_interval(f, knots, istart, istop) for f in [X, Y, Z]]
+        fq_temp = inner_body(
+            f_in_interval,
+            knots,
+            period=None,
+        )
+
+        xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
+        for i in range(3):
+            fq = fq.at[i].set(jnp.where(xq_range, fq_temp[i], fq[i]))
+
+        return fq
+
+    if is_discontinuous:
+        # manually add endpoint for discontinuous
+        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
+        X = jnp.append(params["X"], params["X"][0])
+        Y = jnp.append(params["Y"], params["Y"][0])
+        Z = jnp.append(params["Z"], params["Z"][0])
+        # query points for Xq, Yq, Zq
+        fq = jnp.zeros((3, len(xq)))
+        fq = fori_loop(0, len(transforms["intervals"]), body, fq)
+    else:
+        # regular interpolation
+        fq = inner_body(
+            [params["X"], params["Y"], params["Z"]],
+            params["knots"],
+            period=2 * jnp.pi,
+        )
+        fq = jnp.array(fq)
+
+    coords = jnp.stack(fq, axis=1)
+
+    return coords
 
 
 @register_compute_fun(
@@ -702,53 +738,9 @@ def get_XYZ_in_interval(X, Y, Z, knots, istart, istop):
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     derivative = 0
-    xq = data["s"]
-    method = kwargs.get("method", "cubic")
-    transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    is_discontinuous = len(transforms["intervals"][0])
 
-    def body(i, fq):
-        istart, istop = transforms["intervals"][i]
-        # catch end-point
-        istop = jnp.where(istop == 0, -1, istop)
+    coords = _splinexyz_helper(params, transforms, data, kwargs, derivative)
 
-        f_in_interval = get_XYZ_in_interval(X, Y, Z, knots, istart, istop)
-        fq_temp = inner_body(
-            f_in_interval,
-            knots,
-            xq,
-            derivative,
-            method,
-        )
-
-        xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
-        for i in range(3):
-            fq = fq.at[i].set(jnp.where(xq_range, fq_temp[i], fq[i]))
-
-        return fq
-
-    if is_discontinuous:
-        # manually add endpoint for discontinuous
-        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
-        X = jnp.append(params["X"], params["X"][0])
-        Y = jnp.append(params["Y"], params["Y"][0])
-        Z = jnp.append(params["Z"], params["Z"][0])
-        # query points for Xq, Yq, Zq
-        fq = jnp.zeros((3, len(xq)))
-        fq = fori_loop(0, len(transforms["intervals"]), body, fq)
-    else:
-        # regular interpolation
-        fq = inner_body(
-            [params["X"], params["Y"], params["Z"]],
-            params["knots"],
-            xq,
-            derivative,
-            method=method,
-            period=2 * jnp.pi,
-        )
-        fq = jnp.array(fq)
-
-    coords = jnp.stack(fq, axis=1)
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
     )
@@ -778,54 +770,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 1
-    xq = data["s"]
-    transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = kwargs.get("method", "cubic")
-
-    is_discontinuous = len(transforms["intervals"][0])
-
-    def body(i, fq):
-        istart, istop = transforms["intervals"][i]
-        # catch end-point
-        istop = jnp.where(istop == 0, -1, istop)
-
-        f_in_interval = get_XYZ_in_interval(X, Y, Z, knots, istart, istop)
-        fq_temp = inner_body(
-            f_in_interval,
-            knots,
-            xq,
-            derivative,
-            method,
-        )
-
-        xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
-        for i in range(3):
-            fq = fq.at[i].set(jnp.where(xq_range, fq_temp[i], fq[i]))
-
-        return fq
-
-    if is_discontinuous:
-        # manually add endpoint for discontinuous
-        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
-        X = jnp.append(params["X"], params["X"][0])
-        Y = jnp.append(params["Y"], params["Y"][0])
-        Z = jnp.append(params["Z"], params["Z"][0])
-        # query points for Xq, Yq, Zq
-        fq = jnp.zeros((3, len(xq)))
-        fq = fori_loop(0, len(transforms["intervals"]), body, fq)
-    else:
-        # regular interpolation
-        fq = inner_body(
-            [params["X"], params["Y"], params["Z"]],
-            params["knots"],
-            xq,
-            derivative,
-            method=method,
-            period=2 * jnp.pi,
-        )
-        fq = jnp.array(fq)
-
-    coords_s = jnp.stack(fq, axis=1)
+    coords_s = _splinexyz_helper(params, transforms, data, kwargs, derivative)
     coords_s = coords_s @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -856,54 +801,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 2
-    xq = data["s"]
-    transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = kwargs.get("method", "cubic")
-
-    is_discontinuous = len(transforms["intervals"][0])
-
-    def body(i, fq):
-        istart, istop = transforms["intervals"][i]
-        # catch end-point
-        istop = jnp.where(istop == 0, -1, istop)
-
-        f_in_interval = get_XYZ_in_interval(X, Y, Z, knots, istart, istop)
-        fq_temp = inner_body(
-            f_in_interval,
-            knots,
-            xq,
-            derivative,
-            method,
-        )
-
-        xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
-        for i in range(3):
-            fq = fq.at[i].set(jnp.where(xq_range, fq_temp[i], fq[i]))
-
-        return fq
-
-    if is_discontinuous:
-        # manually add endpoint for discontinuous
-        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
-        X = jnp.append(params["X"], params["X"][0])
-        Y = jnp.append(params["Y"], params["Y"][0])
-        Z = jnp.append(params["Z"], params["Z"][0])
-        # query points for Xq, Yq, Zq
-        fq = jnp.zeros((3, len(xq)))
-        fq = fori_loop(0, len(transforms["intervals"]), body, fq)
-    else:
-        # regular interpolation
-        fq = inner_body(
-            [params["X"], params["Y"], params["Z"]],
-            params["knots"],
-            xq,
-            derivative,
-            method=method,
-            period=2 * jnp.pi,
-        )
-        fq = jnp.array(fq)
-
-    coords_ss = jnp.stack(fq, axis=1)
+    coords_ss = _splinexyz_helper(params, transforms, data, kwargs, derivative)
     coords_ss = coords_ss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -933,54 +831,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 3
-    xq = data["s"]
-    transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = kwargs.get("method", "cubic")
-
-    is_discontinuous = len(transforms["intervals"][0])
-
-    def body(i, fq):
-        istart, istop = transforms["intervals"][i]
-        # catch end-point
-        istop = jnp.where(istop == 0, -1, istop)
-
-        f_in_interval = get_XYZ_in_interval(X, Y, Z, knots, istart, istop)
-        fq_temp = inner_body(
-            f_in_interval,
-            knots,
-            xq,
-            derivative,
-            method,
-        )
-
-        xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
-        for i in range(3):
-            fq = fq.at[i].set(jnp.where(xq_range, fq_temp[i], fq[i]))
-
-        return fq
-
-    if is_discontinuous:
-        # manually add endpoint for discontinuous
-        knots = jnp.append(params["knots"], params["knots"][0] + 2 * jnp.pi)
-        X = jnp.append(params["X"], params["X"][0])
-        Y = jnp.append(params["Y"], params["Y"][0])
-        Z = jnp.append(params["Z"], params["Z"][0])
-        # query points for Xq, Yq, Zq
-        fq = jnp.zeros((3, len(xq)))
-        fq = fori_loop(0, len(transforms["intervals"]), body, fq)
-    else:
-        # regular interpolation
-        fq = inner_body(
-            [params["X"], params["Y"], params["Z"]],
-            params["knots"],
-            xq,
-            derivative,
-            method=method,
-            period=2 * jnp.pi,
-        )
-        fq = jnp.array(fq)
-
-    coords_sss = jnp.stack(fq, axis=1)
+    coords_sss = _splinexyz_helper(params, transforms, data, kwargs, derivative)
     coords_sss = coords_sss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":

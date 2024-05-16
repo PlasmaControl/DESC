@@ -44,13 +44,14 @@ class VacuumBoundaryError(_Objective):
         External field produced by coils or other sources outside the plasma.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -68,8 +69,9 @@ class VacuumBoundaryError(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``
     field_grid : Grid, optional
-        Grid used to discretize field.
+        Grid used to discretize field. Defaults to the default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
@@ -352,13 +354,14 @@ class BoundaryError(_Objective):
         External field produced by coils.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -382,8 +385,9 @@ class BoundaryError(_Objective):
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
         Savart integral and where to evaluate errors. source_grid should not be
         stellarator symmetric, and both should be at rho=1.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
     field_grid : Grid, optional
-        Grid used to discretize field.
+        Grid used to discretize field. Defaults to default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
@@ -481,12 +485,11 @@ class BoundaryError(_Objective):
         if self._source_grid is None:
             # for axisymmetry we still need to know about toroidal effects, so its
             # cheapest to pretend there are extra field periods
-            source_NFP = eq.NFP if eq.N > 0 else 64
             source_grid = LinearGrid(
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
-                NFP=source_NFP,
+                NFP=eq.NFP if eq.N > 0 else 64,
                 sym=False,
             )
         else:
@@ -801,13 +804,14 @@ class BoundaryErrorNESTOR(_Objective):
         External field produced by coils.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f.
     mf, nf : integer
         maximum poloidal and toroidal mode numbers to use for NESTOR scalar potential.
     ntheta, nzeta : int

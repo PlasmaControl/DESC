@@ -35,11 +35,19 @@ from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
-from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
+from desc.utils import (
+    Timer,
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    only1,
+    setdefault,
+)
 
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
-from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
+from .utils import parse_axis, parse_profile, parse_surface
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -196,11 +204,7 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing, getattr(surface, "spectral_indexing", "ansi")
         )
 
-        errorif(
-            (NFP is not None) and not isposint(NFP),
-            ValueError,
-            f"NFP should be a positive integer, got {NFP}",
-        )
+        NFP = check_posint(NFP, "NFP")
         self._NFP = int(
             setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
         )
@@ -229,12 +233,12 @@ class Equilibrium(IOAble, Optimizable):
         self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
 
         # resolution
-        _assert_nonnegint(L, "L")
-        _assert_nonnegint(M, "M")
-        _assert_nonnegint(N, "N")
-        _assert_nonnegint(L_grid, "L_grid")
-        _assert_nonnegint(M_grid, "M_grid")
-        _assert_nonnegint(N_grid, "N_grid")
+        L = check_nonnegint(L, "L")
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        L_grid = check_nonnegint(L_grid, "L_grid")
+        M_grid = check_nonnegint(M_grid, "M_grid")
+        N_grid = check_nonnegint(N_grid, "N_grid")
 
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, self.surface.M))
@@ -399,6 +403,15 @@ class Equilibrium(IOAble, Optimizable):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
+
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+        self._L_grid = int(self._L_grid)
+        self._M_grid = int(self._M_grid)
+        self._N_grid = int(self._N_grid)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -828,7 +841,13 @@ class Equilibrium(IOAble, Optimizable):
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
-        deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
+        # If the user wants to compute x which depends on y which in turn depends on z,
+        # and they pass in y already computed in data, then we shouldn't need to compute
+        # z at all.
+        deps = list(
+            set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names)
+            - data.keys()  # subtract out y if already computed
+        )
         # TODO: replace this logic with `grid_type` from data_index
         dep0d = [
             dep
@@ -843,7 +862,9 @@ class Equilibrium(IOAble, Optimizable):
         dep1dz = [
             dep
             for dep in deps
-            if (data_index[p][dep]["coordinates"] == "z") and (dep not in data)
+            if (data_index[p][dep]["coordinates"] == "z")
+            and (dep not in data)
+            and dep not in ["phi", "zeta"]  # these don't need a special grid
         ]
 
         # whether we need to calculate 0d or 1d quantities on a special grid
@@ -862,19 +883,31 @@ class Equilibrium(IOAble, Optimizable):
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            data0d_seed = {
+                key: data[key]
+                for key in data
+                if data_index[p][key]["coordinates"] == ""
+            }
             data0d = compute_fun(
                 self,
                 dep0d,
                 params=params,
                 transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
                 profiles=get_profiles(dep0d, obj=self, grid=grid0d),
-                data=None,
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data=data0d_seed,
                 **kwargs,
             )
             # these should all be 0d quantities so don't need to compress/expand
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
+        data0d_seed = (
+            {key: data[key] for key in data if data_index[p][key]["coordinates"] == ""}
+            if ((calc1dr or calc1dz) and override_grid)
+            else {}
+        )
         if calc1dr and override_grid:
             grid1dr = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
@@ -883,22 +916,25 @@ class Equilibrium(IOAble, Optimizable):
                 NFP=self.NFP,
                 sym=self.sym,
             )
-            # TODO: Pass in data0d as a seed once there are 1d quantities that
-            # depend on 0d quantities in data_index.
+            data1dr_seed = {
+                key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
+                for key in data
+                if data_index[p][key]["coordinates"] == "r"
+            }
             data1dr = compute_fun(
                 self,
                 dep1dr,
                 params=params,
                 transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
                 profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
-                data=None,
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data=data1dr_seed | data0d_seed,
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid
             data1dr = {
-                key: grid.expand(
-                    grid1dr.compress(val, surface_label="rho"), surface_label="rho"
-                )
+                key: grid.copy_data_from_other(val, grid1dr, surface_label="rho")
                 for key, val in data1dr.items()
                 if key in dep1dr
             }
@@ -912,22 +948,25 @@ class Equilibrium(IOAble, Optimizable):
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym,
             )
-            # TODO: Pass in data0d as a seed once there are 1d quantities that
-            # depend on 0d quantities in data_index.
+            data1dz_seed = {
+                key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
+                for key in data
+                if data_index[p][key]["coordinates"] == "z"
+            }
             data1dz = compute_fun(
                 self,
                 dep1dz,
                 params=params,
                 transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
                 profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
-                data=None,
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data=data1dz_seed | data0d_seed,
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid
             data1dz = {
-                key: grid.expand(
-                    grid1dz.compress(val, surface_label="zeta"), surface_label="zeta"
-                )
+                key: grid.copy_data_from_other(val, grid1dz, surface_label="zeta")
                 for key, val in data1dz.items()
                 if key in dep1dz
             }
@@ -1203,42 +1242,20 @@ class Equilibrium(IOAble, Optimizable):
         """int: Number of (toroidal) field periods."""
         return self._NFP
 
-    @NFP.setter
-    def NFP(self, NFP):
-        assert (
-            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
-        ), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFP=NFP)
-
     @property
     def L(self):
         """int: Maximum radial mode number."""
         return self._L
-
-    @L.setter
-    def L(self, L):
-        _assert_nonnegint(L, "L")
-        self.change_resolution(L=L)
 
     @property
     def M(self):
         """int: Maximum poloidal fourier mode number."""
         return self._M
 
-    @M.setter
-    def M(self, M):
-        _assert_nonnegint(M, "M")
-        self.change_resolution(M=M)
-
     @property
     def N(self):
         """int: Maximum toroidal fourier mode number."""
         return self._N
-
-    @N.setter
-    def N(self, N):
-        _assert_nonnegint(N, "N")
-        self.change_resolution(N=N)
 
     @optimizable_parameter
     @property

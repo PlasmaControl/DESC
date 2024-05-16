@@ -1,4 +1,5 @@
 """Classes for spectral bases and functions for evaluation."""
+
 import functools
 from abc import ABC, abstractmethod
 from math import factorial
@@ -6,9 +7,9 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign, switch
+from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
-from desc.utils import flatten_list
+from desc.utils import check_nonnegint, check_posint, flatten_list
 
 __all__ = [
     "PowerSeries",
@@ -113,11 +114,12 @@ class _Basis(IOAble, ABC):
         N : int
             Toroidal mode number.
         error : bool
-            whether to raise exception if mode is not in basis, or return empty array
+            Whether to raise exception if the mode is not in the basis (default),
+            or to return an empty array.
 
         Returns
         -------
-        idx : ndarray of int
+        idx : int
             Index of given mode numbers.
 
         """
@@ -129,7 +131,7 @@ class _Basis(IOAble, ABC):
                     "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
                 ) from e
             else:
-                return np.array([]).astype(int)
+                return np.array([], dtype=int)
 
     @abstractmethod
     def _get_modes(self):
@@ -169,30 +171,15 @@ class _Basis(IOAble, ABC):
         """int: Maximum radial resolution."""
         return self.__dict__.setdefault("_L", 0)
 
-    @L.setter
-    def L(self, L):
-        assert int(L) == L, "Basis Resolution must be an integer!"
-        self._L = int(L)
-
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
         return self.__dict__.setdefault("_M", 0)
 
-    @M.setter
-    def M(self, M):
-        assert int(M) == M, "Basis Resolution must be an integer!"
-        self._M = int(M)
-
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
         return self.__dict__.setdefault("_N", 0)
-
-    @N.setter
-    def N(self, N):
-        assert int(N) == N, "Basis Resolution must be an integer!"
-        self._N = int(N)
 
     @property
     def NFP(self):
@@ -208,10 +195,6 @@ class _Basis(IOAble, ABC):
     def modes(self):
         """ndarray: Mode numbers [l,m,n]."""
         return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
-
-    @modes.setter
-    def modes(self, modes):
-        self._modes = modes
 
     @property
     def num_modes(self):
@@ -251,9 +234,9 @@ class PowerSeries(_Basis):
     """
 
     def __init__(self, L, sym="even"):
-        self.L = L
-        self.M = 0
-        self.N = 0
+        self._L = check_nonnegint(L, "L", False)
+        self._M = 0
+        self._N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -262,7 +245,7 @@ class PowerSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L):
         """Get mode numbers for power series.
 
         Parameters
@@ -340,7 +323,7 @@ class PowerSeries(_Basis):
 
         """
         if L != self.L:
-            self.L = L
+            self._L = check_nonnegint(L, "L", False)
             self._modes = self._get_modes(self.L)
             self._set_up()
 
@@ -364,10 +347,10 @@ class FourierSeries(_Basis):
     """
 
     def __init__(self, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = 0
-        self.N = N
-        self._NFP = NFP
+        self._L = 0
+        self._M = 0
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -375,7 +358,7 @@ class FourierSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, N=0):
+    def _get_modes(self, N):
         """Get mode numbers for Fourier series.
 
         Parameters
@@ -457,9 +440,10 @@ class FourierSeries(_Basis):
             Whether to enforce stellarator symmetry.
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
-            self.N = N
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
@@ -486,10 +470,10 @@ class DoubleFourierSeries(_Basis):
     """
 
     def __init__(self, M, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = 0
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -497,7 +481,7 @@ class DoubleFourierSeries(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, M=0, N=0):
+    def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
 
         Parameters
@@ -603,10 +587,11 @@ class DoubleFourierSeries(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if M != self.M or N != self.N or sym != self.sym:
-            self.M = M
-            self.N = N
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
@@ -646,9 +631,9 @@ class ZernikePolynomial(_Basis):
     """
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = 0
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = spectral_indexing
@@ -659,7 +644,7 @@ class ZernikePolynomial(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -697,9 +682,6 @@ class ZernikePolynomial(_Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -786,7 +768,7 @@ class ZernikePolynomial(_Basis):
             lm = lm[lmidx]
             m = m[midx]
 
-        radial = zernike_radial(r, lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
 
         if unique:
@@ -813,8 +795,8 @@ class ZernikePolynomial(_Basis):
 
         """
         if L != self.L or M != self.M or sym != self.sym:
-            self.L = L
-            self.M = M
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
@@ -845,10 +827,10 @@ class ChebyshevDoubleFourierBasis(_Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False):
-        self.L = L
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = "linear"
 
@@ -856,7 +838,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0, M=0, N=0):
+    def _get_modes(self, L, M, N):
         """Get mode numbers for Chebyshev-Fourier series.
 
         Parameters
@@ -945,11 +927,12 @@ class ChebyshevDoubleFourierBasis(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self._L = L
-            self._M = M
-            self._N = N
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
@@ -996,10 +979,10 @@ class FourierZernikeBasis(_Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = N
-        self._NFP = NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
@@ -1009,7 +992,7 @@ class FourierZernikeBasis(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, N, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -1049,9 +1032,6 @@ class FourierZernikeBasis(_Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -1150,7 +1130,7 @@ class FourierZernikeBasis(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        radial = zernike_radial(r, lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
         if unique:
@@ -1181,11 +1161,12 @@ class FourierZernikeBasis(_Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self.L = L
-            self.M = M
-            self.N = N
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
@@ -1204,7 +1185,7 @@ class ChebyshevPolynomial(_Basis):
     """
 
     def __init__(self, L):
-        self._L = L
+        self._L = check_nonnegint(L, "L", False)
         self._M = 0
         self._N = 0
         self._NFP = 1
@@ -1215,7 +1196,7 @@ class ChebyshevPolynomial(_Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L):
         """Get mode numbers for shifted Chebyshev polynomials of the first kind.
 
         Parameters
@@ -1280,7 +1261,7 @@ class ChebyshevPolynomial(_Basis):
 
         """
         if L != self.L:
-            self._L = L
+            self._L = check_nonnegint(L, "L", False)
             self._modes = self._get_modes(self.L)
             self._set_up()
 
@@ -1504,149 +1485,83 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-@custom_jvp
-@jit
+@functools.partial(jit, static_argnums=3)
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
-    Calculates Radial part of Zernike Polynomials using Jacobi recursion relation
-    by getting rid of the redundant calculations for appropriate modes.
-    https://en.wikipedia.org/wiki/Jacobi_polynomials#Recurrence_relations
-
-    For the derivatives, the following formula is used with above recursion relation,
-    https://en.wikipedia.org/wiki/Jacobi_polynomials#Derivatives
-
-    Used formulas are also in the zerike_eval.ipynb notebook in docs.
-
-    This function can be made faster. However, JAX reverse mode AD causes problems.
-    In future, we may use vmap() instead of jnp.vectorize() to be able to set dr as
-    static argument, and not calculate every derivative even thoguh not asked.
+    Evaluates basis functions using JAX and a stable
+    evaluation scheme based on jacobi polynomials and
+    binomial coefficients. Generally faster for L>24
+    and differentiable, but slower for low resolution.
 
     Parameters
     ----------
-    r : ndarray, shape(N,) or scalar
+    r : ndarray, shape(N,)
         radial coordinates to evaluate basis
-    l : ndarray of int, shape(K,) or integer
+    l : ndarray of int, shape(K,)
         radial mode number(s)
-    m : ndarray of int, shape(K,) or integer
+    m : ndarray of int, shape(K,)
         azimuthal mode number(s)
     dr : int
         order of derivative (Default = 0)
 
     Returns
     -------
-    out : ndarray, shape(N,K)
+    y : ndarray, shape(N,K)
         basis function(s) evaluated at specified points
 
     """
-    dr = jnp.asarray(dr).astype(int)
-
-    branches = [
-        _zernike_radial_vectorized,
-        _zernike_radial_vectorized_d1,
-        _zernike_radial_vectorized_d2,
-        _zernike_radial_vectorized_d3,
-        _zernike_radial_vectorized_d4,
-    ]
-    return switch(dr, branches, r, l, m, dr)
-
-
-@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
-def _zernike_radial_vectorized(r, l, m, dr):
-    """Calculation of Radial part of Zernike polynomials."""
-
-    def body_inner(N, args):
-        alpha, out, P_past = args
-        P_n2 = P_past[0]  # Jacobi at N-2
-        P_n1 = P_past[1]  # Jacobi at N-1
-        P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
-
-        # Calculate Radial part of Zernike for N,alpha
-        result = (-1) ** N * r**alpha * P_n
-        # Check if the calculated values is in the given modes
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask, result, out)
-
-        # Shift past values if needed
-        # For derivative order dx, if N is smaller than 2+dx, then only the initial
-        # value calculated by find_init_jacobi function will be used. So, if you update
-        # P_n's, preceeding values will be wrong.
-        mask = N >= 2
-        P_n2 = jnp.where(mask, P_n1, P_n2)
-        P_n1 = jnp.where(mask, P_n, P_n1)
-        # Form updated P_past matrix
-        P_past = P_past.at[0].set(P_n2)
-        P_past = P_past.at[1].set(P_n1)
-
-        return (alpha, out, P_past)
-
-    def body(alpha, out):
-        # find l values with m values equal to alpha
-        l_alpha = jnp.where(m == alpha, l, 0)
-        # find the maximum among them
-        L_max = jnp.max(l_alpha)
-        # Maximum possible value for n for loop bound
-        N_max = (L_max - alpha) // 2
-
-        # First 2 Jacobi Polynomials (they don't need recursion)
-        # P_past stores last 2 Jacobi polynomials (and required derivatives)
-        # evaluated at given r points
-        P_past = jnp.zeros(2)
-        P_past = P_past.at[0].set(jacobi_poly_single(r_jacobi, 0, alpha, beta=0))
-        # Jacobi for n=1
-        P_past = P_past.at[1].set(jacobi_poly_single(r_jacobi, 1, alpha, beta=0))
-
-        # Loop over every n value
-        _, out, _ = fori_loop(
-            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
+    m = jnp.abs(m).astype(float)
+    alpha = m
+    beta = 0
+    n = (l - m) // 2
+    s = (-1) ** n
+    jacobi_arg = 1 - 2 * r**2
+    if dr == 0:
+        out = r**m * _jacobi(n, alpha, beta, jacobi_arg, 0)
+    elif dr == 1:
+        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
+        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
+        out = m * r ** jnp.maximum(m - 1, 0) * f - 4 * r ** (m + 1) * df
+    elif dr == 2:
+        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
+        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
+        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
+        out = (
+            (m - 1) * m * r ** jnp.maximum(m - 2, 0) * f
+            - 4 * (2 * m + 1) * r**m * df
+            + 16 * r ** (m + 2) * d2f
         )
-        return out
-
-    # Make inputs 1D arrays in case they aren't
-    m = jnp.atleast_1d(m)
-    l = jnp.atleast_1d(l)
-
-    # From the vectorization, the overall output will be (r.size, m.size)
-    out = jnp.zeros(m.size)
-    r_jacobi = 1 - 2 * r**2
-    m = jnp.abs(m)
-    n = ((l - m) // 2).astype(int)
-
-    M_max = jnp.max(m)
-    # Loop over every different m value. There is another nested
-    # loop which will execute necessary n values.
-    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
-    return out
-
-
-def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
-    """Evaluate Jacobi for single alpha and n pair."""
-    c = 2 * n + alpha + beta
-    a1 = 2 * n * (c - n) * (c - 2)
-    a2 = (c - 1) * (c * (c - 2) * x + (alpha - beta) * (alpha + beta))
-    a3 = 2 * (n + alpha - 1) * (n + beta - 1) * c
-
-    # Check if a1 is 0, to prevent division by 0
-    a1 = jnp.where(a1 == 0, 1e-6, a1)
-    P_n = (a2 * P_n1 - a3 * P_n2) / a1
-    # Checks for special cases
-    P_n = jnp.where(n < 0, 0, P_n)
-    P_n = jnp.where(n == 0, 1, P_n)
-    P_n = jnp.where(n == 1, (alpha + 1) + (alpha + beta + 2) * (x - 1) / 2, P_n)
-    return P_n
-
-
-@zernike_radial.defjvp
-def _zernike_radial_jvp(x, xdot):
-    (r, l, m, dr) = x
-    (rdot, ldot, mdot, drdot) = xdot
-    f = zernike_radial(r, l, m, dr)
-    df = zernike_radial(r, l, m, dr + 1)
-    # in theory l, m, dr aren't differentiable (they're integers)
-    # but marking them as non-diff argnums seems to cause escaped tracer values.
-    # probably a more elegant fix, but just setting those derivatives to zero seems
-    # to work fine.
-    return f, (df.T * rdot).T + 0 * ldot + 0 * mdot + 0 * drdot
+    elif dr == 3:
+        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
+        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
+        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
+        d3f = _jacobi(n, alpha, beta, jacobi_arg, 3)
+        out = (
+            (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 3, 0) * f
+            - 12 * m**2 * r ** jnp.maximum(m - 1, 0) * df
+            + 48 * (m + 1) * r ** (m + 1) * d2f
+            - 64 * r ** (m + 3) * d3f
+        )
+    elif dr == 4:
+        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
+        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
+        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
+        d3f = _jacobi(n, alpha, beta, jacobi_arg, 3)
+        d4f = _jacobi(n, alpha, beta, jacobi_arg, 4)
+        out = (
+            (m - 3) * (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 4, 0) * f
+            - 8 * m * (2 * m**2 - 3 * m + 1) * r ** jnp.maximum(m - 2, 0) * df
+            + 48 * (2 * m**2 + 2 * m + 1) * r**m * d2f
+            - 128 * (2 * m + 3) * r ** (m + 2) * d3f
+            + 256 * r ** (m + 4) * d4f
+        )
+    else:
+        raise NotImplementedError(
+            "Analytic radial derivatives of Zernike polynomials for order>4 "
+            + "have not been implemented."
+        )
+    return s * jnp.where((l - m) % 2 == 0, out, 0)
 
 
 def power_coeffs(l):
@@ -1769,419 +1684,117 @@ def zernike_norm(l, m):
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
 
 
-def find_intermadiate_jacobi(dx, args):
-    """Finds Jacobi function and its derivatives for nth loop."""
-    r_jacobi, N, alpha, P_n1, P_n2, P_n = args
-    P_n = P_n.at[dx].set(
-        jacobi_poly_single(r_jacobi, N - dx, alpha + dx, dx, P_n1[dx], P_n2[dx])
+@jit
+@jnp.vectorize
+def _binom(n, k):
+    """Binomial coefficient.
+
+    Implementation is only correct for positive integer n,k and n>=k
+
+    Parameters
+    ----------
+    n : int, array-like
+        number of things to choose from
+    k : int, array-like
+        number of things chosen
+
+    Returns
+    -------
+    val : int, float, array-like
+        number of possible combinations
+    """
+    # adapted from scipy:
+    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
+    # scipy/special/orthogonal_eval.pxd#L68
+
+    n, k = map(jnp.asarray, (n, k))
+
+    def _binom_body_fun(i, b_n):
+        b, n = b_n
+        num = n + 1 - i
+        den = i
+        return (b * num / den, n)
+
+    kx = k.astype(int)
+    b, n = fori_loop(1, 1 + kx, _binom_body_fun, (1.0, n))
+    return b
+
+
+@custom_jvp
+@jit
+@jnp.vectorize
+def _jacobi(n, alpha, beta, x, dx=0):
+    """Jacobi polynomial evaluation.
+
+    Implementation is only correct for non-negative integer coefficients,
+    returns 0 otherwise.
+
+    Parameters
+    ----------
+    n : int, array_like
+        Degree of the polynomial.
+    alpha : int, array_like
+        Parameter
+    beta : int, array_like
+        Parameter
+    x : float, array_like
+        Points at which to evaluate the polynomial
+
+    Returns
+    -------
+    P : ndarray
+        Values of the Jacobi polynomial
+    """
+    # adapted from scipy:
+    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
+    # scipy/special/orthogonal_eval.pxd#L144
+
+    def _jacobi_body_fun(kk, d_p_a_b_x):
+        d, p, alpha, beta, x = d_p_a_b_x
+        k = kk + 1.0
+        t = 2 * k + alpha + beta
+        d = (
+            (t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d
+        ) / (2 * (k + alpha + 1) * (k + alpha + beta + 1) * t)
+        p = d + p
+        return (d, p, alpha, beta, x)
+
+    n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
+
+    # coefficient for derivative
+    c = (
+        gammaln(alpha + beta + n + 1 + dx)
+        - dx * jnp.log(2)
+        - gammaln(alpha + beta + n + 1)
     )
-    return (r_jacobi, N, alpha, P_n1, P_n2, P_n)
-
-
-def update_zernike_output(i, args):
-    """Updates Zernike radial output, if the mode is in the inputs."""
-    m, n, alpha, N, result, out = args
-    idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
-
-    def falseFun(args):
-        _, _, out = args
-        return out
-
-    def trueFun(args):
-        idx, result, out = args
-        out = out.at[idx].set(result)
-        return out
-
-    out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
-    return (m, n, alpha, N, result, out)
-
-
-def find_initial_jacobi(dx, args):
-    """Finds initial values of Jacobi Polynomial and derivatives."""
-    r_jacobi, alpha, P_past = args
-    # Jacobi for n=0
-    P_past = P_past.at[0, dx].set(jacobi_poly_single(r_jacobi, 0, alpha + dx, beta=dx))
-    # Jacobi for n=1
-    P_past = P_past.at[1, dx].set(jacobi_poly_single(r_jacobi, 1, alpha + dx, beta=dx))
-    return (r_jacobi, alpha, P_past)
-
-
-@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
-def _zernike_radial_vectorized_d1(r, l, m, dr):
-    """First derivative calculation of Radial part of Zernike polynomials."""
-
-    def body_inner(N, args):
-        alpha, out, P_past = args
-        P_n2 = P_past[0]  # Jacobi at N-2
-        P_n1 = P_past[1]  # Jacobi at N-1
-        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
-
-        # Calculate Jacobi polynomial and derivatives for (alpha,N)
-        _, _, _, _, _, P_n = fori_loop(
-            0,
-            MAXDR + 1,
-            find_intermadiate_jacobi,
-            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
-        )
-        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
-        # doesn't have Gamma function directly, that's why we calculate Logarithm of
-        # Gamma function and then exponentiate it.
-        coef = jnp.exp(
-            gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
-        )
-        # 1th Derivative of Zernike Radial
-        result = (-1) ** N * (
-            alpha * r ** jnp.maximum(alpha - 1, 0) * P_n[0]
-            - coef[1] * 4 * r ** (alpha + 1) * P_n[1]
-        )
-        # Check if the calculated values is in the given modes
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask, result, out)
-
-        # Shift past values if needed
-        # For derivative order dx, if N is smaller than 2+dx, then only the initial
-        # value calculated by find_init_jacobi function will be used. So, if you update
-        # P_n's, preceeding values will be wrong.
-        mask = N >= 2 + dxs
-        P_n2 = jnp.where(mask, P_n1, P_n2)
-        P_n1 = jnp.where(mask, P_n, P_n1)
-        # Form updated P_past matrix
-        P_past = P_past.at[0, :].set(P_n2)
-        P_past = P_past.at[1, :].set(P_n1)
-
-        return (alpha, out, P_past)
-
-    def body(alpha, out):
-        # find l values with m values equal to alpha
-        l_alpha = jnp.where(m == alpha, l, 0)
-        # find the maximum among them
-        L_max = jnp.max(l_alpha)
-        # Maximum possible value for n for loop bound
-        N_max = (L_max - alpha) // 2
-
-        # First 2 Jacobi Polynomials (they don't need recursion)
-        # P_past stores last 2 Jacobi polynomials (and required derivatives)
-        # evaluated at given r points
-        P_past = jnp.zeros((2, MAXDR + 1))
-        _, _, P_past = fori_loop(
-            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
-        )
-
-        # Loop over every n value
-        _, out, _ = fori_loop(
-            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
-        )
-        return out
-
-    # Make inputs 1D arrays in case they aren't
-    m = jnp.atleast_1d(m)
-    l = jnp.atleast_1d(l)
-    dr = jnp.asarray(dr).astype(int)
-
-    # From the vectorization, the overall output will be (r.size, m.size)
-    out = jnp.zeros(m.size)
-    r_jacobi = 1 - 2 * r**2
-    m = jnp.abs(m)
-    n = ((l - m) // 2).astype(int)
-
-    # This part can be better implemented. Try to make dr as static argument
-    # jnp.vectorize doesn't allow it to be static
-    MAXDR = 1
-    dxs = jnp.arange(0, MAXDR + 1)
-
-    M_max = jnp.max(m)
-    # Loop over every different m value. There is another nested
-    # loop which will execute necessary n values.
-    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
-    return out
-
-
-@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
-def _zernike_radial_vectorized_d2(r, l, m, dr):
-    """Second derivative calculation of Radial part of Zernike polynomials."""
-
-    def body_inner(N, args):
-        alpha, out, P_past = args
-        P_n2 = P_past[0]  # Jacobi at N-2
-        P_n1 = P_past[1]  # Jacobi at N-1
-        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
-
-        # Calculate Jacobi polynomial and derivatives for (alpha,N)
-        _, _, _, _, _, P_n = fori_loop(
-            0,
-            MAXDR + 1,
-            find_intermadiate_jacobi,
-            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
-        )
-
-        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
-        # doesn't have Gamma function directly, that's why we calculate Logarithm of
-        # Gamma function and then exponentiate it.
-        coef = jnp.exp(
-            gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
-        )
-
-        result = (-1) ** N * (
-            (alpha - 1) * alpha * r ** jnp.maximum(alpha - 2, 0) * P_n[0]
-            - coef[1] * 4 * (2 * alpha + 1) * r**alpha * P_n[1]
-            + coef[2] * 16 * r ** (alpha + 2) * P_n[2]
-        )
-        # Check if the calculated values is in the given modes
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask, result, out)
-
-        # Shift past values if needed
-        # For derivative order dx, if N is smaller than 2+dx, then only the initial
-        # value calculated by find_init_jacobi function will be used. So, if you update
-        # P_n's, preceeding values will be wrong.
-        mask = N >= 2 + dxs
-        P_n2 = jnp.where(mask, P_n1, P_n2)
-        P_n1 = jnp.where(mask, P_n, P_n1)
-        # Form updated P_past matrix
-        P_past = P_past.at[0, :].set(P_n2)
-        P_past = P_past.at[1, :].set(P_n1)
-
-        return (alpha, out, P_past)
-
-    def body(alpha, out):
-        # find l values with m values equal to alpha
-        l_alpha = jnp.where(m == alpha, l, 0)
-        # find the maximum among them
-        L_max = jnp.max(l_alpha)
-        # Maximum possible value for n for loop bound
-        N_max = (L_max - alpha) // 2
-
-        # First 2 Jacobi Polynomials (they don't need recursion)
-        # P_past stores last 2 Jacobi polynomials (and required derivatives)
-        # evaluated at given r points
-        P_past = jnp.zeros((2, MAXDR + 1))
-        _, _, P_past = fori_loop(
-            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
-        )
-
-        # Loop over every n value
-        _, out, _ = fori_loop(
-            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
-        )
-        return out
-
-    # Make inputs 1D arrays in case they aren't
-    m = jnp.atleast_1d(m)
-    l = jnp.atleast_1d(l)
-    dr = jnp.asarray(dr).astype(int)
-
-    # From the vectorization, the overall output will be (r.size, m.size)
-    out = jnp.zeros(m.size)
-    r_jacobi = 1 - 2 * r**2
-    m = jnp.abs(m)
-    n = ((l - m) // 2).astype(int)
-
-    # This part can be better implemented. Try to make dr as static argument
-    # jnp.vectorize doesn't allow it to be static
-    MAXDR = 2
-    dxs = jnp.arange(0, MAXDR + 1)
-
-    M_max = jnp.max(m)
-    # Loop over every different m value. There is another nested
-    # loop which will execute necessary n values.
-    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
-    return out
-
-
-@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
-def _zernike_radial_vectorized_d3(r, l, m, dr):
-    """Third derivative calculation of Radial part of Zernike polynomials."""
-
-    def body_inner(N, args):
-        alpha, out, P_past = args
-        P_n2 = P_past[0]  # Jacobi at N-2
-        P_n1 = P_past[1]  # Jacobi at N-1
-        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
-
-        # Calculate Jacobi polynomial and derivatives for (alpha,N)
-        _, _, _, _, _, P_n = fori_loop(
-            0,
-            MAXDR + 1,
-            find_intermadiate_jacobi,
-            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
-        )
-
-        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
-        # doesn't have Gamma function directly, that's why we calculate Logarithm of
-        # Gamma function and then exponentiate it.
-        coef = jnp.exp(
-            gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
-        )
-
-        # 3rd Derivative of Zernike Radial
-        result = (-1) ** N * (
-            (alpha - 2) * (alpha - 1) * alpha * r ** jnp.maximum(alpha - 3, 0) * P_n[0]
-            - coef[1] * 12 * alpha**2 * r ** jnp.maximum(alpha - 1, 0) * P_n[1]
-            + coef[2] * 48 * (alpha + 1) * r ** (alpha + 1) * P_n[2]
-            - coef[3] * 64 * r ** (alpha + 3) * P_n[3]
-        )
-        # Check if the calculated values is in the given modes
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask, result, out)
-
-        # Shift past values if needed
-        # For derivative order dx, if N is smaller than 2+dx, then only the initial
-        # value calculated by find_init_jacobi function will be used. So, if you update
-        # P_n's, preceeding values will be wrong.
-        mask = N >= 2 + dxs
-        P_n2 = jnp.where(mask, P_n1, P_n2)
-        P_n1 = jnp.where(mask, P_n, P_n1)
-        # Form updated P_past matrix
-        P_past = P_past.at[0, :].set(P_n2)
-        P_past = P_past.at[1, :].set(P_n1)
-
-        return (alpha, out, P_past)
-
-    def body(alpha, out):
-        # find l values with m values equal to alpha
-        l_alpha = jnp.where(m == alpha, l, 0)
-        # find the maximum among them
-        L_max = jnp.max(l_alpha)
-        # Maximum possible value for n for loop bound
-        N_max = (L_max - alpha) // 2
-
-        # First 2 Jacobi Polynomials (they don't need recursion)
-        # P_past stores last 2 Jacobi polynomials (and required derivatives)
-        # evaluated at given r points
-        P_past = jnp.zeros((2, MAXDR + 1))
-        _, _, P_past = fori_loop(
-            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
-        )
-
-        # Loop over every n value
-        _, out, _ = fori_loop(
-            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
-        )
-        return out
-
-    # Make inputs 1D arrays in case they aren't
-    m = jnp.atleast_1d(m)
-    l = jnp.atleast_1d(l)
-    dr = jnp.asarray(dr).astype(int)
-
-    # From the vectorization, the overall output will be (r.size, m.size)
-    out = jnp.zeros(m.size)
-    r_jacobi = 1 - 2 * r**2
-    m = jnp.abs(m)
-    n = ((l - m) // 2).astype(int)
-
-    # This part can be better implemented. Try to make dr as static argument
-    # jnp.vectorize doesn't allow it to be static
-    MAXDR = 3
-    dxs = jnp.arange(0, MAXDR + 1)
-
-    M_max = jnp.max(m)
-    # Loop over every different m value. There is another nested
-    # loop which will execute necessary n values.
-    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
-    return out
-
-
-@functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
-def _zernike_radial_vectorized_d4(r, l, m, dr):
-    """Fourth derivative calculation of Radial part of Zernike polynomials."""
-
-    def body_inner(N, args):
-        alpha, out, P_past = args
-        P_n2 = P_past[0]  # Jacobi at N-2
-        P_n1 = P_past[1]  # Jacobi at N-1
-        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
-
-        # Calculate Jacobi polynomial and derivatives for (alpha,N)
-        _, _, _, _, _, P_n = fori_loop(
-            0,
-            MAXDR + 1,
-            find_intermadiate_jacobi,
-            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
-        )
-
-        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
-        # doesn't have Gamma function directly, that's why we calculate Logarithm of
-        # Gamma function and then exponentiate it.
-        coef = jnp.exp(
-            gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
-        )
-
-        # 4th Derivative of Zernike Radial
-        result = (-1) ** N * (
-            (alpha - 3)
-            * (alpha - 2)
-            * (alpha - 1)
-            * alpha
-            * r ** jnp.maximum(alpha - 4, 0)
-            * P_n[0]
-            - coef[1]
-            * 8
-            * alpha
-            * (2 * alpha**2 - 3 * alpha + 1)
-            * r ** jnp.maximum(alpha - 2, 0)
-            * P_n[1]
-            + coef[2] * 48 * (2 * alpha**2 + 2 * alpha + 1) * r**alpha * P_n[2]
-            - coef[3] * 128 * (2 * alpha + 3) * r ** (alpha + 2) * P_n[3]
-            + coef[4] * 256 * r ** (alpha + 4) * P_n[4]
-        )
-        # Check if the calculated values is in the given modes
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask, result, out)
-
-        # Shift past values if needed
-        # For derivative order dx, if N is smaller than 2+dx, then only the initial
-        # value calculated by find_init_jacobi function will be used. So, if you update
-        # P_n's, preceeding values will be wrong.
-        mask = N >= 2 + dxs
-        P_n2 = jnp.where(mask, P_n1, P_n2)
-        P_n1 = jnp.where(mask, P_n, P_n1)
-        # Form updated P_past matrix
-        P_past = P_past.at[0, :].set(P_n2)
-        P_past = P_past.at[1, :].set(P_n1)
-
-        return (alpha, out, P_past)
-
-    def body(alpha, out):
-        # find l values with m values equal to alpha
-        l_alpha = jnp.where(m == alpha, l, 0)
-        # find the maximum among them
-        L_max = jnp.max(l_alpha)
-        # Maximum possible value for n for loop bound
-        N_max = (L_max - alpha) // 2
-
-        # First 2 Jacobi Polynomials (they don't need recursion)
-        # P_past stores last 2 Jacobi polynomials (and required derivatives)
-        # evaluated at given r points
-        P_past = jnp.zeros((2, MAXDR + 1))
-        _, _, P_past = fori_loop(
-            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
-        )
-
-        # Loop over every n value
-        _, out, _ = fori_loop(
-            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
-        )
-        return out
-
-    # Make inputs 1D arrays in case they aren't
-    m = jnp.atleast_1d(m)
-    l = jnp.atleast_1d(l)
-    dr = jnp.asarray(dr).astype(int)
-
-    # From the vectorization, the overall output will be (r.size, m.size)
-    out = jnp.zeros(m.size)
-    r_jacobi = 1 - 2 * r**2
-    m = jnp.abs(m)
-    n = ((l - m) // 2).astype(int)
-
-    # This part can be better implemented. Try to make dr as static argument
-    # jnp.vectorize doesn't allow it to be static
-    MAXDR = 4
-    dxs = jnp.arange(0, MAXDR + 1)
-
-    M_max = jnp.max(m)
-    # Loop over every different m value. There is another nested
-    # loop which will execute necessary n values.
-    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
-    return out
+    c = jnp.exp(c)
+    # taking derivative is same as coeff*jacobi but for shifted n,a,b
+    n -= dx
+    alpha += dx
+    beta += dx
+
+    d = (alpha + beta + 2) * (x - 1) / (2 * (alpha + 1))
+    p = d + 1
+    d, p, alpha, beta, x = fori_loop(
+        0, jnp.maximum(n - 1, 0).astype(int), _jacobi_body_fun, (d, p, alpha, beta, x)
+    )
+    out = _binom(n + alpha, n) * p
+    # should be complex for n<0, but it gets replaced elsewhere so just return 0 here
+    out = jnp.where(n < 0, 0, out)
+    # other edge cases
+    out = jnp.where(n == 0, 1.0, out)
+    out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
+    return c * out
+
+
+@_jacobi.defjvp
+def _jacobi_jvp(x, xdot):
+    (n, alpha, beta, x, dx) = x
+    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+    f = _jacobi(n, alpha, beta, x, dx)
+    df = _jacobi(n, alpha, beta, x, dx + 1)
+    # in theory n, alpha, beta, dx aren't differentiable (they're integers)
+    # but marking them as non-diff argnums seems to cause escaped tracer values.
+    # probably a more elegant fix, but just setting those derivatives to zero seems
+    # to work fine.
+    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot

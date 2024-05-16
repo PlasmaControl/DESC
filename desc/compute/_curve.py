@@ -639,35 +639,23 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
     is_discontinuous = len(transforms["intervals"][0])
+    n_dim = 3
 
     def inner_body(f, knots, period=None):
         """Interpolation for spline curves."""
-        Xq = interp1d(
-            xq,
-            knots,
-            f[0],
-            method=method,
-            derivative=derivative,
-            period=period,
-        )
-        Yq = interp1d(
-            xq,
-            knots,
-            f[1],
-            method=method,
-            derivative=derivative,
-            period=period,
-        )
-        Zq = interp1d(
-            xq,
-            knots,
-            f[2],
-            method=method,
-            derivative=derivative,
-            period=period,
-        )
+        fq = [
+            interp1d(
+                xq,
+                knots,
+                f[i],
+                method=method,
+                derivative=derivative,
+                period=period,
+            )
+            for i in range(n_dim)
+        ]
 
-        return [Xq, Yq, Zq]
+        return fq
 
     def get_interval(arr, knots, istart, istop):
         arr_temp = jnp.where(knots > knots[istop], arr[istop], arr)
@@ -680,15 +668,15 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
         # catch end-point
         istop = jnp.where(istop == 0, -1, istop)
 
-        f_in_interval = [get_interval(f, knots, istart, istop) for f in full_f]
+        f_in_interval = [get_interval(f, full_knots, istart, istop) for f in full_f]
         fq_temp = inner_body(
             f_in_interval,
-            knots,
+            full_knots,
             period=None,
         )
 
-        xq_range = (xq >= knots[istart]) & (xq <= knots[istop])
-        for i in range(3):
+        xq_range = (xq >= full_knots[istart]) & (xq <= full_knots[istop])
+        for i in range(n_dim):
             fq = fq.at[i].set(jnp.where(xq_range, fq_temp[i], fq[i]))
 
         return fq
@@ -696,10 +684,10 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     if is_discontinuous:
         # full_f, knots used in body()
         # manually add endpoint for discontinuous
-        knots = jnp.append(p_knots, p_knots[0] + 2 * jnp.pi)
+        full_knots = jnp.append(p_knots, p_knots[0] + 2 * jnp.pi)
         full_f = [jnp.append(f[i], f[i][0]) for i in range(3)]
         # query points for Xq, Yq, Zq
-        fq = jnp.zeros((3, len(xq)))
+        fq = jnp.zeros((n_dim, len(xq)))
         fq = fori_loop(0, len(transforms["intervals"]), body, fq)
     else:
         # regular interpolation where the period for interp is 2pi

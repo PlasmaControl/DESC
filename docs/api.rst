@@ -177,7 +177,7 @@ Objective Functions
     desc.objectives.FixOmniBmax
     desc.objectives.FixOmniMap
     desc.objectives.FixOmniWell
-    desc.objectives.FixParameter
+    desc.objectives.FixParameters
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR
@@ -274,6 +274,7 @@ Profiles
     :template: class.rst
 
     desc.profiles.PowerSeriesProfile
+    desc.profiles.TwoPowerProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
     desc.profiles.ScaledProfile

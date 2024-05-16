@@ -268,7 +268,7 @@ class VMECIO:
         data_quad = eq.compute(
             ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
         )
-        data_axis = eq.compute(["G", "p", "R", "<|B|^2>"], grid=grid_axis)
+        data_axis = eq.compute(["G", "p", "R", "<|B|^2>", "<|B|>"], grid=grid_axis)
         data_lcfs = eq.compute(["G", "I", "R", "Z"], grid=grid_lcfs)
         data_half = eq.compute(
             [
@@ -488,7 +488,7 @@ class VMECIO:
         b0 = file.createVariable("b0", np.float64)
         b0.long_name = "average B_tor on axis"
         b0.units = "T"
-        b0[:] = data_axis["G"][0] / data_axis["R"][0]
+        b0[:] = data_axis["<|B|>"][0]
 
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
@@ -1472,7 +1472,7 @@ class VMECIO:
         else:
             current = eq.current
             f.write("  NCURR = 1\n")  # current profile specified
-            f.write("  CURTOR = {:+14.8E}\n".format(float(current(1))))  # AC scale
+            f.write("  CURTOR = {:+14.8E}\n".format(float(current(1)[0])))  # AC scale
             if isinstance(current, PowerSeriesProfile) and current.sym:
                 f.write("  AC =")  # current power series coefficients
                 for ac in current.params:
@@ -1661,7 +1661,7 @@ class VMECIO:
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
         lmbda_mn = interpolate.CubicSpline(si, lmns)
 
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         def root_fun(theta):
@@ -1728,13 +1728,13 @@ class VMECIO:
         rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
         r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
-        # straight field-line angles to plot
+        # straight field line angles to plot
         tr = np.linspace(0, 1, 50)
         tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
         tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
         t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         # find theta angles corresponding to desired theta* angles

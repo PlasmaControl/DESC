@@ -108,7 +108,7 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B",
-    label="B",
+    label="\\mathbf{B}",
     units="T",
     units_long="Tesla",
     description="Magnetic field",
@@ -3203,8 +3203,26 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="min_tz |B|",
+    label="\\min_{\\theta \\zeta} |\\mathbf{B}|",
+    units="T",
+    units_long="Tesla",
+    description="Minimum field strength on each flux surface",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B|"],
+)
+def _min_tz_modB(params, transforms, profiles, data, **kwargs):
+    data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
+    return data
+
+
+@register_compute_fun(
     name="max_tz |B|",
-    label="\\max_{\\theta \\zeta} |B|",
+    label="\\max_{\\theta \\zeta} |\\mathbf{B}|",
     units="T",
     units_long="Tesla",
     description="Maximum field strength on each flux surface",
@@ -3221,20 +3239,22 @@ def _max_tz_modB(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="min_tz |B|",
-    label="\\min_{\\theta \\zeta} |B|",
-    units="T",
-    units_long="Tesla",
-    description="Minimum field strength on each flux surface",
+    name="mirror ratio",
+    label="(B_{max} - B_{min}) / (B_{min} + B_{max})",
+    units="~",
+    units_long="None",
+    description="Mirror ratio on each flux surface",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="r",
-    data=["|B|"],
+    data=["min_tz |B|", "max_tz |B|"],
 )
-def _min_tz_modB(params, transforms, profiles, data, **kwargs):
-    data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
+def _mirror_ratio(params, transforms, profiles, data, **kwargs):
+    data["mirror ratio"] = (data["max_tz |B|"] - data["min_tz |B|"]) / (
+        data["min_tz |B|"] + data["max_tz |B|"]
+    )
     return data
 
 
@@ -3392,7 +3412,7 @@ def _L_grad_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="K_vc",
-    label="\\mathbf{K}_{VC} = \\mathbf{n} \\times \\mathbf{B}",
+    label="\\mathbf{K}_{VC} = \\frac{1}{\\mu_0}\\mathbf{n} \\times \\mathbf{B}",
     units="A \\cdot m^{-1}",
     units_long="Amps / meter",
     description="Virtual casing sheet current",

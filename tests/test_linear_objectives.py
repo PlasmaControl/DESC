@@ -5,8 +5,8 @@ import pytest
 import scipy.linalg
 from qsc import Qsc
 
+import desc.examples
 from desc.equilibrium import Equilibrium
-from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
@@ -180,7 +180,7 @@ def test_fixed_mode_solve():
     # and check that the mode stayed fix
     L = 1
     M = 1
-    eq = get("DSHAPE")
+    eq = desc.examples.get("DSHAPE")
     eq.set_initial_guess()
     fixR = FixModeR(
         eq=eq, modes=np.array([L, M, 0])
@@ -228,7 +228,7 @@ def test_fixed_modes_solve():
     modes_R = np.array([[1, 1, 0], [2, 2, 0]])
     modes_Z = np.array([[1, -1, 0], [2, -2, 0]])
 
-    eq = get("DSHAPE")
+    eq = desc.examples.get("DSHAPE")
     eq.set_initial_guess()
     fixR = FixSumModesR(
         eq=eq, modes=modes_R, sum_weights=np.array([1, 2])
@@ -409,7 +409,7 @@ def test_kinetic_constraints():
 def test_correct_indexing_passed_modes():
     """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
-    eq = get("W7-X")
+    eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
 
@@ -462,7 +462,7 @@ def test_correct_indexing_passed_modes():
 def test_correct_indexing_passed_modes_and_passed_target():
     """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
-    eq = get("W7-X")
+    eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
 
@@ -524,7 +524,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
 def test_correct_indexing_passed_modes_axis():
     """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
-    eq = get("W7-X")
+    eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
     eq.axis = eq.get_axis()
@@ -584,7 +584,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
 
-    eq = get("W7-X")
+    eq = desc.examples.get("W7-X")
     eq.change_resolution(4, 4, 4, 8, 8, 8)
     eq.surface = eq.get_surface_at(1.0)
     eq.axis = eq.get_axis()

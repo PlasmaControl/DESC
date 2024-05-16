@@ -105,25 +105,28 @@ class FixParameters(_Objective):
         )
         from desc.objectives import FixParameters
 
-        # toroidal field coil set with 3 coils
-        tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
-        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=3)
-        # vertical field coil set with 2 coils
-        vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+        # toroidal field coil set with 4 coils
+        tf_coil = FourierPlanarCoil(
+            current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
+        )
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        # vertical field coil set with 3 coils
+        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
         vf_coilset = CoilSet.linspaced_linear(
-            vf_coil, displacement=[0, 0, 2], n=2, endpoint=True
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
         )
         # another single coil
-        coil = FourierXYZCoil()
+        xyz_coil = FourierXYZCoil(current=2)
         # full coil set with TF coils, VF coils, and other single coil
-        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xy_coil))
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
 
         params = [
             [
-                {"current": True},  # fix "current" in 1st TF coil
-                # fix "center" and one component of "normal" for 2nd TF coil
+                {"current": True},  # fix "current" of the 1st TF coil
+                # fix "center" and one component of "normal" for the 2nd TF coil
                 {"center": True, "normal": np.array([1])},
-                {},  # fix nothing in 3rd TF coil
+                {"r_n": True},  # fix radius of the 3rd TF coil
+                {},  # fix nothing in the 4th TF coil
             ],
             {"shift": True, "rotmat": True},  # fix "shift" & "rotmat" for all VF coils
             # fix specified indices of "X_n" and "Z_n", but not "Y_n", for other coil
@@ -2620,11 +2623,11 @@ class FixCoilCurrent(FixParameters):
         Coil(s) that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is ``target=eq.Psi``.
+        Must be broadcastable to Objective.dim_f. Default is ``target=coil.current``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Default is ``target=eq.Psi``.
+        Default is ``target=coil.current``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2636,10 +2639,42 @@ class FixCoilCurrent(FixParameters):
         this should also be set to True.
     indices : nested list of bool, optional
         Pytree of bool specifying which coil currents to fix.
-        Must have the same pytree structure as coil.params_dict.
+        See the example for how to use this on a mixed coil set.
         If True/False fixes all/none of the coil currents.
     name : str, optional
         Name of the objective function.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from desc.coils import (
+            CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
+        )
+        from desc.objectives import FixCoilCurrent
+
+        # toroidal field coil set with 4 coils
+        tf_coil = FourierPlanarCoil(
+            current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
+        )
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        # vertical field coil set with 3 coils
+        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+        vf_coilset = CoilSet.linspaced_linear(
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+        )
+        # another single coil
+        xyz_coil = FourierXYZCoil(current=2)
+        # full coil set with TF coils, VF coils, and other single coil
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+
+        # fix the current of the 1st & 3rd TF coil
+        # fix none of the currents in the VF coil set
+        # fix the current of the other coil
+        obj = FixCoilCurrent(
+            full_coilset, indices=[[True, False, True, False], False, True]
+        )
 
     """
 

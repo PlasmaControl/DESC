@@ -703,10 +703,8 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     derivative = 0
     xq = data["s"]
-    transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    # FIXME: always defaults to "cubic"
     method = kwargs.get("method", "cubic")
-
+    transforms["intervals"] = jnp.asarray(transforms["intervals"])
     is_discontinuous = len(transforms["intervals"][0])
 
     def body(i, fq):
@@ -782,7 +780,6 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 1
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    # FIXME: always defaults to "cubic"
     method = kwargs.get("method", "cubic")
 
     is_discontinuous = len(transforms["intervals"][0])
@@ -861,7 +858,6 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 2
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    # FIXME: always defaults to "cubic"
     method = kwargs.get("method", "cubic")
 
     is_discontinuous = len(transforms["intervals"][0])
@@ -939,7 +935,6 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 3
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    # FIXME: always defaults to "cubic"
     method = kwargs.get("method", "cubic")
 
     is_discontinuous = len(transforms["intervals"][0])

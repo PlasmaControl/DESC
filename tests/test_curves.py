@@ -822,7 +822,7 @@ class TestSplineXYZCurve:
             c.compute("length", grid=np.linspace(0, 1, 10))
 
     @pytest.mark.unit
-    def test_discontinuous(self):
+    def test_discontinuous_knots(self):
         """Test with discontinuous knots."""
         discontinuous_indices = [0, 500]
         R = 2
@@ -844,6 +844,9 @@ class TestSplineXYZCurve:
             discontinuous_indices=None,
             method="linear",
         )
+
+        assert discontinuous.method == "linear"
+        assert continuous.method == "linear"
 
         discont_torsion = discontinuous.compute("torsion")["torsion"]
         cont_torsion = continuous.compute("torsion")["torsion"]

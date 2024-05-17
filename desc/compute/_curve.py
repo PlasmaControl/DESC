@@ -635,6 +635,9 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+method = "catmull-rom"
+
+
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
@@ -662,7 +665,6 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = kwargs["method"]
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -766,7 +768,6 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = "cubic"
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -885,7 +886,6 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = "cubic"
 
     is_discontinuous = len(transforms["intervals"][0])
 
@@ -1003,7 +1003,6 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     xq = data["s"]
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    method = "cubic"
 
     is_discontinuous = len(transforms["intervals"][0])
 

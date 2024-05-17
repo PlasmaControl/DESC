@@ -775,7 +775,7 @@ class SplineXYZCurve(Curve):
             ]
 
         self._knots = knots
-        self.method = method
+        self.method = None
         self.intervals = interval_indices
 
     @optimizable_parameter

@@ -715,9 +715,10 @@ class SplineXYZCurve(Curve):
           data, and will not introduce new extrema in the interpolated points
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
-
     name : str
         name for this curve
+    discontinuous_indices : ndarray
+        indices of knots at which the curve is discontinuous (i.e. only C0)
 
     """
 
@@ -903,11 +904,6 @@ class SplineXYZCurve(Curve):
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
-        override_grid : bool
-            If True, override the user supplied grid if necessary and use a full
-            resolution grid to compute quantities and then downsample to user requested
-            grid. If False, uses only the user specified grid, which may lead to
-            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -965,6 +961,8 @@ class SplineXYZCurve(Curve):
             name for this curve
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        discontinuous_indices : ndarray
+            indices of knots at which the curve is discontinuous (i.e. only C0)
 
         Returns
         -------

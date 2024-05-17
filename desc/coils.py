@@ -269,6 +269,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for this coil
+        discontinuous_indices : ndarray
+            indices of knots at which the curve is discontinuous (i.e. only C0)
 
         Returns
         -------
@@ -559,6 +561,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     name : str
         name for this curve
+    discontinuous_indices : ndarray
+        indices of knots at which the curve is discontinuous (i.e. only C0)
 
     """
 
@@ -676,6 +680,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             name for this curve
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        discontinuous_indices : ndarray
+            indices of knots at which the curve is discontinuous (i.e. only C0)
 
         Returns
         -------
@@ -1373,6 +1379,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for the new CoilSet
+        discontinuous_indices : ndarray
+            indices of knots at which the curve is discontinuous (i.e. only C0)
 
         Returns
         -------

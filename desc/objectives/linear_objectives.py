@@ -2621,7 +2621,7 @@ class FixCoilCurrent(FixParameters):
     ----------
     coil : Coil
         Coil(s) that will be optimized to satisfy the Objective.
-    target : nested list of bool, optional
+    target : dict of {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Should have the same tree structure as coil.params.
         Default is ``target=coil.current``.

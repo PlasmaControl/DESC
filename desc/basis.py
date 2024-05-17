@@ -120,11 +120,12 @@ class _Basis(IOAble, ABC):
         N : int
             Toroidal mode number.
         error : bool
-            whether to raise exception if mode is not in basis, or return empty array
+            Whether to raise exception if the mode is not in the basis (default),
+            or to return an empty array.
 
         Returns
         -------
-        idx : ndarray of int
+        idx : int
             Index of given mode numbers.
 
         """
@@ -136,7 +137,7 @@ class _Basis(IOAble, ABC):
                     "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
                 ) from e
             else:
-                return np.array([]).astype(int)
+                return np.array([], dtype=int)
 
     @abstractmethod
     def _get_modes(self):

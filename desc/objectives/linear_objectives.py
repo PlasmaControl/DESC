@@ -2621,16 +2621,17 @@ class FixCoilCurrent(FixParameters):
     ----------
     coil : Coil
         Coil(s) that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
+    target : nested list of bool, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is ``target=coil.current``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Should have the same tree structure as coil.params.
         Default is ``target=coil.current``.
-    weight : {float, ndarray}, optional
+    bounds : tuple of dict {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Should have the same tree structure as coil.params.
+        Default is ``target=coil.current``.
+    weight : dict of {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Should be a scalar or have the same tree structure as coil.params.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2948,11 +2949,12 @@ class FixSheetCurrent(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is ``target=eq.Psi``.
+        Must be broadcastable to Objective.dim_f.
+        Defaults to the equilibrium sheet current parameters.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Default is ``target=eq.Psi``.
+        Default is to use target.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f

@@ -151,13 +151,6 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
             )
         A = A[unfixed_rows][:, unfixed_idx]
         b = b[unfixed_rows]
-    positives = np.where(A > 0, 1, 0).sum(axis=1)
-    negatives = np.where(A < 0, 1, 0).sum(axis=1)
-    self_consistents = np.where(
-        (positives >= 1) & (negatives == 1) | (positives == 1) & (negatives >= 1)
-    )
-    print(f"Number of Self Consistent rows: {len(self_consistents)}")
-    # from now on, we need to use the global indices of the unfixed variables
     unfixed_idx = indices_idx - 1
     if A.size:
         Ainv_full, Z = svd_inv_null(A)

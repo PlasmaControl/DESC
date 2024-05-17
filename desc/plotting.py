@@ -219,7 +219,7 @@ def _get_grid(**kwargs):
         "rho": np.array([1.0]),
         "theta": np.array([0.0]),
         "zeta": np.array([0.0]),
-        "NFP_umbilic_factor": 1.0,
+        "NFP_umbilic_factor": int(1),
     }
     for key in kwargs.keys():
         if key in grid_args.keys():

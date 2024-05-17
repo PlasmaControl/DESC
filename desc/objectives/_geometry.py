@@ -1585,8 +1585,7 @@ class UmbilicCurvature(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
+            self._normalization = 1.0
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1634,7 +1633,7 @@ class UmbilicCurvature(_Objective):
         R = R.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
         Z = Z.reshape(curve.NFP_umbilic_factor, 4 * curve.N).T
 
-        # now compute the curvature
+        # axis location in rpz coordinates
         data_axis = compute_fun(
             eq,
             self._equil_data_keys_axis,

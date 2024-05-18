@@ -636,6 +636,27 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 
 def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
+    """Used to compute XYZ coordinates for the SplineXYZCurve compute functions.
+
+    Parameters
+    ----------
+    f : list of ndarray
+        X, Y, Z function coords with shape (3, len(p_knots))
+    p_knots : ndarray
+        knots that come from params
+    transforms : dict
+    xq : ndarray
+        query points that come from s parameterization
+    kwargs : dict
+        the kwargs from the compute function
+    derivative : int
+        derivative order used for interpolation
+
+    Returns
+    -------
+    coords : ndarray
+        Interpolated XYZ coords with shape (3, len(xq))
+    """
     method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
     is_discontinuous = len(transforms["intervals"][0])
@@ -669,11 +690,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
         istop = jnp.where(istop == 0, -1, istop)
 
         f_in_interval = [get_interval(f, full_knots, istart, istop) for f in full_f]
-        fq_temp = inner_body(
-            f_in_interval,
-            full_knots,
-            period=None,
-        )
+        fq_temp = inner_body(f_in_interval, full_knots, period=None)
 
         xq_range = (xq >= full_knots[istart]) & (xq <= full_knots[istop])
         for i in range(n_dim):
@@ -691,11 +708,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
         fq = fori_loop(0, len(transforms["intervals"]), body, fq)
     else:
         # regular interpolation where the period for interp is 2pi
-        fq = inner_body(
-            f,
-            p_knots,
-            period=2 * jnp.pi,
-        )
+        fq = inner_body(f, p_knots, period=2 * jnp.pi)
         fq = jnp.array(fq)
 
     coords = jnp.stack(fq, axis=1)
@@ -719,7 +732,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
-    method="{'cubic', 'linear'}: Interpolation type, Default 'cubic'",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 

@@ -2313,7 +2313,7 @@ class FiniteElementMesh3D:
         q = 0
 
     def regular_tetrahedra_integration(self, f, vertices, K):
-        """Considering incorporating this function to incorporate higher order quadrature.
+        """Considering incorporating this to incorporate higher order quadrature.
 
         Returns
         -------
@@ -2856,8 +2856,6 @@ class TetrahedronFiniteElement:
 
         # Computing edge lengths
 
-        # p0p1
-
         e1 = np.sqrt(
             (vertices[0, 0] - vertices[1, 0]) ** 2
             + (vertices[0, 1] - vertices[1, 1]) ** 2
@@ -2893,6 +2891,8 @@ class TetrahedronFiniteElement:
             + (vertices[2, 1] - vertices[3, 1]) ** 2
             + (vertices[2, 2] - vertices[3, 2]) ** 2
         )
+
+        # Do we need angles here?
 
         # We construct equally spaced nodes for order K tetrahedron,
         # which gives Q nodes.
@@ -2930,14 +2930,85 @@ class TetrahedronFiniteElement:
             node_tuple = [K, K, K, K]
             node_mapping.append(node_tuple)
 
-            # Next, we need to place the interior nodes
+            # We next place the interior nodes in the tetrahedra.
+
+        if K == 3:
+            # We place the edge nodes first, spaced out by thirds:
+
+            one_third = np.zeros([6, 3])
+            two_thirds = np.zeros([6, 3])
+
+            for i in range(3):
+                one_third[i, :] = (1 / 3) * vertices[i + 1, :] + (2 / 3) * vertices[
+                    i, :
+                ]
+                two_thirds[i, :] = (2 / 3) * vertices[i + 1, :] + (1 / 3) * vertices[
+                    i, :
+                ]
+
+            # p0p2
+
+            one_third[3, :] = (1 / 3) * vertices[2, :] + (2 / 3) * vertices[0, :]
+            two_thirds[3, :] = (2 / 3) * vertices[2, :] + (1 / 3) * vertices[0, :]
+
+            # p0p3
+
+            one_third[4, :] = (1 / 3) * vertices[3, :] + (2 / 3) * vertices[0, :]
+            two_thirds[4, :] = (2 / 3) * vertices[3, :] + (1 / 3) * vertices[0, :]
+
+            # p1p3
+
+            one_third[5, :] = (1 / 3) * vertices[3, :] + (2 / 3) * vertices[1, :]
+            two_thirds[5, :] = (2 / 3) * vertices[3, :] + (1 / 3) * vertices[1, :]
+
+            for i in range(6):
+                nodes.append(one_third[i, :])
+                nodes.append(two_thirds[i, :])
+                node_tuple = [K, K, K, K]
+                # Not entirely sure the usage of node_tuple
+
+                node_mapping.append(node_tuple)
+
+            # Next we place the interior nodes. We use the barycenter of
+            # each of the four faces.
+
+            barycenters = np.zeros([4, 3])
+
+            # p0p1p2 and p1p2p3
+
+            for j in range(2):
+                barycenters[j, :] = (
+                    vertices[j, :] + vertices[j + 1, :] + vertices[j + 2, :]
+                ) / 3
+
+            # p0p2p3
+
+            barycenters[2, :] = (vertices[0, :] + vertices[2, :] + vertices[3, :]) / 3
+
+            # p0p1p3
+
+            barycenters[3, :] = (vertices[0, :] + vertices[1, :] + vertices[3, :]) / 3
+
+            for j in range(4):
+                nodes.append(barycenters[j, :])
+                node_tuple = [K, K, K, K]
+                node_mapping.append(node_tuple)
 
         self.nodes = np.array(nodes)
         self.eta_nodes, _ = self.get_barycentric_coordinates(self.nodes)
         self.basis_functions_nodes, _ = self.get_basis_functions(self.nodes)
 
-        # Write something to check whether basis functions vanish at the right spots
+        if K == 1:
+            assert np.allclose(self.eta_nodes, self.basis_functions_nodes)
 
+        # Check basis functions vanish at all nodes except the associated node.
+        for i in range(self.Q):
+            assert np.allclose(self.basis_functions_nodes[i, i], 1.0)
+            for j in range(self.Q):
+                if i != j:
+                    assert np.allclose(self.basis_functions_nodes[i, j], 0.0)
+
+        # Check we have the same number of basis functions as nodes.
         assert self.nodes.shape[0] == self.Q
 
     def get_barycentric_coordinates(self, rho_theta_zeta):
@@ -3043,15 +3114,67 @@ class TetrahedronFiniteElement:
         rho_theta_zeta = rho_theta_zeta_in_tetrahedron
         K = self.K
 
+        # Now, we have the rho_theta_zeta points that lie in the tetrahedron.
+        # Recall that eta_nodes is the set of barycentric coordinates for the points
+        # lying in the specific tetrahedron.
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
 
-        # Now, we have the rho_theta_zeta points that lie in the tetrahedron
+        vertices = self.vertices
+        K = self.K
 
-        # Compute the vertex basis functions first
+        # Compute the vertex basis functions first. In this case, the basis
+        # functions should be 1 at
+        # the specific vertex and vanish at the other four nodes. At v1, the barycentric
+        # coordinates [1,0,0,0], at v2,the barycentric coordinates are [0,1,0,0], at v3,
+        # the barycentric coordinates are [0,0,1,0], and at v4, the
+        # barycentric coordinates are [0,0,0,1].
+
+        if K == 1:
+            for i in range(4):
+                basis_functions[i, :] = vertices[i, :]
+
+        # if K == 2:
+
+        # if K == 3:
 
         self.vertices
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
+
+    def lagrange_polynomial(self, eta_i, eta_nodes_i, order, inds_minus_q, q):
+        """Computing lagrange polynomials.
+
+        Computes the lagrange polynomial given the ith component of the
+        Barycentric coordinates on a (rho,theta, zeta) mesh, the ith component
+        of the tetrahedron nodes defined for the basis functions, the order
+        of the polynomial, and the index q of which node this is.
+
+        Parameters
+        ----------
+        eta_i : 1D ndarray, shape(nrho * ntheta * nzeta)
+            The barycentric coordinate i defined at (theta, zeta) points.
+        eta_nodes_i : 1D ndarray, shape(Q)
+            The barycentric coordinate i defined at the tetrahedron nodes.
+        order : integer
+            Order of the polynomial.
+        q : integer
+            The index of the node we are using to define the basis function.
+            Options are 0, ..., Q - 1
+
+        Returns
+        -------
+        lp : 1D ndarray, shape(nrho * ntheta * nzeta)
+            The lagrange polynomial associated with the barycentric
+            coordinate i, the polynomial order (order), and the node q.
+        """
+        denom = 1.0
+        numerator = np.ones(len(eta_i))
+        # Avoid choosing the node q associated with this basis function
+        for i in inds_minus_q:
+            numerator *= eta_i - eta_nodes_i[i]
+            denom *= eta_nodes_i[q] - eta_nodes_i[i]
+        lp = numerator / denom
+        return lp
 
 
 class TriangleFiniteElement:

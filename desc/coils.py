@@ -1569,7 +1569,14 @@ class MixedCoilSet(CoilSet):
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
         return self.__class__(*coils, name=name)
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+    def to_SplineXYZ(
+        self,
+        knots=None,
+        grid=None,
+        method="cubic",
+        name="",
+        discontinuous_indices=None,
+    ):
         """Convert all coils to SplineXYZCoil.
 
         Parameters
@@ -1594,6 +1601,8 @@ class MixedCoilSet(CoilSet):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for the new CoilSet
+        discontinuous_indices : ndarray
+            indices of knots at which the curve is discontinuous (i.e. only C0)
 
         Returns
         -------
@@ -1601,7 +1610,12 @@ class MixedCoilSet(CoilSet):
             New representation of the coilset parameterized by a spline for X,Y,Z.
 
         """
-        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        coils = [
+            coil.to_SplineXYZ(
+                knots, grid, method, discontinuous_indices=discontinuous_indices
+            )
+            for coil in self
+        ]
         return self.__class__(*coils, name=name)
 
     def __add__(self, other):

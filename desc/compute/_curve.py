@@ -772,7 +772,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     data=["s", "x"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
-    method="{'cubic', 'linear'}: Interpolation type, Default 'cubic'",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 1
@@ -807,7 +807,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     data=["s", "x"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
-    method="{'cubic', 'linear'}: Interpolation type, Default 'cubic'",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 2
@@ -841,7 +841,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     data=["s", "x"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
-    method="{'cubic', 'linear'}: Interpolation type, Default 'cubic'",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 3

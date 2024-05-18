@@ -555,6 +555,30 @@ class TestPlanarCurve:
         np.testing.assert_allclose(z, 1)
 
     @pytest.mark.unit
+    def test_basis(self):
+        """Test xyz vs rpz basis."""
+        cxyz = FourierPlanarCurve(center=[1, 1, 0], normal=[-1, 1, 0], basis="xyz")
+        crpz = FourierPlanarCurve(
+            center=[np.sqrt(2), np.pi / 4, 0], normal=[0, 1, 0], basis="rpz"
+        )
+
+        x_xyz = cxyz.compute("x")["x"]
+        x_rpz = crpz.compute("x")["x"]
+        np.testing.assert_allclose(x_xyz, x_rpz)
+
+        xs_xyz = cxyz.compute("x_s")["x_s"]
+        xs_rpz = crpz.compute("x_s")["x_s"]
+        np.testing.assert_allclose(xs_xyz, xs_rpz, atol=2e-15)
+
+        xss_xyz = cxyz.compute("x_ss")["x_ss"]
+        xss_rpz = crpz.compute("x_ss")["x_ss"]
+        np.testing.assert_allclose(xss_xyz, xss_rpz, atol=2e-15)
+
+        xsss_xyz = cxyz.compute("x_sss")["x_sss"]
+        xsss_rpz = crpz.compute("x_sss")["x_sss"]
+        np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=2e-15)
+
+    @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting misc attributes of FourierPlanarCurve."""
         c = FourierPlanarCurve()

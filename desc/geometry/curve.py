@@ -822,6 +822,9 @@ class SplineXYZCurve(Curve):
         if discontinuous_indices is None:
             interval_indices = [[]]
         else:
+            # check that input is monotonic
+            assert discontinuous_indices == sorted(discontinuous_indices)
+            assert discontinuous_indices == np.unique(discontinuous_indices)
             interval_indices = [
                 [discontinuous_indices[i - 1], discontinuous_indices[i]]
                 for i in range(len(discontinuous_indices))

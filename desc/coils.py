@@ -1669,6 +1669,7 @@ class MixedCoilSet(CoilSet):
               the data, and will not introduce new extrema in the interpolated points
             - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
               both endpoints
+
         ignore_groups : bool
             If False, return the coils in a nested MixedCoilSet, with a sub coilset per
             single coilgroup. If there is only a single group, however, this will not

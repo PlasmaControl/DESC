@@ -767,6 +767,7 @@ class SplineXYZCurve(Curve):
           data, and will not introduce new extrema in the interpolated points
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
+
     name : str
         name for this curve
     discontinuous_indices : ndarray

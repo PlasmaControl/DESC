@@ -189,6 +189,7 @@ class InputReader:
         iota_flag = False
         pres_flag = False
         curr_flag = False
+        vac_flag = False
         inputs["output_path"] = self.output_path
 
         if self.args is not None and self.args.quiet:
@@ -275,9 +276,8 @@ class InputReader:
                 flag = True
             match = re.search(r"NFP", argument, re.IGNORECASE)
             if match:
-                inputs["NFP"] = numbers[0]
-                if len(numbers) > 1:
-                    inputs["NFP"] /= numbers[1]
+                assert numbers[0] == int(numbers[0]), "NFP should be an integer"
+                inputs["NFP"] = int(numbers[0])
                 flag = True
             match = re.search(r"Psi", argument, re.IGNORECASE)
             if match:
@@ -360,7 +360,11 @@ class InputReader:
             # solver methods
             match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
-                inputs["objective"] = words[0].lower()
+                method = words[0].lower()
+                if method == "vacuum":
+                    method = "force"
+                    vac_flag = True
+                inputs["objective"] = method
                 flag = True
             match = re.search(r"optimizer", argument, re.IGNORECASE)
             if match:
@@ -558,20 +562,20 @@ class InputReader:
         if curr_flag and iota_flag:
             raise OSError(colored("Cannot specify both iota and current.", "red"))
 
+        if vac_flag and (pres_flag or iota_flag or curr_flag):
+            warnings.warn(
+                "Vacuum objective assumes 0 pressure and 0 current, "
+                + "ignoring provided pressure, iota, and current profiles"
+            )
+            _ = inputs.pop("iota", None)
+            _ = inputs.pop("current", None)
+            _ = inputs.pop("pressure", None)
+
         # remove unused profile
         if iota_flag:
-            if inputs["objective"] != "vacuum":
-                del inputs["current"]
-            else:  # if vacuum objective from input file, use zero current
-                del inputs["iota"]
+            _ = inputs.pop("current", None)
         else:
-            del inputs["iota"]
-
-        if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
-            warnings.warn(
-                "Vacuum objective does not use any profiles, "
-                + "ignoring pressure, iota, and current"
-            )
+            _ = inputs.pop("iota", None)
 
         # sort axis array
         inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
@@ -644,7 +648,7 @@ class InputReader:
                 else:
                     inputs_ii[key] = inputs[key]
             # apply pressure ratio
-            if inputs_ii["pres_ratio"] is not None:
+            if "pressure" in inputs_ii and inputs_ii["pres_ratio"] is not None:
                 inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
             # apply current ratio
             if "current" in inputs_ii and inputs_ii["curr_ratio"] is not None:
@@ -824,6 +828,7 @@ class InputReader:
         from desc.grid import LinearGrid
         from desc.io.equilibrium_io import load
         from desc.profiles import PowerSeriesProfile
+        from desc.utils import copy_coeffs
 
         f = open(outfile, "w+")
 
@@ -868,7 +873,7 @@ class InputReader:
 
         # fit profiles to power series
         grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        rho = grid.nodes[grid._unique_rho_idx, 0]
+        rho = grid.nodes[grid.unique_rho_idx, 0]
         if not isinstance(eq.pressure, PowerSeriesProfile):
             pressure = grid.compress(eq.compute("p", grid=grid)["p"])
             pres_profile = PowerSeriesProfile.from_values(
@@ -902,11 +907,15 @@ class InputReader:
         pres_profile.change_resolution(L=L_profile)
         profile.change_resolution(L=L_profile)
 
+        prof_modes = np.zeros((L_profile, 3))
+        prof_modes[:, 0] = np.arange(L_profile)
+        p1 = copy_coeffs(pres_profile.params, pres_profile.basis.modes, prof_modes)
+        p2 = copy_coeffs(profile.params, profile.basis.modes, prof_modes)
         f.write("\n# pressure and rotational transform/current profiles\n")
         for l in range(L_profile):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
-                    int(l), pres_profile.params[l], char, profile.params[l]
+                    int(l), p1[l], char, p2[l]
                 )
             )
 

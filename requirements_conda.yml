@@ -2,7 +2,7 @@ name: desc-env
 dependencies:
   # standard install
   - colorama
-  - h5py >= 3.0.0
+  - h5py >= 3.0.0, < 4.0
   - matplotlib >= 3.5.0, < 4.0.0
   - mpmath >= 1.0.0, < 2.0
   - netcdf4 >= 1.5.4, < 2.0
@@ -12,6 +12,8 @@ dependencies:
   - termcolor
   - pip
   - pip:
+    # Conda only parses a single list of pip requirements.
+    # If two pip lists are given, all but the last list is skipped.
     - interpax
     - jax[cpu] >= 0.3.2, < 0.5.0
     - nvgpu

@@ -1,6 +1,6 @@
-=================
-API Documentation
-=================
+====================
+Alphabetical Listing
+====================
 
 Basis
 *****
@@ -123,7 +123,6 @@ IO
     :recursive:
     :template: class.rst
 
-    desc.io.InputReader
     desc.io.load
 
 Magnetic Fields
@@ -134,13 +133,17 @@ Magnetic Fields
     :recursive:
     :template: class.rst
 
+    desc.magnetic_fields.CurrentPotentialField
+    desc.magnetic_fields.FourierCurrentPotentialField
+    desc.magnetic_fields.DommaschkPotentialField
+    desc.magnetic_fields.OmnigenousField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
     desc.magnetic_fields.VerticalMagneticField
-    desc.magnetic_fields.PoloidalMagneticField
-    desc.magnetic_fields.SplineMagneticField
-    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
 
@@ -171,7 +174,10 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
-    desc.objectives.FixParameter
+    desc.objectives.FixOmniBmax
+    desc.objectives.FixOmniMap
+    desc.objectives.FixOmniWell
+    desc.objectives.FixParameters
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR
@@ -187,11 +193,13 @@ Objective Functions
     desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
+    desc.objectives.LinearObjectiveFromUser
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
+    desc.objectives.Omnigenity
     desc.objectives.PlasmaVesselDistance
     desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
@@ -250,7 +258,6 @@ Plotting
     desc.plotting.plot_coefficients
     desc.plotting.plot_coils
     desc.plotting.plot_comparison
-    desc.plotting.plot_field_lines_sfl
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
@@ -267,6 +274,7 @@ Profiles
     :template: class.rst
 
     desc.profiles.PowerSeriesProfile
+    desc.profiles.TwoPowerProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
     desc.profiles.ScaledProfile

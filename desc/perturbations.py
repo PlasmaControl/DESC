@@ -254,7 +254,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # 1st order
     if order > 0:
-
         if (weight is None) or (weight == "auto"):
             w = jnp.ones((eq.dim_x,))
             if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
@@ -291,7 +290,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jx = objective.jac_scaled(x)
+        Jx = objective.jac_scaled_error(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
@@ -324,7 +323,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # 2nd order
     if order > 1:
-
         # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing d^2f")
@@ -350,7 +348,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # 3rd order
     if order > 2:
-
         # 3rd partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing d^3f")
@@ -593,7 +590,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # 1st order
     if order > 0:
-
         f = objective_f.compute_scaled_error(xf)
         g = objective_g.compute_scaled_error(xg)
 
@@ -601,7 +597,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Fx = objective_f.jac_scaled(xf)
+        Fx = objective_f.jac_scaled_error(xf)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -610,7 +606,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing dg")
         timer.start("dg computation")
-        Gx = objective_g.jac_scaled(xg)
+        Gx = objective_g.jac_scaled_error(xg)
         timer.stop("dg computation")
         if verbose > 1:
             timer.disp("dg computation")
@@ -685,7 +681,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         dx1_reduced = dx1h_reduced * wx
     # 2nd order
     if order > 1:
-
         # 2nd partial derivatives of f objective wrt both x and c
         if verbose > 0:
             print("Computing d^2f")

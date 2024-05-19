@@ -1014,11 +1014,11 @@ class SplineXYZCurve(Curve):
             - ``'cubic2'``: C2 cubic splines (aka natural splines)
             - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
             - ``'cardinal'``: C1 cubic general tension splines. If used, default tension
-            of c = 0 will be used
+              of c = 0 will be used
             - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in
-            the data, and will not introduce new extrema in the interpolated points
+              the data, and will not introduce new extrema in the interpolated points
             - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
-            both endpoints
+              both endpoints
 
         name : str
             name for this curve

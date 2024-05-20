@@ -97,10 +97,9 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         A = A[:, cols]
     assert A.shape[1] == xp.size
 
-    # will store the global index of the unfixed rows with shifted indices by 1
-    indices_row = np.arange(1, A.shape[0] + 1)
-    # will store the global index of the unfixed idx with shifted indices by 1
-    indices_idx = np.arange(1, A.shape[1] + 1)
+    # will store the global index of the unfixed rows, idx
+    indices_row = np.arange(A.shape[0])
+    indices_idx = np.arange(A.shape[1])
 
     # while loop has problems updating JAX arrays, convert them to numpy arrays
     A = np.array(A)
@@ -108,25 +107,17 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
         # fixed just means there is a single element in A, so A_ij*x_j = b_i
         fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
-        print(f"Number of Fixed rows: {len(fixed_rows)}")
         # indices of x that are fixed = cols of A where rows have 1 nonzero val.
         _, fixed_idx = np.where(A[fixed_rows])
         unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
         unfixed_idx = np.setdiff1d(np.arange(A.shape[1]), fixed_idx)
 
         # find the global index of the fixed variables of this iteration
-        global_fixed_idx = indices_idx[fixed_idx] - 1
+        global_fixed_idx = indices_idx[fixed_idx]
         # find the global index of the unfixed variables by removing the fixed variables
-        # from the indices arrays. This is done by setting the fixed indices to 0 and
-        # removing the 0s.
-        indices_idx[fixed_idx] = 0  # set fixed indices to 0
-        indices_idx = indices_idx[
-            np.nonzero(indices_idx)
-        ]  # remove 0s, hence fixed indices are removed
-        indices_row[fixed_rows] = 0  # set fixed indices to 0
-        indices_row = indices_row[
-            np.nonzero(indices_row)
-        ]  # remove 0s, hence fixed indices are removed
+        # from the indices arrays.
+        indices_idx = np.delete(indices_idx, fixed_idx)  # fixed indices are removed
+        indices_row = np.delete(indices_row, fixed_rows)  # fixed rows are removed
 
         if len(fixed_rows):
             # something like 0.5 x1 = 2 is the same as x1 = 4
@@ -151,7 +142,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
             )
         A = A[unfixed_rows][:, unfixed_idx]
         b = b[unfixed_rows]
-    unfixed_idx = indices_idx - 1
+    unfixed_idx = indices_idx
     if A.size:
         Ainv_full, Z = svd_inv_null(A)
     else:

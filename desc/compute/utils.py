@@ -130,6 +130,14 @@ def _compute(
                     data=data,
                     **kwargs,
                 )
+        coords = data_index[parameterization][name]["grid_coordinates"]
+        errorif(
+            "grid" in transforms and transforms["grid"].coordinates != coords,
+            msg=(
+                f"Grid has coordinates '{transforms['grid'].coordinates}', but "
+                f"expected grid with coordinates '{coords}' to compute {name}."
+            ),
+        )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs

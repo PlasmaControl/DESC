@@ -63,9 +63,9 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
-    aliases=[],
+    aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
-    grid_type=None,
+    grid_coordinates="rtz",
     axis_limit_data=None,
     **kwargs,
 ):
@@ -104,8 +104,9 @@ def register_compute_fun(
     parameterization : str or list of str
         Name of desc types the method is valid for. eg `'desc.geometry.FourierXYZCurve'`
         or `'desc.equilibrium.Equilibrium'`.
-    grid_type : str
-        Name of grid type the quantity must be computed with. eg `'quad'`.
+    grid_coordinates : str
+        Coordinates specified by nodes of the grid.
+        Immediate dependencies should be computed on a grid of this type.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
 
@@ -114,6 +115,8 @@ def register_compute_fun(
     Should only list *direct* dependencies. The full dependencies will be built
     recursively at runtime using each quantity's direct dependencies.
     """
+    if aliases is None:
+        aliases = []
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
 
@@ -142,7 +145,7 @@ def register_compute_fun(
             "coordinates": coordinates,
             "dependencies": deps,
             "aliases": aliases,
-            "grid_type": grid_type,
+            "grid_coordinates": grid_coordinates,
         }
         for p in parameterization:
             flag = False

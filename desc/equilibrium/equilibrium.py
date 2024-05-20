@@ -848,7 +848,6 @@ class Equilibrium(IOAble, Optimizable):
             set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names)
             - data.keys()  # subtract out y if already computed
         )
-        # TODO: replace this logic with `grid_type` from data_index
         dep0d = [
             dep
             for dep in deps

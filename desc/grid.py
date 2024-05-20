@@ -396,17 +396,13 @@ class _Grid(IOAble, ABC):
 
     def get_label(self, label):
         """Get general label that specifies direction given label."""
-        options = {
-            "radial": "rho",  # todo: generalize to radial
-            "poloidal": "poloidal",
-            "toroidal": "zeta",  # todo: generalize to toroidal
-            {"r": "rho"}[self.coordinates[0]]: "rho",
-            {"a": "alpha", "t": "theta", "p": "theta_PEST"}[
-                self.coordinates[1]
-            ]: "poloidal",
-            {"z": "zeta"}[self.coordinates[2]]: "zeta",
-        }
-        return options[label]
+        # TODO: generalize zeta to toroidal in PR #568.
+        if label in {"rho", "poloidal", "zeta"}:
+            return label
+        rad = {"r": "rho"}[self.coordinates[0]]
+        pol = {"a": "alpha", "t": "theta", "p": "theta_PEST"}[self.coordinates[1]]
+        tor = {"z": "zeta"}[self.coordinates[2]]
+        return {rad: "rho", pol: "poloidal", tor: "zeta"}[label]
 
     def compress(self, x, surface_label="rho"):
         """Return elements of ``x`` at indices of unique surface label values.

@@ -10,7 +10,11 @@ from desc.grid import LinearGrid
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import copy_coeffs, errorif, setdefault, warnif
 
-from ._core import _MagneticField, biot_savart_general
+from ._core import (
+    _MagneticField,
+    biot_savart_general,
+    biot_savart_general_vector_potential,
+)
 
 
 class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
@@ -527,6 +531,41 @@ class FourierCurrentPotentialField(
             source_grid=source_grid,
         )
 
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            Magnetic vector potential at specified points.
+
+        """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * max(self.M, self.M_Phi),
+            N=30 + 2 * max(self.N, self.N_Phi),
+            NFP=self.NFP,
+        )
+        return _compute_vector_potential_from_CurrentPotentialField(
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
+        )
+
     @classmethod
     def from_surface(
         cls,
@@ -676,3 +715,75 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     if basis == "rpz":
         B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
     return B
+
+
+def _compute_vector_potential_from_CurrentPotentialField(
+    field,
+    coords,
+    source_grid,
+    params=None,
+    basis="rpz",
+):
+    """Compute magnetic vector potential at a set of points.
+
+    Parameters
+    ----------
+    field : CurrentPotentialField or FourierCurrentPotentialField
+        current potential field object from which to compute magnetic vector potential.
+    coords : array-like shape(N,3)
+        cylindrical or cartesian coordinates
+    source_grid : Grid,
+        source grid upon which to evaluate the surface current density K
+    params : dict, optional
+        parameters to pass to compute function
+        should include the potential
+    basis : {"rpz", "xyz"}
+        basis for input coordinates and returned magnetic vector potential
+
+
+    Returns
+    -------
+    A : ndarray, shape(N,3)
+        magnetic vector potential at specified points
+
+    """
+    assert basis.lower() in ["rpz", "xyz"]
+    coords = jnp.atleast_2d(jnp.asarray(coords))
+    if basis == "rpz":
+        coords = rpz2xyz(coords)
+
+    # compute surface current, and store grid quantities
+    # needed for integration in class
+    # TODO: does this have to be xyz, or can it be computed in rpz as well?
+    data = field.compute(["K", "x"], grid=source_grid, basis="xyz", params=params)
+
+    _rs = xyz2rpz(data["x"])
+    _K = xyz2rpz_vec(data["K"], phi=source_grid.nodes[:, 2])
+
+    # surface element, must divide by NFP to remove the NFP multiple on the
+    # surface grid weights, as we account for that when doing the for loop
+    # over NFP
+    _dV = source_grid.weights * data["|e_theta x e_zeta|"] / source_grid.NFP
+
+    def nfp_loop(j, f):
+        # calculate (by rotating) rs, rs_t, rz_t
+        phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
+            2 * jnp.pi
+        )
+        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
+        rs = rpz2xyz(rs)
+        K = rpz2xyz_vec(_K, phi=phi)
+        fj = biot_savart_general_vector_potential(
+            coords,
+            rs,
+            K,
+            _dV,
+        )
+        f += fj
+        return f
+
+    A = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    if basis == "rpz":
+        A = xyz2rpz_vec(A, x=coords[:, 0], y=coords[:, 1])
+    return A

@@ -2072,6 +2072,12 @@ def zernike_norm(l, m):
 class FiniteElementMesh3D:
     """Class representing a 3D mesh in (rho, theta, zeta) using scikit-fem.
 
+    This class represents a set of I_5LMN = 5LMN tetrahedra obtained by tessalation
+    f a uniform  L x M x N mesh in rho, theta, zeta. The point of this class is to
+    predefine all the tetrahedra and their associated basis functions so that, given
+    a new point (rho_i, theta_i, zeta_i), we can quickly return which tetrahedron
+    contains this point and its associated basis functions.
+    
     Parameters
     ----------
     L : int
@@ -2093,7 +2099,7 @@ class FiniteElementMesh3D:
         self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
         self.K = K
 
-        # Trying a Hex Mesh, and then adding in the tetraehdra to each prism
+        # Trying a Hex Mesh, and then adding in the tetrahedra to each prism
         if K == 1:
             mesh = fem.MeshHex.init_tensor(
                 np.linspace(0, 1, L),
@@ -2385,7 +2391,7 @@ class FiniteElementMesh3D:
             integral = 0.0
         for i, tetrahedron in enumerate(self.tetrahedra):
             integral += np.dot(
-                abs(tetrahedron.volume) * self.weights,
+                abs(tetrahedron.volume2) * self.weights,
                 f[i * nquad : (i + 1) * nquad, :],
             )
         return integral / 2.0
@@ -2851,7 +2857,7 @@ class TetrahedronFiniteElement:
             [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1],
         )
 
-        self.volume = np.linalg.det(D) / 6
+        self.volume2 = np.linalg.det(D) / 3
         self.d = np.linalg.det(D)
 
         # Computing edge lengths
@@ -2913,15 +2919,17 @@ class TetrahedronFiniteElement:
             # We create one additional midpoint node
             # on each of the six tetrahedron edges
             # for a total of 6 more nodes
+            # Checked that the order matches sci-kit
 
             midpoints = np.zeros([6, 3])
 
-            for i in range(3):
+            for i in range(2):
                 midpoints[i] = (vertices[i, :] + vertices[i + 1, :]) / 2
 
-            midpoints[3] = (vertices[0, :] + vertices[2, :]) / 2
-            midpoints[4] = (vertices[0, :] + vertices[3, :]) / 2
-            midpoints[5] = (vertices[1, :] + vertices[3, :]) / 2
+            midpoints[5] = (vertices[2, :] + vertices[3, :]) / 2
+            midpoints[2] = (vertices[0, :] + vertices[2, :]) / 2
+            midpoints[3] = (vertices[0, :] + vertices[3, :]) / 2
+            midpoints[4] = (vertices[1, :] + vertices[3, :]) / 2
 
             # Now, we add all of these nodes to our list of nodes
 
@@ -3119,62 +3127,146 @@ class TetrahedronFiniteElement:
         # lying in the specific tetrahedron.
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
 
-        vertices = self.vertices
+        # At each of the rho_theta_zeta points that lie in the given tetrahedron,
+        # we wish to evaluate the Q = (K+1)(K+2)(K+3)/6 basis functions.
         K = self.K
 
-        # Compute the vertex basis functions first. In this case, the basis
-        # functions should be 1 at
-        # the specific vertex and vanish at the other four nodes. At v1, the barycentric
-        # coordinates [1,0,0,0], at v2,the barycentric coordinates are [0,1,0,0], at v3,
-        # the barycentric coordinates are [0,0,1,0], and at v4, the
-        # barycentric coordinates are [0,0,0,1].
+        # Compute the vertex basis functions first. This will be the first 4 columns
+        # of basis_functions.
 
         if K == 1:
-            for i in range(4):
-                basis_functions[i, :] = vertices[i, :]
+            for i in rho_theta_zeta.shape[0]:
+                for j in range(4):
+                    basis_functions[i, j] = self.eta_nodes[i, j]
+        # Next, we deal with the edge nodes. This will provide an additional 6 columns.
 
-        # if K == 2:
+        if K == 2:
+            for i in rho_theta_zeta.shape[0]:
+                for j in range(4):
+                    basis_functions[i, j] = self.eta_nodes[i, j] * (
+                        2 * self.eta_nodes[i, j] - 1
+                    )
 
-        # if K == 3:
+            for i in rho_theta_zeta.shape[0]:
+                basis_functions[i, 4] = 4 * self.eta_nodes[i, 1] * self.eta_nodes[i, 0]
+                basis_functions[i, 5] = 4 * self.eta_nodes[i, 1] * self.eta_nodes[i, 2]
+                basis_functions[i, 6] = 4 * self.eta_nodes[i, 0] * self.eta_nodes[i, 2]
+                basis_functions[i, 7] = 4 * self.eta_nodes[i, 0] * self.eta_nodes[i, 3]
+                basis_functions[i, 8] = 4 * self.eta_nodes[i, 1] * self.eta_nodes[i, 3]
+                basis_functions[i, 8] = 4 * self.eta_nodes[i, 1] * self.eta_nodes[i, 3]
+                basis_functions[i, 9] = 4 * self.eta_nodes[i, 2] * self.eta_nodes[i, 3]
 
-        self.vertices
+        if K == 3:
+            for i in rho_theta_zeta.shape[0]:
+                for j in range(4):
+                    basis_functions[i, j] = (
+                        (1 / 2)
+                        * self.eta_nodes[i, j]
+                        * (3 * self.eta_nodes[i, j] - 1)
+                        * (3 * self.eta_nodes[i, j] - 2)
+                    )
+            for i in rho_theta_zeta.shape[0]:
+                # Edge nodes
+                basis_functions[i, 4] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 1]
+                    * (3 * self.eta_nodes[i, 0] - 1)
+                )
+                basis_functions[i, 5] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 1]
+                    * (3 * self.eta_nodes[i, 1] - 1)
+                )
+                basis_functions[i, 6] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 1]
+                    * self.eta_nodes[i, 2]
+                    * (3 * self.eta_nodes[i, 1] - 1)
+                )
+                basis_functions[i, 7] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 1]
+                    * self.eta_nodes[i, 2]
+                    * (3 * self.eta_nodes[i, 2] - 1)
+                )
+                basis_functions[i, 8] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 2]
+                    * self.eta_nodes[i, 3]
+                    * (3 * self.eta_nodes[i, 2] - 1)
+                )
+                basis_functions[i, 9] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 2]
+                    * self.eta_nodes[i, 3]
+                    * (3 * self.eta_nodes[i, 3] - 1)
+                )
+                basis_functions[i, 10] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 2]
+                    * (3 * self.eta_nodes[i, 0] - 1)
+                )
+                basis_functions[i, 11] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 2]
+                    * (3 * self.eta_nodes[i, 2] - 1)
+                )
+                basis_functions[i, 12] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 3]
+                    * (3 * self.eta_nodes[i, 0] - 1)
+                )
+                basis_functions[i, 13] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 3]
+                    * (3 * self.eta_nodes[i, 3] - 1)
+                )
+                basis_functions[i, 14] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 1]
+                    * self.eta_nodes[i, 3]
+                    * (3 * self.eta_nodes[i, 1] - 1)
+                )
+                basis_functions[i, 15] = (
+                    (9 / 2)
+                    * self.eta_nodes[i, 1]
+                    * self.eta_nodes[i, 3]
+                    * (3 * self.eta_nodes[i, 3] - 1)
+                )
+
+                # Mid-face nodes
+                basis_functions[i, 16] = (
+                    27
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 1]
+                    * self.eta_nodes[i, 2]
+                )
+                basis_functions[i, 17] = (
+                    27
+                    * self.eta_nodes[i, 1]
+                    * self.eta_nodes[i, 2]
+                    * self.eta_nodes[i, 3]
+                )
+                basis_functions[i, 18] = (
+                    27
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 2]
+                    * self.eta_nodes[i, 3]
+                )
+                basis_functions[i, 19] = (
+                    27
+                    * self.eta_nodes[i, 0]
+                    * self.eta_nodes[i, 1]
+                    * self.eta_nodes[i, 3]
+                )
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
-
-    def lagrange_polynomial(self, eta_i, eta_nodes_i, order, inds_minus_q, q):
-        """Computing lagrange polynomials.
-
-        Computes the lagrange polynomial given the ith component of the
-        Barycentric coordinates on a (rho,theta, zeta) mesh, the ith component
-        of the tetrahedron nodes defined for the basis functions, the order
-        of the polynomial, and the index q of which node this is.
-
-        Parameters
-        ----------
-        eta_i : 1D ndarray, shape(nrho * ntheta * nzeta)
-            The barycentric coordinate i defined at (theta, zeta) points.
-        eta_nodes_i : 1D ndarray, shape(Q)
-            The barycentric coordinate i defined at the tetrahedron nodes.
-        order : integer
-            Order of the polynomial.
-        q : integer
-            The index of the node we are using to define the basis function.
-            Options are 0, ..., Q - 1
-
-        Returns
-        -------
-        lp : 1D ndarray, shape(nrho * ntheta * nzeta)
-            The lagrange polynomial associated with the barycentric
-            coordinate i, the polynomial order (order), and the node q.
-        """
-        denom = 1.0
-        numerator = np.ones(len(eta_i))
-        # Avoid choosing the node q associated with this basis function
-        for i in inds_minus_q:
-            numerator *= eta_i - eta_nodes_i[i]
-            denom *= eta_nodes_i[q] - eta_nodes_i[i]
-        lp = numerator / denom
-        return lp
 
 
 class TriangleFiniteElement:

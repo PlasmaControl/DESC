@@ -2077,7 +2077,7 @@ class FiniteElementMesh3D:
     predefine all the tetrahedra and their associated basis functions so that, given
     a new point (rho_i, theta_i, zeta_i), we can quickly return which tetrahedron
     contains this point and its associated basis functions.
-    
+
     Parameters
     ----------
     L : int
@@ -2208,37 +2208,35 @@ class FiniteElementMesh3D:
                     tetrahedra.append(tetrahedron5)
                     self.vertices = vertices
                     self.tetrahedra = tetrahedra
-
                     # Setup quadrature points and weights
                     # for numerical integration using scikit-fem
 
-                    # When K=1, scikit goes direcly to the K=2 case
-                    if K == 1 or K == 2:
-                        [integration_points, weights] = fem.quadrature.get_quadrature(
-                            element, 1
-                        )
-                        # weights = weights * 2
-                        add_row = [
-                            integration_points[0][1],
-                            integration_points[0][0],
-                            integration_points[0][1],
-                            integration_points[0][1],
-                        ]
-                        integration_points = np.vstack([integration_points, add_row])
+                    [integration_points, weights] = fem.quadrature.get_quadrature(
+                        element, K
+                    )
 
-                    if K == 3:
-                        [integration_points, weights] = fem.quadrature.get_quadrature(
-                            element, 3
+                    # Do we need this in the tetrahedra case?
+                    weights = 2 * weights
+
+                    integration_points = integration_points.T
+
+                    # We want to add a 4th column to the transpose of the
+                    # integration_points, where it is one minus the sum of the
+                    # first three rows.
+
+                    new_col = np.zeros([integration_points.shape[0], 1])
+
+                    for i in range(integration_points.shape[0]):
+                        new_col[i] = (
+                            1
+                            - integration_points[i, 0]
+                            - integration_points[i, 1]
+                            - integration_points[i, 2]
                         )
-                        # weights = weights * 2
-                        add_row = [
-                            integration_points[0][0],
-                            integration_points[0][2],
-                            integration_points[0][1],
-                            integration_points[0][2],
-                            integration_points[0][2],
-                        ]
-                        integration_points = np.vstack([integration_points, add_row]).T
+
+                    # Add new column
+
+                    integration_points = np.append(integration_points, new_col, axis=1)
 
                     # Integration points, weights, and number of integration points
                     self.integration_points = np.array(integration_points)
@@ -2317,56 +2315,6 @@ class FiniteElementMesh3D:
         nquad = self.nquad
         quadrature_points = np.zeros((self.I_5LMN * nquad, 3))
         q = 0
-
-    def regular_tetrahedra_integration(self, f, vertices, K):
-        """Considering incorporating this to incorporate higher order quadrature.
-
-        Returns
-        -------
-        integral: 1D ndarray, shape (num_functions)
-            Value of the integral given basis function f
-        """
-        if K == 8:
-            o_1 = 2
-            o_2 = 2
-            o_3 = 2
-
-        [p_1, w_1] = np.polynomial.legendre.leggauss(o_1)
-        [p_2, w_2] = np.polynomial.legendre.leggauss(o_2)
-        [p_3, w_3] = np.polynomial.legendre.leggauss(o_3)
-
-        A_1 = np.array(
-            [vertices[2][0], vertices[1][0], vertices[3][0]],
-            [vertices[2][1], vertices[1][1], vertices[3][1]],
-            [vertices[2][2], vertices[1][2], vertices[3][2]],
-        )
-        A_2 = np.array(
-            [[vertices[0][0], vertices[0][0], vertices[0][0]]],
-            [
-                [vertices[0][1], vertices[0][1], vertices[0][1]],
-                [[vertices[0][2], vertices[0][2], vertices[0][2]]],
-            ],
-        )
-        A = A_1 - A_2
-
-        J = np.abs(np.linalg.det(A))
-
-        S = 0
-        for i in range(o_1):
-            for j in range(o_2):
-                for k in range(o_3):
-                    x_coor = ((1 + p_1[i]) * (1 + p_2[j]) * (1 + p_3[k])) / 8
-                    y_coor = ((1 + p_1[i]) * (1 + p_2[j]) * (1 - p_3[k])) / 8
-                    z_coor = ((1 + p_1[i]) * (1 - p_2[j])) / 4
-                    X = np.array([[x_coor], [y_coor], [z_coor]])
-                    X_new = np.dot(A, X)
-                    x = X_new[0]
-                    y = X_new[1]
-                    z = X_new[2]
-                    S = S + J * (1 / 8) * (((1 + p_1[i]) ** 2) / 4) * (
-                        (1 + p_2[j]) / 2
-                    ) * w_1[i] * w_2[j] * w_3[k] * f(x, y, z)
-        return S
 
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
@@ -2602,37 +2550,24 @@ class FiniteElementMesh2D:
         # Setup quadrature points and weights for numerical integration using scikit-fem
 
         # K = 1 still requires quadrature rule with 3 points so that the
-        # assembly matrix integrals are nonsingular
-        if K == 1:
-            [integration_points, weights] = fem.quadrature.get_quadrature(element, 2)
-            weights = weights * 2
-            add_row = [
-                integration_points[0][1],
-                integration_points[0][0],
-                integration_points[0][0],
-            ]
-            integration_points = np.vstack([add_row, integration_points])
+        # assembly matrix integrals are nonsingular. Going to automatically bump up
+        # quadrature order.
+        [integration_points, weights] = fem.quadrature.get_quadrature(element, K + 1)
+        weights = 2 * weights
 
-        # K >= 2 appears to need pretty high-order quadrature rule for
-        # assembly matrix integrals to be nonsingular
-        if K == 4:
-            [integration_points, weights] = fem.quadrature.get_quadrature(element, 5)
-            weights = weights * 2
-            add_row = [
-                integration_points[0][0],
-                integration_points[0][1],
-                integration_points[0][2],
-                integration_points[0][1],
-                integration_points[0][2],
-                integration_points[1][1],
-                integration_points[1][2],
-            ]
-            integration_points = np.vstack([add_row, integration_points])
-            integration_points = np.transpose(integration_points)
+        integration_points = integration_points.T
 
-        # Sciki-fem still only seems to provide a partial list of points,
-        # which makes higher order quadrature
-        # a bit tricky. Going to attempt to implement this now using numpy.
+        # We want to add a 3rdcolumn to the tranpose of the integration_points,
+        # where it is one minus the sum of the first two rows.
+
+        new_col = np.zeros([integration_points.shape[0], 1])
+
+        for i in range(integration_points.shape[0]):
+            new_col[i] = 1 - integration_points[i, 0] - integration_points[i, 1]
+
+        # Add new column
+
+        integration_points = np.append(integration_points, new_col, axis=1)
 
         # Integration points, weights, and number of integration points
         self.integration_points = np.array(integration_points)
@@ -3132,7 +3067,7 @@ class TetrahedronFiniteElement:
         K = self.K
 
         # Compute the vertex basis functions first. This will be the first 4 columns
-        # of basis_functions.
+        # of basis_functions. There are hard-coded from book.
 
         if K == 1:
             for i in rho_theta_zeta.shape[0]:

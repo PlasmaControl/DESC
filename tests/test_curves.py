@@ -851,28 +851,41 @@ class TestSplineXYZCurve:
         discontinuous_indices = [0, 500]
         R = 2
         phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
-        discontinuous = SplineXYZCurve(
-            X=R * np.cos(phi),
-            Y=R * np.sin(phi),
-            Z=np.zeros_like(phi),
-            knots="arclength",
-            discontinuous_indices=discontinuous_indices,
-            method="linear",
+
+        def test(method):
+            discontinuous = SplineXYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                knots="arclength",
+                discontinuous_indices=discontinuous_indices,
+                method=method,
+            )
+
+            continuous = SplineXYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                knots="arclength",
+                discontinuous_indices=None,
+                method=method,
+            )
+
+            assert discontinuous.method == method
+            assert continuous.method == method
+
+            discont_curvature = discontinuous.compute("curvature")["curvature"]
+            cont_curvature = continuous.compute("curvature")["curvature"]
+
+            return discont_curvature, cont_curvature
+
+        discont_curvature, cont_curvature = test("linear")
+        np.testing.assert_allclose(discont_curvature, cont_curvature, rtol=1e-3)
+
+        discont_curvature, cont_curvature = test("cubic")
+        np.testing.assert_allclose(
+            # don't include discon knots because of interpolator BCs
+            discont_curvature[~np.array(discontinuous_indices)],
+            cont_curvature[~np.array(discontinuous_indices)],
+            rtol=1e-3,
         )
-
-        continuous = SplineXYZCurve(
-            X=R * np.cos(phi),
-            Y=R * np.sin(phi),
-            Z=np.zeros_like(phi),
-            knots="arclength",
-            discontinuous_indices=None,
-            method="linear",
-        )
-
-        assert discontinuous.method == "linear"
-        assert continuous.method == "linear"
-
-        discont_torsion = discontinuous.compute("torsion")["torsion"]
-        cont_torsion = continuous.compute("torsion")["torsion"]
-
-        np.testing.assert_allclose(discont_torsion, cont_torsion, rtol=1e-3, atol=1e-3)

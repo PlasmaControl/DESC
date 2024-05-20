@@ -129,6 +129,103 @@ class TestCoil:
         )
 
     @pytest.mark.unit
+    def test_biot_savart_vector_potential_all_coils(self):
+        """Test biot-savart vec potential implementation against analytic formula."""
+        coil_grid = LinearGrid(zeta=100, endpoint=False)
+
+        R = 2
+        y = 1
+        I = 1e7
+
+        A_true = np.atleast_2d([0, 0, 0])
+        grid_xyz = np.atleast_2d([10, y, 0])
+        grid_rpz = xyz2rpz(grid_xyz)
+
+        # FourierXYZCoil
+        coil = FourierXYZCoil(I)
+        A_xyz = coil.compute_magnetic_vector_potential(
+            grid_xyz, basis="xyz", source_grid=coil_grid
+        )
+        A_rpz = coil.compute_magnetic_vector_potential(
+            grid_rpz, basis="rpz", source_grid=coil_grid
+        )
+        np.testing.assert_allclose(
+            A_true, A_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYZCoil"
+        )
+        np.testing.assert_allclose(
+            A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYZCoil"
+        )
+        np.testing.assert_allclose(
+            A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYZCoil"
+        )
+
+        # SplineXYZCoil
+        x = coil.compute("x", grid=coil_grid, basis="xyz")["x"]
+        coil = SplineXYZCoil(I, X=x[:, 0], Y=x[:, 1], Z=x[:, 2])
+        A_xyz = coil.compute_magnetic_vector_potential(
+            grid_xyz, basis="xyz", source_grid=coil_grid
+        )
+        A_rpz = coil.compute_magnetic_vector_potential(
+            grid_rpz, basis="rpz", source_grid=coil_grid
+        )
+        np.testing.assert_allclose(
+            A_true, A_xyz, rtol=1e-3, atol=1e-10, err_msg="Using SplineXYZCoil"
+        )
+        np.testing.assert_allclose(
+            A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg="Using SplineXYZCoil"
+        )
+        np.testing.assert_allclose(
+            A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg="Using SplineXYZCoil"
+        )
+
+        # FourierPlanarCoil
+        coil = FourierPlanarCoil(I)
+        A_xyz = coil.compute_magnetic_vector_potential(
+            grid_xyz, basis="xyz", source_grid=coil_grid
+        )
+        A_rpz = coil.compute_magnetic_vector_potential(
+            grid_rpz, basis="rpz", source_grid=coil_grid
+        )
+        np.testing.assert_allclose(
+            A_true, A_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierPlanarCoil"
+        )
+        np.testing.assert_allclose(
+            A_true,
+            A_rpz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierPlanarCoil",
+        )
+        np.testing.assert_allclose(
+            A_true,
+            A_rpz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierPlanarCoil",
+        )
+
+        grid_xyz = np.atleast_2d([0, 0, y])
+        grid_rpz = xyz2rpz(grid_xyz)
+
+        # FourierRZCoil
+        coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
+        A_xyz = coil.compute_magnetic_vector_potential(
+            grid_xyz, basis="xyz", source_grid=coil_grid
+        )
+        A_rpz = coil.compute_magnetic_vector_potential(
+            grid_rpz, basis="rpz", source_grid=coil_grid
+        )
+        np.testing.assert_allclose(
+            A_true, A_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+        np.testing.assert_allclose(
+            A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+        np.testing.assert_allclose(
+            A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+
+    @pytest.mark.unit
     def test_properties(self):
         """Test getting/setting attributes for Coil class."""
         current = 4.34

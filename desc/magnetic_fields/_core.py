@@ -62,6 +62,40 @@ def biot_savart_general(re, rs, J, dV):
     return 1e-7 * fori_loop(0, J.shape[0], body, B)
 
 
+def biot_savart_general_vector_potential(re, rs, J, dV):
+    """Biot-Savart law for arbitrary sources for vector potential.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    A : ndarray, shape(n,3)
+        magnetic vector potential in cartesian components at specified points
+    """
+    re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    A = jnp.zeros_like(re)
+
+    def body(i, A):
+        r = re - rs[i, :]
+        num = JdV[i, :]
+        den = jnp.linalg.norm(r, axis=-1)
+        A = A + jnp.where(den[:, None] == 0, 0, num / den[:, None])
+        return A
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, A)
+
+
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     """Read BNORM-style .txt file containing Bnormal Fourier coefficients.
 

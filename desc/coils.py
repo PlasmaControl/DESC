@@ -112,6 +112,48 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     return B
 
 
+@jit
+def biot_savart_vector_potential_quad(eval_pts, coil_pts, tangents, current):
+    """Biot-Savart law (for A) for filamentary coil using numerical quadrature.
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    coil_pts : array-like shape(m,3)
+        Points in cartesian space defining coil
+    tangents : array-like, shape(m,3)
+        Tangent vectors to the coil at coil_pts. If the curve is given
+        by x(s) with curve parameter s, coil_pts = x, tangents = dx/ds*ds where
+        ds is the spacing between points.
+    current : float
+        Current through the coil (in Amps).
+
+    Returns
+    -------
+    A : ndarray, shape(n,3)
+        Magnetic vector potential in cartesian components at specified points.
+
+    Notes
+    -----
+    #FIXME: what is sacrificed for A? that curl(A) != B exactly?
+    This method does not give curl(B) == 0 exactly. The error in the curl
+    scales the same as the error in B itself, so will only be zero when fully
+    converged. However in practice, for smooth curves described by Fourier series,
+    this method converges exponentially in the number of coil points.
+    """
+    dl = tangents
+    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
+    R_mag = jnp.linalg.norm(R_vec, axis=-1)
+
+    vec = dl[:, jnp.newaxis, :]
+    denom = R_mag
+
+    # 1e-7 == mu_0/(4 pi)
+    A = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    return A
+
+
 class _Coil(_MagneticField, Optimizable, ABC):
     """Base class representing a magnetic field coil.
 
@@ -200,6 +242,61 @@ class _Coil(_MagneticField, Optimizable, ABC):
         if basis.lower() == "rpz":
             B = xyz2rpz_vec(B, phi=phi)
         return B
+
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        The coil current may be overridden by including `current`
+        in the `params` dictionary.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict, optional
+            Parameters to pass to Curve.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        vector_potential : ndarray, shape(n,3)
+            Magnetic vector potential at specified points, in either rpz or
+             xyz coordinates.
+
+        Notes
+        -----
+        Uses direct quadrature of the Biot-Savart integral for filamentary coils with
+        tangents provided by the underlying curve class. Convergence should be
+        exponential in the number of points used to discretize the curve, though curl(B)
+        may not be zero if not fully converged.
+
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis.lower() == "rpz":
+            phi = coords[:, 1]
+            coords = rpz2xyz(coords)
+        if params is None:
+            current = self.current
+        else:
+            current = params.pop("current", self.current)
+
+        data = self.compute(
+            ["x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
+        )
+        A = biot_savart_vector_potential_quad(
+            coords, data["x"], data["x_s"] * data["ds"][:, None], current
+        )
+
+        if basis.lower() == "rpz":
+            A = xyz2rpz_vec(A, phi=phi)
+        return A
 
     def __repr__(self):
         """Get the string form of the object."""

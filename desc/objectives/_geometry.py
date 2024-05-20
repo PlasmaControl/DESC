@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
+from desc.compute import _compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid

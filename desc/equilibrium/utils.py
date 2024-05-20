@@ -8,7 +8,7 @@ from desc.backend import jnp
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
-    PoincareSurface,
+    PoincareRZLSection,
     Surface,
 )
 from desc.profiles import PowerSeriesProfile, _Profile
@@ -77,7 +77,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     -------
     surface : Surface
         Parsed surface object, either FourierRZToroidalSurface or
-        PoincareSurface.
+        PoincareRZLSection.
     """
     if isinstance(surface, Surface):
         surface = surface
@@ -115,7 +115,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
         Stellarator symmetry of the Equilibrium.
     surface: FourierRZToroidalSurface
         Last closed flux surface to get axis from
-    xsection: PoincareSurface
+    xsection: PoincareRZLSection
         Poincare cross-section at given zeta toroidal angle
         If supplied, axis will be axisymmetic
 
@@ -149,7 +149,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
                 ],
                 NFP=NFP,
             )
-        elif isinstance(xsection, PoincareSurface):
+        elif isinstance(xsection, PoincareRZLSection):
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(
                 R_n=xsection.R_lmn[
@@ -177,12 +177,12 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
     return axis
 
 
-def parse_section(xsection=None, sym=True):
-    """Parse section input into PoincareSurface object.
+def parse_section(xsection=None, surface=None, sym=True):
+    """Parse section input into PoincareRZLSection object.
 
     Parameters
     ----------
-    xsection : PoincareSurface, None
+    xsection : PoincareRZLSection, None
         Poincare surface object to parse.
     NFP : int
         Number of field periods of the Equilibrium.
@@ -191,15 +191,15 @@ def parse_section(xsection=None, sym=True):
 
     Returns
     -------
-    xsection : PoincareSurface
+    xsection : PoincareRZLSection
         Parsed Poincare surface object.
     """
-    if isinstance(xsection, PoincareSurface):
+    if isinstance(xsection, PoincareRZLSection):
         _xsection = xsection
     elif isinstance(xsection, (np.ndarray, jnp.ndarray)):
-        # This is temporary, until we have a proper PoincareSurface constructor
+        # This is temporary, until we have a proper PoincareRZLSection constructor
         # from input file
-        raise NotImplementedError("PoincareSurface from input file not implemented")
+        raise NotImplementedError("PoincareRZLSection from input file not implemented")
     else:
-        _xsection = PoincareSurface(sym=sym)
+        _xsection = PoincareRZLSection(L=surface.M, M=surface.M, sym=sym)
     return _xsection

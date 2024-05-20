@@ -60,7 +60,7 @@ def _R(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_r(params, transforms, profiles, data, **kwargs):
@@ -82,7 +82,7 @@ def _R_r(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rr(params, transforms, profiles, data, **kwargs):
@@ -104,7 +104,7 @@ def _R_rr(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rrr(params, transforms, profiles, data, **kwargs):
@@ -126,7 +126,7 @@ def _R_rrr(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rrrr(params, transforms, profiles, data, **kwargs):
@@ -149,7 +149,7 @@ def _R_rrrr(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rrrt(params, transforms, profiles, data, **kwargs):
@@ -191,7 +191,7 @@ def _R_rrrz(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rrt(params, transforms, profiles, data, **kwargs):
@@ -214,7 +214,7 @@ def _R_rrt(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rrtt(params, transforms, profiles, data, **kwargs):
@@ -237,7 +237,7 @@ def _R_rrtt(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rrtz(params, transforms, profiles, data, **kwargs):
@@ -298,7 +298,7 @@ def _R_rrzz(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rt(params, transforms, profiles, data, **kwargs):
@@ -321,7 +321,7 @@ def _R_rt(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rtt(params, transforms, profiles, data, **kwargs):
@@ -344,7 +344,7 @@ def _R_rtt(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _R_rttt(params, transforms, profiles, data, **kwargs):
@@ -861,7 +861,7 @@ def _Z(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_r(params, transforms, profiles, data, **kwargs):
@@ -883,7 +883,7 @@ def _Z_r(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rr(params, transforms, profiles, data, **kwargs):
@@ -905,7 +905,7 @@ def _Z_rr(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rrr(params, transforms, profiles, data, **kwargs):
@@ -927,7 +927,7 @@ def _Z_rrr(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rrrr(params, transforms, profiles, data, **kwargs):
@@ -950,7 +950,7 @@ def _Z_rrrr(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rrrt(params, transforms, profiles, data, **kwargs):
@@ -992,7 +992,7 @@ def _Z_rrrz(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rrt(params, transforms, profiles, data, **kwargs):
@@ -1015,7 +1015,7 @@ def _Z_rrt(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rrtt(params, transforms, profiles, data, **kwargs):
@@ -1095,7 +1095,7 @@ def _Z_rrzz(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rt(params, transforms, profiles, data, **kwargs):
@@ -1118,7 +1118,7 @@ def _Z_rt(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rtt(params, transforms, profiles, data, **kwargs):
@@ -1141,7 +1141,7 @@ def _Z_rtt(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
 )
 def _Z_rttt(params, transforms, profiles, data, **kwargs):

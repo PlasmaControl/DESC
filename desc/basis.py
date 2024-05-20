@@ -9,7 +9,7 @@ import numpy as np
 
 from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, flatten_list
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, flatten_list
 
 __all__ = [
     "PowerSeries",
@@ -1801,7 +1801,7 @@ def _jacobi_jvp(x, xdot):
 
 
 def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
-    """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0.
+    """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0 or pi.
 
     Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates
     the coefficients at the zeta=0 or Pi cross-section, returning a 2D ZernikePolynomial
@@ -1827,6 +1827,11 @@ def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
         radial resolution L and poloidal resolution M are equal to the max radial
         and poloidal resolutions of the 3D basis passed as an input.
     """
+    errorif(
+        not (0 == zeta or zeta == np.pi),
+        ValueError,
+        f"Toroidal angle must be between 0 or pi, got {zeta}",
+    )
     # Add up all the X_lm(n>=0) modes
     # so that the quantity at the zeta=0 surface is described with just lm modes
     # and get rid of the toroidal modes

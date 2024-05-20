@@ -60,7 +60,7 @@ def ensure_positive_jacobian(eq):
 
         eq.axis = eq.get_axis()
         eq.surface = eq.get_surface_at(rho=1)
-        eq.xsection = eq.get_poincare_xsection_at()
+        eq.xsection = eq.get_surface_at(zeta=0)
 
     sign = np.sign(eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
     assert sign == 1
@@ -106,7 +106,7 @@ def flip_helicity(eq):
 
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
-    eq.xsection = eq.get_poincare_xsection_at()
+    eq.xsection = eq.get_surface_at(zeta=0)
 
     return eq
 
@@ -219,6 +219,6 @@ def rescale(
     # boundary & axis & cross-section
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
-    eq.xsection = eq.get_poincare_xsection_at(eq.xsection.zeta)
+    eq.xsection = eq.get_surface_at(zeta=eq.xsection.zeta)
 
     return eq

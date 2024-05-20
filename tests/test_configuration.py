@@ -9,7 +9,7 @@ import desc.examples
 from desc.backend import put
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.initial_guess import _initial_guess_surface
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, PoincareSurface
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, PoincareRZLSection
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
@@ -41,7 +41,7 @@ class TestConstructor:
         iota = SplineProfile([2, 3, 4])
         surface = FourierRZToroidalSurface(NFP=2, sym=False)
         axis = FourierRZCurve([-0.2, 10, 0.3], [0.3, 0, -0.2], NFP=2, sym=False)
-        xsection = PoincareSurface(spectral_indexing="ansi")
+        xsection = PoincareRZLSection(spectral_indexing="ansi")
         eq = Equilibrium(
             M=2,
             pressure=pressure,

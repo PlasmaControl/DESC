@@ -176,7 +176,7 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # Cross-section
-        eq.xsection = eq.get_poincare_xsection_at()
+        eq.xsection = eq.get_surface_at(zeta=0)
 
         # apply boundary conditions
         constraints = get_fixed_axis_constraints(

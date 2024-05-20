@@ -16,12 +16,7 @@ from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
-from desc.geometry import (
-    FourierRZCurve,
-    FourierRZToroidalSurface,
-    PoincareSurface,
-    ZernikeRZToroidalSection,
-)
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, PoincareRZLSection
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
@@ -248,7 +243,7 @@ class Equilibrium(IOAble, Optimizable):
                 surface, self.NFP, self.sym, self.spectral_indexing
             )
             self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
-            self._xsection = parse_section(sym=self.sym)
+            self._xsection = parse_section(surface=self.surface, sym=self.sym)
 
         # resolution
         L = check_nonnegint(L, "L")
@@ -410,7 +405,7 @@ class Equilibrium(IOAble, Optimizable):
                 # For none Poincare BC problems, we need to set the xsection
                 # from the initial guess.
                 self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=True)
-                self._xsection = self.get_poincare_xsection_at()
+                self._xsection = self.get_surface_at(zeta=0)
             else:
                 self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=False)
                 self._surface = self.get_surface_at(rho=1.0)
@@ -441,7 +436,7 @@ class Equilibrium(IOAble, Optimizable):
             self.current._transform = self.current._get_transform(self.current.grid)
         if self._xsection is None:
             # eq.xsection property was added with Poincare BC support
-            self._xsection = self.get_poincare_xsection_at()
+            self._xsection = self.get_surface_at(zeta=0)
 
         # ensure things that should be ints are ints
         self._L = int(self._L)
@@ -662,7 +657,7 @@ class Equilibrium(IOAble, Optimizable):
         -------
         surf : Surface
             object representing the given surface, either a FourierRZToroidalSurface
-            for surfaces of constant rho, or a ZernikeRZToroidalSection for
+            for surfaces of constant rho, or a PoincareRZLSection for
             surfaces of constant zeta.
 
         """
@@ -726,8 +721,9 @@ class Equilibrium(IOAble, Optimizable):
 
         if zeta is not None:
             assert (zeta >= 0) and (zeta <= 2 * np.pi)
-            surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
+            surface = PoincareRZLSection(sym=self.sym, zeta=zeta)
             surface.change_resolution(self.L, self.M)
+            Lp_lmn, Lp_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
@@ -753,39 +749,9 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
+            surface.L_basis = Lp_basis
+            surface.L_lmn = Lp_lmn
             return surface
-
-    def get_poincare_xsection_at(self, zeta=0):
-        """Return a representation for a Poincare section at a given toroidal angle.
-
-        Parameters
-        ----------
-        zeta : float
-            Toroidal angle for the Poincare section.
-
-        Returns
-        -------
-        surface : PoincareSurface
-            object representing the given Poincare section.
-
-        """
-        errorif(
-            not (0 <= zeta <= 2 * np.pi),
-            ValueError,
-            f"Toroidal angle must be between 0 and 2*pi, got {zeta}",
-        )
-        surf = self.get_surface_at(zeta=zeta)
-        Lp_lmn, Lp_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
-        xsection = PoincareSurface(
-            surface=surf,
-            L_lmn=Lp_lmn,
-            modes_L=Lp_basis.modes,
-            zeta=zeta,
-            spectral_indexing=Lp_basis.spectral_indexing,
-            sym=self.sym,
-        )
-
-        return xsection
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
@@ -870,7 +836,7 @@ class Equilibrium(IOAble, Optimizable):
         eq_poincare : Equilibrium
             Separate Equilibrium object to be used for Poincare BC problem
         """
-        xsection = self.get_poincare_xsection_at(zeta)
+        xsection = self.get_surface_at(zeta=zeta)
 
         eq_poincare = Equilibrium(
             xsection=xsection,
@@ -1377,8 +1343,8 @@ class Equilibrium(IOAble, Optimizable):
     @xsection.setter
     def xsection(self, new):
         assert isinstance(
-            new, PoincareSurface
-        ), f"surfaces should be of type PoincareSurface, got {new}"
+            new, PoincareRZLSection
+        ), f"surfaces should be of type PoincareRZLSection, got {new}"
         assert (
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
@@ -2008,7 +1974,7 @@ class Equilibrium(IOAble, Optimizable):
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
-        eq.xsection = eq.get_poincare_xsection_at()
+        eq.xsection = eq.get_surface_at(zeta=0)
 
         return eq
 

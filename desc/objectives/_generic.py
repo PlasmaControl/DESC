@@ -11,6 +11,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
+from desc.utils import errorif
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
@@ -27,16 +28,18 @@ class ExternalObjective(_Objective):
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
     computed with finite differences instead of AD.
 
-    The user supplied function should take one positional argument ``params``, which is
-    a list of the same length as `things` and corresponds to `thing.params_dict` for
-    each thing in things.
+    The user supplied function can take several positional arguments that should
+    correspond to parameter names from ``thing.optimizable_params``, in additional to
+    other (static) keyword arguments.
 
     Parameters
     ----------
     fun : callable
         Custom objective function.
-    things : Optimizable or tuple/list of Optimizable
-        Objects that will be optimized to satisfy the Objective.
+    dim_f : int
+        Dimension of the output of fun.
+    thing : Optimizable
+        Object that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
@@ -58,11 +61,6 @@ class ExternalObjective(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
-    deriv_mode : {"auto", "fwd", "rev"}  # TODO: edit this
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     name : str, optional
         Name of the objective function.
 
@@ -76,30 +74,33 @@ class ExternalObjective(_Objective):
     def __init__(
         self,
         fun,
-        things,
+        dim_f,
+        thing,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
         loss_function=None,
-        deriv_mode="auto",
         fd_step=1e-4,  # TODO: generalize this to allow a vector of different scales
-        name="external",  # TODO: add kwargs to pass to external function
+        name="external",
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
         self._fun = fun
+        self._dim_f = dim_f
         self._fd_step = fd_step
+        self._kwargs = kwargs
         super().__init__(
-            things=things,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            deriv_mode=deriv_mode,
+            deriv_mode="fwd",
             name=name,
         )
 
@@ -114,16 +115,24 @@ class ExternalObjective(_Objective):
             Level of output.
 
         """
-        self._dim_f = 1  # FIXME: does this need to be a user input?
         self._scalar = self._dim_f == 1
-        self._constants = {"quad_weights": 1.0}
+        self._constants = {"quad_weights": 1.0, "kwargs": self._kwargs}
 
-        self._args = self._fun.__code__.co_varnames[: self._fun.__code__.co_argcount]
+        # positional arguments of the external function
+        kwargcount = len(self._fun.__defaults__) if self._fun.__defaults__ else 0
+        self._args = self._fun.__code__.co_varnames[
+            : self._fun.__code__.co_argcount - kwargcount
+        ]
+        errorif(
+            not set(self._args) <= set(self.things[0].optimizable_params),
+            ValueError,
+            "Positional arguments of `fun` must be a subset of "
+            + "`thing.optimizable_params`.",
+        )
 
-        abstract_eval = lambda *args, **kwargs: jnp.array([1.0])  # FIXME: use dim_f?
+        # wrap external function to work with JAX
+        abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
         self._fun_wrapped = self._jaxify(self._fun, abstract_eval)
-
-        # TODO: test if jaxify is actually working
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -146,9 +155,12 @@ class ExternalObjective(_Objective):
         """
         if constants is None:
             constants = self.constants
+        kwargs = constants["kwargs"]
 
-        new_params = {k: params[k] for k in self._args}
-        f = self._fun_wrapped(**new_params)
+        # sort params into positional args for external function
+        args = [params[k] for k in self._args]
+
+        f = self._fun_wrapped(*args, **kwargs)
         return f
 
     def _jaxify(self, func, abstract_eval):
@@ -203,18 +215,16 @@ class ExternalObjective(_Objective):
             def func_jvp(primals, tangents):
                 primal_out = func(*primals)
 
-                # flatten everything into 1d vectors for easier finite differences
+                # flatten everything into 1D vectors for easier finite differences
                 y, unflaty = jax.flatten_util.ravel_pytree(primal_out)
-                v, unflatv = jax.flatten_util.ravel_pytree(
-                    *tangents
-                )  # remember that primals/tangets are passed as tuples
-                x, unflatx = jax.flatten_util.ravel_pytree(*primals)
+                x, unflatx = jax.flatten_util.ravel_pytree(primals)
+                v, _______ = jax.flatten_util.ravel_pytree(tangents)
+                # scale to unit norm if nonzero
                 normv = jnp.linalg.norm(v)
-                # scale to unit norm if its nonzero
                 vh = jnp.where(normv == 0, v, v / normv)
 
                 def f(x):
-                    return jax.flatten_util.ravel_pytree(func(unflatx(x)))[0]
+                    return jax.flatten_util.ravel_pytree(func(*unflatx(x)))[0]
 
                 tangent_out = (f(x + self._fd_step * vh) - y) / self._fd_step * normv
                 tangent_out = unflaty(tangent_out)

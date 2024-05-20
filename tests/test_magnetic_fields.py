@@ -305,6 +305,88 @@ class TestMagneticFields:
             field.potential_dzeta = 1
 
     @pytest.mark.unit
+    def test_current_potential_vector_potential(self):
+        """Test current potential field vector potential against analytic result."""
+        R0 = 10
+        a = 1
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([R0, a]),
+            Z_lmn=jnp.array([0, -a]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        # make a current potential corresponding a purely poloidal current
+        G = 100  # net poloidal current
+        potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi
+        potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
+        potential_dzeta = lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi
+
+        params = {"G": -G}
+
+        field = CurrentPotentialField(
+            potential,
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            params=params,
+            potential_dtheta=potential_dtheta,
+            potential_dzeta=potential_dzeta,
+            NFP=surface.NFP,
+        )
+        # test the loop integral of A around a curve encompassing the torus
+        # against the analytic result for flux in an ideal toroidal solenoid
+        ## expression for flux inside of toroidal solenoid of radius a
+        prefactors = mu_0 * G / 2 / jnp.pi
+        correct_flux = -2 * np.pi * prefactors * (np.sqrt(R0**2 - a**2) - R0)
+
+        curve = FourierXYZCurve()  # curve to integrate A over
+        curve_grid = LinearGrid(zeta=20)
+        curve_data = curve.compute(["x", "x_s"], grid=curve_grid)
+        curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
+
+        surface_grid = LinearGrid(M=60, N=60, NFP=10)
+
+        A_xyz = field.compute_magnetic_vector_potential(
+            curve_data["x"], basis="xyz", source_grid=surface_grid
+        )
+        A_rpz = field.compute_magnetic_vector_potential(
+            curve_data_rpz["x"], basis="rpz", source_grid=surface_grid
+        )
+
+        # integrate to get the flux
+        flux_xyz = jnp.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_rpz = jnp.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(correct_flux, flux_xyz, rtol=1e-8)
+        np.testing.assert_allclose(correct_flux, flux_rpz, rtol=1e-8)
+
+        field.params["G"] = -2 * field.params["G"]
+
+        A_xyz = field.compute_magnetic_vector_potential(
+            curve_data["x"], basis="xyz", source_grid=surface_grid
+        )
+        A_rpz = field.compute_magnetic_vector_potential(
+            curve_data_rpz["x"], basis="rpz", source_grid=surface_grid
+        )
+
+        # integrate to get the flux
+        flux_xyz = jnp.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_rpz = jnp.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(-2 * correct_flux, flux_xyz, rtol=1e-8)
+        np.testing.assert_allclose(-2 * correct_flux, flux_rpz, rtol=1e-8)
+
+    @pytest.mark.unit
     def test_fourier_current_potential_field(self):
         """Test Fourier current potential magnetic field against analytic result."""
         surface = FourierRZToroidalSurface(

@@ -215,6 +215,41 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             source_grid=source_grid,
         )
 
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            Magnetic vector potential at specified points.
+
+        """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * self.M,
+            N=30 + 2 * self.N,
+            NFP=self.NFP,
+        )
+        return _compute_vector_potential_from_CurrentPotentialField(
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
+        )
+
     @classmethod
     def from_surface(
         cls,

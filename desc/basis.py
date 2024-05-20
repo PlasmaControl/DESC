@@ -2307,14 +2307,67 @@ class FiniteElementMesh3D:
 
         Returns
         -------
-        quadrature points: 2D ndarray, shape (nquad * 5MLN, 2)
+        quadrature points: 2D ndarray, shape (nquad * 5MLN, 4)
             Points in (rho, theta, zeta) representing the quadrature point
-            locations for integration, return in real-space coordinates.
+            locations for integration, return in barycentric coordinates.
         """
-        # Going to continue thinking through this
         nquad = self.nquad
         quadrature_points = np.zeros((self.I_5LMN * nquad, 3))
-        q = 0
+        
+        M = [];
+        for tetrahedron in self.tetrahedra:
+            
+            vertices = tetrahedron.vertices
+        
+            D = np.array(
+                 [vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
+                 [vertices[1, 0], vertices[1, 1], vertices[1, 2], 1],
+                 [vertices[2, 0], vertices[2, 1], vertices[2, 2], 1],
+                 [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1])
+     
+            six_vol = np.linalg.det(D)
+             
+            # Transform weights
+            weights = self.weights
+            weights = six_vol * weights
+             
+            # Transform points
+             
+             
+            integration_points = self.integration_points[:,:3]
+         
+            v = vertices
+     
+     
+            # Transform points
+     
+            A = np.array([[v[2,0]-v[0,0],v[1,0]-v[0,0], v[3,0]-v[0,0]],
+                          [v[2,1]-v[0,1],v[1,1]-v[0,1], v[3,1]-v[0,1]],
+                          [v[2,2]-v[0,2],v[1,2]-v[0,2], v[3,2]-v[0,2]]])
+     
+     
+            new_coor = np.zeros([integration_points.shape[0],3])
+     
+     
+            for i in range(integration_points.shape[0]):
+                 new_coor[i] = np.dot(A,integration_points[i,:])
+ 
+            M = np.append(M,new_coor)
+        
+        
+        M = np.reshape([self.I_5LMN * nquad,3])
+        
+        new_col = np.zeros([self.I_5LMN * nquad, 1])
+
+        for i in range(self.I_5LMN * nquad):
+            new_col[i] = 1 - M[i, 0] - M[i, 1] - M[i, 2]
+
+        # Add new column
+        quadrature_points = np.append(M, new_col, axis=1)
+        
+      
+        
+        return quadrature_points
 
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
@@ -3202,6 +3255,8 @@ class TetrahedronFiniteElement:
                 )
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
+    
+
 
 
 class TriangleFiniteElement:

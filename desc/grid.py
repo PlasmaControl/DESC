@@ -34,11 +34,12 @@ class _Grid(IOAble, ABC):
         "_weights",
         "_axis",
         "_node_pattern",
+        "_coordinates",
         "_unique_rho_idx",
-        "_unique_theta_idx",
+        "_unique_poloidal_idx",
         "_unique_zeta_idx",
         "_inverse_rho_idx",
-        "_inverse_theta_idx",
+        "_inverse_poloidal_idx",
         "_inverse_zeta_idx",
     ]
 
@@ -67,7 +68,8 @@ class _Grid(IOAble, ABC):
         """
         if not self.sym:
             return
-        # indices where theta coordinate is off the symmetry line of theta=0 or pi
+        # indices where poloidal coordinate is off the symmetry line of
+        # poloidal coord=0 or pi
         off_sym_line_idx = self.nodes[:, 1] % np.pi != 0
         __, inverse, off_sym_line_per_rho_surf_count = np.unique(
             self.nodes[off_sym_line_idx, 0], return_inverse=True, return_counts=True
@@ -94,8 +96,8 @@ class _Grid(IOAble, ABC):
         # The computation of this scale factor assumes
         # 1. number of nodes to delete is constant over zeta
         # 2. number of nodes off symmetry line is constant over zeta
-        # 3. uniform theta spacing between nodes
-        # The first two assumptions let _per_theta_curve = _per_rho_surf.
+        # 3. uniform poloidal spacing between nodes
+        # The first two assumptions let _per_poloidal_curve = _per_rho_surf.
         # The third assumption lets the scale factor be constant over a
         # particular theta curve, so that each node in the open interval
         # (0, pi) has its spacing scaled up by the same factor.
@@ -127,7 +129,7 @@ class _Grid(IOAble, ABC):
         __, unique_rho_idx, inverse_rho_idx = np.unique(
             self.nodes[:, 0], return_index=True, return_inverse=True
         )
-        __, unique_theta_idx, inverse_theta_idx = np.unique(
+        __, unique_poloidal_idx, inverse_poloidal_idx = np.unique(
             self.nodes[:, 1], return_index=True, return_inverse=True
         )
         __, unique_zeta_idx, inverse_zeta_idx = np.unique(
@@ -136,8 +138,8 @@ class _Grid(IOAble, ABC):
         return (
             unique_rho_idx,
             inverse_rho_idx,
-            unique_theta_idx,
-            inverse_theta_idx,
+            unique_poloidal_idx,
+            inverse_poloidal_idx,
             unique_zeta_idx,
             inverse_zeta_idx,
         )
@@ -171,7 +173,6 @@ class _Grid(IOAble, ABC):
         # Because a surface integral always ignores 1 column, with this approach,
         # duplicates nodes are scaled down properly regardless of which two columns
         # span the surface.
-
         return weights
 
     @property
@@ -200,6 +201,11 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault("_sym", False)
 
     @property
+    def coordinates(self):
+        """Coordinates specified by the nodes."""
+        return self._coordinates
+
+    @property
     def num_nodes(self):
         """int: Total number of nodes."""
         return self.nodes.shape[0]
@@ -210,9 +216,27 @@ class _Grid(IOAble, ABC):
         return self.unique_rho_idx.size
 
     @property
+    def num_poloidal(self):
+        """int: Number of unique poloidal angle coordinates."""
+        return self.unique_poloidal_idx.size
+
+    @property
+    def num_alpha(self):
+        """ndarray: Number of unique field line poloidal angles."""
+        errorif(self.coordinates[1] != "a")
+        return self.num_poloidal
+
+    @property
     def num_theta(self):
-        """int: Number of unique theta coordinates."""
-        return self.unique_theta_idx.size
+        """ndarray: Number of unique theta coordinates."""
+        errorif(self.coordinates[1] != "t")
+        return self.num_poloidal
+
+    @property
+    def num_theta_PEST(self):
+        """ndarray: Number of unique straight field line polodial angles."""
+        errorif(self.coordinates[1] != "p")
+        return self.num_poloidal
 
     @property
     def num_zeta(self):
@@ -230,14 +254,32 @@ class _Grid(IOAble, ABC):
         return self._unique_rho_idx
 
     @property
-    def unique_theta_idx(self):
-        """ndarray: Indices of unique theta coordinates."""
+    def unique_poloidal_idx(self):
+        """ndarray: Indices of unique poloidal angle coordinates."""
         errorif(
-            not hasattr(self, "_unique_theta_idx"),
+            not hasattr(self, "_unique_poloidal_idx"),
             AttributeError,
             "jit compatible Grid objects do not have unique indices assigned.",
         )
-        return self._unique_theta_idx
+        return self._unique_poloidal_idx
+
+    @property
+    def unique_alpha_idx(self):
+        """ndarray: Indices of unique field line poloidal angles."""
+        errorif(self.coordinates[1] != "a")
+        return self.unique_poloidal_idx
+
+    @property
+    def unique_theta_idx(self):
+        """ndarray: Indices of unique theta coordinates."""
+        errorif(self.coordinates[1] != "t")
+        return self.unique_poloidal_idx
+
+    @property
+    def unique_theta_PEST_idx(self):
+        """ndarray: Indices of unique straight field line polodial angles."""
+        errorif(self.coordinates[1] != "p")
+        return self.unique_poloidal_idx
 
     @property
     def unique_zeta_idx(self):
@@ -260,14 +302,32 @@ class _Grid(IOAble, ABC):
         return self._inverse_rho_idx
 
     @property
-    def inverse_theta_idx(self):
-        """ndarray: Indices of unique_theta_idx that recover the theta coordinates."""
+    def inverse_poloidal_idx(self):
+        """ndarray: Indices that recover the unique poloidal coordinates."""
         errorif(
-            not hasattr(self, "_inverse_theta_idx"),
+            not hasattr(self, "_inverse_poloidal_idx"),
             AttributeError,
             "jit compatible Grid objects do not have inverse indices assigned.",
         )
-        return self._inverse_theta_idx
+        return self._inverse_poloidal_idx
+
+    @property
+    def inverse_alpha_idx(self):
+        """ndarray: Indices that recover field line poloidal angles."""
+        errorif(self.coordinates[1] != "a")
+        return self.inverse_poloidal_idx
+
+    @property
+    def inverse_theta_idx(self):
+        """ndarray: Indices that recover unique theta coordinates."""
+        errorif(self.coordinates[1] != "t")
+        return self.inverse_poloidal_idx
+
+    @property
+    def inverse_theta_PEST_idx(self):
+        """ndarray: Indices that recover unique straight field line polodial angles."""
+        errorif(self.coordinates[1] != "p")
+        return self.inverse_poloidal_idx
 
     @property
     def inverse_zeta_idx(self):
@@ -320,10 +380,33 @@ class _Grid(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, node_pattern={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.node_pattern
+            + (
+                " (L={}, M={}, N={}, NFP={}, sym={},"
+                " node_pattern={}, coordinates={})"
+            ).format(
+                self.L,
+                self.M,
+                self.N,
+                self.NFP,
+                self.sym,
+                self.node_pattern,
+                self.coordinates,
             )
         )
+
+    def get_label(self, label):
+        """Get general label that specifies direction given label."""
+        options = {
+            "radial": "rho",  # todo: generalize to radial
+            "poloidal": "poloidal",
+            "toroidal": "zeta",  # todo: generalize to toroidal
+            {"r": "rho"}[self.coordinates[0]]: "rho",
+            {"a": "alpha", "t": "theta", "p": "theta_PEST"}[
+                self.coordinates[1]
+            ]: "poloidal",
+            {"z": "zeta"}[self.coordinates[2]]: "zeta",
+        }
+        return options[label]
 
     def compress(self, x, surface_label="rho"):
         """Return elements of ``x`` at indices of unique surface label values.
@@ -334,8 +417,8 @@ class _Grid(IOAble, ABC):
             The array to compress.
             Should usually represent a surface function (constant over a surface)
             in an array that matches the grid's pattern.
-        surface_label : {"rho", "theta", "zeta"}
-            The surface label of rho, theta, or zeta.
+        surface_label : {"rho", "poloidal", "zeta"}
+            The surface label of rho, poloidal, or zeta.
 
         Returns
         -------
@@ -345,29 +428,15 @@ class _Grid(IOAble, ABC):
             corresponds to the value associated with the largest surface.
 
         """
-        assert surface_label in {"rho", "theta", "zeta"}
-        assert len(x) == self.num_nodes
-        if surface_label == "rho":
-            errorif(
-                not hasattr(self, "_unique_rho_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_rho_idx]
-        if surface_label == "theta":
-            errorif(
-                not hasattr(self, "_unique_theta_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_theta_idx]
-        if surface_label == "zeta":
-            errorif(
-                not hasattr(self, "_unique_zeta_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_zeta_idx]
+        surface_label = self.get_label(surface_label)
+        attr = f"_unique_{surface_label}_idx"
+        errorif(
+            not hasattr(self, attr),
+            AttributeError,
+            "compress operation undefined for jit compatible grids",
+        )
+        errorif(len(x) != self.num_nodes)
+        return x[getattr(self, attr)]
 
     def expand(self, x, surface_label="rho"):
         """Expand ``x`` by duplicating elements to match the grid's pattern.
@@ -382,8 +451,8 @@ class _Grid(IOAble, ABC):
             that the first element corresponds to the value associated with the
             smallest surface, and the last element corresponds to the value
             associated with the largest surface.
-        surface_label : {"rho", "theta", "zeta"}
-            The surface label of rho, theta, or zeta.
+        surface_label : {"rho", "poloidal", "zeta"}
+            The surface label of rho, poloidal, or zeta.
 
         Returns
         -------
@@ -391,31 +460,15 @@ class _Grid(IOAble, ABC):
             ``x`` expanded to match the grid's pattern.
 
         """
-        assert surface_label in {"rho", "theta", "zeta"}
-        if surface_label == "rho":
-            errorif(
-                not hasattr(self, "_inverse_rho_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
-            assert len(x) == self.num_rho
-            return x[self.inverse_rho_idx]
-        if surface_label == "theta":
-            errorif(
-                not hasattr(self, "_inverse_theta_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
-            assert len(x) == self.num_theta
-            return x[self.inverse_theta_idx]
-        if surface_label == "zeta":
-            errorif(
-                not hasattr(self, "_inverse_zeta_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
-            assert len(x) == self.num_zeta
-            return x[self.inverse_zeta_idx]
+        surface_label = self.get_label(surface_label)
+        attr = f"_inverse_{surface_label}_idx"
+        errorif(
+            not hasattr(self, attr),
+            AttributeError,
+            "expand operation undefined for jit compatible grids",
+        )
+        errorif(len(x) != getattr(self, f"num_{surface_label}"))
+        return x[getattr(self, attr)]
 
     def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
         """Copy data x from other_grid to this grid at matching surface label.
@@ -426,11 +479,11 @@ class _Grid(IOAble, ABC):
         Parameters
         ----------
         x : ndarray, shape(other_grid.num_nodes,...)
-            Data to copy
+            Data to copy. Assumed to be constant over the specified surface.
         other_grid: Grid
             Grid to copy from.
-        surface_label : {"rho", "theta", "zeta"}
-            The surface label of rho, theta, or zeta.
+        surface_label : {"rho", "poloidal", "zeta"}
+            The surface label of rho, poloidal, or zeta.
         tol : float
             tolerance for considering nodes the same.
 
@@ -439,20 +492,24 @@ class _Grid(IOAble, ABC):
         y : ndarray, shape(grid2.num_nodes, ...)
             Data copied to grid2
         """
+        sl1 = self.get_label(surface_label)
+        sl2 = other_grid.get_label(surface_label)
+        axis = {"rho": 0, "poloidal": 1, "zeta": 2}
+        errorif(self.coordinates[axis[sl1]] != other_grid.coordinates[axis[sl2]])
+        axis = axis[sl1]
+
         x = jnp.asarray(x)
-        assert surface_label in {"rho", "theta", "zeta"}
         try:
             xc = other_grid.compress(x, surface_label)
             y = self.expand(xc, surface_label)
         except AttributeError:
-            self_nodes = jnp.asarray(self.nodes)
-            other_nodes = jnp.asarray(other_grid.nodes)
-            axis = {"rho": 0, "theta": 1, "zeta": 2}[surface_label]
+            self_nodes = jnp.asarray(self.nodes[:, axis])
+            other_nodes = jnp.asarray(other_grid.nodes[:, axis])
             y = jnp.zeros((self.num_nodes, *x.shape[1:]))
 
             def body(i, y):
                 y = jnp.where(
-                    jnp.abs(self_nodes[:, axis] - other_nodes[i, axis]) <= tol,
+                    jnp.abs(self_nodes - other_nodes[i]) <= tol,
                     x[i],
                     y,
                 )
@@ -488,8 +545,10 @@ class _Grid(IOAble, ABC):
         if self.axis.size:
             if callable(y):
                 y = y(**kwargs)
-            return put(
-                x.copy() if copy else x, self.axis, y[self.axis] if jnp.ndim(y) else y
+            x = put(
+                x.copy() if copy else x,
+                self.axis,
+                y[self.axis] if jnp.ndim(y) else y,
             )
         return x
 
@@ -510,14 +569,28 @@ class Grid(_Grid):
         Quadrature weights for each node.
     sort : bool
         Whether to sort the nodes for use with FFT method.
+    spacing : ndarray of shape(num_nodes, 3)
+        May be provided to ensure even spacing for surface averages etc.
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
-        etc may be wrong if grid contains duplicate nodes.
+        etc. may be wrong if grid contains duplicate nodes.
+    coordinates : str
+        Coordinates that are specified by the nodes.
+        raz : rho, alpha, zeta
+        rpz : rho, theta_PEST, zeta
+        rtz : rho, theta, zeta
     """
 
     def __init__(
-        self, nodes, spacing=None, weights=None, sort=False, jitable=False, **kwargs
+        self,
+        nodes,
+        spacing=None,
+        weights=None,
+        sort=False,
+        jitable=False,
+        coordinates="rtz",
+        **kwargs,
     ):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
@@ -525,6 +598,7 @@ class Grid(_Grid):
         self._NFP = 1
         self._sym = False
         self._node_pattern = "custom"
+        self._coordinates = coordinates
         self._nodes = self._create_nodes(nodes)
         if spacing is not None:
             spacing = (
@@ -545,8 +619,8 @@ class Grid(_Grid):
         if sort:
             self._sort_nodes()
         if jitable:
-            # dont do anything with symmetry since that changes # of nodes
-            # avoid point at the axis, for now. FIXME: make axis boolean mask?
+            # Don't do anything with symmetry since that changes # of nodes
+            # avoid point at the axis, for now.
             r, t, z = self._nodes.T
             r = jnp.where(r == 0, 1e-12, r)
             self._nodes = jnp.array([r, t, z]).T
@@ -554,10 +628,10 @@ class Grid(_Grid):
             # allow for user supplied indices/inverse indices for special cases
             for attr in [
                 "_unique_rho_idx",
-                "_unique_theta_idx",
+                "_unique_poloidal_idx",
                 "_unique_zeta_idx",
                 "_inverse_rho_idx",
-                "_inverse_theta_idx",
+                "_inverse_poloidal_idx",
                 "_inverse_zeta_idx",
             ]:
                 if attr in kwargs:
@@ -567,8 +641,8 @@ class Grid(_Grid):
             (
                 self._unique_rho_idx,
                 self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
@@ -650,6 +724,11 @@ class LinearGrid(_Grid):
         Toroidal coordinates (Default = 0.0).
         Alternatively, the number of toroidal coordinates (if an integer).
         Note that if supplied the values may be reordered in the resulting grid.
+    coordinates : str
+        Coordinates that are specified by the nodes.
+        raz : rho, alpha, zeta
+        rpz : rho, theta_PEST, zeta
+        rtz : rho, theta, zeta
     """
 
     def __init__(
@@ -664,6 +743,7 @@ class LinearGrid(_Grid):
         rho=np.array(1.0),
         theta=np.array(0.0),
         zeta=np.array(0.0),
+        coordinates="rtz",
     ):
         self._L = check_nonnegint(L, "L")
         self._M = check_nonnegint(M, "M")
@@ -671,7 +751,10 @@ class LinearGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._endpoint = bool(endpoint)
+        self._poloidal_endpoint = False
+        self._toroidal_endpoint = False
         self._node_pattern = "linear"
+        self._coordinates = coordinates
         self._nodes, self._spacing = self._create_nodes(
             L=L,
             M=M,
@@ -689,8 +772,8 @@ class LinearGrid(_Grid):
         (
             self._unique_rho_idx,
             self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
             self._unique_zeta_idx,
             self._inverse_zeta_idx,
         ) = self._find_unique_inverse_nodes()
@@ -906,38 +989,26 @@ class LinearGrid(_Grid):
             else:
                 dz = np.array([ZETA_ENDPOINT])
 
-        self._endpoint = (
+        self._poloidal_endpoint = (
             t.size > 0
-            and z.size > 0
-            and (
-                (
-                    np.isclose(t[0], 0, atol=1e-12)
-                    and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
-                )
-                or (t.size == 1 and z.size > 1)
-            )
-            and (
-                (
-                    np.isclose(z[0], 0, atol=1e-12)
-                    and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
-                )
-                or (z.size == 1 and t.size > 1)
-            )
-        )  # if only one theta or one zeta point, can have endpoint=True
+            and np.isclose(t[0], 0, atol=1e-12)
+            and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
+        )
+        self._toroidal_endpoint = (
+            z.size > 0
+            and np.isclose(z[0], 0, atol=1e-12)
+            and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
+        )
+        # if only one theta or one zeta point, can have endpoint=True
         # if the other one is a full array
+        self._endpoint = (self._poloidal_endpoint or (t.size == 1 and z.size > 1)) and (
+            self._toroidal_endpoint or (z.size == 1 and t.size > 1)
+        )
 
-        r, t, z = np.meshgrid(r, t, z, indexing="ij")
-        r = r.flatten()
-        t = t.flatten()
-        z = z.flatten()
-
-        dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
-        dr = dr.flatten()
-        dt = dt.flatten()
-        dz = dz.flatten()
-
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
+        r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
+        dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
+        nodes = np.column_stack([r, t, z])
+        spacing = np.column_stack([dr, dt, dz])
 
         return nodes, spacing
 
@@ -968,8 +1039,8 @@ class LinearGrid(_Grid):
             (
                 self._unique_rho_idx,
                 self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
@@ -997,16 +1068,22 @@ class QuadratureGrid(_Grid):
         toroidal grid resolution (exactly integrates toroidal modes up to order N)
     NFP : int
         number of field periods (Default = 1)
+    coordinates : str
+        Coordinates that are specified by the nodes.
+        raz : rho, alpha, zeta
+        rpz : rho, theta_PEST, zeta
+        rtz : rho, theta, zeta
 
     """
 
-    def __init__(self, L, M, N, NFP=1):
+    def __init__(self, L, M, N, NFP=1, coordinates="rtz"):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "N", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "quad"
+        self._coordinates = coordinates
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
@@ -1014,8 +1091,8 @@ class QuadratureGrid(_Grid):
         (
             self._unique_rho_idx,
             self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
             self._unique_zeta_idx,
             self._inverse_zeta_idx,
         ) = self._find_unique_inverse_nodes()
@@ -1064,18 +1141,15 @@ class QuadratureGrid(_Grid):
         z = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
         dz = 2 * np.pi / N * np.ones_like(z)
 
-        r, t, z = np.meshgrid(r, t, z, indexing="ij")
-        r = r.flatten()
-        t = t.flatten()
-        z = z.flatten()
+        (
+            r,
+            t,
+            z,
+        ) = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
+        dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
 
-        dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
-        dr = dr.flatten()
-        dt = dt.flatten()
-        dz = dz.flatten()
-
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
+        nodes = np.column_stack([r, t, z])
+        spacing = np.column_stack([dr, dt, dz])
 
         return nodes, spacing
 
@@ -1103,8 +1177,8 @@ class QuadratureGrid(_Grid):
             (
                 self._unique_rho_idx,
                 self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
@@ -1142,16 +1216,32 @@ class ConcentricGrid(_Grid):
             * ``'ocs'``: optimal concentric sampling to minimize the condition number
               of the resulting transform matrix, for doing inverse transform.
             * ``linear`` : linear spacing in r=[0,1]
+    coordinates : str
+        Coordinates that are specified by the nodes.
+        raz : rho, alpha, zeta
+        rpz : rho, theta_PEST, zeta
+        rtz : rho, theta, zeta
 
     """
 
-    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
+    def __init__(
+        self,
+        L,
+        M,
+        N,
+        NFP=1,
+        sym=False,
+        axis=False,
+        node_pattern="jacobi",
+        coordinates="rtz",
+    ):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._node_pattern = node_pattern
+        self._coordinates = coordinates
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
         )
@@ -1161,8 +1251,8 @@ class ConcentricGrid(_Grid):
         (
             self._unique_rho_idx,
             self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
             self._unique_zeta_idx,
             self._inverse_zeta_idx,
         ) = self._find_unique_inverse_nodes()
@@ -1315,8 +1405,8 @@ class ConcentricGrid(_Grid):
             (
                 self._unique_rho_idx,
                 self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()

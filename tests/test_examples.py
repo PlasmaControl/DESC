@@ -30,6 +30,7 @@ from desc.objectives import (
     CoilLength,
     CoilTorsion,
     CurrentDensity,
+    ExternalObjective,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -1294,3 +1295,65 @@ def test_second_stage_optimization():
     np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
     np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
     np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
+
+
+@pytest.mark.unit
+def test_external_vs_generic_objectives():
+    """Test ExternalObjective compared to GenericObjective."""
+    fname = "R"
+    target = [4.2, 5.3]
+    rho = np.array([0, 1])
+
+    # TODO: need to add profiles and spectral_indexing
+
+    def extfun(Psi, R_lmn, Z_lmn, L_lmn, L=1, M=1, N=0, NFP=1, sym=False):
+        eq = Equilibrium(
+            Psi=float(Psi[0]),
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            L_lmn=L_lmn,
+            L=L,
+            M=M,
+            N=N,
+            NFP=NFP,
+            sym=sym,
+            spectral_indexing="fringe",
+        )
+        grid = LinearGrid(rho=rho)
+        data = eq.compute(fname, grid=grid)
+        return np.atleast_1d(data[fname])
+
+    eq0 = get("SOLOVEV")
+    optimizer = Optimizer("lsq-exact")
+    grid = LinearGrid(rho=rho)
+    grid._weights = np.ones_like(grid.weights)
+
+    # generic
+    objective = ObjectiveFunction(
+        GenericObjective("R", eq=eq0, target=target, grid=grid)
+    )
+    constraints = FixParameters(
+        eq0, {"Psi": True, "Z_lmn": True, "L_lmn": True, "p_l": True, "c_l": True}
+    )
+    [eq_generic], _ = optimizer.optimize(
+        things=eq0,
+        objective=objective,
+        constraints=constraints,
+        copy=True,
+        ftol=0,
+        verbose=2,
+    )
+
+    # external
+    kwargs = {"L": eq0.L, "M": eq0.M, "N": eq0.N, "NFP": eq0.NFP, "sym": eq0.sym}
+    objective = ObjectiveFunction(
+        ExternalObjective(extfun, len(target), eq0, target=target, **kwargs)
+    )
+    constraints = FixParameters(
+        eq0, {"Psi": True, "Z_lmn": True, "L_lmn": True, "p_l": True, "c_l": True}
+    )
+    [eq_external], _ = optimizer.optimize(
+        things=eq0, objective=objective, constraints=constraints, copy=True, verbose=2
+    )
+
+    np.testing.assert_allclose(eq_generic.R_lmn, eq_external.R_lmn)

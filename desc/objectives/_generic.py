@@ -16,12 +16,8 @@ from desc.utils import errorif
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
 
-# Notes on deriv_mode:
-# batched = Derivative class calls jax.jacfwd on ObjectiveFunction.compute
-# looped = Derivative class calls jax.jvp on ObjectiveFunction.compute for each column
-# blocked = block matrix of _Objective.jac for each objective in ObjectiveFunction
 
-
+# TODO: add SPSA option
 class ExternalObjective(_Objective):
     """Wrap an external code.
 

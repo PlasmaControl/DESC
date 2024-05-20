@@ -2022,6 +2022,7 @@ class TestComputeScalarResolution:
     specials = [
         # these require special logic
         PlasmaVesselDistance,
+        PlasmaVesselDistanceCircular,
         BootstrapRedlConsistency,
         BoundaryError,
         VacuumBoundaryError,
@@ -2058,6 +2059,27 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(
                 PlasmaVesselDistance(
                     surface=surface, eq=self.eq, surface_grid=grid, plasma_grid=grid
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_plasma_vessel_circular(self):
+        """PlasmaVesselDistanceCircular."""
+        f = np.zeros_like(self.res_array, dtype=float)
+        surface = FourierRZToroidalSurface(
+            R_lmn=[10, 1.5], Z_lmn=[-1.5], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        )
+        for i, res in enumerate(self.res_array):
+            grid = LinearGrid(
+                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
+            )
+            obj = ObjectiveFunction(
+                PlasmaVesselDistanceCircular(
+                    surface=surface, eq=self.eq, plasma_grid=grid
                 ),
                 use_jit=False,
             )
@@ -2346,6 +2368,7 @@ class TestObjectiveNaNGrad:
     specials = [
         # these require special logic
         PlasmaVesselDistance,
+        PlasmaVesselDistanceCircular,
         ForceBalanceAnisotropic,
         BootstrapRedlConsistency,
         BoundaryError,
@@ -2374,6 +2397,16 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq, surf))
         assert not np.any(np.isnan(g)), "plasma vessel distance"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_plasma_vessel_circular(self):
+        """PlasmaVesselDistanceCircular."""
+        eq = Equilibrium(L=2, M=2, N=2)
+        surf = FourierRZToroidalSurface()
+        obj = ObjectiveFunction(PlasmaVesselDistanceCircular(eq, surf), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(eq, surf))
+        assert not np.any(np.isnan(g)), "plasma vessel distance circular"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_anisotropy(self):

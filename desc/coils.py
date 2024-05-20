@@ -72,6 +72,52 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
 
 
 @jit
+def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, current):
+    """Biot-Savart law for vector potential for filamentary coils following [1].
+
+    The coil is approximated by a series of straight line segments
+    and an analytic expression is used to evaluate the vector potential from each
+    segment.
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    coil_pts_start, coil_pts_end : array-like shape(m,3)
+        Points in cartesian space defining the start and end of each segment.
+        Should be a closed curve, such that coil_pts_start[0] == coil_pts_end[-1]
+        though this is not checked.
+    current : float
+        Current through the coil (in Amps).
+
+    Returns
+    -------
+    A : ndarray, shape(n,3)
+        Magnetic vector potential in cartesian components at specified points
+
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
+    fields of a filamentary segment" (2002)
+    """
+    d_vec = coil_pts_end - coil_pts_start
+    L = jnp.linalg.norm(d_vec, axis=-1)
+
+    Ri_vec = eval_pts[jnp.newaxis, :] - coil_pts_start[:, jnp.newaxis, :]
+    Ri = jnp.linalg.norm(Ri_vec, axis=-1)
+    Rf = jnp.linalg.norm(
+        eval_pts[jnp.newaxis, :] - coil_pts_end[:, jnp.newaxis, :], axis=-1
+    )
+    Ri_p_Rf = Ri + Rf
+
+    eps = L[:, jnp.newaxis] / (Ri_p_Rf)
+
+    A_mag = 1.0e-7 * current * jnp.log((1 + eps) / (1 - eps))  # 1.0e-7 ==  mu_0/(4 pi)
+
+    # Now just need  to multiply by e^ = d_vec = x_f - x_i
+    A = jnp.sum(A_mag[:, :, jnp.newaxis] * d_vec[:, jnp.newaxis, :], axis=0)
+    return A
+
+
+@jit
 def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     """Biot-Savart law for filamentary coil using numerical quadrature.
 
@@ -133,14 +179,6 @@ def biot_savart_vector_potential_quad(eval_pts, coil_pts, tangents, current):
     -------
     A : ndarray, shape(n,3)
         Magnetic vector potential in cartesian components at specified points.
-
-    Notes
-    -----
-    #FIXME: what is sacrificed for A? that curl(A) != B exactly?
-    This method does not give curl(B) == 0 exactly. The error in the curl
-    scales the same as the error in B itself, so will only be zero when fully
-    converged. However in practice, for smooth curves described by Fourier series,
-    this method converges exponentially in the number of coil points.
     """
     dl = tangents
     R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
@@ -721,6 +759,72 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
         B = biot_savart_hh(coords, coil_pts_start, coil_pts_end, current)
+
+        if basis == "rpz":
+            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+        return B
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        The coil current may be overridden by including `current`
+        in the `params` dictionary.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate magnetic vector potential at in [R,phi,Z]
+            or [X,Y,Z] coordinates.
+        params : dict, optional
+            Parameters to pass to Curve.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        A : ndarray, shape(n,3)
+            Magnetic vector potential at specified points, in either
+            rpz or xyz coordinates
+
+        Notes
+        -----
+        Discretizes the coil into straight segments between grid points, and uses the
+        Hanson-Hirshman expression for exact vector potential from a straight segment.
+        Convergence is approximately quadratic in the number of coil points.
+
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        if params is None:
+            current = self.current
+        else:
+            current = params.pop("current", self.current)
+
+        data = self.compute(["x"], grid=source_grid, params=params, basis="xyz")
+        # need to make sure the curve is closed. If it's already closed, this doesn't
+        # do anything (effectively just adds a segment of zero length which has no
+        # effect on the overall result)
+        coil_pts_start = data["x"]
+        coil_pts_end = jnp.concatenate([data["x"][1:], data["x"][:1]])
+        # could get up to 4th order accuracy by shifting points outward as in
+        # (McGreivy, Zhu, Gunderson, Hudson 2021), however that requires knowing the
+        # coils curvature which is a 2nd derivative of the position, and doing that
+        # with only possibly c1 cubic splines is inaccurate, so we don't do it
+        # (for now, maybe in the future?)
+        B = biot_savart_vector_potential_hh(
+            coords, coil_pts_start, coil_pts_end, current
+        )
 
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])

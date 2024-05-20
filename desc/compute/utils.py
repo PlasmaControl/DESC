@@ -140,6 +140,16 @@ def _compute(
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+        if (
+            data_index[parameterization][name]["dim"] == 3
+            and kwargs.get("basis", "rpz").lower() == "xyz"
+        ):
+            if "phi" in data:
+                from .geom_utils import rpz2xyz_vec
+
+                data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+            else:
+                continue
 
     return data
 

@@ -12,7 +12,6 @@ expensive computations.
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz_vec
 from .utils import cross, safediv
 
 
@@ -32,8 +31,6 @@ from .utils import cross, safediv
 )
 def _b(params, transforms, profiles, data, **kwargs):
     data["b"] = (data["B"].T / data["|B|"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["b"] = rpz2xyz_vec(data["b"], phi=data["phi"])
     return data
 
 
@@ -55,8 +52,6 @@ def _e_sup_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞^ρ | ρ=0 }.
     data["e^rho"] = cross(data["e_theta/sqrt(g)"], data["e_zeta"])
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho"] = rpz2xyz_vec(data["e^rho"], phi=data["phi"])
     return data
 
 
@@ -94,8 +89,6 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
             - a.T * safediv(data["sqrt(g)_rr"], (2 * data["sqrt(g)_r"] ** 2))
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_r"] = rpz2xyz_vec(data["e^rho_r"], phi=data["phi"])
     return data
 
 
@@ -148,8 +141,6 @@ def _e_sup_rho_rr(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_rr"] = rpz2xyz_vec(data["e^rho_rr"], phi=data["phi"])
     return data
 
 
@@ -207,8 +198,6 @@ def _e_sup_rho_rt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_rt"] = rpz2xyz_vec(data["e^rho_rt"], phi=data["phi"])
     return data
 
 
@@ -266,8 +255,6 @@ def _e_sup_rho_rz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_rz"] = rpz2xyz_vec(data["e^rho_rz"], phi=data["phi"])
     return data
 
 
@@ -309,8 +296,6 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
             )
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_t"] = rpz2xyz_vec(data["e^rho_t"], phi=data["phi"])
     return data
 
 
@@ -363,8 +348,6 @@ def _e_sup_rho_tt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_tt"] = rpz2xyz_vec(data["e^rho_tt"], phi=data["phi"])
     return data
 
 
@@ -422,8 +405,6 @@ def _e_sup_rho_tz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_tz"] = rpz2xyz_vec(data["e^rho_tz"], phi=data["phi"])
     return data
 
 
@@ -467,8 +448,6 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
             * safediv(data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_z"] = rpz2xyz_vec(data["e^rho_z"], phi=data["phi"])
     return data
 
 
@@ -521,8 +500,6 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_zz"] = rpz2xyz_vec(data["e^rho_zz"], phi=data["phi"])
     return data
 
 
@@ -542,8 +519,6 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
 )
 def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     data["e^theta"] = (data["e^theta*sqrt(g)"].T / data["sqrt(g)"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta"] = rpz2xyz_vec(data["e^theta"], phi=data["phi"])
     return data
 
 
@@ -569,8 +544,6 @@ def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞^θ √g | ρ=0 }.
     data["e^theta*sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta*sqrt(g)"] = rpz2xyz_vec(data["e^theta*sqrt(g)"], phi=data["phi"])
     return data
 
 
@@ -599,8 +572,6 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
         * data["sqrt(g)_r"]
         / data["sqrt(g)"] ** 2
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_r"] = rpz2xyz_vec(data["e^theta_r"], phi=data["phi"])
     return data
 
 
@@ -653,8 +624,6 @@ def _e_sup_theta_rr(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_rr"] = rpz2xyz_vec(data["e^theta_rr"], phi=data["phi"])
 
     return data
 
@@ -713,8 +682,6 @@ def _e_sup_theta_rt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_rt"] = rpz2xyz_vec(data["e^theta_rt"], phi=data["phi"])
     return data
 
 
@@ -772,8 +739,6 @@ def _e_sup_theta_rz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_rz"] = rpz2xyz_vec(data["e^theta_rz"], phi=data["phi"])
     return data
 
 
@@ -803,8 +768,6 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
         * data["sqrt(g)_t"]
         / data["sqrt(g)"] ** 2
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_t"] = rpz2xyz_vec(data["e^theta_t"], phi=data["phi"])
     return data
 
 
@@ -857,8 +820,6 @@ def _e_sup_theta_tt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_tt"] = rpz2xyz_vec(data["e^theta_tt"], phi=data["phi"])
     return data
 
 
@@ -916,8 +877,6 @@ def _e_sup_theta_tz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_tz"] = rpz2xyz_vec(data["e^theta_tz"], phi=data["phi"])
     return data
 
 
@@ -947,8 +906,6 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
         * data["sqrt(g)_z"]
         / data["sqrt(g)"] ** 2
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_z"] = rpz2xyz_vec(data["e^theta_z"], phi=data["phi"])
     return data
 
 
@@ -1001,8 +958,6 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_zz"] = rpz2xyz_vec(data["e^theta_zz"], phi=data["phi"])
     return data
 
 
@@ -1024,8 +979,6 @@ def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞^ζ | ρ=0 }.
     data["e^zeta"] = cross(data["e_rho"], data["e_theta/sqrt(g)"])
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta"] = rpz2xyz_vec(data["e^zeta"], phi=data["phi"])
     return data
 
 
@@ -1063,8 +1016,6 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
             - b.T * safediv(data["sqrt(g)_rr"], (2 * data["sqrt(g)_r"] ** 2))
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_r"] = rpz2xyz_vec(data["e^zeta_r"], phi=data["phi"])
     return data
 
 
@@ -1117,8 +1068,6 @@ def _e_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_rr"] = rpz2xyz_vec(data["e^zeta_rr"], phi=data["phi"])
     return data
 
 
@@ -1176,8 +1125,6 @@ def _e_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_rt"] = rpz2xyz_vec(data["e^zeta_rt"], phi=data["phi"])
     return data
 
 
@@ -1235,8 +1182,7 @@ def _e_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_rz"] = rpz2xyz_vec(data["e^zeta_rz"], phi=data["phi"])
+
     return data
 
 
@@ -1281,8 +1227,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
             * safediv(data["sqrt(g)_rt"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_t"] = rpz2xyz_vec(data["e^zeta_t"], phi=data["phi"])
+
     return data
 
 
@@ -1335,8 +1280,7 @@ def _e_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_tt"] = rpz2xyz_vec(data["e^zeta_tt"], phi=data["phi"])
+
     return data
 
 
@@ -1394,8 +1338,7 @@ def _e_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_tz"] = rpz2xyz_vec(data["e^zeta_tz"], phi=data["phi"])
+
     return data
 
 
@@ -1440,8 +1383,7 @@ def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
             * safediv(data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_z"] = rpz2xyz_vec(data["e^zeta_z"], phi=data["phi"])
+
     return data
 
 
@@ -1494,8 +1436,7 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_zz"] = rpz2xyz_vec(data["e^zeta_zz"], phi=data["phi"])
+
     return data
 
 
@@ -1520,8 +1461,7 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
 def _e_sub_phi(params, transforms, profiles, data, **kwargs):
     # dX/dphi at const r,t = dX/dz * dz/dphi = dX/dz / (dphi/dz)
     data["e_phi"] = (data["e_zeta"].T / data["phi_z"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_phi"] = rpz2xyz_vec(data["e_phi"], phi=data["phi"])
+
     return data
 
 
@@ -1547,8 +1487,7 @@ def _e_sub_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞ᵨ | ρ=0 }.
     data["e_rho"] = jnp.array([data["R_r"], data["R"] * data["omega_r"], data["Z_r"]]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho"] = rpz2xyz_vec(data["e_rho"], phi=data["phi"])
+
     return data
 
 
@@ -1581,8 +1520,7 @@ def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
             data["Z_rr"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_r"] = rpz2xyz_vec(data["e_rho_r"], phi=data["phi"])
+
     return data
 
 
@@ -1628,8 +1566,7 @@ def _e_sub_rho_rr(params, transforms, profiles, data, **kwargs):
             data["Z_rrr"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rr"] = rpz2xyz_vec(data["e_rho_rr"], phi=data["phi"])
+
     return data
 
 
@@ -1685,8 +1622,7 @@ def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
             data["Z_rrrr"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rrr"] = rpz2xyz_vec(data["e_rho_rrr"], phi=data["phi"])
+
     return data
 
 
@@ -1768,8 +1704,7 @@ def _e_sub_rho_rrt(params, transforms, profiles, data, **kwargs):
             data["Z_rrrt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rrt"] = rpz2xyz_vec(data["e_rho_rrt"], phi=data["phi"])
+
     return data
 
 
@@ -1867,8 +1802,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
             data["Z_rrrz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rrz"] = rpz2xyz_vec(data["e_rho_rrz"], phi=data["phi"])
+
     return data
 
 
@@ -1924,8 +1858,7 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
             data["Z_rrt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rt"] = rpz2xyz_vec(data["e_rho_rt"], phi=data["phi"])
+
     return data
 
 
@@ -2008,8 +1941,7 @@ def _e_sub_rho_rtt(params, transforms, profiles, data, **kwargs):
             data["Z_rrtt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rtt"] = rpz2xyz_vec(data["e_rho_rtt"], phi=data["phi"])
+
     return data
 
 
@@ -2147,8 +2079,7 @@ def _e_sub_rho_rtz(params, transforms, profiles, data, **kwargs):
             data["Z_rrtz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rtz"] = rpz2xyz_vec(data["e_rho_rtz"], phi=data["phi"])
+
     return data
 
 
@@ -2200,8 +2131,7 @@ def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
             data["Z_rrz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rz"] = rpz2xyz_vec(data["e_rho_rz"], phi=data["phi"])
+
     return data
 
 
@@ -2301,8 +2231,7 @@ def _e_sub_rho_rzz(params, transforms, profiles, data, **kwargs):
             data["Z_rrzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rzz"] = rpz2xyz_vec(data["e_rho_rzz"], phi=data["phi"])
+
     return data
 
 
@@ -2334,8 +2263,7 @@ def _e_sub_rho_t(params, transforms, profiles, data, **kwargs):
             data["Z_rt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_t"] = rpz2xyz_vec(data["e_rho_t"], phi=data["phi"])
+
     return data
 
 
@@ -2391,8 +2319,7 @@ def _e_sub_rho_tt(params, transforms, profiles, data, **kwargs):
             data["Z_rtt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_tt"] = rpz2xyz_vec(data["e_rho_tt"], phi=data["phi"])
+
     return data
 
 
@@ -2458,8 +2385,7 @@ def _e_sub_rho_tz(params, transforms, profiles, data, **kwargs):
             data["Z_rtz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_tz"] = rpz2xyz_vec(data["e_rho_tz"], phi=data["phi"])
+
     return data
 
 
@@ -2487,8 +2413,7 @@ def _e_sub_rho_z(params, transforms, profiles, data, **kwargs):
             data["Z_rz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_z"] = rpz2xyz_vec(data["e_rho_z"], phi=data["phi"])
+
     return data
 
 
@@ -2540,8 +2465,7 @@ def _e_sub_rho_zz(params, transforms, profiles, data, **kwargs):
             data["Z_rzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_zz"] = rpz2xyz_vec(data["e_rho_zz"], phi=data["phi"])
+
     return data
 
 
@@ -2567,8 +2491,7 @@ def _e_sub_theta(params, transforms, profiles, data, **kwargs):
     data["e_theta"] = jnp.array(
         [data["R_t"], data["R"] * data["omega_t"], data["Z_t"]]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta"] = rpz2xyz_vec(data["e_theta"], phi=data["phi"])
+
     return data
 
 
@@ -2594,8 +2517,7 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
         safediv(data["e_theta"].T, data["sqrt(g)"]).T,
         lambda: safediv(data["e_theta_r"].T, data["sqrt(g)_r"]).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta/sqrt(g)"] = rpz2xyz_vec(data["e_theta/sqrt(g)"], phi=data["phi"])
+
     return data
 
 
@@ -2616,8 +2538,7 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
 def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
     # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
     data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_PEST"] = rpz2xyz_vec(data["e_theta_PEST"], phi=data["phi"])
+
     return data
 
 
@@ -2651,8 +2572,7 @@ def _e_sub_theta_r(params, transforms, profiles, data, **kwargs):
             data["Z_rt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_r"] = rpz2xyz_vec(data["e_theta_r"], phi=data["phi"])
+
     return data
 
 
@@ -2707,8 +2627,7 @@ def _e_sub_theta_rr(params, transforms, profiles, data, **kwargs):
             data["Z_rrt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rr"] = rpz2xyz_vec(data["e_theta_rr"], phi=data["phi"])
+
     return data
 
 
@@ -2787,8 +2706,7 @@ def _e_sub_theta_rrr(params, transforms, profiles, data, **kwargs):
             data["Z_rrrt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rrr"] = rpz2xyz_vec(data["e_theta_rrr"], phi=data["phi"])
+
     return data
 
 
@@ -2893,8 +2811,7 @@ def _e_sub_theta_rrt(params, transforms, profiles, data, **kwargs):
             data["Z_rrtt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rrt"] = rpz2xyz_vec(data["e_theta_rrt"], phi=data["phi"])
+
     return data
 
 
@@ -3034,8 +2951,7 @@ def _e_sub_theta_rrz(params, transforms, profiles, data, **kwargs):
             data["Z_rrtz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rrz"] = rpz2xyz_vec(data["e_theta_rrz"], phi=data["phi"])
+
     return data
 
 
@@ -3091,8 +3007,7 @@ def _e_sub_theta_rt(params, transforms, profiles, data, **kwargs):
             data["Z_rtt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rt"] = rpz2xyz_vec(data["e_theta_rt"], phi=data["phi"])
+
     return data
 
 
@@ -3175,8 +3090,7 @@ def _e_sub_theta_rtt(params, transforms, profiles, data, **kwargs):
             data["Z_rttt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rtt"] = rpz2xyz_vec(data["e_theta_rtt"], phi=data["phi"])
+
     return data
 
 
@@ -3282,8 +3196,7 @@ def _e_sub_theta_rtz(params, transforms, profiles, data, **kwargs):
             data["Z_rttz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rtz"] = rpz2xyz_vec(data["e_theta_rtz"], phi=data["phi"])
+
     return data
 
 
@@ -3350,8 +3263,7 @@ def _e_sub_theta_rz(params, transforms, profiles, data, **kwargs):
             data["Z_rtz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rz"] = rpz2xyz_vec(data["e_theta_rz"], phi=data["phi"])
+
     return data
 
 
@@ -3460,8 +3372,7 @@ def _e_sub_theta_rzz(params, transforms, profiles, data, **kwargs):
             data["Z_rtzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rzz"] = rpz2xyz_vec(data["e_theta_rzz"], phi=data["phi"])
+
     return data
 
 
@@ -3491,8 +3402,7 @@ def _e_sub_theta_t(params, transforms, profiles, data, **kwargs):
             data["Z_tt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_t"] = rpz2xyz_vec(data["e_theta_t"], phi=data["phi"])
+
     return data
 
 
@@ -3538,8 +3448,7 @@ def _e_sub_theta_tt(params, transforms, profiles, data, **kwargs):
             data["Z_ttt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_tt"] = rpz2xyz_vec(data["e_theta_tt"], phi=data["phi"])
+
     return data
 
 
@@ -3595,8 +3504,7 @@ def _e_sub_theta_tz(params, transforms, profiles, data, **kwargs):
             data["Z_ttz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_tz"] = rpz2xyz_vec(data["e_theta_tz"], phi=data["phi"])
+
     return data
 
 
@@ -3628,8 +3536,7 @@ def _e_sub_theta_z(params, transforms, profiles, data, **kwargs):
             data["Z_tz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_z"] = rpz2xyz_vec(data["e_theta_z"], phi=data["phi"])
+
     return data
 
 
@@ -3685,8 +3592,7 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
             data["Z_tzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_zz"] = rpz2xyz_vec(data["e_theta_zz"], phi=data["phi"])
+
     return data
 
 
@@ -3712,8 +3618,7 @@ def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
     data["e_zeta"] = jnp.array(
         [data["R_z"], data["R"] * (1 + data["omega_z"]), data["Z_z"]]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta"] = rpz2xyz_vec(data["e_zeta"], phi=data["phi"])
+
     return data
 
 
@@ -3741,8 +3646,7 @@ def _e_sub_zeta_r(params, transforms, profiles, data, **kwargs):
             data["Z_rz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_r"] = rpz2xyz_vec(data["e_zeta_r"], phi=data["phi"])
+
     return data
 
 
@@ -3794,8 +3698,7 @@ def _e_sub_zeta_rr(params, transforms, profiles, data, **kwargs):
             data["Z_rrz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rr"] = rpz2xyz_vec(data["e_zeta_rr"], phi=data["phi"])
+
     return data
 
 
@@ -3876,8 +3779,7 @@ def _e_sub_zeta_rrr(params, transforms, profiles, data, **kwargs):
             data["Z_rrrz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rrr"] = rpz2xyz_vec(data["e_zeta_rrr"], phi=data["phi"])
+
     return data
 
 
@@ -4017,8 +3919,7 @@ def _e_sub_zeta_rrt(params, transforms, profiles, data, **kwargs):
             data["Z_rrtz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rrt"] = rpz2xyz_vec(data["e_zeta_rrt"], phi=data["phi"])
+
     return data
 
 
@@ -4120,8 +4021,7 @@ def _e_sub_zeta_rrz(params, transforms, profiles, data, **kwargs):
             data["Z_rrzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rrz"] = rpz2xyz_vec(data["e_zeta_rrz"], phi=data["phi"])
+
     return data
 
 
@@ -4188,8 +4088,7 @@ def _e_sub_zeta_rt(params, transforms, profiles, data, **kwargs):
             data["Z_rtz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rt"] = rpz2xyz_vec(data["e_zeta_rt"], phi=data["phi"])
+
     return data
 
 
@@ -4295,8 +4194,7 @@ def _e_sub_zeta_rtt(params, transforms, profiles, data, **kwargs):
             data["Z_rttz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rtt"] = rpz2xyz_vec(data["e_zeta_rtt"], phi=data["phi"])
+
     return data
 
 
@@ -4407,8 +4305,7 @@ def _e_sub_zeta_rtz(params, transforms, profiles, data, **kwargs):
             data["Z_rtzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rtz"] = rpz2xyz_vec(data["e_zeta_rtz"], phi=data["phi"])
+
     return data
 
 
@@ -4460,8 +4357,7 @@ def _e_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
             data["Z_rzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rz"] = rpz2xyz_vec(data["e_zeta_rz"], phi=data["phi"])
+
     return data
 
 
@@ -4552,8 +4448,7 @@ def _e_sub_zeta_rzz(params, transforms, profiles, data, **kwargs):
             data["Z_rzzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rzz"] = rpz2xyz_vec(data["e_zeta_rzz"], phi=data["phi"])
+
     return data
 
 
@@ -4585,8 +4480,7 @@ def _e_sub_zeta_t(params, transforms, profiles, data, **kwargs):
             data["Z_tz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_t"] = rpz2xyz_vec(data["e_zeta_t"], phi=data["phi"])
+
     return data
 
 
@@ -4642,8 +4536,7 @@ def _e_sub_zeta_tt(params, transforms, profiles, data, **kwargs):
             data["Z_ttz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_tt"] = rpz2xyz_vec(data["e_zeta_tt"], phi=data["phi"])
+
     return data
 
 
@@ -4699,8 +4592,7 @@ def _e_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
             data["Z_tzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_tz"] = rpz2xyz_vec(data["e_zeta_tz"], phi=data["phi"])
+
     return data
 
 
@@ -4730,8 +4622,7 @@ def _e_sub_zeta_z(params, transforms, profiles, data, **kwargs):
             data["Z_zz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_z"] = rpz2xyz_vec(data["e_zeta_z"], phi=data["phi"])
+
     return data
 
 
@@ -4785,8 +4676,7 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
             data["Z_zzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_zz"] = rpz2xyz_vec(data["e_zeta_zz"], phi=data["phi"])
+
     return data
 
 

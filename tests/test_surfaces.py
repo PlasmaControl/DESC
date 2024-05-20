@@ -7,7 +7,7 @@ import desc.examples
 from desc.compute import rpz2xyz
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.geometry import FourierRZToroidalSurface, PoincareRZLSection
 from desc.grid import LinearGrid
 
 
@@ -401,13 +401,13 @@ class TestFourierRZToroidalSurface:
         )
 
 
-class TestZernikeRZToroidalSection:
-    """Tests for ZernikeRZToroidalSection class."""
+class TestPoincareRZLSection:
+    """Tests for PoincareRZLSection class."""
 
     @pytest.mark.unit
     def test_area(self):
         """Test calculation of surface area."""
-        s = ZernikeRZToroidalSection()
+        s = PoincareRZLSection()
         grid = LinearGrid(L=10, M=10)
         area = np.pi * 1**2
         np.testing.assert_allclose(s.compute("A", grid=grid)["A"], area)
@@ -415,7 +415,7 @@ class TestZernikeRZToroidalSection:
     @pytest.mark.unit
     def test_normal(self):
         """Test calculation of surface normal vector."""
-        s = ZernikeRZToroidalSection()
+        s = PoincareRZLSection()
         grid = LinearGrid(L=8, M=4, N=0, axis=False)
         N = s.compute("n_zeta", grid=grid)["n_zeta"]
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
@@ -423,17 +423,21 @@ class TestZernikeRZToroidalSection:
     @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting surface attributes."""
-        c = ZernikeRZToroidalSection()
+        c = PoincareRZLSection()
 
-        R, Z = c.get_coeffs(0, 0)
+        R, Z, L = c.get_coeffs(0, 0)
         np.testing.assert_allclose(R, 10)
         np.testing.assert_allclose(Z, 0)
-        c.set_coeffs(0, 0, 5, None)
-        c.set_coeffs(1, -1, None, 2)
+        np.testing.assert_allclose(L, 0)
+        c.set_coeffs(0, 0, R=5)
+        c.set_coeffs(1, -1, Z=2)
+        c.set_coeffs(1, -1, L=1)
         np.testing.assert_allclose(c.R_lmn, [5, 1])
         np.testing.assert_allclose(c.Z_lmn, [2])
+        np.testing.assert_allclose(c.L_lmn, [1])
         with pytest.raises(ValueError):
-            c.set_coeffs(0, 0, None, 2)
+            c.set_coeffs(0, 0, Z=2)
+            c.set_coeffs(0, 0, L=1)
         s = c.copy()
         assert s.equiv(c)
 
@@ -442,6 +446,8 @@ class TestZernikeRZToroidalSection:
             c.R_lmn = s.R_lmn
         with pytest.raises(ValueError):
             c.Z_lmn = s.Z_lmn
+        with pytest.raises(ValueError):
+            c.L_lmn = s.L_lmn
 
         assert c.sym
 
@@ -451,7 +457,7 @@ class TestZernikeRZToroidalSection:
 
         (kind of pointless since it's a flat surface so its always 0)
         """
-        s = ZernikeRZToroidalSection()
+        s = PoincareRZLSection()
         grid = LinearGrid(theta=np.pi / 2, rho=0.5)
         data = s.compute(
             [

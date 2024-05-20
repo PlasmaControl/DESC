@@ -15,7 +15,7 @@ from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     FourierXYZCurve,
-    ZernikeRZToroidalSection,
+    PoincareRZLSection,
 )
 from desc.grid import LinearGrid
 from desc.io import load
@@ -1178,7 +1178,7 @@ def test_compute_everything():
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
         ),
-        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
+        "desc.geometry.surface.PoincareRZLSection": PoincareRZLSection(
             **elliptic_cross_section_with_torsion
         ),
         # magnetic fields

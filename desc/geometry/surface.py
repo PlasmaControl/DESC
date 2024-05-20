@@ -826,7 +826,7 @@ class PoincareRZLSection(Surface):
             Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [1, -1]])
         if L_lmn is None:
-            L_lmn = np.array([0, -1])
+            L_lmn = np.array([0, 0])
             modes_L = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R

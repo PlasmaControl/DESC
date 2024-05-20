@@ -853,54 +853,51 @@ class PlasmaVesselDistance(_Objective):
                     )
                     return return_data
 
-                point_signs = jnp.zeros(plasma_coords.shape[0])
+                point_signs = jnp.zeros(surface_coords.shape[0])
                 for plasma_zeta_idx, surface_zeta_idx in zip(
                     constants["plasma_zeta_indices"], constants["surface_zeta_indices"]
                 ):
                     plasma_pts_at_zeta_plane = plasma_coords_rpz[plasma_zeta_idx, :]
                     surface_pts_at_zeta_plane = surface_coords_rpz[surface_zeta_idx, :]
-                    surface_pts_at_zeta_plane = jnp.vstack(
-                        (surface_pts_at_zeta_plane, surface_pts_at_zeta_plane[0, :])
+                    plasma_pts_at_zeta_plane = jnp.vstack(
+                        (plasma_pts_at_zeta_plane, plasma_pts_at_zeta_plane[0, :])
                     )
-                    for i, plasma_pt in enumerate(plasma_pts_at_zeta_plane):
+                    for i, surf_pt in enumerate(surface_pts_at_zeta_plane):
                         quads = _find_angle_vec(
-                            surface_pts_at_zeta_plane[:, 0],
-                            surface_pts_at_zeta_plane[:, 2],
-                            plasma_pt[0],
-                            plasma_pt[2],
+                            plasma_pts_at_zeta_plane[:, 0],
+                            plasma_pts_at_zeta_plane[:, 2],
+                            surf_pt[0],
+                            surf_pt[2],
                         )
                         deltas = quads[1:] - quads[0:-1]
                         deltas = jnp.where(deltas == 3, -1, deltas)
                         deltas = jnp.where(deltas == -3, 1, deltas)
                         # then flip sign if the R intercept is > Rtest and the
                         # quadrant flipped over a diagonal
-                        R = surface_pts_at_zeta_plane[:, 0]
-                        Z = surface_pts_at_zeta_plane[:, 2]
+                        R = plasma_pts_at_zeta_plane[:, 0]
+                        Z = plasma_pts_at_zeta_plane[:, 2]
                         b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
-                        Rint = plasma_pt[0, None] - b * (R[1:] - R[0:-1]) / (
+                        Rint = surf_pt[0, None] - b * (R[1:] - R[0:-1]) / (
                             Z[1:] - Z[0:-1]
                         )
                         deltas = jnp.where(
-                            jnp.logical_and(jnp.abs(deltas) == 2, Rint > plasma_pt[0]),
+                            jnp.logical_and(jnp.abs(deltas) == 2, Rint > surf_pt[0]),
                             -deltas,
                             deltas,
                         )
                         pt_sign = jnp.sum(deltas)
+                        # here, if pt_sign is +/-4,means that SURFACE is inside PLASMA
+                        # while if 0, means SURFACE is outside PLASMA
+
                         # positive distance if the plasma pt is inside the surface, else
                         # negative distance is assigned
-                        pt_sign = jnp.where(jnp.isclose(pt_sign, 0), -1, 1)
-                        # need to assign to the correct index of the point on the plasma
-                        point_signs = point_signs.at[plasma_zeta_idx[i]].set(pt_sign)
+                        pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
+                        # need to assign to correct index of the point on the surface
+                        point_signs = point_signs.at[surface_zeta_idx[i]].set(pt_sign)
                 # at end here, point_signs is either +/- 1  with
-                # positive meaning the plasma pt
-                # is inside the surface and -1 if the plasma pt is
-                # outside the surface
-
-                # FIXME" the min dists are per surface point, not per plasma pt,
-                # so need to re-arrange above so it says ifthe SURFACE is
+                # positive meaning the surface pt
+                # is outside the plasma and -1 if the surface pt is
                 # inside the plasma
-                # or not (and mult by a negative one since its the opposite
-                # convention now)
 
                 min_inds = d.argmin(axis=0, keepdims=True)
                 min_ds = jnp.take_along_axis(d, min_inds, axis=0).squeeze()

@@ -1048,21 +1048,14 @@ def test_signed_PlasmaVesselDistance():
     # circular surface
     a = 0.5
     R0 = 10
-    surf = FourierRZToroidalSurface(
-        R_lmn=[R0, a],
-        Z_lmn=[0.0, -a],
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[0, 0], [-1, 0]]),
-        sym=True,
-        NFP=eq.NFP,
-    )
-    surf.change_resolution(M=2, N=2)
+    surf = eq.surface.copy()
+    surf.change_resolution(M=1, N=1)
 
-    grid = LinearGrid(M=6, N=6, NFP=eq.NFP)
+    grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
-        target=0.5,
+        target=-0.25,
         surface_grid=grid,
         plasma_grid=grid,
         use_signed_distance=True,
@@ -1071,10 +1064,10 @@ def test_signed_PlasmaVesselDistance():
 
     optimizer = Optimizer("lsq-exact")
     (eq, surf), _ = optimizer.optimize(
-        (eq, surf), objective, constraints, verbose=3, maxiter=60, ftol=1e-8, xtol=1e-6
+        (eq, surf), objective, constraints, verbose=3, maxiter=60, ftol=1e-8, xtol=1e-9
     )
 
-    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-2)
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), -0.25, atol=1e-2)
 
     # test with circular surface and changing eq
     a = 0.75
@@ -1088,7 +1081,7 @@ def test_signed_PlasmaVesselDistance():
         NFP=eq.NFP,
     )
     # not caring about force balance, just want the eq surface to become circular
-    constraints = (FixParameters(surf), FixPressure(eq), FixCurrent(eq), FixPsi(eq))
+    constraints = (FixParameters(surf), FixPressure(eq), FixIota(eq), FixPsi(eq))
     obj = PlasmaVesselDistanceCircular(
         surface=surf,
         eq=eq,

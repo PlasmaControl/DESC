@@ -6,10 +6,10 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.utils import dot, safenorm
+from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
+from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -571,6 +571,8 @@ class PlasmaVesselDistance(_Objective):
         Whether to use absolute value of distance or a signed distance, with d
         being positive if the plasma is inside of the bounding surface, and
         negative if outside of the bounding surface.
+        NOTE: ``plasma_grid`` and ``surface_grid`` must have the same
+        toroidal angle values for signed distance to be used.
         NOTE: this convention assumes that both surface and equilibrium have
         poloidal angles defined such that they are in a right-handed coordinate
         system with the surface normal vector pointing outwards
@@ -677,6 +679,18 @@ class PlasmaVesselDistance(_Objective):
         if not np.allclose(plasma_grid.nodes[:, 0], 1):
             warnings.warn("Plasma grid includes interior points, should be rho=1")
 
+        # TODO: How to use with generalized toroidal angle?
+        errorif(
+            self._use_signed_distance
+            and not np.allclose(
+                plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2],
+                surface_grid.nodes[surface_grid.unique_zeta_idx, 2],
+            ),
+            ValueError,
+            "Plasma grid and surface grid must contain points only at the "
+            "same zeta values in order to use signed distance",
+        )
+
         self._dim_f = surface_grid.num_nodes
         self._equil_data_keys = ["R", "phi", "Z"]
         self._surface_data_keys = ["x", "n_rho"] if self._use_signed_distance else ["x"]
@@ -718,6 +732,21 @@ class PlasmaVesselDistance(_Objective):
             "surface_transforms": surface_transforms,
             "quad_weights": w,
         }
+
+        if self._use_signed_distance:
+            # get the indices corresponding to the grid points
+            # at each distinct zeta plane, so that can be used
+            # in compute to separate the computed pts by zeta plane
+            zetas = plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2]
+            plasma_zeta_indices = [
+                np.where(np.isclose(plasma_grid.nodes[:, 2], zeta))[0] for zeta in zetas
+            ]
+            surface_zeta_indices = [
+                np.where(np.isclose(surface_grid.nodes[:, 2], zeta))[0]
+                for zeta in zetas
+            ]
+            self._constants["plasma_zeta_indices"] = plasma_zeta_indices
+            self._constants["surface_zeta_indices"] = surface_zeta_indices
 
         if self._surface_fixed:
             # precompute the surface coordinates
@@ -771,7 +800,8 @@ class PlasmaVesselDistance(_Objective):
             transforms=constants["equil_transforms"],
             profiles=constants["equil_profiles"],
         )
-        plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        plasma_coords_rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+        plasma_coords = rpz2xyz(plasma_coords_rpz)
         if self._surface_fixed:
             data_surf = constants["data_surf"]
         else:
@@ -794,19 +824,88 @@ class PlasmaVesselDistance(_Objective):
             if not self._use_signed_distance:
                 return d.min(axis=0)
             else:
+                surface_coords_rpz = xyz2rpz(surface_coords)
+
+                # TODO: currently this fxn only works on one pt
+                # on surface at a time so we need 2 for loops, vectorize it
+                def _find_angle_vec(R, Z, Rtest, Ztest):
+                    # R Z and surface points,
+                    # Rtest Ztest are the point we wanna check is inside
+                    # the surfaceor not
+
+                    # R Z can be vectors?
+                    Rbool = R > Rtest
+                    Zbool = Z > Ztest
+                    return_data = jnp.zeros_like(R)
+                    return_data = jnp.where(
+                        jnp.logical_and(Rbool, Zbool), 0, return_data
+                    )
+                    return_data = jnp.where(
+                        jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, return_data
+                    )
+                    return_data = jnp.where(
+                        jnp.logical_and(jnp.logical_not(Rbool), jnp.logical_not(Zbool)),
+                        2,
+                        return_data,
+                    )
+                    return_data = jnp.where(
+                        jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, return_data
+                    )
+                    return return_data
+
+                point_signs = jnp.zeros(plasma_coords.shape[0])
+                for plasma_zeta_idx, surface_zeta_idx in zip(
+                    constants["plasma_zeta_indices"], constants["surface_zeta_indices"]
+                ):
+                    plasma_pts_at_zeta_plane = plasma_coords_rpz[plasma_zeta_idx, :]
+                    surface_pts_at_zeta_plane = surface_coords_rpz[surface_zeta_idx, :]
+                    surface_pts_at_zeta_plane = jnp.vstack(
+                        (surface_pts_at_zeta_plane, surface_pts_at_zeta_plane[0, :])
+                    )
+                    for i, plasma_pt in enumerate(plasma_pts_at_zeta_plane):
+                        quads = _find_angle_vec(
+                            surface_pts_at_zeta_plane[:, 0],
+                            surface_pts_at_zeta_plane[:, 2],
+                            plasma_pt[0],
+                            plasma_pt[2],
+                        )
+                        deltas = quads[1:] - quads[0:-1]
+                        deltas = jnp.where(deltas == 3, -1, deltas)
+                        deltas = jnp.where(deltas == -3, 1, deltas)
+                        # then flip sign if the R intercept is > Rtest and the
+                        # quadrant flipped over a diagonal
+                        R = surface_pts_at_zeta_plane[:, 0]
+                        Z = surface_pts_at_zeta_plane[:, 2]
+                        b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
+                        Rint = plasma_pt[0, None] - b * (R[1:] - R[0:-1]) / (
+                            Z[1:] - Z[0:-1]
+                        )
+                        deltas = jnp.where(
+                            jnp.logical_and(jnp.abs(deltas) == 2, Rint > plasma_pt[0]),
+                            -deltas,
+                            deltas,
+                        )
+                        pt_sign = jnp.sum(deltas)
+                        # positive distance if the plasma pt is inside the surface, else
+                        # negative distance is assigned
+                        pt_sign = jnp.where(jnp.isclose(pt_sign, 0), -1, 1)
+                        # need to assign to the correct index of the point on the plasma
+                        point_signs = point_signs.at[plasma_zeta_idx[i]].set(pt_sign)
+                # at end here, point_signs is either +/- 1  with
+                # positive meaning the plasma pt
+                # is inside the surface and -1 if the plasma pt is
+                # outside the surface
+
+                # FIXME" the min dists are per surface point, not per plasma pt,
+                # so need to re-arrange above so it says ifthe SURFACE is
+                # inside the plasma
+                # or not (and mult by a negative one since its the opposite
+                # convention now)
+
                 min_inds = d.argmin(axis=0, keepdims=True)
                 min_ds = jnp.take_along_axis(d, min_inds, axis=0).squeeze()
-                diff_vecs_at_mins = jnp.take_along_axis(
-                    diff_vec, min_inds[..., None], axis=0
-                ).squeeze()
-                n_rho_dot_diff_vec = dot(
-                    data_surf["n_rho"], diff_vecs_at_mins, axis=-1
-                ).squeeze()
-                # we mult by -1 because diff_vec points from surface to
-                # the plasma, so
-                # if plasma is inside the surface, n_rho dot diff vec <0,
-                # but we define "plasma inside surface" as >0
-                return min_ds * jnp.sign(n_rho_dot_diff_vec) * -1
+
+                return min_ds * point_signs
 
 
 class PlasmaVesselDistanceCircular(_Objective):

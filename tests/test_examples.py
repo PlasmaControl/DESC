@@ -10,7 +10,13 @@ from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp
-from desc.coils import FourierPlanarCoil, FourierRZCoil, MixedCoilSet
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+    SplineXYZCoil,
+)
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -1298,18 +1304,32 @@ def test_second_stage_optimization():
 
 # TODO: replace this with the solution to Issue #1021
 @pytest.mark.unit
-def test_optimize_with_fourier_planar_coil():
+def test_optimize_with_all_coil_types():
     """Test optimizing a FourierPlanarCoil."""
-    # single coil
-    c = FourierPlanarCoil()
-    objective = ObjectiveFunction(CoilLength(c, target=11))
-    optimizer = Optimizer("fmintr")
-    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
-    np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
+    R = 2
+    phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
+    spline_coil = SplineXYZCoil(
+        current=1, X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi)
+    )
 
-    # in MixedCoilSet
-    c = MixedCoilSet(FourierRZCoil(), FourierPlanarCoil())
-    objective = ObjectiveFunction(CoilLength(c, target=11))
-    optimizer = Optimizer("fmintr")
-    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
-    np.testing.assert_allclose(c.compute("length")[1]["length"], 11, atol=1e-3)
+    def test(c):
+        obj = ObjectiveFunction(CoilLength(c, target=11))
+        optimizer = Optimizer("fmintr")
+        (c,), _ = optimizer.optimize(c, objective=obj, maxiter=200, ftol=0, xtol=0)
+        length = (
+            c.compute("length")[1]["length"]
+            if isinstance(c, MixedCoilSet)
+            else c.compute("length")["length"]
+        )
+        np.testing.assert_allclose(length, 11, atol=1e-3)
+
+    # single coil
+    test(FourierPlanarCoil())
+    test(FourierRZCoil())
+    test(FourierXYZCoil())
+    # TODO: jax still having problem with method kwarg being a string apparently :(
+    test(spline_coil)
+
+    # MixedCoilSet
+    test(MixedCoilSet(FourierRZCoil(), FourierPlanarCoil()))
+    test(MixedCoilSet(FourierXYZCoil(), spline_coil))

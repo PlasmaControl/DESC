@@ -378,7 +378,7 @@ class TestCoil:
             A_rpz = coil.compute_magnetic_vector_potential(
                 grid_rpz, basis="rpz", source_grid=coil_grid
             )
-            # FIXME: have to negate even if normal is negative z^ such that the
+            # FIXME: have to negate even if oriented such that the
             # dl of the coil is the same as the above coils??
             flux_xyz = -jnp.sum(
                 dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]

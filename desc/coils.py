@@ -100,6 +100,7 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
     """
     d_vec = coil_pts_end - coil_pts_start
     L = jnp.linalg.norm(d_vec, axis=-1)
+    d_vec_over_L = ((1 / L) * d_vec.T).T
 
     Ri_vec = eval_pts[jnp.newaxis, :] - coil_pts_start[:, jnp.newaxis, :]
     Ri = jnp.linalg.norm(Ri_vec, axis=-1)
@@ -112,8 +113,8 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
 
     A_mag = 1.0e-7 * current * jnp.log((1 + eps) / (1 - eps))  # 1.0e-7 ==  mu_0/(4 pi)
 
-    # Now just need  to multiply by e^ = d_vec = x_f - x_i
-    A = jnp.sum(A_mag[:, :, jnp.newaxis] * d_vec[:, jnp.newaxis, :], axis=0)
+    # Now just need  to multiply by e^ = d_vec/L = (x_f - x_i)/L
+    A = jnp.sum(A_mag[:, :, jnp.newaxis] * d_vec_over_L[:, jnp.newaxis, :], axis=0)
     return A
 
 

@@ -2095,33 +2095,47 @@ class FiniteElementMesh3D:
         self.M = M
         self.L = L
         self.N = N
-        self.I_5LMN = 5 * L * M * N  # Considering how to incorporate n_p
+        self.I_5LMN = (
+            5 * (L - 1) * (M - 1) * (N - 1)
+        )  # Considering how to incorporate n_p
         self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
         self.K = K
 
         # Trying a Hex Mesh, and then adding in the tetrahedra to each prism
-        if K == 1:
-            mesh = fem.MeshHex.init_tensor(
-                np.linspace(0, 1, L),
-                np.linspace(0, 2 * np.pi, M),
-                np.linspace(0, 2 * np.pi, N),
-            )
 
-        else:
-            mesh = fem.MeshHex.init_tensor(
-                np.linspace(0, 1, L),
-                np.linspace(0, 2 * np.pi, M),
-                np.linspace(0, 2 * np.pi, N),
-            )
+        mesh = fem.MeshHex.init_tensor(
+            np.linspace(0, 1, L),
+            np.linspace(0, 2 * np.pi, M),
+            np.linspace(0, 2 * np.pi, N),
+        )
+
         vertices = mesh.doflocs
 
         vertices = vertices.T
+
+        # Plotting the 3D Mesh
+        from skfem.visuals.matplotlib import draw, draw_mesh3d
+
+        ax = draw(mesh)
+        p = draw_mesh3d(mesh, ax=ax)
+        p.show
 
         if K == 1:
             element = fem.ElementTetP1()
 
         else:
             element = fem.ElementTetP2()
+
+        basis = fem.CellBasis(mesh, element)
+
+        # Setting up integrals
+        from skfem.helpers import dot
+
+        @fem.BilinearForm
+        def assembly(u, v, _):
+            return dot(u, v)
+
+        self.assembly_matrix = assembly.assemble(basis).todense()
 
         # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
         tetrahedra = []
@@ -2243,16 +2257,6 @@ class FiniteElementMesh3D:
                     self.weights = np.array(weights)
                     self.nquad = self.integration_points.shape[0]
 
-    def visualize():
-        """Visualize 3D Mesh."""
-        mesh = fem.MeshTet2()
-        from skfem.visuals.matplotlib import draw, draw_mesh3d
-
-        ax = draw(mesh)
-        return draw_mesh3d(mesh, color="pink", ax=ax)
-
-        # Add later visualize().show()
-
     def get_barycentric_coordinates(self, rho_theta_zeta, K):
         """Gets the barycentric coordinates, given a mesh in rho, theta, zeta.
 
@@ -2267,6 +2271,7 @@ class FiniteElementMesh3D:
         Returns
         -------
         coordinate_matrix: Matrix of volume coordinates for mesh
+        (rho_theta_zeta, Q)
         """
         # nodes should be (4,3)
 
@@ -2300,8 +2305,6 @@ class FiniteElementMesh3D:
 
         return coordinate_matrix
 
-    # Working on basis functions in separate document
-
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
 
@@ -2313,50 +2316,50 @@ class FiniteElementMesh3D:
         """
         nquad = self.nquad
         quadrature_points = np.zeros((self.I_5LMN * nquad, 3))
-        
-        M = [];
+
+        M = []
         for tetrahedron in self.tetrahedra:
-            
+
             vertices = tetrahedron.vertices
-        
+
             D = np.array(
-                 [vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
-                 [vertices[1, 0], vertices[1, 1], vertices[1, 2], 1],
-                 [vertices[2, 0], vertices[2, 1], vertices[2, 2], 1],
-                 [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1])
-     
+                [vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
+                [vertices[1, 0], vertices[1, 1], vertices[1, 2], 1],
+                [vertices[2, 0], vertices[2, 1], vertices[2, 2], 1],
+                [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1],
+            )
+
             six_vol = np.linalg.det(D)
-             
+
             # Transform weights
             weights = self.weights
             weights = six_vol * weights
-             
+
             # Transform points
-             
-             
-            integration_points = self.integration_points[:,:3]
-         
+
+            integration_points = self.integration_points[:, :3]
+
             v = vertices
-     
-     
+
             # Transform points
-     
-            A = np.array([[v[2,0]-v[0,0],v[1,0]-v[0,0], v[3,0]-v[0,0]],
-                          [v[2,1]-v[0,1],v[1,1]-v[0,1], v[3,1]-v[0,1]],
-                          [v[2,2]-v[0,2],v[1,2]-v[0,2], v[3,2]-v[0,2]]])
-     
-     
-            new_coor = np.zeros([integration_points.shape[0],3])
-     
-     
+
+            A = np.array(
+                [
+                    [v[2, 0] - v[0, 0], v[1, 0] - v[0, 0], v[3, 0] - v[0, 0]],
+                    [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1], v[3, 1] - v[0, 1]],
+                    [v[2, 2] - v[0, 2], v[1, 2] - v[0, 2], v[3, 2] - v[0, 2]],
+                ]
+            )
+
+            new_coor = np.zeros([integration_points.shape[0], 3])
+
             for i in range(integration_points.shape[0]):
-                 new_coor[i] = np.dot(A,integration_points[i,:])
- 
-            M = np.append(M,new_coor)
-        
-        
-        M = np.reshape([self.I_5LMN * nquad,3])
-        
+                new_coor[i] = np.dot(A, integration_points[i, :])
+
+            M = np.append(M, new_coor)
+
+        M = np.reshape([self.I_5LMN * nquad, 3])
+
         new_col = np.zeros([self.I_5LMN * nquad, 1])
 
         for i in range(self.I_5LMN * nquad):
@@ -2364,9 +2367,7 @@ class FiniteElementMesh3D:
 
         # Add new column
         quadrature_points = np.append(M, new_col, axis=1)
-        
-      
-        
+
         return quadrature_points
 
     def integrate(self, f):
@@ -2378,7 +2379,12 @@ class FiniteElementMesh3D:
 
         Parameters
         ----------
-        f : 3D ndarray, shape ()
+        f : 3D ndarray, shape (nquad * 5MLN, num_functions)
+            Vector function defined on the L x M mesh in (rho, theta, zeta)
+            that we would like to integrate component-wise with respect
+            to the basis functions. For integration over the barycentric
+            coordinates, we need f to be prescribed at the quadrature points
+            in a barycentric coordinate system.
 
         Returns
         -------
@@ -3255,8 +3261,6 @@ class TetrahedronFiniteElement:
                 )
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
-    
-
 
 
 class TriangleFiniteElement:

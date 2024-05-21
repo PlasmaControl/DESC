@@ -822,13 +822,13 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # coils curvature which is a 2nd derivative of the position, and doing that
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
-        B = biot_savart_vector_potential_hh(
+        A = biot_savart_vector_potential_hh(
             coords, coil_pts_start, coil_pts_end, current
         )
 
         if basis == "rpz":
-            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        return B
+            A = xyz2rpz_vec(A, x=coords[:, 0], y=coords[:, 1])
+        return A
 
     @classmethod
     def from_values(

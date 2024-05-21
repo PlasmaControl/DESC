@@ -343,7 +343,7 @@ class TestMagneticFields:
 
         curve = FourierXYZCurve()  # curve to integrate A over
         curve_grid = LinearGrid(zeta=20)
-        curve_data = curve.compute(["x", "x_s"], grid=curve_grid)
+        curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
         curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
 
         surface_grid = LinearGrid(M=60, N=60, NFP=10)

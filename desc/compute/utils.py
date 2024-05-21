@@ -142,14 +142,12 @@ def _compute(
         )
         if (
             data_index[parameterization][name]["dim"] == 3
-            and kwargs.get("basis", "rpz").lower() == "xyz"
+            and data_index[parameterization][name]["coordinates"] == "rtz"
+            and kwargs.get("basis", "rpz") == "xyz"
         ):
-            if "phi" in data:
-                from .geom_utils import rpz2xyz_vec
+            from .geom_utils import rpz2xyz_vec
 
-                data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
-            else:
-                continue
+            data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
 
     return data
 

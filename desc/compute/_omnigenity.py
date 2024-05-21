@@ -32,6 +32,7 @@ from .utils import cross, dot, safediv
     data=["B_theta"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    require_resolution="tz",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data["B_theta_mn"] = transforms["B"].fit(data["B_theta"])
@@ -53,6 +54,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data=["B_zeta"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    require_resolution="tz",
 )
 def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])

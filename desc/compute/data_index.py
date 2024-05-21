@@ -63,9 +63,11 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
-    aliases=[],
+    aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
-    grid_type=None,
+    require_resolution="",
+    grid_coordinates="rtz",
+    grid_special=None,
     axis_limit_data=None,
     **kwargs,
 ):
@@ -104,8 +106,20 @@ def register_compute_fun(
     parameterization : str or list of str
         Name of desc types the method is valid for. eg `'desc.geometry.FourierXYZCurve'`
         or `'desc.equilibrium.Equilibrium'`.
-    grid_type : str
-        Name of grid type the quantity must be computed with. eg `'quad'`.
+    require_resolution : str
+        Resolution requirements in coordinates. I.e. "r" expects radial resolution
+        in the grid, "rtz" expects grid to radial, poloidal, and toroidal resolution.
+    grid_coordinates : str
+        Coordinates specified by nodes of the grid.
+        Immediate dependencies should be computed on a grid of this type.
+    grid_special : list of str or Grid
+        Special expectations from the grid to compute the quantity. E.g.
+        align : str
+            Grid should be such that the immediate dependency quantities are
+            separable into (rho, poloidal, zeta) coordinates with
+            ``dependency.reshape(num_rho, num_poloidal, num_zeta)``.
+        fft : str
+            Grid should be sorted for fast fourier transform.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
 
@@ -114,8 +128,14 @@ def register_compute_fun(
     Should only list *direct* dependencies. The full dependencies will be built
     recursively at runtime using each quantity's direct dependencies.
     """
+    if aliases is None:
+        aliases = []
+    if grid_special is None:
+        grid_special = []
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
+    if not isinstance(grid_special, (tuple, list)):
+        grid_special = [grid_special]
 
     deps = {
         "params": params,
@@ -142,7 +162,9 @@ def register_compute_fun(
             "coordinates": coordinates,
             "dependencies": deps,
             "aliases": aliases,
-            "grid_type": grid_type,
+            "require_resolution": require_resolution,
+            "grid_coordinates": grid_coordinates,
+            "grid_special": grid_special,
         }
         for p in parameterization:
             flag = False

@@ -69,7 +69,7 @@ class TestComputeUtils:
             Surface integral of the input over each surface in the grid.
 
         """
-        _, _, spacing, _, _ = _get_grid_surface(grid, surface_label)
+        _, _, spacing, _, _ = _get_grid_surface(grid, grid.get_label(surface_label))
         if surface_label == "rho":
             has_endpoint_dupe = False
         elif surface_label == "theta":
@@ -140,7 +140,7 @@ class TestComputeUtils:
             surface_integrals(lg, q, surface_label="rho"), result
         )
         result = surface_averages(lg, q, surface_label="theta")
-        del lg._unique_theta_idx
+        del lg._unique_poloidal_idx
         np.testing.assert_allclose(
             surface_averages(lg, q, surface_label="theta"), result
         )

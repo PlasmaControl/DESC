@@ -2,7 +2,6 @@
 
 import copy
 import inspect
-import warnings
 
 import numpy as np
 from termcolor import colored
@@ -136,6 +135,30 @@ def _compute(
                     profiles=profiles,
                     data=data,
                     **kwargs,
+                )
+        if "grid" in transforms:
+            coords = data_index[parameterization][name]["grid_coordinates"]
+            errorif(
+                coords != transforms["grid"].coordinates,
+                msg=(
+                    f"Expected grid with coordinates '{coords}' to compute {name}, "
+                    f"but got grid with coordinates '{transforms['grid'].coordinates}'."
+                ),
+            )
+            special = data_index[parameterization][name]["grid_special"]
+            for requirement in special:
+                warnif(
+                    isinstance(requirement, Grid)
+                    and not isinstance(transforms["grid"], requirement),
+                    msg=(
+                        f"Expected '{requirement}' to compute {name}, "
+                        f"but got '{type(transforms['grid'])}'."
+                    ),
+                )
+                errorif(
+                    isinstance(requirement, str)
+                    and not hasattr(transforms["grid"], requirement),
+                    msg=f"Expected grid attribute '{requirement}' to compute {name}.",
                 )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
@@ -686,7 +709,7 @@ def _get_grid_surface(grid, surface_label):
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
-        The surface label of rho, theta, or zeta.
+        The surface label of rho, poloidal, or zeta.
 
     Returns
     -------
@@ -703,17 +726,17 @@ def _get_grid_surface(grid, surface_label):
         Whether the grid knows the number of unique nodes and inverse idx.
 
     """
-    assert surface_label in {"rho", "theta", "zeta"}
+    assert surface_label in {"rho", "poloidal", "zeta"}
     if surface_label == "rho":
         spacing = grid.spacing[:, 1:]
         has_endpoint_dupe = False
-    elif surface_label == "theta":
+    elif surface_label == "poloidal":
         spacing = grid.spacing[:, [0, 2]]
-        has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._theta_endpoint
+        has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._poloidal_endpoint
     else:
         spacing = grid.spacing[:, :2]
-        has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._zeta_endpoint
-    has_idx = hasattr(grid, f"num_{surface_label}") & hasattr(
+        has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._toroidal_endpoint
+    has_idx = hasattr(grid, f"num_{surface_label}") and hasattr(
         grid, f"_inverse_{surface_label}_idx"
     )
     unique_size = getattr(grid, f"num_{surface_label}", -1)
@@ -724,14 +747,14 @@ def _get_grid_surface(grid, surface_label):
 def line_integrals(
     grid,
     q=jnp.array([1.0]),
-    line_label="theta",
+    line_label="poloidal",
     fix_surface=("rho", 1.0),
     expand_out=True,
     tol=1e-14,
 ):
     """Compute line integrals over curves covering the given surface.
 
-    As an example, by specifying the combination of ``line_label="theta"`` and
+    As an example, by specifying the combination of ``line_label="poloidal"`` and
     ``fix_surface=("rho", 1.0)``, the intention is to integrate along the
     outermost perimeter of a particular zeta surface (toroidal cross-section),
     for each zeta surface in the grid.
@@ -756,7 +779,7 @@ def line_integrals(
         Quantity to integrate.
         The first dimension of the array should have size ``grid.num_nodes``.
         When ``q`` is n-dimensional, the intention is to integrate,
-        over the domain parameterized by rho, theta, and zeta,
+        over the domain parameterized by rho, poloidal, and zeta,
         an n-dimensional function over the previously mentioned domain.
     line_label : str
         The coordinate curve to compute the integration over.
@@ -782,18 +805,18 @@ def line_integrals(
         By default, the returned array has the same shape as the input.
 
     """
-    assert (
-        line_label != fix_surface[0]
-    ), "There is no valid use for this combination of inputs."
-    assert line_label == "theta" or not isinstance(
-        grid, ConcentricGrid
-    ), "ConcentricGrid should only be used for theta line integrals."
-    if isinstance(grid, LinearGrid) and grid.endpoint:
-        warnings.warn(
-            colored(
-                "Correctness not guaranteed on grids with duplicate nodes.", "yellow"
-            )
-        )
+    line_label = grid.get_label(line_label)
+    fix_label = grid.get_label(fix_surface[0])
+    errorif(
+        line_label == fix_label,
+        msg="There is no valid use for this combination of inputs.",
+    )
+    errorif(
+        line_label != "poloidal" and isinstance(grid, ConcentricGrid),
+        msg="ConcentricGrid should only be used for poloidal line integrals.",
+    )
+    msg = colored("Correctness not guaranteed on grids with duplicate nodes.", "yellow")
+    warnif(isinstance(grid, LinearGrid) and grid.endpoint, msg=msg)
     # Generate a new quantity q_prime which is zero everywhere
     # except on the fixed surface, on which q_prime takes the value of q.
     # Then forward the computation to surface_integrals().
@@ -801,11 +824,11 @@ def line_integrals(
     # should correspond to the line label's spacing.
     # The differential element of the surface integral is
     # ds = dl * fix_surface_dl, so we scale q_prime by 1 / fix_surface_dl.
-    labels = {"rho": 0, "theta": 1, "zeta": 2}
-    column_id = labels[fix_surface[0]]
+    axis = {"rho": 0, "poloidal": 1, "zeta": 2}
+    column_id = axis[fix_label]
     mask = grid.nodes[:, column_id] == fix_surface[1]
     q_prime = (mask * jnp.atleast_1d(q).T / grid.spacing[:, column_id]).T
-    (surface_label,) = labels.keys() - {line_label, fix_surface[0]}
+    (surface_label,) = axis.keys() - {line_label, fix_label}
     return surface_integrals(grid, q_prime, surface_label, expand_out, tol)
 
 
@@ -828,10 +851,10 @@ def surface_integrals(
         Quantity to integrate.
         The first dimension of the array should have size ``grid.num_nodes``.
         When ``q`` is n-dimensional, the intention is to integrate,
-        over the domain parameterized by rho, theta, and zeta,
+        over the domain parameterized by rho, poloidal, and zeta,
         an n-dimensional function over the previously mentioned domain.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute the integration over.
+        The surface label of rho, poloidal, or zeta to compute the integration over.
     expand_out : bool
         Whether to expand the output array so that the output has the same
         shape as the input. Defaults to true so that the output may be
@@ -859,7 +882,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute the integration over.
+        The surface label of rho, poloidal, or zeta to compute the integration over.
     expand_out : bool
         Whether to expand the output array so that the output has the same
         shape as the input. Defaults to true so that the output may be
@@ -876,11 +899,15 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         surface in the grid with code: ``function(q)``.
 
     """
-    msg = colored(
-        "Integrals over constant theta surfaces are poorly defined for ConcentricGrid.",
-        "yellow",
+    surface_label = grid.get_label(surface_label)
+    warnif(
+        surface_label == "poloidal" and isinstance(grid, ConcentricGrid),
+        msg=colored(
+            "Integrals over constant poloidal surfaces"
+            " are poorly defined for ConcentricGrid.",
+            "yellow",
+        ),
     )
-    warnif(surface_label == "theta" and isinstance(grid, ConcentricGrid), msg=msg)
     unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = _get_grid_surface(
         grid, surface_label
     )
@@ -919,10 +946,10 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         )
     else:
         expand_out = False
-        nodes = grid.nodes[:, {"rho": 0, "theta": 1, "zeta": 2}[surface_label]]
+        axis = {"rho": 0, "poloidal": 1, "zeta": 2}[surface_label]
         # Converting nodes from numpy.ndarray to jaxlib.xla_extension.ArrayImpl
         # reduces memory usage by > 400% for the forward computation and Jacobian.
-        nodes = jnp.asarray(nodes)
+        nodes = jnp.asarray(grid.nodes[:, axis])
         # This branch will execute for custom grids, which don't have a use
         # case for having duplicate nodes, so we don't bother to modulo nodes
         # by 2pi or 2pi/NFP.
@@ -945,7 +972,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
             Quantity to integrate.
             The first dimension of the array should have size ``grid.num_nodes``.
             When ``q`` is n-dimensional, the intention is to integrate,
-            over the domain parameterized by rho, theta, and zeta,
+            over the domain parameterized by rho, poloidal, and zeta,
             an n-dimensional function over the previously mentioned domain.
 
         Returns
@@ -985,12 +1012,12 @@ def surface_averages(
         Quantity to average.
         The first dimension of the array should have size ``grid.num_nodes``.
         When ``q`` is n-dimensional, the intention is to average,
-        over the domain parameterized by rho, theta, and zeta,
+        over the domain parameterized by rho, poloidal, and zeta,
         an n-dimensional function over the previously mentioned domain.
     sqrt_g : ndarray
         Coordinate system Jacobian determinant; see ``data_index["sqrt(g)"]``.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute the average over.
+        The surface label of rho, poloidal, or zeta to compute the average over.
     denominator : ndarray
         By default, the denominator is computed as the surface integral of
         ``sqrt_g``. This parameter can optionally be supplied to avoid
@@ -1027,7 +1054,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute the average over.
+        The surface label of rho, poloidal, or zeta to compute the average over.
     expand_out : bool
         Whether to expand the output array so that the output has the same
         shape as the input. Defaults to true so that the output may be
@@ -1045,6 +1072,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
         ``function(q, sqrt_g)``.
 
     """
+    surface_label = grid.get_label(surface_label)
     expand_out = (
         expand_out
         # don't try to expand already expanded output
@@ -1067,7 +1095,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
             Quantity to average.
             The first dimension of the array should have size ``grid.num_nodes``.
             When ``q`` is n-dimensional, the intention is to average,
-            over the domain parameterized by rho, theta, and zeta,
+            over the domain parameterized by rho, poloidal, and zeta,
             an n-dimensional function over the previously mentioned domain.
         sqrt_g : ndarray
             Coordinate system Jacobian determinant; see ``data_index["sqrt(g)"]``.
@@ -1135,7 +1163,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute the integration over.
+        The surface label of rho, poloidal, or zeta to compute the integration over.
         These correspond to the domain parameters discussed in this method's
         description. In particular, ``surface_label`` names u₁.
 
@@ -1177,8 +1205,10 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # transform into the computational domain, so the second dimension that
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
-    assert hasattr(grid, f"num_{surface_label}") and hasattr(
-        grid, f"_inverse_{surface_label}_idx"
+    surface_label = grid.get_label(surface_label)
+    errorif(
+        not hasattr(grid, f"num_{surface_label}")
+        or not hasattr(grid, f"_inverse_{surface_label}_idx")
     )
     return surface_integrals_map(grid, surface_label, expand_out=False)
 
@@ -1246,7 +1276,7 @@ def surface_variance(
         computing the variance of the given set of numbers and not the
         distribution the numbers are (potentially) sampled from.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute the variance over.
+        The surface label of rho, poloidal, or zeta to compute the variance over.
     expand_out : bool
         Whether to expand the output array so that the output has the same
         shape as the input. Defaults to true so that the output may be
@@ -1263,6 +1293,7 @@ def surface_variance(
         By default, the returned array has the same shape as the input.
 
     """
+    surface_label = grid.get_label(surface_label)
     _, _, spacing, _, has_idx = _get_grid_surface(grid, surface_label)
     integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
 
@@ -1296,7 +1327,7 @@ def surface_max(grid, x, surface_label="rho"):
         Quantity to find max.
         The array should have size grid.num_nodes.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute max over.
+        The surface label of rho, poloidal, or zeta to compute max over.
 
     Returns
     -------
@@ -1319,7 +1350,7 @@ def surface_min(grid, x, surface_label="rho"):
         Quantity to find min.
         The array should have size grid.num_nodes.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute min over.
+        The surface label of rho, poloidal, or zeta to compute min over.
 
     Returns
     -------
@@ -1328,9 +1359,9 @@ def surface_min(grid, x, surface_label="rho"):
         The returned array has the same shape as the input.
 
     """
+    surface_label = grid.get_label(surface_label)
     unique_size, inverse_idx, _, _, has_idx = _get_grid_surface(grid, surface_label)
-    msg = "Grid should have unique and inverse idx."
-    errorif(not has_idx, NotImplementedError, msg=msg)
+    errorif(not has_idx, NotImplementedError, msg="Missing unique and inverse idx.")
     inverse_idx = jnp.asarray(inverse_idx)
     x = jnp.asarray(x)
     mins = jnp.full(unique_size, jnp.inf)

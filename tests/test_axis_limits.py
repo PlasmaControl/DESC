@@ -228,18 +228,20 @@ def assert_is_continuous(
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
-        if (
-            name in not_continuous_limits
-            or data_index[p][name]["coordinates"] == ""
-            or data_index[p][name]["coordinates"] == "z"
-        ):
-            # can't check continuity of global scalar or function of toroidal angle
+        if name in not_continuous_limits:
             continue
         elif name in not_finite_limits:
             assert (np.isfinite(data[name]).T != axis).all(), name
             continue
         else:
             assert np.isfinite(data[name]).all(), name
+
+        if (
+            data_index[p][name]["coordinates"] == ""
+            or data_index[p][name]["coordinates"] == "z"
+        ):
+            # can't check continuity of global scalar or function of toroidal angle
+            continue
         # make single variable function of rho
         if data_index[p][name]["coordinates"] == "r":
             # already single variable function of rho

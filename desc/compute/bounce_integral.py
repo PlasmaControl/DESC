@@ -1420,7 +1420,7 @@ def desc_grid_from_field_line_coords(
         Clebsch-Type field-line coordinate grid.
 
     """
-    grid_fl = Grid.create_meshgrid(rho, alpha, zeta)
+    grid_fl = Grid.create_meshgrid(rho, alpha, zeta, coordinates="raz")
     coords_desc = eq.map_coordinates(
         grid_fl.nodes,
         inbasis=("rho", "alpha", "zeta"),
@@ -1431,6 +1431,7 @@ def desc_grid_from_field_line_coords(
         nodes=coords_desc,
         sort=False,
         jitable=True,
+        coordinates="rtz",
         _unique_rho_idx=grid_fl.unique_rho_idx,
         _inverse_rho_idx=grid_fl.inverse_rho_idx,
     )

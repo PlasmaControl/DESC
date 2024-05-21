@@ -579,13 +579,18 @@ class Grid(_Grid):
     """
 
     @classmethod
-    def create_meshgrid(cls, a, b, c):
-        """Create a meshgrid from the given coordinates.
+    def create_meshgrid(cls, a, b, c, coordinates="rtz"):
+        """Create a meshgrid from the given coordinates ina jitable manner.
 
         Parameters
         ----------
         a, b, c : Array, Array, Array
             Sorted unique values of each coordinate.
+        coordinates : str
+            Coordinates that are specified by the nodes a, b, c, respectively.
+            raz : rho, alpha, zeta
+            rpz : rho, theta_PEST, zeta
+            rtz : rho, theta, zeta
 
         Returns
         -------
@@ -615,11 +620,12 @@ class Grid(_Grid):
             nodes=nodes,
             sort=False,
             jitable=True,
+            coordinates=coordinates,
             _unique_rho_idx=unique_a_idx,
-            _unique_theta_idx=unique_b_idx,
+            _unique_poloidal_idx=unique_b_idx,
             _unique_zeta_idx=unique_c_idx,
             _inverse_rho_idx=inverse_a_idx,
-            _inverse_theta_idx=inverse_b_idx,
+            _inverse_poloidal_idx=inverse_b_idx,
             _inverse_zeta_idx=inverse_c_idx,
         )
 

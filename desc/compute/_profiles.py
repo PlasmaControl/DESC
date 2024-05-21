@@ -138,6 +138,7 @@ def _chi_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["chi_r", "rho"],
+    require_resolution="r",
 )
 def _chi(params, transforms, profiles, data, **kwargs):
     chi_r = transforms["grid"].compress(data["chi_r"])

@@ -678,9 +678,6 @@ class Grid(_Grid):
         nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
         # Do not alter nodes given by the user for custom grids.
         # In particular, do not modulo nodes by 2pi or 2pi/NFP.
-        # This may cause the surface_integrals() function to fail recognizing
-        # surfaces outside the interval [0, 2pi] as duplicates. However, most
-        # surface integral computations are done with LinearGrid anyway.
         return nodes
 
 
@@ -1137,11 +1134,7 @@ class QuadratureGrid(_Grid):
         z = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
         dz = 2 * np.pi / N * np.ones_like(z)
 
-        (
-            r,
-            t,
-            z,
-        ) = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
+        r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
         dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
 
         nodes = np.column_stack([r, t, z])

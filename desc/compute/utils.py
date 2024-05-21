@@ -130,14 +130,30 @@ def _compute(
                     data=data,
                     **kwargs,
                 )
-        coords = data_index[parameterization][name]["grid_coordinates"]
-        errorif(
-            "grid" in transforms and transforms["grid"].coordinates != coords,
-            msg=(
-                f"Grid has coordinates '{transforms['grid'].coordinates}', but "
-                f"expected grid with coordinates '{coords}' to compute {name}."
-            ),
-        )
+        if "grid" in transforms:
+            coords = data_index[parameterization][name]["grid_coordinates"]
+            errorif(
+                transforms["grid"].coordinates != coords,
+                msg=(
+                    f"Expected grid with coordinates '{coords}' to compute {name}, "
+                    f"but got grid with coordinates '{transforms['grid'].coordinates}'."
+                ),
+            )
+            special = data_index[parameterization][name]["grid_special"]
+            for requirement in special:
+                warnif(
+                    isinstance(requirement, Grid)
+                    and not isinstance(transforms["grid"], requirement),
+                    msg=(
+                        f"Expected '{requirement}' to compute {name}, "
+                        f"but got '{type(transforms['grid'])}'."
+                    ),
+                )
+                errorif(
+                    isinstance(requirement, str)
+                    and not hasattr(transforms["grid"], requirement),
+                    msg=f"Expected grid attribute '{requirement}' to compute {name}.",
+                )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs

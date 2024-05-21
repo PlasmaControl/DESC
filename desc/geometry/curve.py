@@ -858,7 +858,7 @@ class SplineXYZCurve(Curve):
 
     @discontinuous_indices.setter
     def discontinuous_indices(self, new):
-        self._discontinuous_indices = jnp.array(new)
+        self._discontinuous_indices = jnp.asarray(new)
 
     @property
     def N(self):

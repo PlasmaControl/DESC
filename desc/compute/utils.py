@@ -101,12 +101,18 @@ def _compute(
     parameterization, names, params, transforms, profiles, data=None, **kwargs
 ):
     """Same as above but without checking inputs for faster recursion."""
+    parameterization = _parse_parameterization(parameterization)
+    if isinstance(names, str):
+        names = [names]
+    if data is None:
+        data = {}
+
     for name in names:
         if name in data:
             # don't compute something that's already been computed
             continue
-        if not has_dependencies(
-            parameterization, name, params, transforms, profiles, data
+        if not has_data_dependencies(
+            parameterization, name, data, transforms["grid"].axis.size
         ):
             # then compute the missing dependencies
             data = _compute(
@@ -429,6 +435,13 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
             t.build()
 
     return transforms
+
+
+def has_data_dependencies(parameterization, qty, data, axis=False):
+    """Determine if we have the data needed to compute qty."""
+    return _has_data(qty, data, parameterization) and (
+        not axis or _has_axis_limit_data(qty, data, parameterization)
+    )
 
 
 def has_dependencies(parameterization, qty, params, transforms, profiles, data):

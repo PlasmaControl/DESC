@@ -36,6 +36,7 @@ from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
+    ResolutionWarning,
     Timer,
     check_nonnegint,
     check_posint,
@@ -43,6 +44,7 @@ from desc.utils import (
     errorif,
     only1,
     setdefault,
+    warnif,
 )
 
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
@@ -879,6 +881,30 @@ class Equilibrium(IOAble, Optimizable):
                 calc0d = calc1dr = calc1dz = False
             if isinstance(grid, LinearGrid):
                 calc1dr = calc1dz = False
+        else:
+            for dep in deps:
+                req = data_index[p][dep]["require_resolution"]
+                coords = data_index[p][dep]["coordinates"]
+                msg = lambda direction: colored(
+                    f"Dependency {dep} may require more {direction}"
+                    f" resolution to compute.",
+                    "yellow",
+                )
+                warnif(
+                    "r" in req and "r" in coords and grid.L < self.L_grid,
+                    ResolutionWarning,
+                    msg("radial"),
+                )
+                warnif(
+                    "t" in req and "t" in coords and grid.M < self.M_grid,
+                    ResolutionWarning,
+                    msg("poloidal"),
+                )
+                warnif(
+                    "z" in req and "z" in coords and grid.N < self.N_grid,
+                    ResolutionWarning,
+                    msg("toroidal"),
+                )
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)

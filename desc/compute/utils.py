@@ -133,7 +133,7 @@ def _compute(
         if "grid" in transforms:
             coords = data_index[parameterization][name]["grid_coordinates"]
             errorif(
-                transforms["grid"].coordinates != coords,
+                coords != transforms["grid"].coordinates,
                 msg=(
                     f"Expected grid with coordinates '{coords}' to compute {name}, "
                     f"but got grid with coordinates '{transforms['grid'].coordinates}'."

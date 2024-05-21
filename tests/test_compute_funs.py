@@ -1238,7 +1238,6 @@ def test_compute_everything():
         sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
         axis=True,
     )
-    print()
     curvegrid1 = LinearGrid(N=10)
     curvegrid2 = LinearGrid(N=10, NFP=2)
     fieldgrid = LinearGrid(

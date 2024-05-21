@@ -6,13 +6,6 @@ import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
-from desc.coils import (
-    CoilSet,
-    FourierPlanarCoil,
-    FourierRZCoil,
-    FourierXYZCoil,
-    MixedCoilSet,
-)
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -29,6 +22,7 @@ from desc.objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
     FixElectronDensity,
     FixElectronTemperature,
@@ -953,16 +947,9 @@ def test_fix_parameters_input_order(DummyStellarator):
 
 
 @pytest.mark.unit
-def test_fix_subset_of_params_in_collection():
+def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
     """Tests FixParameters fixing a subset of things in the collection."""
-    tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
-    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
-    vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
-    vf_coilset = CoilSet.linspaced_linear(
-        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
-    )
-    xy_coil = FourierXYZCoil()
-    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xy_coil))
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
 
     params = [
         [
@@ -976,7 +963,7 @@ def test_fix_subset_of_params_in_collection():
     ]
     target = np.concatenate(
         (
-            np.array([1, 2, 0, 0, 1, 1]),
+            np.array([3, 2, 0, 0, 1, 1]),
             np.eye(3).flatten(),
             np.array([0, 0, 0]),
             np.eye(3).flatten(),
@@ -987,6 +974,32 @@ def test_fix_subset_of_params_in_collection():
         )
     )
 
-    obj = FixParameters(full_coilset, params)
+    obj = FixParameters(coilset, params)
     obj.build()
     np.testing.assert_allclose(obj.target, target)
+
+
+@pytest.mark.unit
+def test_fix_coil_current(DummyMixedCoilSet):
+    """Tests FixCoilCurrent."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    # fix a single coil current
+    obj = FixCoilCurrent(coil=coilset.coils[1].coils[0])
+    obj.build()
+    assert obj.dim_f == 1
+    np.testing.assert_allclose(obj.target, -1)
+
+    # fix all coil currents
+    obj = FixCoilCurrent(coil=coilset)
+    obj.build()
+    assert obj.dim_f == 8
+    np.testing.assert_allclose(obj.target, [3, 3, 3, 3, -1, -1, -1, 2])
+
+    # only fix currents of some coils in the coil set
+    obj = FixCoilCurrent(
+        coil=coilset, indices=[[True, False, True, False], False, True]
+    )
+    obj.build()
+    assert obj.dim_f == 3
+    np.testing.assert_allclose(obj.target, [3, 3, 2])

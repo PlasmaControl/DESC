@@ -69,6 +69,7 @@ def compute_scaling_factors(thing):
 
     elif isinstance(thing, Curve):
         scales["a"] = thing.compute("length")["length"] / (2 * np.pi)
+
     # replace 0 scales to avoid normalizing by zero
     for scale in scales.keys():
         if np.isclose(scales[scale], 0):

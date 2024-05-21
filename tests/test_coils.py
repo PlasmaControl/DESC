@@ -240,7 +240,7 @@ class TestCoil:
         R = 1
         I = 1e7
 
-        # analytic eqn for "A_phi" (I assume phi is in dl direction for loop)
+        # analytic eqn for "A_phi" (phi is in dl direction for loop)
         def _A_analytic(r):
             # elliptic integral arguments must be k^2, not k,
             # error in original paper and apparently in Jackson EM book too.
@@ -255,12 +255,12 @@ class TestCoil:
             term_2_den = k_sqd
             return term_1_num * term_2_num / term_1_den / term_2_den
 
-        # we only evaluate it at theta=np.pi/2 (it is in spherical coords)
+        # we only evaluate it at theta=np.pi/2 (b/c it is in spherical coords)
         rs = np.linspace(0.1, 3, 10, endpoint=True)
         N = 200
         curve_grid = LinearGrid(zeta=N)
         for r in rs:
-            # A_phi is constant around the loop
+            # A_phi is constant around the loop (no phi dependence)
             A_true_phi = _A_analytic(r) * np.ones(N)
             A_true_rpz = np.vstack(
                 (np.zeros_like(A_true_phi), A_true_phi, np.zeros_like(A_true_phi))
@@ -268,7 +268,7 @@ class TestCoil:
             correct_flux = np.sum(r * A_true_phi * 2 * np.pi / N)
 
             curve = FourierXYZCurve(
-                X_n=[0, 0, -r], Y_n=[r, 0, 0], Z_n=[0, 0, 0]
+                X_n=[-r, 0, 0], Y_n=[0, 0, r], Z_n=[0, 0, 0]
             )  # flux loop to integrate A over
 
             curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
@@ -283,7 +283,7 @@ class TestCoil:
             ).T
             grid_xyz = rpz2xyz(grid_rpz)
             # FourierXYZCoil
-            coil = FourierXYZCoil(I, X_n=[0, 0, R], Y_n=[-R, 0, 0], Z_n=[0, 0, 0])
+            coil = FourierXYZCoil(I, X_n=[-R, 0, 0], Y_n=[0, 0, R], Z_n=[0, 0, 0])
             A_xyz = coil.compute_magnetic_vector_potential(
                 grid_xyz, basis="xyz", source_grid=coil_grid
             )
@@ -305,7 +305,7 @@ class TestCoil:
             )
             np.testing.assert_allclose(
                 A_true_rpz,
-                np.abs(A_rpz),
+                A_rpz,
                 rtol=1e-8,
                 atol=1e-12,
                 err_msg="Using FourierXYZCoil",
@@ -334,7 +334,7 @@ class TestCoil:
             )
             np.testing.assert_allclose(
                 A_true_rpz,
-                np.abs(A_rpz),
+                A_rpz,
                 rtol=1e-4,
                 atol=1e-12,
                 err_msg="Using SplineXYZCoil",
@@ -347,12 +347,11 @@ class TestCoil:
             A_rpz = coil.compute_magnetic_vector_potential(
                 grid_rpz, basis="rpz", source_grid=coil_grid
             )
-            # FIXME: have to negate even if normal is negative z^ such that the
-            # dl of the coil is the same as the above coils??
-            flux_xyz = -jnp.sum(
+
+            flux_xyz = jnp.sum(
                 dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
             )
-            flux_rpz = -jnp.sum(
+            flux_rpz = jnp.sum(
                 dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
             )
 
@@ -364,7 +363,7 @@ class TestCoil:
             )
             np.testing.assert_allclose(
                 A_true_rpz,
-                np.abs(A_rpz),
+                A_rpz,
                 rtol=1e-8,
                 atol=1e-12,
                 err_msg="Using FourierPlanarCoil",
@@ -378,12 +377,11 @@ class TestCoil:
             A_rpz = coil.compute_magnetic_vector_potential(
                 grid_rpz, basis="rpz", source_grid=coil_grid
             )
-            # FIXME: have to negate even if oriented such that the
-            # dl of the coil is the same as the above coils??
-            flux_xyz = -jnp.sum(
+
+            flux_xyz = jnp.sum(
                 dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
             )
-            flux_rpz = -jnp.sum(
+            flux_rpz = jnp.sum(
                 dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
             )
 
@@ -395,7 +393,7 @@ class TestCoil:
             )
             np.testing.assert_allclose(
                 A_true_rpz,
-                np.abs(A_rpz),
+                A_rpz,
                 rtol=1e-8,
                 atol=1e-12,
                 err_msg="Using FourierRZCoil",

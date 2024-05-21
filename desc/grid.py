@@ -203,7 +203,7 @@ class _Grid(IOAble, ABC):
     @property
     def coordinates(self):
         """Coordinates specified by the nodes."""
-        return self._coordinates
+        return self.__dict__.setdefault("_coordinates", "rtz")
 
     @property
     def num_nodes(self):
@@ -223,19 +223,19 @@ class _Grid(IOAble, ABC):
     @property
     def num_alpha(self):
         """ndarray: Number of unique field line poloidal angles."""
-        errorif(self.coordinates[1] != "a")
+        errorif(self.coordinates[1] != "a", AttributeError)
         return self.num_poloidal
 
     @property
     def num_theta(self):
         """ndarray: Number of unique theta coordinates."""
-        errorif(self.coordinates[1] != "t")
+        errorif(self.coordinates[1] != "t", AttributeError)
         return self.num_poloidal
 
     @property
     def num_theta_PEST(self):
-        """ndarray: Number of unique straight field line polodial angles."""
-        errorif(self.coordinates[1] != "p")
+        """ndarray: Number of unique straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "p", AttributeError)
         return self.num_poloidal
 
     @property
@@ -266,19 +266,19 @@ class _Grid(IOAble, ABC):
     @property
     def unique_alpha_idx(self):
         """ndarray: Indices of unique field line poloidal angles."""
-        errorif(self.coordinates[1] != "a")
+        errorif(self.coordinates[1] != "a", AttributeError)
         return self.unique_poloidal_idx
 
     @property
     def unique_theta_idx(self):
         """ndarray: Indices of unique theta coordinates."""
-        errorif(self.coordinates[1] != "t")
+        errorif(self.coordinates[1] != "t", AttributeError)
         return self.unique_poloidal_idx
 
     @property
     def unique_theta_PEST_idx(self):
-        """ndarray: Indices of unique straight field line polodial angles."""
-        errorif(self.coordinates[1] != "p")
+        """ndarray: Indices of unique straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "p", AttributeError)
         return self.unique_poloidal_idx
 
     @property
@@ -314,19 +314,19 @@ class _Grid(IOAble, ABC):
     @property
     def inverse_alpha_idx(self):
         """ndarray: Indices that recover field line poloidal angles."""
-        errorif(self.coordinates[1] != "a")
+        errorif(self.coordinates[1] != "a", AttributeError)
         return self.inverse_poloidal_idx
 
     @property
     def inverse_theta_idx(self):
         """ndarray: Indices that recover unique theta coordinates."""
-        errorif(self.coordinates[1] != "t")
+        errorif(self.coordinates[1] != "t", AttributeError)
         return self.inverse_poloidal_idx
 
     @property
     def inverse_theta_PEST_idx(self):
-        """ndarray: Indices that recover unique straight field line polodial angles."""
-        errorif(self.coordinates[1] != "p")
+        """ndarray: Indices that recover unique straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "p", AttributeError)
         return self.inverse_poloidal_idx
 
     @property

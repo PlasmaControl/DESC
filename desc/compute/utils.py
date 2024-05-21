@@ -140,6 +140,8 @@ def _compute(
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+        # to reduce repeated code, for 3D and naturally in rtz but desired in xyz basis
+        # quantities can be converted to xyz basis here
         if (
             data_index[parameterization][name]["dim"] == 3
             and data_index[parameterization][name]["coordinates"] == "rtz"

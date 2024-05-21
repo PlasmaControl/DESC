@@ -1304,9 +1304,18 @@ def test_external_vs_generic_objectives():
     target = [4.2, 5.3]
     rho = np.array([0, 1])
 
-    # TODO: need to add profiles and spectral_indexing
-
-    def extfun(Psi, R_lmn, Z_lmn, L_lmn, L=1, M=1, N=0, NFP=1, sym=False):
+    def extfun(
+        Psi,
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        L=1,
+        M=1,
+        N=0,
+        NFP=1,
+        sym=False,
+        spectral_indexing="ansi",
+    ):
         eq = Equilibrium(
             Psi=float(Psi[0]),
             R_lmn=R_lmn,
@@ -1317,7 +1326,7 @@ def test_external_vs_generic_objectives():
             N=N,
             NFP=NFP,
             sym=sym,
-            spectral_indexing="fringe",
+            spectral_indexing=spectral_indexing,
         )
         grid = LinearGrid(rho=rho)
         data = eq.compute(fname, grid=grid)
@@ -1345,7 +1354,14 @@ def test_external_vs_generic_objectives():
     )
 
     # external
-    kwargs = {"L": eq0.L, "M": eq0.M, "N": eq0.N, "NFP": eq0.NFP, "sym": eq0.sym}
+    kwargs = {
+        "L": eq0.L,
+        "M": eq0.M,
+        "N": eq0.N,
+        "NFP": eq0.NFP,
+        "sym": eq0.sym,
+        "spectral_indexing": eq0.spectral_indexing,
+    }
     objective = ObjectiveFunction(
         ExternalObjective(extfun, len(target), eq0, target=target, **kwargs)
     )

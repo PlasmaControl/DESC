@@ -24,9 +24,10 @@ class ExternalObjective(_Objective):
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
     computed with finite differences instead of AD.
 
-    The user supplied function can take several positional arguments that should
-    correspond to parameter names from ``thing.optimizable_params``, in additional to
-    other (static) keyword arguments.
+    The user supplied function can take positional arguments that must correspond to
+    parameter names from ``thing.optimizable_params`` and expect JAX arrays as types.
+    The function can also take additional keyword arguments, which can be of any names
+    and data types since they are treated as static and not differentiable.
 
     Parameters
     ----------
@@ -112,7 +113,7 @@ class ExternalObjective(_Objective):
 
         """
         self._scalar = self._dim_f == 1
-        self._constants = {"quad_weights": 1.0, "kwargs": self._kwargs}
+        self._constants = {"quad_weights": 1.0}
 
         # positional arguments of the external function
         kwargcount = len(self._fun.__defaults__) if self._fun.__defaults__ else 0
@@ -126,9 +127,15 @@ class ExternalObjective(_Objective):
             + "`thing.optimizable_params`.",
         )
 
+        # wrap keyword arguments, which may not be JAX compatable data types
+        no_kwargs_fun = lambda *args, **kwargs: self._fun(*args, **self._kwargs)
+        sig = inspect.signature(self._fun)
+        params = [p for p in sig.parameters.values() if p.default == p.empty]
+        no_kwargs_fun.__signature__ = sig.replace(parameters=params)
+
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
-        self._fun_wrapped = self._jaxify(self._fun, abstract_eval)
+        self._fun_wrapped = self._jaxify(no_kwargs_fun, abstract_eval)
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -149,14 +156,8 @@ class ExternalObjective(_Objective):
             Computed quantity.
 
         """
-        if constants is None:
-            constants = self.constants
-        kwargs = constants["kwargs"]
-
-        # sort params into positional args for external function
-        args = [params[k] for k in self._args]
-
-        f = self._fun_wrapped(*args, **kwargs)
+        args = [params[k] for k in self._args]  # sort positional args to external order
+        f = self._fun_wrapped(*args)
         return f
 
     def _jaxify(self, func, abstract_eval):

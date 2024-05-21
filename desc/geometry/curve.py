@@ -775,6 +775,7 @@ class SplineXYZCurve(Curve):
             ]
 
         self._knots = knots
+        self._discontinuous_indices = discontinuous_indices
         self.method = None
         self.intervals = interval_indices
 
@@ -849,6 +850,15 @@ class SplineXYZCurve(Curve):
                 "new knots should have the same size as the current knots, "
                 + f"got {len(new)} new knots, but expected {len(self.knots)} knots"
             )
+
+    @property
+    def discontinuous_indices(self):
+        """Discontinuous indices for knots."""
+        return self._discontinuous_indices
+
+    @discontinuous_indices.setter
+    def discontinuous_indices(self, new):
+        self._discontinuous_indices = jnp.array(new)
 
     @property
     def N(self):

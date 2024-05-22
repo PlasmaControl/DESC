@@ -504,3 +504,45 @@ def to_sfl(
     eq_sfl.L_lmn = L_lmn_sfl
 
     return eq_sfl
+
+
+def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
+    """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
+
+    Create a meshgrid from the given field line coordinates,
+    and return the equivalent DESC coordinate grid.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium on which to perform coordinate mapping.
+    rho : ndarray
+        Sorted unique flux surface label coordinates.
+    alpha : ndarray
+        Sorted unique field line label coordinates over a constant rho surface.
+    zeta : ndarray
+        Sorted unique field line-following ζ coordinates.
+
+    Returns
+    -------
+    grid_desc : Grid
+        DESC coordinate grid for the given field line coordinates.
+
+    """
+    grid_fl = Grid.create_meshgrid(rho, alpha, zeta, coordinates="raz")
+    coords_desc = eq.map_coordinates(
+        grid_fl.nodes,
+        inbasis=("rho", "alpha", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+    )
+    grid_desc = Grid(
+        nodes=coords_desc,
+        coordinates="rtz",
+        source_grid=grid_fl,
+        sort=False,
+        jitable=True,
+        _unique_rho_idx=grid_fl.unique_rho_idx,
+        _inverse_rho_idx=grid_fl.inverse_rho_idx,
+    )
+    return grid_desc

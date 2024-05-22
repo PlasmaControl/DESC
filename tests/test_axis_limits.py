@@ -168,9 +168,9 @@ def _skip_this(eq, name):
 def assert_is_continuous(
     eq,
     names=data_index["desc.equilibrium.equilibrium.Equilibrium"].keys(),
-    delta=5e-5,
-    rtol=1e-4,
-    atol=1e-6,
+    delta=1e-4,
+    rtol=1e-5,
+    atol=5e-7,
     desired_at_axis=None,
     kwargs=None,
 ):
@@ -222,7 +222,7 @@ def assert_is_continuous(
 
     num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)
-    grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     axis = grid.nodes[:, 0] == 0
     assert axis.any() and not axis.all()
     integrate = surface_integrals_map(grid, expand_out=False)
@@ -237,6 +237,7 @@ def assert_is_continuous(
             continue
         else:
             assert np.isfinite(data[name]).all(), name
+
         if (
             data_index[p][name]["coordinates"] == ""
             or data_index[p][name]["coordinates"] == "z"
@@ -302,10 +303,9 @@ class TestAxisLimits:
         # The need for a weaker tolerance on these keys may be due to a subpar
         # polynomial regression fit against which the axis limit is compared.
         weaker_tolerance = {
-            "B0_rr": {"rtol": 5e-03},
-            "iota_r": {"atol": 1e-4},
-            "iota_num_rr": {"atol": 5e-3},
-            "alpha_r": {"rtol": 1e-3},
+            "iota_r": {"atol": 1e-6},
+            "iota_num_rr": {"atol": 5e-5},
+            "grad(B)": {"rtol": 1e-4},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_map
@@ -397,7 +397,8 @@ def _reverse_mode_unsafe_names():
     return unsafe_names
 
 
-@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.regression
 @pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
 def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""

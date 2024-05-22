@@ -25,7 +25,6 @@ from desc.compute.bounce_integral import (
     bounce_integral,
     bounce_points,
     composite_linspace,
-    desc_grid_from_field_line_coords,
     get_extrema,
     grad_affine_bijection,
     grad_automorphism_arcsin,
@@ -36,6 +35,7 @@ from desc.compute.bounce_integral import (
 )
 from desc.compute.utils import dot, get_data_deps, safediv
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import desc_grid_from_field_line_coords
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.utils import errorif, only1
@@ -466,7 +466,7 @@ def test_bounce_integral_checks():
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
     knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
-    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+    grid_desc = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
     grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
     data = eq.compute(["iota"], grid=grid_fsa)
     data = {"iota": grid_desc.copy_data_from_other(data["iota"], grid_fsa)}
@@ -608,8 +608,6 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
         Computed quantities.
     grid_desc : Grid
         Grid on which the returned quantities can be broadcast on.
-    grid_fl : Grid
-        Clebsch-Type field-line coordinates corresponding to above grid.
     zeta : Array
         Zeta values along field line.
 
@@ -636,7 +634,9 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
     zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
     # Make grid that can separate into field lines via a reshape operation,
     # as expected by bounce_integral().
-    grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, zeta=zeta)
+    grid_desc = desc_grid_from_field_line_coords(
+        eq, rho, alpha=np.array([0]), zeta=zeta
+    )
 
     # Collect quantities that can be used as a seed to compute the
     # field line quantities over the grid mapped from field line coordinates.
@@ -656,7 +656,7 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
     data = eq.compute(
         names=names_field_line, grid=grid_desc, data=data, override_grid=False
     )
-    return data, grid_desc, grid_fl, zeta
+    return data, grid_desc, zeta
 
 
 @pytest.mark.unit
@@ -669,7 +669,7 @@ def test_drift():
     rho = np.sqrt(psi / psi_boundary)
     assert np.isclose(rho, 0.5)
     alpha = 0
-    data, grid, grid_fl, zeta = _get_data(
+    data, grid, zeta = _get_data(
         eq,
         rho,
         alpha,

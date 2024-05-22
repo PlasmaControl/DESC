@@ -8,7 +8,6 @@ from orthax.legendre import leggauss
 
 from desc.backend import complex_sqrt, flatnonzero, imap, jnp, put_along_axis, take
 from desc.compute.utils import safediv
-from desc.grid import Grid
 from desc.utils import errorif
 
 
@@ -1249,7 +1248,7 @@ def bounce_integral(
         rho = np.linspace(1e-12, 1, 6)
         alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
         knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
-        grid_desc, grid_fl = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+        grid_desc = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
         data = eq.compute(
             ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
             grid=grid_desc,
@@ -1278,6 +1277,7 @@ def bounce_integral(
         print(average[:, i, j])
         # are the bounce averages along the field line with nodes
         # given in Clebsch-Type field-line coordinates ρ, α, ζ
+        grid_fl = grid_desc.source_grid
         nodes = grid_fl.nodes.reshape(rho.size, alpha.size, -1, 3)
         print(nodes[i, j])
         # for the pitch values stored in
@@ -1388,51 +1388,3 @@ def bounce_integral(
         return result
 
     return bounce_integrate, spline
-
-
-def desc_grid_from_field_line_coords(
-    eq,
-    rho=jnp.linspace(1e-7, 1, 10),
-    alpha=jnp.array([0]),
-    zeta=jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 40),
-):
-    """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
-
-    Create a meshgrid from the given field line coordinates,
-    and return the equivalent DESC coordinate grid.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium on which to perform coordinate mapping.
-    rho : ndarray
-        Sorted unique flux surface label coordinates.
-    alpha : ndarray
-        Sorted unique field line label coordinates over a constant rho surface.
-    zeta : ndarray
-        Sorted unique field line-following ζ coordinates.
-
-    Returns
-    -------
-    grid_desc : Grid
-        DESC coordinate grid for the given field line coordinates.
-    grid_fl : Grid
-        Clebsch-Type field-line coordinate grid.
-
-    """
-    grid_fl = Grid.create_meshgrid(rho, alpha, zeta, coordinates="raz")
-    coords_desc = eq.map_coordinates(
-        grid_fl.nodes,
-        inbasis=("rho", "alpha", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-    )
-    grid_desc = Grid(
-        nodes=coords_desc,
-        sort=False,
-        jitable=True,
-        coordinates="rtz",
-        _unique_rho_idx=grid_fl.unique_rho_idx,
-        _inverse_rho_idx=grid_fl.inverse_rho_idx,
-    )
-    return grid_desc, grid_fl

@@ -584,7 +584,7 @@ class Grid(_Grid):
 
     @classmethod
     def create_meshgrid(cls, a, b, c, coordinates="rtz"):
-        """Create a meshgrid from the given coordinates ina jitable manner.
+        """Create a meshgrid from the given coordinates in a jitable manner.
 
         Parameters
         ----------
@@ -631,6 +631,7 @@ class Grid(_Grid):
             _inverse_rho_idx=inverse_a_idx,
             _inverse_poloidal_idx=inverse_b_idx,
             _inverse_zeta_idx=inverse_c_idx,
+            is_meshgrid=True,
         )
 
     def __init__(

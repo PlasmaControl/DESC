@@ -1022,7 +1022,7 @@ class PiecewiseOmnigenity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",  
+        deriv_mode="fwd",
         eq_grid=None,
         field_grid=None,
         M_booz=None,
@@ -1254,7 +1254,6 @@ class PiecewiseOmnigenity(_Objective):
                 helicity=constants["helicity"],
                 iota=jnp.mean(eq_data["iota"]),
             )
-
 
         omnigenity_error = eq_data["|B|"] - field_data["|B|"]
 

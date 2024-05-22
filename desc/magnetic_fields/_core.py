@@ -1824,7 +1824,6 @@ class OmnigenousField(Optimizable, IOAble):
         self._helicity = helicity
 
 
-
 class PiecewiseOmnigenousField(Optimizable, IOAble):
     """A magnetic field with piecewise omnigenity.
 
@@ -1865,11 +1864,12 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         self._NFP = int(NFP)
         self.helicity = helicity
         if params0 is None:
-            self._params0 = np.array(["t_1", "t_2", "w_1", "w_2", "c_1", "c_2", "B_min", "B_max"])
+            self._params0 = np.array(
+                ["t_1", "t_2", "w_1", "w_2", "c_1", "c_2", "B_min", "B_max"]
+            )
         else:
             assert len(params0) == int(7)
             self._params0 = params0
-
 
         helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(

@@ -4795,7 +4795,9 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     label="\\nabla \\alpha",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Contravariant basis vector perpendicular to field line label",
+    description=(
+        "Gradient of field line label, which is perpendicular to the field line"
+    ),
     dim=3,
     params=[],
     transforms={},

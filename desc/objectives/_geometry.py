@@ -831,10 +831,11 @@ class PlasmaVesselDistance(_Objective):
                 def _find_angle_vec(R, Z, Rtest, Ztest):
                     # R Z and surface points,
                     # Rtest Ztest are the point we wanna check is inside
-                    # the surfaceor not
-                    Rbool = R > Rtest
-                    Zbool = Z > Ztest
-                    quads = jnp.zeros_like(R)
+                    # the surface or not
+                    Rbool = R[:, None] > Rtest
+                    Zbool = Z[:, None] > Ztest
+                    # these Rbool are now size (Nsurf, Ntest)
+                    quads = jnp.zeros_like(Rbool)
                     quads = jnp.where(jnp.logical_and(Rbool, Zbool), 0, quads)
                     quads = jnp.where(
                         jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quads
@@ -847,24 +848,25 @@ class PlasmaVesselDistance(_Objective):
                     quads = jnp.where(
                         jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quads
                     )
-                    deltas = quads[1:] - quads[0:-1]
+                    deltas = quads[1:, :] - quads[0:-1, :]
                     deltas = jnp.where(deltas == 3, -1, deltas)
                     deltas = jnp.where(deltas == -3, 1, deltas)
                     # then flip sign if the R intercept is > Rtest and the
                     # quadrant flipped over a diagonal
                     b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
-                    Rint = surf_pt[0, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
+                    Rint = Rtest[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
                     deltas = jnp.where(
-                        jnp.logical_and(jnp.abs(deltas) == 2, Rint > surf_pt[0]),
+                        jnp.logical_and(jnp.abs(deltas) == 2, Rint > Rtest),
                         -deltas,
                         deltas,
                     )
-                    pt_sign = jnp.sum(deltas)
-                    # here, if pt_sign is +/-4,means that SURFACE is inside PLASMA
-                    # while if 0, means SURFACE is outside PLASMA
-
+                    pt_sign = jnp.sum(deltas, axis=0)
                     # positive distance if the plasma pt is inside the surface, else
                     # negative distance is assigned
+                    # pt_sign = 0 : Means SURFACE is OUTSIDE of the PLASMA,
+                    #               assign positive distance
+                    # pt_sign = +/-4: Means SURFACE is INSIDE PLASMA, so
+                    #                 assign negative distance
                     pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
                     return pt_sign
 
@@ -877,16 +879,17 @@ class PlasmaVesselDistance(_Objective):
                     plasma_pts_at_zeta_plane = jnp.vstack(
                         (plasma_pts_at_zeta_plane, plasma_pts_at_zeta_plane[0, :])
                     )
-                    for i, surf_pt in enumerate(surface_pts_at_zeta_plane):
-                        pt_sign = _find_angle_vec(
-                            plasma_pts_at_zeta_plane[:, 0],
-                            plasma_pts_at_zeta_plane[:, 2],
-                            surf_pt[0],
-                            surf_pt[2],
-                        )
 
-                        # need to assign to correct index of the point on the surface
-                        point_signs = point_signs.at[surface_zeta_idx[i]].set(pt_sign)
+                    surface_pts_at_zeta_plane
+                    pt_sign = _find_angle_vec(
+                        plasma_pts_at_zeta_plane[:, 0],
+                        plasma_pts_at_zeta_plane[:, 2],
+                        surface_pts_at_zeta_plane[:, 0],
+                        surface_pts_at_zeta_plane[:, 2],
+                    )
+
+                    # need to assign to correct index of the points on the surface
+                    point_signs = point_signs.at[surface_zeta_idx].set(pt_sign)
                 # at end here, point_signs is either +/- 1  with
                 # positive meaning the surface pt
                 # is outside the plasma and -1 if the surface pt is

@@ -104,17 +104,37 @@ class TestMagneticFields:
         assert scaled_field.B0 == 2
         assert scaled_field.scale == 3.1
         np.testing.assert_allclose(scaled_field([1.0, 0, 0]), np.array([[0, 6.2, 0]]))
+        np.testing.assert_allclose(
+            scaled_field.compute_magnetic_vector_potential([2.0, 0, 0]),
+            np.array([[0, 0, -3.1 * 2 * 1 * np.log(2)]]),
+        )
+
         scaled_field.R0 = 1.3
         scaled_field.scale = 1.0
         np.testing.assert_allclose(scaled_field([1.3, 0, 0]), np.array([[0, 2, 0]]))
+        np.testing.assert_allclose(
+            scaled_field.compute_magnetic_vector_potential([2.0, 0, 0]),
+            np.array([[0, 0, -2 * 1.3 * np.log(2)]]),
+        )
         assert scaled_field.optimizable_params == ["B0", "R0", "scale"]
         assert hasattr(scaled_field, "B0")
 
         sum_field = vfield + pfield + tfield
+        sum_field_tv = vfield + tfield  # to test A since pfield does not have A
         assert len(sum_field) == 3
+        assert len(sum_field_tv) == 2
+
         np.testing.assert_allclose(
             sum_field([1.3, 0, 0.0]), [[0.0, 2, 3.2 + 2 * 1.2 * 0.3]]
         )
+        R = 1.3
+        tfield_A = np.array([[0, 0, -2 * 1.3 * np.log(R)]])
+        vfield_A = np.array([[vfield.B0, -vfield.B0, 0]]) / 2
+        np.testing.assert_allclose(
+            sum_field_tv.compute_magnetic_vector_potential([R, 0, 0.0], basis="xyz"),
+            tfield_A + vfield_A,
+        )
+
         assert sum_field.optimizable_params == [
             ["B0"],
             ["B0", "R0", "iota"],
@@ -337,7 +357,6 @@ class TestMagneticFields:
         )
         # test the loop integral of A around a curve encompassing the torus
         # against the analytic result for flux in an ideal toroidal solenoid
-        ## expression for flux inside of toroidal solenoid of radius a
         prefactors = mu_0 * G / 2 / jnp.pi
         correct_flux = -2 * np.pi * prefactors * (np.sqrt(R0**2 - a**2) - R0)
 

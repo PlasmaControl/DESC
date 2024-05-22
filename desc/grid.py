@@ -35,12 +35,14 @@ class _Grid(IOAble, ABC):
         "_axis",
         "_node_pattern",
         "_coordinates",
+        "_source_grid",
         "_unique_rho_idx",
         "_unique_poloidal_idx",
         "_unique_zeta_idx",
         "_inverse_rho_idx",
         "_inverse_poloidal_idx",
         "_inverse_zeta_idx",
+        "is_meshgrid",
     ]
 
     @abstractmethod
@@ -576,6 +578,8 @@ class Grid(_Grid):
         raz : rho, alpha, zeta
         rpz : rho, theta_PEST, zeta
         rtz : rho, theta, zeta
+    source_grid : Grid, optional
+        Grid from which coordinates were mapped from.
     """
 
     @classmethod
@@ -637,6 +641,7 @@ class Grid(_Grid):
         sort=False,
         jitable=False,
         coordinates="rtz",
+        source_grid=None,
         **kwargs,
     ):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
@@ -646,6 +651,14 @@ class Grid(_Grid):
         self._sym = False
         self._node_pattern = "custom"
         self._coordinates = coordinates
+        self._source_grid = source_grid
+        # Whether this grid is separable into coordinate chunks.
+        # Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
+        # coordinate value. The is_meshgrid flag denotes whether any coordinate
+        # can be iterated over along the relevant axis of the reshaped grid:
+        # nodes.reshape(3, num_radial, num_poloidal, num_toroidal).
+        self.is_meshgrid = kwargs.pop("is_meshgrid", False)
+
         self._nodes = self._create_nodes(nodes)
         if spacing is not None:
             spacing = (
@@ -730,6 +743,11 @@ class Grid(_Grid):
         # Do not alter nodes given by the user for custom grids.
         # In particular, do not modulo nodes by 2pi or 2pi/NFP.
         return nodes
+
+    @property
+    def source_grid(self):
+        """Coordinates from which this grid was mapped from."""
+        return self._source_grid
 
 
 class LinearGrid(_Grid):

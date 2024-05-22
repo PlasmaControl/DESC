@@ -489,18 +489,17 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|B|_piecewise_omni",
+    name="|B|_pwO",
     label="|\\mathbf{B}|",
     units="T",
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
     dim=1,
-    params=["t_1", "t_2", "w_1", "w_2", "c_1", "c_2", "B_min", "B_max"],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["theta_B", "zeta_B", "|B|"],  # Potential error, we want eq |B|
-    parameterization="desc.magnetic_fields._core.OmnigenousField",
+    parameterization="",
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     zeta_B = data["zeta_B"]

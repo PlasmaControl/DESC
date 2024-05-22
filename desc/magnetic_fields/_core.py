@@ -1822,3 +1822,184 @@ class OmnigenousField(Optimizable, IOAble):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
+
+
+
+class PiecewiseOmnigenousField(Optimizable, IOAble):
+    """A magnetic field with piecewise omnigenity.
+
+    Uses parameterization from Velasco et al.[2]
+
+    Parameters
+    ----------
+    NFP : int
+        Number of field periods.
+    helicity : tuple, optional
+        Type of pseudo-symmetry (M, N). Default = toroidal contours (1, 0).
+    params0 : ndarray, optional
+        Omnigenity parameters describing h(ρ,η,α). The coefficients correspond to the
+        modes in `x_basis`. If not supplied, `x_lmn` defaults to zero for all modes.
+
+    Notes
+    -----
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
+    computational coordinates, not vector B in lab coordinates.
+
+    References
+    ----------
+    .. [1] Velasco, Jose L., et al. "Piecewise Omnigenity"
+    """
+
+    _io_attrs_ = [
+        "_NFP",
+        "_helicity",
+        "_params0",
+    ]
+
+    def __init__(
+        self,
+        NFP=1,
+        helicity=(1, 0),
+        params0=None,
+    ):
+        self._NFP = int(NFP)
+        self.helicity = helicity
+        if params0 is None:
+            self._params0 = np.array(["t_1", "t_2", "w_1", "w_2", "c_1", "c_2", "B_min", "B_max"])
+        else:
+            assert len(params0) == int(7)
+            self._params0 = params0
+
+
+        helicity_sign = sign(helicity[0]) * sign(helicity[1])
+        warnif(
+            self.helicity != (0, self.NFP * helicity_sign)
+            and abs(self.helicity[0]) != 1,
+            UserWarning,
+            "Typical helicity (M,N) has M=1.",
+        )
+        warnif(
+            self.helicity != (helicity_sign, 0) and abs(self.helicity[1]) != self.NFP,
+            UserWarning,
+            "Typical helicity (M,N) has N=NFP.",
+        )
+
+    def change_resolution(
+        self,
+        NFP=None,
+    ):
+        """Set the spectral resolution of field parameters.
+
+        Parameters
+        ----------
+        NFP : int
+            Number of field periods.
+
+        """
+        self._NFP = setdefault(NFP, self.NFP)
+
+        self._params0
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. The grid nodes are given in the usual
+            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
+            Defaults to a linearly space grid on the rho=1 surface.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+        **kwargs : dict, optional
+            Valid keyword arguments are:
+
+            * ``iota``: rotational transform
+            * ``helicity``: helicity (defaults to self.helicity)
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            grid = LinearGrid(
+                theta=2 * self.M_B, N=2 * self.N_x, NFP=self.NFP, sym=False
+            )
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
+
+        if params is None:
+            params = get_params(names, obj=self)
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            helicity=kwargs.pop("helicity", self.helicity),
+            **kwargs,
+        )
+        return data
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @optimizable_parameter
+    @property
+    def params0(self):
+        """ndarray: Omnigenity magnetic well shape parameters."""
+        return self._params0
+
+    @params0.setter
+    def params0(self, params0):
+        assert len(params0) == int(7)
+        self._params0 = params0
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        self._helicity = helicity

@@ -573,10 +573,6 @@ class PlasmaVesselDistance(_Objective):
         negative if outside of the bounding surface.
         NOTE: ``plasma_grid`` and ``surface_grid`` must have the same
         toroidal angle values for signed distance to be used.
-        NOTE: this convention assumes that both surface and equilibrium have
-        poloidal angles defined such that they are in a right-handed coordinate
-        system with the surface normal vector pointing outwards
-        NOTE: only works with use_softmin=False currently
     surface_fixed: bool, optional
         Whether the surface the distance from the plasma is computed to
         is fixed or not. If True, the surface is fixed and its coordinates are

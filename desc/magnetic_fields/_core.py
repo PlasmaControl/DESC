@@ -677,6 +677,33 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
             B = rpz2xyz_vec(B, phi=coords[:, 1])
         return B
 
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        raise NotImplementedError(
+            "MagneticFieldFromUser does not have vector potential calculation "
+            "implemented."
+        )
+
 
 class ScaledMagneticField(_MagneticField, Optimizable):
     """Magnetic field scaled by a scalar value.
@@ -1513,6 +1540,33 @@ class SplineMagneticField(_MagneticField, Optimizable):
             B = rpz2xyz_vec(B, phi=coords[:, 1])
         return B
 
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        raise NotImplementedError(
+            "SplineMagneticField does not have vector potential calculation "
+            "implemented."
+        )
+
     @classmethod
     def from_mgrid(cls, mgrid_file, extcur=None, method="cubic", extrap=False):
         """Create a SplineMagneticField from an "mgrid" file from MAKEGRID.
@@ -1673,6 +1727,37 @@ class ScalarPotentialField(_MagneticField):
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
         return B
+
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            magnetic vector potential at specified points
+
+        """
+        raise NotImplementedError(
+            "ScalarPotentialField does not have vector potential calculation "
+            "implemented."
+        )
+
+
+# TODO: Implement a VectorPotentialField that uses AD to do curl(A) on the input
+# magnetic vector potential function
 
 
 def field_line_integrate(

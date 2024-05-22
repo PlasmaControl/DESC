@@ -1,12 +1,15 @@
 """Test for neoclassical transport compute functions."""
 
+from functools import partial
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
 from desc.compute import data_index, get_data_deps
-from desc.compute.bounce_integral import desc_grid_from_field_line_coords
+from desc.compute.bounce_integral import bounce_integral
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import desc_grid_from_field_line_coords
 from desc.grid import LinearGrid
 
 
@@ -77,29 +80,29 @@ def test_effective_ripple():
         "tests/inputs/DESC_from_NAE_O_r1_precise_QI_plunk_fixed_bdry_r0"
         ".15_L_9_M_9_N_24_output.h5"
     )
-    grid_desc, grid_fl = desc_grid_from_field_line_coords(
+    grid = desc_grid_from_field_line_coords(
         eq,
         rho=np.linspace(0.01, 1, 20),
-        zeta=np.linspace(-20 * np.pi, 20 * np.pi, 200),
+        alpha=np.array([0]),
+        zeta=np.linspace(-2 * np.pi, 2 * np.pi, 20),
     )
     data = _compute_field_line_data(
         eq,
-        grid_desc,
+        grid,
         ["B^zeta", "|B|_z|r,a", "|B|", "|grad(psi)|", "cvdrift0"],
         ["max_tz |B|", "R0", "V_r(r)", "psi_r", "S(r)"],
     )
     data = eq.compute(
         "ripple",
-        grid=grid_desc,
+        grid=grid,
         data=data,
         override_grid=False,
-        grid_fl=grid_fl,
+        bounce_integral=partial(bounce_integral, deg=28),
         b_quad_res=5,
-        quad_res=28,
     )
     assert np.isfinite(data["ripple"]).all()
-    rho = grid_desc.compress(grid_desc.nodes[:, 0])
-    ripple = grid_desc.compress(data["ripple"])
+    rho = grid.compress(grid.nodes[:, 0])
+    ripple = grid.compress(data["ripple"])
     fig, ax = plt.subplots(2)
     ax[0].plot(rho, ripple, marker="o", label="∫ db ∑ⱼ Hⱼ² / Iⱼ")
     ax[0].set_xlabel(r"$\rho$")
@@ -114,15 +117,9 @@ def test_effective_ripple():
             # Need to add R0's dependencies which are surface functions of zeta
             # aren't attempted to be recomputed on grid_desc.
             data[key] = data_R0[key]
-    data = eq.compute(
-        "effective ripple",
-        grid=grid_desc,
-        data=data,
-        grid_fl=grid_fl,
-        override_grid=False,
-    )
+    data = eq.compute("effective ripple", grid=grid, data=data, override_grid=False)
     assert np.isfinite(data["effective ripple"]).all()
-    eff_ripple = grid_desc.compress(data["effective ripple"])
+    eff_ripple = grid.compress(data["effective ripple"])
     ax[1].plot(rho, eff_ripple, marker="o", label=r"$\epsilon_{\text{effective}}$")
     ax[1].set_xlabel(r"$\rho$")
     ax[1].set_ylabel(r"$\epsilon_{\text{effective}}$")

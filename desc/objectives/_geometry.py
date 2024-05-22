@@ -625,11 +625,6 @@ class PlasmaVesselDistance(_Objective):
         self._plasma_grid = plasma_grid
         self._use_softmin = use_softmin
         self._use_signed_distance = use_signed_distance
-        if use_softmin and use_signed_distance:
-            warnings.warn(
-                "signed distance cannot currently" " be used with use_softmin=True!",
-                UserWarning,
-            )
         self._surface_fixed = surface_fixed
         self._alpha = alpha
         super().__init__(
@@ -818,87 +813,81 @@ class PlasmaVesselDistance(_Objective):
         diff_vec = plasma_coords[:, None, :] - surface_coords[None, :, :]
         d = safenorm(diff_vec, axis=-1)
 
+        point_signs = jnp.ones(surface_coords.shape[0])
+        if self._use_signed_distance:
+            surface_coords_rpz = xyz2rpz(surface_coords)
+
+            def _find_angle_vec(R, Z, Rtest, Ztest):
+                # R Z and surface points,
+                # Rtest Ztest are the point we wanna check is inside
+                # the surface or not
+                Rbool = R[:, None] > Rtest
+                Zbool = Z[:, None] > Ztest
+                # these Rbool are now size (Nsurf, Ntest)
+                quads = jnp.zeros_like(Rbool)
+                quads = jnp.where(jnp.logical_and(Rbool, Zbool), 0, quads)
+                quads = jnp.where(
+                    jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quads
+                )
+                quads = jnp.where(
+                    jnp.logical_and(jnp.logical_not(Rbool), jnp.logical_not(Zbool)),
+                    2,
+                    quads,
+                )
+                quads = jnp.where(
+                    jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quads
+                )
+                deltas = quads[1:, :] - quads[0:-1, :]
+                deltas = jnp.where(deltas == 3, -1, deltas)
+                deltas = jnp.where(deltas == -3, 1, deltas)
+                # then flip sign if the R intercept is > Rtest and the
+                # quadrant flipped over a diagonal
+                b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
+                Rint = Rtest[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
+                deltas = jnp.where(
+                    jnp.logical_and(jnp.abs(deltas) == 2, Rint > Rtest),
+                    -deltas,
+                    deltas,
+                )
+                pt_sign = jnp.sum(deltas, axis=0)
+                # positive distance if the plasma pt is inside the surface, else
+                # negative distance is assigned
+                # pt_sign = 0 : Means SURFACE is OUTSIDE of the PLASMA,
+                #               assign positive distance
+                # pt_sign = +/-4: Means SURFACE is INSIDE PLASMA, so
+                #                 assign negative distance
+                pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
+                return pt_sign
+
+            # loop over zeta planes
+            for plasma_zeta_idx, surface_zeta_idx in zip(
+                constants["plasma_zeta_indices"], constants["surface_zeta_indices"]
+            ):
+                plasma_pts_at_zeta_plane = plasma_coords_rpz[plasma_zeta_idx, :]
+                surface_pts_at_zeta_plane = surface_coords_rpz[surface_zeta_idx, :]
+                plasma_pts_at_zeta_plane = jnp.vstack(
+                    (plasma_pts_at_zeta_plane, plasma_pts_at_zeta_plane[0, :])
+                )
+
+                surface_pts_at_zeta_plane
+                pt_sign = _find_angle_vec(
+                    plasma_pts_at_zeta_plane[:, 0],
+                    plasma_pts_at_zeta_plane[:, 2],
+                    surface_pts_at_zeta_plane[:, 0],
+                    surface_pts_at_zeta_plane[:, 2],
+                )
+
+                # need to assign to correct index of the points on the surface
+                point_signs = point_signs.at[surface_zeta_idx].set(pt_sign)
+            # at end here, point_signs is either +/- 1  with
+            # positive meaning the surface pt
+            # is outside the plasma and -1 if the surface pt is
+            # inside the plasma
+
         if self._use_softmin:  # do softmin
-            return jnp.apply_along_axis(softmin, 0, d, self._alpha)
+            return jnp.apply_along_axis(softmin, 0, d, self._alpha) * point_signs
         else:  # do hardmin
-            if not self._use_signed_distance:
-                return d.min(axis=0)
-            else:
-                surface_coords_rpz = xyz2rpz(surface_coords)
-
-                # TODO: currently this fxn only works on one pt
-                # on surface at a time so we need 2 for loops, vectorize it
-                def _find_angle_vec(R, Z, Rtest, Ztest):
-                    # R Z and surface points,
-                    # Rtest Ztest are the point we wanna check is inside
-                    # the surface or not
-                    Rbool = R[:, None] > Rtest
-                    Zbool = Z[:, None] > Ztest
-                    # these Rbool are now size (Nsurf, Ntest)
-                    quads = jnp.zeros_like(Rbool)
-                    quads = jnp.where(jnp.logical_and(Rbool, Zbool), 0, quads)
-                    quads = jnp.where(
-                        jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quads
-                    )
-                    quads = jnp.where(
-                        jnp.logical_and(jnp.logical_not(Rbool), jnp.logical_not(Zbool)),
-                        2,
-                        quads,
-                    )
-                    quads = jnp.where(
-                        jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quads
-                    )
-                    deltas = quads[1:, :] - quads[0:-1, :]
-                    deltas = jnp.where(deltas == 3, -1, deltas)
-                    deltas = jnp.where(deltas == -3, 1, deltas)
-                    # then flip sign if the R intercept is > Rtest and the
-                    # quadrant flipped over a diagonal
-                    b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
-                    Rint = Rtest[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
-                    deltas = jnp.where(
-                        jnp.logical_and(jnp.abs(deltas) == 2, Rint > Rtest),
-                        -deltas,
-                        deltas,
-                    )
-                    pt_sign = jnp.sum(deltas, axis=0)
-                    # positive distance if the plasma pt is inside the surface, else
-                    # negative distance is assigned
-                    # pt_sign = 0 : Means SURFACE is OUTSIDE of the PLASMA,
-                    #               assign positive distance
-                    # pt_sign = +/-4: Means SURFACE is INSIDE PLASMA, so
-                    #                 assign negative distance
-                    pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
-                    return pt_sign
-
-                point_signs = jnp.zeros(surface_coords.shape[0])
-                for plasma_zeta_idx, surface_zeta_idx in zip(
-                    constants["plasma_zeta_indices"], constants["surface_zeta_indices"]
-                ):
-                    plasma_pts_at_zeta_plane = plasma_coords_rpz[plasma_zeta_idx, :]
-                    surface_pts_at_zeta_plane = surface_coords_rpz[surface_zeta_idx, :]
-                    plasma_pts_at_zeta_plane = jnp.vstack(
-                        (plasma_pts_at_zeta_plane, plasma_pts_at_zeta_plane[0, :])
-                    )
-
-                    surface_pts_at_zeta_plane
-                    pt_sign = _find_angle_vec(
-                        plasma_pts_at_zeta_plane[:, 0],
-                        plasma_pts_at_zeta_plane[:, 2],
-                        surface_pts_at_zeta_plane[:, 0],
-                        surface_pts_at_zeta_plane[:, 2],
-                    )
-
-                    # need to assign to correct index of the points on the surface
-                    point_signs = point_signs.at[surface_zeta_idx].set(pt_sign)
-                # at end here, point_signs is either +/- 1  with
-                # positive meaning the surface pt
-                # is outside the plasma and -1 if the surface pt is
-                # inside the plasma
-
-                min_inds = d.argmin(axis=0, keepdims=True)
-                min_ds = jnp.take_along_axis(d, min_inds, axis=0).squeeze()
-
-                return min_ds * point_signs
+            return d.min(axis=0) * point_signs
 
 
 class PlasmaVesselDistanceCircular(_Objective):

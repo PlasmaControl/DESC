@@ -1069,6 +1069,26 @@ def test_signed_PlasmaVesselDistance():
 
     np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), -0.25, atol=1e-2)
 
+    # with softmin
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=-0.25,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+        use_softmin=True,
+        alpha=100,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (eq, surf), _ = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=60, ftol=1e-8, xtol=1e-9
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), -0.25, atol=1e-2)
+
     # test with circular surface and changing eq
     a = 0.75
     R0 = 10

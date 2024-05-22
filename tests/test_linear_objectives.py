@@ -6,6 +6,13 @@ import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
+from desc.coils import (
+    CoilSet,
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+)
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -33,7 +40,7 @@ from desc.objectives import (
     FixModeZ,
     FixOmniMap,
     FixOmniWell,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -346,7 +353,7 @@ def test_factorize_linear_constraints_asserts():
         _ = factorize_linear_constraints(objective, constraint)
 
     # constraining a foreign thing
-    constraint = ObjectiveFunction(FixParameter(surf))
+    constraint = ObjectiveFunction(FixParameters(surf))
     constraint.build(verbose=0)
     with pytest.raises(UserWarning):
         _ = factorize_linear_constraints(objective, constraint)
@@ -406,7 +413,7 @@ def test_kinetic_constraints():
 
 @pytest.mark.unit
 def test_correct_indexing_passed_modes():
-    """Test Indexing when passing in specified modes, related to gh issue #380."""
+    """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
@@ -459,7 +466,7 @@ def test_correct_indexing_passed_modes():
 
 @pytest.mark.unit
 def test_correct_indexing_passed_modes_and_passed_target():
-    """Test Indexing when passing in specified modes, related to gh issue #380."""
+    """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
@@ -521,7 +528,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
 
 @pytest.mark.unit
 def test_correct_indexing_passed_modes_axis():
-    """Test Indexing when passing in specified axis modes, related to gh issue #380."""
+    """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
@@ -580,7 +587,7 @@ def test_correct_indexing_passed_modes_axis():
 
 @pytest.mark.unit
 def test_correct_indexing_passed_modes_and_passed_target_axis():
-    """Test Indexing when passing in specified axis modes, related to gh issue #380."""
+    """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
 
     eq = desc.examples.get("W7-X")
@@ -743,18 +750,18 @@ def test_FixBoundary_passed_target_no_passed_modes_error():
 def test_FixAxis_passed_target_no_passed_modes_error():
     """Test Fixing Axis with no passed-in modes."""
     eq = Equilibrium()
-    FixZ = FixAxisZ(eq=eq, modes=True, target=np.array([0, 0]))
-    with pytest.raises(ValueError):
-        FixZ.build()
-    FixZ = FixAxisZ(eq=eq, modes=False, target=np.array([0, 0]))
-    with pytest.raises(ValueError):
-        FixZ.build()
     FixR = FixAxisR(eq=eq, modes=True, target=np.array([0, 0]))
     with pytest.raises(ValueError):
         FixR.build()
     FixR = FixAxisR(eq=eq, modes=False, target=np.array([0, 0]))
     with pytest.raises(ValueError):
         FixR.build()
+    FixZ = FixAxisZ(eq=eq, modes=True, target=np.array([0, 0]))
+    with pytest.raises(ValueError):
+        FixZ.build()
+    FixZ = FixAxisZ(eq=eq, modes=False, target=np.array([0, 0]))
+    with pytest.raises(ValueError):
+        FixZ.build()
 
 
 @pytest.mark.unit
@@ -793,39 +800,21 @@ def test_FixSumModes_passed_target_too_long():
 
 
 @pytest.mark.unit
-def test_FixMode_False_or_None_modes():
-    """Test Fixing Modes without specifying modes or All modes."""
-    eq = Equilibrium(L=3, M=4)
-    with pytest.raises(ValueError):
-        FixModeR(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeR(eq, modes=None, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeZ(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeZ(eq, modes=None, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeLambda(eq, modes=False, target=np.array([[0, 1]]))
-    with pytest.raises(ValueError):
-        FixModeLambda(eq, modes=None, target=np.array([[0, 1]]))
-
-
-@pytest.mark.unit
 def test_FixSumModes_False_or_None_modes():
     """Test Fixing Sum Modes without specifying modes or All modes."""
     eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixSumModesZ(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesZ(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=None)
     with pytest.raises(ValueError):
-        FixSumModesR(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesR(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=None)
     with pytest.raises(ValueError):
-        FixSumModesLambda(eq, modes=False, target=np.array([[0, 1]]))
+        FixSumModesLambda(eq, modes=False)
     with pytest.raises(ValueError):
-        FixSumModesLambda(eq, modes=None, target=np.array([[0, 1]]))
+        FixSumModesLambda(eq, modes=None)
 
 
 def _is_any_instance(things, cls):
@@ -897,24 +886,107 @@ def test_fix_omni_indices():
     # no indices
     constraint = FixOmniWell(field=field, indices=False)
     constraint.build()
-    assert constraint._idx.size == 0
+    assert constraint.dim_f == 0
     constraint = FixOmniMap(field=field, indices=False)
     constraint.build()
-    assert constraint._idx.size == 0
+    assert constraint.dim_f == 0
 
     # all indices
     constraint = FixOmniWell(field=field, indices=True)
     constraint.build()
-    assert constraint._idx.size == field.B_lm.size
+    assert constraint.dim_f == field.B_lm.size
     constraint = FixOmniMap(field=field, indices=True)
     constraint.build()
-    assert constraint._idx.size == field.x_lmn.size
+    assert constraint.dim_f == field.x_lmn.size
 
     # specified indices
     indices = np.arange(3, 8)
     constraint = FixOmniWell(field=field, indices=indices)
     constraint.build()
-    assert constraint._idx.size == indices.size
+    assert constraint.dim_f == indices.size
     constraint = FixOmniMap(field=field, indices=indices)
     constraint.build()
-    assert constraint._idx.size == indices.size
+    assert constraint.dim_f == indices.size
+
+
+@pytest.mark.unit
+def test_fix_parameters_input_order(DummyStellarator):
+    """Test that FixParameters preserves the input indices and target ordering."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    default_target = eq.Rb_lmn
+
+    # default objective
+    obj = FixBoundaryR(eq)
+    obj.build()
+    np.testing.assert_allclose(obj.target, default_target)
+
+    # manually specify default
+    obj = FixBoundaryR(eq, modes=eq.surface.R_basis.modes)
+    obj.build()
+    np.testing.assert_allclose(obj.target, default_target)
+
+    # reverse order
+    obj = FixBoundaryR(eq, modes=np.flipud(eq.surface.R_basis.modes))
+    obj.build()
+    np.testing.assert_allclose(obj.target, np.flipud(default_target))
+
+    # custom order
+    obj = ObjectiveFunction(
+        FixBoundaryR(eq, modes=np.array([[0, 0, 0], [0, 1, 0], [0, 1, 1]]))
+    )
+    obj.build()
+    np.testing.assert_allclose(obj.target_scaled, np.array([3, 1, 0.3]))
+    np.testing.assert_allclose(obj.compute_scaled_error(obj.x(eq)), np.zeros(obj.dim_f))
+
+    # custom target
+    obj = ObjectiveFunction(
+        FixBoundaryR(
+            eq,
+            modes=np.array([[0, 0, 0], [0, 1, 0], [0, 1, 1]]),
+            target=np.array([0, -1, 0.5]),
+        )
+    )
+    obj.build()
+    np.testing.assert_allclose(
+        obj.compute_scaled_error(obj.x(eq)), np.array([3, 2, -0.2])
+    )
+
+
+@pytest.mark.unit
+def test_fix_subset_of_params_in_collection():
+    """Tests FixParameters fixing a subset of things in the collection."""
+    tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
+    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+    vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+    vf_coilset = CoilSet.linspaced_linear(
+        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+    )
+    xy_coil = FourierXYZCoil()
+    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xy_coil))
+
+    params = [
+        [
+            {"current": True},
+            {"center": True, "normal": np.array([1])},
+            {"r_n": True},
+            {},
+        ],
+        {"shift": True, "rotmat": True},
+        {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+    ]
+    target = np.concatenate(
+        (
+            np.array([1, 2, 0, 0, 1, 1]),
+            np.eye(3).flatten(),
+            np.array([0, 0, 0]),
+            np.eye(3).flatten(),
+            np.array([0, 0, 1]),
+            np.eye(3).flatten(),
+            np.array([0, 0, 2]),
+            np.array([10, 2, -2]),
+        )
+    )
+
+    obj = FixParameters(full_coilset, params)
+    obj.build()
+    np.testing.assert_allclose(obj.target, target)

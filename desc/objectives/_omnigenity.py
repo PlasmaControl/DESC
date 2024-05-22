@@ -3,8 +3,8 @@
 import warnings
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform

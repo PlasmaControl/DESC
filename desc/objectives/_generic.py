@@ -7,37 +7,32 @@ import re
 import numpy as np
 
 from desc.backend import jax, jnp
-from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
-from desc.utils import errorif
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
 
 
-# TODO: add SPSA option
 class ExternalObjective(_Objective):
     """Wrap an external code.
 
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
     computed with finite differences instead of AD.
 
-    The user supplied function can take positional arguments that must correspond to
-    parameter names from ``thing.optimizable_params`` and expect JAX arrays as types.
-    The function can also take additional keyword arguments, which can be of any names
-    and data types since they are treated as static and not differentiable.
+    The user supplied function must take an Equilibrium as its only positional argument,
+    but can take additional keyword arguments.
 
     Parameters
     ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
     fun : callable
         Custom objective function.
     dim_f : int
         Dimension of the output of fun.
-    thing : Optimizable
-        Object that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
@@ -71,9 +66,9 @@ class ExternalObjective(_Objective):
 
     def __init__(
         self,
+        eq,
         fun,
         dim_f,
-        thing,
         target=None,
         bounds=None,
         weight=1,
@@ -86,12 +81,13 @@ class ExternalObjective(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
+        self._eq = eq.copy()
         self._fun = fun
         self._dim_f = dim_f
         self._fd_step = fd_step
         self._kwargs = kwargs
         super().__init__(
-            things=thing,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -116,27 +112,42 @@ class ExternalObjective(_Objective):
         self._scalar = self._dim_f == 1
         self._constants = {"quad_weights": 1.0}
 
-        # positional arguments of the external function
-        kwargcount = len(self._fun.__defaults__) if self._fun.__defaults__ else 0
-        self._args = self._fun.__code__.co_varnames[
-            : self._fun.__code__.co_argcount - kwargcount
-        ]
-        errorif(
-            not set(self._args) <= set(self.things[0].optimizable_params),
-            ValueError,
-            "Positional arguments of `fun` must be a subset of "
-            + "`thing.optimizable_params`.",
-        )
+        def fun_wrapped(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            c_l,
+            Psi,
+            Te_l,
+            ne_l,
+            Ti_l,
+            Zeff_l,
+            a_lmn,
+            Ra_n,
+            Za_n,
+            Rb_lmn,
+            Zb_lmn,
+            I,
+            G,
+            Phi_mn,
+        ):
+            """Wrap external function with optimiazable params arguments."""
+            for param in self._eq.optimizable_params:
+                par = eval(param)  # FIXME: how bad is it to use eval here?
+                if len(par):
+                    setattr(self._eq, param, par)
+            return self._fun(self._eq, **self._kwargs)
 
-        # wrap keyword arguments, which may not be JAX compatable data types
-        no_kwargs_fun = lambda *args, **kwargs: self._fun(*args, **self._kwargs)
-        sig = inspect.signature(self._fun)
-        params = [p for p in sig.parameters.values() if p.default == p.empty]
-        no_kwargs_fun.__signature__ = sig.replace(parameters=params)
+        # check to make sure fun_wrapped has the correct signature
+        # in case we ever update Equilibrium.optimizable_params
+        args = inspect.getfullargspec(fun_wrapped).args
+        assert args == self._eq.optimizable_params
 
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
-        self._fun_wrapped = self._jaxify(no_kwargs_fun, abstract_eval)
+        self._fun_wrapped = self._jaxify(fun_wrapped, abstract_eval)
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -157,7 +168,8 @@ class ExternalObjective(_Objective):
             Computed quantity.
 
         """
-        args = [params[k] for k in self._args]  # sort positional args to external order
+        # ensure positional args are passed in the correct order
+        args = [params[k] for k in self._eq.optimizable_params]
         f = self._fun_wrapped(*args)
         return f
 

@@ -6,6 +6,7 @@ difference in areas between constant theta and rho contours.
 
 import numpy as np
 import pytest
+from netCDF4 import Dataset
 from qic import Qic
 from qsc import Qsc
 
@@ -60,6 +61,7 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.vmec import VMECIO
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -1317,51 +1319,42 @@ def test_optimize_with_fourier_planar_coil():
 
 
 @pytest.mark.unit
-def test_external_vs_generic_objectives():
+def test_external_vs_generic_objectives(tmpdir_factory):
     """Test ExternalObjective compared to GenericObjective."""
-    fname = "R"
-    target = [4.2, 5.3]
-    rho = np.array([0, 1])
+    target = np.array([6.2e-3, 1.1e-1, 6.5e-3, 0])  # values at p_l = [2e2, -2e2]
 
-    def extfun(
-        Psi,
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        L=1,
-        M=1,
-        N=0,
-        NFP=1,
-        sym=False,
-        spectral_indexing="ansi",
-    ):
-        eq = Equilibrium(
-            Psi=float(Psi[0]),
-            R_lmn=R_lmn,
-            Z_lmn=Z_lmn,
-            L_lmn=L_lmn,
-            L=L,
-            M=M,
-            N=N,
-            NFP=NFP,
-            sym=sym,
-            spectral_indexing=spectral_indexing,
-        )
-        grid = LinearGrid(rho=rho)
-        data = eq.compute(fname, grid=grid)
-        return np.atleast_1d(data[fname])
+    def data_from_vmec(eq, path=""):
+        VMECIO.save(eq, path, surfs=8, verbose=0)
+        file = Dataset(path, mode="r")
+        betatot = float(file.variables["betatotal"][0])
+        betapol = float(file.variables["betapol"][0])
+        betator = float(file.variables["betator"][0])
+        presf1 = float(file.variables["presf"][-1])
+        file.close()
+        return np.atleast_1d([betatot, betapol, betator, presf1])
 
     eq0 = get("SOLOVEV")
     optimizer = Optimizer("lsq-exact")
-    grid = LinearGrid(rho=rho)
-    grid._weights = np.ones_like(grid.weights)
 
     # generic
     objective = ObjectiveFunction(
-        GenericObjective("R", eq=eq0, target=target, grid=grid)
+        (
+            GenericObjective("<beta>_vol", eq=eq0, target=target[0]),
+            GenericObjective("<beta_pol>_vol", eq=eq0, target=target[1]),
+            GenericObjective("<beta_tor>_vol", eq=eq0, target=target[2]),
+            GenericObjective("p", eq=eq0, target=0, grid=LinearGrid(rho=[1], M=0, N=0)),
+        )
     )
     constraints = FixParameters(
-        eq0, {"Psi": True, "Z_lmn": True, "L_lmn": True, "p_l": True, "c_l": True}
+        eq0,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "p_l": np.arange(2, len(eq0.p_l)),
+            "i_l": True,
+            "Psi": True,
+        },
     )
     [eq_generic], _ = optimizer.optimize(
         things=eq0,
@@ -1373,22 +1366,31 @@ def test_external_vs_generic_objectives():
     )
 
     # external
-    kwargs = {
-        "L": eq0.L,
-        "M": eq0.M,
-        "N": eq0.N,
-        "NFP": eq0.NFP,
-        "sym": eq0.sym,
-        "spectral_indexing": eq0.spectral_indexing,
-    }
+    dir = tmpdir_factory.mktemp("results")
+    path = dir.join("wout_result.nc")
     objective = ObjectiveFunction(
-        ExternalObjective(extfun, len(target), eq0, target=target, **kwargs)
+        ExternalObjective(eq=eq0, fun=data_from_vmec, dim_f=4, target=target, path=path)
     )
     constraints = FixParameters(
-        eq0, {"Psi": True, "Z_lmn": True, "L_lmn": True, "p_l": True, "c_l": True}
+        eq0,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "p_l": np.arange(2, len(eq0.p_l)),
+            "i_l": True,
+            "Psi": True,
+        },
     )
     [eq_external], _ = optimizer.optimize(
-        things=eq0, objective=objective, constraints=constraints, copy=True, verbose=2
+        things=eq0,
+        objective=objective,
+        constraints=constraints,
+        copy=True,
+        ftol=0,
+        verbose=2,
     )
 
-    np.testing.assert_allclose(eq_generic.R_lmn, eq_external.R_lmn)
+    np.testing.assert_allclose(eq_generic.p_l, eq_external.p_l)
+    np.testing.assert_allclose(eq_generic.p_l[:2], [2e2, -2e2], rtol=4e-2)
+    np.testing.assert_allclose(eq_external.p_l[:2], [2e2, -2e2], rtol=4e-2)

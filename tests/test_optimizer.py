@@ -1101,7 +1101,7 @@ def test_signed_PlasmaVesselDistance():
     eq = Equilibrium(M=1, N=1)
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
-    grid = LinearGrid(M=eq.M * 3, N=eq.N, NFP=eq.NFP)
+    grid = LinearGrid(M=12, N=2, NFP=eq.NFP)
 
     obj = PlasmaVesselDistance(
         surface=surf,

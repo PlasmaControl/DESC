@@ -883,7 +883,7 @@ class Equilibrium(IOAble, Optimizable):
                 calc1dr = calc1dz = False
         else:
             for dep in deps:
-                req = data_index[p][dep]["require_resolution"]
+                req = data_index[p][dep]["resolution_requirement"]
                 coords = data_index[p][dep]["coordinates"]
                 msg = lambda direction: colored(
                     f"Dependency {dep} may require more {direction}"

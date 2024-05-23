@@ -161,7 +161,7 @@ def register_compute_fun(
             "coordinates": coordinates,
             "dependencies": deps,
             "aliases": aliases,
-            "require_resolution": resolution_requirement,
+            "resolution_requirement": resolution_requirement,
             "grid_requirement": grid_requirement,
         }
         for p in parameterization:

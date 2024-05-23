@@ -807,13 +807,17 @@ class PlasmaVesselDistance(_Objective):
         if self._use_signed_distance:
             surface_coords_rpz = xyz2rpz(surface_coords)
 
-            def _find_angle_vec(R, Z, Rtest, Ztest):
-                # R Z and surface points,
-                # Rtest Ztest are the point we wanna check is inside
-                # the surface or not
-                Rbool = R[:, None] > Rtest
-                Zbool = Z[:, None] > Ztest
-                # these Rbool are now size (Nsurf, Ntest)
+            def _find_angle_vec(R, Z, Rsurf, Zsurf):
+                # R Z are plasma points,
+                # Rsurf Zsurf are the surface points being checked for whether
+                # or not they are inside the plasma
+
+                # algorithm based off of "An Incremental Angle Point in Polygon Test",
+                # K. Weiler, https://doi.org/10.1016/B978-0-12-336156-1.50012-4
+
+                Rbool = R[:, None] > Rsurf
+                Zbool = Z[:, None] > Zsurf
+                # these are now size (Nplasma, Nsurf)
                 quads = jnp.zeros_like(Rbool)
                 quads = jnp.where(jnp.logical_and(Rbool, Zbool), 0, quads)
                 quads = jnp.where(
@@ -830,12 +834,12 @@ class PlasmaVesselDistance(_Objective):
                 deltas = quads[1:, :] - quads[0:-1, :]
                 deltas = jnp.where(deltas == 3, -1, deltas)
                 deltas = jnp.where(deltas == -3, 1, deltas)
-                # then flip sign if the R intercept is > Rtest and the
+                # then flip sign if the R intercept is > Rsurf and the
                 # quadrant flipped over a diagonal
                 b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
-                Rint = Rtest[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
+                Rint = Rsurf[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
                 deltas = jnp.where(
-                    jnp.logical_and(jnp.abs(deltas) == 2, Rint > Rtest),
+                    jnp.logical_and(jnp.abs(deltas) == 2, Rint.T > Rsurf),
                     -deltas,
                     deltas,
                 )

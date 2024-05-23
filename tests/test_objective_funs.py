@@ -1136,17 +1136,17 @@ def test_signed_plasma_vessel_distance():
     surface = FourierRZToroidalSurface(
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
-    # For equally spaced grids, should get true d=1
     grid = LinearGrid(M=5, N=6)
     obj = PlasmaVesselDistance(
         eq=eq,
         surface_grid=grid,
-        plasma_grid=grid,
+        plasma_grid=LinearGrid(M=10, N=6),
         surface=surface,
         use_signed_distance=True,
     )
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
+    assert obj.dim_f == d.size
     np.testing.assert_allclose(d, a_s - a_p)
 
     # ensure that it works (dimension-wise) when compute_scaled is called
@@ -1163,13 +1163,29 @@ def test_signed_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq,
         surface_grid=grid,
-        plasma_grid=grid,
+        plasma_grid=LinearGrid(M=10, N=6),
         surface=surface,
         use_signed_distance=True,
     )
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
+    assert obj.dim_f == d.size
     np.testing.assert_allclose(d, -0.5 * a_p)
+
+    # ensure it works with different sized grids (poloidal resolution different)
+    grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        surface_grid=grid,
+        plasma_grid=LinearGrid(M=10, N=6),
+        surface=surface,
+        use_signed_distance=True,
+    )
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
+    assert obj.dim_f == d.size
+    assert abs(d.max() - (-0.5 * a_p)) < 1e-14
+    assert abs(d.min() - (-0.5 * a_p)) < grid.spacing[0, 1] * a_p * 0.5
 
 
 @pytest.mark.unit

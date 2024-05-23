@@ -986,59 +986,6 @@ def test_constrained_AL_scalar():
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.optimize
-def test_proximal_with_PlasmaVesselDistance():
-    """Tests that the proximal projection works with fixed surface distance obj."""
-    eq = desc.examples.get("SOLOVEV")
-
-    constraints = (
-        ForceBalance(eq=eq),
-        FixPressure(eq=eq),  # fix pressure profile
-        FixIota(eq=eq),  # fix rotational transform profile
-        FixPsi(eq=eq),  # fix total toroidal magnetic flux
-    )
-    # circular surface
-    a = 2
-    R0 = 4
-    surf = FourierRZToroidalSurface(
-        R_lmn=[R0, a],
-        Z_lmn=[0.0, -a],
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[0, 0], [-1, 0]]),
-        sym=True,
-        NFP=eq.NFP,
-    )
-
-    grid = LinearGrid(M=eq.M, N=0, NFP=eq.NFP)
-    obj = PlasmaVesselDistance(
-        surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=True
-    )
-    objective = ObjectiveFunction((obj,))
-
-    optimizer = Optimizer("proximal-lsq-exact")
-    eq.optimize(
-        objective,
-        constraints,
-        verbose=3,
-        maxiter=3,
-    )
-
-    # make sure it also works if proximal is given multiple objects in things
-    obj = PlasmaVesselDistance(
-        surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=False
-    )
-    objective = ObjectiveFunction((obj,))
-    (eq, surf), result = optimizer.optimize(
-        (eq, surf),
-        objective,
-        constraints,
-        verbose=3,
-        maxiter=3,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-@pytest.mark.optimize
 def test_signed_PlasmaVesselDistance():
     """Tests that signed distance works with surface optimization."""
     eq = desc.examples.get("HELIOTRON")

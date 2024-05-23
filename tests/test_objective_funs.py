@@ -614,6 +614,7 @@ class TestObjectiveFunction:
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert d.size == obj.dim_f
         assert abs(d.min() - (a_s - a_p)) < 1e-14
         assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
 
@@ -653,6 +654,7 @@ class TestObjectiveFunction:
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert d.size == obj.dim_f
         assert np.all(np.abs(d) < a_s - a_p)
 
         # for large enough alpha, should be same as actual min
@@ -1123,91 +1125,6 @@ def test_target_profiles():
 
 
 @pytest.mark.unit
-def test_plasma_vessel_distance():
-    """Test calculation of min distance from plasma to vessel."""
-    R0 = 10.0
-    a_p = 1.0
-    a_s = 2.0
-    # default eq has R0=10, a=1
-    eq = Equilibrium(M=3, N=2)
-    # surface with same R0, a=2, so true d=1 for all pts
-    surface = FourierRZToroidalSurface(
-        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
-    )
-    # For equally spaced grids, should get true d=1
-    surf_grid = LinearGrid(M=5, N=6)
-    plas_grid = LinearGrid(M=5, N=6)
-    obj = PlasmaVesselDistance(
-        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
-    )
-    obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq, surface))
-    np.testing.assert_allclose(d, a_s - a_p)
-
-    # for unequal M, should have error of order M_spacing*a_p
-    surf_grid = LinearGrid(M=5, N=6)
-    plas_grid = LinearGrid(M=10, N=6)
-    obj = PlasmaVesselDistance(
-        eq=eq,
-        plasma_grid=plas_grid,
-        surface_grid=surf_grid,
-        surface=surface,
-        surface_fixed=True,
-    )
-    obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq, surface))
-    assert abs(d.min() - (a_s - a_p)) < 1e-14
-    assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
-
-    # for unequal N, should have error of order N_spacing*R0
-    surf_grid = LinearGrid(M=5, N=6)
-    plas_grid = LinearGrid(M=5, N=12)
-    obj = PlasmaVesselDistance(
-        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
-    )
-    obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq, surface))
-    assert abs(d.min() - (a_s - a_p)) < 1e-14
-    assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
-    # ensure that it works (dimension-wise) when compute_scaled is called
-    _ = obj.compute_scaled(*obj.xs(eq, surface))
-
-    grid = LinearGrid(L=3, M=3, N=3)
-    eq = Equilibrium()
-    surf = FourierRZToroidalSurface()
-    obj = PlasmaVesselDistance(surface=surf, surface_grid=grid, plasma_grid=grid, eq=eq)
-    with pytest.warns(UserWarning):
-        obj.build()
-
-    # test softmin, should give value less than true minimum
-    surf_grid = LinearGrid(M=5, N=6)
-    plas_grid = LinearGrid(M=5, N=6)
-    obj = PlasmaVesselDistance(
-        eq=eq,
-        plasma_grid=plas_grid,
-        surface_grid=surf_grid,
-        surface=surface,
-        use_softmin=True,
-    )
-    obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq, surface))
-    assert np.all(np.abs(d) < a_s - a_p)
-
-    # for large enough alpha, should be same as actual min
-    obj = PlasmaVesselDistance(
-        eq=eq,
-        plasma_grid=plas_grid,
-        surface_grid=surf_grid,
-        surface=surface,
-        use_softmin=True,
-        alpha=100,
-    )
-    obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq, surface))
-    np.testing.assert_allclose(d, a_s - a_p)
-
-
-@pytest.mark.unit
 def test_signed_plasma_vessel_distance():
     """Test calculation of signed distance from plasma to vessel."""
     R0 = 10.0
@@ -1253,82 +1170,6 @@ def test_signed_plasma_vessel_distance():
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, -0.5 * a_p)
-
-
-@pytest.mark.unit
-def test_mean_curvature():
-    """Test for mean curvature objective function."""
-    # torus should have mean curvature negative everywhere
-    eq = Equilibrium()
-    obj = MeanCurvature(eq=eq)
-    obj.build()
-    H = obj.compute_unscaled(*obj.xs(eq))
-    assert np.all(H <= 0)
-
-    # more shaped case like NCSX should have some positive curvature
-    eq = get("NCSX")
-    obj = MeanCurvature(eq=eq)
-    obj.build()
-    H = obj.compute_unscaled(*obj.xs(eq))
-    assert np.any(H > 0)
-
-    # check using the surface
-    obj = MeanCurvature(eq=eq.surface)
-    obj.build()
-    H = obj.compute_unscaled(*obj.xs(eq.surface))
-    assert np.any(H > 0)
-
-
-@pytest.mark.unit
-def test_principal_curvature():
-    """Test for principal curvature objective function."""
-    eq1 = get("DSHAPE")
-    eq2 = get("NCSX")
-    obj1 = PrincipalCurvature(eq=eq1, normalize=False)
-    obj1.build()
-    K1 = obj1.compute_unscaled(*obj1.xs(eq1))
-    obj2 = PrincipalCurvature(eq=eq2, normalize=False)
-    obj2.build()
-    K2 = obj2.compute_unscaled(*obj2.xs(eq2))
-
-    # simple test: NCSX should have higher mean absolute curvature than DSHAPE
-    assert K1.mean() < K2.mean()
-
-    # same test but using the surface directly
-    obj1 = PrincipalCurvature(eq=eq1.surface, normalize=False)
-    obj1.build()
-    K1 = obj1.compute_unscaled(*obj1.xs(eq1.surface))
-    obj2 = PrincipalCurvature(eq=eq2.surface, normalize=False)
-    obj2.build()
-    K2 = obj2.compute_unscaled(*obj2.xs(eq2.surface))
-
-    # simple test: NCSX should have higher mean absolute curvature than DSHAPE
-    assert K1.mean() < K2.mean()
-
-
-@pytest.mark.unit
-def test_field_scale_length():
-    """Test for B field scale length objective function."""
-    surf1 = FourierRZToroidalSurface(
-        R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
-    )
-    surf2 = FourierRZToroidalSurface(
-        R_lmn=[10, 2], Z_lmn=[-2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
-    )
-    eq1 = Equilibrium(L=2, M=2, N=0, surface=surf1)
-    eq2 = Equilibrium(L=2, M=2, N=0, surface=surf2)
-    eq1.solve()
-    eq2.solve()
-
-    obj1 = BScaleLength(eq=eq1, normalize=False)
-    obj2 = BScaleLength(eq=eq2, normalize=False)
-    obj1.build()
-    obj2.build()
-
-    L1 = obj1.compute_unscaled(*obj1.xs(eq1))
-    L2 = obj2.compute_unscaled(*obj2.xs(eq2))
-
-    np.testing.assert_array_less(L1, L2)
 
 
 @pytest.mark.unit

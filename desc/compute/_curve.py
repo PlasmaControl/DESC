@@ -649,6 +649,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     p_knots : ndarray
         knots that come from params
     transforms : dict
+        the transforms from the compute function
     xq : ndarray
         query points that come from s parameterization
     kwargs : dict
@@ -728,9 +729,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     description="Position vector along curve",
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat", "shift"],
-    transforms={
-        "intervals": [],
-    },
+    transforms={"intervals": []},
     profiles=[],
     coordinates="s",
     data=["s"],
@@ -764,9 +763,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, first derivative",
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
-    transforms={
-        "intervals": [],
-    },
+    transforms={"intervals": []},
     profiles=[],
     coordinates="s",
     data=["s", "x"],
@@ -799,9 +796,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, second derivative",
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
-    transforms={
-        "intervals": [],
-    },
+    transforms={"intervals": []},
     profiles=[],
     coordinates="s",
     data=["s", "x"],
@@ -833,9 +828,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, third derivative",
     dim=3,
     params=["X", "Y", "Z", "knots", "rotmat"],
-    transforms={
-        "intervals": [],
-    },
+    transforms={"intervals": []},
     profiles=[],
     coordinates="s",
     data=["s", "x"],

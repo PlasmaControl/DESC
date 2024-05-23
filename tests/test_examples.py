@@ -10,7 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp
-from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil
+from desc.coils import FourierPlanarCoil, FourierRZCoil, MixedCoilSet
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -28,7 +28,6 @@ from desc.objectives import (
     BoundaryError,
     CoilCurvature,
     CoilLength,
-    CoilsetMinDistance,
     CoilTorsion,
     CurrentDensity,
     FixBoundaryR,
@@ -48,13 +47,11 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
-    PlasmaCoilsetMinDistance,
     PlasmaVesselDistance,
     PrincipalCurvature,
     QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
-    ToroidalFlux,
     VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
@@ -1299,57 +1296,20 @@ def test_second_stage_optimization():
     np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
 
 
+# TODO: replace this with the solution to Issue #1021
 @pytest.mark.unit
-def test_coilset_geometry_optimization():
-    """Test optimizing coilset around a fixed axisymmetric equilibrium."""
-    # circular tokamak
-    R0 = 5
-    a = 1
-    surf = FourierRZToroidalSurface(
-        R_lmn=np.array([R0, a]),
-        Z_lmn=np.array([0, -a]),
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[0, 0], [-1, 0]]),
-    )
-    eq = Equilibrium(Psi=3, surface=surf, NFP=1, M=2, N=0, sym=True)
-    eq, _ = eq.solve(verbose=2)
+def test_optimize_with_fourier_planar_coil():
+    """Test optimizing a FourierPlanarCoil."""
+    # single coil
+    c = FourierPlanarCoil()
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
 
-    # symmetric coilset with 1 unique coil + 7 virtual coils
-    offset = 1
-    coil = FourierPlanarCoil(
-        current=1e6, center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + 2 * offset]
-    )
-    coils = CoilSet.linspaced_angular(coil, angle=np.pi / 12, n=2, endpoint=True)
-    coils = CoilSet(coils[1], NFP=4, sym=True)
-    assert len(coils) == 1
-    assert coils.num_coils == 8
-
-    # optimizing for target coil-plasma distance and maximum coil-coil distance
-    coil_grid = LinearGrid(N=8)
-    plasma_grid = LinearGrid(M=8, zeta=64)
-    flux_grid = LinearGrid(L=8, M=8, zeta=jnp.array([0.0]))
-    objective = ObjectiveFunction(
-        (
-            PlasmaCoilsetMinDistance(
-                eq=eq,
-                coils=coils,
-                target=offset,
-                plasma_grid=plasma_grid,
-                coil_grid=coil_grid,
-                eq_fixed=True,
-            ),
-            CoilsetMinDistance(
-                coils, target=0.4 * 2 * np.pi * R0 / coils.num_coils, grid=coil_grid
-            ),
-        )
-    )
-    constraints = ToroidalFlux(
-        eq=eq, field=coils, eval_grid=flux_grid, field_grid=coil_grid
-    )
-    optimizer = Optimizer("lsq-auglag")
-    (coils,), _ = optimizer.optimize(
-        things=coils, objective=objective, constraints=constraints, verbose=2
-    )
-
-    f = objective.compute_scaled_error(objective.x(coils))
-    np.testing.assert_array_less(np.abs(f), 5e-2)
+    # in MixedCoilSet
+    c = MixedCoilSet(FourierRZCoil(), FourierPlanarCoil())
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")[1]["length"], 11, atol=1e-3)

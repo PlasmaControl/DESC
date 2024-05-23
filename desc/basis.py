@@ -2611,7 +2611,7 @@ class FiniteElementMesh2D:
         # K = 1 still requires quadrature rule with 3 points so that the
         # assembly matrix integrals are nonsingular. Going to automatically bump up
         # quadrature order.
-        [integration_points, weights] = fem.quadrature.get_quadrature(element, K + 1)
+        [integration_points, weights] = fem.quadrature.get_quadrature(element, 3 * K + 1)
         weights = 2 * weights
 
         integration_points = integration_points.T

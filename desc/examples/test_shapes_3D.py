@@ -104,9 +104,8 @@ nodes = (
 )
 R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
-fig = plt.figure(12)
-ax3 = mplot3d.Axes3D(fig)
-ax3.scatter(R, zeta, Z, label="DESC rep")
+fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+ax.scatter(R, nodes[:, -1], Z, label="DESC rep")
 plt.show()
 
 Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)

@@ -719,21 +719,6 @@ class PlasmaVesselDistance(_Objective):
             "quad_weights": w,
         }
 
-        if self._use_signed_distance:
-            # get the indices corresponding to the grid points
-            # at each distinct zeta plane, so that can be used
-            # in compute to separate the computed pts by zeta plane
-            zetas = plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2]
-            plasma_zeta_indices = [
-                np.where(np.isclose(plasma_grid.nodes[:, 2], zeta))[0] for zeta in zetas
-            ]
-            surface_zeta_indices = [
-                np.where(np.isclose(surface_grid.nodes[:, 2], zeta))[0]
-                for zeta in zetas
-            ]
-            self._constants["plasma_zeta_indices"] = plasma_zeta_indices
-            self._constants["surface_zeta_indices"] = surface_zeta_indices
-
         if self._surface_fixed:
             # precompute the surface coordinates
             # as the surface is fixed during the optimization

@@ -3,6 +3,7 @@
 import warnings
 
 import numpy as np
+from jax import vmap
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
@@ -853,12 +854,19 @@ class PlasmaVesselDistance(_Objective):
                 pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
                 return pt_sign
 
+            plasma_coords_rpz = plasma_coords_rpz.reshape(
+                constants["equil_transforms"]["grid"].num_zeta,
+                constants["equil_transforms"]["grid"].num_theta,
+                3,
+            )
+            surface_coords_rpz = surface_coords_rpz.reshape(
+                constants["surface_transforms"]["grid"].num_zeta,
+                constants["surface_transforms"]["grid"].num_theta,
+                3,
+            )
+
             # loop over zeta planes
-            for plasma_zeta_idx, surface_zeta_idx in zip(
-                constants["plasma_zeta_indices"], constants["surface_zeta_indices"]
-            ):
-                plasma_pts_at_zeta_plane = plasma_coords_rpz[plasma_zeta_idx, :]
-                surface_pts_at_zeta_plane = surface_coords_rpz[surface_zeta_idx, :]
+            def fun(plasma_pts_at_zeta_plane, surface_pts_at_zeta_plane):
                 plasma_pts_at_zeta_plane = jnp.vstack(
                     (plasma_pts_at_zeta_plane, plasma_pts_at_zeta_plane[0, :])
                 )
@@ -872,7 +880,11 @@ class PlasmaVesselDistance(_Objective):
                 )
 
                 # need to assign to correct index of the points on the surface
-                point_signs = point_signs.at[surface_zeta_idx].set(pt_sign)
+                return pt_sign
+
+            point_signs = vmap(fun, in_axes=0)(
+                plasma_coords_rpz, surface_coords_rpz
+            ).flatten()
             # at end here, point_signs is either +/- 1  with
             # positive meaning the surface pt
             # is outside the plasma and -1 if the surface pt is

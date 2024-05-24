@@ -879,7 +879,6 @@ class PlasmaVesselDistance(_Objective):
                     surface_pts_at_zeta_plane[:, 2],
                 )
 
-                # need to assign to correct index of the points on the surface
                 return pt_sign
 
             point_signs = vmap(fun, in_axes=0)(

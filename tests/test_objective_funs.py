@@ -1140,7 +1140,7 @@ def test_signed_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq,
         surface_grid=grid,
-        plasma_grid=LinearGrid(M=10, N=6),
+        plasma_grid=grid,
         surface=surface,
         use_signed_distance=True,
     )
@@ -1163,7 +1163,7 @@ def test_signed_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq,
         surface_grid=grid,
-        plasma_grid=LinearGrid(M=10, N=6),
+        plasma_grid=grid,
         surface=surface,
         use_signed_distance=True,
     )

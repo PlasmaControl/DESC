@@ -9,7 +9,7 @@ import pytest
 from qic import Qic
 from qsc import Qsc
 
-from desc.backend import jnp
+from desc.backend import jnp, tree_leaves
 from desc.coils import (
     FourierPlanarCoil,
     FourierRZCoil,
@@ -1304,8 +1304,13 @@ def test_second_stage_optimization():
 
 # TODO: replace this with the solution to Issue #1021
 @pytest.mark.unit
-def test_optimize_with_all_coil_types():
+def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     """Test optimizing a FourierPlanarCoil."""
+    coilset = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+    mixed_coilset = load(
+        load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
+    )
+
     R = 2
     phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
     spline_coil = SplineXYZCoil(
@@ -1315,21 +1320,23 @@ def test_optimize_with_all_coil_types():
     def test(c):
         obj = ObjectiveFunction(CoilLength(c, target=11))
         optimizer = Optimizer("fmintr")
-        (c,), _ = optimizer.optimize(c, objective=obj, maxiter=200, ftol=0, xtol=0)
-        length = (
-            c.compute("length")[1]["length"]
-            if isinstance(c, MixedCoilSet)
-            else c.compute("length")["length"]
-        )
-        np.testing.assert_allclose(length, 11, atol=1e-3)
+        (c,), _ = optimizer.optimize(c, objective=obj, maxiter=700, ftol=0, xtol=0)
+        flattened_coils = tree_leaves(c, is_leaf=lambda x: not hasattr(x, "__len__"))
+        lengths = [coil.compute("length")["length"] for coil in flattened_coils]
+        np.testing.assert_allclose(lengths, 11, atol=1e-3)
 
     # single coil
     test(FourierPlanarCoil())
     test(FourierRZCoil())
     test(FourierXYZCoil())
-    # TODO: jax still having problem with method kwarg being a string apparently :(
+    # # TODO: jax still having problem with method kwarg being a string apparently :(
     test(spline_coil)
 
+    # TODO: should I add a separate CoilSet for each coil type
+    # CoilSet
+    test(coilset)
+
+    # TODO: should I just add a spline coil to DummyMixedCoilSet
     # MixedCoilSet
-    test(MixedCoilSet(FourierRZCoil(), FourierPlanarCoil()))
+    test(mixed_coilset)
     test(MixedCoilSet(FourierXYZCoil(), spline_coil))

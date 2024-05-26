@@ -252,6 +252,7 @@ def DummyCoilSet(tmpdir_factory):
             center=centers[k, :],
             normal=normals[k, :],
             r_n=[0, minor_radius + 0.5, 0],
+            name="hi",
         )
         coils.append(coil)
     coilset_sym = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)

@@ -2,7 +2,6 @@
 
 import functools
 from abc import ABC, abstractmethod
-from math import factorial
 
 import mpmath
 import numpy as np
@@ -1295,6 +1294,8 @@ def polyder_vec(p, m, exact=False):
 
 
 def _polyder_exact(p, m):
+    from scipy.special import factorial
+
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
     order = p.shape[1] - 1
@@ -1389,6 +1390,16 @@ def _polyval_jax(p, x):
 def zernike_radial_coeffs(l, m, exact=True):
     """Polynomial coefficients for radial part of zernike basis.
 
+    The for loop ranges from m to l+1 in steps of 2, as opposed to the
+    formula in the zernike_eval notebook. This is to make the coeffs array in
+    ascending powers of r, which is more natural for polynomial evaluation.
+    So, one should substitute s=(l-k)/s in the formula in the notebook to get
+    the coding implementation below.
+
+                                 (-1)^((l-k)/2) * ((l+k)/2)!
+    R_l^m(r) = sum_{k=m}^l  -------------------------------------
+                             ((l-k)/2)! * ((k+m)/2)! * ((k-m)/2)!
+
     Parameters
     ----------
     l : ndarray of int, shape(K,)
@@ -1416,6 +1427,14 @@ def zernike_radial_coeffs(l, m, exact=True):
     # only evaluate those
     lms, idx = np.unique(lm, return_inverse=True, axis=0)
 
+    if exact:
+        from scipy.special import factorial
+
+        _factorial = factorial
+    else:
+        from math import factorial
+
+        _factorial = factorial
     npoly = len(lms)
     lmax = np.max(lms[:, 0])
     coeffs = np.zeros((npoly, lmax + 1), dtype=object)
@@ -1426,11 +1445,11 @@ def zernike_radial_coeffs(l, m, exact=True):
         for s in range(mm, ll + 1, 2):
             coeffs[ii, s] = (
                 (-1) ** ((ll - s) // 2)
-                * factorial((ll + s) // 2)
-                // (
-                    factorial((ll - s) // 2)
-                    * factorial((s + mm) // 2)
-                    * factorial((s - mm) // 2)
+                * _factorial((ll + s) // 2)
+                / (
+                    _factorial((ll - s) // 2)
+                    * _factorial((s + mm) // 2)
+                    * _factorial((s - mm) // 2)
                 )
             )
     c = np.fliplr(np.where(lm_even, coeffs, 0))

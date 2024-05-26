@@ -116,7 +116,7 @@ def register_compute_fun(
             Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
             coordinate value. The meshgrid flag denotes whether any coordinate
             can be iterated over along the relevant axis of the reshaped grid:
-            nodes.reshape(3, num_radial, num_poloidal, num_toroidal).
+            nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
         fft : str
             Whether the grid is sorted for fast fourier transform.
     axis_limit_data : list of str

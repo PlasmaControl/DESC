@@ -657,7 +657,7 @@ class Grid(_Grid):
         # Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
         # coordinate value. The is_meshgrid flag denotes whether any coordinate
         # can be iterated over along the relevant axis of the reshaped grid:
-        # nodes.reshape(3, num_radial, num_poloidal, num_toroidal).
+        # nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
         self.is_meshgrid = kwargs.pop("is_meshgrid", False)
 
         self._nodes = self._create_nodes(nodes)
@@ -1427,8 +1427,8 @@ class ConcentricGrid(_Grid):
         dr = np.tile(dr, 2 * N + 1)
         dt = np.tile(dt, 2 * N + 1)
         dz = np.ones_like(z) * dz
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
+        nodes = np.column_stack([r, t, z])
+        spacing = np.column_stack([dr, dt, dz])
 
         return nodes, spacing
 

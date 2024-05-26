@@ -444,16 +444,17 @@ def test_bounce_quadrature():
         B,
         B_z_ra,
         knots,
-        quad=tanh_sinh,
+        quad=tanh_sinh(40),
         automorphism=None,
-        deg=40,
         check=True,
     )
     tanh_sinh_vanilla = _filter_not_nan(bounce_integrate(integrand, [], pitch))
     assert tanh_sinh_vanilla.size == 1
     np.testing.assert_allclose(tanh_sinh_vanilla, truth, rtol=rtol)
 
-    bounce_integrate, _ = bounce_integral(B_sup_z, B, B_z_ra, knots, deg=25, check=True)
+    bounce_integrate, _ = bounce_integral(
+        B_sup_z, B, B_z_ra, knots, quad=leggauss(25), check=True
+    )
     leg_gauss_sin = _filter_not_nan(bounce_integrate(integrand, [], pitch))
     assert leg_gauss_sin.size == 1
     np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
@@ -482,7 +483,7 @@ def test_bounce_integral_checks():
         data["|B|_z|r,a"],
         knots,
         check=True,
-        deg=3,  # not checking quadrature accuracy in this test
+        quad=leggauss(3),  # not checking quadrature accuracy in this test
     )
 
     def numerator(g_zz, B, pitch, Z):
@@ -696,16 +697,16 @@ def test_drift():
         knots=zeta,
         B_ref=B_ref,
         L_ref=L_ref,
-        deg=28,  # converges to absolute and relative tolerance of 1e-7
+        quad=leggauss(28),  # converges to absolute and relative tolerance of 1e-7
         check=True,
     )
 
     B = data["|B|"] / B_ref
     B0 = np.mean(B)
-    # TODO: epsilon should be dimensionless, and probably computed in a way that
-    #   is independent of normalization length scales.
+    # TODO: epsilon should be dimensionless, and computed in a way that
+    #   is independent of normalization length scales, like "effective r/R0".
     epsilon = L_ref * rho  # Aspect ratio of the flux surface.
-    assert np.isclose(epsilon, 0.05)
+    np.testing.assert_allclose(epsilon, 0.05)
     iota = grid.compress(data["iota"]).item()
     theta_PEST = alpha + iota * zeta
     # same as 1 / (1 + epsilon cos(theta)) assuming epsilon << 1

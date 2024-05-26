@@ -1126,7 +1126,7 @@ def bounce_integral(
     B,
     B_z_ra,
     knots,
-    quad=leggauss,
+    quad=leggauss(19),
     automorphism=(automorphism_sin, grad_automorphism_sin),
     B_ref=1,
     L_ref=1,
@@ -1189,10 +1189,9 @@ def bounce_integral(
         the derivative information should be captured without compromise.
         Can also specify to use a monotonic interpolation for |B| rather
         than a cubic Hermite spline with keyword argument ``monotonic=True``.
-    quad : callable
-        The quadrature scheme used to evaluate the integral.
-        The returned quadrature points xₖ and weights wₖ
-        should approximate ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
+    quad : (Array, Array)
+        Quadrature points xₖ and weights wₖ for the approximate evaluation
+        of an integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
     automorphism : (callable, callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
@@ -1209,8 +1208,6 @@ def bounce_integral(
         Flag for debugging.
     plot : bool
         Whether to plot some things if check is true.
-    kwargs
-        Can specify additional arguments to the ``quad`` method with kwargs.
 
     Returns
     -------
@@ -1314,9 +1311,8 @@ def bounce_integral(
     assert B_c.shape[-1] == B_z_ra_c.shape[-1] == knots.size - 1
     spline = {"knots": knots, "B_c": B_c, "B_z_ra_c": B_z_ra_c}
 
-    if quad == leggauss:
-        kwargs.setdefault("deg", 19)
-    x, w = quad(**kwargs)
+    x, w = quad
+    assert x.ndim == w.ndim == 1
     if automorphism is not None:
         auto, grad_auto = automorphism
         w = w * grad_auto(x)

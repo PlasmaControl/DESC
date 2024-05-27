@@ -22,7 +22,6 @@ from .bounce_integral import (
     affine_bijection,
     bounce_integral,
     composite_linspace,
-    get_extrema,
     grad_affine_bijection,
 )
 from .data_index import register_compute_fun
@@ -138,7 +137,6 @@ def _dI(B, pitch, Z):
     quad="callable : Quadrature method over velocity space (i.e. pitch integral)."
     "Adaptive quadrature method from quadax must be wrapped with vec_quadax.",
     quad_res="int : Resolution for quadrature over velocity space.",
-    # if doing a flux surface average
     alpha_weight="Array : Quadrature weight over alpha.",
 )
 @partial(jit, static_argnames=["bounce_integral", "batched", "quad"])
@@ -148,8 +146,8 @@ def _ripple(params, transforms, profiles, data, **kwargs):
 
     _bounce_integral = kwargs.pop("bounce_integral", bounce_integral)
     batched = kwargs.pop("batched", True)
-    quad = kwargs.pop("quad", trapezoid)
-    quad_res = kwargs.pop("quad_res", 21)
+    quad = kwargs.pop("quad", quadax.simpson)
+    quad_res = kwargs.pop("quad_res", 50)
     alpha_weight = jnp.atleast_1d(kwargs.pop("alpha_weight", 1 / g.num_alpha))
 
     # Get boundary of integral over pitch for each field line.
@@ -162,7 +160,7 @@ def _ripple(params, transforms, profiles, data, **kwargs):
 
     is_Newton_Cotes = quad in [trapezoid, quadax.trapezoid, quadax.simpson]
     if is_Newton_Cotes:
-        bounce_integrate, spline = _bounce_integral(
+        bounce_integrate, _ = _bounce_integral(
             data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots
         )
 
@@ -187,28 +185,10 @@ def _ripple(params, transforms, profiles, data, **kwargs):
             I = bounce_integrate(_dI, [], pitch, batched=batched)
             return jnp.nansum(H**2 / I, axis=-1)
 
-        # For ε ∼ ∫ db ∑ⱼ Hⱼ² / Iⱼ, the contribution of ∑ⱼ Hⱼ² / Iⱼ may be largest in
-        # the intervals such that b ∈ [|B|(ζ*) - db, |B|(ζ*)] where ζ* is a maxima. To
-        # see this, observe that Iⱼ ∼ √(1 − λ |B|), so Hⱼ² / Iⱼ ∼ Hⱼ² / √(1 − λ |B|).
-        # For λ = 1 / |B|(ζ*), near |B|(ζ*), the quantity 1 / √(1 − λ |B|) is singular
-        # with strength ~ 1 / |∂|B|/∂_ζ|. Therefore, a quadrature for ε should evaluate
-        # the integrand near b = 1 / λ = |B|(ζ*) to capture the fat banana orbits.
-        breaks = get_extrema(**spline, sort=False).reshape(-1, g.num_rho, g.num_alpha)
-        # Need to remove nan and include max_B regardless of whether there are any nan.
-        breaks = jnp.where(jnp.isnan(breaks), max_B[:, jnp.newaxis], breaks)
-        # Gather quadrature points at breaks and uniformly spaced within boundary.
-        # TODO: might be better to just do uniformly spaced
-        uniform = composite_linspace(boundary, quad_res)
-        b = jnp.vstack(
-            [
-                jnp.broadcast_to(
-                    uniform[..., jnp.newaxis],
-                    (uniform.shape[0], g.num_rho, g.num_alpha),
-                ),
-                breaks,
-            ]
-        )
-        b = jnp.sort(b, axis=0).reshape(-1, g.num_rho * g.num_alpha)
+        b = composite_linspace(boundary, quad_res)
+        b = jnp.broadcast_to(
+            b[..., jnp.newaxis], (b.shape[0], g.num_rho, g.num_alpha)
+        ).reshape(b.shape[0], g.num_rho * g.num_alpha)
         ripple = quad(rs(b), b, axis=0)
     else:
         # Use adaptive quadrature.
@@ -236,7 +216,7 @@ def _ripple(params, transforms, profiles, data, **kwargs):
         ripple = quad(rs, boundary, *args)
 
     # Integrate over flux surface.
-    ripple = ripple.reshape(g.num_rho, g.num_alpha) @ alpha_weight
+    ripple = jnp.reshape(ripple, (g.num_rho, g.num_alpha)) @ alpha_weight
     data["ripple"] = g.expand(ripple)
     return data
 

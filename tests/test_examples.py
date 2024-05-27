@@ -1312,9 +1312,14 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     )
 
     R = 2
-    phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
+    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+    knots = np.linspace(0, 2 * np.pi, len(phi))
     spline_coil = SplineXYZCoil(
-        current=1, X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi)
+        current=1,
+        X=R * np.cos(phi),
+        Y=R * np.sin(phi),
+        Z=np.zeros_like(phi),
+        knots=knots,
     )
 
     def test(c):
@@ -1329,7 +1334,6 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     test(FourierPlanarCoil())
     test(FourierRZCoil())
     test(FourierXYZCoil())
-    # # TODO: jax still having problem with method kwarg being a string apparently :(
     test(spline_coil)
 
     # TODO: should I add a separate CoilSet for each coil type
@@ -1339,4 +1343,4 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     # TODO: should I just add a spline coil to DummyMixedCoilSet
     # MixedCoilSet
     test(mixed_coilset)
-    test(MixedCoilSet(FourierXYZCoil(), spline_coil))
+    test(MixedCoilSet(FourierPlanarCoil(), spline_coil))

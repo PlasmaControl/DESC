@@ -992,14 +992,15 @@ def _length(params, transforms, profiles, data, **kwargs):
     description="Length of the curve",
     dim=0,
     params=[],
-    transforms={"method": []},
+    transforms={},
     profiles=[],
     coordinates="",
     data=["ds", "x", "x_s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
-    if transforms["method"] == "nearest":  # cannot use derivative method as deriv=0
+    if kwargs["method"] == "nearest":  # cannot use derivative method as deriv=0
         coords = data["x"]
         if kwargs.get("basis", "rpz").lower() == "rpz":
             coords = rpz2xyz(coords)

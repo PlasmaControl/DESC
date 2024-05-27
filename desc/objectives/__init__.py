@@ -56,6 +56,7 @@ from .linear_objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
     FixCurveRotation,
     FixCurveShift,

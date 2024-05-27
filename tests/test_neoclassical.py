@@ -12,7 +12,6 @@ from desc.compute.bounce_integral import bounce_integral
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
 from desc.grid import LinearGrid
-from desc.utils import Timer
 
 
 def _compute_field_line_data(eq, grid_desc, names_field_line, names_0d_or_1dr=None):
@@ -78,40 +77,30 @@ def _compute_field_line_data(eq, grid_desc, names_field_line, names_0d_or_1dr=No
 @pytest.mark.unit
 def test_effective_ripple():
     """Compare DESC effective ripple against neo stellopt."""
-    timer = Timer()
     eq = Equilibrium.load(
         "tests/inputs/DESC_from_NAE_O_r1_precise_QI_plunk_fixed_bdry_r0"
         ".15_L_9_M_9_N_24_output.h5"
     )
-    timer.start("map")
     grid = desc_grid_from_field_line_coords(
         eq,
         rho=np.linspace(0.01, 1, 20),
         alpha=np.array([0]),
         zeta=np.linspace(-10 * np.pi, 10 * np.pi, 100),
     )
-    timer.stop("map")
-    timer.disp("map")
-    timer.start("dependency compute")
     data = _compute_field_line_data(
         eq,
         grid,
         ["B^zeta", "|B|_z|r,a", "|B|", "|grad(psi)|", "cvdrift0"],
         ["min_tz |B|", "max_tz |B|", "R0", "V_r(r)", "psi_r", "S(r)"],
     )
-    timer.stop("dependency compute")
-    timer.disp("dependency compute")
-    timer.start("ripple compute")
     data = eq.compute(
         "ripple",
         grid=grid,
         data=data,
         override_grid=False,
         bounce_integral=partial(bounce_integral, quad=leggauss(28)),
-        # quad=vec_quadax(quadax.quadgk), # noqa: E800
+        # quad=vec_quadax(quadax.quadgk),  # noqa: E800
     )
-    timer.stop("ripple compute")
-    timer.disp("ripple compute")
     assert np.isfinite(data["ripple"]).all()
     rho = grid.compress(grid.nodes[:, 0])
     ripple = grid.compress(data["ripple"])

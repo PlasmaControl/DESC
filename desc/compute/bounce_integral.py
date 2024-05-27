@@ -278,7 +278,7 @@ def composite_linspace(breaks, resolution):
     breaks : Array
         First axis has values to return linearly spaced values between.
         The remaining axes are batch axes.
-        Assumes input is sorted.
+        Assumes input is sorted along first axis.
     resolution : int
         Number of points between each break.
 
@@ -1285,15 +1285,11 @@ def bounce_integral(
         print(np.nansum(average, axis=-1))
 
     """
-
-    def group_data_by_field_line(g):
-        errorif(g.ndim > 2)
-        return g.reshape(-1, knots.size)
-
     B_sup_z = B_sup_z * L_ref / B_ref
     B = B / B_ref
     B_z_ra = B_z_ra / B_ref
-    B_sup_z, B, B_z_ra = map(group_data_by_field_line, (B_sup_z, B, B_z_ra))
+    # group data by field line
+    B_sup_z, B, B_z_ra = (g.reshape(-1, knots.size) for g in [B_sup_z, B, B_z_ra])
     errorif(not (B_sup_z.shape == B.shape == B_z_ra.shape))
 
     # Compute splines.

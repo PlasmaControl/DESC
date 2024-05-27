@@ -2,6 +2,7 @@
 
 import functools
 from abc import ABC, abstractmethod
+from math import factorial
 
 import mpmath
 import numpy as np
@@ -1294,8 +1295,6 @@ def polyder_vec(p, m, exact=False):
 
 
 def _polyder_exact(p, m):
-    from scipy.special import factorial
-
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
     order = p.shape[1] - 1
@@ -1430,15 +1429,9 @@ def zernike_radial_coeffs(l, m, exact=True):
     lms, idx = np.unique(lm, return_inverse=True, axis=0)
 
     if exact:
-        from scipy.special import factorial
-
-        _factorial = lambda x: factorial(x, exact=True)
         # Increase the precision of Decimal operations
         getcontext().prec = 100
     else:
-        from math import factorial
-
-        _factorial = factorial
         # Use lower precision for not exact calculations
         getcontext().prec = 15
     npoly = len(lms)
@@ -1450,12 +1443,12 @@ def zernike_radial_coeffs(l, m, exact=True):
         mm = lms[ii, 1]
         for s in range(mm, ll + 1, 2):
             coeffs[ii, s] = Decimal(
-                int((-1) ** ((ll - s) // 2) * _factorial((ll + s) // 2))
+                int((-1) ** ((ll - s) // 2) * factorial((ll + s) // 2))
             ) / Decimal(
                 int(
-                    _factorial((ll - s) // 2)
-                    * _factorial((s + mm) // 2)
-                    * _factorial((s - mm) // 2)
+                    factorial((ll - s) // 2)
+                    * factorial((s + mm) // 2)
+                    * factorial((s - mm) // 2)
                 )
             )
     c = np.fliplr(np.where(lm_even, coeffs, 0))

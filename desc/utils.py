@@ -3,9 +3,9 @@
 import operator
 import warnings
 from itertools import combinations_with_replacement, permutations
-from math import factorial
 
 import numpy as np
+from scipy.special import factorial
 from termcolor import colored
 
 from desc.backend import fori_loop, jit, jnp
@@ -457,8 +457,8 @@ def combination_permutation(m, n, equals=True):
 def multinomial_coefficients(m, n):
     """Number of ways to place n objects into m bins."""
     k = combination_permutation(m, n)
-    num = factorial(n)
-    den = factorial(k).prod(axis=-1)
+    num = factorial(n, exact=True)
+    den = factorial(k, exact=True).prod(axis=-1)
     return num / den
 
 

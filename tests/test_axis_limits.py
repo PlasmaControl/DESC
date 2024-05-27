@@ -61,7 +61,6 @@ not_finite_limits = {
     "gbdrift",
     "cvdrift",
     "grad(alpha)",
-    "cvdrift0",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -93,7 +92,7 @@ not_implemented_limits = {
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
-    "cvdrift0",
+    "ripple",
 }
 
 

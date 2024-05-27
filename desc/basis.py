@@ -1300,8 +1300,8 @@ def _polyder_exact(p, m):
     order = p.shape[1] - 1
 
     D = np.arange(order, -1, -1)
-    num = np.array([factorial(i, exact=True) for i in D], dtype=object)
-    den = np.array([factorial(max(i - m, 0), exact=True) for i in D], dtype=object)
+    num = np.array([factorial(i) for i in D], dtype=object)
+    den = np.array([factorial(max(i - m, 0)) for i in D], dtype=object)
     D = (num // den).astype(p.dtype)
 
     p = np.roll(D * p, m, axis=1)

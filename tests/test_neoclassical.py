@@ -5,11 +5,9 @@ from functools import partial
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-import quadax
 from orthax.legendre import leggauss
 
 from desc.compute import data_index, get_data_deps
-from desc.compute._neoclassical import vec_quadax
 from desc.compute.bounce_integral import bounce_integral
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
@@ -110,7 +108,7 @@ def test_effective_ripple():
         data=data,
         override_grid=False,
         bounce_integral=partial(bounce_integral, quad=leggauss(28)),
-        quad=vec_quadax(quadax.quadgk),
+        # quad=vec_quadax(quadax.quadgk), # noqa: E800
     )
     timer.stop("ripple compute")
     timer.disp("ripple compute")

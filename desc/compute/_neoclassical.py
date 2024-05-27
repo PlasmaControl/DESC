@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from functools import partial
+
 import orthax
 import quadax
 from termcolor import colored
@@ -139,6 +141,7 @@ def _dI(B, pitch, Z):
     # if doing a flux surface average
     alpha_weight="Array : Quadrature weight over alpha.",
 )
+@partial(jit, static_argnames=["bounce_integral"])
 def _ripple(params, transforms, profiles, data, **kwargs):
     g = transforms["grid"].source_grid
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
@@ -163,7 +166,6 @@ def _ripple(params, transforms, profiles, data, **kwargs):
             data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots
         )
 
-        @jit
         def rs(b):
             """Return ∑ⱼ Hⱼ² / Iⱼ evaluated at b.
 
@@ -200,7 +202,7 @@ def _ripple(params, transforms, profiles, data, **kwargs):
         ripple = quad(rs(b), b, axis=0)
     else:
         # Use adaptive quadrature.
-        @jit
+
         def rs(b, B_sup_z, B, B_z_ra, grad_psi, cvdrift0):
             # Quadax requires scalar integration interval, so we need scalar integrand.
             bounce_integrate, _ = _bounce_integral(B_sup_z, B, B_z_ra, knots)

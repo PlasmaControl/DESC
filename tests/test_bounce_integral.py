@@ -223,7 +223,7 @@ def test_get_extrema():
     rtol = 1e-7
     extrema = get_extrema(k, B.c, B_z_ra.c, relative_shift=rtol)
     eps = 100 * np.finfo(float).eps
-    extrema = _filter_not_nan(extrema)
+    extrema = np.sort(_filter_not_nan(extrema))
     assert extrema.size == extrema_scipy.size
     np.testing.assert_allclose(extrema, extrema_scipy, rtol=rtol + eps)
 

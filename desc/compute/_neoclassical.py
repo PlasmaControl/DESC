@@ -9,13 +9,11 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from functools import partial
-
 import orthax
 import quadax
 from termcolor import colored
 
-from desc.backend import jit, jnp, trapezoid
+from desc.backend import jnp, trapezoid
 
 from ..utils import warnif
 from .bounce_integral import (
@@ -62,11 +60,19 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     integrals over finite transits.
 
     Assuming the rotational transform is irrational, the limit where the
-    parameterization of the field line length tends to infinity, the
-    integrals in (29), (30), (31) will converge to a flux surface average.
-    In theory, we can compute the effective ripple via flux surface
-    averages. It is not tested whether such a method will converge to the
-    limit faster than extending the length of the field line chunk.
+    parameterization of the field line length tends to infinity of an average
+    along the field line will converge to a flux surface average.
+    In theory, we can compute such quantities with averages over finite lengths
+    of the field line, e.g. one toroidal transit, for many values of the poloidal
+    field line label and then average this over the poloidal domain.
+
+    This should also work for integrands which are bounce integrals;
+    Since everything is continuous, as the number of nodes tend to infinity both
+    approaches should converge to the same result, assuming irrational surface.
+    However, the order at which all the bounce integrals detected over the surface
+    are summed differs, so the convergence rate will differ. It is not tested whether
+    such a method will converge to the limit faster than extending the length of the
+    field line chunk.
 
     Parameters
     ----------
@@ -92,12 +98,14 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
 
 
 @register_compute_fun(
-    name="V_psi(r)_line",
+    name="V_psi(r)*range(z)",
     label="\\int d \\ell / \\vert B \\vert",
     units="m^3 / Wb",
     units_long="Cubic meters per Weber",
-    description="Volume enclosed by flux surfaces, derivative with respect to"
-    " toroidal flux, computed along field line",
+    description=(
+        "Volume enclosed by flux surfaces, derivative with respect to toroidal flux, "
+        "computed along field line, scaled by dimensionless length of field line"
+    ),
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -110,24 +118,26 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
         and grid.source_grid.is_meshgrid,
     ],
 )
-def _V_psi_line(data, transforms, profiles, **kwargs):
+def _V_psi_range_z(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     z = jnp.reshape(g.nodes[:, 2], shape)
     V = jnp.reshape(1 / (data["B^zeta"] * data["|B|"]), shape)
     V = jnp.mean(quadax.simpson(V, z, axis=-1), axis=1)
     warnif(g.num_alpha != 1, msg=colored("Reduced via mean over alpha.", "yellow"))
-    # same as V_r / psi_r * (max zeta - min zeta)
-    data["V_psi(r)_line"] = g.expand(V)
+    data["V_psi(r)*range(z)"] = g.expand(V)
     return data
 
 
 @register_compute_fun(
-    name="S(r)_line",
+    name="S(r)*range(z)",
     label="\\int d \\ell \\vert \\nabla \\psi \\vert / \\vert B \\vert",
     units="m^2",
     units_long="Square meters",
-    description="Surface area of flux surfaces, computed along field line",
+    description=(
+        "Surface area of flux surfaces, computed along field line, "
+        "scaled by dimensionless length of field line"
+    ),
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -140,24 +150,23 @@ def _V_psi_line(data, transforms, profiles, **kwargs):
         and grid.source_grid.is_meshgrid,
     ],
 )
-def _S_line(data, transforms, profiles, **kwargs):
+def _S_range_z(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     z = jnp.reshape(g.nodes[:, 2], shape)
     S = jnp.reshape(data["|grad(psi)|"] / (data["B^zeta"] * data["|B|"]), shape)
     S = jnp.mean(quadax.simpson(S, z, axis=-1), axis=1)
     warnif(g.num_alpha != 1, msg=colored("Reduced via mean over alpha.", "yellow"))
-    # same as S(r) * (max zeta - min zeta)
-    data["S(r)_line"] = g.expand(S)
+    data["S(r)*range(z)"] = g.expand(S)
     return data
 
 
 @register_compute_fun(
-    name="ripple",
+    name="effective ripple raw",
     label="∫ db ∑ⱼ Hⱼ² / Iⱼ",
-    units="~",
-    units_long="None",
-    description="Effective ripple, not normalized",
+    units="Wb / m",
+    units_long="Webers per meter",
+    description="Effective ripple modulation amplitude, not normalized",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -178,20 +187,19 @@ def _S_line(data, transforms, profiles, **kwargs):
         and grid.source_grid.is_meshgrid,
     ],
     bounce_integral=(
-        "callable : Method to compute bounce integrals.\n"
+        "callable : Method to compute bounce integrals. "
         "(You may want to wrap desc.compute.bounce_integral.bounce_integral "
         "to change optional parameters such as quadrature resolution, etc.)."
     ),
-    batched="bool : Whether to perform computation in a batched manner.",
+    batch="bool : Whether to perform computation in a batched manner.",
     quad=(
-        "callable : Quadrature method over velocity space.\n"
+        "callable : Quadrature method over velocity space. "
         "Adaptive quadrature method from quadax must be wrapped with vec_quadax."
     ),
     quad_res="int : Resolution for quadrature over velocity space.",
     alpha_weight="Array : Quadrature weight over alpha.",
 )
-@partial(jit, static_argnames=["bounce_integral", "batched", "quad", "quad_res"])
-def _ripple(params, transforms, profiles, data, **kwargs):
+def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     def dH(grad_psi_norm, cvdrift0, B, pitch, Z):
         return (
             pitch
@@ -208,7 +216,7 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     g = transforms["grid"].source_grid
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
     _bounce_integral = kwargs.pop("bounce_integral", bounce_integral)
-    batched = kwargs.pop("batched", True)
+    batch = kwargs.pop("batch", True)
     quad = kwargs.pop("quad", quadax.simpson)
     quad_res = kwargs.pop("quad_res", 50)
     alpha_weight = jnp.atleast_1d(kwargs.pop("alpha_weight", 1 / g.num_alpha))
@@ -226,7 +234,7 @@ def _ripple(params, transforms, profiles, data, **kwargs):
             data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots
         )
 
-        def rs(b):
+        def d_ripple(b):
             """Return ∑ⱼ Hⱼ² / Iⱼ evaluated at b.
 
             Parameters
@@ -242,25 +250,25 @@ def _ripple(params, transforms, profiles, data, **kwargs):
             """
             pitch = 1 / b
             H = bounce_integrate(
-                dH, [data["|grad(psi)|"], data["cvdrift0"]], pitch, batched=batched
+                dH, [data["|grad(psi)|"], data["cvdrift0"]], pitch, batch=batch
             )
-            I = bounce_integrate(dI, [], pitch, batched=batched)
+            I = bounce_integrate(dI, [], pitch, batch=batch)
             return jnp.nansum(H**2 / I, axis=-1)
 
         b = composite_linspace(boundary, quad_res)
         b = jnp.broadcast_to(
             b[..., jnp.newaxis], (b.shape[0], g.num_rho, g.num_alpha)
         ).reshape(b.shape[0], g.num_rho * g.num_alpha)
-        ripple = quad(rs(b), b, axis=0)
+        ripple = quad(d_ripple(b), b, axis=0)
     else:
         # Use adaptive quadrature.
 
-        def rs(b, B_sup_z, B, B_z_ra, grad_psi, cvdrift0):
-            # Quadax requires scalar integration interval, so we need scalar integrand.
+        def d_ripple(b, B_sup_z, B, B_z_ra, grad_psi, cvdrift0):
+            # Quadax requires scalar integration interval, so we need to return scalar.
             bounce_integrate, _ = _bounce_integral(B_sup_z, B, B_z_ra, knots)
             pitch = 1 / b
-            H = bounce_integrate(dH, [grad_psi, cvdrift0], pitch, batched=batched)
-            I = bounce_integrate(dI, [], pitch, batched=batched)
+            H = bounce_integrate(dH, [grad_psi, cvdrift0], pitch, batch=batch)
+            I = bounce_integrate(dI, [], pitch, batch=batch)
             return jnp.squeeze(jnp.nansum(H**2 / I, axis=-1))
 
         boundary = boundary.T[:, jnp.newaxis]
@@ -275,11 +283,11 @@ def _ripple(params, transforms, profiles, data, **kwargs):
                 data["cvdrift0"],
             ]
         ]
-        ripple = quad(rs, boundary, *args)
+        ripple = quad(d_ripple, boundary, *args)
 
     # Integrate over flux surface.
     ripple = jnp.reshape(ripple, (g.num_rho, g.num_alpha)) @ alpha_weight
-    data["ripple"] = g.expand(ripple)
+    data["effective ripple raw"] = g.expand(ripple)
     return data
 
 
@@ -294,31 +302,31 @@ def _ripple(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["ripple", "R0", "V_psi(r)_line", "S(r)_line"],
+    data=["effective ripple raw", "R0", "V_psi(r)*range(z)", "S(r)*range(z)"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     """Evaluation of 1/ν neoclassical transport in stellarators.
 
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-    https://doi.org/10.1063/1.873749
+    https://doi.org/10.1063/1.873749.
     """
     data["effective ripple"] = (
         jnp.pi
         * data["R0"] ** 2
         / (8 * 2**0.5)
-        * data["V_psi(r)_line"]
-        / data["S(r)_line"] ** 2
-        * data["ripple"]
+        * data["V_psi(r)*range(z)"]
+        / data["S(r)*range(z)"] ** 2
+        * data["effective ripple raw"]
     ) ** (2 / 3)
     return data
 
 
 @register_compute_fun(
-    name="Gamma_c_raw",
-    label="∫ db ∑ⱼ (γ_c² * (∂I/∂b)ⱼ",
-    units="~",
-    units_long="None",
+    name="Gamma_c raw",
+    label="∫ db ∑ⱼ (γ_c² * ∂I/∂b)ⱼ",
+    units="m^3 / Wb",
+    units_long="Cubic meters per Weber",
     description="Energetic ion confinement, not normalized",
     dim=1,
     params=[],
@@ -340,13 +348,13 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         and grid.source_grid.is_meshgrid,
     ],
     bounce_integral=(
-        "callable : Method to compute bounce integrals.\n"
+        "callable : Method to compute bounce integrals. "
         "(You may want to wrap desc.compute.bounce_integral.bounce_integral "
         "to change optional parameters such as quadrature resolution, etc.)."
     ),
-    batched="bool : Whether to perform computation in a batched manner.",
+    batch="bool : Whether to perform computation in a batched manner.",
     quad=(
-        "callable : Quadrature method over velocity space.\n"
+        "callable : Quadrature method over velocity space. "
         "Adaptive quadrature method from quadax must be wrapped with vec_quadax."
     ),
     quad_res="int : Resolution for quadrature over velocity space.",
@@ -362,7 +370,7 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
     g = transforms["grid"].source_grid
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
     _bounce_integral = kwargs.pop("bounce_integral", bounce_integral)
-    batched = kwargs.pop("batched", True)
+    batch = kwargs.pop("batch", True)
     quad = kwargs.pop("quad", quadax.simpson)
     quad_res = kwargs.pop("quad_res", 50)
     alpha_weight = jnp.atleast_1d(kwargs.pop("alpha_weight", 1 / g.num_alpha))
@@ -381,7 +389,7 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
         )
 
         def d_Gamma_c_raw(b):
-            """Return ∑ⱼ (γ_c² * (∂I/∂b)ⱼ evaluated at b.
+            """Return ∑ⱼ (γ_c² * ∂I/∂b)ⱼ evaluated at b.
 
             Parameters
             ----------
@@ -391,7 +399,7 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
             Returns
             -------
             rs : Array, shape(b.shape)
-                ∑ⱼ (γ_c² * (∂I/∂b)ⱼ
+                ∑ⱼ (γ_c² * ∂I/∂b)ⱼ
 
             """
             pitch = 1 / b
@@ -400,15 +408,11 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
                 2
                 / jnp.pi
                 * jnp.arctan(
-                    bounce_integrate(
-                        d_gamma_c, data["cvdrift0"], pitch, batched=batched
-                    )
-                    / bounce_integrate(
-                        d_gamma_c, data["gbdrift"], pitch, batched=batched
-                    )
+                    bounce_integrate(d_gamma_c, data["cvdrift0"], pitch, batch=batch)
+                    / bounce_integrate(d_gamma_c, data["gbdrift"], pitch, batch=batch)
                 )
             )
-            dI_db = bounce_integrate(d_dI_db, [], pitch, batched=batched)
+            dI_db = bounce_integrate(d_dI_db, [], pitch, batch=batch)
             return jnp.nansum(gamma_c**2 * dI_db, axis=-1)
 
         b = composite_linspace(boundary, quad_res)
@@ -420,7 +424,7 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
         # Use adaptive quadrature.
 
         def d_Gamma_c_raw(b, B_sup_z, B, B_z_ra, cvdrift0, gbdrift):
-            # Quadax requires scalar integration interval, so we need scalar integrand.
+            # Quadax requires scalar integration interval, so we need to return scalar.
             bounce_integrate, _ = _bounce_integral(B_sup_z, B, B_z_ra, knots)
             pitch = 1 / b
             # todo: add Nemov's |grad(psi)|
@@ -428,11 +432,11 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
                 2
                 / jnp.pi
                 * jnp.arctan(
-                    bounce_integrate(d_gamma_c, cvdrift0, pitch, batched=batched)
-                    / bounce_integrate(d_gamma_c, gbdrift, pitch, batched=batched)
+                    bounce_integrate(d_gamma_c, cvdrift0, pitch, batch=batch)
+                    / bounce_integrate(d_gamma_c, gbdrift, pitch, batch=batch)
                 )
             )
-            dI_db = bounce_integrate(d_dI_db, [], pitch, batched=batched)
+            dI_db = bounce_integrate(d_dI_db, [], pitch, batch=batch)
             return jnp.squeeze(jnp.nansum(gamma_c**2 * dI_db, axis=-1))
 
         boundary = boundary.T[:, jnp.newaxis]
@@ -451,7 +455,7 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
 
     # Integrate over flux surface.
     Gamma_c_raw = jnp.reshape(Gamma_c_raw, (g.num_rho, g.num_alpha)) @ alpha_weight
-    data["Gamma_c_raw"] = g.expand(Gamma_c_raw)
+    data["Gamma_c raw"] = g.expand(Gamma_c_raw)
     return data
 
 
@@ -466,14 +470,16 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["Gamma_c_raw", "V_psi(r)_line"],
+    data=["Gamma_c raw", "V_psi(r)*range(z)"],
 )
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Poloidal motion of trapped particle orbits in real-space coordinates.
 
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
     Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456
+    https://doi.org/10.1063/1.2912456.
     """
-    data["Gamma_c"] = jnp.pi / (2**1.5) * data["Gamma_c_raw"] / data["V_psi(r)_line"]
+    data["Gamma_c"] = (
+        jnp.pi / (2**1.5) * data["Gamma_c raw"] / data["V_psi(r)*range(z)"]
+    )
     return data

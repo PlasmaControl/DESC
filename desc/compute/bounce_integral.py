@@ -1027,7 +1027,7 @@ def _bounce_quadrature(
     knots,
     method="akima",
     method_B="cubic",
-    batched=True,
+    batch=True,
     check=False,
     plot=False,
 ):
@@ -1069,7 +1069,7 @@ def _bounce_quadrature(
     f = map(group_data_by_field_line_and_pitch, f)
 
     # Integrate and complete the change of variable.
-    if batched:
+    if batch:
         Z = affine_bijection(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
         result = _interpolatory_quadrature(
             Z,
@@ -1315,7 +1315,7 @@ def bounce_integral(
         # Recall affine_bijection(auto(x), ζ_b₁, ζ_b₂) = ζ.
         x = auto(x)
 
-    def bounce_integrate(integrand, f, pitch, method="akima", batched=True):
+    def bounce_integrate(integrand, f, pitch, method="akima", batch=True):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
         Parameters
@@ -1346,7 +1346,7 @@ def bounce_integral(
             Method of interpolation for functions contained in ``f``.
             Defaults to akima spline to suppress oscillation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
-        batched : bool
+        batch : bool
             Whether to perform computation in a batched manner.
             If you can afford the memory expense, batched is more efficient.
 
@@ -1372,7 +1372,7 @@ def bounce_integral(
             knots,
             method,
             method_B="monotonic" if monotonic else "cubic",
-            batched=batched,
+            batch=batch,
             check=check,
             plot=plot,
         )

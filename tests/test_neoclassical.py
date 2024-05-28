@@ -81,30 +81,39 @@ def test_effective_ripple():
         eq,
         rho=np.linspace(0.01, 1, 20),
         alpha=np.array([0]),
-        zeta=np.linspace(-100 * np.pi, 100 * np.pi, 1000),
+        zeta=np.linspace(-100 * np.pi, 100 * np.pi, 500),
     )
     data = _compute_field_line_data(
         eq,
         grid,
-        ["B^zeta", "|B|_z|r,a", "|B|", "|grad(psi)|", "cvdrift0"],
-        ["min_tz |B|", "max_tz |B|", "R0", "V_r(r)", "psi_r", "S(r)"],
+        [
+            "B^zeta",
+            "|B|_z|r,a",
+            "|B|",
+            "|grad(psi)|",
+            "cvdrift0",
+            "V_psi(r)*range(z)",
+            "S(r)*range(z)",
+        ],
+        ["min_tz |B|", "max_tz |B|", "R0"],
     )
     data = eq.compute(
-        "ripple",
+        "effective ripple raw",
         grid=grid,
         data=data,
         override_grid=False,
-        # batched=False,  # noqa: E800
+        # batch=False,  # noqa: E800
         # quad=vec_quadax(quadax.quadgk),  # noqa: E800
     )
-    assert np.isfinite(data["ripple"]).all()
+    assert np.isfinite(data["effective ripple raw"]).all()
     rho = grid.compress(grid.nodes[:, 0])
-    ripple = grid.compress(data["ripple"])
+    ripple = grid.compress(data["effective ripple raw"])
     fig, ax = plt.subplots(2)
     ax[0].plot(rho, ripple, marker="o", label="∫ db ∑ⱼ Hⱼ² / Iⱼ")
     ax[0].set_xlabel(r"$\rho$")
-    ax[0].set_ylabel("ripple")
-    ax[0].set_title("Ripple, defined as ∫ db ∑ⱼ Hⱼ² / Iⱼ")
+    ax[0].set_ylabel("effective ripple raw")
+    ax[0].set_title("effective ripple raw, defined as ∫ db ∑ⱼ Hⱼ² / Iⱼ")
+
     # Workaround until eq.compute() is fixed to only compute dependencies
     # that are needed for the requested computation. (So don't compute
     # dependencies of things already in data).
@@ -114,7 +123,7 @@ def test_effective_ripple():
             # Need to add R0's dependencies which are surface functions of zeta
             # aren't attempted to be recomputed on grid_desc.
             data[key] = data_R0[key]
-    data = eq.compute("effective ripple", grid=grid, data=data, override_grid=False)
+    data = eq.compute("effective ripple", grid=grid, data=data)
     assert np.isfinite(data["effective ripple"]).all()
     eff_ripple = grid.compress(data["effective ripple"])
     ax[1].plot(rho, eff_ripple, marker="o", label=r"$\epsilon_{\text{effective}}$")

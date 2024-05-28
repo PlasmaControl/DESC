@@ -278,7 +278,7 @@ def composite_linspace(breaks, resolution):
     breaks : Array
         First axis has values to return linearly spaced values between.
         The remaining axes are batch axes.
-        Assumes input is sorted.
+        Assumes input is sorted along first axis.
     resolution : int
         Number of points between each break.
 
@@ -1027,7 +1027,7 @@ def _bounce_quadrature(
     knots,
     method="akima",
     method_B="cubic",
-    batched=True,
+    batch=True,
     check=False,
     plot=False,
 ):
@@ -1069,7 +1069,7 @@ def _bounce_quadrature(
     f = map(group_data_by_field_line_and_pitch, f)
 
     # Integrate and complete the change of variable.
-    if batched:
+    if batch:
         Z = affine_bijection(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
         result = _interpolatory_quadrature(
             Z,
@@ -1285,15 +1285,11 @@ def bounce_integral(
         print(np.nansum(average, axis=-1))
 
     """
-
-    def group_data_by_field_line(g):
-        errorif(g.ndim > 2)
-        return g.reshape(-1, knots.size)
-
     B_sup_z = B_sup_z * L_ref / B_ref
     B = B / B_ref
     B_z_ra = B_z_ra / B_ref
-    B_sup_z, B, B_z_ra = map(group_data_by_field_line, (B_sup_z, B, B_z_ra))
+    # group data by field line
+    B_sup_z, B, B_z_ra = (g.reshape(-1, knots.size) for g in [B_sup_z, B, B_z_ra])
     errorif(not (B_sup_z.shape == B.shape == B_z_ra.shape))
 
     # Compute splines.
@@ -1319,7 +1315,7 @@ def bounce_integral(
         # Recall affine_bijection(auto(x), ζ_b₁, ζ_b₂) = ζ.
         x = auto(x)
 
-    def bounce_integrate(integrand, f, pitch, method="akima", batched=True):
+    def bounce_integrate(integrand, f, pitch, method="akima", batch=True):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
         Parameters
@@ -1350,7 +1346,7 @@ def bounce_integral(
             Method of interpolation for functions contained in ``f``.
             Defaults to akima spline to suppress oscillation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
-        batched : bool
+        batch : bool
             Whether to perform computation in a batched manner.
             If you can afford the memory expense, batched is more efficient.
 
@@ -1376,7 +1372,7 @@ def bounce_integral(
             knots,
             method,
             method_B="monotonic" if monotonic else "cubic",
-            batched=batched,
+            batch=batch,
             check=check,
             plot=plot,
         )

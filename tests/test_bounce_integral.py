@@ -495,7 +495,7 @@ def test_bounce_integral_checks():
 
     pitch = 1 / get_extrema(**spline)
     num = bounce_integrate(numerator, data["g_zz"], pitch)
-    den = bounce_integrate(denominator, [], pitch, batched=False)
+    den = bounce_integrate(denominator, [], pitch, batch=False)
     average = num / den
     assert np.isfinite(average).any()
 
@@ -532,8 +532,6 @@ def _elliptic_incomplete(k2):
     np.testing.assert_allclose(K, _fixed_elliptic(K_integrand, k, 10))
     np.testing.assert_allclose(E, _fixed_elliptic(E_integrand, k, 10))
 
-    # Here are the notes that explain these integrals.
-    # https://github.com/PlasmaControl/DESC/files/15010927/bavg.pdf.
     I_0 = 4 / k * K
     I_1 = 4 * k * E
     I_2 = 16 * k * E
@@ -635,9 +633,7 @@ def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
     zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
     # Make grid that can separate into field lines via a reshape operation,
     # as expected by bounce_integral().
-    grid_desc = desc_grid_from_field_line_coords(
-        eq, rho, alpha=np.array([0]), zeta=zeta
-    )
+    grid_desc = desc_grid_from_field_line_coords(eq, rho, alpha=alpha, zeta=zeta)
 
     # Collect quantities that can be used as a seed to compute the
     # field line quantities over the grid mapped from field line coordinates.

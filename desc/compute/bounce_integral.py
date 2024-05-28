@@ -345,8 +345,15 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     return B_c, B_z_ra_c, pitch
 
 
-def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6, sort=True):
+def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     """Return |B| values at extrema.
+
+    The quantity 1 / √(1 − λ |B|) common to bounce integrals is singular with
+    strength ~ |ζ_b₂ - ζ_b₁| / |∂|B|/∂_ζ|. Therefore, an integral over the pitch
+    angle λ may have mass concentrated near λ = 1 / |B|(ζ*) where |B|(ζ*) is a
+    local maximum. These correspond to fat banana orbits. Depending on the
+    quantity to integrate, it may be beneficial to place quadrature points near
+    these regions.
 
     Parameters
     ----------
@@ -367,8 +374,6 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6, sort=True):
     relative_shift : float
         Relative amount to shift maxima down and minima up to avoid floating point
         errors in downstream routines.
-    sort : bool
-        Whether to sort output.
 
     Returns
     -------
@@ -376,8 +381,9 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6, sort=True):
         For the shaping notation, the ``degree`` of the spline of |B| matches
         ``B_c.shape[0] - 1``, the number of polynomials per spline ``N`` matches
         ``knots.size - 1``, and the number of field lines is denoted by ``S``.
+
         If there were less than ``N * (degree - 1)`` extrema detected along a
-        field line, then the first axis is padded with nan.
+        field line, then the first axis is interspersed with nan.
 
     """
     B_c, B_z_ra_c, _ = _check_shape(knots, B_c, B_z_ra_c)
@@ -402,7 +408,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6, sort=True):
         .T
     )
     assert B_extrema.shape == (N * (degree - 1), S)
-    return jnp.sort(B_extrema, axis=0) if sort else B_extrema
+    return B_extrema
 
 
 def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False):
@@ -547,7 +553,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
                 )
                 if plot:
                     plot_field_line_with_ripple(
-                        B, pitch[p, s], bp1_p, bp2_p, name=f"{p},{s}"
+                        B, pitch[p, s], bp1_p, bp2_p, id=f"{p},{s}"
                     )
                 print("bp1:", bp1_p)
                 print("bp2:", bp2_p)
@@ -560,9 +566,7 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
                 )
                 assert not err_3, msg_3
         if plot:
-            plot_field_line_with_ripple(
-                B, pitch[:, s], bp1[:, s], bp2[:, s], name=str(s)
-            )
+            plot_field_line_with_ripple(B, pitch[:, s], bp1[:, s], bp2[:, s], id=str(s))
 
 
 def plot_field_line_with_ripple(
@@ -573,8 +577,9 @@ def plot_field_line_with_ripple(
     start=None,
     stop=None,
     num=500,
+    title=r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$",
+    id=None,
     show=True,
-    name=None,
 ):
     """Plot the field line given spline of |B| and bounce points etc.
 
@@ -594,10 +599,12 @@ def plot_field_line_with_ripple(
         Maximum ζ of plot.
     num : int
         Number of ζ points to plot.
+    title : str
+        Plot title.
+    id : str
+        Identifier string to append to plot title.
     show : bool
         Whether to show the plot.
-    name : str
-        String to prepend to plot title.
 
     Returns
     -------
@@ -653,9 +660,8 @@ def plot_field_line_with_ripple(
     ax.set_xlabel(r"Field line $\zeta$")
     ax.set_ylabel(r"$\vert B \vert \sim 1 / \lambda$")
     ax.legend(legend.values(), legend.keys())
-    title = r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$"
-    if name is not None:
-        title = f"{title}. name = {name}."
+    if id is not None:
+        title = f"{title}. id = {id}."
     ax.set_title(title)
     if show:
         plt.tight_layout()
@@ -932,8 +938,8 @@ def _interpolatory_quadrature(
     if check:
         _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product)
         # if plot:  # noqa: E800
-        #     _plot(Z, B, name=r"$\vert B \vert$")  # noqa: E800
-        #     _plot(Z, V, name="integrand")  # noqa: E800
+        #     _plot(Z, B, id=r"$\vert B \vert$")  # noqa: E800
+        #     _plot(Z, V, id="integrand")  # noqa: E800
     return inner_product
 
 
@@ -988,7 +994,7 @@ def _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product):
     )
 
 
-def _plot(Z, V, name=""):
+def _plot(Z, V, id=""):
     """Plot V[λ, (ρ, α), (ζ₁, ζ₂)](Z)."""
     for p in range(Z.shape[0]):
         for s in range(Z.shape[1]):
@@ -997,16 +1003,14 @@ def _plot(Z, V, name=""):
                 continue
             fig, ax = plt.subplots()
             ax.set_xlabel(r"Field line $\zeta$")
-            ax.set_ylabel(name)
-            ax.set_title(
-                f"Interpolation of {name} to quadrature points. Index {p},{s}."
-            )
+            ax.set_ylabel(id)
+            ax.set_title(f"Interpolation of {id} to quadrature points. Index {p},{s}.")
             for i in is_quad_point_set:
                 ax.plot(Z[p, s, i], V[p, s, i], marker="o")
             fig.text(
                 0.01,
                 0.01,
-                f"Each color specifies the set of points and values (ζ, {name}(ζ)) "
+                f"Each color specifies the set of points and values (ζ, {id}(ζ)) "
                 "used to evaluate an integral.",
             )
             plt.tight_layout()
@@ -1153,7 +1157,7 @@ def bounce_integral(
 
     Notes
     -----
-    This function requires that the quantities `B_sup_z`, `B`, `B_z_ra`,
+    This function requires that the quantities ``B_sup_z``, ``B``, ``B_z_ra``,
     and the quantities in ``f`` passed to the returned method
     can be separated into field lines via ``.reshape(S, knots.size)``.
     One way to satisfy this is to pass in quantities computed on the grid
@@ -1246,6 +1250,9 @@ def bounce_integral(
         alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
         knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
         grid_desc = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+        grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
+        data = eq.compute(["iota"], grid=grid_fsa)
+        data = {"iota": grid_desc.copy_data_from_other(data["iota"], grid_fsa)}
         data = eq.compute(
             ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
             grid=grid_desc,

@@ -148,6 +148,7 @@ def _compute(
             data_index[parameterization][name]["dim"] == 3  # it should be 3D
             and kwargs.get("basis", "rpz") == "xyz"  # user should ask in xyz
             and ("xy" not in name.lower())  # not already in xyz (naming specify this)
+            and name.lower() not in {"x", "y", "z"}  # some basic exceptions
             and ("phi" in data)  # phi is needed for conversion
         ):
             from .geom_utils import rpz2xyz_vec

@@ -140,12 +140,14 @@ def _compute(
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
-        # to reduce repeated code, for 3D and naturally in rtz but desired in xyz basis
-        # quantities can be converted to xyz basis here
+
+    # to reduce repeated code, 3D quantities can be converted to xyz basis here.
+    # Assumes every 3D quantity is in rpz basis.
+    for name in names:
         if (
             data_index[parameterization][name]["dim"] == 3
-            and data_index[parameterization][name]["coordinates"] == "rtz"
             and kwargs.get("basis", "rpz") == "xyz"
+            and "xy" not in name.lower()
         ):
             from .geom_utils import rpz2xyz_vec
 

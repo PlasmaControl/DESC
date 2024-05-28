@@ -2193,8 +2193,10 @@ class TestObjectiveNaNGrad:
         # these require special logic
         BootstrapRedlConsistency,
         BoundaryError,
+        CoilLength,
         CoilCurrentLength,
         CoilCurvature,
+        CoilsetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
         PlasmaCoilsetMinDistance,

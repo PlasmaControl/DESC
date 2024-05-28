@@ -1384,3 +1384,141 @@ def test_coilset_geometry_optimization():
     )
     np.testing.assert_allclose(coils[0].normal, [0, 1, 0])  # normal was fixed
     np.testing.assert_allclose(coils[0].r_n, a + offset, rtol=1e-2)  # check coil radius
+
+    ## Now fix coil radii and allow eq/surface to change
+    # optimizing for target coil-plasma distance and maximum coil-coil distance
+    plasma_grid = LinearGrid(M=8, zeta=64)
+    coil_grid = LinearGrid(N=8)
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilsetMinDistance(
+                eq=eq,
+                coils=coils,
+                target=offset + 0.1,
+                weight=2,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=False,
+            ),
+            CoilsetMinDistance(
+                coils,
+                target=2 * np.pi * (R0 - offset) / coils.num_coils,
+                grid=coil_grid,
+            ),
+        )
+    )
+    # TODO: use FixCoilCurrent instead
+    # only 2 free optimization variables are coil center position phi and radius r_n
+    constraints = FixParameters(
+        coils,
+        {"current": True, "center": np.array([0, 2]), "normal": True, "r_n": True},
+    )
+    optimizer = Optimizer("scipy-trf")
+    [coils, eq], _ = optimizer.optimize(
+        things=[coils, eq], objective=objective, constraints=constraints, verbose=2
+    )
+
+    assert coils[0].current == 1e6  # current was fixed
+    np.testing.assert_allclose(  # check coils are equally spaced in toroidal angle phi
+        coils[0].center, [R0, np.pi / coils.num_coils, 0], rtol=1e-5
+    )
+    np.testing.assert_allclose(coils[0].normal, [0, 1, 0])  # normal was fixed
+    np.testing.assert_allclose(coils[0].r_n, a + offset, rtol=1e-2)  # check coil radius
+    # we asked targeted a larger offset but coil r_n were fixed, so surface
+    # coefficients should have decreased
+    np.testing.assert_allclose(
+        eq.surface.R_lmn[eq.surface.R_basis.get_idx(M=1, N=0)], a - 0.1
+    )
+    np.testing.assert_allclose(
+        eq.surface.Z_lmn[eq.surface.Z_basis.get_idx(M=-1, N=0)], -a + 0.1
+    )
+
+    # same but test with using surface
+    # reset the circular tokamak surface
+    surf = FourierRZToroidalSurface(
+        R_lmn=np.array([R0, a]),
+        Z_lmn=np.array([0, -a]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+    )
+    # reset coilset
+    coil = FourierPlanarCoil(
+        current=1e6,
+        center=[R0, phi0, 0],
+        normal=[0, 1, 0],
+        r_n=[a + 2 * offset],
+        basis="rpz",
+    )
+    coils = CoilSet(coil, NFP=4, sym=True)
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilsetMinDistance(
+                eq=surf,
+                coils=coils,
+                target=offset,
+                weight=2,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=True,
+            ),
+            CoilsetMinDistance(
+                coils,
+                target=2 * np.pi * (R0 - offset) / coils.num_coils,
+                grid=coil_grid,
+            ),
+        )
+    )
+    [coils], _ = optimizer.optimize(
+        things=coils, objective=objective, constraints=constraints, verbose=2
+    )
+
+    assert coils[0].current == 1e6  # current was fixed
+    np.testing.assert_allclose(  # check coils are equally spaced in toroidal angle phi
+        coils[0].center, [R0, np.pi / coils.num_coils, 0], rtol=1e-5
+    )
+    np.testing.assert_allclose(coils[0].normal, [0, 1, 0])  # normal was fixed
+    np.testing.assert_allclose(coils[0].r_n, a + offset, rtol=1e-2)  # check coil radius
+
+    ## Now fix coil radii and allow surface to change
+    # optimizing for target coil-plasma distance and maximum coil-coil distance
+    plasma_grid = LinearGrid(M=8, zeta=64)
+    coil_grid = LinearGrid(N=8)
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilsetMinDistance(
+                eq=surf,
+                coils=coils,
+                target=offset + 0.1,
+                weight=2,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=False,
+            ),
+            CoilsetMinDistance(
+                coils,
+                target=2 * np.pi * (R0 - offset) / coils.num_coils,
+                grid=coil_grid,
+            ),
+        )
+    )
+    # TODO: use FixCoilCurrent instead
+    # only 2 free optimization variables are coil center position phi and radius r_n
+    constraints = FixParameters(
+        coils,
+        {"current": True, "center": np.array([0, 2]), "normal": True, "r_n": True},
+    )
+    optimizer = Optimizer("scipy-trf")
+    [coils, surf], _ = optimizer.optimize(
+        things=[coils, surf], objective=objective, constraints=constraints, verbose=2
+    )
+
+    assert coils[0].current == 1e6  # current was fixed
+    np.testing.assert_allclose(  # check coils are equally spaced in toroidal angle phi
+        coils[0].center, [R0, np.pi / coils.num_coils, 0], rtol=1e-5
+    )
+    np.testing.assert_allclose(coils[0].normal, [0, 1, 0])  # normal was fixed
+    np.testing.assert_allclose(coils[0].r_n, a + offset, rtol=1e-2)  # check coil radius
+    # we asked targeted a larger offset but coil r_n were fixed, so surface
+    # coefficients should have decreased
+    np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(M=1, N=0)], a - 0.1)
+    np.testing.assert_allclose(surf.Z_lmn[surf.Z_basis.get_idx(M=-1, N=0)], -a + 0.1)

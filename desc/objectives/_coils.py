@@ -971,7 +971,7 @@ class PlasmaCoilsetMinDistance(_Objective):
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
             UserWarning,
-            "Plasma grid includes interior points, should be rho=1.",
+            "Plasma/Surface grid includes interior points, should be rho=1.",
         )
 
         self._dim_f = coilset.num_coils
@@ -1001,7 +1001,7 @@ class PlasmaCoilsetMinDistance(_Objective):
         if self._eq_fixed:
             # precompute the equilibrium surface coordinates
             data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
+                eq,
                 self._eq_data_keys,
                 params=eq.params_dict,
                 transforms=eq_transforms,
@@ -1017,12 +1017,16 @@ class PlasmaCoilsetMinDistance(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, coils_params, eq_params=None, constants=None):
-        """Compute minimum distances between coils.
+        """Compute minimum distance between coils and the plasma/surface.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        coils_params : dict
+            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict``
+        eq_params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg ``Equilibrium.params_dict``
+            Only required if ``self._eq_fixed = False``.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
             Defaults to self._constants.
@@ -1030,7 +1034,7 @@ class PlasmaCoilsetMinDistance(_Objective):
         Returns
         -------
         f : array of floats
-            Minimum distance to another coil for each coil in the coilset.
+            Minimum distance from coil to surface for each coil in the coilset.
 
         """
         if constants is None:
@@ -1046,7 +1050,7 @@ class PlasmaCoilsetMinDistance(_Objective):
             plasma_pts = constants["plasma_coords"]
         else:
             data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq,
                 self._eq_data_keys,
                 params=eq_params,
                 transforms=constants["eq_transforms"],

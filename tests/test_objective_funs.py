@@ -947,6 +947,14 @@ class TestObjectiveFunction:
             coil_grid=coil_grid,
             eq_fixed=True,
         )
+        test(
+            eq.surface,
+            coils,
+            offset,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=True,
+        )
 
         # planar toroidal coils with symmetry, around unfixed circular tokamak
         R0 = 5
@@ -964,6 +972,14 @@ class TestObjectiveFunction:
         coils = CoilSet(coils[1::2], NFP=2, sym=True)
         test(
             eq,
+            coils,
+            offset,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=False,
+        )
+        test(
+            eq.surface,
             coils,
             offset,
             plasma_grid=plasma_grid,

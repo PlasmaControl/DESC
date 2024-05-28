@@ -1,14 +1,10 @@
 """Test for neoclassical transport compute functions."""
 
-from functools import partial
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from orthax.legendre import leggauss
 
 from desc.compute import data_index, get_data_deps
-from desc.compute.bounce_integral import bounce_integral
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import desc_grid_from_field_line_coords
 from desc.grid import LinearGrid
@@ -85,7 +81,7 @@ def test_effective_ripple():
         eq,
         rho=np.linspace(0.01, 1, 20),
         alpha=np.array([0]),
-        zeta=np.linspace(-10 * np.pi, 10 * np.pi, 100),
+        zeta=np.linspace(-100 * np.pi, 100 * np.pi, 1000),
     )
     data = _compute_field_line_data(
         eq,
@@ -98,7 +94,7 @@ def test_effective_ripple():
         grid=grid,
         data=data,
         override_grid=False,
-        bounce_integral=partial(bounce_integral, quad=leggauss(28)),
+        # batched=False,  # noqa: E800
         # quad=vec_quadax(quadax.quadgk),  # noqa: E800
     )
     assert np.isfinite(data["ripple"]).all()

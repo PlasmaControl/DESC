@@ -13,7 +13,6 @@ from scipy.special import ellipkm1
 from tests.test_plotting import tol_1d
 
 from desc.backend import flatnonzero, jnp
-from desc.compute import data_index
 from desc.compute.bounce_integral import (
     _filter_not_nan,
     _poly_der,
@@ -33,12 +32,13 @@ from desc.compute.bounce_integral import (
     take_mask,
     tanh_sinh,
 )
-from desc.compute.utils import dot, get_data_deps, safediv
+from desc.compute.utils import dot, safediv
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import desc_grid_from_field_line_coords
+from desc.equilibrium.coords import rtz_grid
+from desc.equilibrium.equilibrium import compute_raz_data
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
-from desc.utils import errorif, only1
+from desc.utils import only1
 
 
 def _affine_bijection_forward(x, a, b):
@@ -85,7 +85,7 @@ def test_reshape_convention():
     rho = np.linspace(0, 1, 3)
     alpha = np.linspace(0, 2 * np.pi, 4)
     zeta = np.linspace(0, 6 * np.pi, 5)
-    grid = Grid.create_meshgrid(rho, alpha, zeta)
+    grid = Grid.create_meshgrid(rho, alpha, zeta, coordinates="raz")
     r, a, z = grid.nodes.T
     # functions of zeta should separate along first two axes
     # since those are contiguous, this should work
@@ -96,7 +96,7 @@ def test_reshape_convention():
     f = r.reshape(rho.size, -1)
     for i in range(1, f.shape[-1]):
         np.testing.assert_allclose(f[:, i - 1], f[:, i])
-    # test final reshape of bounce integral result won't mix data
+    # test reshape=ing result won't mix data
     f = (a**2 + z).reshape(rho.size, alpha.size, zeta.size)
     for i in range(1, f.shape[0]):
         np.testing.assert_allclose(f[i - 1], f[i])
@@ -109,9 +109,10 @@ def test_reshape_convention():
 
     err_msg = "The ordering conventions are required for correctness."
     assert "P, S, N" in inspect.getsource(bounce_points), err_msg
-    src = inspect.getsource(bounce_integral)
-    assert "S, knots.size" in src, err_msg
-    assert "pitch.shape[0], rho.size, alpha.size" in src, err_msg
+    assert "S, knots.size" in inspect.getsource(bounce_integral), err_msg
+    assert 'meshgrid(a, b, c, indexing="ij")' in inspect.getsource(
+        Grid.create_meshgrid
+    ), err_msg
 
 
 @pytest.mark.unit
@@ -463,17 +464,22 @@ def test_bounce_quadrature():
 @pytest.mark.unit
 def test_bounce_integral_checks():
     """Test that all the internal correctness checks pass for real example."""
+    # Suppose we want to compute a bounce average of the function
+    # f(ℓ) = (1 − λ |B|) * g_zz, where g_zz is the squared norm of the
+    # toroidal basis vector on some set of field lines specified by (ρ, α)
+    # coordinates. This is defined as
+    # (∫ f(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ)
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
     knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
-    grid_desc = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
+    grid = rtz_grid(eq, rho, alpha, knots, coordinates="raz")
     grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
     data = eq.compute(["iota"], grid=grid_fsa)
-    data = {"iota": grid_desc.copy_data_from_other(data["iota"], grid_fsa)}
+    data = {"iota": grid.copy_data_from_other(data["iota"], grid_fsa)}
     data = eq.compute(
         ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
-        grid=grid_desc,
+        grid=grid,
         override_grid=False,
         data=data,
     )
@@ -495,9 +501,26 @@ def test_bounce_integral_checks():
 
     pitch = 1 / get_extrema(**spline)
     num = bounce_integrate(numerator, data["g_zz"], pitch)
+    # Can reduce memory usage by specifying by not batching.
     den = bounce_integrate(denominator, [], pitch, batch=False)
-    average = num / den
-    assert np.isfinite(average).any()
+    avg = num / den
+    assert np.isfinite(avg).any()
+
+    # Sum all bounce integrals across field line
+    avg = np.nansum(avg, axis=-1)
+    # Group the data by field line.
+    avg = avg.reshape(pitch.shape[0], rho.size, alpha.size)
+    # The bounce averages stored at index i, j
+    i, j = 0, 0
+    print(avg[:, i, j])
+    # are the bounce averages along the field line with nodes
+    # given in Clebsch-Type field-line coordinates ρ, α, ζ
+    raz_grid = grid.source_grid
+    nodes = raz_grid.nodes.reshape(rho.size, alpha.size, -1, 3)
+    print(nodes[i, j])
+    # for the pitch values stored in
+    pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
+    print(pitch[:, i, j])
 
 
 @partial(np.vectorize, excluded={0})
@@ -583,79 +606,6 @@ def _elliptic_incomplete(k2):
     return I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7
 
 
-# kludge until GitHub issue #719 is resolved.
-def _get_data(eq, rho, alpha, names_field_line, names_0d_or_1dr=None):
-    """Compute field line quantities on correct grid for test_drift().
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium to compute on.
-    rho : Array
-        Field line radial label.
-    alpha : Array
-        Field line poloidal label.
-    names_field_line : list
-        Field line quantities that will be computed on the returned field line grid.
-        Should not include 0d or 1dr quantities.
-    names_0d_or_1dr : list
-        Things to compute that are constant throughout volume or over flux surface.
-
-    Returns
-    -------
-    data : dict
-        Computed quantities.
-    grid_desc : Grid
-        Grid on which the returned quantities can be broadcast on.
-    zeta : Array
-        Zeta values along field line.
-
-    """
-    if names_0d_or_1dr is None:
-        names_0d_or_1dr = []
-    p = "desc.equilibrium.equilibrium.Equilibrium"
-    # Gather dependencies of given quantities.
-    deps = (
-        get_data_deps(names_field_line + names_0d_or_1dr, obj=p, has_axis=False)
-        + names_0d_or_1dr
-    )
-    deps = list(set(deps))
-    # Create grid with given flux surfaces.
-    grid1dr = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-    # Compute dependencies on correct grids.
-    seed_data = eq.compute(deps, grid=grid1dr)
-    dep1dr = {dep for dep in deps if data_index[p][dep]["coordinates"] == "r"}
-    dep0d = {dep for dep in deps if data_index[p][dep]["coordinates"] == ""}
-
-    # Make a set of nodes along a single fieldline.
-    iota = grid1dr.compress(seed_data["iota"]).item()
-    errorif(alpha != 0, NotImplementedError)
-    zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-    # Make grid that can separate into field lines via a reshape operation,
-    # as expected by bounce_integral().
-    grid_desc = desc_grid_from_field_line_coords(eq, rho, alpha=alpha, zeta=zeta)
-
-    # Collect quantities that can be used as a seed to compute the
-    # field line quantities over the grid mapped from field line coordinates.
-    # (Single field line grid won't have enough poloidal resolution to
-    # compute these quantities accurately).
-    data0d = {key: val for key, val in seed_data.items() if key in dep0d}
-    data1d = {
-        key: grid_desc.copy_data_from_other(val, grid1dr)
-        for key, val in seed_data.items()
-        if key in dep1dr
-    }
-    data = data0d | data1d
-    # Compute field line quantities with precomputed dependencies.
-    for name in names_field_line:
-        if name in data:
-            del data[name]
-    data = eq.compute(
-        names=names_field_line, grid=grid_desc, data=data, override_grid=False
-    )
-    return data, grid_desc, zeta
-
-
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_drift():
@@ -664,12 +614,19 @@ def test_drift():
     psi_boundary = eq.Psi / (2 * np.pi)
     psi = 0.25 * psi_boundary
     rho = np.sqrt(psi / psi_boundary)
-    assert np.isclose(rho, 0.5)
+    np.testing.assert_allclose(rho, 0.5)
+
+    # Make a set of nodes along a single fieldline.
+    grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
+    data = eq.compute(["iota"], grid=grid_fsa)
+    iota = grid_fsa.compress(data["iota"]).item()
     alpha = 0
-    data, grid, zeta = _get_data(
+    zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
+    grid = rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+
+    data = compute_raz_data(
         eq,
-        rho,
-        alpha,
+        grid,
         [
             "B^zeta",
             "|B|",
@@ -680,9 +637,11 @@ def test_drift():
             "grad(psi)",
             "|grad(psi)|",
         ],
-        ["shear", "a", "psi", "iota"],
+        names_0d=["a"],
+        names_1dr=["shear", "psi", "iota"],
     )
-    assert np.allclose(data["psi"], psi)
+    np.testing.assert_allclose(data["psi"], psi)
+    np.testing.assert_allclose(data["iota"], iota)
 
     L_ref = data["a"]
     B_ref = 2 * np.abs(psi_boundary) / L_ref**2
@@ -703,7 +662,6 @@ def test_drift():
     #   is independent of normalization length scales, like "effective r/R0".
     epsilon = L_ref * rho  # Aspect ratio of the flux surface.
     np.testing.assert_allclose(epsilon, 0.05)
-    iota = grid.compress(data["iota"]).item()
     theta_PEST = alpha + iota * zeta
     # same as 1 / (1 + epsilon cos(theta)) assuming epsilon << 1
     B_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
@@ -765,6 +723,7 @@ def test_drift():
     y = np.sqrt(2 * epsilon * pitch * B0)
     I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
     I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
+
     drift_analytic_num = (
         fudge_2 * alpha_MHD / B0**2 * I_1
         - 0.5
@@ -775,16 +734,14 @@ def test_drift():
             - (I_6 + I_7)
         )
     ) / G0
-
-    drift_analytic_denom = I_0 / G0
-
-    drift_analytic = drift_analytic_num / drift_analytic_denom
+    drift_analytic_den = I_0 / G0
+    drift_analytic = drift_analytic_num / drift_analytic_den
 
     def integrand_num(cvdrift, gbdrift, B, pitch, Z):
         g = jnp.sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
-    def integrand_denom(B, pitch, Z):
+    def integrand_den(B, pitch, Z):
         g = jnp.sqrt(1 - pitch * B)
         return 1 / g
 
@@ -793,17 +750,15 @@ def test_drift():
         f=[cvdrift, gbdrift],
         pitch=pitch[:, np.newaxis],
     )
-
-    drift_numerical_denom = bounce_integrate(
-        integrand=integrand_denom,
+    drift_numerical_den = bounce_integrate(
+        integrand=integrand_den,
         f=[],
         pitch=pitch[:, np.newaxis],
     )
 
     drift_numerical_num = np.squeeze(_filter_not_nan(drift_numerical_num))
-    drift_numerical_denom = np.squeeze(_filter_not_nan(drift_numerical_denom))
-
-    drift_numerical = drift_numerical_num / drift_numerical_denom
+    drift_numerical_den = np.squeeze(_filter_not_nan(drift_numerical_den))
+    drift_numerical = drift_numerical_num / drift_numerical_den
     msg = "There should be one bounce integral per pitch in this example."
     assert drift_numerical.size == drift_analytic.size, msg
     np.testing.assert_allclose(drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2)

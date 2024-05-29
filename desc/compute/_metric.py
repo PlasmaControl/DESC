@@ -1843,12 +1843,12 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "grad(alpha)", "grad(|B|)"],
+    data=["|B|^2", "b", "grad(alpha)", "grad(|B|)"],
 )
 def _gbdrift(params, transforms, profiles, data, **kwargs):
     data["gbdrift"] = (
         1
-        / data["|B|"] ** 2
+        / data["|B|^2"]
         * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
     )
     return data
@@ -1870,11 +1870,11 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "psi_r", "|B|", "gbdrift"],
+    data=["p_r", "psi_r", "|B|^2", "gbdrift"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
-    data["cvdrift"] = 1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
+    data["cvdrift"] = 1 / data["|B|^2"] * dp_dpsi + data["gbdrift"]
     return data
 
 
@@ -1888,16 +1888,16 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     units="1/(T-m^{2})",
     units_long="inverse Tesla meters^2",
     description="Radial component of the geometric part of the curvature drift"
-    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    + " used for local stability analyses for Gamma_c.",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "e^rho", "grad(|B|)"],
+    data=["|B|^2", "b", "e^rho", "grad(|B|)"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (
-        1 / data["|B|"] ** 2 * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
+        1 / data["|B|^2"] * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
     )
     return data

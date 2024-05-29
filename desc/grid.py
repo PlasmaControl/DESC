@@ -765,10 +765,6 @@ class Grid(_Grid):
             quadrature weight over poloidal domain
 
         """
-        if hasattr(self, "_poloidal_weight"):
-            return self._poloidal_weight
-        if hasattr(self, "_unique_poloidal_idx"):
-            self._poloidal_weight = jnp.array([2 * jnp.pi / self.num_poloidal])
         return self.__dict__.setdefault("_poloidal_weight", None)
 
     @poloidal_weight.setter

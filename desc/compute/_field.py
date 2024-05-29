@@ -2674,11 +2674,11 @@ def _B_vol(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["sqrt(g)", "|B|", "V"],
+    data=["sqrt(g)", "|B|^2", "V"],
 )
 def _B_rms(params, transforms, profiles, data, **kwargs):
     data["<|B|>_rms"] = jnp.sqrt(
-        jnp.sum(data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights)
+        jnp.sum(data["|B|^2"] * data["sqrt(g)"] * transforms["grid"].weights)
         / data["V"]
     )
     return data

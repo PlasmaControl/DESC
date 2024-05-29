@@ -506,43 +506,49 @@ def to_sfl(
     return eq_sfl
 
 
-def desc_grid_from_field_line_coords(eq, rho, alpha, zeta):
-    """Return DESC coordinate grid from given Clebsch-Type field-line coordinates.
+def rtz_grid(eq, radial, poloidal, toroidal, coordinates):
+    """Return DESC coordinate grid from given coordinates.
 
-    Create a meshgrid from the given field line coordinates,
-    and return the equivalent DESC coordinate grid.
+    Create a meshgrid from the given coordinates, and return the
+    paired DESC coordinate grid.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium on which to perform coordinate mapping.
-    rho : ndarray
-        Sorted unique flux surface label coordinates.
-    alpha : ndarray
-        Sorted unique field line label coordinates over a constant rho surface.
-    zeta : ndarray
-        Sorted unique field line-following ζ coordinates.
+    radial : ndarray
+        Sorted unique radial coordinates.
+    poloidal : ndarray
+        Sorted unique poloidal coordinates.
+    toroidal : ndarray
+        Sorted unique toroidal coordinates.
+    coordinates : str
+        Input coordinates that are specified by the arguments, respectively.
+        raz : rho, alpha, zeta
+        rpz : rho, theta_PEST, zeta
+        rtz : rho, theta, zeta
 
     Returns
     -------
-    grid_desc : Grid
-        DESC coordinate grid for the given field line coordinates.
+    desc_grid : Grid
+        DESC coordinate grid for the given coordinates.
 
     """
-    grid_fl = Grid.create_meshgrid(rho, alpha, zeta, coordinates="raz")
-    coords_desc = eq.map_coordinates(
-        grid_fl.nodes,
-        inbasis=("rho", "alpha", "zeta"),
+    grid = Grid.create_meshgrid(radial, poloidal, toroidal, coordinates)
+    inbasis = {"r": "rho", "t": "theta", "p": "theta_PEST", "a": "alpha", "z": "zeta"}
+    rtz_nodes = eq.map_coordinates(
+        grid.nodes,
+        inbasis=[inbasis[char] for char in coordinates],
         outbasis=("rho", "theta", "zeta"),
         period=(jnp.inf, 2 * jnp.pi, jnp.inf),
     )
-    grid_desc = Grid(
-        nodes=coords_desc,
+    desc_grid = Grid(
+        nodes=rtz_nodes,
         coordinates="rtz",
-        source_grid=grid_fl,
+        source_grid=grid,
         sort=False,
         jitable=True,
-        _unique_rho_idx=grid_fl.unique_rho_idx,
-        _inverse_rho_idx=grid_fl.inverse_rho_idx,
+        _unique_rho_idx=grid.unique_rho_idx,
+        _inverse_rho_idx=grid.inverse_rho_idx,
     )
-    return grid_desc
+    return desc_grid

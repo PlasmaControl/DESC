@@ -1130,7 +1130,7 @@ def bounce_integral(
     B,
     B_z_ra,
     knots,
-    quad=leggauss(19),
+    quad=leggauss(21),
     automorphism=(automorphism_sin, grad_automorphism_sin),
     B_ref=1,
     L_ref=1,
@@ -1161,7 +1161,8 @@ def bounce_integral(
     and the quantities in ``f`` passed to the returned method
     can be separated into field lines via ``.reshape(S, knots.size)``.
     One way to satisfy this is to pass in quantities computed on the grid
-    returned from the method ``desc_grid_from_field_line_coords``.
+    returned from the method ``desc.equilibrium.coords.rtz_grid``.
+    See ``tests.test_bounce_integral.test_bounce_integral_checks`` for example use.
 
     Parameters
     ----------
@@ -1233,63 +1234,6 @@ def bounce_integral(
             Second axis enumerates the splines along the field lines.
             Last axis enumerates the polynomials of the spline along a particular
             field line.
-
-    Examples
-    --------
-    Suppose we want to compute a bounce average of the function
-    f(ℓ) = (1 − λ |B|) * g_zz, where g_zz is the squared norm of the
-    toroidal basis vector on some set of field lines specified by (ρ, α)
-    coordinates. This is defined as
-        (∫ f(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ)
-
-
-    .. code-block:: python
-
-        eq = get("HELIOTRON")
-        rho = np.linspace(1e-12, 1, 6)
-        alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
-        knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
-        grid_desc = desc_grid_from_field_line_coords(eq, rho, alpha, knots)
-        grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-        data = eq.compute(["iota"], grid=grid_fsa)
-        data = {"iota": grid_desc.copy_data_from_other(data["iota"], grid_fsa)}
-        data = eq.compute(
-            ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
-            grid=grid_desc,
-            override_grid=False,
-        )
-        bounce_integrate, spline = bounce_integral(
-            data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, check=True
-        )
-
-        def numerator(g_zz, B, pitch, Z):
-            f = (1 - pitch * B) * g_zz
-            return safediv(f, jnp.sqrt(1 - pitch * B))
-
-        def denominator(B, pitch, Z):
-            return safediv(1, jnp.sqrt(1 - pitch * B))
-
-        pitch = 1 / get_extrema(**spline)
-        num = bounce_integrate(numerator, data["g_zz"], pitch)
-        den = bounce_integrate(denominator, [], pitch)
-        average = num / den
-
-        # Now we can group the data by field line.
-        average = average.reshape(pitch.shape[0], rho.size, alpha.size, -1)
-        # The bounce averages stored at index i, j
-        i, j = 0, 0
-        print(average[:, i, j])
-        # are the bounce averages along the field line with nodes
-        # given in Clebsch-Type field-line coordinates ρ, α, ζ
-        grid_fl = grid_desc.source_grid
-        nodes = grid_fl.nodes.reshape(rho.size, alpha.size, -1, 3)
-        print(nodes[i, j])
-        # for the pitch values stored in
-        pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
-        print(pitch[:, i, j])
-        # Some of these bounce averages will evaluate as nan.
-        # You should filter out these nan values when computing stuff.
-        print(np.nansum(average, axis=-1))
 
     """
     B_sup_z = B_sup_z * L_ref / B_ref

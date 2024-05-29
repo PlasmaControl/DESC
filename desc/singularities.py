@@ -9,7 +9,7 @@ from interpax import fft_interp2d
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.compute.utils import safediv, safenorm
+from desc.compute.utils import dot, safediv, safenorm
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
@@ -705,11 +705,56 @@ _kernel_biot_savart_A.ndim = 3
 _kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
 
 
+def _kernel_Bn_over_r(eval_data, source_data, diag=False):
+    # Bn / |r|
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    if diag:
+        dx = eval_x - source_x
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    r = safenorm(dx, axis=-1)
+    out = safediv(source_data["Bn"], r)
+    return out
+
+
+_kernel_Bn_over_r.ndim = 1
+_kernel_Bn_over_r.keys = ["R", "phi", "Z", "Bn"]
+
+
+def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
+    # Phi * dG/dn = Phi * n dot r / r^3
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    if diag:
+        dx = eval_x - source_x
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
+    num = dot(n, dx, axis=-1) * source_data["Phi"] * source_data["|e_theta x e_zeta|"]
+    r = safenorm(dx, axis=-1)
+    out = 1e-7 * safediv(num, r**3)
+    return out
+
+
+_kernel_Phi_dG_dn.ndim = 1
+_kernel_Phi_dG_dn.keys = ["R", "phi", "Z", "Phi", "|e_theta x e_zeta|", "n_rho"]
+
 kernels = {
     "1_over_r": _kernel_1_over_r,
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
+    "_kernel_Bn_over_r": _kernel_Bn_over_r,
+    "_kernel_Phi_dG_dn": _kernel_Phi_dG_dn,
 }
 
 

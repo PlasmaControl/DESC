@@ -43,6 +43,7 @@ class _Grid(IOAble, ABC):
         "_inverse_poloidal_idx",
         "_inverse_zeta_idx",
         "is_meshgrid",
+        "_poloidal_weight",
     ]
 
     @abstractmethod
@@ -659,6 +660,10 @@ class Grid(_Grid):
         # can be iterated over along the relevant axis of the reshaped grid:
         # nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
         self.is_meshgrid = kwargs.pop("is_meshgrid", False)
+        if "poloidal_weight" in kwargs:
+            self._poloidal_weight = jnp.atleast_1d(kwargs.pop("poloidal_weight"))
+        else:
+            self._poloidal_weight = None
 
         self._nodes = self._create_nodes(nodes)
         if spacing is not None:
@@ -749,6 +754,27 @@ class Grid(_Grid):
     def source_grid(self):
         """Coordinates from which this grid was mapped from."""
         return self._source_grid
+
+    @property
+    def poloidal_weight(self):
+        """Quadrature weight over poloidal domain.
+
+        Returns
+        -------
+        poloidal_weight : Array, shape(self.num_poloidal)
+            quadrature weight over poloidal domain
+
+        """
+        if hasattr(self, "_poloidal_weight"):
+            return self._poloidal_weight
+        if hasattr(self, "_unique_poloidal_idx"):
+            self._poloidal_weight = jnp.array([2 * jnp.pi / self.num_poloidal])
+        return self.__dict__.setdefault("_poloidal_weight", None)
+
+    @poloidal_weight.setter
+    def poloidal_weight(self, value):
+        """Set quadrature weight over poloidal domain."""
+        self._poloidal_weight = jnp.atleast_1d(value)
 
 
 class LinearGrid(_Grid):

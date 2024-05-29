@@ -49,15 +49,14 @@ def vec_quadax(quad):
     return vec_quad
 
 
-def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
+def poloidal_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     """Gauss-Legendre quadrature.
 
     Returns quadrature points αₖ and weights wₖ for the approximate evaluation
     of the integral ∫ f(α) dα ≈ ∑ₖ wₖ f(αₖ).
 
-    For use with computing effective ripple, set resolution > 1 to see if a long
-    field line integral can be approximated by flux surface average of field line
-    integrals over finite transits.
+    Set resolution > 1 to see if a long field line integral can be approximated
+    by flux surface average of shorter field line integrals with finite transits.
 
     Assuming the rotational transform is irrational, the limit where the
     parameterization of the field line length tends to infinity of an average
@@ -97,6 +96,19 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
     return alpha, w
 
 
+def _poloidal_integrate(grid, f, name=""):
+    # assumes f has shape (grid.num_radial, grid.num_poloidal)
+    if grid.poloidal_weight is None:
+        warnif(
+            grid.num_poloidal != 1,
+            msg=colored(f"{name} reduced via poloidal mean.", "yellow"),
+        )
+        f = jnp.mean(f, axis=-1)
+    else:
+        f = f @ grid.poloidal_weight
+    return f
+
+
 @register_compute_fun(
     name="V_psi(r)*range(z)",
     label="\\int d \\ell / \\vert B \\vert",
@@ -121,10 +133,15 @@ def alpha_leggauss(resolution, a_min=0, a_max=2 * jnp.pi):
 def _V_psi_range_z(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
-    z = jnp.reshape(g.nodes[:, 2], shape)
-    V = jnp.reshape(1 / (data["B^zeta"] * data["|B|"]), shape)
-    V = jnp.mean(quadax.simpson(V, z, axis=-1), axis=1)
-    warnif(g.num_alpha != 1, msg=colored("Reduced via mean over alpha.", "yellow"))
+    V = _poloidal_integrate(
+        g,
+        quadax.simpson(
+            jnp.reshape(1 / (data["B^zeta"] * data["|B|"]), shape),
+            jnp.reshape(g.nodes[:, 2], shape),
+            axis=-1,
+        ),
+        name="V_psi(r)*range(z)",
+    )
     data["V_psi(r)*range(z)"] = g.expand(V)
     return data
 
@@ -153,17 +170,22 @@ def _V_psi_range_z(data, transforms, profiles, **kwargs):
 def _S_range_z(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
-    z = jnp.reshape(g.nodes[:, 2], shape)
-    S = jnp.reshape(data["|grad(psi)|"] / (data["B^zeta"] * data["|B|"]), shape)
-    S = jnp.mean(quadax.simpson(S, z, axis=-1), axis=1)
-    warnif(g.num_alpha != 1, msg=colored("Reduced via mean over alpha.", "yellow"))
+    S = _poloidal_integrate(
+        g,
+        quadax.simpson(
+            jnp.reshape(data["|grad(psi)|"] / (data["B^zeta"] * data["|B|"]), shape),
+            jnp.reshape(g.nodes[:, 2], shape),
+            axis=-1,
+        ),
+        name="S(r)*range(z)",
+    )
     data["S(r)*range(z)"] = g.expand(S)
     return data
 
 
 @register_compute_fun(
     name="effective ripple raw",
-    label="∫ db ∑ⱼ Hⱼ² / Iⱼ",
+    label="-∫ dλ λ⁻² ∑ⱼ Hⱼ² / Iⱼ",
     units="Wb / m",
     units_long="Webers per meter",
     description="Effective ripple modulation amplitude, not normalized",
@@ -193,16 +215,16 @@ def _S_range_z(data, transforms, profiles, **kwargs):
     ),
     batch="bool : Whether to perform computation in a batched manner.",
     quad=(
-        "callable : Quadrature method over velocity space. "
+        "callable : Quadrature method over velocity coordinate. "
         "Adaptive quadrature method from quadax must be wrapped with vec_quadax."
     ),
-    quad_res="int : Resolution for quadrature over velocity space.",
-    alpha_weight="Array : Quadrature weight over alpha.",
+    quad_res="int : Resolution for quadrature over velocity coordinate.",
 )
 def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     def dH(grad_psi_norm, cvdrift0, B, pitch, Z):
         return (
-            pitch
+            1
+            / pitch
             * jnp.sqrt(1 / pitch - B)
             * (4 / B - pitch)
             * grad_psi_norm
@@ -219,60 +241,58 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     batch = kwargs.pop("batch", True)
     quad = kwargs.pop("quad", quadax.simpson)
     quad_res = kwargs.pop("quad_res", 50)
-    alpha_weight = jnp.atleast_1d(kwargs.pop("alpha_weight", 1 / g.num_alpha))
-    # Get boundary of integral over pitch for each field line.
+    # Get endpoints of integral over pitch for each field line.
     min_B, max_B = map(g.compress, (data["min_tz |B|"], data["max_tz |B|"]))
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + 1e-6) * min_B
     max_B = (1 - 1e-6) * max_B
-    boundary = jnp.stack([min_B, max_B])
+    pitch_endpoint = 1 / jnp.stack([max_B, min_B])
 
     is_Newton_Cotes = quad in [trapezoid, quadax.trapezoid, quadax.simpson]
     if is_Newton_Cotes:
-        bounce_integrate, _ = _bounce_integral(
+        bounce_int, _ = _bounce_integral(
             data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots
         )
 
-        def d_ripple(b):
-            """Return ∑ⱼ Hⱼ² / Iⱼ evaluated at b.
+        def d_ripple(pitch):
+            """Return λ⁻² ∑ⱼ Hⱼ² / Iⱼ evaluated at pitch.
 
             Parameters
             ----------
-            b : Array, shape(*b.shape[:-1], g.num_rho * g.num_alpha)
-                Multiplicative inverse of pitch angle.
+            pitch : Array, shape(*pitch.shape[:-1], g.num_rho * g.num_alpha)
+                Pitch angle.
 
             Returns
             -------
-            rs : Array, shape(b.shape)
-                ∑ⱼ Hⱼ² / Iⱼ
+            d_ripple : Array, shape(pitch.shape)
+                λ⁻² ∑ⱼ Hⱼ² / Iⱼ
 
             """
-            pitch = 1 / b
-            H = bounce_integrate(
+            # absorbed λ⁻² into H
+            H = bounce_int(
                 dH, [data["|grad(psi)|"], data["cvdrift0"]], pitch, batch=batch
             )
-            I = bounce_integrate(dI, [], pitch, batch=batch)
+            I = bounce_int(dI, [], pitch, batch=batch)
             return jnp.nansum(H**2 / I, axis=-1)
 
-        b = composite_linspace(boundary, quad_res)
-        b = jnp.broadcast_to(
-            b[..., jnp.newaxis], (b.shape[0], g.num_rho, g.num_alpha)
-        ).reshape(b.shape[0], g.num_rho * g.num_alpha)
-        ripple = quad(d_ripple(b), b, axis=0)
+        pitch = composite_linspace(pitch_endpoint, quad_res)
+        pitch = jnp.broadcast_to(
+            pitch[..., jnp.newaxis], (pitch.shape[0], g.num_rho, g.num_alpha)
+        ).reshape(pitch.shape[0], g.num_rho * g.num_alpha)
+        ripple = quad(d_ripple(pitch), pitch, axis=0)
     else:
         # Use adaptive quadrature.
 
-        def d_ripple(b, B_sup_z, B, B_z_ra, grad_psi, cvdrift0):
+        def d_ripple(pitch, B_sup_z, B, B_z_ra, grad_psi, cvdrift0):
             # Quadax requires scalar integration interval, so we need to return scalar.
-            bounce_integrate, _ = _bounce_integral(B_sup_z, B, B_z_ra, knots)
-            pitch = 1 / b
-            H = bounce_integrate(dH, [grad_psi, cvdrift0], pitch, batch=batch)
-            I = bounce_integrate(dI, [], pitch, batch=batch)
+            bounce_int, _ = _bounce_integral(B_sup_z, B, B_z_ra, knots)
+            H = bounce_int(dH, [grad_psi, cvdrift0], pitch, batch=batch)
+            I = bounce_int(dI, [], pitch, batch=batch)
             return jnp.squeeze(jnp.nansum(H**2 / I, axis=-1))
 
-        boundary = boundary.T[:, jnp.newaxis]
-        assert boundary.shape == (g.num_rho, 1, 2)
+        pitch_endpoint = pitch_endpoint.T[:, jnp.newaxis]
+        assert pitch_endpoint.shape == (g.num_rho, 1, 2)
         args = [
             f.reshape(g.num_rho, g.num_alpha, g.num_zeta)
             for f in [
@@ -283,10 +303,11 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
                 data["cvdrift0"],
             ]
         ]
-        ripple = quad(d_ripple, boundary, *args)
+        ripple = quad(d_ripple, pitch_endpoint, *args)
 
-    # Integrate over flux surface.
-    ripple = jnp.reshape(ripple, (g.num_rho, g.num_alpha)) @ alpha_weight
+    ripple = _poloidal_integrate(
+        g, ripple.reshape(g.num_rho, g.num_alpha), name="effective ripple raw"
+    )
     data["effective ripple raw"] = g.expand(ripple)
     return data
 
@@ -324,7 +345,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Gamma_c raw",
-    label="∫ db ∑ⱼ (γ_c² * ∂I/∂b)ⱼ",
+    label="-∫ dλ ∑ⱼ (γ_c² ∂I/∂(λ⁻¹) λ⁻²)ⱼ",
     units="m^3 / Wb",
     units_long="Cubic meters per Weber",
     description="Energetic ion confinement, not normalized",
@@ -354,18 +375,17 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     ),
     batch="bool : Whether to perform computation in a batched manner.",
     quad=(
-        "callable : Quadrature method over velocity space. "
+        "callable : Quadrature method over velocity coordinate. "
         "Adaptive quadrature method from quadax must be wrapped with vec_quadax."
     ),
-    quad_res="int : Resolution for quadrature over velocity space.",
-    alpha_weight="Array : Quadrature weight over alpha.",
+    quad_res="int : Resolution for quadrature over velocity coordinate.",
 )
 def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
     def d_gamma_c(f, B, pitch, Z):
         return f * (1 - pitch * B / 2) / jnp.sqrt(1 - pitch * B)
 
-    def d_dI_db(B, pitch, Z):
-        return pitch**2 / (2 * jnp.sqrt(1 - pitch * B))
+    def dK(B, pitch, Z):
+        return 1 / (2 * jnp.sqrt(1 - pitch * B))
 
     g = transforms["grid"].source_grid
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
@@ -373,74 +393,72 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
     batch = kwargs.pop("batch", True)
     quad = kwargs.pop("quad", quadax.simpson)
     quad_res = kwargs.pop("quad_res", 50)
-    alpha_weight = jnp.atleast_1d(kwargs.pop("alpha_weight", 1 / g.num_alpha))
-    # Get boundary of integral over pitch for each field line.
+    # Get endpoints of integral over pitch for each field line.
     min_B, max_B = map(g.compress, (data["min_tz |B|"], data["max_tz |B|"]))
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + 1e-6) * min_B
     max_B = (1 - 1e-6) * max_B
-    boundary = jnp.stack([min_B, max_B])
+    pitch_endpoint = 1 / jnp.stack([max_B, min_B])
 
     is_Newton_Cotes = quad in [trapezoid, quadax.trapezoid, quadax.simpson]
     if is_Newton_Cotes:
-        bounce_integrate, _ = _bounce_integral(
+        bounce_int, _ = _bounce_integral(
             data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots
         )
 
-        def d_Gamma_c_raw(b):
-            """Return ∑ⱼ (γ_c² * ∂I/∂b)ⱼ evaluated at b.
+        def d_Gamma_c_raw(pitch):
+            """Return ∑ⱼ (γ_c² ∂I/∂(λ⁻¹) λ⁻²)ⱼ evaluated at pitch.
 
             Parameters
             ----------
-            b : Array, shape(*b.shape[:-1], g.num_rho * g.num_alpha)
-                Multiplicative inverse of pitch angle.
+            pitch : Array, shape(*pitch.shape[:-1], g.num_rho * g.num_alpha)
+                Pitch angle.
 
             Returns
             -------
-            rs : Array, shape(b.shape)
-                ∑ⱼ (γ_c² * ∂I/∂b)ⱼ
+            d_Gamma_c_raw : Array, shape(pitch.shape)
+                ∑ⱼ (γ_c² ∂I/∂(λ⁻¹) λ⁻²)ⱼ
 
             """
-            pitch = 1 / b
             # todo: add Nemov's |grad(psi)|
             gamma_c = (
                 2
                 / jnp.pi
                 * jnp.arctan(
-                    bounce_integrate(d_gamma_c, data["cvdrift0"], pitch, batch=batch)
-                    / bounce_integrate(d_gamma_c, data["gbdrift"], pitch, batch=batch)
+                    bounce_int(d_gamma_c, data["cvdrift0"], pitch, batch=batch)
+                    / bounce_int(d_gamma_c, data["gbdrift"], pitch, batch=batch)
                 )
             )
-            dI_db = bounce_integrate(d_dI_db, [], pitch, batch=batch)
-            return jnp.nansum(gamma_c**2 * dI_db, axis=-1)
+            # K = ∂I/∂(λ⁻¹) λ⁻²
+            K = bounce_int(dK, [], pitch, batch=batch)
+            return jnp.nansum(gamma_c**2 * K, axis=-1)
 
-        b = composite_linspace(boundary, quad_res)
-        b = jnp.broadcast_to(
-            b[..., jnp.newaxis], (b.shape[0], g.num_rho, g.num_alpha)
-        ).reshape(b.shape[0], g.num_rho * g.num_alpha)
-        Gamma_c_raw = quad(d_Gamma_c_raw(b), b, axis=0)
+        pitch = composite_linspace(pitch_endpoint, quad_res)
+        pitch = jnp.broadcast_to(
+            pitch[..., jnp.newaxis], (pitch.shape[0], g.num_rho, g.num_alpha)
+        ).reshape(pitch.shape[0], g.num_rho * g.num_alpha)
+        Gamma_c_raw = quad(d_Gamma_c_raw(pitch), pitch, axis=0)
     else:
         # Use adaptive quadrature.
 
-        def d_Gamma_c_raw(b, B_sup_z, B, B_z_ra, cvdrift0, gbdrift):
+        def d_Gamma_c_raw(pitch, B_sup_z, B, B_z_ra, cvdrift0, gbdrift):
             # Quadax requires scalar integration interval, so we need to return scalar.
-            bounce_integrate, _ = _bounce_integral(B_sup_z, B, B_z_ra, knots)
-            pitch = 1 / b
+            bounce_int, _ = _bounce_integral(B_sup_z, B, B_z_ra, knots)
             # todo: add Nemov's |grad(psi)|
             gamma_c = (
                 2
                 / jnp.pi
                 * jnp.arctan(
-                    bounce_integrate(d_gamma_c, cvdrift0, pitch, batch=batch)
-                    / bounce_integrate(d_gamma_c, gbdrift, pitch, batch=batch)
+                    bounce_int(d_gamma_c, cvdrift0, pitch, batch=batch)
+                    / bounce_int(d_gamma_c, gbdrift, pitch, batch=batch)
                 )
             )
-            dI_db = bounce_integrate(d_dI_db, [], pitch, batch=batch)
-            return jnp.squeeze(jnp.nansum(gamma_c**2 * dI_db, axis=-1))
+            K = bounce_int(dK, [], pitch, batch=batch)
+            return jnp.squeeze(jnp.nansum(gamma_c**2 * K, axis=-1))
 
-        boundary = boundary.T[:, jnp.newaxis]
-        assert boundary.shape == (g.num_rho, 1, 2)
+        pitch_endpoint = pitch_endpoint.T[:, jnp.newaxis]
+        assert pitch_endpoint.shape == (g.num_rho, 1, 2)
         args = [
             f.reshape(g.num_rho, g.num_alpha, g.num_zeta)
             for f in [
@@ -451,10 +469,11 @@ def _Gamma_c_raw(params, transforms, profiles, data, **kwargs):
                 data["gbdrift"],
             ]
         ]
-        Gamma_c_raw = quad(d_Gamma_c_raw, boundary, *args)
+        Gamma_c_raw = quad(d_Gamma_c_raw, pitch_endpoint, *args)
 
-    # Integrate over flux surface.
-    Gamma_c_raw = jnp.reshape(Gamma_c_raw, (g.num_rho, g.num_alpha)) @ alpha_weight
+    Gamma_c_raw = _poloidal_integrate(
+        g, Gamma_c_raw.reshape(g.num_rho, g.num_alpha), name="Gamma_c raw"
+    )
     data["Gamma_c raw"] = g.expand(Gamma_c_raw)
     return data
 

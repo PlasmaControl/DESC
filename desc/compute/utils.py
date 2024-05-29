@@ -146,7 +146,7 @@ def _compute(
     for name in names:
         if (
             data_index[parameterization][name]["dim"] == 3  # it should be 3D
-            and kwargs.get("basis", "rpz") == "xyz"  # user should ask in xyz
+            and kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
             and ("phi" in data)  # phi is needed for conversion
             and data_index[parameterization][name]["coordinates"] == "rtz"
         ):

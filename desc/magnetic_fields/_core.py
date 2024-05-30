@@ -15,7 +15,7 @@ from desc.basis import (
     DoubleFourierSeries,
 )
 from desc.compute import compute as compute_fun
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -56,10 +56,63 @@ def biot_savart_general(re, rs, J, dV):
         r = re - rs[i, :]
         num = jnp.cross(JdV[i, :], r, axis=-1)
         den = jnp.linalg.norm(r, axis=-1) ** 3
-        B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
+        B += jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return B
 
     return 1e-7 * fori_loop(0, J.shape[0], body, B)
+
+
+def B_from_surface_integral(re, rs, K, NFP, dA):
+    """Calculate magnetic field from surface integral.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in "rpz" coordinates.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for surface current density K, in "rpz" coordinates.
+    K : ndarray, shape(n_src_pts, 3)
+        surface current density vector at source points, in "rpz" coordinates.
+    NFP : int
+        number of field periods
+    dA : ndarray, shape(n_src_pts)
+        area element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n_eval_pts,3)
+        magnetic field vector B at evaluation points, in "rpz" coordinates
+    """
+    r = jnp.array([jnp.linalg.norm(row - rs, axis=-1) for row in re])
+    errorif(
+        jnp.any(r <= 1e-6),
+        UserWarning,
+        "The integral you are calculating is singular. Please check the "
+        + "source and evaluation points or check singularities.py for "
+        + "methods to handle singular integrals.",
+    )
+
+    def nfp_loop(j, f):
+        # calculate (by rotating) rs, rs_t, rz_t
+        phi = (rs[:, 1] + j * 2 * jnp.pi / NFP) % (2 * jnp.pi)
+        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+        _rs = jnp.vstack((rs[:, 0], phi, rs[:, 2])).T
+        _rs = rpz2xyz(_rs)
+        _K = rpz2xyz_vec(K, phi=phi)
+        f += biot_savart_general(
+            re,
+            _rs,
+            _K,
+            dA,
+        )
+        return f
+
+    phi_re = re[:, 1]
+    re = rpz2xyz(re)
+    B = fori_loop(0, NFP, nfp_loop, jnp.zeros_like(re))
+    B = xyz2rpz_vec(B, phi=phi_re)
+    B *= -1
+    return B
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):

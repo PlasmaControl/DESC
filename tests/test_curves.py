@@ -848,11 +848,8 @@ class TestSplineXYZCurve:
     @pytest.mark.unit
     def test_discontinuous_knots(self):
         """Test with discontinuous knots."""
-        discontinuous_indices = [0, 500]
-        R = 2
-        phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
 
-        def test(method):
+        def test(method, data_key):
             discontinuous = SplineXYZCurve(
                 X=R * np.cos(phi),
                 Y=R * np.sin(phi),
@@ -874,18 +871,31 @@ class TestSplineXYZCurve:
             assert discontinuous.method == method
             assert continuous.method == method
 
-            discont_curvature = discontinuous.compute("curvature")["curvature"]
-            cont_curvature = continuous.compute("curvature")["curvature"]
+            discon_data = discontinuous.compute(data_key)[data_key]
+            cont_data = continuous.compute(data_key)[data_key]
 
-            return discont_curvature, cont_curvature
+            return discon_data, cont_data
 
-        discont_curvature, cont_curvature = test("linear")
-        np.testing.assert_allclose(discont_curvature, cont_curvature, rtol=1e-3)
+        discontinuous_indices = [0, 500]
+        R = 2
+        phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
 
-        discont_curvature, cont_curvature = test("cubic")
+        np.testing.assert_allclose(*test("linear", "length"), rtol=1e-3)
+        np.testing.assert_allclose(*test("linear", "curvature"), rtol=1e-3)
+        np.testing.assert_allclose(*test("linear", "torsion"), rtol=1e-3)
+
+        np.testing.assert_allclose(*test("cubic", "length"), rtol=1e-3)
+        discont_data, cont_data = test("cubic", "curvature")
         np.testing.assert_allclose(
             # don't include discon knots because of interpolator BCs
-            discont_curvature[~np.array(discontinuous_indices)],
-            cont_curvature[~np.array(discontinuous_indices)],
+            discont_data[~np.array(discontinuous_indices)],
+            cont_data[~np.array(discontinuous_indices)],
+            rtol=1e-3,
+        )
+        discont_data, cont_data = test("cubic", "torsion")
+        np.testing.assert_allclose(
+            # don't include discon knots because of interpolator BCs
+            discont_data[~np.array(discontinuous_indices)],
+            cont_data[~np.array(discontinuous_indices)],
             rtol=1e-3,
         )

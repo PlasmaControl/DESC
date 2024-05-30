@@ -4,15 +4,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from desc.compute._neoclassical import poloidal_leggauss
+from desc.compute._neoclassical import _poloidal_average, poloidal_leggauss
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import rtz_grid
 from desc.equilibrium.equilibrium import compute_raz_data
 
 
 @pytest.mark.unit
-def test_integration_on_field_line():
-    """Test that V_psi(r)*L / S(r)*L = V_psi(r) / S(r) as L → ∞."""
+def test_field_line_average():
+    """Test that field line average converges to surface average."""
     eq = Equilibrium.load(
         "tests/inputs/DESC_from_NAE_O_r1_precise_QI_plunk_fixed_bdry_r0"
         ".15_L_9_M_9_N_24_output.h5"
@@ -26,28 +26,22 @@ def test_integration_on_field_line():
     zeta = np.linspace(0, L, resolution)
     grid = rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
     grid.source_grid.poloidal_weight = w
-    data = compute_raz_data(
-        eq, grid, ["V_psi(r)*L", "S(r)*L"], names_1dr=["psi_r", "V_r(r)", "S(r)"]
-    )
+    data = compute_raz_data(eq, grid, ["L|r,a", "G|r,a"], names_1dr=["V_r(r)"])
     np.testing.assert_allclose(
-        data["V_psi(r)*L"] / data["S(r)*L"],
-        data["V_r(r)"] / data["psi_r"] / data["S(r)"],
-        rtol=0.01,
+        _poloidal_average(grid.source_grid, data["L|r,a"] / data["G|r,a"]),
+        grid.compress(data["V_r(r)"]),
+        rtol=3e-2,
     )
 
     # Now for field line with large L.
-    # The drawback of this approach is that convergence can regress
-    # unless resolution is increased linearly with L.
-    L = 100 * np.pi
-    zeta = np.linspace(0, L, resolution**2)
+    L = 20 * np.pi
+    zeta = np.linspace(0, L, resolution * 2)
     grid = rtz_grid(eq, rho, 0, zeta, coordinates="raz")
-    data = compute_raz_data(
-        eq, grid, ["V_psi(r)*L", "S(r)*L"], names_1dr=["psi_r", "V_r(r)", "S(r)"]
-    )
+    data = compute_raz_data(eq, grid, ["L|r,a", "G|r,a"], names_1dr=["V_r(r)"])
     np.testing.assert_allclose(
-        data["V_psi(r)*L"] / data["S(r)*L"],
-        data["V_r(r)"] / data["psi_r"] / data["S(r)"],
-        rtol=0.01,
+        np.squeeze(data["L|r,a"] / data["G|r,a"]),
+        grid.compress(data["V_r(r)"]),
+        rtol=3e-2,
     )
 
 
@@ -68,34 +62,26 @@ def test_effective_ripple():
     data = compute_raz_data(
         eq,
         grid,
-        [
-            "B^zeta",
-            "|B|_z|r,a",
-            "|B|",
-            "|grad(psi)|",
-            "cvdrift0",
-            "V_psi(r)*L",
-            "S(r)*L",
-        ],
+        ["B^zeta", "|B|", "|B|_z|r,a", "|grad(psi)|", "kappa_g", "L|r,a"],
         names_0d=["R0"],
-        names_1dr=["min_tz |B|", "max_tz |B|"],
+        names_1dr=["min_tz |B|", "max_tz |B|", "V_r(r)", "psi_r", "S(r)"],
     )
     data = eq.compute(
         "effective ripple raw",
         grid=grid,
         data=data,
         override_grid=False,
-        # batch=False,  # noqa: E800
+        batch=False,  # noqa: E800
         # quad=vec_quadax(quadax.quadgk),  # noqa: E800
     )
     assert np.isfinite(data["effective ripple raw"]).all()
     rho = grid.compress(grid.nodes[:, 0])
     ripple = grid.compress(data["effective ripple raw"])
     fig, ax = plt.subplots(2)
-    ax[0].plot(rho, ripple, marker="o", label="∫ db ∑ⱼ Hⱼ² / Iⱼ")
+    ax[0].plot(rho, ripple, marker="o")
     ax[0].set_xlabel(r"$\rho$")
     ax[0].set_ylabel("effective ripple raw")
-    ax[0].set_title("effective ripple raw, defined as ∫ db ∑ⱼ Hⱼ² / Iⱼ")
+    ax[0].set_title(r"∫ dλ λ⁻² $\langle$ ∑ⱼ Hⱼ²/Iⱼ $\rangle$")
 
     # Workaround until eq.compute() is fixed to only compute dependencies
     # that are needed for the requested computation. (So don't compute
@@ -109,10 +95,12 @@ def test_effective_ripple():
     data = eq.compute("effective ripple", grid=grid, data=data)
     assert np.isfinite(data["effective ripple"]).all()
     eff_ripple = grid.compress(data["effective ripple"])
-    ax[1].plot(rho, eff_ripple, marker="o", label=r"$\epsilon_{\text{effective}}$")
+    ax[1].plot(rho, eff_ripple, marker="o")
     ax[1].set_xlabel(r"$\rho$")
-    ax[1].set_ylabel(r"$\epsilon_{\text{effective}}$")
-    ax[1].set_title("Effective ripple (not raised to 3/2 power)")
+    ax[1].set_ylabel(r"$\epsilon_{\text{eff}}^{3/2}$")
+    ax[1].set_title(
+        r"ε¹ᐧ⁵ = π/(8√2) (R₀(∂_ψ V)/S)² ∫ dλ λ⁻² $\langle$ ∑ⱼ Hⱼ²/Iⱼ $\rangle$"
+    )
     plt.tight_layout()
     plt.show()
     plt.close()

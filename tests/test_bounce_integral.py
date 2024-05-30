@@ -96,7 +96,7 @@ def test_reshape_convention():
     f = r.reshape(rho.size, -1)
     for i in range(1, f.shape[-1]):
         np.testing.assert_allclose(f[:, i - 1], f[:, i])
-    # test reshape=ing result won't mix data
+    # test reshaping result won't mix data
     f = (a**2 + z).reshape(rho.size, alpha.size, zeta.size)
     for i in range(1, f.shape[0]):
         np.testing.assert_allclose(f[i - 1], f[i])
@@ -642,8 +642,8 @@ def test_drift():
 
     B = data["|B|"] / B_ref
     B0 = np.mean(B)
-    # TODO: epsilon should be dimensionless, and computed in a way that
-    #   is independent of normalization length scales, like "effective r/R0".
+    # epsilon should be changed to dimensionless, and computed in a way that
+    # is independent of normalization length scales, like "effective r/R0".
     epsilon = L_ref * rho  # Aspect ratio of the flux surface.
     np.testing.assert_allclose(epsilon, 0.05)
     theta_PEST = alpha + data["iota"] * zeta

@@ -460,7 +460,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False):
     P, S, N, degree = pitch.shape[0], B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
     intersect = _poly_root(
         c=B_c,
-        k=(1 / pitch)[..., jnp.newaxis],
+        k=1 / pitch[..., jnp.newaxis],
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
         sort=True,
@@ -632,7 +632,7 @@ def plot_field_line_with_ripple(
     add(ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$"))
 
     if pitch is not None:
-        b = jnp.atleast_1d(1 / pitch)
+        b = 1 / jnp.atleast_1d(pitch)
         for val in b:
             add(ax.axhline(val, color="tab:purple", alpha=0.25, label=r"$1 / \lambda$"))
         bp1, bp2 = jnp.atleast_2d(bp1, bp2)

@@ -1436,7 +1436,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (name={}, with {} submembers)".format(self.name, len(self))
+            + " (name={}, with {} submembers)".format(self._name, len(self))
         )
 
 

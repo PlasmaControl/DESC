@@ -1304,10 +1304,10 @@ def test_second_stage_optimization():
     np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
 
 
-# TODO: replace this with the solution to Issue #1021
 @pytest.mark.unit
-def test_optimize_with_all_coil_types():
-    """Test optimizing a FourierPlanarCoil."""
+def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
+    """Test optimizing for every type of coil and dummy coil sets."""
+    # TODO: replace with DummyCoilSet, DummyMixedCoilSet when bool bug is fixed
 
     def get_coilset():
         eq = get("precise_QH")
@@ -1336,6 +1336,7 @@ def test_optimize_with_all_coil_types():
         return coilset_sym, coilset_asym
 
     def get_mixed_coilset():
+        sym_coilset = get_coilset()[0]
         tf_coil = FourierPlanarCoil(
             current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
         )
@@ -1355,32 +1356,27 @@ def test_optimize_with_all_coil_types():
             Z=np.zeros_like(phi),
             knots=knots,
         )
-        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil, spline_coil))
+        full_coilset = MixedCoilSet(
+            (tf_coilset, vf_coilset, sym_coilset, xyz_coil, spline_coil)
+        )
         return full_coilset
 
-    sym_coilset, asym_coilset = get_coilset()
-    mixed_coilset = get_mixed_coilset()
-
-    R = 2
-    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
-    knots = np.linspace(0, 2 * np.pi, len(phi))
-    spline_coil = SplineXYZCoil(
-        current=1,
-        X=R * np.cos(phi),
-        Y=R * np.sin(phi),
-        Z=np.zeros_like(phi),
-        knots=knots,
-    )
-
-    def test(c):
+    def test(c, maxiter=200):
         obj = ObjectiveFunction(CoilLength(c, target=11))
         optimizer = Optimizer("fmintr")
-        (c,), _ = optimizer.optimize(c, objective=obj, maxiter=700, ftol=0, xtol=0)
+        (c,), _ = optimizer.optimize(
+            c, objective=obj, maxiter=maxiter, ftol=1e-15, xtol=1e-15
+        )
         flattened_coils = tree_leaves(c, is_leaf=lambda x: not hasattr(x, "__len__"))
         lengths = [coil.compute("length")["length"] for coil in flattened_coils]
 
         assert obj.dim_f == len(flattened_coils)
         np.testing.assert_allclose(lengths, 11, atol=1e-3)
+
+    sym_coilset, asym_coilset = get_coilset()
+    mixed_coilset = get_mixed_coilset()
+
+    spline_coil = mixed_coilset.coils[-1].copy()
 
     # single coil
     test(FourierPlanarCoil())
@@ -1388,10 +1384,11 @@ def test_optimize_with_all_coil_types():
     test(FourierXYZCoil())
     test(spline_coil)
 
-    # TODO: should I add a separate CoilSet for each coil type
     # CoilSet
-    test(sym_coilset)
-    test(asym_coilset)
+    test(sym_coilset, maxiter=500)
+    test(asym_coilset, maxiter=500)
 
     # MixedCoilSet
-    test(mixed_coilset)
+    # TODO: why does this take so many iterations?
+    # in particular, vf_coilset takes a long time to converge
+    test(mixed_coilset, maxiter=2000)

@@ -980,3 +980,248 @@ class BoundaryErrorNESTOR(_Objective):
         bp = data["|B|^2"]
         g = data["|e_theta x e_zeta|"]
         return (bv - bp - data["p"] * (2 * mu_0)) * g
+
+
+class BaroundIslandError(_Objective):
+    """Target B_{nxB}=B_{eq} on a single target surface (for now).
+
+    Uses nxB to find surface current density K_vc. Integrates K over the
+    last closed flux surface to find B_{nxB} at specified surface and compares
+    to B_{eq}. For vacuum equilibrium, they have to be equal. The objective
+    penalizes the difference.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    rho : float
+        Flux surface label of the target surface. Must be between 0 and 1.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    loop : bool
+        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
+        less memory.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "B Consistency Error: {:10.3e} "
+    _units = "(T)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        rho,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loop=True,
+        name="B consistency error",
+    ):
+        errorif(
+            rho < 0 or rho > 1,
+            ValueError,
+            "Flux surface label rho must be between 0 and 1",
+        )
+        if target is None and bounds is None:
+            target = 0
+        self.rho = rho
+        self._loop = loop
+        things = eq
+
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        self.src_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        self.eval_grid = LinearGrid(rho=self.rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+
+        self._eq_data_keys = [
+            "K_vc",
+            "|e_theta x e_zeta|",
+            "R",
+            "phi",
+            "Z",
+            "B",
+        ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        src_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=self.src_grid)
+        src_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=self.src_grid)
+        eval_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=self.eval_grid)
+        eval_transforms = get_transforms(
+            self._eq_data_keys, obj=eq, grid=self.eval_grid
+        )
+
+        self._constants = {
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+            "src_transforms": src_transforms,
+            "src_profiles": src_profiles,
+            "interpolator": None,
+            "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, 3)),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+        # the 3 components of B
+        self._dim_f = 3 * self.eval_grid.num_nodes
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, eq_params, constants=None):
+        """Compute B consistency error.
+
+        Parameters
+        ----------
+        eq_params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Magnetic Field vector difference (T).
+
+        """
+        from desc.magnetic_fields._core import B_from_surface_integral
+
+        eq = self.things[0]
+
+        if constants is None:
+            constants = self.constants
+        src_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._eq_data_keys,
+            params=eq_params,
+            transforms=constants["src_transforms"],
+            profiles=constants["src_profiles"],
+        )
+        eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._eq_data_keys,
+            params=eq_params,
+            transforms=constants["eval_transforms"],
+            profiles=constants["eval_profiles"],
+        )
+
+        re = jnp.vstack((eval_data["R"], eval_data["phi"], eval_data["Z"])).T
+        rs = jnp.vstack((src_data["R"], src_data["phi"], src_data["Z"])).T
+        dA = self.src_grid.weights * src_data["|e_theta x e_zeta|"] / eq.NFP
+        K = src_data["K_vc"]
+
+        Bplasma = B_from_surface_integral(re, rs, K, eq.NFP, dA)
+
+        return Bplasma - eval_data["B"]
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        # this objective is really 3 residuals concatenated so its helpful to print
+        # them individually
+        f = self.compute_unscaled(*args, **kwargs)
+        # try to do weighted mean if possible
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
+            w = jnp.ones_like(f)
+        else:
+            w = constants["quad_weights"]
+
+        abserr = jnp.all(self.target == 0)
+
+        def _print(fmt, fmax, fmin, fmean, units):
+            print(
+                "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
+            )
+            print(
+                "Minimum " + ("absolute " if abserr else "") + fmt.format(fmin) + units
+            )
+            print(
+                "Average " + ("absolute " if abserr else "") + fmt.format(fmean) + units
+            )
+
+            if self._normalize and units != "(dimensionless)":
+                print(
+                    "Maximum "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmax / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Minimum "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmin / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Average "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmean / self.normalization)
+                    + "(normalized)"
+                )
+
+        formats = [
+            "B_R error: {:10.3e} ",
+            "B_phi error: {:10.3e} ",
+            "B_Z error: {:10.3e} ",
+        ]
+        units = ["(T)", "(T)", "(T)"]
+        nn = f.size // 3
+
+        for i, (fmt, unit) in enumerate(zip(formats, units)):
+            fi = f[i * nn : (i + 1) * nn]
+            # target == 0 probably indicates f is some sort of error metric,
+            # mean abs makes more sense than mean
+            fi = jnp.abs(fi) if abserr else fi
+            wi = w[i * nn : (i + 1) * nn]
+            fmax = jnp.max(fi)
+            fmin = jnp.min(fi)
+            fmean = jnp.mean(fi * wi) / jnp.mean(wi)
+            _print(fmt, fmax, fmin, fmean, unit)

@@ -21,6 +21,7 @@ from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
+from desc.io import load
 from desc.vmec import VMECIO
 
 
@@ -270,10 +271,14 @@ def DummyCoilSet(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def DummyMixedCoilSet(tmpdir_factory):
+def DummyMixedCoilSet(tmpdir_factory, DummyCoilSet):
     """Create and save a dummy mixed coil set for testing."""
     output_dir = tmpdir_factory.mktemp("result")
     output_path = output_dir.join("DummyMixedCoilSet.h5")
+
+    sym_coilset = load(
+        load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5"
+    )
 
     tf_coil = FourierPlanarCoil(current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
@@ -290,7 +295,9 @@ def DummyMixedCoilSet(tmpdir_factory):
         Z=np.zeros_like(phi),
         knots=np.linspace(0, 2 * np.pi, len(phi)),
     )
-    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil, spline_coil))
+    full_coilset = MixedCoilSet(
+        (tf_coilset, vf_coilset, sym_coilset, xyz_coil, spline_coil)
+    )
 
     full_coilset.save(output_path)
     DummyMixedCoilSet_out = {"output_path": output_path}

@@ -1031,7 +1031,6 @@ def _bounce_quadrature(
     method_B="cubic",
     batch=True,
     check=False,
-    plot=False,
 ):
     """Bounce integrate ∫ f(ℓ) dℓ.
 
@@ -1321,7 +1320,6 @@ def bounce_integral(
             method_B="monotonic" if monotonic else "cubic",
             batch=batch,
             check=check,
-            plot=plot,
         )
         assert result.shape[-1] == (knots.size - 1) * degree
         return result

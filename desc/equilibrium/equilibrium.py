@@ -963,7 +963,6 @@ class Equilibrium(IOAble, Optimizable):
                 for key, val in data1dr.items()
                 if key in dep1dr
             }
-
             data.update(data1dr)
 
         if calc1dz and override_grid:

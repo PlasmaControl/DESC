@@ -823,11 +823,8 @@ _repeated_docstring = """w : Array, shape(w.size, )
         This callable is the composition operator on the set of functions in ``f``
         that maps the functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ.
         It should accept the items in ``f`` as arguments as well as the additional
-        keyword arguments: ``B``, ``pitch``, and ``Z``, where ``Z`` is the set of
-        quadrature points. A quadrature will be performed to approximate the
-        bounce integral of ``integrand(*f, B=B, pitch=pitch, Z=Z)``.
-        Note that any arrays baked into the callable method should broadcast
-        with ``Z``.
+        keyword arguments: ``B`` and ``pitch``. A quadrature will be performed to
+        approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
     f : list of Array, shape(P, S, knots.size, )
         Arguments to the callable ``integrand``.
         These should be the functions in the integrand of the bounce integral
@@ -918,7 +915,7 @@ def _interpolatory_quadrature(
     shape = Z.shape
     Z_ps = Z.reshape(Z.shape[0], Z.shape[1], -1)
     f = [_interp1d_vec(Z_ps, knots, f_i, method=method).reshape(shape) for f_i in f]
-    B_sup_z = _interp1d_vec(Z_ps, knots, B_sup_z, method=method).reshape(shape)
+    b_sup_z = _interp1d_vec(Z_ps, knots, B_sup_z / B, method=method).reshape(shape)
     B = _interp1d_vec_with_df(Z_ps, knots, B, B_z_ra, method=method_B).reshape(shape)
     pitch = jnp.expand_dims(pitch, axis=(2, 3) if Z.ndim == 4 else 2)
     # Assuming that the integrand is a well-behaved function of some interpolation
@@ -929,17 +926,18 @@ def _interpolatory_quadrature(
     # between bounce points. Don't suppress inf as that indicates catastrophic
     # floating point error.
     inner_product = jnp.dot(
-        jnp.nan_to_num(
-            integrand(*f, B=B, pitch=pitch, Z=Z), posinf=jnp.inf, neginf=-jnp.inf
-        )
-        / B_sup_z,
+        jnp.nan_to_num(integrand(*f, B=B, pitch=pitch), posinf=jnp.inf, neginf=-jnp.inf)
+        / b_sup_z,
         w,
     )
     if check:
-        _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product)
-        # if plot:  # noqa: E800
-        #     _plot(Z, B, id=r"$\vert B \vert$")  # noqa: E800
-        #     _plot(Z, V, id="integrand")  # noqa: E800
+        _assert_finite_and_hairy(Z, f, b_sup_z, B, B_z_ra, inner_product)
+        if plot:
+            _plot(Z, B, id=r"$\vert B \vert$")
+            _plot(Z, b_sup_z, id=r"$ (B/\vert B \vert) \cdot e^{\zeta}$")
+            # Note to developer if debugging: consider plotting argument to
+            # inner_product to see how singular the integrand is before/after
+            # change of variables.
     return inner_product
 
 
@@ -1088,7 +1086,8 @@ def _bounce_quadrature(
             method,
             method_B,
             check,
-            plot,
+            # Only developers doing debugging want to see these plots.
+            plot=False,
         )
     else:
         f = list(f)
@@ -1141,7 +1140,7 @@ def bounce_integral(
     """Returns a method to compute the bounce integral of any quantity.
 
     The bounce integral is defined as ∫ f(ℓ) dℓ, where
-        dℓ parameterizes the distance along the field line,
+        dℓ parameterizes the distance along the field line in meters,
         λ is a constant proportional to the magnetic moment over energy,
         |B| is the norm of the magnetic field,
         f(ℓ) is the quantity to integrate along the field line,
@@ -1158,8 +1157,8 @@ def bounce_integral(
     Notes
     -----
     This function requires that the quantities ``B_sup_z``, ``B``, ``B_z_ra``,
-    and the quantities in ``f`` passed to the returned method
-    can be separated into field lines via ``.reshape(S, knots.size)``.
+    and the quantities in ``f`` passed to the returned method can be separated
+    into field lines via ``.reshape(S, knots.size)``.
     One way to satisfy this is to pass in quantities computed on the grid
     returned from the method ``desc.equilibrium.coords.rtz_grid``.
     See ``tests.test_bounce_integral.test_bounce_integral_checks`` for example use.
@@ -1275,11 +1274,8 @@ def bounce_integral(
             This callable is the composition operator on the set of functions in ``f``
             that maps the functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ.
             It should accept the items in ``f`` as arguments as well as the additional
-            keyword arguments: ``B``, ``pitch``, and ``Z``, where ``Z`` is the set of
-            quadrature points. A quadrature will be performed to approximate the
-            bounce integral of ``integrand(*f, B=B, pitch=pitch, Z=Z)``.
-            Note that any arrays baked into the callable method should broadcast
-            with ``Z``.
+            keyword arguments: ``B`` and ``pitch``. A quadrature will be performed to
+            approximate the bounce integral of ``integrand(*f, B=B, pitch=pitch)``.
         f : list of Array, shape(..., S, knots.size)
             Arguments to the callable ``integrand``.
             These should be the functions in the integrand of the bounce integral

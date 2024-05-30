@@ -32,7 +32,7 @@ from desc.compute.bounce_integral import (
     take_mask,
     tanh_sinh,
 )
-from desc.compute.utils import dot, safediv
+from desc.compute.utils import safediv
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import rtz_grid
 from desc.equilibrium.equilibrium import compute_raz_data
@@ -390,10 +390,7 @@ def test_automorphism():
     np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y, atol=5e-7)
     np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y, atol=5e-7)
 
-    np.testing.assert_allclose(
-        grad_affine_bijection(a, b),
-        1 / (2 / (b - a)),
-    )
+    np.testing.assert_allclose(grad_affine_bijection(a, b), 1 / (2 / (b - a)))
     np.testing.assert_allclose(
         grad_automorphism_sin(y),
         1 / grad_automorphism_arcsin(automorphism_sin(y)),
@@ -429,32 +426,25 @@ def test_bounce_quadrature():
     truth = v * 2 * ellipkm1(p)
     rtol = 1e-4
 
-    def integrand(B, pitch, Z):
+    def integrand(B, pitch):
         return 1 / jnp.sqrt(1 - pitch * m * B)
 
     bp1 = -np.pi / 2 * v
     bp2 = -bp1
     knots = np.linspace(bp1, bp2, 50)
-    B_sup_z = np.ones(knots.size)
     B = np.clip(np.sin(knots / v) ** 2, 1e-7, 1)
     B_z_ra = np.sin(2 * knots / v) / v
     pitch = 1 + 50 * jnp.finfo(jnp.array(1.0).dtype).eps
 
     bounce_integrate, _ = bounce_integral(
-        B_sup_z,
-        B,
-        B_z_ra,
-        knots,
-        quad=tanh_sinh(40),
-        automorphism=None,
-        check=True,
+        B, B, B_z_ra, knots, quad=tanh_sinh(40), automorphism=None, check=True
     )
     tanh_sinh_vanilla = _filter_not_nan(bounce_integrate(integrand, [], pitch))
     assert tanh_sinh_vanilla.size == 1
     np.testing.assert_allclose(tanh_sinh_vanilla, truth, rtol=rtol)
 
     bounce_integrate, _ = bounce_integral(
-        B_sup_z, B, B_z_ra, knots, quad=leggauss(25), check=True
+        B, B, B_z_ra, knots, quad=leggauss(25), check=True
     )
     leg_gauss_sin = _filter_not_nan(bounce_integrate(integrand, [], pitch))
     assert leg_gauss_sin.size == 1
@@ -492,11 +482,11 @@ def test_bounce_integral_checks():
         quad=leggauss(3),  # not checking quadrature accuracy in this test
     )
 
-    def numerator(g_zz, B, pitch, Z):
+    def numerator(g_zz, B, pitch):
         f = (1 - pitch * B) * g_zz
         return safediv(f, jnp.sqrt(1 - pitch * B))
 
-    def denominator(B, pitch, Z):
+    def denominator(B, pitch):
         return safediv(1, jnp.sqrt(1 - pitch * B))
 
     pitch = 1 / get_extrema(**spline)
@@ -619,29 +609,23 @@ def test_drift():
     # Make a set of nodes along a single fieldline.
     grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
     data = eq.compute(["iota"], grid=grid_fsa)
-    iota = grid_fsa.compress(data["iota"]).item()
+    data["iota"] = grid_fsa.compress(data["iota"]).item()
     alpha = 0
-    zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
+    zeta = np.linspace(
+        -np.pi / data["iota"], np.pi / data["iota"], (2 * eq.M_grid) * 4 + 1
+    )
     grid = rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
 
     data = compute_raz_data(
         eq,
         grid,
-        [
-            "B^zeta",
-            "|B|",
-            "|B|_z|r,a",
-            "cvdrift",
-            "gbdrift",
-            "grad(alpha)",
-            "grad(psi)",
-            "|grad(psi)|",
-        ],
+        ["B^zeta", "|B|", "|B|_z|r,a", "cvdrift", "gbdrift", "g^pa"],
         names_0d=["a"],
-        names_1dr=["shear", "psi", "iota"],
+        names_1dr=["shear", "psi"],
+        data={"iota": data["iota"]},
     )
     np.testing.assert_allclose(data["psi"], psi)
-    np.testing.assert_allclose(data["iota"], iota)
+    data["shear"] = grid.compress(data["shear"]).item()
 
     L_ref = data["a"]
     B_ref = 2 * np.abs(psi_boundary) / L_ref**2
@@ -662,16 +646,16 @@ def test_drift():
     #   is independent of normalization length scales, like "effective r/R0".
     epsilon = L_ref * rho  # Aspect ratio of the flux surface.
     np.testing.assert_allclose(epsilon, 0.05)
-    theta_PEST = alpha + iota * zeta
+    theta_PEST = alpha + data["iota"] * zeta
     # same as 1 / (1 + epsilon cos(theta)) assuming epsilon << 1
     B_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
     np.testing.assert_allclose(B, B_analytic, atol=3e-3)
 
     gradpar = L_ref * data["B^zeta"] / data["|B|"]
-    # This method of computing G0 suggests a fixed point iteration?
+    # This method of computing G0 suggests a fixed point iteration.
     G0 = data["a"]
     gradpar_analytic = G0 * (1 - epsilon * np.cos(theta_PEST))
-    gradpar_theta_analytic = iota * gradpar_analytic
+    gradpar_theta_analytic = data["iota"] * gradpar_analytic
     G0 = np.mean(gradpar_theta_analytic)
     np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
 
@@ -680,26 +664,27 @@ def test_drift():
     cvdrift = data["cvdrift"] * normalization
     gbdrift = data["gbdrift"] * normalization
     dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * data["|B|"] ** 2)
-    alpha_MHD = -0.5 * dPdrho / iota**2
-    shear = grid.compress(data["shear"]).item()
-    gds21 = -np.sign(iota) * shear * dot(data["grad(psi)"], data["grad(alpha)"]) / B_ref
-    gds21_analytic = -shear * (
-        shear * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
+    alpha_MHD = -0.5 * dPdrho / data["iota"] ** 2
+    gds21 = -np.sign(data["iota"]) * data["shear"] * data["g^pa"] / B_ref
+    gds21_analytic = -data["shear"] * (
+        data["shear"] * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
     )
-    gds21_analytic_low_order = -shear * (
-        shear * theta_PEST - alpha_MHD / B0**4 * np.sin(theta_PEST)
+    gds21_analytic_low_order = -data["shear"] * (
+        data["shear"] * theta_PEST - alpha_MHD / B0**4 * np.sin(theta_PEST)
     )
     np.testing.assert_allclose(gds21, gds21_analytic, atol=2e-2)
     np.testing.assert_allclose(gds21, gds21_analytic_low_order, atol=2.7e-2)
 
     fudge_1 = 0.19
     gbdrift_analytic = fudge_1 * (
-        -shear + np.cos(theta_PEST) - gds21_analytic / shear * np.sin(theta_PEST)
+        -data["shear"]
+        + np.cos(theta_PEST)
+        - gds21_analytic / data["shear"] * np.sin(theta_PEST)
     )
     gbdrift_analytic_low_order = fudge_1 * (
-        -shear
+        -data["shear"]
         + np.cos(theta_PEST)
-        - gds21_analytic_low_order / shear * np.sin(theta_PEST)
+        - gds21_analytic_low_order / data["shear"] * np.sin(theta_PEST)
     )
     fudge_2 = 0.07
     cvdrift_analytic = gbdrift_analytic + fudge_2 * alpha_MHD / B**2
@@ -729,7 +714,7 @@ def test_drift():
         - 0.5
         * fudge_1
         * (
-            shear * (I_0 + I_1 - I_2 - I_3)
+            data["shear"] * (I_0 + I_1 - I_2 - I_3)
             + alpha_MHD / B0**4 * (I_4 + I_5)
             - (I_6 + I_7)
         )
@@ -737,11 +722,11 @@ def test_drift():
     drift_analytic_den = I_0 / G0
     drift_analytic = drift_analytic_num / drift_analytic_den
 
-    def integrand_num(cvdrift, gbdrift, B, pitch, Z):
+    def integrand_num(cvdrift, gbdrift, B, pitch):
         g = jnp.sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
-    def integrand_den(B, pitch, Z):
+    def integrand_den(B, pitch):
         g = jnp.sqrt(1 - pitch * B)
         return 1 / g
 

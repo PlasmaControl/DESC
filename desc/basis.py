@@ -2164,8 +2164,7 @@ class FiniteElementMesh3D:
                         element, K
                     )
 
-                    # Do we need this in the tetrahedra case?
-                    weights = 2 * weights
+                    weights = 6 * weights
 
                     integration_points = integration_points.T
 
@@ -2247,7 +2246,8 @@ class FiniteElementMesh3D:
         -------
         quadrature points: 2D ndarray, shape (nquad * 5MLN, 4)
             Points in (rho, theta, zeta) representing the quadrature point
-            locations for integration, return in barycentric coordinates.
+            locations for integration, return in barycentric coordinates. Then
+            ultimately converted to real-space coordinates
         """
         nquad = self.nquad
         quadrature_points = np.zeros((self.I_5LMN * nquad, 3))
@@ -2265,10 +2265,6 @@ class FiniteElementMesh3D:
             )
 
             six_vol = np.linalg.det(D)
-
-            # Transform weights
-            weights = self.weights
-            weights = six_vol * weights
 
             # Transform points
 
@@ -2302,6 +2298,23 @@ class FiniteElementMesh3D:
 
         # Add new column
         quadrature_points = np.append(M, new_col, axis=1)
+        
+        q_p = quadrature_points 
+        
+        # Need to convert to real-space coordinates. quadrature_points
+        # has size (I_5LMN * nquad,4), where each row is a set of 
+        # barycentric coordinates
+        
+        barycentric_points = np.zeros([self.I_5LMN * nquad, 3])
+        
+        for i in range(self.I_5LMN * nquad):
+            for j in range(3):
+                barycentric_points[i,j] = q_p[i,0]*v[0,j] + q_p[i,1]*v[1,j] + q_p[i,2]*v[2,j] + q_p[i,3]*v[3,j]
+            
+            
+        
+        quadrature_points = barycentric_points
+        
 
         return quadrature_points
 
@@ -2333,10 +2346,10 @@ class FiniteElementMesh3D:
             integral = 0.0
         for i, tetrahedron in enumerate(self.tetrahedra):
             integral += np.dot(
-                abs(tetrahedron.volume2) * self.weights,
+                abs(tetrahedron.volume6) * self.weights,
                 f[i * nquad : (i + 1) * nquad, :],
             )
-        return integral / 2.0
+        return integral / 6.0
 
     def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta):
         """Given a point on the mesh, find which tetrahedron it lies inside.
@@ -2546,7 +2559,9 @@ class FiniteElementMesh2D:
         # K = 1 still requires quadrature rule with 3 points so that the
         # assembly matrix integrals are nonsingular. Going to automatically bump up
         # quadrature order.
-        [integration_points, weights] = fem.quadrature.get_quadrature(element, 3 * K + 1)
+        [integration_points, weights] = fem.quadrature.get_quadrature(
+            element, 3 * K + 1
+        )
         weights = 2 * weights
 
         integration_points = integration_points.T
@@ -2603,30 +2618,6 @@ class FiniteElementMesh2D:
             coordinate_matrix[i] = np.dot((np.linalg.inv(A)), X_vec)
 
         return coordinate_matrix
-
-    def get_basis_functions(self, rho_theta, K=1):
-        """Gets the barycentric basis functions on rho_theta mesh.
-
-        Return the triangle basis functions, evaluated at the 2D rho
-        and theta mesh points.
-
-        Parameters
-        ----------
-        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
-        Coordinates of the original grid, lying inside this triangle.
-
-        Returns
-        -------
-        coordinate_matrix: (rho_theta, Q)
-        """
-
-    # Will use triangle_location
-    # and self.find_triangles_corresponding_to_points(rho_theta)[0]
-
-    # Will use for i in range(rho_theta.shape[0]):
-    # grab triangle corresponding to point
-    # Will use idx = triangle_location[i]
-    # Will use   triangle_with_point = self.triangle[idx]
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""
@@ -2774,6 +2765,7 @@ class TetrahedronFiniteElement:
         basis functions.
     """
 
+    # Test comment
     def __init__(self, vertices, K=1):
         self.vertices = vertices
         self.Q = int(((K + 1) * (K + 2) * (K + 3)) / 6)
@@ -2786,7 +2778,7 @@ class TetrahedronFiniteElement:
             [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1],
         )
 
-        self.volume2 = np.linalg.det(D) / 3
+        self.volume6 = np.linalg.det(D)
         self.d = np.linalg.det(D)
 
         # Computing edge lengths
@@ -4005,6 +3997,7 @@ class FiniteElementMesh1D:
                 interval.jacobian * self.weights @ f[i * nquad : (i + 1) * nquad, :]
             )
         return integral
+
 
 @jit
 @jnp.vectorize

@@ -2482,3 +2482,82 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria.insert(i, new_item)
+
+
+# TODO: GitHub issue #1035. Move logic to eq.compute
+def compute_raz_data(
+    eq, grid, names_field_line, names_0d=None, names_1dr=None, data=None
+):
+    """Compute field line quantities and their dependencies on the correct grids.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to compute on.
+    grid : Grid
+        Grid on which the field line quantities should be computed.
+    names_field_line : iterable
+        Field line quantities that will be computed on the returned field line grid.
+        These quantities should require grid.source_grid in grid_requirement parameter
+        or the register compute function decorator.
+    names_0d : iterable
+        Additional things to compute constant over volume.
+    names_1dr : iterable
+        Additional things to compute constant over flux surface.
+    data : dict of Array
+        Data computed so far, generally output from other compute functions.
+
+    Returns
+    -------
+    data : dict
+        Computed quantities.
+
+    """
+    assert grid.source_grid is not None, "Why are you using this function?"
+    if data is None:
+        data = {}
+    if names_0d is None:
+        names_0d = {}
+    if names_1dr is None:
+        names_1dr = {}
+    names_field_line = set(names_field_line)
+    names_0d = set(names_0d) - names_field_line
+    names_1dr = set(names_1dr) - names_field_line
+    p = "desc.equilibrium.equilibrium.Equilibrium"
+    deps = (
+        names_0d
+        | names_1dr
+        | set(get_data_deps(names_field_line, obj=p, has_axis=grid.axis.size > 0))
+    ) - data.keys()
+    dep0d = {dep for dep in deps if data_index[p][dep]["coordinates"] == ""}
+    dep1dr = {dep for dep in deps if data_index[p][dep]["coordinates"] == "r"}
+    # Create grid with given flux surfaces.
+    grid1dr = LinearGrid(
+        rho=grid.compress(grid.nodes[:, 0]),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        sym=eq.sym,
+        NFP=eq.NFP,
+    )
+    # Compute dependencies on correct grids, overriding whenever necessary.
+    # (The given grid may not have enough radial or poloidal resolution to compute
+    # dependencies of names_field_line accurately. For flux functions or scalars,
+    # this is not an issue since the interpolation to the given grid is trivial).
+    seed = eq.compute(list(dep0d | dep1dr), grid=grid1dr)
+
+    # Remove dependencies from data_seed that cannot be interpolated trivially.
+    seed0d = {key: val for key, val in seed.items() if key in dep0d}
+    seed1dr = {
+        key: grid.copy_data_from_other(val, grid1dr)
+        for key, val in seed.items()
+        if key in dep1dr
+    }
+    seed = seed0d | seed1dr
+    # Now, compute names_field_line on grid with correct dependencies.
+    # Can't override grid here because computing stuff in names_field_line
+    # requires grid.source_grid.
+    data = seed | data  # values of shared keys should default to data
+    data = eq.compute(
+        names=list(names_field_line), grid=grid, data=data, override_grid=False
+    )
+    return data

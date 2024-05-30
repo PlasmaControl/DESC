@@ -732,6 +732,24 @@ class TestGrid:
         test("theta", cg_sym)
         test("zeta", cg_sym)
 
+    @pytest.mark.unit
+    def test_meshgrid(self):
+        """Test meshgrid constructor."""
+        R = np.linspace(0, 1, 4)
+        T = np.linspace(0, 2 * np.pi, 2)
+        Z = np.linspace(0, 10 * np.pi, 3)
+        grid = Grid.create_meshgrid(R, T, Z)
+        r, t, z = grid.nodes.T
+        _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(grid.unique_rho_idx, unique)
+        np.testing.assert_allclose(grid.inverse_rho_idx, inverse)
+        _, unique, inverse = np.unique(t, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(grid.unique_theta_idx, unique)
+        np.testing.assert_allclose(grid.inverse_theta_idx, inverse)
+        _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(grid.unique_zeta_idx, unique)
+        np.testing.assert_allclose(grid.inverse_zeta_idx, inverse)
+
 
 @pytest.mark.unit
 def test_find_most_rational_surfaces():

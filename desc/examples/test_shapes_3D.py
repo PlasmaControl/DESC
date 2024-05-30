@@ -15,7 +15,7 @@ from desc.geometry import convert_spectral_to_FE
 L = 2
 M = 5
 N = 2
-K = 2
+K = 1
 
 # Make a surface in (R, phi=0, Z), (R, phi=pi / N, Z), ...
 nt = 100

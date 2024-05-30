@@ -1207,8 +1207,6 @@ class FiniteElementBasis(_FE_Basis):
             # Get all IQ basis functions from each of the points,
             # and most will be zeros at a given point because of local support.
             basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
-            basis_functions = np.reshape(basis_functions, (len(t), -1))
-            inds = i * self.Q + q
         elif self.N == 0:
             # Tessellate the domain and find the basis functions for theta, zeta
             Rho_Theta = np.array([np.ravel(r), np.ravel(t)]).T
@@ -1216,21 +1214,16 @@ class FiniteElementBasis(_FE_Basis):
                 intervals,
                 basis_functions,
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
-
-            # Sum the basis functions from each triangle node
-            basis_functions = np.reshape(basis_functions, (len(t), -1))
-            inds = i * self.Q + q
         else:
-            Rho, Theta, Zeta = np.meshgrid(r, t, z, indexing="ij")
             Rho_Theta_Zeta = np.array(
-                [np.ravel(Rho), np.ravel(Theta), np.ravel(Zeta)]
+                [np.ravel(r), np.ravel(t), np.ravel(z)]
             ).T
             (
                 intervals,
                 basis_functions,
-            ) = self.mesh.find_tetrahedron_corresponding_to_points(Rho_Theta_Zeta)
-            inds = i * self.Q + q
-
+            ) = self.mesh.find_tetrahedra_corresponding_to_points(Rho_Theta_Zeta)
+        inds = i * self.Q + q
+        basis_functions = np.reshape(basis_functions, (len(t), -1))
         return basis_functions[:, inds]
 
     def change_resolution(self, L, M, N):
@@ -2042,7 +2035,7 @@ class FiniteElementMesh3D:
             np.linspace(0, 1, L),
             np.linspace(0, 2 * np.pi, M),
             np.linspace(0, 2 * np.pi, N),
-        )
+        ).to_meshtet()
 
         vertices = mesh.doflocs
 
@@ -2145,6 +2138,7 @@ class FiniteElementMesh3D:
                     tetrahedron_5_vertices[3] = rectangular_prism_vertices[2]
 
                     # Grabbing the six tetrahedra in each Rectangular prism:
+                    # print(tetrahedron_1_vertices)
                     tetrahedron1 = TetrahedronFiniteElement(tetrahedron_1_vertices, K=K)
                     tetrahedron2 = TetrahedronFiniteElement(tetrahedron_2_vertices, K=K)
                     tetrahedron3 = TetrahedronFiniteElement(tetrahedron_3_vertices, K=K)
@@ -2209,7 +2203,7 @@ class FiniteElementMesh3D:
         """
         # nodes should be (4,3)
 
-        tetrahedra_location = self.find_tetrahedron_corresponding_to_points(
+        tetrahedra_location = self.find_tetrahedra_corresponding_to_points(
             rho_theta_zeta
         )[0]
 
@@ -2239,84 +2233,119 @@ class FiniteElementMesh3D:
 
         return coordinate_matrix
 
+
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
 
         Returns
         -------
-        quadrature points: 2D ndarray, shape (nquad * 5MLN, 4)
+        quadrature points: 2D ndarray, shape (nquad * I_5LMN, 3)
             Points in (rho, theta, zeta) representing the quadrature point
-            locations for integration, return in barycentric coordinates. Then
-            ultimately converted to real-space coordinates
+            locations for integration, return in real-space coordinates.
+
         """
         nquad = self.nquad
         quadrature_points = np.zeros((self.I_5LMN * nquad, 3))
-
-        M = []
+        q = 0
         for tetrahedron in self.tetrahedra:
-
-            vertices = tetrahedron.vertices
-
-            D = np.array(
-                [vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
-                [vertices[1, 0], vertices[1, 1], vertices[1, 2], 1],
-                [vertices[2, 0], vertices[2, 1], vertices[2, 2], 1],
-                [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1],
-            )
-
-            six_vol = np.linalg.det(D)
-
-            # Transform points
-
-            integration_points = self.integration_points[:, :3]
-
-            v = vertices
-
-            # Transform points
-
-            A = np.array(
-                [
-                    [v[2, 0] - v[0, 0], v[1, 0] - v[0, 0], v[3, 0] - v[0, 0]],
-                    [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1], v[3, 1] - v[0, 1]],
-                    [v[2, 2] - v[0, 2], v[1, 2] - v[0, 2], v[3, 2] - v[0, 2]],
-                ]
-            )
-
-            new_coor = np.zeros([integration_points.shape[0], 3])
-
-            for i in range(integration_points.shape[0]):
-                new_coor[i] = np.dot(A, integration_points[i, :])
-
-            M = np.append(M, new_coor)
-
-        M = np.reshape([self.I_5LMN * nquad, 3])
-
-        new_col = np.zeros([self.I_5LMN * nquad, 1])
-
-        for i in range(self.I_5LMN * nquad):
-            new_col[i] = 1 - M[i, 0] - M[i, 1] - M[i, 2]
-
-        # Add new column
-        quadrature_points = np.append(M, new_col, axis=1)
-        
-        q_p = quadrature_points 
-        
-        # Need to convert to real-space coordinates. quadrature_points
-        # has size (I_5LMN * nquad,4), where each row is a set of 
-        # barycentric coordinates
-        
-        barycentric_points = np.zeros([self.I_5LMN * nquad, 3])
-        
-        for i in range(self.I_5LMN * nquad):
-            for j in range(3):
-                barycentric_points[i,j] = q_p[i,0]*v[0,j] + q_p[i,1]*v[1,j] + q_p[i,2]*v[2,j] + q_p[i,3]*v[3,j]
-            
-            
-        
-        quadrature_points = barycentric_points
-        
-
+            for i in range(nquad):
+                A = np.array(
+                    [
+                        [tetrahedron.b[0], tetrahedron.c[0], tetrahedron.d[0]],
+                        [tetrahedron.b[1], tetrahedron.c[1], tetrahedron.d[1]],
+                        [tetrahedron.b[2], tetrahedron.c[2], tetrahedron.d[2]],
+                        [
+                            tetrahedron.b[0] + tetrahedron.b[1] + tetrahedron.b[2] + tetrahedron.b[3],
+                            tetrahedron.c[0] + tetrahedron.c[1] + tetrahedron.c[2] + tetrahedron.c[3],
+                            tetrahedron.d[0] + tetrahedron.d[1] + tetrahedron.d[2] + tetrahedron.d[3],
+                        ],
+                    ]
+                )
+                b = np.zeros(4)
+                b[:3] = tetrahedron.volume6 * self.integration_points[i, :3] - tetrahedron.a[:3]
+                b[3] = tetrahedron.volume6 - tetrahedron.a[0] - tetrahedron.a[1] - tetrahedron.a[2] - tetrahedron.a[3]
+                quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
+                q = q + 1
         return quadrature_points
+
+    # def return_quadrature_points(self):
+    #     """Get quadrature points for numerical integration over the mesh.
+
+    #     Returns
+    #     -------
+    #     quadrature points: 2D ndarray, shape (nquad * 5MLN, 4)
+    #         Points in (rho, theta, zeta) representing the quadrature point
+    #         locations for integration, return in barycentric coordinates. Then
+    #         ultimately converted to real-space coordinates
+    #     """
+    #     nquad = self.nquad
+    #     quadrature_points = np.zeros((self.I_5LMN * nquad, 3))
+
+    #     M = []
+    #     for tetrahedron in self.tetrahedra:
+
+    #         vertices = tetrahedron.vertices
+
+    #         D = np.array(
+    #             [vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
+    #             [vertices[1, 0], vertices[1, 1], vertices[1, 2], 1],
+    #             [vertices[2, 0], vertices[2, 1], vertices[2, 2], 1],
+    #             [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1],
+    #         )
+
+    #         six_vol = np.linalg.det(D)
+
+    #         # Transform points
+
+    #         integration_points = self.integration_points[:, :3]
+
+    #         v = vertices
+
+    #         # Transform points
+
+    #         A = np.array(
+    #             [
+    #                 [v[2, 0] - v[0, 0], v[1, 0] - v[0, 0], v[3, 0] - v[0, 0]],
+    #                 [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1], v[3, 1] - v[0, 1]],
+    #                 [v[2, 2] - v[0, 2], v[1, 2] - v[0, 2], v[3, 2] - v[0, 2]],
+    #             ]
+    #         )
+
+    #         new_coor = np.zeros([integration_points.shape[0], 3])
+
+    #         for i in range(integration_points.shape[0]):
+    #             new_coor[i] = np.dot(A, integration_points[i, :])
+
+    #         M = np.append(M, new_coor)
+
+    #     M = np.reshape([self.I_5LMN * nquad, 3])
+
+    #     new_col = np.zeros([self.I_5LMN * nquad, 1])
+
+    #     for i in range(self.I_5LMN * nquad):
+    #         new_col[i] = 1 - M[i, 0] - M[i, 1] - M[i, 2]
+
+    #     # Add new column
+    #     quadrature_points = np.append(M, new_col, axis=1)
+        
+    #     q_p = quadrature_points 
+        
+    #     # Need to convert to real-space coordinates. quadrature_points
+    #     # has size (I_5LMN * nquad,4), where each row is a set of 
+    #     # barycentric coordinates
+        
+    #     barycentric_points = np.zeros([self.I_5LMN * nquad, 3])
+        
+    #     for i in range(self.I_5LMN * nquad):
+    #         for j in range(3):
+    #             barycentric_points[i,j] = q_p[i,0]*v[0,j] + q_p[i,1]*v[1,j] + q_p[i,2]*v[2,j] + q_p[i,3]*v[3,j]
+            
+            
+        
+    #     quadrature_points = barycentric_points
+        
+
+    #     return quadrature_points
 
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
@@ -2772,10 +2801,10 @@ class TetrahedronFiniteElement:
         self.K = K
 
         D = np.array(
-            [vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
+            [[vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
             [vertices[1, 0], vertices[1, 1], vertices[1, 2], 1],
             [vertices[2, 0], vertices[2, 1], vertices[2, 2], 1],
-            [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1],
+            [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1]]
         )
 
         self.volume6 = np.linalg.det(D)
@@ -2954,38 +2983,38 @@ class TetrahedronFiniteElement:
             Barycentric coordinates defined by the tetrahedron and evaluated at the
             points (rho, theta, zeta)
         """
-        eta = np.zeros(rho_theta_zeta.shape[[0], 4])
-
+        eta = []
+        rho_theta_zeta_in_tetrahedron = []
         for i in range(rho_theta_zeta.shape[0]):
 
             g_v = self.vertices
 
             D_1 = np.array(
-                [rho_theta_zeta[i][0], rho_theta_zeta[i][1], rho_theta_zeta[i][2], 1],
+                [[rho_theta_zeta[i][0], rho_theta_zeta[i][1], rho_theta_zeta[i][2], 1],
                 [g_v[1][0], g_v[1][1], g_v[1][2], 1],
                 [g_v[2][0], g_v[2][1], g_v[2][2], 1],
-                [g_v[3][0], g_v[3][1], g_v[3][2], 1],
+                [g_v[3][0], g_v[3][1], g_v[3][2], 1]]
             )
 
             D_2 = np.array(
-                [g_v[0][0], g_v[0][1], g_v[0][2], 1],
+                [[g_v[0][0], g_v[0][1], g_v[0][2], 1],
                 [rho_theta_zeta[i][0], rho_theta_zeta[i][1], rho_theta_zeta[i][2], 1],
                 [g_v[2][0], g_v[2][1], g_v[2][2], 1],
-                [g_v[3][0], g_v[3][1], g_v[3][2], 1],
+                [g_v[3][0], g_v[3][1], g_v[3][2], 1]]
             )
 
             D_3 = np.array(
-                [g_v[0][0], g_v[0][1], g_v[0][2], 1],
+                [[g_v[0][0], g_v[0][1], g_v[0][2], 1],
                 [g_v[1][0], g_v[1][1], g_v[1][2], 1],
                 [rho_theta_zeta[i][0], rho_theta_zeta[i][1], rho_theta_zeta[i][2], 1],
-                [g_v[3][0], g_v[3][1], g_v[3][2], 1],
+                [g_v[3][0], g_v[3][1], g_v[3][2], 1]]
             )
 
             D_4 = np.array(
-                [g_v[0][0], g_v[0][1], g_v[0][2], 1],
+                [[g_v[0][0], g_v[0][1], g_v[0][2], 1],
                 [g_v[1][0], g_v[1][1], g_v[1][2], 1],
                 [g_v[2][0], g_v[2][1], g_v[2][2], 1],
-                [rho_theta_zeta[i][0], rho_theta_zeta[i][1], rho_theta_zeta[i][2], 1],
+                [rho_theta_zeta[i][0], rho_theta_zeta[i][1], rho_theta_zeta[i][2], 1]]
             )
 
             d_1 = np.linalg.det(D_1)
@@ -2999,25 +3028,21 @@ class TetrahedronFiniteElement:
             eta_4 = d_4 / self.d
 
             # Check that all points are indeed inside the tetrahedron
-            eta_final = []
-            rho_theta_zeta_in_tetrahedron = []
-            for j in range(4):
-                if eta_1[j] < 0 or eta_2[j] < 0 or eta_3[j] < 0 or eta_4[j] < 0:
-                    warnings.warn()
-                    "Found rho_theta_zeta points outside the tetrahedron ... "
-                    "Not using these points to evaluate the barycentric "
-                    "coordinates."
+            # for j in range(4):
+            if eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0:
+                warnings.warn()
+                "Found rho_theta_zeta points outside the tetrahedron ... "
+                "Not using these points to evaluate the barycentric "
+                "coordinates."
 
-                else:
-                    eta[j][0] = eta_1
-                    eta[j][1] = eta_2
-                    eta[j][2] = eta_3
-                    eta[j][3] = eta_4
+            else:
+                eta.append(eta_1)
+                eta.append(eta_2)
+                eta.append(eta_3)
+                eta.append(eta_4)
+                rho_theta_zeta_in_tetrahedron.append(rho_theta_zeta[i, :])
 
-                eta_final.append(eta[j, :])
-                rho_theta_zeta_in_tetrahedron.append(rho_theta_zeta[j, :])
-
-        return np.array(eta_final), np.array(rho_theta_zeta_in_tetrahedron)
+        return np.array(eta).reshape(-1, 4), np.array(rho_theta_zeta_in_tetrahedron).reshape(-1, 3)
 
     def get_basis_functions(self, rho_theta_zeta):
         """
@@ -3047,7 +3072,6 @@ class TetrahedronFiniteElement:
         # Recall that eta_nodes is the set of barycentric coordinates for the points
         # lying in the specific tetrahedron.
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
-
         # At each of the rho_theta_zeta points that lie in the given tetrahedron,
         # we wish to evaluate the Q = (K+1)(K+2)(K+3)/6 basis functions.
         K = self.K
@@ -3056,19 +3080,19 @@ class TetrahedronFiniteElement:
         # of basis_functions. There are hard-coded from book.
 
         if K == 1:
-            for i in rho_theta_zeta.shape[0]:
+            for i in range(rho_theta_zeta.shape[0]):
                 for j in range(4):
                     basis_functions[i, j] = self.eta_nodes[i, j]
         # Next, we deal with the edge nodes. This will provide an additional 6 columns.
 
         if K == 2:
-            for i in rho_theta_zeta.shape[0]:
+            for i in range(rho_theta_zeta.shape[0]):
                 for j in range(4):
                     basis_functions[i, j] = self.eta_nodes[i, j] * (
                         2 * self.eta_nodes[i, j] - 1
                     )
 
-            for i in rho_theta_zeta.shape[0]:
+            for i in range(rho_theta_zeta.shape[0]):
                 basis_functions[i, 4] = 4 * self.eta_nodes[i, 1] * self.eta_nodes[i, 0]
                 basis_functions[i, 5] = 4 * self.eta_nodes[i, 1] * self.eta_nodes[i, 2]
                 basis_functions[i, 6] = 4 * self.eta_nodes[i, 0] * self.eta_nodes[i, 2]
@@ -3078,7 +3102,7 @@ class TetrahedronFiniteElement:
                 basis_functions[i, 9] = 4 * self.eta_nodes[i, 2] * self.eta_nodes[i, 3]
 
         if K == 3:
-            for i in rho_theta_zeta.shape[0]:
+            for i in range(rho_theta_zeta.shape[0]):
                 for j in range(4):
                     basis_functions[i, j] = (
                         (1 / 2)
@@ -3086,7 +3110,7 @@ class TetrahedronFiniteElement:
                         * (3 * self.eta_nodes[i, j] - 1)
                         * (3 * self.eta_nodes[i, j] - 2)
                     )
-            for i in rho_theta_zeta.shape[0]:
+            for i in range(rho_theta_zeta.shape[0]):
                 # Edge nodes
                 basis_functions[i, 4] = (
                     (9 / 2)

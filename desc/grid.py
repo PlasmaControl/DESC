@@ -42,7 +42,7 @@ class _Grid(IOAble, ABC):
         "_inverse_rho_idx",
         "_inverse_poloidal_idx",
         "_inverse_zeta_idx",
-        "is_meshgrid",
+        "_is_meshgrid",
         "_poloidal_weight",
     ]
 
@@ -204,6 +204,17 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault("_sym", False)
 
     @property
+    def is_meshgrid(self):
+        """bool: Whether this grid is separable into coordinate chunks.
+
+        Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
+        coordinate value. The is_meshgrid flag denotes whether any coordinate
+        can be iterated over along the relevant axis of the reshaped grid:
+        nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
+        """
+        return self.__dict__.setdefault("_is_meshgrid", False)
+
+    @property
     def coordinates(self):
         """Coordinates specified by the nodes."""
         return self.__dict__.setdefault("_coordinates", "rtz")
@@ -252,7 +263,8 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_rho_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have unique indices assigned.",
+            f"{self} does not have unique indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_rho_idx
 
@@ -262,7 +274,8 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_poloidal_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have unique indices assigned.",
+            f"{self} does not have unique indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_poloidal_idx
 
@@ -290,7 +303,8 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_zeta_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have unique indices assigned.",
+            f"{self} does not have unique indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_zeta_idx
 
@@ -300,7 +314,8 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_rho_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have inverse indices assigned.",
+            f"{self} does not have inverse indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_rho_idx
 
@@ -310,7 +325,8 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_poloidal_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have inverse indices assigned.",
+            f"{self} does not have inverse indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_poloidal_idx
 
@@ -338,7 +354,8 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_zeta_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have inverse indices assigned.",
+            f"{self} does not have inverse indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_zeta_idx
 
@@ -384,7 +401,7 @@ class _Grid(IOAble, ABC):
             + " at "
             + str(hex(id(self)))
             + (
-                " (L={}, M={}, N={}, NFP={}, sym={},"
+                " (L={}, M={}, N={}, NFP={}, sym={}, is_meshgrid={},"
                 " node_pattern={}, coordinates={})"
             ).format(
                 self.L,
@@ -392,6 +409,7 @@ class _Grid(IOAble, ABC):
                 self.N,
                 self.NFP,
                 self.sym,
+                self.is_meshgrid,
                 self.node_pattern,
                 self.coordinates,
             )
@@ -428,14 +446,10 @@ class _Grid(IOAble, ABC):
 
         """
         surface_label = self.get_label(surface_label)
-        attr = f"_unique_{surface_label}_idx"
-        errorif(
-            not hasattr(self, attr),
-            AttributeError,
-            "compress operation undefined for jit compatible grids",
-        )
         errorif(len(x) != self.num_nodes)
-        return take(x, getattr(self, attr), axis=0, unique_indices=True)
+        return take(
+            x, getattr(self, f"unique_{surface_label}_idx"), axis=0, unique_indices=True
+        )
 
     def expand(self, x, surface_label="rho"):
         """Expand ``x`` by duplicating elements to match the grid's pattern.
@@ -460,14 +474,8 @@ class _Grid(IOAble, ABC):
 
         """
         surface_label = self.get_label(surface_label)
-        attr = f"_inverse_{surface_label}_idx"
-        errorif(
-            not hasattr(self, attr),
-            AttributeError,
-            "expand operation undefined for jit compatible grids",
-        )
         errorif(len(x) != getattr(self, f"num_{surface_label}"))
-        return x[getattr(self, attr)]
+        return x[getattr(self, f"inverse_{surface_label}_idx")]
 
     def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
         """Copy data x from other_grid to this grid at matching surface label.
@@ -566,25 +574,29 @@ class Grid(_Grid):
         Spacing between nodes in each direction.
     weights : ndarray of float, size(num_nodes, )
         Quadrature weights for each node.
-    sort : bool
-        Whether to sort the nodes for use with FFT method.
-    spacing : ndarray of shape(num_nodes, 3)
-        May be provided to ensure even spacing for surface averages etc.
-    jitable : bool
-        Whether to skip certain checks and conditionals that don't work under jit.
-        Allows grid to be created on the fly with custom nodes, but weights, symmetry
-        etc. may be wrong if grid contains duplicate nodes.
     coordinates : str
         Coordinates that are specified by the nodes.
         raz : rho, alpha, zeta
         rpz : rho, theta_PEST, zeta
         rtz : rho, theta, zeta
-    source_grid : Grid, optional
+    source_grid : Grid
         Grid from which coordinates were mapped from.
+    sort : bool
+        Whether to sort the nodes for use with FFT method.
+    is_meshgrid : bool
+        Whether this grid is separable into coordinate chunks.
+        Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
+        coordinate value. The is_meshgrid flag denotes whether any coordinate
+        can be iterated over along the relevant axis of the reshaped grid:
+        nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
+    jitable : bool
+        Whether to skip certain checks and conditionals that don't work under jit.
+        Allows grid to be created on the fly with custom nodes, but weights, symmetry
+        etc. may be wrong if grid contains duplicate nodes.
     """
 
     @classmethod
-    def create_meshgrid(cls, a, b, c, coordinates="rtz"):
+    def create_meshgrid(cls, a, b, c, coordinates="rtz", **kwargs):
         """Create a meshgrid from the given coordinates in a jitable manner.
 
         Parameters
@@ -623,16 +635,17 @@ class Grid(_Grid):
         inverse_c_idx = jnp.tile(unique_c_idx, a.size * b.size)
         return cls(
             nodes=nodes,
-            sort=False,
-            jitable=True,
             coordinates=coordinates,
+            sort=False,
+            is_meshgrid=True,
+            jitable=True,
             _unique_rho_idx=unique_a_idx,
             _unique_poloidal_idx=unique_b_idx,
             _unique_zeta_idx=unique_c_idx,
             _inverse_rho_idx=inverse_a_idx,
             _inverse_poloidal_idx=inverse_b_idx,
             _inverse_zeta_idx=inverse_c_idx,
-            is_meshgrid=True,
+            **kwargs,
         )
 
     def __init__(
@@ -640,10 +653,11 @@ class Grid(_Grid):
         nodes,
         spacing=None,
         weights=None,
-        sort=False,
-        jitable=False,
         coordinates="rtz",
         source_grid=None,
+        sort=False,
+        is_meshgrid=False,
+        jitable=False,
         **kwargs,
     ):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
@@ -654,12 +668,7 @@ class Grid(_Grid):
         self._node_pattern = "custom"
         self._coordinates = coordinates
         self._source_grid = source_grid
-        # Whether this grid is separable into coordinate chunks.
-        # Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
-        # coordinate value. The is_meshgrid flag denotes whether any coordinate
-        # can be iterated over along the relevant axis of the reshaped grid:
-        # nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
-        self.is_meshgrid = kwargs.pop("is_meshgrid", False)
+        self._is_meshgrid = bool(is_meshgrid)
         if "poloidal_weight" in kwargs:
             self._poloidal_weight = jnp.atleast_1d(kwargs.pop("poloidal_weight"))
         else:

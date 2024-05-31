@@ -2484,9 +2484,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         self._equilibria.insert(i, new_item)
 
 
-# TODO: in GitHub issue #1035.
-#  Move logic to eq.compute and store spline of rotational transform used to
-#  compute coordinate mapping.
+# TODO: GitHub issue #1035. Move logic to eq.compute
 def compute_raz_data(
     eq, grid, names_field_line, names_0d=None, names_1dr=None, data=None
 ):

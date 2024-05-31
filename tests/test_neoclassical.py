@@ -29,19 +29,19 @@ def test_field_line_average():
     data = compute_raz_data(eq, grid, ["L|r,a", "G|r,a"], names_1dr=["V_r(r)"])
     np.testing.assert_allclose(
         _poloidal_average(grid.source_grid, data["L|r,a"] / data["G|r,a"]),
-        grid.compress(data["V_r(r)"]),
-        rtol=3e-2,
+        grid.compress(data["V_r(r)"]) / (4 * np.pi**2),
+        rtol=2e-2,
     )
 
     # Now for field line with large L.
-    L = 20 * np.pi
+    L = 10 * np.pi
     zeta = np.linspace(0, L, resolution * 2)
     grid = rtz_grid(eq, rho, 0, zeta, coordinates="raz")
     data = compute_raz_data(eq, grid, ["L|r,a", "G|r,a"], names_1dr=["V_r(r)"])
     np.testing.assert_allclose(
         np.squeeze(data["L|r,a"] / data["G|r,a"]),
-        grid.compress(data["V_r(r)"]),
-        rtol=3e-2,
+        grid.compress(data["V_r(r)"]) / (4 * np.pi**2),
+        rtol=2e-2,
     )
 
 
@@ -81,7 +81,7 @@ def test_effective_ripple():
     ax[0].plot(rho, ripple, marker="o")
     ax[0].set_xlabel(r"$\rho$")
     ax[0].set_ylabel("effective ripple raw")
-    ax[0].set_title(r"∫ dλ λ⁻² $\langle$ ∑ⱼ Hⱼ²/Iⱼ $\rangle$")
+    ax[0].set_title(r"∫ dλ λ⁻² B₀⁻¹ $\langle$ ∑ⱼ Hⱼ²/Iⱼ $\rangle$")
 
     # Workaround until eq.compute() is fixed to only compute dependencies
     # that are needed for the requested computation. (So don't compute
@@ -99,7 +99,7 @@ def test_effective_ripple():
     ax[1].set_xlabel(r"$\rho$")
     ax[1].set_ylabel(r"$\epsilon_{\text{eff}}^{3/2}$")
     ax[1].set_title(
-        r"ε¹ᐧ⁵ = π/(8√2) (R₀(∂_ψ V)/S)² ∫ dλ λ⁻² $\langle$ ∑ⱼ Hⱼ²/Iⱼ $\rangle$"
+        r"ε¹ᐧ⁵ = π/(8√2) (R₀(∂V/∂ψ)/S)² ∫ dλ λ⁻² B₀⁻¹ $\langle$ ∑ⱼ Hⱼ²/Iⱼ $\rangle$"
     )
     plt.tight_layout()
     plt.show()

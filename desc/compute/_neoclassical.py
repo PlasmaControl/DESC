@@ -118,16 +118,16 @@ def _poloidal_average(grid, f, name=""):
 @register_compute_fun(
     name="L|r,a",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
-    " \\frac{d\\zeta}{B^{\\zeta} \\vert B \\vert}",
-    units="m",
-    units_long="meters",
+    " \\frac{d\\zeta}{B^{\\zeta}}",
+    units="m / T",
+    units_long="Meter / Tesla",
     description="Length along field line",
     dim=2,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="ra",
-    data=["B^zeta", "|B|"],
+    data=["B^zeta"],
     grid_requirement=[
         "source_grid",
         lambda grid: grid.source_grid.coordinates == "raz"
@@ -138,7 +138,7 @@ def _L_ra(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     data["L|r,a"] = quadax.simpson(
-        jnp.reshape(1 / (data["B^zeta"] * data["|B|"]), shape),
+        jnp.reshape(1 / data["B^zeta"], shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
@@ -148,16 +148,16 @@ def _L_ra(data, transforms, profiles, **kwargs):
 @register_compute_fun(
     name="G|r,a",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
-    " \\frac{d\\zeta}{B^{\\zeta} \\vert B \\vert \\sqrt g}",
-    units="m^{-2}",
-    units_long="inverse meters squared",
+    " \\frac{d\\zeta}{B^{\\zeta} \\sqrt g}",
+    units="1 / Wb",
+    units_long="Inverse webers",
     description="Length over volume along field line",
     dim=2,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="ra",
-    data=["B^zeta", "|B|", "sqrt(g)"],
+    data=["B^zeta", "sqrt(g)"],
     grid_requirement=[
         "source_grid",
         lambda grid: grid.source_grid.coordinates == "raz"
@@ -168,16 +168,16 @@ def _G_ra(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     data["G|r,a"] = quadax.simpson(
-        jnp.reshape(1 / (data["B^zeta"] * data["|B|"] * data["sqrt(g)"]), shape),
+        jnp.reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
-    ) / (4 * jnp.pi**2)
+    )
     return data
 
 
 @register_compute_fun(
     name="effective ripple raw",
-    label="∫ dλ λ⁻² \\langle ∑ⱼ Hⱼ²/Iⱼ \\rangle",
+    label="∫ dλ λ⁻² B₀⁻¹ \\langle ∑ⱼ Hⱼ²/Iⱼ \\rangle",
     units="T^2",
     units_long="Tesla squared",
     description="Effective ripple modulation amplitude, not dimensionless",
@@ -221,19 +221,28 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     batch = kwargs.get("batch", True)
     quad = kwargs.get("quad", quadax.simpson)
     quad_res = kwargs.get("quad_res", 100)
-    # Get endpoints of integral over pitch for each field line.
+    # Get endpoints of integral over pitch for each flux surface.
     min_B, max_B = map(g.compress, (data["min_tz |B|"], data["max_tz |B|"]))
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + 1e-6) * min_B
     max_B = (1 - 1e-6) * max_B
+    # λ is the pitch angle. Note Nemov dimensionless integration variable b = (λB₀)⁻¹.
     pitch_endpoint = 1 / jnp.stack([max_B, min_B])
 
-    def dH(grad_psi_norm, kappa_g, B, pitch, Z):
-        # absorbed 1/λ into H
-        return jnp.sqrt(1 / pitch - B) * (4 / B - pitch) * grad_psi_norm * kappa_g / B
+    def dH(grad_psi_norm, kappa_g, B, pitch):
+        # Pulled out dimensionless factor of (λB₀)¹ᐧ⁵ from integrand of
+        # Nemov equation 30. Multiplied back in at end.
+        return (
+            jnp.sqrt(1 - pitch * B)
+            * (4 / (pitch * B) - 1)
+            * grad_psi_norm
+            * kappa_g
+            / B
+        )
 
-    def dI(B, pitch, Z):
+    def dI(B, pitch):
+        # Integrand of Nemov equation 31.
         return jnp.sqrt(1 - pitch * B) / B
 
     if _is_Newton_Cotes(quad):
@@ -242,7 +251,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         )
 
         def d_ripple(pitch):
-            """Return λ⁻² ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
+            """Return λ⁻² B₀⁻¹ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
 
             Parameters
             ----------
@@ -252,19 +261,23 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
             Returns
             -------
             d_ripple : Array, shape(pitch.shape)
-                λ⁻² ∑ⱼ Hⱼ²/Iⱼ
+                λ⁻² B₀⁻¹ ∑ⱼ Hⱼ²/Iⱼ
 
             """
             H = bounce_integrate(
                 dH, [data["|grad(psi)|"], data["kappa_g"]], pitch, batch=batch
             )
             I = bounce_integrate(dI, [], pitch, batch=batch)
-            return jnp.nansum(H**2 / I, axis=-1)
+            # (λB₀)³ db = (λB₀)³ B₀⁻¹ λ⁻² (-dλ) = B₀² λ (-dλ)
+            # We chose B₀ = 1 (inverse units of λ).
+            # The minus sign is accounted for with the integration order.
+            return pitch * jnp.nansum(H**2 / I, axis=-1)
 
         pitch = composite_linspace(pitch_endpoint, quad_res)
         pitch = jnp.broadcast_to(
             pitch[..., jnp.newaxis], (pitch.shape[0], g.num_rho, g.num_alpha)
         ).reshape(pitch.shape[0], g.num_rho * g.num_alpha)
+        # This has units of Tesla meters.
         ripple = quad(d_ripple(pitch), pitch, axis=0)
     else:
         # Use adaptive quadrature.
@@ -273,7 +286,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
             bounce_integrate, _ = _bounce_integral(B_sup_z, B, B_z_ra, knots)
             H = bounce_integrate(dH, [grad_psi_norm, kappa_g], pitch, batch=batch)
             I = bounce_integrate(dI, [], pitch, batch=batch)
-            return jnp.squeeze(jnp.nansum(H**2 / I, axis=-1))
+            return jnp.squeeze(pitch * jnp.nansum(H**2 / I, axis=-1))
 
         pitch_endpoint = pitch_endpoint.T[:, jnp.newaxis]
         assert pitch_endpoint.shape == (g.num_rho, 1, 2)
@@ -298,7 +311,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="effective ripple",  # this is ε¹ᐧ⁵
-    label="π/(8√2) (R₀(∂_ψ V)/S)² ∫ dλ λ⁻² \\langle ∑ⱼ Hⱼ²/Iⱼ \\rangle",
+    label="π/(8√2) (R₀(∂V/∂ψ)/S)² ∫ dλ λ⁻² B₀⁻¹ \\langle ∑ⱼ Hⱼ²/Iⱼ \\rangle",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude",
@@ -325,28 +338,28 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# When comparing Velasco's Γ_c: https://doi.org/10.1088/1741-4326/ac2994
+#           with Nemov's   Γ_c: https://doi.org/10.1063/1.2912456,
+# note that
+#     dλ v τ_b = - 4 (∂I/∂b) db = 4 ∂I/∂((λB₀)⁻¹) B₀⁻¹ λ⁻² dλ
+# and
+#     4π² ∂Ψₜ/∂V = lim{L → ∞} ( [∫₀ᴸ ds/(B √g)] / [∫₀ᴸ ds/B] )
+# where the integrals are along an irrational field line with
+#     ds / B given by dζ / B^ζ
+#     √g the (Ψ, α, ζ)-coordinate Jacobian
+# There is also the dimensionless difference between Nemov's and Velascos's γ_c,
+# mentioned in Velasco's footnote 4. If this difference is γ_c ignored, and the
+# (missing?) √g factor is pushed into the integral over alpha in Velasco eq. 18
+# then we have that
+#     Velasco Γ_c ∼ Nemov Γ_c * lim{L → ∞} ∫₀ᴸ ds/(B √g).
+# In particular, Velasco Γ_c grows with the length of the field line,
+# which isn't what we want.
+# TODO:
+#  We currently implement Nemov Γ_c with Velasco γ_c.
+#  Switch to Nemov γ_c too.
 @register_compute_fun(
     name="Gamma_c",
-    # When comparing Velasco's Γ_c: https://doi.org/10.1088/1741-4326/ac2994
-    #           with Nemov's   Γ_c: https://doi.org/10.1063/1.2912456,
-    # note that
-    #     dλ v τ_b = 8 (∂I/∂b) db = -8 ∂I/∂(λ⁻¹) dλ λ⁻²
-    # and
-    #     4π² ∂Ψₜ/∂V = lim{L → ∞} ( [∫₀ᴸ ds/(B √g)] / [∫₀ᴸ ds/B] )
-    # where the integrals are along an irrational field line with
-    #     ds given by dζ / B^ζ
-    #     √g the (Ψ, θ, ζ)-coordinate Jacobian
-    # There is also the dimensionless difference between Nemov's and Velascos's γ_c,
-    # mentioned in Velasco's footnote 4. If this difference is γ_c ignored, and the
-    # (missing?) √g factor is pushed into the integral over alpha in Velasco eq. 18
-    # then we have that
-    #     Velasco Γ_c = Nemov Γ_c * lim{L → ∞} ∫₀ᴸ ds/(B √g) / (2π).
-    # In particular, Velasco Γ_c grows with the length of the field line
-    # which isn't what we want.
-    # TODO:
-    #  We currently implement Nemov Γ_c with Velasco γ_c.
-    #  Switch to Nemov γ_c too.
-    label="π/(2√2) ∫ dλ λ⁻² \\langle ∑ⱼ [γ_c² ∂I/∂(λ⁻¹)]ⱼ \\rangle",
+    label="π/(2√2) ∫ dλ λ⁻² B₀⁻¹ \\langle ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ \\rangle",
     units="~",
     units_long="None",
     description="Nemov's energetic ion confinement proxy",
@@ -401,12 +414,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + 1e-6) * min_B
     max_B = (1 - 1e-6) * max_B
+    # λ is the pitch angle. Note Nemov dimensionless integration variable b = (λB₀)⁻¹.
     pitch_endpoint = 1 / jnp.stack([max_B, min_B])
 
-    def d_gamma_c(f, B, pitch, Z):
+    def d_gamma_c(f, B, pitch):
         return f * (1 - pitch * B / 2) / jnp.sqrt(1 - pitch * B)
 
-    def dK(B, pitch, Z):
+    def dK(B, pitch):
         return 0.5 / jnp.sqrt(1 - pitch * B)
 
     if _is_Newton_Cotes(quad):
@@ -415,7 +429,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         )
 
         def d_Gamma_c(pitch):
-            """Return ∑ⱼ [γ_c² ∂I/∂(λ⁻¹)]ⱼ evaluated at λ = pitch.
+            """Return λ⁻² B₀⁻¹ ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ evaluated at λ = pitch.
 
             Parameters
             ----------
@@ -425,7 +439,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             Returns
             -------
             d_Gamma_c : Array, shape(pitch.shape)
-                ∑ⱼ [γ_c² ∂I/∂(λ⁻¹)]ⱼ
+                λ⁻² B₀⁻¹ ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ
 
             """
             # TODO: Currently we have implemented Velasco's Gamma_c.
@@ -441,13 +455,15 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     / bounce_integrate(d_gamma_c, data["gbdrift"], pitch, batch=batch)
                 )
             )
-            K = bounce_integrate(dK, [], pitch, batch=batch)  # λ⁻² ∂I/∂(λ⁻¹)
+            # K = λ⁻² B₀⁻¹ ∂I/∂((λB₀)⁻¹) where I is given in Nemov equation 36.
+            K = bounce_integrate(dK, [], pitch, batch=batch)
             return jnp.nansum(gamma_c**2 * K, axis=-1)
 
         pitch = composite_linspace(pitch_endpoint, quad_res)
         pitch = jnp.broadcast_to(
             pitch[..., jnp.newaxis], (pitch.shape[0], g.num_rho, g.num_alpha)
         ).reshape(pitch.shape[0], g.num_rho * g.num_alpha)
+        # This has units of meters / tesla.
         Gamma_c = quad(d_Gamma_c(pitch), pitch, axis=0)
     else:
         # Use adaptive quadrature.

@@ -120,7 +120,7 @@ def _poloidal_average(grid, f, name=""):
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
     " \\frac{d\\zeta}{B^{\\zeta}}",
     units="m / T",
-    units_long="Meter / Tesla",
+    units_long="Meter / tesla",
     description="Length along field line",
     dim=2,
     params=[],
@@ -218,7 +218,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     g = transforms["grid"].source_grid
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
     _bounce_integral = kwargs.get("bounce_integral", bounce_integral)
-    batch = kwargs.get("batch", True)
+    batch = kwargs.get("batch", False)
     quad = kwargs.get("quad", quadax.simpson)
     quad_res = kwargs.get("quad_res", 100)
     # Get endpoints of integral over pitch for each flux surface.
@@ -277,7 +277,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         pitch = jnp.broadcast_to(
             pitch[..., jnp.newaxis], (pitch.shape[0], g.num_rho, g.num_alpha)
         ).reshape(pitch.shape[0], g.num_rho * g.num_alpha)
-        # This has units of Tesla meters.
+        # This has units of tesla meters.
         ripple = quad(d_ripple(pitch), pitch, axis=0)
     else:
         # Use adaptive quadrature.
@@ -391,10 +391,12 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     Equation 61, using Velasco's γ_c from equation 15 of the above paper.
 
     Besides the difference in γ_c mentioned above, Nemov's Γ_c and Velasco Γ_c
-    as defined in equation 16 are identical, although Nemov's expression is more
-    explicit while Velasco's requires some interpretation. However, Velasco Γ_c
-    as defined in equation 18 does not seem to match equation 16.
-    Note that
+    as defined in equation 16 are identical, although Nemov's expression is
+    precise while Velasco's requires a flexible interpretation for the expression
+    to be well-defined.
+
+    Also, Velasco Γ_c as defined in equation 18 does not seem to match
+    equation 16. Note that
         dλ v τ_b = - 4 (∂I/∂b) db = 4 ∂I/∂((λB₀)⁻¹) B₀⁻¹ λ⁻² dλ
         4π² ∂Ψₜ/∂V = lim{L → ∞} ( [∫₀ᴸ ds/(B √g)] / [∫₀ᴸ ds/B] )
     where the integrals are along an irrational field line with
@@ -407,7 +409,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     g = transforms["grid"].source_grid
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
     _bounce_integral = kwargs.get("bounce_integral", bounce_integral)
-    batch = kwargs.get("batch", True)
+    batch = kwargs.get("batch", False)
     quad = kwargs.get("quad", quadax.simpson)
     quad_res = kwargs.get("quad_res", 100)
     # Get endpoints of integral over pitch for each field line.
@@ -453,7 +455,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 )
             )
             # K = 2 λ⁻² B₀⁻¹ ∂I/∂((λB₀)⁻¹) where I is given in Nemov equation 36.
-            # So factors of B₀ cancel, making this quantity independent of the
+            # The factor of B₀ cancels, making this quantity independent of the
             # chosen reference magnetic field strength.
             K = bounce_integrate(dK, [], pitch, batch=batch)
             return jnp.nansum(gamma_c**2 * K, axis=-1)

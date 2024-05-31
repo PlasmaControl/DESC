@@ -2063,16 +2063,16 @@ class FiniteElementMesh3D:
 
         self.assembly_matrix = assembly.assemble(basis).todense()
 
-        # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
+        # We wish to compute the tetrahedral elements for all 5MNL tetrahedra:
         tetrahedra = []
         # Pick four points of tetrahedral elements:
-
+                    
         for i in range(L - 1):
             for j in range(M - 1):
                 for k in range(N - 1):
 
                     # We know that each rectangular prism in the mesh has
-                    # six tetrahedra lying in it
+                    # five tetrahedra lying in it
 
                     # There are MNL rectangular prisms in the grid.
                     # Each quad corresponds to ijk
@@ -2103,7 +2103,6 @@ class FiniteElementMesh3D:
                     # Form five tetrahedra out of rectangular prisms.
                     # Basing this on the way MeshTet functions
 
-                    tetrahedra = []
                     tetrahedron_1_vertices = np.zeros([4, 3])
                     tetrahedron_2_vertices = np.zeros([4, 3])
                     tetrahedron_3_vertices = np.zeros([4, 3])
@@ -2147,41 +2146,44 @@ class FiniteElementMesh3D:
                     tetrahedra.append(tetrahedron3)
                     tetrahedra.append(tetrahedron4)
                     tetrahedra.append(tetrahedron5)
-                    self.vertices = vertices
-                    self.tetrahedra = tetrahedra
-                    # Setup quadrature points and weights
-                    # for numerical integration using scikit-fem
+                    
+                
+        
+        self.vertices = vertices
+        self.tetrahedra = tetrahedra
+        # Setup quadrature points and weights
+        # for numerical integration using scikit-fem
 
-                    [integration_points, weights] = fem.quadrature.get_quadrature(
-                        element, K
-                    )
+        [integration_points, weights] = fem.quadrature.get_quadrature(
+            element, K
+        )
 
-                    weights = 6 * weights
+        weights = 6 * weights
 
-                    integration_points = integration_points.T
+        integration_points = integration_points.T
 
-                    # We want to add a 4th column to the transpose of the
-                    # integration_points, where it is one minus the sum of the
-                    # first three rows.
+        # We want to add a 4th column to the transpose of the
+        # integration_points, where it is one minus the sum of the
+        # first three rows.
 
-                    new_col = np.zeros([integration_points.shape[0], 1])
+        new_col = np.zeros([integration_points.shape[0], 1])
 
-                    for i in range(integration_points.shape[0]):
-                        new_col[i] = (
-                            1
-                            - integration_points[i, 0]
-                            - integration_points[i, 1]
-                            - integration_points[i, 2]
-                        )
+        for i in range(integration_points.shape[0]):
+            new_col[i] = (
+                1
+                - integration_points[i, 0]
+                - integration_points[i, 1]
+                - integration_points[i, 2]
+            )
 
-                    # Add new column
+        # Add new column
 
-                    integration_points = np.append(integration_points, new_col, axis=1)
+        integration_points = np.append(integration_points, new_col, axis=1)
 
-                    # Integration points, weights, and number of integration points
-                    self.integration_points = np.array(integration_points)
-                    self.weights = np.array(weights)
-                    self.nquad = self.integration_points.shape[0]
+        # Integration points, weights, and number of integration points
+        self.integration_points = np.array(integration_points)
+        self.weights = np.array(weights)
+        self.nquad = self.integration_points.shape[0]
 
     def get_barycentric_coordinates(self, rho_theta_zeta, K):
         """Gets the barycentric coordinates, given a mesh in rho, theta, zeta.
@@ -2283,7 +2285,6 @@ class FiniteElementMesh3D:
                 q = q + 1
         return quadrature_points
 
-
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
 
@@ -2338,13 +2339,13 @@ class FiniteElementMesh3D:
         tetrahedra_indices = np.zeros(rho_theta_zeta.shape[0])
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
         for i in range(rho_theta_zeta.shape[0]):
-            v = rho_theta_zeta[i, :]
+            P = rho_theta_zeta[i]
+            print(P)
             for j, tetrahedron in enumerate(self.tetrahedra):
-                v1 = self.tetrahedra.vertices[0, :]
-                v2 = self.tetrahedra.vertices[1, :]
-                v3 = self.tetrahedra.vertices[2, :]
-                v4 = self.tetrahedra.vertices[3, :]
-                P = self.tetrahedra_indices[i]
+                v1 = tetrahedron.vertices[0, :]
+                v2 = tetrahedron.vertices[1, :]
+                v3 = tetrahedron.vertices[2, :]
+                v4 = tetrahedron.vertices[3, :]
                 D0 = np.array(
                     [
                         [v1[0], v1[1], v1[2], 1],
@@ -2389,7 +2390,7 @@ class FiniteElementMesh3D:
                 Det0 = np.linalg.det(D0)
                 Det1 = np.linalg.det(D1)
                 Det2 = np.linalg.det(D2)
-                Det3 = np.linal.det(D3)
+                Det3 = np.linalg.det(D3)
                 Det4 = np.linalg.det(D4)
 
                 # Check whether point lies inside tetrahedra:
@@ -2401,7 +2402,7 @@ class FiniteElementMesh3D:
                     and np.sign(Det0) == np.sign(Det4)
                 ):
                     tetrahedra_indices[i] = j
-                    basis_functions[i, :], _ = self.tetrahedra.get_basis_functions(v)
+                    basis_functions[i, :], _ = self.tetrahedra.get_basis_functions(P)
         return tetrahedra_indices, basis_functions
 
 

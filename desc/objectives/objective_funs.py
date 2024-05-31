@@ -865,17 +865,23 @@ class _Objective(IOAble, ABC):
         if self.bounds is not None:  # must be a tuple of length 2
             self._bounds = tuple([np.asarray(bound) for bound in self._bounds])
             for bound in self.bounds:
-                if not is_broadcastable((self.dim_f,), bound.shape):
+                if not is_broadcastable((self.dim_f,), bound.shape) or (
+                    self.dim_f == 1 and bound.size != 1
+                ):
                     raise ValueError("len(bounds) != dim_f")
             if np.any(self.bounds[1] < self.bounds[0]):
                 raise ValueError("bounds must be: (lower bound, upper bound)")
         else:  # target only gets used if bounds is None
             self._target = np.asarray(self._target)
-            if not is_broadcastable((self.dim_f,), self.target.shape):
+            if not is_broadcastable((self.dim_f,), self.target.shape) or (
+                self.dim_f == 1 and self.target.size != 1
+            ):
                 raise ValueError("len(target) != dim_f")
 
         self._weight = np.asarray(self._weight)
-        if not is_broadcastable((self.dim_f,), self.weight.shape):
+        if not is_broadcastable((self.dim_f,), self.weight.shape) or (
+            self.dim_f == 1 and self.weight.size != 1
+        ):
             raise ValueError("len(weight) != dim_f")
 
     @abstractmethod

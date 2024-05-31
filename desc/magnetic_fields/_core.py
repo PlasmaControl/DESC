@@ -65,6 +65,11 @@ def biot_savart_general(re, rs, J, dV):
 def B_from_surface_integral(re, rs, K, NFP, dA):
     """Calculate magnetic field from surface integral.
 
+    Evaluation and source points shouldn't be on the same plane,
+    otherwise the integral will be singular and the result will not be
+    accurate. Check singularities.py for a more accurate calculations
+    of singular integrals.
+
     Parameters
     ----------
     re : ndarray, shape(n_eval_pts, 3)
@@ -83,14 +88,6 @@ def B_from_surface_integral(re, rs, K, NFP, dA):
     B : ndarray, shape(n_eval_pts,3)
         magnetic field vector B at evaluation points, in "rpz" coordinates
     """
-    r = jnp.array([jnp.linalg.norm(row - rs, axis=-1) for row in re])
-    errorif(
-        jnp.any(r <= 1e-6),
-        UserWarning,
-        "The integral you are calculating is singular. Please check the "
-        + "source and evaluation points or check singularities.py for "
-        + "methods to handle singular integrals.",
-    )
 
     def nfp_loop(j, f):
         # calculate (by rotating) rs, rs_t, rz_t

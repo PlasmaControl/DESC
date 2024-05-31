@@ -1021,7 +1021,7 @@ class BFieldErrorAtIslandSurface(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "B Consistency Error: {:10.3e} "
+    _print_value_fmt = "|B| Error at the Island Surface: {:10.3e} "
     _units = "(T)"
     _coordinates = "rtz"
 
@@ -1035,7 +1035,7 @@ class BFieldErrorAtIslandSurface(_Objective):
         normalize=True,
         normalize_target=True,
         loop=True,
-        name="B consistency error",
+        name="|B| Error at the Island Surface",
     ):
         errorif(
             rho < 0 or rho > 1,
@@ -1044,7 +1044,7 @@ class BFieldErrorAtIslandSurface(_Objective):
         )
         if target is None and bounds is None:
             target = 0
-        self.rho = rho
+        self._rho = rho
         self._loop = loop
         things = eq
 
@@ -1071,7 +1071,7 @@ class BFieldErrorAtIslandSurface(_Objective):
         """
         eq = self.things[0]
         self.src_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        self.eval_grid = LinearGrid(rho=self.rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        self.eval_grid = LinearGrid(rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
 
         self._eq_data_keys = [
             "K_vc",
@@ -1100,14 +1100,14 @@ class BFieldErrorAtIslandSurface(_Objective):
             "src_transforms": src_transforms,
             "src_profiles": src_profiles,
             "interpolator": None,
-            "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, 3)),
+            "quad_weights": np.sqrt(eval_transforms["grid"].weights),
         }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
-        # the 3 components of B
-        self._dim_f = 3 * self.eval_grid.num_nodes
+        # magnitude of B at the evaluation nodes
+        self._dim_f = self.eval_grid.num_nodes
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -1160,7 +1160,7 @@ class BFieldErrorAtIslandSurface(_Objective):
 
         Bplasma = B_from_surface_integral(re, rs, K, eq.NFP, dA)
 
-        return Bplasma - eval_data["B"]
+        return jnp.linalg.norm(Bplasma - eval_data["B"], axis=-1)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -1208,11 +1208,9 @@ class BFieldErrorAtIslandSurface(_Objective):
                 )
 
         formats = [
-            "B_R error: {:10.3e} ",
-            "B_phi error: {:10.3e} ",
-            "B_Z error: {:10.3e} ",
+            "|B| error at island surface: {:10.3e} ",
         ]
-        units = ["(T)", "(T)", "(T)"]
+        units = ["(T)"]
         nn = f.size // 3
 
         for i, (fmt, unit) in enumerate(zip(formats, units)):

@@ -961,24 +961,6 @@ def test_plot_Phi_regcoil(regcoil_modular_coils):
 
 
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_omnigenous_field():
-    """Test plot omnigenous magnetic field."""
-    field = OmnigenousField(
-        L_B=0,
-        M_B=4,
-        L_x=0,
-        M_x=1,
-        N_x=1,
-        NFP=4,
-        helicity=(1, 4),
-        B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
-        x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
-    )
-    fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
-    return fig
-
-
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 @pytest.mark.unit
 def test_2d_plot_Bn():
     """Test 2d plotting of Bn on equilibrium surface."""

@@ -194,8 +194,6 @@ class TestRZCurve:
         with pytest.raises(ValueError):
             xyz = rz.to_FourierXYZ(N=2, grid=grid, s=s)
 
-        # pass in a closed curve
-
     @pytest.mark.unit
     def test_to_SplineXYZCurve(self):
         """Test conversion to SplineXYZCurve."""

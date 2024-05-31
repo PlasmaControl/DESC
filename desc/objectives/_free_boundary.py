@@ -982,7 +982,7 @@ class BoundaryErrorNESTOR(_Objective):
         return (bv - bp - data["p"] * (2 * mu_0)) * g
 
 
-class BaroundIslandError(_Objective):
+class BFieldErrorAtIslandSurface(_Objective):
     """Target B_{nxB}=B_{eq} on a single target surface (for now).
 
     Uses nxB to find surface current density K_vc. Integrates K over the

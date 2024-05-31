@@ -17,7 +17,11 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._free_boundary import BaroundIslandError, BoundaryError, VacuumBoundaryError
+from ._free_boundary import (
+    BFieldErrorAtIslandSurface,
+    BoundaryError,
+    VacuumBoundaryError,
+)
 from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,

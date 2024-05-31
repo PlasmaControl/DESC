@@ -640,6 +640,7 @@ class TestMagneticFields:
         # with this choice of Phi_mn, the constant Phi contours
         # move so much that they intersect the boundaries of where we
         # plot them, that should return a warning
+        # TODO: When we switch from the visual coil cutting method, remove this
         field = FourierCurrentPotentialField(
             I=curr,
             G=curr,

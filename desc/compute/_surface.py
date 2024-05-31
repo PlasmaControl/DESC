@@ -576,8 +576,7 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     label="K^{\\theta}",
     units="A/m^2",
     units_long="Amperes per square meter",
-    description="Contravariant poloidal component of surface current density, defined "
-    "as the surface normal vector cross the gradient of the current potential.",
+    description="Contravariant poloidal component of surface current density",
     dim=1,
     params=[],
     transforms={},
@@ -599,8 +598,7 @@ def _K_sup_theta_CurrentPotentialField(params, transforms, profiles, data, **kwa
     label="K^{\\zeta}",
     units="A/m^2",
     units_long="Amperes per square meter",
-    description="Contravariant toroidal component of surface current density, defined "
-    "as the surface normal vector cross the gradient of the current potential.",
+    description="Contravariant toroidal component of surface current density",
     dim=1,
     params=[],
     transforms={},

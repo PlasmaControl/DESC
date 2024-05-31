@@ -1434,6 +1434,11 @@ def zernike_radial_coeffs(l, m, exact=True):
         ll = lms[ii, 0]
         mm = lms[ii, 1]
         for s in range(mm, ll + 1, 2):
+            # Zernike polynomials can also be written in the form of [1] which
+            # states that the coefficients are given by the binomial coefficients
+            # hence they are all integers. So, we can use exact arithmetic with integer
+            # division instead of floating point division.
+            # [1]https://en.wikipedia.org/wiki/Zernike_polynomials#Other_representations
             coeffs[ii, s] = ((-1) ** ((ll - s) // 2) * factorial((ll + s) // 2)) // (
                 factorial((ll - s) // 2)
                 * factorial((s + mm) // 2)

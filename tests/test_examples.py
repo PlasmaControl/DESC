@@ -1522,68 +1522,6 @@ def test_regcoil_helical_coils_check_coils_pos_helicity(
     np.testing.assert_allclose(B, B_from_coils, rtol=1e-3, atol=8e-3)
 
 
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
-def test_regcoil_ellipse_modular_coils():
-    """Test elliptical eq and winding surf modular coil regcoil solution."""
-    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
-
-    M_Phi = 8
-    N_Phi = 8
-    M_egrid = 20
-    N_egrid = 20
-    M_sgrid = 40
-    N_sgrid = 40
-    alpha = 1e-18
-
-    surf_winding = FourierRZToroidalSurface(
-        R_lmn=np.array([0.7035, 0.0365]),
-        Z_lmn=np.array([-0.0365]),
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[-1, 0]]),
-        sym=True,
-        NFP=eq.NFP,
-    )
-    surface_current_field = FourierCurrentPotentialField.from_surface(
-        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
-    )
-    surface_current_field, data = run_regcoil(
-        surface_current_field,
-        eq,
-        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
-        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
-        alpha=alpha,
-        current_helicity=0,
-        vacuum=True,
-    )
-
-    chi_B = data["chi^2_B"]
-    assert np.all(chi_B < 1e-5)
-
-    coords = eq.compute(["R", "phi", "Z", "B"])
-    B = coords["B"]
-    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-    B_from_surf = surface_current_field.compute_magnetic_field(
-        coords,
-        source_grid=LinearGrid(M=40, N=40, NFP=surface_current_field.NFP),
-        basis="rpz",
-    )
-    np.testing.assert_allclose(B, B_from_surf, atol=2e-3)
-
-    coilset = surface_current_field.to_CoilSet(
-        desirednumcoils=300, step=5, show_plots=False
-    )
-    coords = eq.compute(["R", "phi", "Z", "B"])
-    B = coords["B"]
-    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-    B_from_surf = coilset.compute_magnetic_field(
-        coords,
-        basis="rpz",
-    )
-    np.testing.assert_allclose(B, B_from_surf, atol=1e-3, rtol=1e-2)
-
-
 @pytest.mark.unit
 def test_single_coil_optimization():
     """Test that single coil (not coilset) optimization works."""

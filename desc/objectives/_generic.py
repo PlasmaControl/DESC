@@ -112,38 +112,13 @@ class ExternalObjective(_Objective):
         self._scalar = self._dim_f == 1
         self._constants = {"quad_weights": 1.0}
 
-        def fun_wrapped(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            Te_l,
-            ne_l,
-            Ti_l,
-            Zeff_l,
-            a_lmn,
-            Ra_n,
-            Za_n,
-            Rb_lmn,
-            Zb_lmn,
-            I,
-            G,
-            Phi_mn,
-        ):
-            """Wrap external function with optimiazable params arguments."""
-            for param in self._eq.optimizable_params:
-                par = eval(param)  # FIXME: how bad is it to use eval here?
-                if len(par):
-                    setattr(self._eq, param, par)
+        def fun_wrapped(params):
+            """Wrap external function with optimizable params arguments."""
+            for param_key in self._eq.optimizable_params:
+                param_value = params[param_key]
+                if len(param_value):
+                    setattr(self._eq, param_key, param_value)
             return self._fun(self._eq, **self._kwargs)
-
-        # check to make sure fun_wrapped has the correct signature
-        # in case we ever update Equilibrium.optimizable_params
-        args = inspect.getfullargspec(fun_wrapped).args
-        assert args == self._eq.optimizable_params
 
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
@@ -168,9 +143,7 @@ class ExternalObjective(_Objective):
             Computed quantity.
 
         """
-        # ensure positional args are passed in the correct order
-        args = [params[k] for k in self._eq.optimizable_params]
-        f = self._fun_wrapped(*args)
+        f = self._fun_wrapped(params)
         return f
 
     def _jaxify(self, func, abstract_eval):

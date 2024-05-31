@@ -15,6 +15,7 @@ from desc.magnetic_fields import (
     CurrentPotentialField,
     DommaschkPotentialField,
     FourierCurrentPotentialField,
+    MagneticFieldFromUser,
     OmnigenousField,
     PoloidalMagneticField,
     ScalarPotentialField,
@@ -62,6 +63,28 @@ class TestMagneticFields:
         np.testing.assert_allclose((tfield + vfield)([1, 0, 0]), [[0, 2, 1]])
         np.testing.assert_allclose(
             (tfield + vfield - pfield)([1, 0, 0.1]), [[0.4, 2, 1]]
+        )
+
+    @pytest.mark.unit
+    def test_field_from_user(self):
+        """Test for MagneticFieldFromUser."""
+        tfield = ToroidalMagneticField(2, 1)
+
+        def fun(coords, params):
+            R0, B0 = params
+            coords = jnp.atleast_2d(jnp.asarray(coords))
+            bp = B0 * R0 / coords[:, 0]
+            brz = jnp.zeros_like(bp)
+            B = jnp.array([brz, bp, brz]).T
+            return B
+
+        ufield = MagneticFieldFromUser(fun, [tfield.R0, tfield.B0])
+        np.testing.assert_allclose(
+            tfield([1, 0, 0]), ufield([1, 0, 0], params=[tfield.R0, tfield.B0])
+        )
+        np.testing.assert_allclose(
+            tfield([1, 1, 0], basis="xyz"),
+            ufield([1, 1, 0], params=[tfield.R0, tfield.B0], basis="xyz"),
         )
 
     @pytest.mark.unit

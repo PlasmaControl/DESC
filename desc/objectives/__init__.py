@@ -2,6 +2,7 @@
 
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
+    CoilCurrentLength,
     CoilCurvature,
     CoilLength,
     CoilTorsion,
@@ -56,6 +57,7 @@ from .linear_objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
     FixCurveRotation,
     FixCurveShift,
@@ -70,9 +72,10 @@ from .linear_objectives import (
     FixOmniBmax,
     FixOmniMap,
     FixOmniWell,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
+    FixSheetCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,

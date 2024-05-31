@@ -338,31 +338,12 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# When comparing Velasco's Γ_c: https://doi.org/10.1088/1741-4326/ac2994
-#           with Nemov's   Γ_c: https://doi.org/10.1063/1.2912456,
-# note that
-#     dλ v τ_b = - 4 (∂I/∂b) db = 4 ∂I/∂((λB₀)⁻¹) B₀⁻¹ λ⁻² dλ
-# and
-#     4π² ∂Ψₜ/∂V = lim{L → ∞} ( [∫₀ᴸ ds/(B √g)] / [∫₀ᴸ ds/B] )
-# where the integrals are along an irrational field line with
-#     ds / B given by dζ / B^ζ
-#     √g the (Ψ, α, ζ)-coordinate Jacobian
-# There is also the dimensionless difference between Nemov's and Velascos's γ_c,
-# mentioned in Velasco's footnote 4. If this difference is γ_c ignored, and the
-# (missing?) √g factor is pushed into the integral over alpha in Velasco eq. 18
-# then we have that
-#     Velasco Γ_c ∼ Nemov Γ_c * lim{L → ∞} ∫₀ᴸ ds/(B √g).
-# In particular, Velasco Γ_c grows with the length of the field line,
-# which isn't what we want.
-# TODO:
-#  We currently implement Nemov Γ_c with Velasco γ_c.
-#  Switch to Nemov γ_c too.
 @register_compute_fun(
     name="Gamma_c",
     label="π/(2√2) ∫ dλ λ⁻² B₀⁻¹ \\langle ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ \\rangle",
     units="~",
     units_long="None",
-    description="Nemov's energetic ion confinement proxy",
+    description="Energetic ion confinement proxy",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -396,11 +377,32 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     quad_res="int : Resolution for quadrature over velocity coordinate.",
 )
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
-    """Poloidal motion of trapped particle orbits in real-space coordinates.
+    """Energetic ion confinement proxy.
 
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16. (Not equation 18).
+
+    Poloidal motion of trapped particle orbits in real-space coordinates.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
     Phys. Plasmas 1 May 2008; 15 (5): 052501.
     https://doi.org/10.1063/1.2912456.
+    Equation 61, using Velasco's γ_c from equation 15 of the above paper.
+
+    Besides the difference in γ_c mentioned above, Nemov's Γ_c and Velasco Γ_c
+    as defined in equation 16 are identical, although Nemov's expression is more
+    explicit while Velasco's requires some interpretation. However, Velasco Γ_c
+    as defined in equation 18 does not seem to match equation 16.
+    Note that
+        dλ v τ_b = - 4 (∂I/∂b) db = 4 ∂I/∂((λB₀)⁻¹) B₀⁻¹ λ⁻² dλ
+        4π² ∂Ψₜ/∂V = lim{L → ∞} ( [∫₀ᴸ ds/(B √g)] / [∫₀ᴸ ds/B] )
+    where the integrals are along an irrational field line with
+        ds / B given by dζ / B^ζ
+        √g the (Ψ, α, ζ)-coordinate Jacobian
+    If the (missing?) √g factor in Velasco Γ_c equation 18 is pushed into the
+    integral over alpha in Velasco equation 18 then we have that
+        eq. 18 Velasco Γ_c ∼ eq. 16 Velasco Γ_c * lim{L → ∞} ∫₀ᴸ ds/(B √g).
     """
     g = transforms["grid"].source_grid
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
@@ -421,7 +423,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         return f * (1 - pitch * B / 2) / jnp.sqrt(1 - pitch * B)
 
     def dK(B, pitch):
-        return 0.5 / jnp.sqrt(1 - pitch * B)
+        return 1 / jnp.sqrt(1 - pitch * B)
 
     if _is_Newton_Cotes(quad):
         bounce_integrate, _ = _bounce_integral(
@@ -429,7 +431,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         )
 
         def d_Gamma_c(pitch):
-            """Return λ⁻² B₀⁻¹ ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ evaluated at λ = pitch.
+            """Return 2 λ⁻² B₀⁻¹ ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ evaluated at λ = pitch.
 
             Parameters
             ----------
@@ -439,14 +441,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             Returns
             -------
             d_Gamma_c : Array, shape(pitch.shape)
-                λ⁻² B₀⁻¹ ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ
+                2 λ⁻² B₀⁻¹ ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ
 
             """
-            # TODO: Currently we have implemented Velasco's Gamma_c.
-            #       If we add a 1/|grad(psi)| into the arctan of little
-            #       gamma_c, we implement Nemov's Gamma_c. (Check this again).
-            #       This will affect the gamma_c profile since |grad(psi)|
-            #       depends on alpha.
             gamma_c = (
                 2
                 / jnp.pi
@@ -455,7 +452,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     / bounce_integrate(d_gamma_c, data["gbdrift"], pitch, batch=batch)
                 )
             )
-            # K = λ⁻² B₀⁻¹ ∂I/∂((λB₀)⁻¹) where I is given in Nemov equation 36.
+            # K = 2 λ⁻² B₀⁻¹ ∂I/∂((λB₀)⁻¹) where I is given in Nemov equation 36.
+            # So factors of B₀ cancel, making this quantity independent of the
+            # chosen reference magnetic field strength.
             K = bounce_integrate(dK, [], pitch, batch=batch)
             return jnp.nansum(gamma_c**2 * K, axis=-1)
 
@@ -495,8 +494,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         ]
         Gamma_c = quad(d_Gamma_c, pitch_endpoint, *args)
 
-    Gamma_c = _poloidal_average(
-        g, Gamma_c.reshape(g.num_rho, g.num_alpha) / data["L|r,a"]
+    Gamma_c = (
+        jnp.pi
+        / (4 * 2**0.5)
+        * _poloidal_average(g, Gamma_c.reshape(g.num_rho, g.num_alpha) / data["L|r,a"])
     )
-    data["Gamma_c"] = g.expand(jnp.pi / 2**1.5 * Gamma_c)
+    data["Gamma_c"] = g.expand(Gamma_c)
     return data

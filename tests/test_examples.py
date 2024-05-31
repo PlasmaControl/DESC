@@ -1298,7 +1298,7 @@ def test_regcoil_axisymmetric():
 @pytest.mark.solve
 @pytest.mark.slow
 def test_regcoil_modular_check_B(regcoil_modular_coils):
-    """Test precise QA eq and winding surf modular (helicity=0) regcoil solution."""
+    """Test precise QA modular (helicity=0) regcoil solution."""
     (
         data,
         initial_surface_current_field,
@@ -1323,7 +1323,7 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
 @pytest.mark.solve
 @pytest.mark.slow
 def test_regcoil_modular_coils_check_coils(regcoil_modular_coils):
-    """Test elliptical eq and winding surf helical coil regcoil solution."""
+    """Test precise QA modular regcoil solution coils."""
     (
         _,
         initial_surface_current_field,
@@ -1370,7 +1370,7 @@ def test_regcoil_modular_coils_check_coils(regcoil_modular_coils):
 def test_regcoil_helical_coils_check_objective_method(
     regcoil_helical_coils_pos_helicity,
 ):
-    """Test elliptical eq and winding surf helical coil regcoil solution."""
+    """Test precise QA helical coil regcoil solution."""
     M_egrid = 30
     N_egrid = 30
     M_sgrid = 50

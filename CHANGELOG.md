@@ -10,7 +10,7 @@ REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimizat
     * Can specify ``current_helicity`` to determine if resulting contours correspond to
     helical topology (``current_helicity`` not equal to 0) or
     modular (``current_helicity``equal to 0)
-- Adds method ``cut_surface_current_into_coils`` to ``FourierCurrentPotentialField``
+- Adds method ``.to_CoilSet`` to ``FourierCurrentPotentialField``
 which implements a coil cutting algorithm to discretize the surface current into coils
     * works for both modular and helical coils
 - Adds two new objectives, ``QuadraticFlux`` (which minimizes Bn on plasma surface due to

@@ -35,7 +35,6 @@ from desc.compute.bounce_integral import (
 from desc.compute.utils import safediv
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import rtz_grid
-from desc.equilibrium.equilibrium import compute_raz_data
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.utils import only1
@@ -464,15 +463,7 @@ def test_bounce_integral_checks():
     alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
     knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
     grid = rtz_grid(eq, rho, alpha, knots, coordinates="raz")
-    grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-    data = eq.compute(["iota"], grid=grid_fsa)
-    data = {"iota": grid.copy_data_from_other(data["iota"], grid_fsa)}
-    data = eq.compute(
-        ["B^zeta", "|B|", "|B|_z|r,a", "g_zz"],
-        grid=grid,
-        override_grid=False,
-        data=data,
-    )
+    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a", "g_zz"], grid=grid)
     bounce_integrate, spline = bounce_integral(
         data["B^zeta"],
         data["|B|"],
@@ -609,22 +600,29 @@ def test_drift():
     # Make a set of nodes along a single fieldline.
     grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
     data = eq.compute(["iota"], grid=grid_fsa)
-    data["iota"] = grid_fsa.compress(data["iota"]).item()
+    iota = grid_fsa.compress(data["iota"]).item()
     alpha = 0
-    zeta = np.linspace(
-        -np.pi / data["iota"], np.pi / data["iota"], (2 * eq.M_grid) * 4 + 1
-    )
+    zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
     grid = rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
 
-    data = compute_raz_data(
-        eq,
-        grid,
-        ["B^zeta", "|B|", "|B|_z|r,a", "cvdrift", "gbdrift", "g^pa"],
-        names_0d=["a"],
-        names_1dr=["shear", "psi"],
-        data={"iota": data["iota"]},
+    data = eq.compute(
+        [
+            "B^zeta",
+            "|B|",
+            "|B|_z|r,a",
+            "cvdrift",
+            "gbdrift",
+            "g^pa",
+            "shear",
+            "iota",
+            "psi",
+            "a",
+        ],
+        grid=grid,
     )
     np.testing.assert_allclose(data["psi"], psi)
+    np.testing.assert_allclose(data["iota"], iota)
+    data["iota"] = grid.compress(data["iota"]).item()
     data["shear"] = grid.compress(data["shear"]).item()
 
     L_ref = data["a"]

@@ -779,7 +779,7 @@ class Equilibrium(IOAble, Optimizable):
         axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
         return axis
 
-    def compute(
+    def compute(  # noqa: C901
         self,
         names,
         grid=None,
@@ -824,11 +824,12 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        elif not isinstance(grid, _Grid):
-            raise TypeError(
-                "must pass in a Grid object for argument grid!"
-                f" instead got type {type(grid)}"
-            )
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            msg="must pass in a Grid object for argument grid!"
+            f" instead got type {type(grid)}",
+        )
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)
@@ -839,49 +840,70 @@ class Equilibrium(IOAble, Optimizable):
         if data is None:
             data = {}
 
-        # To avoid the issue of using the wrong grid for surface and volume averages,
-        # we first figure out what needed qtys are flux functions or volume integrals
-        # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
+
+        def need_src(name):
+            # Need to compute these on grid that is paired to the source grid, since
+            # the compute logic assume input data is evaluated on those coordinates.
+            # We exclude these from the depXdx sets below since the grids we will
+            # use to compute those dependencies are coordinate-blind.
+            return "source_grid" in data_index[p][name]["grid_requirement"]
+
+        def is_0d(name):
+            # Should compute on a grid that samples entire plasma volume.
+            # In particular, a QuadratureGrid for accurate radial integration.
+            return data_index[p][name]["coordinates"] == ""
+
+        def is_1dr(name):
+            # Should compute on a grid that samples entire radial surfaces.
+            return data_index[p][name]["coordinates"] == "r"
+
+        def is_1dz(name):
+            # Should compute on a grid that samples entire toroidal surfaces.
+            return data_index[p][name]["coordinates"] == "z"
+
         # If the user wants to compute x which depends on y which in turn depends on z,
         # and they pass in y already computed in data, then we shouldn't need to compute
         # z at all.
-        deps = list(
+        deps = (
             set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names)
             - data.keys()  # subtract out y if already computed
         )
-        dep0d = [
+        dep0d = {dep for dep in deps if is_0d(dep) and not need_src(dep)}
+        # Unless user asks, don't try to recompute stuff which are only dependencies
+        # of dep0d. Example, need R0. R0 <- A <- A(z) computable on dep0d grid.
+        # But A(z) in dep1dz and attempt to recompute on dep1dz grid will error
+        # without unique zeta idx defined, which mapped coordinate grids lack.
+        dep0d_deps = set(get_data_deps(dep0d, obj=p, has_axis=grid.axis.size))
+        # This filter is stronger than the name implies, but the false positives
+        # will still be computed correctly with the logic in compute.utils.compute.
+        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
+        dep1dr = {
             dep
             for dep in deps
-            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
-        ]
-        dep1dr = [
+            if is_1dr(dep) and not need_src(dep) and not just_dep0d_dep(dep)
+        }
+        dep1dz = {
             dep
             for dep in deps
-            if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
-        ]
-        dep1dz = [
-            dep
-            for dep in deps
-            if (data_index[p][dep]["coordinates"] == "z")
-            and (dep not in data)
-            and dep not in ["phi", "zeta"]  # these don't need a special grid
-        ]
+            if is_1dz(dep) and not need_src(dep) and not just_dep0d_dep(dep)
+            # These don't need a special grid, since the transforms are always
+            # built on the (rho, theta, zeta) coordinate grid.
+            and dep not in ["phi", "zeta"]
+        }
 
-        # whether we need to calculate 0d or 1d quantities on a special grid
-        calc0d = bool(len(dep0d))
-        calc1dr = bool(len(dep1dr))
-        calc1dz = bool(len(dep1dz))
-        if (  # see if the grid we're already using will work for desired qtys
-            (grid.L >= self.L_grid)
-            and (grid.M >= self.M_grid)
-            and (grid.N >= self.N_grid)
-        ):
+        # Whether we need to calculate any dependencies on a special grid.
+        calc0d = bool(dep0d)
+        calc1dr = bool(dep1dr)
+        calc1dz = bool(dep1dz)
+        # If the grid samples the full volume, then it is sufficient.
+        if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
             if isinstance(grid, QuadratureGrid):
                 calc0d = calc1dr = calc1dz = False
             if isinstance(grid, LinearGrid):
                 calc1dr = calc1dz = False
         else:
+            # Warn if best way to compute accurately is increasing resolution.
             for dep in deps:
                 req = data_index[p][dep]["resolution_requirement"]
                 coords = data_index[p][dep]["coordinates"]
@@ -906,16 +928,20 @@ class Equilibrium(IOAble, Optimizable):
                     msg("toroidal"),
                 )
 
+        # Now compute dependencies on the proper grids, passing in any available
+        # seed data which is already computed and interpolatable.
+        # There isn't a single non-repeating order for computing that ensures the
+        # dependencies of the dependencies are computed on the proper grid. However,
+        # 0d -> 1dr -> 1dz -> rest covers most cases. In cases where it
+        # doesn't, the expectation is that developer registers the compute function
+        # with a resolution requirement or the user precomputes it.
+
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-            data0d_seed = {
-                key: data[key]
-                for key in data
-                if data_index[p][key]["coordinates"] == ""
-            }
+            data0d_seed = {key: data[key] for key in data if is_0d(key)}
             data0d = compute_fun(
                 self,
-                dep0d,
+                list(dep0d),
                 params=params,
                 transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
                 profiles=get_profiles(dep0d, obj=self, grid=grid0d),
@@ -924,18 +950,19 @@ class Equilibrium(IOAble, Optimizable):
                 data=data0d_seed,
                 **kwargs,
             )
-            # these should all be 0d quantities so don't need to compress/expand
-            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            # These should all be 0d quantities so don't need to compress/expand.
+            data0d = {
+                key: data0d[key] for key in data0d if key in dep0d and key not in data
+            }
             data.update(data0d)
 
-        data0d_seed = (
-            {key: data[key] for key in data if data_index[p][key]["coordinates"] == ""}
-            if ((calc1dr or calc1dz) and override_grid)
-            else {}
-        )
+        if (calc1dr or calc1dz) and override_grid:
+            data0d_seed = {key: data[key] for key in data if is_0d(key)}
+        else:
+            data0d_seed = {}
         if calc1dr and override_grid:
             grid1dr = LinearGrid(
-                rho=grid.nodes[grid.unique_rho_idx, 0],
+                rho=grid.compress(grid.nodes[:, 0], surface_label="rho"),
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
@@ -944,11 +971,11 @@ class Equilibrium(IOAble, Optimizable):
             data1dr_seed = {
                 key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
                 for key in data
-                if data_index[p][key]["coordinates"] == "r"
+                if is_1dr(key)
             }
             data1dr = compute_fun(
                 self,
-                dep1dr,
+                list(dep1dr),
                 params=params,
                 transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
                 profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
@@ -957,17 +984,19 @@ class Equilibrium(IOAble, Optimizable):
                 data=data1dr_seed | data0d_seed,
                 **kwargs,
             )
-            # need to make this data broadcast with the data on the original grid
+            # Need to make this data broadcast with the data on the original grid.
             data1dr = {
-                key: grid.copy_data_from_other(val, grid1dr, surface_label="rho")
-                for key, val in data1dr.items()
-                if key in dep1dr
+                key: grid.copy_data_from_other(
+                    data1dr[key], grid1dr, surface_label="rho"
+                )
+                for key in data1dr
+                if key in dep1dr and key not in data
             }
             data.update(data1dr)
 
         if calc1dz and override_grid:
             grid1dz = LinearGrid(
-                zeta=grid.nodes[grid.unique_zeta_idx, 2],
+                zeta=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
@@ -976,11 +1005,11 @@ class Equilibrium(IOAble, Optimizable):
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
                 for key in data
-                if data_index[p][key]["coordinates"] == "z"
+                if is_1dz(key)
             }
             data1dz = compute_fun(
                 self,
-                dep1dz,
+                list(dep1dz),
                 params=params,
                 transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
                 profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
@@ -989,17 +1018,16 @@ class Equilibrium(IOAble, Optimizable):
                 data=data1dz_seed | data0d_seed,
                 **kwargs,
             )
-            # need to make this data broadcast with the data on the original grid
+            # Need to make this data broadcast with the data on the original grid.
             data1dz = {
-                key: grid.copy_data_from_other(val, grid1dz, surface_label="zeta")
-                for key, val in data1dz.items()
-                if key in dep1dz
+                key: grid.copy_data_from_other(
+                    data1dz[key], grid1dz, surface_label="zeta"
+                )
+                for key in data1dz
+                if key in dep1dz and key not in data
             }
             data.update(data1dz)
 
-        # TODO: we can probably reduce the number of deps computed here if some are only
-        #   needed as inputs for 0d and 1d qtys, unless the user asks for them
-        #   specifically?
         data = compute_fun(
             self,
             names,
@@ -2482,82 +2510,3 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria.insert(i, new_item)
-
-
-# TODO: GitHub issue #1035. Move logic to eq.compute
-def compute_raz_data(
-    eq, grid, names_field_line, names_0d=None, names_1dr=None, data=None
-):
-    """Compute field line quantities and their dependencies on the correct grids.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium to compute on.
-    grid : Grid
-        Grid on which the field line quantities should be computed.
-    names_field_line : iterable
-        Field line quantities that will be computed on the returned field line grid.
-        These quantities should require grid.source_grid in grid_requirement parameter
-        or the register compute function decorator.
-    names_0d : iterable
-        Additional things to compute constant over volume.
-    names_1dr : iterable
-        Additional things to compute constant over flux surface.
-    data : dict of Array
-        Data computed so far, generally output from other compute functions.
-
-    Returns
-    -------
-    data : dict
-        Computed quantities.
-
-    """
-    assert grid.source_grid is not None, "Why are you using this function?"
-    if data is None:
-        data = {}
-    if names_0d is None:
-        names_0d = {}
-    if names_1dr is None:
-        names_1dr = {}
-    names_field_line = set(names_field_line)
-    names_0d = set(names_0d) - names_field_line
-    names_1dr = set(names_1dr) - names_field_line
-    p = "desc.equilibrium.equilibrium.Equilibrium"
-    deps = (
-        names_0d
-        | names_1dr
-        | set(get_data_deps(names_field_line, obj=p, has_axis=grid.axis.size > 0))
-    ) - data.keys()
-    dep0d = {dep for dep in deps if data_index[p][dep]["coordinates"] == ""}
-    dep1dr = {dep for dep in deps if data_index[p][dep]["coordinates"] == "r"}
-    # Create grid with given flux surfaces.
-    grid1dr = LinearGrid(
-        rho=grid.compress(grid.nodes[:, 0]),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        sym=eq.sym,
-        NFP=eq.NFP,
-    )
-    # Compute dependencies on correct grids, overriding whenever necessary.
-    # (The given grid may not have enough radial or poloidal resolution to compute
-    # dependencies of names_field_line accurately. For flux functions or scalars,
-    # this is not an issue since the interpolation to the given grid is trivial).
-    seed = eq.compute(list(dep0d | dep1dr), grid=grid1dr)
-
-    # Remove dependencies from data_seed that cannot be interpolated trivially.
-    seed0d = {key: val for key, val in seed.items() if key in dep0d}
-    seed1dr = {
-        key: grid.copy_data_from_other(val, grid1dr)
-        for key, val in seed.items()
-        if key in dep1dr
-    }
-    seed = seed0d | seed1dr
-    # Now, compute names_field_line on grid with correct dependencies.
-    # Can't override grid here because computing stuff in names_field_line
-    # requires grid.source_grid.
-    data = seed | data  # values of shared keys should default to data
-    data = eq.compute(
-        names=list(names_field_line), grid=grid, data=data, override_grid=False
-    )
-    return data

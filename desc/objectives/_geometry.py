@@ -2132,6 +2132,8 @@ class UmbilicHighCurvature2(_Objective):
             has_axis=curve_grid.axis.size,
         )
 
+        # The profiles and transforms to obtain
+        # rpz values of an rtz grid do not change
         eq_profiles1 = get_profiles(
             self._eq_data_keys1,
             obj=eq,
@@ -2219,9 +2221,10 @@ class UmbilicHighCurvature2(_Objective):
             curve_phi = curve_data["phi"]
             curve_Z = curve_data["Z"]
 
+        # First, we obtain a grid of points on the umbilic curve
         curve_pts = rpz2xyz(jnp.array([curve_R, curve_phi, curve_Z]).T)
 
-        # First, we obtain a grid of points on the plasma boundary
+        # Then, we obtain a grid of points on the plasma boundary
         eq_data = compute_fun(
             eq,
             self._eq_data_keys1,
@@ -2232,7 +2235,7 @@ class UmbilicHighCurvature2(_Objective):
 
         eq_pts = rpz2xyz(jnp.array([eq_data["R"], eq_data["phi"], eq_data["Z"]]).T)
 
-        # dist btwn the plasma boundary and the umbilic curve
+        # Then, we get the dist btwn the plasma boundary and the umbilic curve
         # arranged as (number_of_equilibrium_points, number_of_curve points)
         dist = safenorm(eq_pts[:, None, :] - curve_pts[None, :, :], axis=-1)
 
@@ -2242,7 +2245,7 @@ class UmbilicHighCurvature2(_Objective):
             [eq_data["rho"], eq_data["theta"], eq_data["zeta"]]
         ).T
 
-        # Grid on which to compute the curvature
+        # Min distnace grid on which to compute the curvature
         umbilic_edge_grid = Grid(
             jnp.array(eq_rtz_grid_points[min_dist_points]), jitable=True
         )

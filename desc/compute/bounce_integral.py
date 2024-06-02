@@ -311,11 +311,10 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
 
     Returns
     -------
-    pitch : Array, shape(num + 2, *min_B.shape[1:])
+    pitch : Array, shape(num + 2, *min_B.shape)
         Pitch values.
 
     """
-    assert min_B.shape == max_B.shape
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + relative_shift) * min_B
@@ -324,7 +323,7 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     # Uniformly space in pitch (as opposed to 1/pitch) to get faster convergence in
     # an integration over pitch.
     pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
-    assert pitch.shape == (num + 2, *min_B.shape[1:])
+    assert pitch.shape == (num + 2, *pitch.shape[1:])
     return pitch
 
 

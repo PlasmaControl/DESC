@@ -29,6 +29,9 @@ from ._geometry import (
     PrincipalCurvature,
     UmbilicCurvature,
     UmbilicDistance,
+    UmbilicDistance2,
+    UmbilicHighCurvature2,
+    UmbilicLowCurvature2,
     Volume,
 )
 from ._omnigenity import (

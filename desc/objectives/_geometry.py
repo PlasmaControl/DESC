@@ -2228,7 +2228,7 @@ class UmbilicHighCurvature2(_Objective):
         eq_data = compute_fun(
             eq,
             self._eq_data_keys1,
-            params=params_2,
+            params=params_1,
             transforms=constants["eq_transforms1"],
             profiles=constants["eq_profiles1"],
         )
@@ -2517,7 +2517,7 @@ class UmbilicLowCurvature2(_Objective):
         eq_data = compute_fun(
             eq,
             self._eq_data_keys1,
-            params=params_2,
+            params=params_1,
             transforms=constants["eq_transforms1"],
             profiles=constants["eq_profiles1"],
         )
@@ -2814,7 +2814,7 @@ class UmbilicDistance2(_Objective):
         eq_data = compute_fun(
             eq,
             self._eq_data_keys1,
-            params=params_2,
+            params=params_1,
             transforms=constants["eq_transforms1"],
             profiles=constants["eq_profiles1"],
         )

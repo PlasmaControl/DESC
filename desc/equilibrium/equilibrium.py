@@ -15,7 +15,13 @@ from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
+from desc.compute.utils import (
+    _grow_seeds,
+    get_data_deps,
+    get_params,
+    get_profiles,
+    get_transforms,
+)
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -841,6 +847,16 @@ class Equilibrium(IOAble, Optimizable):
             data = {}
 
         p = "desc.equilibrium.equilibrium.Equilibrium"
+        # TODO:
+        #  If the user wants to compute x which depends on y which in turn depends on z,
+        #  and they pass in y already in data, then we shouldn't need to compute z at
+        #  all. To resolve this we need to compute dependencies recursively, so that
+        #  priming data with just the first order dependencies will avoid computing
+        #  unnecessary dependencies. For now just subtract out y.
+        deps = (
+            set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names)
+            - data.keys()
+        )
 
         def need_src(name):
             # Need to compute these on grid that is paired to the source grid, since
@@ -848,6 +864,8 @@ class Equilibrium(IOAble, Optimizable):
             # We exclude these from the depXdx sets below since the grids we will
             # use to compute those dependencies are coordinate-blind.
             return "source_grid" in data_index[p][name]["grid_requirement"]
+
+        need_src_deps = _grow_seeds(set(filter(need_src, deps)), deps)
 
         def is_0d(name):
             # Should compute on a grid that samples entire plasma volume.
@@ -862,14 +880,7 @@ class Equilibrium(IOAble, Optimizable):
             # Should compute on a grid that samples entire toroidal surfaces.
             return data_index[p][name]["coordinates"] == "z"
 
-        # If the user wants to compute x which depends on y which in turn depends on z,
-        # and they pass in y already computed in data, then we shouldn't need to compute
-        # z at all.
-        deps = (
-            set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names)
-            - data.keys()  # subtract out y if already computed
-        )
-        dep0d = {dep for dep in deps if is_0d(dep) and not need_src(dep)}
+        dep0d = {dep for dep in deps if is_0d(dep) and dep not in need_src_deps}
         # Unless user asks, don't try to recompute stuff which are only dependencies
         # of dep0d. Example, need R0. R0 <- A <- A(z) computable on dep0d grid.
         # But A(z) in dep1dz and attempt to recompute on dep1dz grid will error
@@ -881,12 +892,12 @@ class Equilibrium(IOAble, Optimizable):
         dep1dr = {
             dep
             for dep in deps
-            if is_1dr(dep) and not need_src(dep) and not just_dep0d_dep(dep)
+            if is_1dr(dep) and not just_dep0d_dep(dep) and dep not in need_src_deps
         }
         dep1dz = {
             dep
             for dep in deps
-            if is_1dz(dep) and not need_src(dep) and not just_dep0d_dep(dep)
+            if is_1dz(dep) and not just_dep0d_dep(dep) and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]

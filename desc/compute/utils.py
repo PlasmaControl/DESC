@@ -179,30 +179,59 @@ def get_data_deps(keys, obj, has_axis=False):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-
-    def _get_deps_1_key(key):
-        if has_axis:
-            if "full_with_axis_dependencies" in data_index[p][key]:
-                return data_index[p][key]["full_with_axis_dependencies"]["data"]
-        elif "full_dependencies" in data_index[p][key]:
-            return data_index[p][key]["full_dependencies"]["data"]
-        deps = data_index[p][key]["dependencies"]["data"]
-        if len(deps) == 0:
-            return deps
-        out = deps.copy()  # to avoid modifying the data_index
-        for dep in deps:
-            out += _get_deps_1_key(dep)
-        if has_axis:
-            axis_limit_deps = data_index[p][key]["dependencies"]["axis_limit_data"]
-            out += axis_limit_deps.copy()  # to be safe
-            for dep in axis_limit_deps:
-                out += _get_deps_1_key(dep)
-        return sorted(set(out))
-
     out = []
     for key in keys:
-        out += _get_deps_1_key(key)
+        out += _get_deps_1_key(key, p, has_axis)
     return sorted(set(out))
+
+
+def _get_deps_1_key(key, p, has_axis):
+    if has_axis:
+        if "full_with_axis_dependencies" in data_index[p][key]:
+            return data_index[p][key]["full_with_axis_dependencies"]["data"]
+    elif "full_dependencies" in data_index[p][key]:
+        return data_index[p][key]["full_dependencies"]["data"]
+
+    deps = data_index[p][key]["dependencies"]["data"]
+    if len(deps) == 0:
+        return deps
+    out = deps.copy()  # to avoid modifying the data_index
+    for dep in deps:
+        out += _get_deps_1_key(dep, p, has_axis)
+    if has_axis:
+        axis_limit_deps = data_index[p][key]["dependencies"]["axis_limit_data"]
+        out += axis_limit_deps.copy()  # to be safe
+        for dep in axis_limit_deps:
+            out += _get_deps_1_key(dep, p, has_axis)
+
+    return sorted(set(out))
+
+
+def _grow_seeds(seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Traverse the dependency DAG for keys in search space dependent on seeds.
+
+    Parameters
+    ----------
+    seeds : Set
+        Keys to find paths toward.
+    search_space : iterable
+        Additional keys to consider returning.
+    p: str
+        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
+        or `desc.equilibrium.Equilibrium`.
+
+    Returns
+    -------
+    out : Set
+        All keys in search space with any path in the dependency DAG to any seed.
+
+    """
+    out = seeds.copy()
+    for key in search_space:
+        deps = data_index[p][key]["full_with_axis_dependencies"]["data"]
+        if not seeds.isdisjoint(deps):
+            out.add(key)
+    return out
 
 
 def get_derivs(keys, obj, has_axis=False):

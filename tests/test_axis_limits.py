@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import dot, surface_integrals_map
+from desc.compute.utils import _grow_seeds, dot, surface_integrals_map
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
@@ -113,38 +113,7 @@ def add_all_aliases(names):
 zero_limits = add_all_aliases(zero_limits)
 not_finite_limits = add_all_aliases(not_finite_limits)
 not_implemented_limits = add_all_aliases(not_implemented_limits)
-
-
-def grow_seeds(
-    seeds, search_space, parameterization="desc.equilibrium.equilibrium.Equilibrium"
-):
-    """Traverse the dependency DAG for keys in search space dependent on seeds.
-
-    Parameters
-    ----------
-    seeds : set
-        Keys to find paths toward.
-    search_space : iterable
-        Additional keys to consider returning.
-    parameterization: str or list of str
-        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
-        or `desc.equilibrium.Equilibrium`.
-
-    Returns
-    -------
-    out : set
-        All keys in search space with any path in the dependency DAG to any seed.
-
-    """
-    out = seeds.copy()
-    for key in search_space:
-        deps = data_index[parameterization][key]["full_with_axis_dependencies"]["data"]
-        if not seeds.isdisjoint(deps):
-            out.add(key)
-    return out
-
-
-not_implemented_limits = grow_seeds(
+not_implemented_limits = _grow_seeds(
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
 )

@@ -2118,7 +2118,7 @@ class UmbilicHighCurvature2(_Objective):
 
         self._eq_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
         self._eq_data_keys2 = ["curvature_k2_rho"]
-        self._curve_data_keys = ["R", "phi", "phi"]
+        self._curve_data_keys = ["R", "phi", "Z"]
 
         timer = Timer()
         if verbose > 0:
@@ -2410,7 +2410,7 @@ class UmbilicLowCurvature2(_Objective):
 
         self._eq_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
         self._eq_data_keys2 = ["curvature_k2_rho"]
-        self._curve_data_keys = ["R", "phi", "phi"]
+        self._curve_data_keys = ["R", "phi", "Z"]
 
         timer = Timer()
         if verbose > 0:
@@ -2707,7 +2707,7 @@ class UmbilicDistance2(_Objective):
 
         self._eq_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
         self._eq_data_keys2 = ["curvature_k2_rho"]
-        self._curve_data_keys = ["R", "phi", "phi"]
+        self._curve_data_keys = ["R", "phi", "Z"]
 
         timer = Timer()
         if verbose > 0:

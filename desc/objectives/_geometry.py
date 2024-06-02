@@ -2107,12 +2107,12 @@ class UmbilicHighCurvature2(_Objective):
 
         if eq != self._eq:
             self._eq = eq
-        if self._eq_grid is None:
+        if self._equil_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
             theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
-            eq_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
+            equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
-            eq_grid = self._eq_grid
+            equil_grid = self._equil_grid
 
         self._dim_f = int(curve_grid.num_nodes)
 
@@ -2137,15 +2137,15 @@ class UmbilicHighCurvature2(_Objective):
         eq_profiles1 = get_profiles(
             self._eq_data_keys1,
             obj=eq,
-            grid=eq_grid,
-            has_axis=eq_grid.axis.size,
+            grid=equil_grid,
+            has_axis=equil_grid.axis.size,
         )
 
         eq_transforms1 = get_transforms(
             self._eq_data_keys1,
             obj=eq,
-            grid=eq_grid,
-            has_axis=eq_grid.axis.size,
+            grid=equil_grid,
+            has_axis=equil_grid.axis.size,
         )
 
         self._constants = {
@@ -2399,12 +2399,12 @@ class UmbilicLowCurvature2(_Objective):
 
         if eq != self._eq:
             self._eq = eq
-        if self._eq_grid is None:
+        if self._equil_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
             theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
-            eq_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
+            equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
-            eq_grid = self._eq_grid
+            equil_grid = self._equil_grid
 
         self._dim_f = int(curve_grid.num_nodes)
 
@@ -2427,15 +2427,15 @@ class UmbilicLowCurvature2(_Objective):
         eq_profiles1 = get_profiles(
             self._eq_data_keys1,
             obj=eq,
-            grid=eq_grid,
-            has_axis=eq_grid.axis.size,
+            grid=equil_grid,
+            has_axis=equil_grid.axis.size,
         )
 
         eq_transforms1 = get_transforms(
             self._eq_data_keys1,
             obj=eq,
-            grid=eq_grid,
-            has_axis=eq_grid.axis.size,
+            grid=equil_grid,
+            has_axis=equil_grid.axis.size,
         )
 
         self._constants = {
@@ -2696,12 +2696,12 @@ class UmbilicDistance2(_Objective):
 
         if eq != self._eq:
             self._eq = eq
-        if self._eq_grid is None:
+        if self._equil_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
             theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
-            eq_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
+            equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
-            eq_grid = self._eq_grid
+            equil_grid = self._equil_grid
 
         self._dim_f = int(curve_grid.num_nodes)
 
@@ -2724,15 +2724,15 @@ class UmbilicDistance2(_Objective):
         eq_profiles1 = get_profiles(
             self._eq_data_keys1,
             obj=eq,
-            grid=eq_grid,
-            has_axis=eq_grid.axis.size,
+            grid=equil_grid,
+            has_axis=equil_grid.axis.size,
         )
 
         eq_transforms1 = get_transforms(
             self._eq_data_keys1,
             obj=eq,
-            grid=eq_grid,
-            has_axis=eq_grid.axis.size,
+            grid=equil_grid,
+            has_axis=equil_grid.axis.size,
         )
 
         self._constants = {

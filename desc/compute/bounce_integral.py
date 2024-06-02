@@ -270,30 +270,62 @@ def _poly_val(x, c):
     return val
 
 
-def composite_linspace(breaks, resolution):
-    """Returns linearly spaced points between breakpoints.
+def composite_linspace(x, num):
+    """Returns linearly spaced points between every pair of points ``x``.
 
     Parameters
     ----------
-    breaks : Array
+    x : Array
         First axis has values to return linearly spaced values between.
         The remaining axes are batch axes.
         Assumes input is sorted along first axis.
-    resolution : int
-        Number of points between each break.
+    num : int
+        Number of points between every pair of points in ``x``.
 
     Returns
     -------
-    pts : Array, shape((breaks.shape[0] - 1) * resolution + 1, *breaks.shape[1:])
-        Linearly spaced points between ``breaks``.
+    pts : Array, shape((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
+        Linearly spaced points between ``x``.
 
     """
-    breaks = jnp.atleast_1d(breaks)
-    pts = jnp.linspace(breaks[:-1, ...], breaks[1:, ...], resolution, endpoint=False)
-    pts = jnp.moveaxis(pts, source=0, destination=1).reshape(-1, *breaks.shape[1:])
-    pts = jnp.append(pts, breaks[jnp.newaxis, -1, ...], axis=0)
-    assert pts.shape == ((breaks.shape[0] - 1) * resolution + 1, *breaks.shape[1:])
+    x = jnp.atleast_1d(x)
+    pts = jnp.linspace(x[:-1, ...], x[1:, ...], num + 1, endpoint=False)
+    pts = jnp.moveaxis(pts, source=0, destination=1).reshape(-1, *x.shape[1:])
+    pts = jnp.append(pts, x[jnp.newaxis, -1, ...], axis=0)
+    assert pts.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
     return pts
+
+
+def get_pitch(min_B, max_B, num, relative_shift=1e-6):
+    """Return uniformly spaced pitch values between 1 / max B and 1 / min B.
+
+    Parameters
+    ----------
+    min_B, max_B : Array, Array
+        Minimum and maximum |B| values.
+    num : int
+        Number of values, not including endpoints.
+    relative_shift : float
+        Relative amount to shift maxima down and minima up to avoid floating point
+        errors in downstream routines.
+
+    Returns
+    -------
+    pitch : Array, shape(num + 2, *min_B.shape[1:])
+        Pitch values.
+
+    """
+    assert min_B.shape == max_B.shape
+    # Floating point error impedes consistent detection of bounce points riding
+    # extrema. Shift values slightly to resolve this issue.
+    min_B = (1 + relative_shift) * min_B
+    max_B = (1 - relative_shift) * max_B
+    # λ is the pitch angle. Note Nemov dimensionless integration variable b = (λB₀)⁻¹.
+    # Uniformly space in pitch (as opposed to 1/pitch) to get faster convergence in
+    # an integration over pitch.
+    pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
+    assert pitch.shape == (num + 2, *min_B.shape[1:])
+    return pitch
 
 
 def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
@@ -499,19 +531,9 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False):
     bp1 = take_mask(intersect, is_bp1)
     bp2 = take_mask(intersect, is_bp2)
 
-    # Consistent with (in particular the discussion on page 3 and 5 of)
-    # V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    # Evaluation of 1/ν neoclassical transport in stellarators.
-    # Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-    # https://doi.org/10.1063/1.873749.
-    # we ignore the bounce points of particles assigned to a class that
-    # are trapped outside this snapshot of the field line. The caveat
-    # is that the field line discussed in the paper above specifies the
-    # flux surface completely as its length tends to infinity, whereas
-    # the field line snapshot here is for a particular alpha coordinate.
-    # Don't think it's necessary to stitch together the field lines using
-    # rotational transform to potentially capture the bounce point outside
-    # this snapshot of the field line.
+    # Following discussion on page 3 and 5 of https://doi.org/10.1063/1.873749,
+    # we ignore the bounce points of particles assigned to a class that are
+    # trapped outside this snapshot of the field line.
     if check:
         _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot)
     return bp1, bp2
@@ -913,11 +935,11 @@ def _interpolatory_quadrature(
     # Spline each function separately so that the singularity near the bounce
     # points can be captured more accurately than can be by any polynomial.
     shape = Z.shape
-    Z_ps = Z.reshape(Z.shape[0], Z.shape[1], -1)
-    f = [_interp1d_vec(Z_ps, knots, f_i, method=method).reshape(shape) for f_i in f]
-    b_sup_z = _interp1d_vec(Z_ps, knots, B_sup_z / B, method=method).reshape(shape)
-    B = _interp1d_vec_with_df(Z_ps, knots, B, B_z_ra, method=method_B).reshape(shape)
-    pitch = jnp.expand_dims(pitch, axis=(2, 3) if Z.ndim == 4 else 2)
+    Z = Z.reshape(Z.shape[0], Z.shape[1], -1)
+    f = [_interp1d_vec(Z, knots, f_i, method=method).reshape(shape) for f_i in f]
+    b_sup_z = _interp1d_vec(Z, knots, B_sup_z / B, method=method).reshape(shape)
+    B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method=method_B).reshape(shape)
+    pitch = jnp.expand_dims(pitch, axis=(2, 3) if len(shape) == 4 else 2)
     # Assuming that the integrand is a well-behaved function of some interpolation
     # points Z, it should evaluate as NaN only if Z is NaN. This condition needs to
     # be enforced explicitly due to floating point and interpolation error.
@@ -931,6 +953,7 @@ def _interpolatory_quadrature(
         w,
     )
     if check:
+        Z = Z.reshape(shape)
         _assert_finite_and_hairy(Z, f, b_sup_z, B, B_z_ra, inner_product)
         if plot:
             _plot(Z, B, id=r"$\vert B \vert$")

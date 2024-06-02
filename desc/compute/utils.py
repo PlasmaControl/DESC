@@ -197,12 +197,12 @@ def get_data_deps(keys, obj, has_axis=False):
             out += axis_limit_deps.copy()  # to be safe
             for dep in axis_limit_deps:
                 out += _get_deps_1_key(dep)
-        return sorted(list(set(out)))
+        return sorted(set(out))
 
     out = []
     for key in keys:
         out += _get_deps_1_key(key)
-    return sorted(list(set(out)))
+    return sorted(set(out))
 
 
 def get_derivs(keys, obj, has_axis=False):
@@ -282,7 +282,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
     profs = []
     for key in deps:
         profs += data_index[p][key]["dependencies"]["profiles"]
-    profs = sorted(list(set(profs)))
+    profs = sorted(set(profs))
     if isinstance(obj, str) or inspect.isclass(obj):
         return profs
     # need to use copy here because profile may be None

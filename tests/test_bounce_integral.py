@@ -25,6 +25,7 @@ from desc.compute.bounce_integral import (
     bounce_points,
     composite_linspace,
     get_extrema,
+    get_pitch,
     grad_affine_bijection,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
@@ -234,7 +235,7 @@ def test_composite_linspace():
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
     breaks = np.linspace(B_min_tz, B_max_tz, num=5)
-    b = composite_linspace(breaks, resolution=3)
+    b = composite_linspace(breaks, num=3)
     print(breaks)
     print(b)
     for i in range(breaks.shape[0]):
@@ -694,13 +695,7 @@ def test_drift():
     np.testing.assert_allclose(gbdrift, gbdrift_analytic_low_order, atol=1e-2)
     np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
 
-    relative_shift = 1e-6
-    pitch = 1 / np.linspace(
-        np.min(B) * (1 + relative_shift),
-        np.max(B) * (1 - relative_shift),
-        100,
-        endpoint=False,
-    )
+    pitch = get_pitch(np.min(B), np.max(B), 100)[1:]
     k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
     I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = _elliptic_incomplete(k2)
     y = np.sqrt(2 * epsilon * pitch * B0)

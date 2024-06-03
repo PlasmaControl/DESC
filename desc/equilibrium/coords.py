@@ -506,7 +506,7 @@ def to_sfl(
     return eq_sfl
 
 
-def rtz_grid(eq, radial, poloidal, toroidal, coordinates):
+def rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
     """Return DESC coordinate grid from given coordinates.
 
     Create a meshgrid from the given coordinates, and return the
@@ -527,6 +527,12 @@ def rtz_grid(eq, radial, poloidal, toroidal, coordinates):
         raz : rho, alpha, zeta
         rpz : rho, theta_PEST, zeta
         rtz : rho, theta, zeta
+    period : tuple of float
+        Assumed periodicity for each quantity in inbasis.
+        Use np.inf to denote no periodicity.
+    jitable : bool, optional
+        If false the returned grid has additional attributes.
+        Required to be false to retain nodes at magnetic axis.
 
     Returns
     -------
@@ -534,20 +540,26 @@ def rtz_grid(eq, radial, poloidal, toroidal, coordinates):
         DESC coordinate grid for the given coordinates.
 
     """
-    grid = Grid.create_meshgrid(radial, poloidal, toroidal, coordinates)
-    inbasis = {"r": "rho", "t": "theta", "p": "theta_PEST", "a": "alpha", "z": "zeta"}
+    grid = Grid.create_meshgrid([radial, poloidal, toroidal], coordinates=coordinates)
+    inbasis = {
+        "r": "rho",
+        "t": "theta",
+        "p": "theta_PEST",
+        "a": "alpha",
+        "z": "zeta",
+    }
     rtz_nodes = eq.map_coordinates(
         grid.nodes,
         inbasis=[inbasis[char] for char in coordinates],
         outbasis=("rho", "theta", "zeta"),
-        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+        period=period,
     )
     desc_grid = Grid(
         nodes=rtz_nodes,
         coordinates="rtz",
         source_grid=grid,
         sort=False,
-        jitable=True,
+        jitable=jitable,
         _unique_rho_idx=grid.unique_rho_idx,
         _inverse_rho_idx=grid.inverse_rho_idx,
     )

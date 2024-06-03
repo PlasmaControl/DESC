@@ -77,7 +77,7 @@ def convert_spectral_to_FE(
     t1 = time.time()
 
     N = R_basis.N
-    I = Rprime_basis.I_2ML
+    I = Rprime_basis.I_LMN
     Q = Rprime_basis.Q
     L = Rprime_basis.L
     M = Rprime_basis.M
@@ -120,6 +120,7 @@ def convert_spectral_to_FE(
             * FE_basis_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
     ).reshape(IQ, IQ)
+    # print(FE_basis_pre_evaluated)
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)
 

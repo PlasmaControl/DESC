@@ -229,7 +229,7 @@ class _FE_Basis(IOAble, ABC):
     """Basis is an abstract base class for finite-element basis sets."""
 
     _io_attrs_ = [
-        "_I_2ML",
+        "I_LMN",
         "_Q",
         "_NFP",
         "_modes",
@@ -250,18 +250,18 @@ class _FE_Basis(IOAble, ABC):
     def _create_idx(self):
         """Create index for use with self.get_idx()."""
         self._idx = {}
-        for idx, (I_2ML, Q) in enumerate(self.modes):
-            self._idx[I_2ML] = {}
-            self._idx[I_2ML][Q] = idx
+        for idx, (I_LMN, Q) in enumerate(self.modes):
+            self._idx[I_LMN] = {}
+            self._idx[I_LMN][Q] = idx
 
-    def get_idx(self, I_2ML=0, Q=0, error=True):
+    def get_idx(self, I_LMN=0, Q=0, error=True):
         """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
         Parameters
         ----------
-        I_2ML : int
-            Maximum number of triangles in a 2D tesselation in the (theta, zeta)
-            plane. If have (M x N) points in the grid, I_2ML = 2NM.
+        I_LMN : int
+            Maximum number of 1D, 2D or 3D geometric finite elements.
+            If have (M x N) points in the grid, I_LMN = 2NM for triangles. 
         Q : int
             Number of basis functions. For order K triangle FE, should be
             q = (K + 1)(K + 2) / 2.
@@ -275,11 +275,11 @@ class _FE_Basis(IOAble, ABC):
 
         """
         try:
-            return self._idx[I_2ML][Q]
+            return self._idx[I_LMN][Q]
         except KeyError as e:
             if error:
                 raise ValueError(
-                    "mode ({}, {}) is not in basis {}".format(I_2ML, Q, str(self))
+                    "mode ({}, {}) is not in basis {}".format(I_LMN, Q, str(self))
                 ) from e
             else:
                 return np.array([]).astype(int)
@@ -331,14 +331,14 @@ class _FE_Basis(IOAble, ABC):
         self._L = int(L)
 
     @property
-    def I_2ML(self):
+    def I_LMN(self):
         """int:  Maximum triangle index."""
-        return self.__dict__.setdefault("_I_2ML", 0)
+        return self.__dict__.setdefault("_I_LMN", 0)
 
-    @I_2ML.setter
-    def I_2ML(self, I_2ML):
-        assert int(I_2ML) == I_2ML, "Number of triangles must be an integer!"
-        self._I_2ML = int(I_2ML)
+    @I_LMN.setter
+    def I_LMN(self, I_LMN):
+        assert int(I_LMN) == I_LMN, "Number of triangles must be an integer!"
+        self._I_LMN = int(I_LMN)
 
     @property
     def Q(self):
@@ -382,7 +382,7 @@ class _FE_Basis(IOAble, ABC):
             + str(hex(id(self)))
             + " (L={}, M={}, N={}, NFP={}, sym={})".format(
                 self.L,
-                self.I_2ML,
+                self.I_LMN,
                 self.Q,
                 self.NFP,
                 self.sym,
@@ -1144,17 +1144,17 @@ class FiniteElementBasis(_FE_Basis):
         self._sym = sym
         if L == 0 and N == 0:
             self.mesh = FiniteElementMesh1D(M, K=K)
-            self.I_2ML = M - 1
+            self.I_LMN = M - 1
             self.Q = K + 1
         elif N == 0:
             self.mesh = FiniteElementMesh2D(L, M, K=K)
-            self.I_2ML = 2 * (M - 1) * (L - 1)
+            self.I_LMN = 2 * (M - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) / 2.0)
         else:
             self.mesh = FiniteElementMesh3D(L, M, N, K=K)
-            self.I_2ML = 6 * (M - 1) * (N - 1) * (L - 1)
+            self.I_LMN = 5 * (M - 1) * (N - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
-        self.nmodes = self.I_2ML * self.Q
+        self.nmodes = self.I_LMN * self.Q
         self._modes = self._get_modes()
         super().__init__()
 
@@ -1169,7 +1169,7 @@ class FiniteElementBasis(_FE_Basis):
 
         """
         lij_mesh = np.meshgrid(
-            np.arange(self.I_2ML),
+            np.arange(self.I_LMN),
             np.arange(self.Q),
             indexing="ij",
         )
@@ -1220,6 +1220,7 @@ class FiniteElementBasis(_FE_Basis):
                 intervals,
                 basis_functions,
             ) = self.mesh.find_tetrahedra_corresponding_to_points(Rho_Theta_Zeta)
+            print(basis_functions)
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
         return basis_functions[:, inds]
@@ -1998,7 +1999,7 @@ def zernike_norm(l, m):
 class FiniteElementMesh3D:
     """Class representing a 3D mesh in (rho, theta, zeta) using scikit-fem.
 
-    This class represents a set of I_5LMN = 5LMN tetrahedra obtained by tessalation
+    This class represents a set of I_LMN = 5LMN tetrahedra obtained by tessalation
     f a uniform  L x M x N mesh in rho, theta, zeta. The point of this class is to
     predefine all the tetrahedra and their associated basis functions so that, given
     a new point (rho_i, theta_i, zeta_i), we can quickly return which tetrahedron
@@ -2021,7 +2022,7 @@ class FiniteElementMesh3D:
         self.M = M
         self.L = L
         self.N = N
-        self.I_5LMN = (
+        self.I_LMN = (
             5 * (L - 1) * (M - 1) * (N - 1)
         )  # Considering how to incorporate n_p
         self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
@@ -2155,7 +2156,7 @@ class FiniteElementMesh3D:
         # for numerical integration using scikit-fem
 
         [integration_points, weights] = fem.quadrature.get_quadrature(
-            element, K
+            element, K * 5
         )
 
         weights = 6 * weights
@@ -2238,13 +2239,13 @@ class FiniteElementMesh3D:
 
         Returns
         -------
-        quadrature points: 2D ndarray, shape (nquad * I_5LMN, 3)
+        quadrature points: 2D ndarray, shape (nquad * I_LMN, 3)
             Points in (rho, theta, zeta) representing the quadrature point
             locations for integration, return in real-space coordinates.
 
         """
         nquad = self.nquad
-        quadrature_points = np.zeros((self.I_5LMN * nquad, 3))
+        quadrature_points = np.zeros((self.I_LMN * nquad, 3))
         q = 0
         for tetrahedron in self.tetrahedra:
             for i in range(nquad):
@@ -2337,10 +2338,9 @@ class FiniteElementMesh3D:
 
         """
         tetrahedra_indices = np.zeros(rho_theta_zeta.shape[0])
-        basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
+        basis_functions = np.zeros((rho_theta_zeta.shape[0], self.I_LMN * self.Q))
         for i in range(rho_theta_zeta.shape[0]):
             P = rho_theta_zeta[i]
-            print(P)
             for j, tetrahedron in enumerate(self.tetrahedra):
                 v1 = tetrahedron.vertices[0, :]
                 v2 = tetrahedron.vertices[1, :]
@@ -2394,22 +2394,23 @@ class FiniteElementMesh3D:
                 Det4 = np.linalg.det(D4)
 
                 # Check whether point lies inside tetrahedra:
-
+                print(Det0, Det1, Det2, Det3, Det4)
                 if (
                     np.sign(Det0) == np.sign(Det1)
                     and np.sign(Det0) == np.sign(Det2)
                     and np.sign(Det0) == np.sign(Det3)
                     and np.sign(Det0) == np.sign(Det4)
                 ):
+                    print('Success, j = ', j)
                     tetrahedra_indices[i] = j
-                    basis_functions[i, :], _ = self.tetrahedra.get_basis_functions(P)
+                    basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = tetrahedron.get_basis_functions(P.reshape(1, 3))
         return tetrahedra_indices, basis_functions
 
 
 class FiniteElementMesh2D:
     """Class representing a 2D mesh in (rho, theta).
 
-    This class represents a set of I_2ML = 2ML triangles obtained by tessellation
+    This class represents a set of I_LMN = 2ML triangles obtained by tessellation
     of a UNIFORM rectangular L x M mesh in the (rho, theta) plane.
     The point of this class is to pre-define all the triangles and their
     associated basis functions so that, given a new point (rho_i, theta_i),
@@ -2429,7 +2430,7 @@ class FiniteElementMesh2D:
     def __init__(self, L, M, K=1):
         self.M = M
         self.L = L
-        self.I_2ML = 2 * (M - 1) * (L - 1)
+        self.I_LMN = 2 * (M - 1) * (L - 1)
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
 
@@ -2616,7 +2617,7 @@ class FiniteElementMesh2D:
             triangle_indices.
         """
         triangle_indices = np.zeros(rho_theta.shape[0])
-        basis_functions = np.zeros((rho_theta.shape[0], self.I_2ML * self.Q))
+        basis_functions = np.zeros((rho_theta.shape[0], self.I_LMN * self.Q))
         for i in range(rho_theta.shape[0]):
             v = rho_theta[i, :]
             for j, triangle in enumerate(self.triangles):
@@ -2663,7 +2664,7 @@ class FiniteElementMesh2D:
 
         """
         nquad = self.nquad
-        quadrature_points = np.zeros((self.I_2ML * nquad, 2))
+        quadrature_points = np.zeros((self.I_LMN * nquad, 2))
         q = 0
         for triangle in self.triangles:
             for i in range(nquad):
@@ -3104,15 +3105,20 @@ class TetrahedronFiniteElement:
             eta_2 = d_2 / self.det
             eta_3 = d_3 / self.det
             eta_4 = d_4 / self.det
-
-            # Check that all points are indeed inside the tetrahedron
-            # for j in range(4):
-            if eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0:
-                warnings.warn()
-                "Found rho_theta_zeta points outside the tetrahedron ... "
-                "Not using these points to evaluate the barycentric "
-                "coordinates."
-
+            
+            # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
+            # is not sufficient because sometimes numerical errors
+            # have eta_i ~ -1e-16 which breaks this 
+            ind_1 = ((eta_1 < 0) and (not np.isclose(eta_1, 0.0)))
+            ind_2 = ((eta_2 < 0) and (not np.isclose(eta_2, 0.0)))
+            ind_3 = ((eta_3 < 0) and (not np.isclose(eta_3, 0.0)))
+            ind_4 = ((eta_4 < 0) and (not np.isclose(eta_4, 0.0)))
+            if ind_1 and ind_2 and ind_3 and ind_4:
+                warnings.warn(
+                    "Found rho_theta_zeta points outside the tetrahedron ... "
+                    "Not using these points to evaluate the barycentric "
+                    "coordinates."
+                )
             else:
                 eta.append(eta_1)
                 eta.append(eta_2)

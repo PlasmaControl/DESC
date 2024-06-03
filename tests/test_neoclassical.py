@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from desc.compute._neoclassical import _poloidal_average, poloidal_leggauss
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import rtz_grid
 from desc.vmec import VMECIO
@@ -17,26 +16,13 @@ def test_field_line_average():
         "tests/inputs/DESC_from_NAE_O_r1_precise_QI_plunk_fixed_bdry_r0"
         ".15_L_9_M_9_N_24_output.h5"
     )
-    resolution = 10
-    rho = np.linspace(0, 1, resolution)
-
-    # Surface average field lines truncated at 1 toroidal transit.
-    alpha, w = poloidal_leggauss(resolution)
-    L = 2 * np.pi
-    zeta = np.linspace(0, L, resolution)
-    grid = rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    grid.source_grid.poloidal_weight = w
-    data = eq.compute(["L|r,a", "G|r,a", "V_r(r)"], grid=grid)
-    np.testing.assert_allclose(
-        _poloidal_average(grid.source_grid, data["L|r,a"] / data["G|r,a"]),
-        grid.compress(data["V_r(r)"]) / (4 * np.pi**2),
-        rtol=2e-2,
-    )
-
-    # Now for field line with large L.
+    rho = np.linspace(0, 1, 5)
+    alpha = np.array([0])
     L = 10 * np.pi  # Large enough to pass the test, apparently.
-    zeta = np.linspace(0, L, resolution * 2)
-    grid = rtz_grid(eq, rho, 0, zeta, coordinates="raz")
+    zeta = np.linspace(0, L, 20)
+    grid = rtz_grid(
+        eq, rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+    )
     data = eq.compute(["L|r,a", "G|r,a", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         np.squeeze(data["L|r,a"] / data["G|r,a"]),
@@ -55,7 +41,14 @@ def test_effective_ripple():
     rho = np.linspace(0, 1, 40)
     # TODO: Here's a potential issue, resolve with 2d spline.
     knots = np.linspace(0, 100 * np.pi, 1000)
-    grid = rtz_grid(eq, rho, np.array([0]), knots, coordinates="raz")
+    grid = rtz_grid(
+        eq,
+        rho,
+        np.array([0]),
+        knots,
+        coordinates="raz",
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
     data = eq.compute(
         "effective ripple",
         grid=grid,

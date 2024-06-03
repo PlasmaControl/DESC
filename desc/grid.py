@@ -44,7 +44,6 @@ class _Grid(IOAble, ABC):
         "_inverse_poloidal_idx",
         "_inverse_zeta_idx",
         "_is_meshgrid",
-        "_poloidal_weight",
     ]
 
     @abstractmethod
@@ -706,10 +705,6 @@ class Grid(_Grid):
         self._period = period
         self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
-        if "poloidal_weight" in kwargs:
-            self._poloidal_weight = jnp.atleast_1d(kwargs.pop("poloidal_weight"))
-        else:
-            self._poloidal_weight = None
 
         self._nodes = self._create_nodes(nodes)
         if spacing is not None:
@@ -800,23 +795,6 @@ class Grid(_Grid):
     def source_grid(self):
         """Coordinates from which this grid was mapped from."""
         return self.__dict__.setdefault("_source_grid", None)
-
-    @property
-    def poloidal_weight(self):
-        """Quadrature weight over poloidal domain.
-
-        Returns
-        -------
-        poloidal_weight : Array, shape(self.num_poloidal)
-            quadrature weight over poloidal domain
-
-        """
-        return self.__dict__.setdefault("_poloidal_weight", None)
-
-    @poloidal_weight.setter
-    def poloidal_weight(self, value):
-        """Set quadrature weight over poloidal domain."""
-        self._poloidal_weight = jnp.atleast_1d(value)
 
 
 class LinearGrid(_Grid):

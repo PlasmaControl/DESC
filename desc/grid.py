@@ -35,6 +35,7 @@ class _Grid(IOAble, ABC):
         "_axis",
         "_node_pattern",
         "_coordinates",
+        "_period",
         "_source_grid",
         "_unique_rho_idx",
         "_unique_poloidal_idx",
@@ -64,7 +65,7 @@ class _Grid(IOAble, ABC):
         1. Remove nodes with theta > pi.
         2. Rescale theta spacing to preserve dtheta weight.
             Need to rescale on each theta coordinate curve by a different factor.
-            dtheta should = 2pi / number of nodes remaining on that theta curve.
+            dtheta should = 2π / number of nodes remaining on that theta curve.
             Nodes on the symmetry line should not be rescaled.
 
         """
@@ -87,7 +88,7 @@ class _Grid(IOAble, ABC):
             >= to_delete_per_rho_surf_count.size
         )
         if off_sym_line_per_rho_surf_count.size > to_delete_per_rho_surf_count.size:
-            # edge case where surfaces closest to axis lack theta > pi nodes
+            # edge case where surfaces closest to axis lack theta > π nodes
             # The number of nodes to delete on those surfaces is zero.
             pad_count = (
                 off_sym_line_per_rho_surf_count.size - to_delete_per_rho_surf_count.size
@@ -103,7 +104,7 @@ class _Grid(IOAble, ABC):
         # The third assumption lets the scale factor be constant over a
         # particular theta curve, so that each node in the open interval
         # (0, pi) has its spacing scaled up by the same factor.
-        # Nodes at endpoints 0, pi should not be scaled.
+        # Nodes at endpoints 0, π should not be scaled.
         scale = off_sym_line_per_rho_surf_count / (
             off_sym_line_per_rho_surf_count - to_delete_per_rho_surf_count
         )
@@ -217,6 +218,12 @@ class _Grid(IOAble, ABC):
     def coordinates(self):
         """Coordinates specified by the nodes."""
         return self.__dict__.setdefault("_coordinates", "rtz")
+
+    @property
+    def period(self):
+        return self.__dict__.setdefault(
+            "_period", (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
+        )
 
     @property
     def num_nodes(self):
@@ -416,7 +423,6 @@ class _Grid(IOAble, ABC):
 
     def get_label(self, label):
         """Get general label that specifies direction given label."""
-        # TODO: generalize zeta to toroidal in PR #568.
         if label in {"rho", "poloidal", "zeta"}:
             return label
         rad = {"r": "rho"}[self.coordinates[0]]
@@ -578,6 +584,9 @@ class Grid(_Grid):
         raz : rho, alpha, zeta
         rpz : rho, theta_PEST, zeta
         rtz : rho, theta, zeta
+    period : tuple of float
+        Assumed periodicity for each coordinate.
+        Use np.inf to denote no periodicity.
     source_grid : Grid
         Grid from which coordinates were mapped from.
     sort : bool
@@ -595,29 +604,52 @@ class Grid(_Grid):
     """
 
     @classmethod
-    def create_meshgrid(cls, a, b, c, coordinates="rtz", **kwargs):
+    def create_meshgrid(
+        cls,
+        nodes,
+        spacing=None,
+        coordinates="rtz",
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        **kwargs,
+    ):
         """Create a meshgrid from the given coordinates in a jitable manner.
 
         Parameters
         ----------
-        a, b, c : Array, Array, Array
+        nodes : Array, Array, Array
             Sorted unique values of each coordinate.
+        spacing : Array, Array, Array
+            Weights for integration. Defaults to a midpoint rule.
         coordinates : str
             Coordinates that are specified by the nodes a, b, c, respectively.
             raz : rho, alpha, zeta
             rpz : rho, theta_PEST, zeta
             rtz : rho, theta, zeta
+        period : tuple of float
+            Assumed periodicity for each coordinate.
+            Use np.inf to denote no periodicity.
 
         Returns
         -------
         grid : Grid
-            Meshgrid with indices assigned.
+            Meshgrid.
 
         """
-        a, b, c = jnp.atleast_1d(a, b, c)
+        a, b, c = jnp.atleast_1d(*nodes)
+        if spacing is None:
+            errorif(coordinates[0] != "r", NotImplementedError)
+            da = _midpoint_spacing(a)
+            db = _periodic_spacing(b, period[1])[1]
+            dc = _periodic_spacing(c, period[2])[1]
+        else:
+            da, db, dc = spacing
         nodes = jnp.column_stack(
             list(map(jnp.ravel, jnp.meshgrid(a, b, c, indexing="ij")))
         )
+        spacing = jnp.column_stack(
+            list(map(jnp.ravel, jnp.meshgrid(da, db, dc, indexing="ij")))
+        )
+        weights = spacing.prod(axis=1) if coordinates == "rtz" else None
 
         unique_a_idx = jnp.arange(a.size) * b.size * c.size
         unique_b_idx = jnp.arange(b.size) * c.size
@@ -634,7 +666,10 @@ class Grid(_Grid):
         inverse_c_idx = jnp.tile(unique_c_idx, a.size * b.size)
         return cls(
             nodes=nodes,
+            spacing=spacing,
+            weights=weights,
             coordinates=coordinates,
+            period=period,
             sort=False,
             is_meshgrid=True,
             jitable=True,
@@ -653,6 +688,7 @@ class Grid(_Grid):
         spacing=None,
         weights=None,
         coordinates="rtz",
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
         source_grid=None,
         sort=False,
         is_meshgrid=False,
@@ -666,6 +702,7 @@ class Grid(_Grid):
         self._sym = False
         self._node_pattern = "custom"
         self._coordinates = coordinates
+        self._period = period
         self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
 
@@ -751,13 +788,13 @@ class Grid(_Grid):
         """
         nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
         # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
+        # In particular, do not modulo nodes by 2π or 2π/NFP.
         return nodes
 
     @property
     def source_grid(self):
         """Coordinates from which this grid was mapped from."""
-        return self._source_grid
+        return self.__dict__.setdefault("_source_grid", None)
 
 
 class LinearGrid(_Grid):
@@ -801,6 +838,9 @@ class LinearGrid(_Grid):
         raz : rho, alpha, zeta
         rpz : rho, theta_PEST, zeta
         rtz : rho, theta, zeta
+    period : tuple of float
+        Assumed periodicity for each coordinate.
+        Use np.inf to denote no periodicity.
     """
 
     def __init__(
@@ -816,6 +856,7 @@ class LinearGrid(_Grid):
         theta=np.array(0.0),
         zeta=np.array(0.0),
         coordinates="rtz",
+        period=None,
     ):
         self._L = check_nonnegint(L, "L")
         self._M = check_nonnegint(M, "M")
@@ -827,6 +868,9 @@ class LinearGrid(_Grid):
         self._toroidal_endpoint = False
         self._node_pattern = "linear"
         self._coordinates = coordinates
+        self._period = (
+            (np.inf, 2 * np.pi, 2 * np.pi / NFP) if period is None else period
+        )
         self._nodes, self._spacing = self._create_nodes(
             L=L,
             M=M,
@@ -862,6 +906,7 @@ class LinearGrid(_Grid):
         rho=1.0,
         theta=0.0,
         zeta=0.0,
+        period=None,
     ):
         """Create grid nodes and weights.
 
@@ -890,6 +935,9 @@ class LinearGrid(_Grid):
         zeta : int or ndarray of float, optional
             Toroidal coordinates (Default = 0.0).
             Alternatively, the number of toroidal coordinates (if an integer).
+        period : tuple of float
+            Assumed periodicity for each coordinate.
+            Use np.inf to denote no periodicity.
 
         Returns
         -------
@@ -900,10 +948,13 @@ class LinearGrid(_Grid):
 
         """
         self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (
+            (np.inf, 2 * np.pi, 2 * np.pi / NFP) if period is None else period
+        )
         axis = bool(axis)
         endpoint = bool(endpoint)
-        THETA_ENDPOINT = 2 * np.pi
-        ZETA_ENDPOINT = 2 * np.pi / NFP
+        theta_period = self.period[1]
+        zeta_period = self.period[2]
 
         # rho
         if L is not None:
@@ -916,17 +967,8 @@ class LinearGrid(_Grid):
             # choose dr such that each node has the same weight
             dr = np.ones_like(r) / r.size
         else:
-            # need to sort to compute correct spacing
             r = np.sort(np.atleast_1d(rho))
-            dr = np.zeros_like(r)
-            if r.size > 1:
-                # choose dr such that cumulative sums of dr[] are node midpoints
-                # and the total sum is 1
-                dr[0] = (r[0] + r[1]) / 2
-                dr[1:-1] = (r[2:] - r[:-2]) / 2
-                dr[-1] = 1 - (r[-2] + r[-1]) / 2
-            else:
-                dr = np.array([1.0])
+            dr = np.asarray(_midpoint_spacing(r))
 
         # theta
         if M is not None:
@@ -937,20 +979,20 @@ class LinearGrid(_Grid):
         if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
             theta = int(theta)
             if self.sym and theta > 1:
-                # Enforce that no node lies on theta=0 or theta=2pi, so that
+                # Enforce that no node lies on theta=0 or theta=2π, so that
                 # each node has a symmetric counterpart, and that, for all i,
-                # t[i]-t[i-1] = 2 t[0] = 2 (pi - t[last node before pi]).
+                # t[i]-t[i-1] = 2 t[0] = 2 (π - t[last node before π]).
                 # Both conditions necessary to evenly space nodes with constant dt.
                 # This can be done by making (theta + endpoint) an even integer.
                 if (theta + endpoint) % 2 != 0:
                     theta += 1
-                t = np.linspace(0, THETA_ENDPOINT, theta, endpoint=endpoint)
+                t = np.linspace(0, theta_period, theta, endpoint=endpoint)
                 t += t[1] / 2
-                # delete theta > pi nodes
+                # delete theta > π nodes
                 t = t[: np.searchsorted(t, np.pi, side="right")]
             else:
-                t = np.linspace(0, THETA_ENDPOINT, theta, endpoint=endpoint)
-            dt = THETA_ENDPOINT / t.size * np.ones_like(t)
+                t = np.linspace(0, theta_period, theta, endpoint=endpoint)
+            dt = theta_period / t.size * np.ones_like(t)
             if (endpoint and not self.sym) and t.size > 1:
                 # increase node weight to account for duplicate node
                 dt *= t.size / (t.size - 1)
@@ -959,64 +1001,54 @@ class LinearGrid(_Grid):
         else:
             t = np.atleast_1d(theta).astype(float)
             # enforce periodicity
-            t[t != THETA_ENDPOINT] %= THETA_ENDPOINT
+            t[t != theta_period] %= theta_period
             # need to sort to compute correct spacing
             t = np.sort(t)
             if self.sym:
-                # cut domain to relevant subdomain: delete theta > pi nodes
+                # cut domain to relevant subdomain: delete theta > π nodes
                 t = t[: np.searchsorted(t, np.pi, side="right")]
-            dt = np.zeros_like(t)
             if t.size > 1:
-                # choose dt to be the cyclic distance of the surrounding two nodes
-                dt[1:-1] = t[2:] - t[:-2]
                 if not self.sym:
-                    dt[0] = t[1] + (THETA_ENDPOINT - t[-1]) % THETA_ENDPOINT
-                    dt[-1] = t[0] + (THETA_ENDPOINT - t[-2]) % THETA_ENDPOINT
-                    dt /= 2  # choose dt to be half the cyclic distance
-                    if t.size == 2:
-                        assert dt[0] == np.pi and dt[-1] == 0
-                        dt[-1] = dt[0]
-                    if t[0] == 0 and t[-1] == THETA_ENDPOINT:
+                    dt = np.array(_periodic_spacing(t, theta_period)[1])
+                    if t[0] == 0 and t[-1] == theta_period:
                         # The cyclic distance algorithm above correctly weights
-                        # the duplicate endpoint node spacing at theta = 0 and 2pi
+                        # the duplicate endpoint node spacing at theta = 0 and 2π
                         # to be half the weight of the other nodes.
                         # However, scale_weights() is not aware of this, so we
                         # counteract the reduction that will be done there.
                         dt[0] += dt[-1]
                         dt[-1] = dt[0]
                 else:
+                    dt = np.zeros(t.shape)
+                    dt[1:-1] = t[2:] - t[:-2]
                     first_positive_idx = np.searchsorted(t, 0, side="right")
+                    # total spacing of nodes at theta=0 should be half the
+                    # distance between first positive node and its
+                    # reflection across the theta=0 line.
+                    dt[0] = t[first_positive_idx]
                     if first_positive_idx == 0:
                         # then there are no nodes at theta=0
-                        dt[0] = t[0] + t[1]
+                        dt[0] += t[1]
                     else:
-                        # total spacing of nodes at theta=0 should be half the
-                        # distance between first positive node and its
-                        # reflection across the theta=0 line.
-                        dt[0] = t[first_positive_idx]
-                        assert (first_positive_idx == 1) or (
-                            dt[0] == dt[first_positive_idx - 1]
-                        )
-                        # If the first condition is false and the latter true,
+                        assert dt[0] == dt[first_positive_idx - 1]
+                        # If first_positive_idx != 1,
                         # then both of those dt should be halved.
                         # The scale_weights() function will handle this.
                     first_pi_idx = np.searchsorted(t, np.pi, side="left")
+                    # total spacing of nodes at theta=π should be half the
+                    # distance between first node < π and its
+                    # reflection across the theta=π line.
                     if first_pi_idx == t.size:
-                        # then there are no nodes at theta=pi
-                        dt[-1] = (THETA_ENDPOINT - t[-1]) - t[-2]
+                        # then there are no nodes at theta=π
+                        dt[-1] = (theta_period - t[-1]) - t[-2]
                     else:
-                        # total spacing of nodes at theta=pi should be half the
-                        # distance between first node < pi and its
-                        # reflection across the theta=pi line.
-                        dt[-1] = (THETA_ENDPOINT - t[-1]) - t[first_pi_idx - 1]
-                        assert (first_pi_idx == t.size - 1) or (
-                            dt[first_pi_idx] == dt[-1]
-                        )
-                        # If the first condition is false and the latter true,
+                        dt[-1] = (theta_period - t[-1]) - t[first_pi_idx - 1]
+                        assert dt[first_pi_idx] == dt[-1]
+                        # If first_pi_idx != t.size - 1,
                         # then both of those dt should be halved.
                         # The scale_weights() function will handle this.
             else:
-                dt = np.array([THETA_ENDPOINT])
+                dt = np.array([theta_period])
 
         # zeta
         # note: dz spacing should not depend on NFP
@@ -1028,7 +1060,7 @@ class LinearGrid(_Grid):
         else:
             self._N = len(np.atleast_1d(zeta))
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
-            z = np.linspace(0, ZETA_ENDPOINT, int(zeta), endpoint=endpoint)
+            z = np.linspace(0, zeta_period, int(zeta), endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)
             if endpoint and z.size > 1:
                 # increase node weight to account for duplicate node
@@ -1036,40 +1068,25 @@ class LinearGrid(_Grid):
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
         else:
-            z = np.atleast_1d(zeta).astype(float)
-            # enforce periodicity
-            z[z != ZETA_ENDPOINT] %= ZETA_ENDPOINT
-            # need to sort to compute correct spacing
-            z = np.sort(z)
-            dz = np.zeros_like(z)
-            if z.size > 1:
-                # choose dz to be half the cyclic distance of the surrounding two nodes
-                dz[0] = z[1] + (ZETA_ENDPOINT - z[-1]) % ZETA_ENDPOINT
-                dz[1:-1] = z[2:] - z[:-2]
-                dz[-1] = z[0] + (ZETA_ENDPOINT - z[-2]) % ZETA_ENDPOINT
-                dz /= 2
-                dz *= NFP
-                if z.size == 2:
-                    dz[-1] = dz[0]
-                if z[0] == 0 and z[-1] == ZETA_ENDPOINT:
-                    # The cyclic distance algorithm above correctly weights
-                    # the duplicate node spacing at zeta = 0 and 2pi / NFP.
-                    # However, scale_weights() is not aware of this, so we
-                    # counteract the reduction that will be done there.
-                    dz[0] += dz[-1]
-                    dz[-1] = dz[0]
-            else:
-                dz = np.array([ZETA_ENDPOINT])
+            z, dz = map(np.asarray, _periodic_spacing(zeta, zeta_period, sort=True))
+            dz = dz * NFP
+            if z[0] == 0 and z[-1] == zeta_period:
+                # _periodic_spacing algorithm above correctly weights
+                # the duplicate node spacing at zeta = 0 and 2π/NFP.
+                # However, scale_weights() is not aware of this, so we
+                # counteract the reduction that will be done there.
+                dz[0] += dz[-1]
+                dz[-1] = dz[0]
 
         self._poloidal_endpoint = (
             t.size > 0
             and np.isclose(t[0], 0, atol=1e-12)
-            and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
+            and np.isclose(t[-1], theta_period, atol=1e-12)
         )
         self._toroidal_endpoint = (
             z.size > 0
             and np.isclose(z[0], 0, atol=1e-12)
-            and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
+            and np.isclose(z[-1], zeta_period, atol=1e-12)
         )
         # if only one theta or one zeta point, can have endpoint=True
         # if the other one is a full array
@@ -1390,13 +1407,7 @@ class ConcentricGrid(_Grid):
         elif rho[0] == 0:
             rho[0] = rho[1] / 10
 
-        drho = np.zeros_like(rho)
-        if rho.size > 1:
-            drho[0] = (rho[0] + rho[1]) / 2
-            drho[1:-1] = (rho[2:] - rho[:-2]) / 2
-            drho[-1] = 1 - (rho[-2] + rho[-1]) / 2
-        else:
-            drho = np.array([1.0])
+        drho = _midpoint_spacing(rho)
         r = []
         t = []
         dr = []
@@ -1775,3 +1786,63 @@ def find_least_rational_surfaces(
     io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
     rho = _find_rho(iota, io, tol=atol)
     return rho, io
+
+
+def _periodic_spacing(x, period=2 * jnp.pi, sort=False):
+    """Compute dx between points in x assuming periodicity.
+
+    Parameters
+    ----------
+    x : Array
+        Points, assumed sorted in the cyclic domain [0, period], unless
+        specified otherwise.
+    period : float
+        Number such that x + period = x.
+    sort : bool
+        Set to true if x is not sorted in the cyclic domain [0, period].
+
+    Returns
+    -------
+    x, dx : Array
+        Points in [0, period] and assigned spacing.
+
+    """
+    x = jnp.where(x == period, x, x % period)
+    if sort:
+        x = jnp.sort(x, axis=0)
+    # choose dx to be half the distance between its neighbors
+    if x.size > 1:
+        dx_0 = x[1] + (period - x[-1]) % period
+        dx_1 = x[0] + (period - x[-2]) % period
+        if x.size == 2:
+            # then dx[0] == period and dx[-1] == 0, so fix this
+            dx_1 = dx_0
+        dx = jnp.hstack([dx_0, x[2:] - x[:-2], dx_1]) / 2
+    else:
+        dx = jnp.array([period])
+    return x, dx
+
+
+def _midpoint_spacing(x):
+    """Compute dx between points in x in [0, 1].
+
+    Parameters
+    ----------
+    x : Array
+        Points in [0, 1], assumed sorted.
+
+    Returns
+    -------
+    dx : Array
+        Spacing assigned to points in x.
+
+    """
+    if x.size > 1:
+        # choose dx such that cumulative sums of dx[] are node midpoints
+        # and the total sum is 1
+        dx_0 = (x[0] + x[1]) / 2
+        dx_1 = 1 - (x[-2] + x[-1]) / 2
+        dx = jnp.hstack([dx_0, (x[2:] - x[:-2]) / 2, dx_1])
+    else:
+        dx = jnp.array([1.0])
+    return dx

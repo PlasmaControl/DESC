@@ -200,6 +200,7 @@ class TestGrid:
         """Test surface spacing on grids with sym=False."""
         self._test_node_spacing_non_sym(False, 8, 13, 3)
         self._test_node_spacing_non_sym(True, 8, 13, 3)
+        self._test_node_spacing_non_sym(False, 1, 1, 3)
 
     @staticmethod
     def _test_node_spacing_non_sym(
@@ -736,16 +737,16 @@ class TestGrid:
     def test_meshgrid(self):
         """Test meshgrid constructor."""
         R = np.linspace(0, 1, 4)
-        T = np.linspace(0, 2 * np.pi, 2)
+        A = np.linspace(0, 2 * np.pi, 2)
         Z = np.linspace(0, 10 * np.pi, 3)
-        grid = Grid.create_meshgrid(R, T, Z)
-        r, t, z = grid.nodes.T
+        grid = Grid.create_meshgrid([R, A, Z], coordinates="raz")
+        r, a, z = grid.nodes.T
         _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
         np.testing.assert_allclose(grid.unique_rho_idx, unique)
         np.testing.assert_allclose(grid.inverse_rho_idx, inverse)
-        _, unique, inverse = np.unique(t, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_theta_idx, unique)
-        np.testing.assert_allclose(grid.inverse_theta_idx, inverse)
+        _, unique, inverse = np.unique(a, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(grid.unique_alpha_idx, unique)
+        np.testing.assert_allclose(grid.inverse_alpha_idx, inverse)
         _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
         np.testing.assert_allclose(grid.unique_zeta_idx, unique)
         np.testing.assert_allclose(grid.inverse_zeta_idx, inverse)

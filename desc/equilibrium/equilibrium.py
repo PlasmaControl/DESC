@@ -27,7 +27,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid, _Grid
+from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -836,6 +836,27 @@ class Equilibrium(IOAble, Optimizable):
             msg="must pass in a Grid object for argument grid!"
             f" instead got type {type(grid)}",
         )
+        if grid.coordinates != "rtz":
+            inbasis = {
+                "r": "rho",
+                "t": "theta",
+                "p": "theta_PEST",
+                "a": "alpha",
+                "z": "zeta",
+            }
+            rtz_nodes = self.map_coordinates(
+                grid.nodes,
+                inbasis=[inbasis[char] for char in grid.coordinates],
+                outbasis=("rho", "theta", "zeta"),
+                period=grid.period,
+            )
+            grid = Grid(
+                nodes=rtz_nodes,
+                coordinates="rtz",
+                source_grid=grid,
+                sort=False,
+                jitable=False,
+            )
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)
@@ -863,7 +884,7 @@ class Equilibrium(IOAble, Optimizable):
             # the compute logic assume input data is evaluated on those coordinates.
             # We exclude these from the depXdx sets below since the grids we will
             # use to compute those dependencies are coordinate-blind.
-            return "source_grid" in data_index[p][name]["grid_requirement"]
+            return bool(data_index[p][name]["source_grid_requirement"])
 
         need_src_deps = _grow_seeds(set(filter(need_src, deps)), deps)
 

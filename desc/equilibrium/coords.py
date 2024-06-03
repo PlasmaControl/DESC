@@ -203,7 +203,6 @@ def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
     elif poloidal == "alpha":
         alpha = coords[:, inbasis.index("alpha")]
         iota = profiles["iota"](rho)
-        # why not alpha % (2 * jnp.pi) + iota * zeta % (user supplied period)?
         theta = (alpha + iota * zeta) % (2 * jnp.pi)
 
     yk = jnp.array([rho, theta, zeta]).T
@@ -540,7 +539,9 @@ def rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
         DESC coordinate grid for the given coordinates.
 
     """
-    grid = Grid.create_meshgrid([radial, poloidal, toroidal], coordinates=coordinates)
+    grid = Grid.create_meshgrid(
+        [radial, poloidal, toroidal], coordinates=coordinates, period=period
+    )
     inbasis = {
         "r": "rho",
         "t": "theta",

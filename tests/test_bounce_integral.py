@@ -85,7 +85,7 @@ def test_reshape_convention():
     rho = np.linspace(0, 1, 3)
     alpha = np.linspace(0, 2 * np.pi, 4)
     zeta = np.linspace(0, 6 * np.pi, 5)
-    grid = Grid.create_meshgrid(rho, alpha, zeta, coordinates="raz")
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
     r, a, z = grid.nodes.T
     # functions of zeta should separate along first two axes
     # since those are contiguous, this should work
@@ -461,9 +461,11 @@ def test_bounce_integral_checks():
     # (∫ f(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ)
     eq = get("HELIOTRON")
     rho = np.linspace(1e-12, 1, 6)
-    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 5)
+    alpha = np.linspace(0, 2 * np.pi, 5)
     knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
-    grid = rtz_grid(eq, rho, alpha, knots, coordinates="raz")
+    grid = rtz_grid(
+        eq, rho, alpha, knots, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+    )
     data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a", "g_zz"], grid=grid)
     bounce_integrate, spline = bounce_integral(
         data["B^zeta"],
@@ -604,7 +606,9 @@ def test_drift():
     iota = grid_fsa.compress(data["iota"]).item()
     alpha = 0
     zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-    grid = rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+    grid = rtz_grid(
+        eq, rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+    )
 
     data = eq.compute(
         [

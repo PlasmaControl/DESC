@@ -137,20 +137,16 @@ def _compute(
                     **kwargs,
                 )
         if "grid" in transforms:
-            for req in data_index[parameterization][name]["grid_requirement"]:
-                warnif(
-                    isinstance(req, Grid) and not isinstance(transforms["grid"], req),
-                    msg=f"Expected {req} to compute {name},"
-                    f" but got {type(transforms['grid'])}.",
-                )
+            reqs = data_index[parameterization][name]["source_grid_requirement"]
+            errorif(
+                reqs and (getattr(transforms["grid"], "source_grid", None) is None),
+                msg=f"Expected grid with attribute 'source_grid' to compute {name}.",
+            )
+            for req in reqs:
                 errorif(
-                    isinstance(req, str) and not hasattr(transforms["grid"], req),
-                    msg=f"Expected grid with attribute '{req}' to compute {name}.",
-                )
-                errorif(
-                    callable(req) and not req(transforms["grid"]),
-                    msg=f"Expected requirement to compute {name}"
-                    f" not satisfied by {transforms['grid']}.",
+                    not hasattr(transforms["grid"].source_grid, req)
+                    or reqs[req] != getattr(transforms["grid"].source_grid, req),
+                    msg=f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](

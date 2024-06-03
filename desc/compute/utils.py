@@ -139,7 +139,7 @@ def _compute(
         if "grid" in transforms:
             reqs = data_index[parameterization][name]["source_grid_requirement"]
             errorif(
-                reqs and (getattr(transforms["grid"], "source_grid", None) is None),
+                reqs and not hasattr(transforms["grid"], "source_grid"),
                 msg=f"Expected grid with attribute 'source_grid' to compute {name}.",
             )
             for req in reqs:

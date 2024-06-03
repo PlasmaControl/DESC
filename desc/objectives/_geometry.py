@@ -1757,7 +1757,7 @@ class UmbilicDistance(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="Umbilic curvature",
+        name="Umbilic distance",
     ):
 
         if target is None and bounds is None:
@@ -2109,15 +2109,15 @@ class UmbilicHighCurvature2(_Objective):
             self._eq = eq
         if self._equil_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
-            theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
+            theta_arr = jnp.linspace(0, 2 * jnp.pi, 81)
             equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
             equil_grid = self._equil_grid
 
         self._dim_f = int(curve_grid.num_nodes)
 
-        self._eq_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
-        self._eq_data_keys2 = ["curvature_k2_rho"]
+        self._equil_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
+        self._equil_data_keys2 = ["curvature_k2_rho"]
         self._curve_data_keys = ["R", "phi", "Z"]
 
         timer = Timer()
@@ -2135,14 +2135,14 @@ class UmbilicHighCurvature2(_Objective):
         # The profiles and transforms to obtain
         # rpz values of an rtz grid do not change
         eq_profiles1 = get_profiles(
-            self._eq_data_keys1,
+            self._equil_data_keys1,
             obj=eq,
             grid=equil_grid,
             has_axis=equil_grid.axis.size,
         )
 
         eq_transforms1 = get_transforms(
-            self._eq_data_keys1,
+            self._equil_data_keys1,
             obj=eq,
             grid=equil_grid,
             has_axis=equil_grid.axis.size,
@@ -2201,9 +2201,6 @@ class UmbilicHighCurvature2(_Objective):
         if constants is None:
             constants = self.constants
 
-        eq = self.things[0]
-        curve = self.things[1]
-
         if self._curve_fixed:
             curve_coords = constants["curve_coords"]
             curve_R = curve_coords["R"]
@@ -2211,7 +2208,7 @@ class UmbilicHighCurvature2(_Objective):
             curve_Z = curve_coords["Z"]
         else:
             curve_data = compute_fun(
-                curve,
+                self._curve,
                 self._curve_data_keys,
                 params=params_2,
                 transforms=constants["curve_transforms"],
@@ -2226,8 +2223,8 @@ class UmbilicHighCurvature2(_Objective):
 
         # Then, we obtain a grid of points on the plasma boundary
         eq_data = compute_fun(
-            eq,
-            self._eq_data_keys1,
+            self._eq,
+            self._equil_data_keys1,
             params=params_1,
             transforms=constants["eq_transforms1"],
             profiles=constants["eq_profiles1"],
@@ -2241,7 +2238,7 @@ class UmbilicHighCurvature2(_Objective):
 
         min_dist_points = jnp.argmin(dist, axis=0)
 
-        eq_rtz_grid_points = np.array(
+        eq_rtz_grid_points = jnp.array(
             [eq_data["rho"], eq_data["theta"], eq_data["zeta"]]
         ).T
 
@@ -2252,14 +2249,14 @@ class UmbilicHighCurvature2(_Objective):
 
         equil_profiles2 = get_profiles(
             self._equil_data_keys2,
-            obj=eq,
+            obj=self._eq,
             grid=umbilic_edge_grid,
             has_axis=umbilic_edge_grid.axis.size,
             jitable=True,
         )
         equil_transforms2 = get_transforms(
             self._equil_data_keys2,
-            obj=eq,
+            obj=self._eq,
             grid=umbilic_edge_grid,
             has_axis=umbilic_edge_grid.axis.size,
             jitable=True,
@@ -2267,7 +2264,7 @@ class UmbilicHighCurvature2(_Objective):
 
         # now compute the curvature
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self._eq,
             self._equil_data_keys2,
             params=params_1,
             profiles=equil_profiles2,
@@ -2401,15 +2398,16 @@ class UmbilicLowCurvature2(_Objective):
             self._eq = eq
         if self._equil_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
-            theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
+            theta_arr = jnp.linspace(0, 2 * jnp.pi, 81)
             equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
             equil_grid = self._equil_grid
 
-        self._dim_f = int(curve_grid.num_nodes)
+        # There are two curves on which we impose a low curvature
+        self._dim_f = int(2 * curve_grid.num_nodes)
 
-        self._eq_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
-        self._eq_data_keys2 = ["curvature_k2_rho"]
+        self._equil_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
+        self._equil_data_keys2 = ["curvature_k2_rho"]
         self._curve_data_keys = ["R", "phi", "Z"]
 
         timer = Timer()
@@ -2425,14 +2423,14 @@ class UmbilicLowCurvature2(_Objective):
         )
 
         eq_profiles1 = get_profiles(
-            self._eq_data_keys1,
+            self._equil_data_keys1,
             obj=eq,
             grid=equil_grid,
             has_axis=equil_grid.axis.size,
         )
 
         eq_transforms1 = get_transforms(
-            self._eq_data_keys1,
+            self._equil_data_keys1,
             obj=eq,
             grid=equil_grid,
             has_axis=equil_grid.axis.size,
@@ -2491,9 +2489,6 @@ class UmbilicLowCurvature2(_Objective):
         if constants is None:
             constants = self.constants
 
-        eq = self.things[0]
-        curve = self.things[1]
-
         if self._curve_fixed:
             curve_coords = constants["curve_coords"]
             curve_R = curve_coords["R"]
@@ -2501,7 +2496,7 @@ class UmbilicLowCurvature2(_Objective):
             curve_Z = curve_coords["Z"]
         else:
             curve_data = compute_fun(
-                curve,
+                self._curve,
                 self._curve_data_keys,
                 params=params_2,
                 transforms=constants["curve_transforms"],
@@ -2515,8 +2510,8 @@ class UmbilicLowCurvature2(_Objective):
 
         # First, we obtain a grid of points on the plasma boundary
         eq_data = compute_fun(
-            eq,
-            self._eq_data_keys1,
+            self._eq,
+            self._equil_data_keys1,
             params=params_1,
             transforms=constants["eq_transforms1"],
             profiles=constants["eq_profiles1"],
@@ -2530,7 +2525,7 @@ class UmbilicLowCurvature2(_Objective):
 
         min_dist_points = jnp.argmin(dist, axis=0)
 
-        eq_rtz_grid_points = np.array(
+        eq_rtz_grid_points = jnp.array(
             [eq_data["rho"], eq_data["theta"], eq_data["zeta"]]
         ).T
 
@@ -2549,14 +2544,14 @@ class UmbilicLowCurvature2(_Objective):
 
         equil_profiles2 = get_profiles(
             self._equil_data_keys2,
-            obj=eq,
+            obj=self._eq,
             grid=umbilic_middle_grid,
             has_axis=umbilic_middle_grid.axis.size,
             jitable=True,
         )
         equil_transforms2 = get_transforms(
             self._equil_data_keys2,
-            obj=eq,
+            obj=self._eq,
             grid=umbilic_middle_grid,
             has_axis=umbilic_middle_grid.axis.size,
             jitable=True,
@@ -2564,7 +2559,7 @@ class UmbilicLowCurvature2(_Objective):
 
         # now compute the curvature
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self._eq,
             self._equil_data_keys2,
             params=params_1,
             profiles=equil_profiles2,
@@ -2627,7 +2622,7 @@ class UmbilicDistance2(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Umbilic curvature: {:10.3e} "
+    _print_value_fmt = "Umbilic distance: {:10.3e} "
 
     def __init__(
         self,
@@ -2644,11 +2639,11 @@ class UmbilicDistance2(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="Umbilic curvature",
+        name="Umbilic distance",
     ):
 
         if target is None and bounds is None:
-            target = -10
+            target = 0.0
 
         self._eq = eq
         self._curve = curve
@@ -2698,15 +2693,15 @@ class UmbilicDistance2(_Objective):
             self._eq = eq
         if self._equil_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
-            theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
+            theta_arr = jnp.linspace(0, 2 * jnp.pi, 81)
             equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
             equil_grid = self._equil_grid
 
-        self._dim_f = int(curve_grid.num_nodes)
+        self._dim_f = int(1)
 
-        self._eq_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
-        self._eq_data_keys2 = ["curvature_k2_rho"]
+        self._equil_data_keys1 = ["R", "phi", "Z", "rho", "theta", "zeta"]
+        self._equil_data_keys2 = ["curvature_k2_rho"]
         self._curve_data_keys = ["R", "phi", "Z"]
 
         timer = Timer()
@@ -2722,14 +2717,14 @@ class UmbilicDistance2(_Objective):
         )
 
         eq_profiles1 = get_profiles(
-            self._eq_data_keys1,
+            self._equil_data_keys1,
             obj=eq,
             grid=equil_grid,
             has_axis=equil_grid.axis.size,
         )
 
         eq_transforms1 = get_transforms(
-            self._eq_data_keys1,
+            self._equil_data_keys1,
             obj=eq,
             grid=equil_grid,
             has_axis=equil_grid.axis.size,
@@ -2788,9 +2783,6 @@ class UmbilicDistance2(_Objective):
         if constants is None:
             constants = self.constants
 
-        eq = self.things[0]
-        curve = self.things[1]
-
         if self._curve_fixed:
             curve_coords = constants["curve_coords"]
             curve_R = curve_coords["R"]
@@ -2798,7 +2790,7 @@ class UmbilicDistance2(_Objective):
             curve_Z = curve_coords["Z"]
         else:
             curve_data = compute_fun(
-                curve,
+                self._curve,
                 self._curve_data_keys,
                 params=params_2,
                 transforms=constants["curve_transforms"],
@@ -2812,8 +2804,8 @@ class UmbilicDistance2(_Objective):
 
         # First, we obtain a grid of points on the plasma boundary
         eq_data = compute_fun(
-            eq,
-            self._eq_data_keys1,
+            self._eq,
+            self._equil_data_keys1,
             params=params_1,
             transforms=constants["eq_transforms1"],
             profiles=constants["eq_profiles1"],
@@ -2827,6 +2819,8 @@ class UmbilicDistance2(_Objective):
 
         min_dist_points = jnp.argmin(dist, axis=0)
 
-        distance = jnp.linalg.norm(dist[min_dist_points])
+        distance = jnp.linalg.norm(
+            jnp.take_along_axis(dist, min_dist_points[None, :], axis=0)[0]
+        )
 
         return distance

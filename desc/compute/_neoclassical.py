@@ -323,6 +323,9 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         "to change optional parameters such as quadrature resolution, etc.)."
     ),
     batch="bool : Whether to perform computation in a batched manner.",
+    # Composite quadrature should perform better than higher order methods.
+    # TODO: Two layers of pitch for quadrature, linearly spaced minB to maxB
+    #  and then second layer for extrema in fixed [0, zeta*].
     quad=(
         "callable : Quadrature method over velocity coordinate. "
         "Default is composite Simpson's rule. "
@@ -381,7 +384,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     def dK(B, pitch):
         return 1 / jnp.sqrt(1 - pitch * B)
 
-    if _is_Newton_Cotes(quad):
+    if not _is_adaptive(quad):
         bounce_integrate, _ = bounce(
             data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots
         )
@@ -447,7 +450,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     Gamma_c = (
         jnp.pi
         / (4 * 2**0.5)
-        * _poloidal_average(g, Gamma_c.reshape(g.num_rho, g.num_alpha) / data["L|r,a"])
+        * _poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha) / data["L|r,a"])
     )
     data["Gamma_c"] = g.expand(Gamma_c)
     return data

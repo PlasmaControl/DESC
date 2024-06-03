@@ -139,7 +139,7 @@ def _compute(
         if "grid" in transforms:
             reqs = data_index[parameterization][name]["source_grid_requirement"]
             errorif(
-                reqs and (getattr(transforms["grid"], "source_grid", None) is None),
+                reqs and not hasattr(transforms["grid"], "source_grid"),
                 msg=f"Expected grid with attribute 'source_grid' to compute {name}.",
             )
             for req in reqs:
@@ -203,7 +203,9 @@ def _get_deps_1_key(key, p, has_axis):
     return sorted(set(out))
 
 
-def _grow_seeds(seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium"):
+def _grow_seeds(
+    seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium", has_axis=False
+):
     """Traverse the dependency DAG for keys in search space dependent on seeds.
 
     Parameters
@@ -215,6 +217,8 @@ def _grow_seeds(seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium
     p: str
         Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
         or `desc.equilibrium.Equilibrium`.
+    has_axis : bool
+        Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
@@ -224,7 +228,9 @@ def _grow_seeds(seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium
     """
     out = seeds.copy()
     for key in search_space:
-        deps = data_index[p][key]["full_with_axis_dependencies"]["data"]
+        deps = data_index[p][key][
+            "full_with_axis_dependencies" if has_axis else "full_dependencies"
+        ]["data"]
         if not seeds.isdisjoint(deps):
             out.add(key)
     return out

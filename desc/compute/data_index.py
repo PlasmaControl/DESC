@@ -66,7 +66,7 @@ def register_compute_fun(
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
     resolution_requirement="",
-    grid_requirement=None,
+    source_grid_requirement=None,
     axis_limit_data=None,
     **kwargs,
 ):
@@ -108,17 +108,9 @@ def register_compute_fun(
     resolution_requirement : str
         Resolution requirements in coordinates. I.e. "r" expects radial resolution
         in the grid, "rtz" expects grid to radial, poloidal, and toroidal resolution.
-    grid_requirement : list of str or callable or Grid
-        Particular attributes of the grid on which the immediate dependencies
-        should be computed that should be true. E.g.
-        is_meshgrid : str
-            Whether the grid is separable into coordinate chunks.
-            Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
-            coordinate value. The meshgrid flag denotes whether any coordinate
-            can be iterated over along the relevant axis of the reshaped grid:
-            nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
-        fft : str
-            Whether the grid is sorted for fast fourier transform.
+    source_grid_requirement : dict
+        Attributes of the source grid that the compute function requires.
+        Also assumes dependencies were computed on such a grid.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
 
@@ -129,10 +121,8 @@ def register_compute_fun(
     """
     if aliases is None:
         aliases = []
-    if grid_requirement is None:
-        grid_requirement = []
-    if not isinstance(grid_requirement, (tuple, list)):
-        grid_requirement = [grid_requirement]
+    if source_grid_requirement is None:
+        source_grid_requirement = {}
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
 
@@ -162,7 +152,7 @@ def register_compute_fun(
             "dependencies": deps,
             "aliases": aliases,
             "resolution_requirement": resolution_requirement,
-            "grid_requirement": grid_requirement,
+            "source_grid_requirement": source_grid_requirement,
         }
         for p in parameterization:
             flag = False

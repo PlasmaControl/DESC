@@ -11,27 +11,21 @@ expensive computations.
 
 from functools import partial
 
-import orthax
 import quadax
 from termcolor import colored
 
 from desc.backend import jit, jnp, trapezoid
 
 from ..utils import warnif
-from .bounce_integral import (
-    affine_bijection,
-    bounce_integral,
-    get_pitch,
-    grad_affine_bijection,
-)
+from .bounce_integral import bounce_integral, get_pitch
 from .data_index import register_compute_fun
 
 
-def _is_Newton_Cotes(quad):
-    if hasattr(quad, "is_Newton_Cotes"):
-        return quad.is_Newton_Cotes
+def _is_adaptive(quad):
+    if hasattr(quad, "is_adaptive"):
+        return quad.is_adaptive
     else:
-        return quad in [trapezoid, quadax.trapezoid, quadax.simpson]
+        return quad not in [trapezoid, quadax.trapezoid, quadax.simpson]
 
 
 def vec_quadax(quad):
@@ -48,7 +42,7 @@ def vec_quadax(quad):
         Vectorized adaptive quadrature method.
 
     """
-    if _is_Newton_Cotes(quad):
+    if not _is_adaptive(quad):
         return quad
 
     def vec_quad(fun, interval, B_sup_z, B, B_z_ra, arg1, arg2):
@@ -60,62 +54,18 @@ def vec_quadax(quad):
     return vec_quad
 
 
-def poloidal_leggauss(deg, a_min=0, a_max=2 * jnp.pi):
-    """Gauss-Legendre quadrature.
-
-    Returns quadrature points αₖ and weights wₖ for the approximate evaluation
-    of the integral ∫ f(α) dα ≈ ∑ₖ wₖ f(αₖ).
-
-    Set resolution > 1 to see if a long field line integral can be approximated
-    by flux surface average of shorter field line integrals with finite transits.
-
-    Assuming the rotational transform is irrational, the limit where the
-    parameterization of the field line length tends to infinity of an average
-    along the field line will converge to a flux surface average.
-    In theory, we can compute such quantities with averages over finite lengths
-    of the field line, e.g. one toroidal transit, for many values of the poloidal
-    field line label and then average this over the poloidal domain.
-
-    This should also work for integrands which are bounce integrals;
-    Since everything is continuous, as the number of nodes tend to infinity both
-    approaches should converge to the same result, assuming irrational surface.
-    However, the order at which all the bounce integrals detected over the surface
-    are summed differs, so the convergence rate will differ.
-
-    Parameters
-    ----------
-    deg: int
-        Number of quadrature points.
-    a_min: float
-        Min α value.
-    a_max: float
-        Max α value.
-
-    Returns
-    -------
-    alpha : Array
-        Quadrature points.
-    w : Array
-        Quadrature weights.
-
-    """
-    x, w = orthax.legendre.leggauss(deg)
-    w = w * grad_affine_bijection(a_min, a_max)
-    alpha = affine_bijection(x, a_min, a_max)
-    return alpha, w
-
-
-def _poloidal_average(grid, f, name=""):
+def _poloidal_mean(grid, f):
     assert f.shape[-1] == grid.num_poloidal
-    if grid.poloidal_weight is None:
+    if grid.spacing is None:
         warnif(
             grid.num_poloidal != 1,
-            msg=colored(f"{name} reduced via uniform poloidal mean.", "yellow"),
+            msg=colored("Reduced via uniform poloidal mean.", "yellow"),
         )
-        avg = jnp.mean(f, axis=-1)
+        return jnp.mean(f, axis=-1)
     else:
-        avg = f @ grid.poloidal_weight / jnp.sum(grid.poloidal_weight)
-    return avg
+        assert grid.is_meshgrid
+        dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
+        return f @ dp / jnp.sum(dp)
 
 
 def _get_pitch(grid, data, quad, num=75):
@@ -123,7 +73,7 @@ def _get_pitch(grid, data, quad, num=75):
     # with num values uniformly spaced in between.
     min_B = grid.compress(data["min_tz |B|"])
     max_B = grid.compress(data["max_tz |B|"])
-    if _is_Newton_Cotes(quad):
+    if not _is_adaptive(quad):
         pitch = get_pitch(min_B, max_B, num)
         pitch = jnp.broadcast_to(
             pitch[..., jnp.newaxis], (pitch.shape[0], grid.num_rho, grid.num_alpha)
@@ -147,11 +97,7 @@ def _get_pitch(grid, data, quad, num=75):
     profiles=[],
     coordinates="ra",
     data=["B^zeta"],
-    grid_requirement=[
-        "source_grid",
-        lambda grid: grid.source_grid.coordinates == "raz"
-        and grid.source_grid.is_meshgrid,
-    ],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _L_ra(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
@@ -177,11 +123,7 @@ def _L_ra(data, transforms, profiles, **kwargs):
     profiles=[],
     coordinates="ra",
     data=["B^zeta", "sqrt(g)"],
-    grid_requirement=[
-        "source_grid",
-        lambda grid: grid.source_grid.coordinates == "raz"
-        and grid.source_grid.is_meshgrid,
-    ],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _G_ra(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
@@ -215,17 +157,14 @@ def _G_ra(data, transforms, profiles, **kwargs):
         "kappa_g",
         "L|r,a",
     ],
-    grid_requirement=[
-        "source_grid",
-        lambda grid: grid.source_grid.coordinates == "raz"
-        and grid.source_grid.is_meshgrid,
-    ],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     bounce_integral=(
         "callable : Method to compute bounce integrals. "
         "(You may want to wrap desc.compute.bounce_integral.bounce_integral "
         "to change optional parameters such as quadrature resolution, etc.)."
     ),
     batch="bool : Whether to perform computation in a batched manner.",
+    # Composite quadrature should perform better than higher order methods.
     quad=(
         "callable : Quadrature method over velocity coordinate. "
         "Default is composite Simpson's rule. "
@@ -265,7 +204,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         # Integrand of Nemov equation 31.
         return jnp.sqrt(1 - pitch * B) / B
 
-    if _is_Newton_Cotes(quad):
+    if not _is_adaptive(quad):
         bounce_integrate, _ = bounce(
             data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots
         )
@@ -317,9 +256,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         ]
         ripple = quad(d_ripple, pitch, *args)
 
-    ripple = _poloidal_average(
-        g, ripple.reshape(g.num_rho, g.num_alpha) / data["L|r,a"]
-    )
+    ripple = _poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha) / data["L|r,a"])
     data["effective ripple raw"] = g.expand(ripple)
     return data
 

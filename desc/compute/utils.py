@@ -137,20 +137,16 @@ def _compute(
                     **kwargs,
                 )
         if "grid" in transforms:
-            for req in data_index[parameterization][name]["grid_requirement"]:
-                warnif(
-                    isinstance(req, Grid) and not isinstance(transforms["grid"], req),
-                    msg=f"Expected {req} to compute {name},"
-                    f" but got {type(transforms['grid'])}.",
-                )
+            reqs = data_index[parameterization][name]["source_grid_requirement"]
+            errorif(
+                reqs and not hasattr(transforms["grid"], "source_grid"),
+                msg=f"Expected grid with attribute 'source_grid' to compute {name}.",
+            )
+            for req in reqs:
                 errorif(
-                    isinstance(req, str) and not hasattr(transforms["grid"], req),
-                    msg=f"Expected grid with attribute '{req}' to compute {name}.",
-                )
-                errorif(
-                    callable(req) and not req(transforms["grid"]),
-                    msg=f"Expected requirement to compute {name}"
-                    f" not satisfied by {transforms['grid']}.",
+                    not hasattr(transforms["grid"].source_grid, req)
+                    or reqs[req] != getattr(transforms["grid"].source_grid, req),
+                    msg=f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
@@ -207,7 +203,9 @@ def _get_deps_1_key(key, p, has_axis):
     return sorted(set(out))
 
 
-def _grow_seeds(seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium"):
+def _grow_seeds(
+    seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium", has_axis=False
+):
     """Traverse the dependency DAG for keys in search space dependent on seeds.
 
     Parameters
@@ -219,6 +217,8 @@ def _grow_seeds(seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium
     p: str
         Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
         or `desc.equilibrium.Equilibrium`.
+    has_axis : bool
+        Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
@@ -228,7 +228,9 @@ def _grow_seeds(seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium
     """
     out = seeds.copy()
     for key in search_space:
-        deps = data_index[p][key]["full_with_axis_dependencies"]["data"]
+        deps = data_index[p][key][
+            "full_with_axis_dependencies" if has_axis else "full_dependencies"
+        ]["data"]
         if not seeds.isdisjoint(deps):
             out.add(key)
     return out
@@ -644,82 +646,6 @@ def safediv(a, b, fill=0, threshold=0):
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
-
-
-def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
-    """Cumulatively integrate y(x) using the composite trapezoidal rule.
-
-    Taken from SciPy, but changed NumPy references to JAX.NumPy:
-        https://github.com/scipy/scipy/blob/v1.10.1/scipy/integrate/_quadrature.py
-
-    Parameters
-    ----------
-    y : array_like
-        Values to integrate.
-    x : array_like, optional
-        The coordinate to integrate along. If None (default), use spacing `dx`
-        between consecutive elements in `y`.
-    dx : float, optional
-        Spacing between elements of `y`. Only used if `x` is None.
-    axis : int, optional
-        Specifies the axis to cumulate. Default is -1 (last axis).
-    initial : scalar, optional
-        If given, insert this value at the beginning of the returned result.
-        Typically, this value should be 0. Default is None, which means no
-        value at ``x[0]`` is returned and `res` has one element less than `y`
-        along the axis of integration.
-
-    Returns
-    -------
-    res : ndarray
-        The result of cumulative integration of `y` along `axis`.
-        If `initial` is None, the shape is such that the axis of integration
-        has one less value than `y`. If `initial` is given, the shape is equal
-        to that of `y`.
-
-    """
-    y = jnp.asarray(y)
-    if x is None:
-        d = dx
-    else:
-        x = jnp.asarray(x)
-        if x.ndim == 1:
-            d = jnp.diff(x)
-            # reshape to correct shape
-            shape = [1] * y.ndim
-            shape[axis] = -1
-            d = d.reshape(shape)
-        elif len(x.shape) != len(y.shape):
-            raise ValueError("If given, shape of x must be 1-D or the " "same as y.")
-        else:
-            d = jnp.diff(x, axis=axis)
-
-        if d.shape[axis] != y.shape[axis] - 1:
-            raise ValueError(
-                "If given, length of x along axis must be the " "same as y."
-            )
-
-    def tupleset(t, i, value):
-        l = list(t)
-        l[i] = value
-        return tuple(l)
-
-    nd = len(y.shape)
-    slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))
-    slice2 = tupleset((slice(None),) * nd, axis, slice(None, -1))
-    res = jnp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
-
-    if initial is not None:
-        if not jnp.isscalar(initial):
-            raise ValueError("`initial` parameter should be a scalar.")
-
-        shape = list(res.shape)
-        shape[axis] = 1
-        res = jnp.concatenate(
-            [jnp.full(shape, initial, dtype=res.dtype), res], axis=axis
-        )
-
-    return res
 
 
 def _get_grid_surface(grid, surface_label):

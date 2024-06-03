@@ -1220,16 +1220,11 @@ class FiniteElementBasis(_FE_Basis):
                 intervals,
                 basis_functions,
             ) = self.mesh.find_tetrahedra_corresponding_to_points(Rho_Theta_Zeta)
-<<<<<<< HEAD
-            print(basis_functions)
-        inds = i * self.Q + q
-        basis_functions = np.reshape(basis_functions, (len(t), -1))
-=======
+
 
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
         print(basis_functions, inds)
->>>>>>> 83033d4dd (Making fixes to the find_tetrahedra function. Latest error is with the indexing of the rho_theta_zeta mesh in the get barycentric coordinates function.)
         return basis_functions[:, inds]
 
     def change_resolution(self, L, M, N):
@@ -2345,16 +2340,11 @@ class FiniteElementMesh3D:
 
         """
         tetrahedra_indices = np.zeros(rho_theta_zeta.shape[0])
-<<<<<<< HEAD
+
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.I_LMN * self.Q))
         for i in range(rho_theta_zeta.shape[0]):
             P = rho_theta_zeta[i]
-=======
-        basis_functions = np.zeros((rho_theta_zeta.shape[0], self.I_5LMN * self.Q))
-        for i in range(rho_theta_zeta.shape[0]):
-            P = rho_theta_zeta[i]
 
->>>>>>> 83033d4dd (Making fixes to the find_tetrahedra function. Latest error is with the indexing of the rho_theta_zeta mesh in the get barycentric coordinates function.)
             for j, tetrahedron in enumerate(self.tetrahedra):
                 v1 = tetrahedron.vertices[0, :]
                 v2 = tetrahedron.vertices[1, :]
@@ -2401,25 +2391,6 @@ class FiniteElementMesh3D:
                     ]
                 )
 
-<<<<<<< HEAD
-                Det0 = np.linalg.det(D0)
-                Det1 = np.linalg.det(D1)
-                Det2 = np.linalg.det(D2)
-                Det3 = np.linalg.det(D3)
-                Det4 = np.linalg.det(D4)
-
-                # Check whether point lies inside tetrahedra:
-                print(Det0, Det1, Det2, Det3, Det4)
-                if (
-                    np.sign(Det0) == np.sign(Det1)
-                    and np.sign(Det0) == np.sign(Det2)
-                    and np.sign(Det0) == np.sign(Det3)
-                    and np.sign(Det0) == np.sign(Det4)
-                ):
-                    print('Success, j = ', j)
-                    tetrahedra_indices[i] = j
-                    basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = tetrahedron.get_basis_functions(P.reshape(1, 3))
-=======
                 Det0 = np.abs(np.linalg.det(D0))
                 Det1 = np.abs(np.linalg.det(D1))
                 Det2 = np.abs(np.linalg.det(D2))
@@ -2442,7 +2413,6 @@ class FiniteElementMesh3D:
                     )
 
                     break  # found the right tetrahedron, so break out of j loop
->>>>>>> 83033d4dd (Making fixes to the find_tetrahedra function. Latest error is with the indexing of the rho_theta_zeta mesh in the get barycentric coordinates function.)
         return tetrahedra_indices, basis_functions
 
 
@@ -3075,10 +3045,6 @@ class TetrahedronFiniteElement:
         """
         eta = []
         rho_theta_zeta_in_tetrahedron = []
-<<<<<<< HEAD
-=======
-
->>>>>>> 83033d4dd (Making fixes to the find_tetrahedra function. Latest error is with the indexing of the rho_theta_zeta mesh in the get barycentric coordinates function.)
         for i in range(rho_theta_zeta.shape[0]):
 
             g_v = self.vertices
@@ -3086,15 +3052,10 @@ class TetrahedronFiniteElement:
             D_1 = np.array(
                 [
                     [
-<<<<<<< HEAD
+
                         rho_theta_zeta[i][0],
                         rho_theta_zeta[i][1],
                         rho_theta_zeta[i][2],
-=======
-                        rho_theta_zeta[i, 0],
-                        rho_theta_zeta[i, 1],
-                        rho_theta_zeta[i, 2],
->>>>>>> 83033d4dd (Making fixes to the find_tetrahedra function. Latest error is with the indexing of the rho_theta_zeta mesh in the get barycentric coordinates function.)
                         1,
                     ],
                     [g_v[1][0], g_v[1][1], g_v[1][2], 1],
@@ -3154,7 +3115,7 @@ class TetrahedronFiniteElement:
             eta_2 = d_2 / self.det
             eta_3 = d_3 / self.det
             eta_4 = d_4 / self.det
-<<<<<<< HEAD
+
             
             # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
             # is not sufficient because sometimes numerical errors
@@ -3164,23 +3125,12 @@ class TetrahedronFiniteElement:
             ind_3 = ((eta_3 < 0) and (not np.isclose(eta_3, 0.0)))
             ind_4 = ((eta_4 < 0) and (not np.isclose(eta_4, 0.0)))
             if ind_1 and ind_2 and ind_3 and ind_4:
-=======
 
-            eta = np.array([eta_1, eta_2, eta_3, eta_4])
-
-            # Check that all points are indeed inside the tetrahedron
-            # for j in range(4):
-            if eta[0] < 0 or eta[1] < 0 or eta[2] < 0 or eta[3] < 0:
->>>>>>> 83033d4dd (Making fixes to the find_tetrahedra function. Latest error is with the indexing of the rho_theta_zeta mesh in the get barycentric coordinates function.)
                 warnings.warn(
                     "Found rho_theta_zeta points outside the tetrahedron ... "
                     "Not using these points to evaluate the barycentric "
                     "coordinates."
                 )
-<<<<<<< HEAD
-=======
-
->>>>>>> 83033d4dd (Making fixes to the find_tetrahedra function. Latest error is with the indexing of the rho_theta_zeta mesh in the get barycentric coordinates function.)
             else:
                 eta.append(eta_1)
                 eta.append(eta_2)

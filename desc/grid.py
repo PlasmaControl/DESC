@@ -1807,6 +1807,7 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False):
         Points in [0, period] and assigned spacing.
 
     """
+    x = jnp.atleast_1d(x)
     x = jnp.where(x == period, x, x % period)
     if sort:
         x = jnp.sort(x, axis=0)
@@ -1837,6 +1838,7 @@ def _midpoint_spacing(x):
         Spacing assigned to points in x.
 
     """
+    x = jnp.atleast_1d(x)
     if x.size > 1:
         # choose dx such that cumulative sums of dx[] are node midpoints
         # and the total sum is 1

@@ -739,7 +739,9 @@ class TestGrid:
         R = np.linspace(0, 1, 4)
         A = np.linspace(0, 2 * np.pi, 2)
         Z = np.linspace(0, 10 * np.pi, 3)
-        grid = Grid.create_meshgrid([R, A, Z], coordinates="raz")
+        grid = Grid.create_meshgrid(
+            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+        )
         r, a, z = grid.nodes.T
         _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
         np.testing.assert_allclose(grid.unique_rho_idx, unique)

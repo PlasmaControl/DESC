@@ -118,6 +118,7 @@ not_implemented_limits = add_all_aliases(not_implemented_limits)
 not_implemented_limits = _grow_seeds(
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
+    has_axis=True,
 )
 
 

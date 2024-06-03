@@ -966,7 +966,7 @@ class LinearGrid(_Grid):
             dr = np.ones_like(r) / r.size
         else:
             r = np.sort(np.atleast_1d(rho))
-            dr = _midpoint_spacing(r, use_numpy=True)
+            dr = _midpoint_spacing(r, jnp=np)
 
         # theta
         if M is not None:
@@ -1007,7 +1007,7 @@ class LinearGrid(_Grid):
                 t = t[: np.searchsorted(t, np.pi, side="right")]
             if t.size > 1:
                 if not self.sym:
-                    dt = _periodic_spacing(t, theta_period, use_numpy=True)[1]
+                    dt = _periodic_spacing(t, theta_period, jnp=np)[1]
                     if t[0] == 0 and t[-1] == theta_period:
                         # _periodic_spacing above correctly weights
                         # the duplicate endpoint node spacing at theta = 0 and 2π
@@ -1066,7 +1066,7 @@ class LinearGrid(_Grid):
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
         else:
-            z, dz = _periodic_spacing(zeta, zeta_period, sort=True, use_numpy=True)
+            z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP
             if z[0] == 0 and z[-1] == zeta_period:
                 # _periodic_spacing above correctly weights
@@ -1405,7 +1405,7 @@ class ConcentricGrid(_Grid):
         elif rho[0] == 0:
             rho[0] = rho[1] / 10
 
-        drho = _midpoint_spacing(rho, use_numpy=True)
+        drho = _midpoint_spacing(rho, jnp=np)
         r = []
         t = []
         dr = []
@@ -1786,7 +1786,7 @@ def find_least_rational_surfaces(
     return rho, io
 
 
-def _periodic_spacing(x, period=2 * jnp.pi, sort=False, use_numpy=False):
+def _periodic_spacing(x, period=2 * jnp.pi, sort=False, jnp=jnp):
     """Compute dx between points in x assuming periodicity.
 
     Parameters
@@ -1805,8 +1805,6 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False, use_numpy=False):
         Points in [0, period] and assigned spacing.
 
     """
-    if use_numpy:
-        jnp = np
     x = jnp.atleast_1d(x)
     x = jnp.where(x == period, x, x % period)
     if sort:
@@ -1824,7 +1822,7 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False, use_numpy=False):
     return x, dx
 
 
-def _midpoint_spacing(x, use_numpy=False):
+def _midpoint_spacing(x, jnp=jnp):
     """Compute dx between points in x in [0, 1].
 
     Parameters
@@ -1838,8 +1836,6 @@ def _midpoint_spacing(x, use_numpy=False):
         Spacing assigned to points in x.
 
     """
-    if use_numpy:
-        jnp = np
     x = jnp.atleast_1d(x)
     if x.size > 1:
         # choose dx such that cumulative sums of dx[] are node midpoints

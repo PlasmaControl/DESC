@@ -1,3 +1,4 @@
+import nvtx
 from interpax import interp1d
 
 from desc.backend import jnp
@@ -7,6 +8,7 @@ from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_
 from .utils import cross, dot, safenormalize
 
 
+@nvtx.annotate("s")
 @register_compute_fun(
     name="s",
     label="s",
@@ -26,6 +28,7 @@ def _s(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("ds")
 @register_compute_fun(
     name="ds",
     label="ds",
@@ -45,6 +48,7 @@ def _ds(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x")
 @register_compute_fun(
     name="X",
     label="X",
@@ -202,6 +206,7 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_s")
 @register_compute_fun(
     name="x_s",
     label="\\partial_{s} \\mathbf{x}",
@@ -253,6 +258,7 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_ss")
 @register_compute_fun(
     name="x_ss",
     label="\\partial_{ss} \\mathbf{x}",
@@ -309,6 +315,7 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_sss")
 @register_compute_fun(
     name="x_sss",
     label="\\partial_{sss} \\mathbf{x}",
@@ -372,6 +379,7 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x")
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
@@ -403,6 +411,7 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_s")
 @register_compute_fun(
     name="x_s",
     label="\\partial_{s} \\mathbf{x}",
@@ -433,6 +442,7 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_ss")
 @register_compute_fun(
     name="x_ss",
     label="\\partial_{ss} \\mathbf{x}",
@@ -467,6 +477,7 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_sss")
 @register_compute_fun(
     name="x_sss",
     label="\\partial_{sss} \\mathbf{x}",
@@ -505,6 +516,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x")
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
@@ -534,6 +546,7 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_s")
 @register_compute_fun(
     name="x_s",
     label="\\partial_{s} \\mathbf{x}",
@@ -569,6 +582,7 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_ss")
 @register_compute_fun(
     name="x_ss",
     label="\\partial_{ss} \\mathbf{x}",
@@ -604,6 +618,7 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_sss")
 @register_compute_fun(
     name="x_sss",
     label="\\partial_{sss} \\mathbf{x}",
@@ -639,6 +654,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x")
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
@@ -692,6 +708,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_s")
 @register_compute_fun(
     name="x_s",
     label="\\partial_{s} \\mathbf{x}",
@@ -776,6 +793,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_ss")
 @register_compute_fun(
     name="x_ss",
     label="\\partial_{ss} \\mathbf{x}",
@@ -859,6 +877,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("x_sss")
 @register_compute_fun(
     name="x_sss",
     label="\\partial_{sss} \\mathbf{x}",
@@ -943,6 +962,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("frenet_tangent")
 @register_compute_fun(
     name="frenet_tangent",
     label="\\mathbf{T}_{\\mathrm{Frenet-Serret}}",
@@ -964,6 +984,7 @@ def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("frenet_normal")
 @register_compute_fun(
     name="frenet_normal",
     label="\\mathbf{N}_{\\mathrm{Frenet-Serret}}",
@@ -985,6 +1006,7 @@ def _frenet_normal(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("frenet_binormal")
 @register_compute_fun(
     name="frenet_binormal",
     label="\\mathbf{B}_{\\mathrm{Frenet-Serret}}",
@@ -1006,6 +1028,7 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("curvature")
 @register_compute_fun(
     name="curvature",
     label="\\kappa",
@@ -1028,6 +1051,7 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("torsion")
 @register_compute_fun(
     name="torsion",
     label="\\tau",
@@ -1048,6 +1072,7 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("length")
 @register_compute_fun(
     name="length",
     label="L",
@@ -1074,6 +1099,7 @@ def _length(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("length")
 @register_compute_fun(
     name="length",
     label="L",

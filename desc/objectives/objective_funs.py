@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from functools import partial
 
 import numpy as np
+import nvtx
 
 from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
@@ -235,6 +236,7 @@ class ObjectiveFunction(IOAble):
         self._unflatten = unflatten
         self._flatten = flatten
 
+    @nvtx.annotate("compute_unscaled")
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
 
@@ -262,6 +264,7 @@ class ObjectiveFunction(IOAble):
         )
         return f
 
+    @nvtx.annotate("compute_scaled")
     def compute_scaled(self, x, constants=None):
         """Compute the objective function and apply weighting and normalization.
 
@@ -289,6 +292,7 @@ class ObjectiveFunction(IOAble):
         )
         return f
 
+    @nvtx.annotate("compute_scaled_error")
     def compute_scaled_error(self, x, constants=None):
         """Compute and apply the target/bounds, weighting, and normalization.
 
@@ -316,6 +320,7 @@ class ObjectiveFunction(IOAble):
         )
         return f
 
+    @nvtx.annotate("compute_scalar")
     def compute_scalar(self, x, constants=None):
         """Compute the sum of squares error.
 
@@ -408,36 +413,42 @@ class ObjectiveFunction(IOAble):
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
 
+    @nvtx.annotate("grad")
     def grad(self, x, constants=None):
         """Compute gradient vector of self.compute_scalar wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_1d(self._grad(x, constants).squeeze())
 
+    @nvtx.annotate("hess")
     def hess(self, x, constants=None):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._hess(x, constants).squeeze())
 
+    @nvtx.annotate("jac_scaled")
     def jac_scaled(self, x, constants=None):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_scaled(x, constants).squeeze())
 
+    @nvtx.annotate("jac_scaled_error")
     def jac_scaled_error(self, x, constants=None):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_scaled_error(x, constants).squeeze())
 
+    @nvtx.annotate("jac_unscaled")
     def jac_unscaled(self, x, constants=None):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_unscaled(x, constants).squeeze())
 
+    @nvtx.annotate("_jvp")
     def _jvp(self, v, x, constants=None, op="compute_scaled"):
         v = v if isinstance(v, (tuple, list)) else (v,)
 
@@ -456,6 +467,7 @@ class ObjectiveFunction(IOAble):
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
+    @nvtx.annotate("jvp_scaled")
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
 
@@ -472,6 +484,7 @@ class ObjectiveFunction(IOAble):
         """
         return self._jvp(v, x, constants, "compute_scaled")
 
+    @nvtx.annotate("jvp_scaled_error")
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
@@ -488,6 +501,7 @@ class ObjectiveFunction(IOAble):
         """
         return self._jvp(v, x, constants, "compute_scaled_error")
 
+    @nvtx.annotate("jvp_unscaled")
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
 
@@ -504,10 +518,12 @@ class ObjectiveFunction(IOAble):
         """
         return self._jvp(v, x, constants, "compute_unscaled")
 
+    @nvtx.annotate("_vjp")
     def _vjp(self, v, x, constants=None, op="compute_scaled"):
         fun = lambda x: getattr(self, op)(x, constants)
         return Derivative.compute_vjp(fun, 0, v, x)
 
+    @nvtx.annotate("vjp_scaled")
     def vjp_scaled(self, v, x, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.
 
@@ -523,6 +539,7 @@ class ObjectiveFunction(IOAble):
         """
         return self._vjp(v, x, constants, "compute_scaled")
 
+    @nvtx.annotate("vjp_scaled_error")
     def vjp_scaled_error(self, v, x, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled_error.
 
@@ -538,6 +555,7 @@ class ObjectiveFunction(IOAble):
         """
         return self._vjp(v, x, constants, "compute_scaled_error")
 
+    @nvtx.annotate("vjp_unscaled")
     def vjp_unscaled(self, v, x, constants=None):
         """Compute vector-Jacobian product of self.compute_unscaled.
 

@@ -9,6 +9,7 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import nvtx
 from scipy.constants import mu_0
 
 from desc.backend import jnp
@@ -32,6 +33,7 @@ from .utils import cross, dot, safediv, safenorm, surface_averages
     axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
 )
+@nvtx.annotate("J^rho")
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis,
     # ∂_θ (𝐁 ⋅ 𝐞_ζ) - ∂_ζ (𝐁 ⋅ 𝐞_θ) = 𝐁 ⋅ (∂_θ 𝐞_ζ - ∂_ζ 𝐞_θ) = 0
@@ -60,6 +62,7 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B_rho_z", "B_zeta_r"],
 )
+@nvtx.annotate("J^theta*sqrt(g)")
 def _J_sup_theta_sqrt_g(params, transforms, profiles, data, **kwargs):
     data["J^theta*sqrt(g)"] = (data["B_rho_z"] - data["B_zeta_r"]) / mu_0
     return data
@@ -78,6 +81,7 @@ def _J_sup_theta_sqrt_g(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["sqrt(g)", "J^theta*sqrt(g)"],
 )
+@nvtx.annotate("J^theta")
 def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     data["J^theta"] = data["J^theta*sqrt(g)"] / data["sqrt(g)"]
     return data
@@ -97,6 +101,7 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     data=["sqrt(g)", "B_theta_r", "B_rho_t"],
     axis_limit_data=["sqrt(g)_r", "B_theta_rr", "B_rho_rt"],
 )
+@nvtx.annotate("J^zeta")
 def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis,
     # ∂ᵨ (𝐁 ⋅ 𝐞_θ) - ∂_θ (𝐁 ⋅ 𝐞ᵨ) = 𝐁 ⋅ (∂ᵨ 𝐞_θ - ∂_θ 𝐞ᵨ) = 0
@@ -131,6 +136,7 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
         "e_theta/sqrt(g)",
     ],
 )
+@nvtx.annotate("J")
 def _J(params, transforms, profiles, data, **kwargs):
     data["J"] = (
         data["J^rho"] * data["e_rho"].T
@@ -163,6 +169,7 @@ def _J(params, transforms, profiles, data, **kwargs):
         "e_zeta",
     ],
 )
+@nvtx.annotate("J*sqrt(g)")
 def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
     data["J*sqrt(g)"] = (
         (data["B_zeta_t"] - data["B_theta_z"]) * data["e_rho"].T
@@ -205,6 +212,7 @@ def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
         "e_zeta_r",
     ],
 )
+@nvtx.annotate("(J*sqrt(g))_r")
 def _J_sqrt_g_r(params, transforms, profiles, data, **kwargs):
     data["(J*sqrt(g))_r"] = (
         (data["B_zeta_rt"] - data["B_theta_rz"]) * data["e_rho"].T
@@ -230,6 +238,7 @@ def _J_sqrt_g_r(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J"],
 )
+@nvtx.annotate("J_R")
 def _J_R(params, transforms, profiles, data, **kwargs):
     data["J_R"] = data["J"][:, 0]
     return data
@@ -248,6 +257,7 @@ def _J_R(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J"],
 )
+@nvtx.annotate("J_phi")
 def _J_phi(params, transforms, profiles, data, **kwargs):
     data["J_phi"] = data["J"][:, 1]
     return data
@@ -266,6 +276,7 @@ def _J_phi(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J"],
 )
+@nvtx.annotate("J_Z")
 def _J_Z(params, transforms, profiles, data, **kwargs):
     data["J_Z"] = data["J"][:, 2]
     return data
@@ -284,6 +295,7 @@ def _J_Z(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J"],
 )
+@nvtx.annotate("|J|")
 def _Jmag(params, transforms, profiles, data, **kwargs):
     data["|J|"] = safenorm(data["J"], axis=-1)
     return data
@@ -302,6 +314,7 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J", "e_rho"],
 )
+@nvtx.annotate("J_rho")
 def _J_sub_rho(params, transforms, profiles, data, **kwargs):
     data["J_rho"] = dot(data["J"], data["e_rho"])
     return data
@@ -320,6 +333,7 @@ def _J_sub_rho(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J", "e_theta"],
 )
+@nvtx.annotate("J_theta")
 def _J_sub_theta(params, transforms, profiles, data, **kwargs):
     data["J_theta"] = dot(data["J"], data["e_theta"])
     return data
@@ -338,6 +352,7 @@ def _J_sub_theta(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J", "e_zeta"],
 )
+@nvtx.annotate("J_zeta")
 def _J_sub_zeta(params, transforms, profiles, data, **kwargs):
     data["J_zeta"] = dot(data["J"], data["e_zeta"])
     return data
@@ -357,6 +372,7 @@ def _J_sub_zeta(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J", "B"],
 )
+@nvtx.annotate("J*B")
 def _J_dot_B(params, transforms, profiles, data, **kwargs):
     data["J*B"] = dot(data["J"], data["B"])
     return data
@@ -377,6 +393,7 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
     data=["J*sqrt(g)", "B", "V_r(r)"],
     axis_limit_data=["(J*sqrt(g))_r", "V_rr(r)"],
 )
+@nvtx.annotate("<J*B>")
 def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
     J = transforms["grid"].replace_at_axis(
         data["J*sqrt(g)"], lambda: data["(J*sqrt(g))_r"], copy=True
@@ -404,6 +421,7 @@ def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["J*B", "|B|"],
 )
+@nvtx.annotate("J_parallel")
 def _J_parallel(params, transforms, profiles, data, **kwargs):
     data["J_parallel"] = data["J*B"] / data["|B|"]
     return data
@@ -422,6 +440,7 @@ def _J_parallel(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["p_r", "(curl(B)xB)_rho"],
 )
+@nvtx.annotate("F_rho")
 def _F_rho(params, transforms, profiles, data, **kwargs):
     data["F_rho"] = data["(curl(B)xB)_rho"] / mu_0 - data["p_r"]
     return data
@@ -440,6 +459,7 @@ def _F_rho(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["F_helical", "B^zeta"],
 )
+@nvtx.annotate("F_theta")
 def _F_theta(params, transforms, profiles, data, **kwargs):
     data["F_theta"] = -data["B^zeta"] * data["F_helical"]
     return data
@@ -458,6 +478,7 @@ def _F_theta(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B^theta", "F_helical"],
 )
+@nvtx.annotate("F_zeta")
 def _F_zeta(params, transforms, profiles, data, **kwargs):
     data["F_zeta"] = data["B^theta"] * data["F_helical"]
     return data
@@ -476,6 +497,7 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B_zeta_t", "B_theta_z"],
 )
+@nvtx.annotate("F_helical")
 def _F_helical(params, transforms, profiles, data, **kwargs):
     data["F_helical"] = (data["B_zeta_t"] - data["B_theta_z"]) / mu_0
     return data
@@ -494,6 +516,7 @@ def _F_helical(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["F_rho", "F_zeta", "e^rho", "e^zeta", "B^zeta", "J^rho", "e^theta*sqrt(g)"],
 )
+@nvtx.annotate("F")
 def _F(params, transforms, profiles, data, **kwargs):
     # F_theta e^theta refactored as below to resolve indeterminacy at axis.
     data["F"] = (
@@ -517,6 +540,7 @@ def _F(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["F"],
 )
+@nvtx.annotate("|F|")
 def _Fmag(params, transforms, profiles, data, **kwargs):
     data["|F|"] = safenorm(data["F"], axis=-1)
     return data
@@ -535,6 +559,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["|F|", "sqrt(g)", "V"],
 )
+@nvtx.annotate("<|F|>_vol")
 def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data["<|F|>_vol"] = (
         jnp.sum(data["|F|"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
@@ -555,6 +580,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B^theta", "B^zeta", "e^theta", "e^zeta"],
 )
+@nvtx.annotate("e^helical")
 def _e_sup_helical(params, transforms, profiles, data, **kwargs):
     data["e^helical"] = (
         data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
@@ -596,6 +622,7 @@ def _e_sup_helical_times_sqrt_g(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^helical"],
 )
+@nvtx.annotate("|e^helical|")
 def _e_sup_helical_mag(params, transforms, profiles, data, **kwargs):
     data["|e^helical|"] = jnp.linalg.norm(data["e^helical"], axis=-1)
     return data
@@ -632,6 +659,7 @@ def _e_sup_helical_times_sqrt_g_mag(params, transforms, profiles, data, **kwargs
     coordinates="rtz",
     data=["J", "B", "grad(beta_a)", "beta_a", "grad(|B|^2)", "grad(p)"],
 )
+@nvtx.annotate("F_anisotropic")
 def _F_anisotropic(params, transforms, profiles, data, **kwargs):
     data["F_anisotropic"] = (
         (1 - data["beta_a"]) * cross(data["J"], data["B"]).T
@@ -656,6 +684,7 @@ def _F_anisotropic(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["|B|", "sqrt(g)"],
 )
+@nvtx.annotate("W_B")
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
         data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
@@ -676,6 +705,7 @@ def _W_B(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["B", "sqrt(g)"],
 )
+@nvtx.annotate("W_Bpol")
 def _W_Bpol(params, transforms, profiles, data, **kwargs):
     data["W_Bpol"] = jnp.sum(
         dot(data["B"][:, (0, 2)], data["B"][:, (0, 2)])
@@ -698,6 +728,7 @@ def _W_Bpol(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["B", "sqrt(g)"],
 )
+@nvtx.annotate("W_Btor")
 def _W_Btor(params, transforms, profiles, data, **kwargs):
     data["W_Btor"] = jnp.sum(
         data["B"][:, 1] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
@@ -719,6 +750,7 @@ def _W_Btor(params, transforms, profiles, data, **kwargs):
     data=["p", "sqrt(g)"],
     gamma="float: Adiabatic index. Default 0",
 )
+@nvtx.annotate("W_p")
 def _W_p(params, transforms, profiles, data, **kwargs):
     data["W_p"] = jnp.sum(data["p"] * data["sqrt(g)"] * transforms["grid"].weights) / (
         kwargs.get("gamma", 0) - 1
@@ -739,6 +771,7 @@ def _W_p(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["W_B", "W_p"],
 )
+@nvtx.annotate("W")
 def _W(params, transforms, profiles, data, **kwargs):
     data["W"] = data["W_B"] + data["W_p"]
     return data
@@ -757,6 +790,7 @@ def _W(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["W_p", "W_B"],
 )
+@nvtx.annotate("<beta>_vol")
 def _beta_vol(params, transforms, profiles, data, **kwargs):
     data["<beta>_vol"] = jnp.abs(data["W_p"] / data["W_B"])
     return data
@@ -775,6 +809,7 @@ def _beta_vol(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["W_p", "W_Bpol"],
 )
+@nvtx.annotate("<beta_pol>_vol")
 def _beta_volpol(params, transforms, profiles, data, **kwargs):
     data["<beta_pol>_vol"] = jnp.abs(data["W_p"] / data["W_Bpol"])
     return data
@@ -793,6 +828,7 @@ def _beta_volpol(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["W_p", "W_Btor"],
 )
+@nvtx.annotate("<beta_tor>_vol")
 def _beta_voltor(params, transforms, profiles, data, **kwargs):
     data["<beta_tor>_vol"] = jnp.abs(data["W_p"] / data["W_Btor"])
     return data

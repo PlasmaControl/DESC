@@ -1,10 +1,13 @@
 """Core compute functions, for polar, flux, and cartesian coordinates."""
 
+import nvtx
+
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
 
 
+@nvtx.annotate("0")
 @register_compute_fun(
     name="0",
     label="0",
@@ -28,6 +31,7 @@ def _0(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R")
 @register_compute_fun(
     name="R",
     label="R",
@@ -46,6 +50,7 @@ def _R(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_r")
 @register_compute_fun(
     name="R_r",
     label="\\partial_{\\rho} R",
@@ -68,6 +73,7 @@ def _R_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rr")
 @register_compute_fun(
     name="R_rr",
     label="\\partial_{\\rho \\rho} R",
@@ -90,6 +96,7 @@ def _R_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrr")
 @register_compute_fun(
     name="R_rrr",
     label="\\partial_{\\rho \\rho \\rho} R",
@@ -112,6 +119,7 @@ def _R_rrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrrr")
 @register_compute_fun(
     name="R_rrrr",
     label="\\partial_{\\rho \\rho \\rho \\rho} R",
@@ -134,6 +142,7 @@ def _R_rrrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrrt")
 @register_compute_fun(
     name="R_rrrt",
     label="\\partial_{\\rho \\rho \\rho \\theta} R",
@@ -157,6 +166,7 @@ def _R_rrrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrrz")
 @register_compute_fun(
     name="R_rrrz",
     label="\\partial_{\\rho \\rho \\rho \\zeta} R",
@@ -176,6 +186,7 @@ def _R_rrrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrt")
 @register_compute_fun(
     name="R_rrt",
     label="\\partial_{\\rho \\rho \\theta} R",
@@ -199,6 +210,7 @@ def _R_rrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrtt")
 @register_compute_fun(
     name="R_rrtt",
     label="\\partial_{\\rho \\rho \\theta \\theta} R",
@@ -222,6 +234,7 @@ def _R_rrtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrtz")
 @register_compute_fun(
     name="R_rrtz",
     label="\\partial_{\\rho \\rho \\theta \\zeta} R",
@@ -245,6 +258,7 @@ def _R_rrtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrz")
 @register_compute_fun(
     name="R_rrz",
     label="\\partial_{\\rho \\rho \\zeta} R",
@@ -264,6 +278,7 @@ def _R_rrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rrzz")
 @register_compute_fun(
     name="R_rrzz",
     label="\\partial_{\\rho \\rho \\zeta \\zeta} R",
@@ -283,6 +298,7 @@ def _R_rrzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rt")
 @register_compute_fun(
     name="R_rt",
     label="\\partial_{\\rho \\theta} R",
@@ -306,6 +322,7 @@ def _R_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rtt")
 @register_compute_fun(
     name="R_rtt",
     label="\\partial_{\\rho \\theta \\theta} R",
@@ -329,6 +346,7 @@ def _R_rtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rttt")
 @register_compute_fun(
     name="R_rttt",
     label="\\partial_{\\rho \\theta \\theta \\theta} R",
@@ -352,6 +370,7 @@ def _R_rttt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rttz")
 @register_compute_fun(
     name="R_rttz",
     label="\\partial_{\\rho \\theta \\theta \\zeta} R",
@@ -371,6 +390,7 @@ def _R_rttz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rtz")
 @register_compute_fun(
     name="R_rtz",
     label="\\partial_{\\rho \\theta \\zeta} R",
@@ -390,6 +410,7 @@ def _R_rtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rtzz")
 @register_compute_fun(
     name="R_rtzz",
     label="\\partial_{\\rho \\theta \\zeta \\zeta} R",
@@ -409,6 +430,7 @@ def _R_rtzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rz")
 @register_compute_fun(
     name="R_rz",
     label="\\partial_{\\rho \\zeta} R",
@@ -428,6 +450,7 @@ def _R_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rzz")
 @register_compute_fun(
     name="R_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} R",
@@ -447,6 +470,7 @@ def _R_rzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_rzzz")
 @register_compute_fun(
     name="R_rzzz",
     label="\\partial_{\\rho \\zeta \\zeta \\zeta} R",
@@ -466,6 +490,7 @@ def _R_rzzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_t")
 @register_compute_fun(
     name="R_t",
     label="\\partial_{\\theta} R",
@@ -488,6 +513,7 @@ def _R_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_tt")
 @register_compute_fun(
     name="R_tt",
     label="\\partial_{\\theta \\theta} R",
@@ -510,6 +536,7 @@ def _R_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_ttt")
 @register_compute_fun(
     name="R_ttt",
     label="\\partial_{\\theta \\theta \\theta} R",
@@ -532,6 +559,7 @@ def _R_ttt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_ttz")
 @register_compute_fun(
     name="R_ttz",
     label="\\partial_{\\theta \\theta \\zeta} R",
@@ -555,6 +583,7 @@ def _R_ttz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_tz")
 @register_compute_fun(
     name="R_tz",
     label="\\partial_{\\theta \\zeta} R",
@@ -578,6 +607,7 @@ def _R_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_tzz")
 @register_compute_fun(
     name="R_tzz",
     label="\\partial_{\\theta \\zeta \\zeta} R",
@@ -601,6 +631,7 @@ def _R_tzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_z")
 @register_compute_fun(
     name="R_z",
     label="\\partial_{\\zeta} R",
@@ -623,6 +654,7 @@ def _R_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_zz")
 @register_compute_fun(
     name="R_zz",
     label="\\partial_{\\zeta \\zeta} R",
@@ -645,6 +677,7 @@ def _R_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("R_zzz")
 @register_compute_fun(
     name="R_zzz",
     label="\\partial_{\\zeta \\zeta \\zeta} R",
@@ -667,6 +700,7 @@ def _R_zzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("X")
 @register_compute_fun(
     name="X",
     label="X = R \\cos{\\phi}",
@@ -685,6 +719,7 @@ def _X(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("X_r")
 @register_compute_fun(
     name="X_r",
     label="\\partial_{\\rho} X",
@@ -706,6 +741,7 @@ def _X_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("X_t")
 @register_compute_fun(
     name="X_t",
     label="\\partial_{\\theta} X",
@@ -727,6 +763,7 @@ def _X_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("X_z")
 @register_compute_fun(
     name="X_z",
     label="\\partial_{\\zeta} X",
@@ -748,6 +785,7 @@ def _X_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Y")
 @register_compute_fun(
     name="Y",
     label="Y = R \\sin{\\phi}",
@@ -766,6 +804,7 @@ def _Y(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Y_r")
 @register_compute_fun(
     name="Y_r",
     label="\\partial_{\\rho} Y",
@@ -787,6 +826,7 @@ def _Y_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Y_t")
 @register_compute_fun(
     name="Y_t",
     label="\\partial_{\\theta} Y",
@@ -808,6 +848,7 @@ def _Y_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Y_z")
 @register_compute_fun(
     name="Y_z",
     label="\\partial_{\\zeta} Y",
@@ -829,6 +870,7 @@ def _Y_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z")
 @register_compute_fun(
     name="Z",
     label="Z",
@@ -847,6 +889,7 @@ def _Z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_r")
 @register_compute_fun(
     name="Z_r",
     label="\\partial_{\\rho} Z",
@@ -869,6 +912,7 @@ def _Z_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rr")
 @register_compute_fun(
     name="Z_rr",
     label="\\partial_{\\rho \\rho} Z",
@@ -891,6 +935,7 @@ def _Z_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrr")
 @register_compute_fun(
     name="Z_rrr",
     label="\\partial_{\\rho \\rho \\rho} Z",
@@ -913,6 +958,7 @@ def _Z_rrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrrr")
 @register_compute_fun(
     name="Z_rrrr",
     label="\\partial_{\\rho \\rho \\rho \\rho} Z",
@@ -935,6 +981,7 @@ def _Z_rrrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrrt")
 @register_compute_fun(
     name="Z_rrrt",
     label="\\partial_{\\rho \\rho \\rho \\theta} Z",
@@ -958,6 +1005,7 @@ def _Z_rrrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrrz")
 @register_compute_fun(
     name="Z_rrrz",
     label="\\partial_{\\rho \\rho \\rho \\zeta} Z",
@@ -977,6 +1025,7 @@ def _Z_rrrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrt")
 @register_compute_fun(
     name="Z_rrt",
     label="\\partial_{\\rho \\rho \\theta} Z",
@@ -1000,6 +1049,7 @@ def _Z_rrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrtt")
 @register_compute_fun(
     name="Z_rrtt",
     label="\\partial_{\\rho \\rho \\theta} Z",
@@ -1023,6 +1073,7 @@ def _Z_rrtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrtz")
 @register_compute_fun(
     name="Z_rrtz",
     label="\\partial_{\\rho \\rho \\theta \\zeta} Z",
@@ -1042,6 +1093,7 @@ def _Z_rrtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrz")
 @register_compute_fun(
     name="Z_rrz",
     label="\\partial_{\\rho \\rho \\zeta} Z",
@@ -1061,6 +1113,7 @@ def _Z_rrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rrzz")
 @register_compute_fun(
     name="Z_rrzz",
     label="\\partial_{\\rho \\rho \\zeta \\zeta} Z",
@@ -1080,6 +1133,7 @@ def _Z_rrzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rt")
 @register_compute_fun(
     name="Z_rt",
     label="\\partial_{\\rho \\theta} Z",
@@ -1103,6 +1157,7 @@ def _Z_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rtt")
 @register_compute_fun(
     name="Z_rtt",
     label="\\partial_{\\rho \\theta \\theta} Z",
@@ -1126,6 +1181,7 @@ def _Z_rtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rttt")
 @register_compute_fun(
     name="Z_rttt",
     label="\\partial_{\\rho \\theta \\theta \\theta} Z",
@@ -1149,6 +1205,7 @@ def _Z_rttt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rttz")
 @register_compute_fun(
     name="Z_rttz",
     label="\\partial_{\\rho \\theta \\theta \\zeta} Z",
@@ -1168,6 +1225,7 @@ def _Z_rttz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rtz")
 @register_compute_fun(
     name="Z_rtz",
     label="\\partial_{\\rho \\theta \\zeta} Z",
@@ -1187,6 +1245,7 @@ def _Z_rtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rtzz")
 @register_compute_fun(
     name="Z_rtzz",
     label="\\partial_{\\rho \\theta \\zeta \\zeta} Z",
@@ -1206,6 +1265,7 @@ def _Z_rtzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rz")
 @register_compute_fun(
     name="Z_rz",
     label="\\partial_{\\rho \\zeta} Z",
@@ -1225,6 +1285,7 @@ def _Z_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rzz")
 @register_compute_fun(
     name="Z_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} Z",
@@ -1244,6 +1305,7 @@ def _Z_rzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_rzzz")
 @register_compute_fun(
     name="Z_rzzz",
     label="\\partial_{\\rho \\zeta \\zeta \\zeta} Z",
@@ -1263,6 +1325,7 @@ def _Z_rzzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_t")
 @register_compute_fun(
     name="Z_t",
     label="\\partial_{\\theta} Z",
@@ -1285,6 +1348,7 @@ def _Z_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_tt")
 @register_compute_fun(
     name="Z_tt",
     label="\\partial_{\\theta \\theta} Z",
@@ -1307,6 +1371,7 @@ def _Z_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_ttt")
 @register_compute_fun(
     name="Z_ttt",
     label="\\partial_{\\theta \\theta \\theta} Z",
@@ -1329,6 +1394,7 @@ def _Z_ttt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_ttz")
 @register_compute_fun(
     name="Z_ttz",
     label="\\partial_{\\theta \\theta \\zeta} Z",
@@ -1352,6 +1418,7 @@ def _Z_ttz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_tz")
 @register_compute_fun(
     name="Z_tz",
     label="\\partial_{\\theta \\zeta} Z",
@@ -1375,6 +1442,7 @@ def _Z_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_tzz")
 @register_compute_fun(
     name="Z_tzz",
     label="\\partial_{\\theta \\zeta \\zeta} Z",
@@ -1398,6 +1466,7 @@ def _Z_tzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_z")
 @register_compute_fun(
     name="Z_z",
     label="\\partial_{\\zeta} Z",
@@ -1420,6 +1489,7 @@ def _Z_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_zz")
 @register_compute_fun(
     name="Z_zz",
     label="\\partial_{\\zeta \\zeta} Z",
@@ -1442,6 +1512,7 @@ def _Z_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Z_zzz")
 @register_compute_fun(
     name="Z_zzz",
     label="\\partial_{\\zeta \\zeta \\zeta} Z",
@@ -1464,6 +1535,7 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("alpha")
 @register_compute_fun(
     name="alpha",
     label="\\alpha",
@@ -1482,6 +1554,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("alpha_r")
 @register_compute_fun(
     name="alpha_r",
     label="\\partial_\\rho \\alpha",
@@ -1504,6 +1577,7 @@ def _alpha_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("alpha_t")
 @register_compute_fun(
     name="alpha_t",
     label="\\partial_\\theta \\alpha",
@@ -1522,6 +1596,7 @@ def _alpha_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("alpha_z")
 @register_compute_fun(
     name="alpha_z",
     label="\\partial_\\zeta \\alpha",
@@ -1540,6 +1615,7 @@ def _alpha_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda")
 @register_compute_fun(
     name="lambda",
     label="\\lambda",
@@ -1558,6 +1634,7 @@ def _lambda(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_r")
 @register_compute_fun(
     name="lambda_r",
     label="\\partial_{\\rho} \\lambda",
@@ -1576,6 +1653,7 @@ def _lambda_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rr")
 @register_compute_fun(
     name="lambda_rr",
     label="\\partial_{\\rho \\rho} \\lambda",
@@ -1594,6 +1672,7 @@ def _lambda_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rrr")
 @register_compute_fun(
     name="lambda_rrr",
     label="\\partial_{\\rho \\rho \\rho} \\lambda",
@@ -1612,6 +1691,7 @@ def _lambda_rrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rrrt")
 @register_compute_fun(
     name="lambda_rrrt",
     label="\\partial_{\\rho \\rho \\rho \\theta} \\lambda",
@@ -1631,6 +1711,7 @@ def _lambda_rrrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rrrz")
 @register_compute_fun(
     name="lambda_rrrz",
     label="\\partial_{\\rho \\rho \\rho \\zeta} \\lambda",
@@ -1650,6 +1731,7 @@ def _lambda_rrrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rrt")
 @register_compute_fun(
     name="lambda_rrt",
     label="\\partial_{\\rho \\rho \\theta} \\lambda",
@@ -1669,6 +1751,7 @@ def _lambda_rrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rrz")
 @register_compute_fun(
     name="lambda_rrz",
     label="\\partial_{\\rho \\rho \\zeta} \\lambda",
@@ -1688,6 +1771,7 @@ def _lambda_rrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rt")
 @register_compute_fun(
     name="lambda_rt",
     label="\\partial_{\\rho \\theta} \\lambda",
@@ -1707,6 +1791,7 @@ def _lambda_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rtt")
 @register_compute_fun(
     name="lambda_rtt",
     label="\\partial_{\\rho \\theta \\theta} \\lambda",
@@ -1726,6 +1811,7 @@ def _lambda_rtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rtz")
 @register_compute_fun(
     name="lambda_rtz",
     label="\\partial_{\\rho \\theta \\zeta} \\lambda",
@@ -1745,6 +1831,7 @@ def _lambda_rtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_rz")
 @register_compute_fun(
     name="lambda_rz",
     label="\\partial_{\\rho \\zeta} \\lambda",
@@ -1764,6 +1851,7 @@ def _lambda_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_xrz")
 @register_compute_fun(
     name="lambda_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} \\lambda",
@@ -1783,6 +1871,7 @@ def _lambda_rzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_t")
 @register_compute_fun(
     name="lambda_t",
     label="\\partial_{\\theta} \\lambda",
@@ -1801,6 +1890,7 @@ def _lambda_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_tt")
 @register_compute_fun(
     name="lambda_tt",
     label="\\partial_{\\theta \\theta} \\lambda",
@@ -1819,6 +1909,7 @@ def _lambda_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_ttt")
 @register_compute_fun(
     name="lambda_ttt",
     label="\\partial_{\\theta \\theta \\theta} \\lambda",
@@ -1837,6 +1928,7 @@ def _lambda_ttt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_ttz")
 @register_compute_fun(
     name="lambda_ttz",
     label="\\partial_{\\theta \\theta \\zeta} \\lambda",
@@ -1856,6 +1948,7 @@ def _lambda_ttz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_tz")
 @register_compute_fun(
     name="lambda_tz",
     label="\\partial_{\\theta \\zeta} \\lambda",
@@ -1875,6 +1968,7 @@ def _lambda_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_tzz")
 @register_compute_fun(
     name="lambda_tzz",
     label="\\partial_{\\theta \\zeta \\zeta} \\lambda",
@@ -1894,6 +1988,7 @@ def _lambda_tzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_z")
 @register_compute_fun(
     name="lambda_z",
     label="\\partial_{\\zeta} \\lambda",
@@ -1912,6 +2007,7 @@ def _lambda_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_zz")
 @register_compute_fun(
     name="lambda_zz",
     label="\\partial_{\\zeta \\zeta} \\lambda",
@@ -1930,6 +2026,7 @@ def _lambda_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("lambda_zzz")
 @register_compute_fun(
     name="lambda_zzz",
     label="\\partial_{\\zeta \\zeta \\zeta} \\lambda",
@@ -1948,6 +2045,7 @@ def _lambda_zzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega")
 @register_compute_fun(
     name="omega",
     label="\\omega",
@@ -1970,6 +2068,7 @@ def _omega(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_r")
 @register_compute_fun(
     name="omega_r",
     label="\\partial_{\\rho} \\omega",
@@ -1992,6 +2091,7 @@ def _omega_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rr")
 @register_compute_fun(
     name="omega_rr",
     label="\\partial_{\\rho \\rho} \\omega",
@@ -2014,6 +2114,7 @@ def _omega_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrr")
 @register_compute_fun(
     name="omega_rrr",
     label="\\partial_{\\rho \\rho \\rho} \\omega",
@@ -2036,6 +2137,7 @@ def _omega_rrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrrr")
 @register_compute_fun(
     name="omega_rrrr",
     label="\\partial_{\\rho \\rho \\rho \\rho} \\omega",
@@ -2058,6 +2160,7 @@ def _omega_rrrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrrt")
 @register_compute_fun(
     name="omega_rrrt",
     label="\\partial_{\\rho \\rho \\rho \\theta} \\omega",
@@ -2081,6 +2184,7 @@ def _omega_rrrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrrz")
 @register_compute_fun(
     name="omega_rrrz",
     label="\\partial_{\\rho \\rho \\rho \\zeta} \\omega",
@@ -2104,6 +2208,7 @@ def _omega_rrrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrt")
 @register_compute_fun(
     name="omega_rrt",
     label="\\partial_{\\rho \\rho \\theta} \\omega",
@@ -2127,6 +2232,7 @@ def _omega_rrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrtt")
 @register_compute_fun(
     name="omega_rrtt",
     label="\\partial_{\\rho \\rho \\theta \\theta} \\omega",
@@ -2150,6 +2256,7 @@ def _omega_rrtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrtz")
 @register_compute_fun(
     name="omega_rrtz",
     label="\\partial_{\\rho \\theta \\zeta} \\omega",
@@ -2173,6 +2280,7 @@ def _omega_rrtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrz")
 @register_compute_fun(
     name="omega_rrz",
     label="\\partial_{\\rho \\rho \\zeta} \\omega",
@@ -2196,6 +2304,7 @@ def _omega_rrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rrzz")
 @register_compute_fun(
     name="omega_rrzz",
     label="\\partial_{\\rho \\rho \\zeta \\zeta} \\omega",
@@ -2219,6 +2328,7 @@ def _omega_rrzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rt")
 @register_compute_fun(
     name="omega_rt",
     label="\\partial_{\\rho \\theta} \\omega",
@@ -2242,6 +2352,7 @@ def _omega_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rtt")
 @register_compute_fun(
     name="omega_rtt",
     label="\\partial_{\\rho \\theta \\theta} \\omega",
@@ -2265,6 +2376,7 @@ def _omega_rtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rttt")
 @register_compute_fun(
     name="omega_rttt",
     label="\\partial_{\\rho \\theta \\theta \\theta} \\omega",
@@ -2288,6 +2400,7 @@ def _omega_rttt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rttz")
 @register_compute_fun(
     name="omega_rttz",
     label="\\partial_{\\rho \\theta \\theta \\zeta} \\omega",
@@ -2311,6 +2424,7 @@ def _omega_rttz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rtz")
 @register_compute_fun(
     name="omega_rtz",
     label="\\partial_{\\rho \\theta \\zeta} \\omega",
@@ -2334,6 +2448,7 @@ def _omega_rtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rtzz")
 @register_compute_fun(
     name="omega_rtzz",
     label="\\partial_{\\rho \\theta \\zeta \\zeta} \\omega",
@@ -2357,6 +2472,7 @@ def _omega_rtzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rz")
 @register_compute_fun(
     name="omega_rz",
     label="\\partial_{\\rho \\zeta} \\omega",
@@ -2380,6 +2496,7 @@ def _omega_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rzz")
 @register_compute_fun(
     name="omega_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} \\omega",
@@ -2403,6 +2520,7 @@ def _omega_rzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_rzzz")
 @register_compute_fun(
     name="omega_rzzz",
     label="\\partial_{\\rho \\zeta \\zeta \\zeta} \\omega",
@@ -2426,6 +2544,7 @@ def _omega_rzzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_t")
 @register_compute_fun(
     name="omega_t",
     label="\\partial_{\\theta} \\omega",
@@ -2448,6 +2567,7 @@ def _omega_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_tt")
 @register_compute_fun(
     name="omega_tt",
     label="\\partial_{\\theta \\theta} \\omega",
@@ -2470,6 +2590,7 @@ def _omega_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_ttt")
 @register_compute_fun(
     name="omega_ttt",
     label="\\partial_{\\theta \\theta \\theta} \\omega",
@@ -2492,6 +2613,7 @@ def _omega_ttt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_ttz")
 @register_compute_fun(
     name="omega_ttz",
     label="\\partial_{\\theta \\theta \\zeta} \\omega",
@@ -2515,6 +2637,7 @@ def _omega_ttz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_tz")
 @register_compute_fun(
     name="omega_tz",
     label="\\partial_{\\theta \\zeta} \\omega",
@@ -2538,6 +2661,7 @@ def _omega_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_tzz")
 @register_compute_fun(
     name="omega_tzz",
     label="\\partial_{\\theta \\zeta \\zeta} \\omega",
@@ -2561,6 +2685,7 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_z")
 @register_compute_fun(
     name="omega_z",
     label="\\partial_{\\zeta} \\omega",
@@ -2583,6 +2708,7 @@ def _omega_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_zz")
 @register_compute_fun(
     name="omega_zz",
     label="\\partial_{\\zeta \\zeta} \\omega",
@@ -2605,6 +2731,7 @@ def _omega_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("omega_zzz")
 @register_compute_fun(
     name="omega_zzz",
     label="\\partial_{\\zeta \\zeta \\zeta} \\omega",
@@ -2627,6 +2754,7 @@ def _omega_zzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi")
 @register_compute_fun(
     name="phi",
     label="\\phi",
@@ -2645,6 +2773,7 @@ def _phi(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_r")
 @register_compute_fun(
     name="phi_r",
     label="\\partial_{\\rho} \\phi",
@@ -2663,6 +2792,7 @@ def _phi_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_rr")
 @register_compute_fun(
     name="phi_rr",
     label="\\partial_{\\rho \\rho} \\phi",
@@ -2681,6 +2811,7 @@ def _phi_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_rt")
 @register_compute_fun(
     name="phi_rt",
     label="\\partial_{\\rho \\theta} \\phi",
@@ -2700,6 +2831,7 @@ def _phi_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_rz")
 @register_compute_fun(
     name="phi_rz",
     label="\\partial_{\\rho \\zeta} \\phi",
@@ -2719,6 +2851,7 @@ def _phi_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_t")
 @register_compute_fun(
     name="phi_t",
     label="\\partial_{\\theta} \\phi",
@@ -2737,6 +2870,7 @@ def _phi_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_tt")
 @register_compute_fun(
     name="phi_tt",
     label="\\partial_{\\theta \\theta} \\phi",
@@ -2756,6 +2890,7 @@ def _phi_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_tz")
 @register_compute_fun(
     name="phi_tz",
     label="\\partial_{\\theta \\zeta} \\phi",
@@ -2775,6 +2910,7 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_z")
 @register_compute_fun(
     name="phi_z",
     label="\\partial_{\\zeta} \\phi",
@@ -2793,6 +2929,7 @@ def _phi_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("phi_zz")
 @register_compute_fun(
     name="phi_zz",
     label="\\partial_{\\zeta \\zeta} \\phi",
@@ -2812,6 +2949,7 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("rho")
 @register_compute_fun(
     name="rho",
     label="\\rho",
@@ -2836,6 +2974,7 @@ def _rho(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("rho_r")
 @register_compute_fun(
     name="rho_r",
     label="\\partial_{\\rho} \\rho",
@@ -2859,6 +2998,7 @@ def _rho_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("rho_t")
 @register_compute_fun(
     name="rho_t",
     label="\\partial_{\\theta} \\rho",
@@ -2882,6 +3022,7 @@ def _rho_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("rho_z")
 @register_compute_fun(
     name="rho_z",
     label="\\partial_{\\zeta} \\rho",
@@ -2905,6 +3046,7 @@ def _rho_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("theta")
 @register_compute_fun(
     name="theta",
     label="\\theta",
@@ -2927,6 +3069,7 @@ def _theta(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("theta_PEST")
 @register_compute_fun(
     name="theta_PEST",
     label="\\vartheta",
@@ -2945,6 +3088,7 @@ def _theta_PEST(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("theta_PEST_r")
 @register_compute_fun(
     name="theta_PEST_r",
     label="\\partial_{\\rho} \\vartheta",
@@ -2964,6 +3108,7 @@ def _theta_PEST_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("theta_PEST_t")
 @register_compute_fun(
     name="theta_PEST_t",
     label="\\partial_{\\theta} \\vartheta",
@@ -2983,6 +3128,7 @@ def _theta_PEST_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("theta_PEST_z")
 @register_compute_fun(
     name="theta_PEST_z",
     label="\\partial_{\\zeta} \\vartheta",
@@ -3002,6 +3148,7 @@ def _theta_PEST_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("theta_r")
 @register_compute_fun(
     name="theta_r",
     label="\\partial_{\\rho} \\theta",
@@ -3025,6 +3172,7 @@ def _theta_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("theta_t")
 @register_compute_fun(
     name="theta_t",
     label="\\partial_{\\theta} \\theta",
@@ -3048,6 +3196,7 @@ def _theta_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("theta_z")
 @register_compute_fun(
     name="theta_z",
     label="\\partial_{\\zeta} \\theta",
@@ -3071,6 +3220,7 @@ def _theta_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("zeta")
 @register_compute_fun(
     name="zeta",
     label="\\zeta",
@@ -3093,6 +3243,7 @@ def _zeta(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("zeta_r")
 @register_compute_fun(
     name="zeta_r",
     label="\\partial_{\\rho} \\zeta",
@@ -3115,6 +3266,7 @@ def _zeta_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("zeta_t")
 @register_compute_fun(
     name="zeta_t",
     label="\\partial_{\\theta} \\zeta",
@@ -3137,6 +3289,7 @@ def _zeta_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("zeta_z")
 @register_compute_fun(
     name="zeta_z",
     label="\\partial_{\\zeta} \\zeta",

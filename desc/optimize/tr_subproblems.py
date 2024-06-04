@@ -1,6 +1,7 @@
 """Functions for solving subproblems arising in trust region methods."""
 
 import numpy as np
+import nvtx
 
 from desc.backend import (
     cho_factor,
@@ -150,6 +151,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
     return *out, initial_alpha
 
 
+@nvtx.annotate("trust_region_step_exact_svd")
 @jit
 def trust_region_step_exact_svd(
     f, u, s, v, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None

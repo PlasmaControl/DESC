@@ -9,6 +9,7 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import nvtx
 from scipy.constants import elementary_charge, mu_0
 from scipy.special import roots_legendre
 
@@ -17,6 +18,7 @@ from .data_index import register_compute_fun
 from .utils import surface_averages_map
 
 
+@nvtx.annotate("trapped fraction")
 @register_compute_fun(
     name="trapped fraction",
     label="1 - \\frac{3}{4} \\langle |B|^2 \\rangle \\int_0^{1/Bmax} "
@@ -76,6 +78,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉")
 def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
@@ -307,6 +310,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     return J_dot_B_data
 
 
+@nvtx.annotate("<J*B> Redl")
 @register_compute_fun(
     name="<J*B> Redl",
     label="\\langle\\mathbf{J}\\cdot\\mathbf{B}\\rangle_{Redl}",

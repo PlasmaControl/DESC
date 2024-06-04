@@ -5,6 +5,7 @@ import inspect
 import warnings
 
 import numpy as np
+import nvtx
 from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
@@ -34,6 +35,7 @@ def _parse_parameterization(p):
     return module + "." + klass.__qualname__
 
 
+@nvtx.annotate("compute/compute")
 def compute(parameterization, names, params, transforms, profiles, data=None, **kwargs):
     """Compute the quantity given by name on grid.
 

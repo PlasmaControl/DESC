@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import nvtx
+
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
@@ -16,6 +18,7 @@ from .geom_utils import rpz2xyz_vec
 from .utils import cross, safediv
 
 
+@nvtx.annotate("b")
 @register_compute_fun(
     name="b",
     label="\\hat{b}",
@@ -37,6 +40,7 @@ def _b(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho")
 @register_compute_fun(
     name="e^rho",
     label="\\mathbf{e}^{\\rho}",
@@ -60,6 +64,7 @@ def _e_sup_rho(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_r")
 @register_compute_fun(
     name="e^rho_r",
     label="\\partial_{\\rho} \\mathbf{e}^{\\rho}",
@@ -99,6 +104,7 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_rr")
 @register_compute_fun(
     name="e^rho_rr",
     label="\\partial_{\\rho\\rho} \\mathbf{e}^{\\rho}",
@@ -153,6 +159,7 @@ def _e_sup_rho_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_rt")
 @register_compute_fun(
     name="e^rho_rt",
     label="\\partial_{\\rho\\theta} \\mathbf{e}^{\\rho}",
@@ -212,6 +219,7 @@ def _e_sup_rho_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_rz")
 @register_compute_fun(
     name="e^rho_rz",
     label="\\partial_{\\rho\\zeta} \\mathbf{e}^{\\rho}",
@@ -271,6 +279,7 @@ def _e_sup_rho_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_t")
 @register_compute_fun(
     name="e^rho_t",
     label="\\partial_{\\theta} \\mathbf{e}^{\\rho}",
@@ -314,6 +323,7 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_tt")
 @register_compute_fun(
     name="e^rho_tt",
     label="\\partial_{\\theta\\theta} \\mathbf{e}^{\\rho}",
@@ -368,6 +378,7 @@ def _e_sup_rho_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_tz")
 @register_compute_fun(
     name="e^rho_tz",
     label="\\partial_{\\theta\\zeta} \\mathbf{e}^{\\rho}",
@@ -427,6 +438,7 @@ def _e_sup_rho_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_z")
 @register_compute_fun(
     name="e^rho_z",
     label="\\partial_{\\zeta} \\mathbf{e}^{\\rho}",
@@ -472,6 +484,7 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^rho_zz")
 @register_compute_fun(
     name="e^rho_zz",
     label="\\partial_{\\zeta\\zeta} \\mathbf{e}^{\\rho}",
@@ -526,6 +539,7 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta")
 @register_compute_fun(
     name="e^theta",
     label="\\mathbf{e}^{\\theta}",
@@ -547,6 +561,7 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta*sqrt(g)")
 @register_compute_fun(
     name="e^theta*sqrt(g)",
     label="\\mathbf{e}^{\\theta} \\sqrt{g}",
@@ -604,6 +619,7 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta_rr")
 @register_compute_fun(
     name="e^theta_rr",
     label="\\partial_{\\rho\\rho} \\mathbf{e}^{\\theta}",
@@ -659,6 +675,7 @@ def _e_sup_theta_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta_rt")
 @register_compute_fun(
     name="e^theta_rt",
     label="\\partial_{\\rho\\theta} \\mathbf{e}^{\\theta}",
@@ -718,6 +735,7 @@ def _e_sup_theta_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta_rz")
 @register_compute_fun(
     name="e^theta_rz",
     label="\\partial_{\\rho\\zeta} \\mathbf{e}^{\\theta}",
@@ -777,6 +795,7 @@ def _e_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta_t")
 @register_compute_fun(
     name="e^theta_t",
     label="\\partial_{\\theta} \\mathbf{e}^{\\theta}",
@@ -808,6 +827,7 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta_tt")
 @register_compute_fun(
     name="e^theta_tt",
     label="\\partial_{\\theta\\theta} \\mathbf{e}^{\\theta}",
@@ -862,6 +882,7 @@ def _e_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta_tz")
 @register_compute_fun(
     name="e^theta_tz",
     label="\\partial_{\\theta\\zeta} \\mathbf{e}^{\\theta}",
@@ -921,6 +942,7 @@ def _e_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta_z")
 @register_compute_fun(
     name="e^theta_z",
     label="\\partial_{\\zeta} \\mathbf{e}^{\\theta}",
@@ -952,6 +974,7 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^theta_zz")
 @register_compute_fun(
     name="e^theta_zz",
     label="\\partial_{\\zeta\\zeta} \\mathbf{e}^{\\theta}",
@@ -1006,6 +1029,7 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta")
 @register_compute_fun(
     name="e^zeta",
     label="\\mathbf{e}^{\\zeta}",
@@ -1029,6 +1053,7 @@ def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_r")
 @register_compute_fun(
     name="e^zeta_r",
     label="\\partial_{\\rho} \\mathbf{e}^{\\zeta}",
@@ -1068,6 +1093,7 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_rr")
 @register_compute_fun(
     name="e^zeta_rr",
     label="\\partial_{\\rho\\rho} \\mathbf{e}^{\\zeta}",
@@ -1122,6 +1148,7 @@ def _e_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_rt")
 @register_compute_fun(
     name="e^zeta_rt",
     label="\\partial_{\\rho\\theta} \\mathbf{e}^{\\zeta}",
@@ -1181,6 +1208,7 @@ def _e_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_rz")
 @register_compute_fun(
     name="e^zeta_rz",
     label="\\partial_{\\rho\\zeta} \\mathbf{e}^{\\zeta}",
@@ -1240,6 +1268,7 @@ def _e_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_r")
 @register_compute_fun(
     name="e^zeta_t",
     label="\\partial_{\\theta} \\mathbf{e}^{\\zeta}",
@@ -1286,6 +1315,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_tt")
 @register_compute_fun(
     name="e^zeta_tt",
     label="\\partial_{\\theta\\theta} \\mathbf{e}^{\\zeta}",
@@ -1340,6 +1370,7 @@ def _e_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_tz")
 @register_compute_fun(
     name="e^zeta_tz",
     label="\\partial_{\\theta\\zeta} \\mathbf{e}^{\\zeta}",
@@ -1399,6 +1430,7 @@ def _e_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_xz")
 @register_compute_fun(
     name="e^zeta_z",
     label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",
@@ -1445,6 +1477,7 @@ def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e^zeta_zz")
 @register_compute_fun(
     name="e^zeta_zz",
     label="\\partial_{\\zeta\\zeta} \\mathbf{e}^{\\zeta}",
@@ -1499,6 +1532,7 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_phi")
 @register_compute_fun(
     name="e_phi",
     label="\\mathbf{e}_{\\phi}",
@@ -1525,6 +1559,7 @@ def _e_sub_phi(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho")
 @register_compute_fun(
     name="e_rho",
     label="\\mathbf{e}_{\\rho}",
@@ -1552,6 +1587,7 @@ def _e_sub_rho(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_r")
 @register_compute_fun(
     name="e_rho_r",
     label="\\partial_{\\rho} \\mathbf{e}_{\\rho}",
@@ -1586,6 +1622,7 @@ def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_rr")
 @register_compute_fun(
     name="e_rho_rr",
     label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\rho}",
@@ -1690,6 +1727,7 @@ def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_rrt")
 @register_compute_fun(
     name="e_rho_rrt",
     label="\\partial_{\\rho \\rho \\theta} \\mathbf{e}_{\\rho}",
@@ -1773,6 +1811,7 @@ def _e_sub_rho_rrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_rrz")
 @register_compute_fun(
     name="e_rho_rrz",
     label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\rho}",
@@ -1872,6 +1911,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_rt")
 @register_compute_fun(
     name="e_rho_rt",
     label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\rho}",
@@ -1929,6 +1969,7 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_rtt")
 @register_compute_fun(
     name="e_rho_rtt",
     label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\rho}",
@@ -2013,6 +2054,7 @@ def _e_sub_rho_rtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_rtz")
 @register_compute_fun(
     name="e_rho_rtz",
     label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\rho}",
@@ -2152,6 +2194,7 @@ def _e_sub_rho_rtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_rz")
 @register_compute_fun(
     name="e_rho_rz",
     label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\rho}",
@@ -2205,6 +2248,7 @@ def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_rzz")
 @register_compute_fun(
     name="e_rho_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\rho}",
@@ -2306,6 +2350,7 @@ def _e_sub_rho_rzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_t")
 @register_compute_fun(
     name="e_rho_t",
     label="\\partial_{\\theta} \\mathbf{e}_{\\rho}",
@@ -2339,6 +2384,7 @@ def _e_sub_rho_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_tt")
 @register_compute_fun(
     name="e_rho_tt",
     label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\rho}",
@@ -2396,6 +2442,7 @@ def _e_sub_rho_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_tz")
 @register_compute_fun(
     name="e_rho_tz",
     label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\rho}",
@@ -2463,6 +2510,7 @@ def _e_sub_rho_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_z")
 @register_compute_fun(
     name="e_rho_z",
     label="\\partial_{\\zeta} \\mathbf{e}_{\\rho}",
@@ -2492,6 +2540,7 @@ def _e_sub_rho_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_rho_zz")
 @register_compute_fun(
     name="e_rho_zz",
     label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\rho}",
@@ -2545,6 +2594,7 @@ def _e_sub_rho_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta")
 @register_compute_fun(
     name="e_theta",
     label="\\mathbf{e}_{\\theta}",
@@ -2572,6 +2622,7 @@ def _e_sub_theta(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta/sqrt(g)")
 @register_compute_fun(
     name="e_theta/sqrt(g)",
     label="\\mathbf{e}_{\\theta} / \\sqrt{g}",
@@ -2599,6 +2650,7 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_PEST")
 @register_compute_fun(
     name="e_theta_PEST",
     label="\\mathbf{e}_{\\theta_{PEST}}",
@@ -2621,6 +2673,7 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_r")
 @register_compute_fun(
     name="e_theta_r",
     label="\\partial_{\\rho} \\mathbf{e}_{\\theta}",
@@ -2656,6 +2709,7 @@ def _e_sub_theta_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rr")
 @register_compute_fun(
     name="e_theta_rr",
     label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\theta}",
@@ -2712,6 +2766,7 @@ def _e_sub_theta_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rrr")
 @register_compute_fun(
     name="e_theta_rrr",
     label="\\partial_{\\rho \\rho \\rho} \\mathbf{e}_{\\theta}",
@@ -2792,6 +2847,7 @@ def _e_sub_theta_rrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rrt")
 @register_compute_fun(
     name="e_theta_rrt",
     label="\\partial_{\\rho \\rho \\theta} \\mathbf{e}_{\\theta}",
@@ -2898,6 +2954,7 @@ def _e_sub_theta_rrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rrz")
 @register_compute_fun(
     name="e_theta_rrz",
     label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\theta}",
@@ -3039,6 +3096,7 @@ def _e_sub_theta_rrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rt")
 @register_compute_fun(
     name="e_theta_rt",
     label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\theta}",
@@ -3096,6 +3154,7 @@ def _e_sub_theta_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rtt")
 @register_compute_fun(
     name="e_theta_rtt",
     label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\theta}",
@@ -3180,6 +3239,7 @@ def _e_sub_theta_rtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rtz")
 @register_compute_fun(
     name="e_theta_rtz",
     label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\theta}",
@@ -3287,6 +3347,7 @@ def _e_sub_theta_rtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rz")
 @register_compute_fun(
     name="e_theta_rz",
     label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\theta}",
@@ -3355,6 +3416,7 @@ def _e_sub_theta_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_rzz")
 @register_compute_fun(
     name="e_theta_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\theta}",
@@ -3465,6 +3527,7 @@ def _e_sub_theta_rzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_t")
 @register_compute_fun(
     name="e_theta_t",
     label="\\partial_{\\theta} \\mathbf{e}_{\\theta}",
@@ -3496,6 +3559,7 @@ def _e_sub_theta_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_tt")
 @register_compute_fun(
     name="e_theta_tt",
     label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\theta}",
@@ -3543,6 +3607,7 @@ def _e_sub_theta_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_tz")
 @register_compute_fun(
     name="e_theta_tz",
     label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\theta}",
@@ -3600,6 +3665,7 @@ def _e_sub_theta_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_z")
 @register_compute_fun(
     name="e_theta_z",
     label="\\partial_{\\zeta} \\mathbf{e}_{\\theta}",
@@ -3633,6 +3699,7 @@ def _e_sub_theta_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_theta_zz")
 @register_compute_fun(
     name="e_theta_zz",
     label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\theta}",
@@ -3690,6 +3757,7 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta")
 @register_compute_fun(
     name="e_zeta",
     label="\\mathbf{e}_{\\zeta}",
@@ -3717,6 +3785,7 @@ def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_r")
 @register_compute_fun(
     name="e_zeta_r",
     label="\\partial_{\\rho} \\mathbf{e}_{\\zeta}",
@@ -3746,6 +3815,7 @@ def _e_sub_zeta_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_rr")
 @register_compute_fun(
     name="e_zeta_rr",
     label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\zeta}",
@@ -3799,6 +3869,7 @@ def _e_sub_zeta_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_rrr")
 @register_compute_fun(
     name="e_zeta_rrr",
     label="\\partial_{\\rho \\rho \\rho} \\mathbf{e}_{\\zeta}",
@@ -3881,6 +3952,7 @@ def _e_sub_zeta_rrr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_rrt")
 @register_compute_fun(
     name="e_zeta_rrt",
     label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\zeta}",
@@ -4022,6 +4094,7 @@ def _e_sub_zeta_rrt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_rrz")
 @register_compute_fun(
     name="e_zeta_rrz",
     label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\zeta}",
@@ -4125,6 +4198,7 @@ def _e_sub_zeta_rrz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_t")
 @register_compute_fun(
     name="e_zeta_rt",
     label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\zeta}",
@@ -4193,6 +4267,7 @@ def _e_sub_zeta_rt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_rtt")
 @register_compute_fun(
     name="e_zeta_rtt",
     label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\zeta}",
@@ -4300,6 +4375,7 @@ def _e_sub_zeta_rtt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_rtz")
 @register_compute_fun(
     name="e_zeta_rtz",
     label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\zeta}",
@@ -4412,6 +4488,7 @@ def _e_sub_zeta_rtz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_rz")
 @register_compute_fun(
     name="e_zeta_rz",
     label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\zeta}",
@@ -4465,6 +4542,7 @@ def _e_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_rzz")
 @register_compute_fun(
     name="e_zeta_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\zeta}",
@@ -4557,6 +4635,7 @@ def _e_sub_zeta_rzz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_t")
 @register_compute_fun(
     name="e_zeta_t",
     label="\\partial_{\\theta} \\mathbf{e}_{\\zeta}",
@@ -4590,6 +4669,7 @@ def _e_sub_zeta_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_tt")
 @register_compute_fun(
     name="e_zeta_tt",
     label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\zeta}",
@@ -4647,6 +4727,7 @@ def _e_sub_zeta_tt(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_tz")
 @register_compute_fun(
     name="e_zeta_tz",
     label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\zeta}",
@@ -4704,6 +4785,7 @@ def _e_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_z")
 @register_compute_fun(
     name="e_zeta_z",
     label="\\partial_{\\zeta} \\mathbf{e}_{\\zeta}",
@@ -4735,6 +4817,7 @@ def _e_sub_zeta_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("e_zeta_zz")
 @register_compute_fun(
     name="e_zeta_zz",
     label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\zeta}",
@@ -4790,6 +4873,7 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("grad(alpha)")
 @register_compute_fun(
     name="grad(alpha)",
     label="\\nabla \\alpha",
@@ -4814,6 +4898,7 @@ def _grad_alpha(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("grad(psi)")
 @register_compute_fun(
     name="grad(psi)",
     label="\\nabla\\psi",
@@ -4832,6 +4917,7 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("n_rho")
 @register_compute_fun(
     name="n_rho",
     label="\\hat{\\mathbf{n}}_{\\rho}",
@@ -4864,6 +4950,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("n_theta")
 @register_compute_fun(
     name="n_rho_z",
     label="\\partial_{\\zeta}\\hat{\\mathbf{n}}_{\\rho}",
@@ -4928,6 +5015,7 @@ def _n_theta(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@nvtx.annotate("n_zeta")
 @register_compute_fun(
     name="n_zeta",
     label="\\hat{\\mathbf{n}}_{\\zeta}",

@@ -344,6 +344,8 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
             basis = getattr(obj, c + "_basis")
             # first check if we already have a transform with a compatible basis
             for transform in transforms.values():
+                if jitable:  # re-using transforms doesn't work under jit, so skip
+                    continue
                 if basis.equiv(getattr(transform, "basis", None)):
                     ders = np.unique(
                         np.vstack([derivs[c], transform.derivatives]), axis=0

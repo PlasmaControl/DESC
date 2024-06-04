@@ -406,14 +406,13 @@ class ObjectiveFunction(IOAble):
         J = []
         for k, (obj, const) in enumerate(zip(self.objectives, constants)):
             # get the xs that go to that objective
-            xi = [xs[i] for i in self._things_per_objective_idx[k]]
+            thing_idx = self._things_per_objective_idx[k]
+            xi = [xs[i] for i in thing_idx]
             Ji_ = getattr(obj, op)(*xi, constants=const)  # jac wrt to just those things
             Ji = []  # jac wrt all things
-            for i, (thing, idx) in enumerate(
-                zip(self.things, self._things_per_objective_idx)
-            ):
-                if i in idx:
-                    Ji += [Ji_[idx.index(i)]]
+            for i, thing in enumerate(self.things):
+                if i in thing_idx:
+                    Ji += [Ji_[thing_idx.index(i)]]
                 else:
                     Ji += [jnp.zeros((obj.dim_f, thing.dim_x))]
             Ji = jnp.hstack(Ji)

@@ -293,7 +293,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Gamma_c",
-    label="π/(2√2) ∫dλ λ⁻²B₀⁻¹ \\langle ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ \\rangle",
+    label="Γ_c = π/(2√2) ∫dλ λ⁻²B₀⁻¹ \\langle ∑ⱼ [γ_c² ∂I/∂((λB₀)⁻¹)]ⱼ \\rangle",
     units="~",
     units_long="None",
     description="Energetic ion confinement proxy",
@@ -312,11 +312,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         "gbdrift",
         "L|r,a",
     ],
-    grid_requirement=[
-        "source_grid",
-        lambda grid: grid.source_grid.coordinates == "raz"
-        and grid.source_grid.is_meshgrid,
-    ],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     bounce_integral=(
         "callable : Method to compute bounce integrals. "
         "(You may want to wrap desc.compute.bounce_integral.bounce_integral "
@@ -338,6 +334,8 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         "Default is 75. This setting is ignored for adaptive quadrature."
     ),
 )
+# temporary
+@partial(jit, static_argnames=["bounce_integral", "batch", "quad", "num_pitch"])
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy.
 

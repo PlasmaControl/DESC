@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import rtz_grid
 from desc.vmec import VMECIO
@@ -93,6 +94,34 @@ def test_effective_ripple():
     ax.set_xlabel(r"$\rho$")
     ax.set_ylabel(r"$\epsilon_{\text{eff}}^{3/2}$")
     ax.set_title("DESC vs. NEO effective ripple")
+    plt.tight_layout()
+    plt.show()
+    plt.close()
+
+
+@pytest.mark.unit
+def test_Gamma_c():
+    """Compare DESC effective ripple against NEO STELLOPT."""
+    eq = Equilibrium.load(
+        "tests/inputs/DESC_from_NAE_O_r1_precise_QI_plunk_fixed_bdry_r0"
+        ".15_L_9_M_9_N_24_output.h5"
+    )
+    rho = jnp.linspace(0, 1, 20)
+    alpha = jnp.array([0])
+    # TODO: Here's a potential issue, resolve with 2d spline.
+    knots = jnp.linspace(-30 * jnp.pi, 30 * jnp.pi, 2000)
+    grid = rtz_grid(
+        eq, rho, alpha, knots, coordinates="raz", period=(jnp.inf, 2 * jnp.pi, jnp.inf)
+    )
+    data = eq.compute("Gamma_c", grid=grid)
+    assert np.isfinite(data["Gamma_c"]).all()
+    Gamma_c = grid.compress(data["Gamma_c"])
+
+    fig, ax = plt.subplots()
+    ax.plot(rho, Gamma_c, marker="o")
+    ax.set_xlabel(r"$\rho$")
+    ax.set_ylabel(r"$\Gamma_{c}$")
+    ax.set_title(r"DESC $\Gamma_{c}$")
     plt.tight_layout()
     plt.show()
     plt.close()

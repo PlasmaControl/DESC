@@ -208,8 +208,6 @@ class TERPSICHORE(_Objective):
             f_slurm.close()
             return False
 
-        # Uncomment the following block when dynamic allocation is working correctly
-        '''
         elif 'PARAMETER LSSL' in terps_out_contents:
             if terps_subprocess.returncode == None:
                 terps_subprocess.terminate()
@@ -235,14 +233,11 @@ v            while line:
                 line = f_slurm.readline()
             self.write_terps_io() # Rewrite the input file with suggested value of LSSD and re-run
             return True
-        '''
         
-#    def processor_work(self, task_id):
-        
-#        # stuff
 
     def run_terps(self):
 
+        '''
         # Get jobID
         job_id = os.environ.get('SLURM_JOB_ID')
         print(job_id)        
@@ -268,7 +263,7 @@ v            while line:
 
         pool.close()
         pool.join()
-        
+        '''
         
         sleep_time = 1 # seconds
         stop_time = 60 # seconds (kill the infinite loop if TERPS ran into an error and won't be printing growth rate)
@@ -289,8 +284,6 @@ v            while line:
             toc = time.perf_counter()
             runtime = toc-tic
 
-        # Uncomment the following block when dynamic allocation TERPS is working
-        '''
         if (self.lssl_repeat):
             self.lssl_repeat = False
             self.run_terps()
@@ -298,7 +291,6 @@ v            while line:
         elif (self.lssd_repeat):
             self.lssd_repeat = False
             self.run_terps()
-        '''        
 
         print("Found growth rate!")
         
@@ -368,8 +360,6 @@ v            while line:
         
         eq_identifier = "C640"
 
-        # Uncomment the following block when dynamic allocation TERPS is working
-        '''
         ivac = self.nsurf // 4
         if (self.max_moden > 8) or (self.max_modem > 16):
             nj = 150
@@ -380,7 +370,6 @@ v            while line:
         else:
             nj = 50
             nk = 50
-        '''           
  
         self.terps_infile = os.path.join(self.path, "{}_N{}_family".format(eq_identifier, self.mode_family))
         f = open(self.terps_infile,"w")
@@ -389,13 +378,6 @@ v            while line:
         f.write("C\n")
         f.write("C        MM  NMIN  NMAX   MMS NSMIN NSMAX NPROCS INSOL\n")
         f.write("         {:>2d}   {:>3d}   {:>3d}    55    -8    10    1     0\n".format(self.max_bozm, -self.max_bozn, self.max_bozn))
-
-        # Uncomment the following block when dynamic allocation TERPS is working
-        '''
-        f.write("C\n")
-        f.write("C        NJ    NK  IVAC  LSSL  LSSD MMAXDF NMAXDF\n")
-        f.write("        {:>3d}   {:>3d}   {:>3d}  {:>4d}  {:>4d}    120     64\n".format(nj, nk, ivac, self.lssl, self.lssd)) # Not exactly sure how to set LSSL and LSSD..usually it tells you to increase if not high enough (does this affect runtime?)
-        '''
         f.write("C\n")
         f.write("C     TABLE OF FOURIER COEFFIENTS FOR BOOZER COORDINATES\n")
         f.write("C     EQUILIBRIUM SETTINGS ARE COMPUTED FROM FIT/VMEC\n")
@@ -404,7 +386,6 @@ v            while line:
         boz_str_title = "C M=  0"
         boz_str_neg = "      0"
         boz_str_pos = "      1"
-        #for _im in range(1,self.max_bozm+1):
         for _im in range(1,37):
             if (_im >= 10):
                 boz_str_title += " "+str(_im)[1]

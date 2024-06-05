@@ -143,7 +143,7 @@ def _compute(
 
     # to reduce repeated code, 3D quantities can be converted to xyz basis here.
     # Assumes every 3D quantity is in rpz basis.
-    for name in names:
+    for name in data.keys():
         if (
             data_index[parameterization][name]["dim"] == 3  # it should be 3D
             and kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
@@ -153,16 +153,8 @@ def _compute(
         ):
             from .geom_utils import rpz2xyz_vec
 
+            print(f"converting {name} to xyz -1")
             data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
-        elif (
-            data_index[parameterization][name]["dim"] == 3  # it should be 3D
-            and kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
-            and data_index[parameterization][name]["coordinates"] == "s"
-            and name != "x"
-        ):
-            from .geom_utils import rpz2xyz_vec
-
-            data[name] = rpz2xyz_vec(data[name], phi=transforms["grid"].nodes[:, 2])
         elif (
             kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
             and name
@@ -170,6 +162,7 @@ def _compute(
         ):
             from .geom_utils import rpz2xyz
 
+            print(f"converting {name} to xyz -3")
             data[name] = rpz2xyz(data[name])
 
     return data

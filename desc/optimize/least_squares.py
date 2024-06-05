@@ -1,8 +1,9 @@
 """Function for solving nonlinear least squares problems."""
 
+import pynvml
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.utils import errorif, setdefault
 
 from .bound_utils import (
@@ -24,6 +25,9 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
+
+pynvml.nvmlInit()
+nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
 
 def lsqtr(  # noqa: C901 - FIXME: simplify this
@@ -173,7 +177,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
-    J = jac(x, *args)
+    J = jac(x, *args).astype(jnp.float32)
     njev += 1
     g = jnp.dot(J.T, f)
 
@@ -262,10 +266,16 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)]) if bounded else J_h
         f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)]) if bounded else f
 
+        all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+        jax.debug.print("{x} before svd", x=all_mem_gb)
+
         if tr_method == "svd":
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
+
+        all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+        jax.debug.print("{x} after svd", x=all_mem_gb)
 
         actual_reduction = -1
 
@@ -356,7 +366,15 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             allx.append(x)
             f = f_new
             cost = cost_new
-            J = jac(x, *args)
+
+            all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+            jax.debug.print("{x} before jacobian", x=all_mem_gb)
+
+            J = jac(x, *args).astype(jnp.float32)
+
+            all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+            jax.debug.print("{x} after jacobian", x=all_mem_gb)
+
             njev += 1
             g = jnp.dot(J.T, f)
 

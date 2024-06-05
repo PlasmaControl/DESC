@@ -141,29 +141,28 @@ def _compute(
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
 
-    # to reduce repeated code, 3D quantities can be converted to xyz basis here.
-    # Assumes every 3D quantity is in rpz basis.
+    # By default each compute function will return in rpz basis. If the user
+    # wants the data in xyz basis, we will convert it here.
+    # TODO: think about compute functions for _curve
     for name in data.keys():
         if (
             data_index[parameterization][name]["dim"] == 3  # it should be 3D
             and kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
             and ("phi" in data)  # phi is needed for conversion
             and data_index[parameterization][name]["coordinates"] == "rtz"
-            and name != "x"
+            and name != "x"  # x is not a vector, it is coordinates
         ):
             from .geom_utils import rpz2xyz_vec
 
-            print(f"converting {name} to xyz -1")
             data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
         elif (
             kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
-            and data_index[parameterization][name]["coordinates"] == "rtz"
+            and data_index[parameterization][name]["coordinates"] != "s"  # not curve x
             and name
             == "x"  # x is the only none vector quantity that needs to be converted
         ):
             from .geom_utils import rpz2xyz
 
-            print(f"converting {name} to xyz -3")
             data[name] = rpz2xyz(data[name])
 
     return data

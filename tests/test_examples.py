@@ -1319,6 +1319,7 @@ def test_optimize_with_fourier_planar_coil():
 
 
 @pytest.mark.unit
+@pytest.mark.slow
 def test_external_vs_generic_objectives(tmpdir_factory):
     """Test ExternalObjective compared to GenericObjective."""
     target = np.array([6.2e-3, 1.1e-1, 6.5e-3, 0])  # values at p_l = [2e2, -2e2]

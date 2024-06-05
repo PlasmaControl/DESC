@@ -126,8 +126,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             1 where x>=0, -1 where x<0
 
         """
-        x = jnp.asarray(x)
-        y = jnp.where(x == 0, 1, jnp.sign(x))
+        # FIXME: when this is jnp, Basis with sym is a JAX object for some reason
+        x = np.asarray(x)
+        y = np.where(x == 0, 1, np.sign(x))
         return y
 
     @jit

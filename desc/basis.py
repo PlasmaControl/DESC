@@ -290,7 +290,7 @@ class PowerSeries(_Basis):
         if modes is None:
             modes = self.modes
         if (derivatives[1] != 0) or (derivatives[2] != 0):
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return np.zeros((nodes.shape[0], modes.shape[0]))
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
@@ -404,7 +404,7 @@ class FourierSeries(_Basis):
         if modes is None:
             modes = self.modes
         if (derivatives[0] != 0) or (derivatives[1] != 0):
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return np.zeros((nodes.shape[0], modes.shape[0]))
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
@@ -535,7 +535,7 @@ class DoubleFourierSeries(_Basis):
         if modes is None:
             modes = self.modes
         if derivatives[0] != 0:
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return np.zeros((nodes.shape[0], modes.shape[0]))
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
@@ -742,7 +742,7 @@ class ZernikePolynomial(_Basis):
         if modes is None:
             modes = self.modes
         if derivatives[2] != 0:
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return np.zeros((nodes.shape[0], modes.shape[0]))
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
@@ -1241,7 +1241,7 @@ class ChebyshevPolynomial(_Basis):
         if modes is None:
             modes = self.modes
         if (derivatives[1] != 0) or (derivatives[2] != 0):
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return np.zeros((nodes.shape[0], modes.shape[0]))
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 

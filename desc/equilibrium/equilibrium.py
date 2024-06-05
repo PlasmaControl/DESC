@@ -10,7 +10,6 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
-from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
@@ -376,7 +375,7 @@ class Equilibrium(IOAble, Optimizable):
             assert ("R_lmn" in kwargs) and ("Z_lmn" in kwargs), "Must give both R and Z"
             self.R_lmn = kwargs.pop("R_lmn")
             self.Z_lmn = kwargs.pop("Z_lmn")
-            self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
+            self.L_lmn = kwargs.pop("L_lmn", np.zeros(self.L_basis.num_modes))
         else:
             self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
@@ -600,9 +599,15 @@ class Equilibrium(IOAble, Optimizable):
         )
         self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
 
-        self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
-        self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
-        self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+        self._R_lmn = np.asarray(
+            copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
+        )
+        self._Z_lmn = np.asarray(
+            copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
+        )
+        self._L_lmn = np.asarray(
+            copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+        )
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
@@ -1265,7 +1270,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        R_lmn = jnp.atleast_1d(jnp.asarray(R_lmn))
+        R_lmn = np.atleast_1d(np.asarray(R_lmn))
         errorif(
             R_lmn.size != self._R_lmn.size,
             ValueError,
@@ -1282,7 +1287,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        Z_lmn = jnp.atleast_1d(jnp.asarray(Z_lmn))
+        Z_lmn = np.atleast_1d(np.asarray(Z_lmn))
         errorif(
             Z_lmn.size != self._Z_lmn.size,
             ValueError,
@@ -1299,7 +1304,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        L_lmn = jnp.atleast_1d(jnp.asarray(L_lmn))
+        L_lmn = np.atleast_1d(np.asarray(L_lmn))
         errorif(
             L_lmn.size != self._L_lmn.size,
             ValueError,

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.backend import jnp, put
+from desc.backend import put
 from desc.basis import FourierSeries
 from desc.compute import rpz2xyz, xyz2rpz
 from desc.grid import LinearGrid
@@ -86,11 +86,11 @@ class FourierRZCurve(Curve):
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
-        self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
+        self._R_basis = FourierSeries(int(N), int(NFP), sym="cos" if sym else False)
+        self._Z_basis = FourierSeries(int(N), int(NFP), sym="sin" if sym else False)
 
-        self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
-        self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
+        self._R_n = np.array(copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2]))
+        self._Z_n = np.array(copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2]))
 
     @property
     def sym(self):
@@ -138,8 +138,8 @@ class FourierRZCurve(Curve):
             self.Z_basis.change_resolution(
                 N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
-            self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
-            self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
+            self.R_n = np.array(copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes))
+            self.Z_n = np.array(copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes))
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -176,7 +176,7 @@ class FourierRZCurve(Curve):
     @R_n.setter
     def R_n(self, new):
         if len(new) == self.R_basis.num_modes:
-            self._R_n = jnp.asarray(new)
+            self._R_n = np.asarray(new)
         else:
             raise ValueError(
                 f"R_n should have the same size as the basis, got {len(new)} for "
@@ -192,7 +192,7 @@ class FourierRZCurve(Curve):
     @Z_n.setter
     def Z_n(self, new):
         if len(new) == self.Z_basis.num_modes:
-            self._Z_n = jnp.asarray(new)
+            self._Z_n = np.asarray(new)
         else:
             raise ValueError(
                 f"Z_n should have the same size as the basis, got {len(new)} for "
@@ -439,7 +439,7 @@ class FourierXYZCurve(Curve):
     @X_n.setter
     def X_n(self, new):
         if len(new) == self.X_basis.num_modes:
-            self._X_n = jnp.asarray(new)
+            self._X_n = np.asarray(new)
         else:
             raise ValueError(
                 f"X_n should have the same size as the basis, got {len(new)} for "
@@ -455,7 +455,7 @@ class FourierXYZCurve(Curve):
     @Y_n.setter
     def Y_n(self, new):
         if len(new) == self.Y_basis.num_modes:
-            self._Y_n = jnp.asarray(new)
+            self._Y_n = np.asarray(new)
         else:
             raise ValueError(
                 f"Y_n should have the same size as the basis, got {len(new)} for "
@@ -471,7 +471,7 @@ class FourierXYZCurve(Curve):
     @Z_n.setter
     def Z_n(self, new):
         if len(new) == self.Z_basis.num_modes:
-            self._Z_n = jnp.asarray(new)
+            self._Z_n = np.asarray(new)
         else:
             raise ValueError(
                 f"Z_n should have the same size as the basis, got {len(new)} for "
@@ -663,7 +663,7 @@ class FourierPlanarCurve(Curve):
     @r_n.setter
     def r_n(self, new):
         if len(np.asarray(new)) == self.r_basis.num_modes:
-            self._r_n = jnp.asarray(new)
+            self._r_n = np.asarray(new)
         else:
             raise ValueError(
                 f"r_n should have the same size as the basis, got {len(new)} for "
@@ -829,7 +829,7 @@ class SplineXYZCurve(Curve):
     @X.setter
     def X(self, new):
         if len(new) == len(self.knots):
-            self._X = jnp.asarray(new)
+            self._X = np.asarray(new)
         else:
             raise ValueError(
                 "X should have the same size as the knots, "
@@ -845,7 +845,7 @@ class SplineXYZCurve(Curve):
     @Y.setter
     def Y(self, new):
         if len(new) == len(self.knots):
-            self._Y = jnp.asarray(new)
+            self._Y = np.asarray(new)
         else:
             raise ValueError(
                 "Y should have the same size as the knots, "
@@ -861,7 +861,7 @@ class SplineXYZCurve(Curve):
     @Z.setter
     def Z(self, new):
         if len(new) == len(self.knots):
-            self._Z = jnp.asarray(new)
+            self._Z = np.asarray(new)
         else:
             raise ValueError(
                 "Z should have the same size as the knots, "
@@ -876,7 +876,7 @@ class SplineXYZCurve(Curve):
     @knots.setter
     def knots(self, new):
         if len(new) == len(self.knots):
-            knots = jnp.atleast_1d(jnp.asarray(new))
+            knots = np.atleast_1d(np.asarray(new))
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
@@ -884,7 +884,7 @@ class SplineXYZCurve(Curve):
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
-            self._knots = jnp.asarray(knots)
+            self._knots = np.asarray(knots)
         else:
             raise ValueError(
                 "new knots should have the same size as the current knots, "

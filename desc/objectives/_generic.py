@@ -2,7 +2,9 @@
 
 import functools
 import inspect
+import multiprocessing
 import re
+import warnings
 
 import numpy as np
 
@@ -76,6 +78,7 @@ class ExternalObjective(_Objective):
         normalize_target=False,
         loss_function=None,
         fd_step=1e-4,  # TODO: generalize this to allow a vector of different scales
+        vectorized=False,
         name="external",
         **kwargs,
     ):
@@ -85,6 +88,7 @@ class ExternalObjective(_Objective):
         self._fun = fun
         self._dim_f = dim_f
         self._fd_step = fd_step
+        self._vectorized = vectorized
         self._kwargs = kwargs
         super().__init__(
             things=eq,
@@ -114,11 +118,30 @@ class ExternalObjective(_Objective):
 
         def fun_wrapped(params):
             """Wrap external function with optimizable params arguments."""
-            for param_key in self._eq.optimizable_params:
-                param_value = params[param_key]
-                if len(param_value):
-                    setattr(self._eq, param_key, param_value)
-            return self._fun(self._eq, **self._kwargs)
+            param_shape = params["Psi"].shape
+            num_eq = param_shape[0] if len(param_shape) > 1 else 1
+            if self._vectorized and num_eq > 1:
+                # convert params to list of Equilibria
+                eqs = [self._eq.copy() for _ in range(num_eq)]
+                for k, eq in enumerate(eqs):
+                    for param_key in self._eq.optimizable_params:
+                        param_value = np.array(params[param_key][k, :])
+                        if len(param_value):
+                            setattr(eq, param_key, param_value)
+                # parallelize calls to external function
+                with warnings.catch_warnings(action="ignore", category=RuntimeWarning):
+                    with multiprocessing.Pool() as pool:
+                        results = pool.map(
+                            functools.partial(self._fun, **self._kwargs), eqs
+                        )
+                        return jnp.vstack(results)
+            else:
+                # update Equilibrium with params
+                for param_key in self._eq.optimizable_params:
+                    param_value = params[param_key]
+                    if len(param_value):
+                        setattr(self._eq, param_key, param_value)
+                return self._fun(self._eq, **self._kwargs)
 
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
@@ -187,7 +210,13 @@ class ExternalObjective(_Objective):
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 result_shape_dtype = abstract_eval(*args, **kwargs)
-                return jax.pure_callback(func, result_shape_dtype, *args, **kwargs)
+                return jax.pure_callback(
+                    func,
+                    result_shape_dtype,
+                    *args,
+                    vectorized=self._vectorized,
+                    **kwargs,
+                )
 
             return wrapper
 

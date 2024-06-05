@@ -157,6 +157,7 @@ def _compute(
             data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
         elif (
             kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
+            and data_index[parameterization][name]["coordinates"] == "rtz"
             and name
             == "x"  # x is the only none vector quantity that needs to be converted
         ):

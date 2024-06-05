@@ -6,7 +6,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.utils import compute as compute_fun
+from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
@@ -707,8 +707,8 @@ class PlasmaVesselDistance(_Objective):
                 params=self._surface.params_dict,
                 transforms=surface_transforms,
                 profiles={},
-                basis="xyz",
             )["x"]
+            surface_coords = rpz2xyz(surface_coords)
             self._constants["surface_coords"] = surface_coords
 
         timer.stop("Precomputing transforms")
@@ -760,8 +760,8 @@ class PlasmaVesselDistance(_Objective):
                 params=surface_params,
                 transforms=constants["surface_transforms"],
                 profiles={},
-                basis="xyz",
             )["x"]
+            surface_coords = rpz2xyz(surface_coords)
         d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
 
         if self._use_softmin:  # do softmin

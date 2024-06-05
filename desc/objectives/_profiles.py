@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.compute.utils import compute as compute_fun
+from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer, warnif

@@ -177,12 +177,14 @@ class TERPSICHORE(_Objective):
 
     def remove_terps_files(self):
 
+        # Keeping this function for now in case there's a reason we might want these files in the future
+        
         if (os.path.exists(os.path.join(self.path, 'tpr16_dat_wall'))):
-            rm_cmd = ['rm', 'tpr16_dat_wall'] # There's probably a better way to handle this
+            rm_cmd = ['rm', 'tpr16_dat_wall']
             subprocess.run(rm_cmd)
 
         if (os.path.exists(os.path.join(self.path, 'tpr16_dat_pvi'))):
-            rm_cmd = ['rm', 'tpr16_dat_pvi'] # There's probably a better way to handle this
+            rm_cmd = ['rm', 'tpr16_dat_pvi']
             subprocess.run(rm_cmd)
         
 
@@ -204,7 +206,7 @@ class TERPSICHORE(_Objective):
             if terps_subprocess.returncode == None:
                 terps_subprocess.terminate()
             f_slurm.close()
-            self.remove_terps_files()
+            #self.remove_terps_files()
             return True
 
         else:
@@ -247,9 +249,9 @@ v            while line:
         fs = open('stdout.terps','w')
         head, tail = os.path.split(self.terps_infile)
 
-        self.remove_terps_files()
+        # self.remove_terps_files() # Newest TERPS version does not write out problematic files
         
-        cmd = ['srun', '-n', '1', '-t', '00:01:00', self.terps_app]
+        cmd = ['srun', '-n', '1', '-t', '00:01:00', '<', self.terps_app, self.wout_filename]
         terps_subprocess = subprocess.run(cmd, stdin=open(self.terps_infile,'r'), stdout=fs, stderr=fs_error)
 
         runtime = 0.0
@@ -259,6 +261,7 @@ v            while line:
             toc = time.perf_counter()
             runtime = toc-tic
 
+        # !!!!! This check and setting of LSSL and LSSD should be done in a TERPS run BEFORE sending out a bunch of parallel TERPS runs (since they should all use the same LSSL and LSSD values) !!!!!
         if (self.lssl_repeat):
             self.lssl_repeat = False
             self.run_terps()
@@ -266,10 +269,10 @@ v            while line:
         elif (self.lssd_repeat):
             self.lssd_repeat = False
             self.run_terps()
-
-        print("Found growth rate!")
-        
+                    
         fs.close()
+
+        # The parallel jobs could start here
 
         # Need a command here to wait until all TERPS runs are complete if doing some form of parallel execution
         

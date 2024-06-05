@@ -2,7 +2,7 @@
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
-from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import compute as compute_fun
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.utils import Timer
 

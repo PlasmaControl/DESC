@@ -6,7 +6,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import compute as compute_fun
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer

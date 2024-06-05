@@ -277,7 +277,7 @@ class ScaledProfile(_Profile):
     @property
     def params(self):
         """ndarray: Parameters for computation [scale, profile.params]."""
-        return np.concatenate([np.atleast_1d(self._scale), self._profile.params])
+        return jnp.concatenate([jnp.atleast_1d(self._scale), self._profile.params])
 
     @params.setter
     def params(self, x):
@@ -364,7 +364,7 @@ class SumProfile(_Profile):
     @property
     def params(self):
         """ndarray: Concatenated array of parameters for computation."""
-        return np.concatenate([profile.params for profile in self._profiles])
+        return jnp.concatenate([profile.params for profile in self._profiles])
 
     @params.setter
     def params(self, x):
@@ -451,7 +451,7 @@ class ProductProfile(_Profile):
     @property
     def params(self):
         """ndarray: Concatenated array of parameters for computation."""
-        return np.concatenate([profile.params for profile in self._profiles])
+        return jnp.concatenate([profile.params for profile in self._profiles])
 
     @params.setter
     def params(self, x):
@@ -591,9 +591,9 @@ class PowerSeriesProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = np.atleast_1d(np.asarray(new))
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == self._basis.num_modes:
-            self._params = np.asarray(new)
+            self._params = jnp.asarray(new)
         else:
             raise ValueError(
                 "params should have the same size as the basis, "
@@ -745,9 +745,9 @@ class TwoPowerProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = np.atleast_1d(np.asarray(new))
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == 3:
-            self._params = np.asarray(new)
+            self._params = jnp.asarray(new)
         else:
             raise ValueError(f"params should be an array of size 3, got {len(new)}.")
 
@@ -849,7 +849,7 @@ class SplineProfile(_Profile):
     @params.setter
     def params(self, new):
         if len(new) == len(self._knots):
-            self._params = np.asarray(new)
+            self._params = jnp.asarray(new)
         else:
             raise ValueError(
                 "params should have the same size as the knots, "
@@ -932,9 +932,9 @@ class MTanhProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = np.atleast_1d(np.asarray(new))
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size >= 5:
-            self._params = np.asarray(new)
+            self._params = jnp.asarray(new)
         else:
             raise ValueError(
                 "params should have at least 5 elements [ped, offset, sym, width,"
@@ -1199,9 +1199,9 @@ class FourierZernikeProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = np.atleast_1d(np.asarray(new))
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == self._basis.num_modes:
-            self._params = np.asarray(new)
+            self._params = jnp.asarray(new)
         else:
             raise ValueError(
                 f"params should have the same size as the basis, got {new.size} "

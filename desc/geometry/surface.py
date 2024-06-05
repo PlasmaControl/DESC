@@ -225,7 +225,7 @@ class FourierRZToroidalSurface(Surface):
     @R_lmn.setter
     def R_lmn(self, new):
         if len(new) == self.R_basis.num_modes:
-            self._R_lmn = np.atleast_1d(np.asarray(new))
+            self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
                 f"R_lmn should have the same size as the basis, got {len(new)} for "
@@ -241,7 +241,7 @@ class FourierRZToroidalSurface(Surface):
     @Z_lmn.setter
     def Z_lmn(self, new):
         if len(new) == self.Z_basis.num_modes:
-            self._Z_lmn = np.atleast_1d(np.asarray(new))
+            self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
@@ -963,7 +963,7 @@ class ZernikeRZToroidalSection(Surface):
     @R_lmn.setter
     def R_lmn(self, new):
         if len(new) == self.R_basis.num_modes:
-            self._R_lmn = np.atleast_1d(np.asarray(new))
+            self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
                 f"R_lmn should have the same size as the basis, got {len(new)} for "
@@ -979,7 +979,7 @@ class ZernikeRZToroidalSection(Surface):
     @Z_lmn.setter
     def Z_lmn(self, new):
         if len(new) == self.Z_basis.num_modes:
-            self._Z_lmn = np.atleast_1d(np.asarray(new))
+            self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "

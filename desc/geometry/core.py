@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.geom_utils import reflection_matrix, rotation_matrix
@@ -25,8 +26,8 @@ class Curve(IOAble, Optimizable, ABC):
     _io_attrs_ = ["_name", "_shift", "_rotmat"]
 
     def __init__(self, name=""):
-        self._shift = np.array([0, 0, 0], dtype=float)
-        self._rotmat = np.eye(3, dtype=float).flatten()
+        self._shift = jnp.array([0, 0, 0], dtype=float)
+        self._rotmat = jnp.eye(3, dtype=float).flatten()
         self._name = name
 
     def _set_up(self):
@@ -42,12 +43,12 @@ class Curve(IOAble, Optimizable, ABC):
     @property
     def shift(self):
         """Displacement of curve in X, Y, Z."""
-        return self.__dict__.setdefault("_shift", np.array([0, 0, 0], dtype=float))
+        return self.__dict__.setdefault("_shift", jnp.array([0, 0, 0], dtype=float))
 
     @shift.setter
     def shift(self, new):
         if len(new) == 3:
-            self._shift = np.asarray(new)
+            self._shift = jnp.asarray(new)
         else:
             raise ValueError("shift should be a 3 element vector, got {}".format(new))
 
@@ -55,14 +56,14 @@ class Curve(IOAble, Optimizable, ABC):
     @property
     def rotmat(self):
         """Rotation matrix of curve in X, Y, Z."""
-        return self.__dict__.setdefault("_rotmat", np.eye(3, dtype=float).flatten())
+        return self.__dict__.setdefault("_rotmat", jnp.eye(3, dtype=float).flatten())
 
     @rotmat.setter
     def rotmat(self, new):
         if len(new) == 9:
-            self._rotmat = np.asarray(new)
+            self._rotmat = jnp.asarray(new)
         else:
-            self._rotmat = np.asarray(new.flatten())
+            self._rotmat = jnp.asarray(new.flatten())
 
     @property
     def name(self):
@@ -178,7 +179,7 @@ class Curve(IOAble, Optimizable, ABC):
 
     def translate(self, displacement=[0, 0, 0]):
         """Translate the curve by a rigid displacement in X,Y,Z coordinates."""
-        self.shift = self.shift + np.asarray(displacement)
+        self.shift = self.shift + jnp.asarray(displacement)
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""

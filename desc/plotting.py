@@ -2638,7 +2638,6 @@ def plot_boozer_surface(
             "theta": 91,
             "zeta": 91,
             "NFP": thing.NFP,
-            "NFP_umbilic_factor": thing.NFP_umbilic_factor,
             "endpoint": True,
         }
         grid_plot = _get_grid(**grid_kwargs)
@@ -2715,9 +2714,7 @@ def plot_boozer_surface(
 
     if fieldlines:
         theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
-        zeta = np.linspace(
-            0, 2 * np.pi / grid_plot.NFP * grid_plot.NFP_umbilic_factor, 100
-        )
+        zeta = np.linspace(0, 2 * np.pi / grid_plot.NFP, 100)
         alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
         alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
         alpha2 = np.where(

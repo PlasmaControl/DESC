@@ -3,7 +3,7 @@ import numbers
 import numpy as np
 
 from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
-from desc.compute import _compute as compute_fun
+from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid, _Grid
 from desc.singularities import compute_B_plasma

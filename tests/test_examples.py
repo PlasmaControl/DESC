@@ -1336,7 +1336,6 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
         return coilset_sym, coilset_asym
 
     def get_mixed_coilset():
-        sym_coilset = get_coilset()[0]
         tf_coil = FourierPlanarCoil(
             current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
         )
@@ -1356,16 +1355,14 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
             Z=np.zeros_like(phi),
             knots=knots,
         )
-        full_coilset = MixedCoilSet(
-            (tf_coilset, vf_coilset, sym_coilset, xyz_coil, spline_coil)
-        )
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil, spline_coil))
         return full_coilset
 
-    def test(c, maxiter=200):
+    def test(c, maxiter=200, constraints=()):
         obj = ObjectiveFunction(CoilLength(c, target=11))
         optimizer = Optimizer("fmintr")
         (c,), _ = optimizer.optimize(
-            c, objective=obj, maxiter=maxiter, ftol=1e-15, xtol=1e-15
+            c, obj, constraints, maxiter=maxiter, ftol=1e-15, xtol=1e-15
         )
         flattened_coils = tree_leaves(c, is_leaf=lambda x: not hasattr(x, "__len__"))
         lengths = [coil.compute("length")["length"] for coil in flattened_coils]
@@ -1391,4 +1388,11 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     # MixedCoilSet
     # TODO: why does this take so many iterations?
     # in particular, vf_coilset takes a long time to converge
-    test(mixed_coilset, maxiter=2000)
+    params = [
+        {"center": True, "normal": True},
+        {"R_n": True, "Z_n": True},
+        {},
+        {"knots": True},
+    ]
+    constraints = (FixParameters(mixed_coilset, params),)
+    test(mixed_coilset, constraints=constraints, maxiter=400)

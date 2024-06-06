@@ -98,6 +98,8 @@ def convert_spectral_to_FE(
         quadpoints = np.hstack((quadpoints_mesh, np.zeros((I * nquad, 1))))
     else:
         quadpoints = quadpoints_mesh  # transpose here?
+    print(quadpoints_mesh)
+    exit()
 
     # Compute the A matrix in Ax = b, should be exactly the same
     # as in the 2D case.

@@ -2188,7 +2188,7 @@ class FiniteElementMesh3D:
         self.integration_points = np.array(integration_points)
         self.weights = np.array(weights)
         self.nquad = self.integration_points.shape[0]
-        self.plot_tetrahedra(plot_quadrature_points=True)
+        # self.plot_tetrahedra(plot_quadrature_points=True)
         
     def plot_tetrahedra(self, plot_quadrature_points=False):
         """Plot all the tetrahedra in the 2D mesh tessellation."""
@@ -2914,16 +2914,15 @@ class TetrahedronFiniteElement:
         d3 = np.linalg.det(D3)
         d4 = np.linalg.det(D4)
         self.d = np.array([d1, d2, d3, d4])
-
         self.Q = int(((K + 1) * (K + 2) * (K + 3)) / 6)
         self.K = K
 
         D = np.array(
             [
-                [vertices[0, 0], vertices[0, 1], vertices[0, 2], 1],
-                [vertices[1, 0], vertices[1, 1], vertices[1, 2], 1],
-                [vertices[2, 0], vertices[2, 1], vertices[2, 2], 1],
-                [vertices[3, 0], vertices[3, 1], vertices[3, 2], 1],
+                [1, vertices[0, 0], vertices[0, 1], vertices[0, 2]],
+                [1, vertices[1, 0], vertices[1, 1], vertices[1, 2]],
+                [1, vertices[2, 0], vertices[2, 1], vertices[2, 2]],
+                [1, vertices[3, 0], vertices[3, 1], vertices[3, 2]],
             ]
         )
 
@@ -3072,56 +3071,55 @@ class TetrahedronFiniteElement:
             D_1 = np.array(
                 [
                     [
-
+                        1, 
                         rho_theta_zeta[i][0],
                         rho_theta_zeta[i][1],
                         rho_theta_zeta[i][2],
-                        1,
                     ],
-                    [g_v[1][0], g_v[1][1], g_v[1][2], 1],
-                    [g_v[2][0], g_v[2][1], g_v[2][2], 1],
-                    [g_v[3][0], g_v[3][1], g_v[3][2], 1],
+                    [1, g_v[1][0], g_v[1][1], g_v[1][2]],
+                    [1, g_v[2][0], g_v[2][1], g_v[2][2]],
+                    [1, g_v[3][0], g_v[3][1], g_v[3][2]],
                 ]
             )
 
             D_2 = np.array(
                 [
-                    [g_v[0][0], g_v[0][1], g_v[0][2], 1],
+                    [1, g_v[0][0], g_v[0][1], g_v[0][2]],
                     [
+                        1,
                         rho_theta_zeta[i][0],
                         rho_theta_zeta[i][1],
                         rho_theta_zeta[i][2],
-                        1,
                     ],
-                    [g_v[2][0], g_v[2][1], g_v[2][2], 1],
-                    [g_v[3][0], g_v[3][1], g_v[3][2], 1],
+                    [1, g_v[2][0], g_v[2][1], g_v[2][2]],
+                    [1, g_v[3][0], g_v[3][1], g_v[3][2]],
                 ]
             )
 
             D_3 = np.array(
                 [
-                    [g_v[0][0], g_v[0][1], g_v[0][2], 1],
-                    [g_v[1][0], g_v[1][1], g_v[1][2], 1],
+                    [1, g_v[0][0], g_v[0][1], g_v[0][2]],
+                    [1, g_v[1][0], g_v[1][1], g_v[1][2]],
                     [
+                        1,
                         rho_theta_zeta[i][0],
                         rho_theta_zeta[i][1],
                         rho_theta_zeta[i][2],
-                        1,
                     ],
-                    [g_v[3][0], g_v[3][1], g_v[3][2], 1],
+                    [1, g_v[3][0], g_v[3][1], g_v[3][2]],
                 ]
             )
 
             D_4 = np.array(
                 [
-                    [g_v[0][0], g_v[0][1], g_v[0][2], 1],
-                    [g_v[1][0], g_v[1][1], g_v[1][2], 1],
-                    [g_v[2][0], g_v[2][1], g_v[2][2], 1],
+                    [1, g_v[0][0], g_v[0][1], g_v[0][2]],
+                    [1, g_v[1][0], g_v[1][1], g_v[1][2]],
+                    [1, g_v[2][0], g_v[2][1], g_v[2][2]],
                     [
+                        1,
                         rho_theta_zeta[i][0],
                         rho_theta_zeta[i][1],
                         rho_theta_zeta[i][2],
-                        1,
                     ],
                 ]
             )
@@ -3135,7 +3133,7 @@ class TetrahedronFiniteElement:
             eta_2 = d_2 / self.det
             eta_3 = d_3 / self.det
             eta_4 = d_4 / self.det
-
+            # print(i, eta_1, eta_2, eta_3, eta_4)
             
             # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
             # is not sufficient because sometimes numerical errors

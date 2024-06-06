@@ -269,8 +269,15 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for this coil
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------
@@ -564,8 +571,15 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     name : str
         name for this curve
-    discontinuous_indices : ndarray
-        indices of knots at which the curve is discontinuous (i.e. only C0)
+    break_indices : ndarray
+        Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+        continuous but with "corners" where the derivative jumps). In between each set
+        of break points, there is an unbroken spline whose start and endpoints are
+        given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+        Each (the ith) spline is interpolated independently of all other unbroken
+        splines (i+1th, i-1th, etc.) and does not consider their query points
+        (knots) when interpolating. The boundary conditions are evaluated using
+        interpax's default where non-periodicity is assumed.
 
     """
 
@@ -683,8 +697,15 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             name for this curve
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------
@@ -1382,8 +1403,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for the new CoilSet
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------
@@ -1601,8 +1629,15 @@ class MixedCoilSet(CoilSet):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for the new CoilSet
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------

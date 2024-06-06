@@ -949,7 +949,7 @@ def test_fix_parameters_input_order(DummyStellarator):
 @pytest.mark.unit
 def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
     """Tests FixParameters fixing a subset of things in the collection."""
-    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    coilset = DummyMixedCoilSet
 
     params = [
         [
@@ -960,6 +960,7 @@ def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
         ],
         {"shift": True, "rotmat": True},
         {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+        {},
     ]
     target = np.concatenate(
         (

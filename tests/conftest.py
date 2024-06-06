@@ -21,7 +21,6 @@ from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.io import load
 from desc.vmec import VMECIO
 
 
@@ -230,12 +229,8 @@ def DummyStellarator(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def DummyCoilSet(tmpdir_factory):
+def DummyCoilSet():
     """Create and save a dummy coil set for testing."""
-    output_dir = tmpdir_factory.mktemp("result")
-    output_path_sym = output_dir.join("DummyCoilSet_sym.h5")
-    output_path_asym = output_dir.join("DummyCoilSet_asym.h5")
-
     eq = get("precise_QH")
     minor_radius = eq.compute("a")["a"]
 
@@ -257,32 +252,20 @@ def DummyCoilSet(tmpdir_factory):
         )
         coils.append(coil)
     coilset_sym = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
-    coilset_sym.save(output_path_sym)
 
     # equivalent CoilSet without symmetry
     coilset_asym = CoilSet.from_symmetry(coilset_sym, NFP=eq.NFP, sym=eq.sym)
-    coilset_asym.save(output_path_asym)
 
-    DummyCoilSet_out = {
-        "output_path_sym": output_path_sym,
-        "output_path_asym": output_path_asym,
-    }
-    return DummyCoilSet_out
+    return coilset_sym, coilset_asym
 
 
 @pytest.fixture(scope="session")
-def DummyMixedCoilSet(tmpdir_factory, DummyCoilSet):
+def DummyMixedCoilSet(DummyCoilSet):
     """Create and save a dummy mixed coil set for testing."""
-    output_dir = tmpdir_factory.mktemp("result")
-    output_path = output_dir.join("DummyMixedCoilSet.h5")
-
-    sym_coilset = load(
-        load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5"
-    )
-
     tf_coil = FourierPlanarCoil(current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
     vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+    # TODO make this symmetric
     vf_coilset = CoilSet.linspaced_linear(
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )
@@ -295,13 +278,9 @@ def DummyMixedCoilSet(tmpdir_factory, DummyCoilSet):
         Z=np.zeros_like(phi),
         knots=np.linspace(0, 2 * np.pi, len(phi)),
     )
-    full_coilset = MixedCoilSet(
-        (tf_coilset, vf_coilset, sym_coilset, xyz_coil, spline_coil)
-    )
+    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil, spline_coil))
 
-    full_coilset.save(output_path)
-    DummyMixedCoilSet_out = {"output_path": output_path}
-    return DummyMixedCoilSet_out
+    return full_coilset
 
 
 @pytest.fixture(scope="session")

@@ -105,17 +105,21 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         ):
             from .geom_utils import rpz2xyz_vec
 
+            print(f"Converting {name} to xyz basis")
             data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
         elif (
             kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
             and data_index[parameterization][name]["coordinates"] != "s"  # not curve x
-            and name
-            == "x"  # x is the only none vector quantity that needs to be converted
+            and name == "x"  # x is the only coordinate value
         ):
             from .geom_utils import rpz2xyz
 
+            print(f"Converting {name} to xyz basis")
             data[name] = rpz2xyz(data[name])
-
+        else:
+            dim = data_index[parameterization][name]["dim"]
+            coord = data_index[parameterization][name]["coordinates"]
+            print(f"NOT Converting {name} to xyz basis {dim=}, {coord=}")
     return data
 
 
@@ -125,7 +129,14 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
 def _compute(
     parameterization, names, params, transforms, profiles, data=None, **kwargs
 ):
-    """Same as above but without checking inputs for faster recursion."""
+    """Same as above but without checking inputs for faster recursion.
+
+    We need to directly call this function in objectives, since the checks in above
+    function are not compatible with JIT. This function computes given names while
+    using recursion to compute dependencies. If you want to call this function, you
+    cannot give the argument basis='xyz' since that will break the recursion. In that
+    case, either call above function or manually convert the output to xyz basis.
+    """
     parameterization = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]

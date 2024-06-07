@@ -950,11 +950,40 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x_s", "x_ss", "x_sss"],
-    parameterization="desc.geometry.core.Curve",
+    parameterization=[
+        "desc.geometry.curve.FourierRZCurve",
+        "desc.geometry.curve.FourierXYZCurve",
+        "desc.geometry.curve.FourierPlanarCurve",
+    ],
 )
 def _torsion(params, transforms, profiles, data, **kwargs):
     dxd2x = cross(data["x_s"], data["x_ss"])
     data["torsion"] = dot(dxd2x, data["x_sss"]) / jnp.linalg.norm(dxd2x, axis=-1) ** 2
+    return data
+
+
+@register_compute_fun(
+    name="torsion",
+    label="\\tau",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Scalar torsion of the curve",
+    dim=1,
+    params=[],
+    transforms={"intervals": []},
+    profiles=[],
+    coordinates="s",
+    data=["x_s", "x_ss", "x_sss"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
+)
+def _torsion_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    dxd2x = cross(data["x_s"], data["x_ss"])
+    data["torsion"] = dot(dxd2x, data["x_sss"]) / jnp.linalg.norm(dxd2x, axis=-1) ** 2
+    # set torsion to zero at break points
+    if len(transforms["intervals"][0]):
+        data["torsion"] = data["torsion"].at[transforms["intervals"][:, 1]].set(0.0)
+
     return data
 
 

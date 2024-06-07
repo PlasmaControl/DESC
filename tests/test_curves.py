@@ -850,6 +850,9 @@ class TestSplineXYZCurve:
         """Test with discontinuous knots."""
 
         def test(method, data_key):
+            R = 2
+            phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
+
             discontinuous = SplineXYZCurve(
                 X=R * np.cos(phi),
                 Y=R * np.sin(phi),
@@ -876,9 +879,7 @@ class TestSplineXYZCurve:
 
             return discon_data, cont_data
 
-        discontinuous_indices = [0, 500]
-        R = 2
-        phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
+        discontinuous_indices = [0, 250, 500, 750]
 
         np.testing.assert_allclose(*test("linear", "length"), rtol=1e-3)
         np.testing.assert_allclose(*test("linear", "curvature"), rtol=1e-3)
@@ -892,10 +893,4 @@ class TestSplineXYZCurve:
             cont_data[~np.array(discontinuous_indices)],
             rtol=1e-3,
         )
-        discont_data, cont_data = test("cubic", "torsion")
-        np.testing.assert_allclose(
-            # don't include discon knots because of interpolator BCs
-            discont_data[~np.array(discontinuous_indices)],
-            cont_data[~np.array(discontinuous_indices)],
-            rtol=1e-3,
-        )
+        np.testing.assert_allclose(*test("cubic", "torsion"))

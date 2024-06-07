@@ -792,7 +792,7 @@ class SplineXYZCurve(Curve):
         knots=None,
         method="cubic",
         name="",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
         super().__init__(name)
         X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
@@ -827,16 +827,16 @@ class SplineXYZCurve(Curve):
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
             knots = knots[:-1] if closed_flag else knots
 
-        if discontinuous_indices is None:
+        if break_indices is None:
             interval_indices = [[]]
         else:
             # check that input is monotonic
             assert np.all(
-                discontinuous_indices == np.unique(sorted(discontinuous_indices))
+                break_indices == np.unique(sorted(break_indices))
             ), "Indices must be monotonic."
             interval_indices = [
-                [discontinuous_indices[i - 1], discontinuous_indices[i]]
-                for i in range(len(discontinuous_indices))
+                [break_indices[i - 1], break_indices[i]]
+                for i in range(len(break_indices))
             ]
 
         self._knots = knots
@@ -994,7 +994,7 @@ class SplineXYZCurve(Curve):
         method="cubic",
         name="",
         basis="xyz",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
         """Create SplineXYZCurve from coordinate values.
 
@@ -1057,5 +1057,5 @@ class SplineXYZCurve(Curve):
             knots,
             method,
             name,
-            discontinuous_indices,
+            break_indices,
         )

@@ -242,7 +242,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         )
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", discontinuous_indices=None
+        self, knots=None, grid=None, method="cubic", name="", break_indices=None
     ):
         """Convert coil to SplineXYZCoil.
 
@@ -295,7 +295,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             method=method,
             name=name,
             basis="xyz",
-            discontinuous_indices=discontinuous_indices,
+            break_indices=break_indices,
         )
 
 
@@ -594,9 +594,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         knots=None,
         method="cubic",
         name="",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
-        super().__init__(current, X, Y, Z, knots, method, name, discontinuous_indices)
+        super().__init__(current, X, Y, Z, knots, method, name, break_indices)
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -665,7 +665,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         method="cubic",
         name="",
         basis="xyz",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -722,7 +722,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             knots=curve.knots,
             method=curve.method,
             name=name,
-            discontinuous_indices=discontinuous_indices,
+            break_indices=break_indices,
         )
 
 
@@ -1377,7 +1377,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", discontinuous_indices=None
+        self, knots=None, grid=None, method="cubic", name="", break_indices=None
     ):
         """Convert all coils to SplineXYZCoil.
 
@@ -1420,9 +1420,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [
-            coil.to_SplineXYZ(
-                knots, grid, method, discontinuous_indices=discontinuous_indices
-            )
+            coil.to_SplineXYZ(knots, grid, method, break_indices=break_indices)
             for coil in self
         ]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
@@ -1603,7 +1601,7 @@ class MixedCoilSet(CoilSet):
         grid=None,
         method="cubic",
         name="",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
         """Convert all coils to SplineXYZCoil.
 
@@ -1646,9 +1644,7 @@ class MixedCoilSet(CoilSet):
 
         """
         coils = [
-            coil.to_SplineXYZ(
-                knots, grid, method, discontinuous_indices=discontinuous_indices
-            )
+            coil.to_SplineXYZ(knots, grid, method, break_indices=break_indices)
             for coil in self
         ]
         return self.__class__(*coils, name=name)

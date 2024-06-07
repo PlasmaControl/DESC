@@ -858,7 +858,7 @@ class TestSplineXYZCurve:
                 Y=R * np.sin(phi),
                 Z=np.zeros_like(phi),
                 knots="arclength",
-                discontinuous_indices=discontinuous_indices,
+                break_indices=break_indices,
                 method=method,
             )
 
@@ -867,7 +867,7 @@ class TestSplineXYZCurve:
                 Y=R * np.sin(phi),
                 Z=np.zeros_like(phi),
                 knots="arclength",
-                discontinuous_indices=None,
+                break_indices=None,
                 method=method,
             )
 
@@ -879,7 +879,7 @@ class TestSplineXYZCurve:
 
             return discon_data, cont_data
 
-        discontinuous_indices = [0, 250, 500, 750]
+        break_indices = [0, 250, 500, 750]
 
         np.testing.assert_allclose(*test("linear", "length"), rtol=1e-3)
         np.testing.assert_allclose(*test("linear", "curvature"), rtol=1e-3)
@@ -889,8 +889,8 @@ class TestSplineXYZCurve:
         discont_data, cont_data = test("cubic", "curvature")
         np.testing.assert_allclose(
             # don't include discon knots because of interpolator BCs
-            discont_data[~np.array(discontinuous_indices)],
-            cont_data[~np.array(discontinuous_indices)],
+            discont_data[~np.array(break_indices)],
+            cont_data[~np.array(break_indices)],
             rtol=1e-3,
         )
         np.testing.assert_allclose(*test("cubic", "torsion"))

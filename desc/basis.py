@@ -261,7 +261,7 @@ class _FE_Basis(IOAble, ABC):
         ----------
         I_LMN : int
             Maximum number of 1D, 2D or 3D geometric finite elements.
-            If have (M x N) points in the grid, I_LMN = 2NM for triangles. 
+            If have (M x N) points in the grid, I_LMN = 2NM for triangles.
         Q : int
             Number of basis functions. For order K triangle FE, should be
             q = (K + 1)(K + 2) / 2.
@@ -1221,7 +1221,6 @@ class FiniteElementBasis(_FE_Basis):
                 basis_functions,
             ) = self.mesh.find_tetrahedra_corresponding_to_points(Rho_Theta_Zeta)
 
-
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
         print(basis_functions, inds)
@@ -2070,7 +2069,7 @@ class FiniteElementMesh3D:
         # We wish to compute the tetrahedral elements for all 5MNL tetrahedra:
         tetrahedra = []
         # Pick four points of tetrahedral elements:
-                    
+
         for i in range(L - 1):
             for j in range(M - 1):
                 for k in range(N - 1):
@@ -2150,17 +2149,13 @@ class FiniteElementMesh3D:
                     tetrahedra.append(tetrahedron3)
                     tetrahedra.append(tetrahedron4)
                     tetrahedra.append(tetrahedron5)
-                    
-                
-        
+
         self.vertices = vertices
         self.tetrahedra = tetrahedra
         # Setup quadrature points and weights
         # for numerical integration using scikit-fem
 
-        [integration_points, weights] = fem.quadrature.get_quadrature(
-            element, K   # * 5
-        )
+        [integration_points, weights] = fem.quadrature.get_quadrature(element, K)  # * 5
 
         weights = 6 * weights
 
@@ -2189,7 +2184,7 @@ class FiniteElementMesh3D:
         self.weights = np.array(weights)
         self.nquad = self.integration_points.shape[0]
         self.plot_tetrahedra(plot_quadrature_points=True)
-        
+
     def plot_tetrahedra(self, plot_quadrature_points=False):
         """Plot all the tetrahedra in the 2D mesh tessellation."""
         nquad = self.nquad
@@ -2201,11 +2196,15 @@ class FiniteElementMesh3D:
                 print(quadpoints.shape)
                 for i in range(self.Q):
                     # ax = fig.get_axes()[i]
-                    ax = fig.add_subplot(1, self.Q, i + 1, projection='3d')
-                    ax.scatter(quadpoints[i * nquad: (i + 1) * nquad, 0], 
-                               quadpoints[i * nquad: (i + 1) * nquad, 1], 
-                               quadpoints[i * nquad: (i + 1) * nquad, 2], 
-                               c='k', marker="x", s=100)
+                    ax = fig.add_subplot(1, self.Q, i + 1, projection="3d")
+                    ax.scatter(
+                        quadpoints[i * nquad : (i + 1) * nquad, 0],
+                        quadpoints[i * nquad : (i + 1) * nquad, 1],
+                        quadpoints[i * nquad : (i + 1) * nquad, 2],
+                        c="k",
+                        marker="x",
+                        s=100,
+                    )
         plt.show()
 
     def get_barycentric_coordinates(self, rho_theta_zeta, K):
@@ -2256,6 +2255,58 @@ class FiniteElementMesh3D:
 
         return coordinate_matrix
 
+    def return_quadrature_points(self):
+        """Get quadrature points for numerical integration over the mesh.
+
+        Returns
+        -------
+        quadrature points: 2D ndarray, shape (nquad * I_LMN, 3)
+            Points in (rho, theta, zeta) representing the quadrature point
+            locations for integration, return in real-space coordinates.
+
+        """
+        nquad = self.nquad
+        quadrature_points = np.zeros((self.I_LMN * nquad, 3))
+        q = 0
+        for tetrahedron in self.tetrahedra:
+            for i in range(nquad):
+                A = np.array(
+                    [
+                        [tetrahedron.b[0], tetrahedron.c[0], tetrahedron.d[0]],
+                        [tetrahedron.b[1], tetrahedron.c[1], tetrahedron.d[1]],
+                        [tetrahedron.b[2], tetrahedron.c[2], tetrahedron.d[2]],
+                        [
+                            tetrahedron.b[0]
+                            + tetrahedron.b[1]
+                            + tetrahedron.b[2]
+                            + tetrahedron.b[3],
+                            tetrahedron.c[0]
+                            + tetrahedron.c[1]
+                            + tetrahedron.c[2]
+                            + tetrahedron.c[3],
+                            tetrahedron.d[0]
+                            + tetrahedron.d[1]
+                            + tetrahedron.d[2]
+                            + tetrahedron.d[3],
+                        ],
+                    ]
+                )
+                b = np.zeros(4)
+                b[:3] = (
+                    tetrahedron.volume6 * self.integration_points[i, :3]
+                    - tetrahedron.a[:3]
+                )
+                b[3] = (
+                    tetrahedron.volume6
+                    - tetrahedron.a[0]
+                    - tetrahedron.a[1]
+                    - tetrahedron.a[2]
+                    - tetrahedron.a[3]
+                )
+                quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
+                q = q + 1
+        return quadrature_points
+
     # def return_quadrature_points(self):
     #     """Get quadrature points for numerical integration over the mesh.
 
@@ -2267,110 +2318,57 @@ class FiniteElementMesh3D:
 
     #     """
     #     nquad = self.nquad
-    #     quadrature_points = np.zeros((self.I_LMN * nquad, 3))
+    #     quadrature_points = np.zeros((nquad * self.I_LMN, 3))
+    #     integration_points = self.integration_points
     #     q = 0
     #     for tetrahedron in self.tetrahedra:
+    #         v = tetrahedron.vertices
+
+    #         A = np.array(
+    #             [
+    #                 [v[2, 0] - v[0, 0], v[1, 0] - v[0, 0], v[3, 0] - v[0, 0]],
+    #                 [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1], v[3, 1] - v[0, 1]],
+    #                 [v[2, 2] - v[0, 2], v[1, 2] - v[0, 2], v[3, 2] - v[0, 2]],
+    #             ]
+    #         )
+
+    #         q_p = integration_points
+
+    #         # Transformation of quad_points to real-coordinates. q_p is a matrix
+    #         # with size (nquad,4)
+
+    #         qp_r = np.zeros((nquad, 3))
+
     #         for i in range(nquad):
-    #             A = np.array(
-    #                 [
-    #                     [tetrahedron.b[0], tetrahedron.c[0], tetrahedron.d[0]],
-    #                     [tetrahedron.b[1], tetrahedron.c[1], tetrahedron.d[1]],
-    #                     [tetrahedron.b[2], tetrahedron.c[2], tetrahedron.d[2]],
-    #                     [
-    #                         tetrahedron.b[0]
-    #                         + tetrahedron.b[1]
-    #                         + tetrahedron.b[2]
-    #                         + tetrahedron.b[3],
-    #                         tetrahedron.c[0]
-    #                         + tetrahedron.c[1]
-    #                         + tetrahedron.c[2]
-    #                         + tetrahedron.c[3],
-    #                         tetrahedron.d[0]
-    #                         + tetrahedron.d[1]
-    #                         + tetrahedron.d[2]
-    #                         + tetrahedron.d[3],
-    #                     ],
-    #                 ]
-    #             )
-    #             b = np.zeros(4)
-    #             b[:3] = (
-    #                 tetrahedron.volume6 * self.integration_points[i, :3]
-    #                 - tetrahedron.a[:3]
-    #             )
-    #             b[3] = (
-    #                 tetrahedron.volume6
-    #                 - tetrahedron.a[0]
-    #                 - tetrahedron.a[1]
-    #                 - tetrahedron.a[2]
-    #                 - tetrahedron.a[3]
-    #             )
-    #             quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
-    #             q = q + 1
+    #             for j in range(3):
+    #                 qp_r[i, j] = (
+    #                     q_p[i, 0] * v[0, j]
+    #                     + q_p[i, 1] * v[1, j]
+    #                     + q_p[i, 2] * v[2, j]
+    #                     + q_p[i, 3] * v[3, j]
+    #                 )
+
+    #         # qp_r is now a matrix of quadrature points, in real coordinates, with shape
+    #         # (nquad,3). We now transform these real-space quadrature points
+    #         # from the reference tetrahedron to the tetrahedron of interest:
+
+    #         # For a single tetrahedron:
+    #         single_tet_quad = np.zeros((nquad, 3))
+    #         for i in range(nquad):
+    #             single_tet_quad[i, :] = np.dot(A, np.transpose(qp_r[i, :]))
+    #         # quadrature_points = np.vstack([quadrature_points, single_tet_quad]).
+
+    #         # Now have a matrix for single tetrahedron
+
+    #         for j in range(nquad):
+
+    #             quadrature_points[q * nquad + j, :] = single_tet_quad[j, :]
+
+    #         q = q + 1
+
+    #     print(quadrature_points)
+
     #     return quadrature_points
-    
-    
-    def return_quadrature_points(self):
-        """Get quadrature points for numerical integration over the mesh.
-    
-        Returns
-        -------
-        quadrature points: 2D ndarray, shape (nquad * I_LMN, 3)
-            Points in (rho, theta, zeta) representing the quadrature point
-            locations for integration, return in real-space coordinates.
-    
-        """
-        nquad = self.nquad
-        quadrature_points = np.zeros((nquad *self.I_LMN, 3))
-        integration_points = self.integration_points
-        q = 0
-        for tetrahedron in self.tetrahedra:
-            v = tetrahedron.vertices
-            
-          
-            A = np.array([
-                [v[2,0]-v[0,0], v[1,0] - v[0,0], v[3,0]-v[0,0]],
-                [v[2,1]-v[0,1], v[1,1] - v[0,1], v[3,1]-v[0,1]],
-                [v[2,2]-v[0,2], v[1,2] - v[0,2], v[3,2]-v[0,2]]
-                ])
-        
-            q_p = integration_points
-            
-            
-            # Transformation of quad_points to real-coordinates. q_p is a matrix
-            # with size (nquad,4)
-            
-            qp_r = np.zeros((nquad,3))
-            
-            for i in range(nquad):
-                for j in range(3):
-                    qp_r[i,j] = q_p[i,0]*v[0,j] + q_p[i,1]*v[1,j] +  q_p[i,2]*v[2,j] + q_p[i,3]*v[3,j]
-                    
-                    
-             
-            # qp_r is now a matrix of quadrature points, in real coordinates, with shape
-            # (nquad,3). We now transform these real-space quadrature points
-            # from the reference tetrahedron to the tetrahedron of interest:
-                
-      
-    
-            # For a single tetrahedron:
-            single_tet_quad = np.zeros((nquad, 3))
-            for i in range(nquad):
-                single_tet_quad[i,:] = np.dot(A,np.transpose(qp_r[i,:]))
-               # quadrature_points = np.vstack([quadrature_points, single_tet_quad]).
-        
-            # Now have a matrix for single tetrahedron
-            
-            for j in range(nquad):
-            
-                quadrature_points[q*nquad+j, :] =  single_tet_quad[j,:]
-            
-            
-            q = q+1
-            
-        print(quadrature_points)
-        
-        return quadrature_points
 
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
@@ -2828,109 +2826,88 @@ class TetrahedronFiniteElement:
 
     # Test comment
     def __init__(self, vertices, K=1):
-        
+
         v = vertices
-        
-        
-        A1 = np.array([
-            [v[1,0],v[1,1], v[1,2]],
-            [v[2,0], v[2,1], v[2,2]],
-            [v[3,0], v[3,1], v[3,2]]
-            ])
-        
-        B1 = np.array([
-            [v[1,1], v[1,2],1],
-            [v[2,1], v[2,2],1],
-            [ v[3,1], v[3,2],1]
-            ])
-        
-        C1 = np.array([
-            [v[1,2],1, v[1,0]],
-            [v[2,2],1, v[2,0]],
-            [v[3,2],1, v[3,0]]
-            ])
-        
-        D1 = np.array([
-            [1, v[1,0],v[1,1]],
-            [1, v[2,0], v[2,1]],
-            [1, v[3,0], v[3,1] ]
-            ])
-        
-        
-        A2 = np.array([
-            [v[2,0], v[2,1], v[2,2]],
-            [v[3,0], v[3,1], v[3,2]],
-            [v[0,0], v[0,1], v[0,2]]
-            ])
-        
-        B2 = np.array([
-            [v[2,1], v[2,2], 1],
-            [v[3,1], v[3,2], 1],
-            [v[0,1], v[0,2], 1]
-            ])
-        
-        C2 = np.array([
-            [v[2,2], 1, v[2,0]],
-            [v[3,2], 1, v[3,0]],
-            [v[0,2], 1, v[0,0]]
-            ])
-        
-        D2 = np.array([
-            [1, v[2,0], v[2,1]],
-            [1, v[3,0], v[3,1]],
-            [1, v[0,0], v[0,1]]
-            ])
-        
-        A3 = np.array([
-            [v[3,0], v[3,1], v[3,2]],
-            [v[0,0], v[0,1], v[0,2]],
-            [v[1,0], v[1,1], v[1,2]]
-            ])
-        
-        B3 = np.array([
-            [v[3,1], v[3,2], 1],
-            [v[0,1], v[0,2], 1],
-            [v[1,1], v[1,2], 1]
-            ])
-        
-        C3 = np.array([
-            [v[3,2], 1, v[3,0] ],
-            [v[0,2], 1, v[0,0]],
-            [v[1,2], 1, v[1,0] ]
-            ])
-        
-        D3 = np.array([
-            [1, v[3,0], v[3,1] ],
-            [1, v[0,0], v[0,1] ],
-            [1, v[1,0], v[1,1] ]
-            ])
-        
-        A4 = np.array([
-            [v[0,0], v[0,1], v[0,2]],
-            [v[1,0], v[1,1], v[1,2]],
-            [v[2,0], v[2,1], v[2,2]]
-            ])
-        
-        
-        B4 = np.array([
-            [v[0,1], v[0,2], 1],
-            [v[1,1], v[1,2], 1],
-            [v[2,1], v[2,2], 1]
-            ])
-        
-        C4 = np.array([
-            [v[0,2], 1, v[0,0]],
-            [v[1,2], 1, v[1,0]],
-            [v[2,2], 1, v[2,0]]
-            ])
-        
-        D4 = np.array([
-            [1, v[0,0], v[0,1]],
-            [1, v[1,0], v[1,1]],
-            [1, v[2,0], v[2,1]]
-            ])
-        
-        
+
+        A1 = np.array(
+            [
+                [v[1, 0], v[1, 1], v[1, 2]],
+                [v[2, 0], v[2, 1], v[2, 2]],
+                [v[3, 0], v[3, 1], v[3, 2]],
+            ]
+        )
+
+        B1 = np.array(
+            [[v[1, 1], v[1, 2], 1], [v[2, 1], v[2, 2], 1], [v[3, 1], v[3, 2], 1]]
+        )
+
+        C1 = np.array(
+            [[v[1, 2], 1, v[1, 0]], [v[2, 2], 1, v[2, 0]], [v[3, 2], 1, v[3, 0]]]
+        )
+
+        D1 = np.array(
+            [[1, v[1, 0], v[1, 1]], [1, v[2, 0], v[2, 1]], [1, v[3, 0], v[3, 1]]]
+        )
+
+        A2 = np.array(
+            [
+                [v[2, 0], v[2, 1], v[2, 2]],
+                [v[3, 0], v[3, 1], v[3, 2]],
+                [v[0, 0], v[0, 1], v[0, 2]],
+            ]
+        )
+
+        B2 = np.array(
+            [[v[2, 1], v[2, 2], 1], [v[3, 1], v[3, 2], 1], [v[0, 1], v[0, 2], 1]]
+        )
+
+        C2 = np.array(
+            [[v[2, 2], 1, v[2, 0]], [v[3, 2], 1, v[3, 0]], [v[0, 2], 1, v[0, 0]]]
+        )
+
+        D2 = np.array(
+            [[1, v[2, 0], v[2, 1]], [1, v[3, 0], v[3, 1]], [1, v[0, 0], v[0, 1]]]
+        )
+
+        A3 = np.array(
+            [
+                [v[3, 0], v[3, 1], v[3, 2]],
+                [v[0, 0], v[0, 1], v[0, 2]],
+                [v[1, 0], v[1, 1], v[1, 2]],
+            ]
+        )
+
+        B3 = np.array(
+            [[v[3, 1], v[3, 2], 1], [v[0, 1], v[0, 2], 1], [v[1, 1], v[1, 2], 1]]
+        )
+
+        C3 = np.array(
+            [[v[3, 2], 1, v[3, 0]], [v[0, 2], 1, v[0, 0]], [v[1, 2], 1, v[1, 0]]]
+        )
+
+        D3 = np.array(
+            [[1, v[3, 0], v[3, 1]], [1, v[0, 0], v[0, 1]], [1, v[1, 0], v[1, 1]]]
+        )
+
+        A4 = np.array(
+            [
+                [v[0, 0], v[0, 1], v[0, 2]],
+                [v[1, 0], v[1, 1], v[1, 2]],
+                [v[2, 0], v[2, 1], v[2, 2]],
+            ]
+        )
+
+        B4 = np.array(
+            [[v[0, 1], v[0, 2], 1], [v[1, 1], v[1, 2], 1], [v[2, 1], v[2, 2], 1]]
+        )
+
+        C4 = np.array(
+            [[v[0, 2], 1, v[0, 0]], [v[1, 2], 1, v[1, 0]], [v[2, 2], 1, v[2, 0]]]
+        )
+
+        D4 = np.array(
+            [[1, v[0, 0], v[0, 1]], [1, v[1, 0], v[1, 1]], [1, v[2, 0], v[2, 1]]]
+        )
 
         self.vertices = vertices
         a1 = np.linalg.det(A1)
@@ -2955,6 +2932,8 @@ class TetrahedronFiniteElement:
         self.d = np.array([d1, d2, d3, d4])
         self.Q = int(((K + 1) * (K + 2) * (K + 3)) / 6)
         self.K = K
+        
+        print(self.a,self.b,self.c,self.d)
 
         D = np.array(
             [
@@ -2965,8 +2944,21 @@ class TetrahedronFiniteElement:
             ]
         )
 
+        # Making sure volume is positive; if not, then we switch the first two
+        # rows:
+        if (np.linalg.det(D) < 0) and (not np.isclose(np.linalg.det(D), 0.0)):
+
+            r_0 = D[0].copy()
+            D[0] = D[1]
+            D[1] = r_0
+
+            v_0 = self.vertices[0].copy()
+            self.vertices[0] = self.vertices[1]
+            self.vertices[1] = v_0
+
         self.volume6 = np.linalg.det(D)
         self.det = np.linalg.det(D)
+
 
         # We construct equally spaced nodes for order K tetrahedron,
         # which gives Q nodes.
@@ -3086,7 +3078,7 @@ class TetrahedronFiniteElement:
 
         # Check we have the same number of basis functions as nodes.
         assert self.nodes.shape[0] == self.Q
-        
+
     def get_barycentric_coordinates(self, rho_theta_zeta):
         """Gets the barycentic coordinates, given a mesh in rho, theta, zeta.
 
@@ -3110,7 +3102,7 @@ class TetrahedronFiniteElement:
             D_1 = np.array(
                 [
                     [
-                        1, 
+                        1,
                         rho_theta_zeta[i][0],
                         rho_theta_zeta[i][1],
                         rho_theta_zeta[i][2],
@@ -3173,14 +3165,14 @@ class TetrahedronFiniteElement:
             eta_3 = d_3 / self.det
             eta_4 = d_4 / self.det
             # print(i, eta_1, eta_2, eta_3, eta_4)
-            
+
             # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
             # is not sufficient because sometimes numerical errors
-            # have eta_i ~ -1e-16 which breaks this 
-            ind_1 = ((eta_1 < 0) and (not np.isclose(eta_1, 0.0)))
-            ind_2 = ((eta_2 < 0) and (not np.isclose(eta_2, 0.0)))
-            ind_3 = ((eta_3 < 0) and (not np.isclose(eta_3, 0.0)))
-            ind_4 = ((eta_4 < 0) and (not np.isclose(eta_4, 0.0)))
+            # have eta_i ~ -1e-16 which breaks this
+            ind_1 = (eta_1 < 0) and (not np.isclose(eta_1, 0.0))
+            ind_2 = (eta_2 < 0) and (not np.isclose(eta_2, 0.0))
+            ind_3 = (eta_3 < 0) and (not np.isclose(eta_3, 0.0))
+            ind_4 = (eta_4 < 0) and (not np.isclose(eta_4, 0.0))
             if ind_1 or ind_2 or ind_3 or ind_4:
                 warnings.warn(
                     "Found rho_theta_zeta points outside the tetrahedron ... "
@@ -3243,9 +3235,7 @@ class TetrahedronFiniteElement:
         if K == 2:
             for i in range(rho_theta_zeta.shape[0]):
                 for j in range(4):
-                    basis_functions[i, j] = eta[i, j] * (
-                        2 * eta[i, j] - 1
-                    )
+                    basis_functions[i, j] = eta[i, j] * (2 * eta[i, j] - 1)
 
             for i in range(rho_theta_zeta.shape[0]):
                 basis_functions[i, 4] = 4 * eta[i, 1] * eta[i, 0]
@@ -3260,114 +3250,55 @@ class TetrahedronFiniteElement:
             for i in range(rho_theta_zeta.shape[0]):
                 for j in range(4):
                     basis_functions[i, j] = (
-                        (1 / 2)
-                        * eta[i, j]
-                        * (3 * eta[i, j] - 1)
-                        * (3 * eta[i, j] - 2)
+                        (1 / 2) * eta[i, j] * (3 * eta[i, j] - 1) * (3 * eta[i, j] - 2)
                     )
             for i in range(rho_theta_zeta.shape[0]):
                 # Edge nodes
                 basis_functions[i, 4] = (
-                    (9 / 2)
-                    * eta[i, 0]
-                    * eta[i, 1]
-                    * (3 * eta[i, 0] - 1)
+                    (9 / 2) * eta[i, 0] * eta[i, 1] * (3 * eta[i, 0] - 1)
                 )
                 basis_functions[i, 5] = (
-                    (9 / 2)
-                    * eta[i, 0]
-                    * eta[i, 1]
-                    * (3 * eta[i, 1] - 1)
+                    (9 / 2) * eta[i, 0] * eta[i, 1] * (3 * eta[i, 1] - 1)
                 )
                 basis_functions[i, 6] = (
-                    (9 / 2)
-                    * eta[i, 1]
-                    * eta[i, 2]
-                    * (3 * eta[i, 1] - 1)
+                    (9 / 2) * eta[i, 1] * eta[i, 2] * (3 * eta[i, 1] - 1)
                 )
                 basis_functions[i, 7] = (
-                    (9 / 2)
-                    * eta[i, 1]
-                    * eta[i, 2]
-                    * (3 * eta[i, 2] - 1)
+                    (9 / 2) * eta[i, 1] * eta[i, 2] * (3 * eta[i, 2] - 1)
                 )
                 basis_functions[i, 8] = (
-                    (9 / 2)
-                    * eta[i, 2]
-                    * eta[i, 3]
-                    * (3 * eta[i, 2] - 1)
+                    (9 / 2) * eta[i, 2] * eta[i, 3] * (3 * eta[i, 2] - 1)
                 )
                 basis_functions[i, 9] = (
-                    (9 / 2)
-                    * eta[i, 2]
-                    * eta[i, 3]
-                    * (3 * eta[i, 3] - 1)
+                    (9 / 2) * eta[i, 2] * eta[i, 3] * (3 * eta[i, 3] - 1)
                 )
                 basis_functions[i, 10] = (
-                    (9 / 2)
-                    * eta[i, 0]
-                    * eta[i, 2]
-                    * (3 * eta[i, 0] - 1)
+                    (9 / 2) * eta[i, 0] * eta[i, 2] * (3 * eta[i, 0] - 1)
                 )
                 basis_functions[i, 11] = (
-                    (9 / 2)
-                    * eta[i, 0]
-                    * eta[i, 2]
-                    * (3 * eta[i, 2] - 1)
+                    (9 / 2) * eta[i, 0] * eta[i, 2] * (3 * eta[i, 2] - 1)
                 )
                 basis_functions[i, 12] = (
-                    (9 / 2)
-                    * eta[i, 0]
-                    * eta[i, 3]
-                    * (3 * eta[i, 0] - 1)
+                    (9 / 2) * eta[i, 0] * eta[i, 3] * (3 * eta[i, 0] - 1)
                 )
                 basis_functions[i, 13] = (
-                    (9 / 2)
-                    * eta[i, 0]
-                    * eta[i, 3]
-                    * (3 * eta[i, 3] - 1)
+                    (9 / 2) * eta[i, 0] * eta[i, 3] * (3 * eta[i, 3] - 1)
                 )
                 basis_functions[i, 14] = (
-                    (9 / 2)
-                    * eta[i, 1]
-                    * eta[i, 3]
-                    * (3 * eta[i, 1] - 1)
+                    (9 / 2) * eta[i, 1] * eta[i, 3] * (3 * eta[i, 1] - 1)
                 )
                 basis_functions[i, 15] = (
-                    (9 / 2)
-                    * eta[i, 1]
-                    * eta[i, 3]
-                    * (3 * eta[i, 3] - 1)
+                    (9 / 2) * eta[i, 1] * eta[i, 3] * (3 * eta[i, 3] - 1)
                 )
 
                 # Mid-face nodes
-                basis_functions[i, 16] = (
-                    27
-                    * eta[i, 0]
-                    * eta[i, 1]
-                    * eta[i, 2]
-                )
-                basis_functions[i, 17] = (
-                    27
-                    * eta[i, 1]
-                    * eta[i, 2]
-                    * eta[i, 3]
-                )
-                basis_functions[i, 18] = (
-                    27
-                    * eta[i, 0]
-                    * eta[i, 2]
-                    * eta[i, 3]
-                )
-                basis_functions[i, 19] = (
-                    27
-                    * eta[i, 0]
-                    * eta[i, 1]
-                    * eta[i, 3]
-                )
+                basis_functions[i, 16] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 2]
+                basis_functions[i, 17] = 27 * eta[i, 1] * eta[i, 2] * eta[i, 3]
+                basis_functions[i, 18] = 27 * eta[i, 0] * eta[i, 2] * eta[i, 3]
+                basis_functions[i, 19] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 3]
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
-    
+
     def plot_tetrahedron(self):
         """
         Plot the tetrahedron in (rho, theta, zeta) coordinates.
@@ -3398,10 +3329,12 @@ class TetrahedronFiniteElement:
 
         fig = plt.figure(100)
         for i in range(self.Q):
-            ax = fig.add_subplot(1, self.Q, i + 1, projection='3d')
+            ax = fig.add_subplot(1, self.Q, i + 1, projection="3d")
             plt.grid()
             # Plot the nodes of the triangle
-            plt.plot(self.nodes[:, 0], self.nodes[:, 1], self.nodes[:, 2], "ro", markersize=2)
+            plt.plot(
+                self.nodes[:, 0], self.nodes[:, 1], self.nodes[:, 2], "ro", markersize=2
+            )
 
             # Plot the ith basis function
             ax.scatter(

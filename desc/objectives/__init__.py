@@ -18,12 +18,7 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from ._free_boundary import BoundaryError, VacuumBoundaryError
-from ._generic import (
-    ExternalObjective,
-    GenericObjective,
-    LinearObjectiveFromUser,
-    ObjectiveFromUser,
-)
+from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,

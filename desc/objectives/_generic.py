@@ -2,11 +2,13 @@
 
 import functools
 import inspect
+import multiprocessing
 import re
+from abc import ABC
 
 import numpy as np
 
-from desc.backend import jax, jnp
+from desc.backend import jnp
 from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
@@ -16,7 +18,7 @@ from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
 
 
-class ExternalObjective(_Objective):
+class _ExternalObjective(_Objective, ABC):
     """Wrap an external code.
 
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
@@ -24,6 +26,8 @@ class ExternalObjective(_Objective):
 
     The user supplied function must take an Equilibrium as its only positional argument,
     but can take additional keyword arguments.
+
+    # TODO: add Parameters documentation
 
     Parameters
     ----------
@@ -76,6 +80,7 @@ class ExternalObjective(_Objective):
         normalize_target=False,
         loss_function=None,
         fd_step=1e-4,  # TODO: generalize this to allow a vector of different scales
+        vectorized=False,
         name="external",
         **kwargs,
     ):
@@ -85,7 +90,13 @@ class ExternalObjective(_Objective):
         self._fun = fun
         self._dim_f = dim_f
         self._fd_step = fd_step
+        self._vectorized = vectorized
         self._kwargs = kwargs
+        if self._vectorized:
+            try:  # spawn a new environment so the backend can be set to numpy
+                multiprocessing.set_start_method("spawn")
+            except RuntimeError:  # context can only be set once
+                pass
         super().__init__(
             things=eq,
             target=target,
@@ -113,12 +124,33 @@ class ExternalObjective(_Objective):
         self._constants = {"quad_weights": 1.0}
 
         def fun_wrapped(params):
-            """Wrap external function with optimizable params arguments."""
-            for param_key in self._eq.optimizable_params:
-                param_value = params[param_key]
-                if len(param_value):
-                    setattr(self._eq, param_key, param_value)
-            return self._fun(self._eq, **self._kwargs)
+            """Wrap external function with possibly vectorized params."""
+            # number of equilibria for vectorized computations
+            param_shape = params["Psi"].shape
+            num_eq = param_shape[0] if len(param_shape) > 1 else 1
+
+            if self._vectorized and num_eq > 1:
+                # convert params to list of equilibria
+                eqs = [self._eq.copy() for _ in range(num_eq)]
+                for k, eq in enumerate(eqs):
+                    # update equilibria with new params
+                    for param_key in self._eq.optimizable_params:
+                        param_value = np.array(params[param_key][k, :])
+                        if len(param_value):
+                            setattr(eq, param_key, param_value)
+                # parallelize calls to external function
+                with multiprocessing.Pool(processes=num_eq) as pool:
+                    results = pool.map(
+                        functools.partial(self._fun, **self._kwargs), eqs
+                    )
+                    return jnp.vstack(results, dtype=float)
+            else:  # no vectorization
+                # update equilibrium with new params
+                for param_key in self._eq.optimizable_params:
+                    param_value = params[param_key]
+                    if len(param_value):
+                        setattr(self._eq, param_key, param_value)
+                return self._fun(self._eq, **self._kwargs)
 
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
@@ -182,12 +214,19 @@ class ExternalObjective(_Objective):
             New function that behaves as func but works with jit/vmap/jacfwd etc.
 
         """
+        import jax
 
         def wrap_pure_callback(func):
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 result_shape_dtype = abstract_eval(*args, **kwargs)
-                return jax.pure_callback(func, result_shape_dtype, *args, **kwargs)
+                return jax.pure_callback(
+                    func,
+                    result_shape_dtype,
+                    *args,
+                    vectorized=self._vectorized,
+                    **kwargs,
+                )
 
             return wrapper
 
@@ -602,6 +641,8 @@ class ObjectiveFromUser(_Objective):
             Level of output.
 
         """
+        import jax
+
         eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
@@ -628,7 +669,6 @@ class ObjectiveFromUser(_Objective):
                 ).squeeze()
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
-        import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1

@@ -39,6 +39,30 @@ class Curve(IOAble, Optimizable, ABC):
         if not hasattr(self, "_rotmat"):
             self.rotmat
 
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute curve positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to curve, either the same for all curve or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            curve positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        x = self.compute("x", grid=grid, params=params, **kwargs)["x"]
+        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])
+        basis = kwargs.pop("basis", "xyz")
+        if basis.lower() == "rpz":
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        return x
+
     @optimizable_parameter
     @property
     def shift(self):

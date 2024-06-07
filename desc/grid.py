@@ -648,8 +648,8 @@ class LinearGrid(_Grid):
         Toroidal grid resolution.
     NFP : int
         Number of field periods (Default = 1).
-    NFP_umbilic_factor : float
-        Rational number of the form 1/integer with integer>=1.
+    NFP_umbilic_factor : int
+        Integer>=1.
         This is needed for the umbilic torus design.
     sym : bool
         True for stellarator symmetry, False otherwise (Default = False).
@@ -679,7 +679,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
-        NFP_umbilic_factor=1,
+        NFP_umbilic_factor=int(1),
         sym=False,
         axis=True,
         endpoint=False,
@@ -728,7 +728,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
-        NFP_umbilic_factor=1,
+        NFP_umbilic_factor=int(1),
         axis=True,
         endpoint=False,
         rho=1.0,

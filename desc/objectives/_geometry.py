@@ -2049,7 +2049,6 @@ class UmbilicHighCurvature2(_Objective):
         weight=1,
         curve_grid=None,
         equil_grid=None,
-        curve_fixed=False,
         normalize=True,
         normalize_target=True,
         loss_function=None,
@@ -2065,9 +2064,8 @@ class UmbilicHighCurvature2(_Objective):
         self._curve = curve
         self._curve_grid = curve_grid
         self._equil_grid = equil_grid
-        self._curve_fixed = curve_fixed
         super().__init__(
-            things=[self._eq, self._curve] if not curve_fixed else [eq],
+            things=[self._eq, self._curve],  # if not curve_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2089,8 +2087,8 @@ class UmbilicHighCurvature2(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
-        curve = self._curve if self._curve_fixed else self.things[1]
+        eq = self._eq
+        curve = self._curve  # if self._curve_fixed else self.things[1]
         # if things[1] is different than self._curve, update self._curve
         if curve != self._curve:
             self._curve = curve
@@ -2108,8 +2106,8 @@ class UmbilicHighCurvature2(_Objective):
         if eq != self._eq:
             self._eq = eq
         if self._equil_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
-            theta_arr = jnp.linspace(0, 2 * jnp.pi, 81)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 80)
+            theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
             equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
             equil_grid = self._equil_grid
@@ -2150,23 +2148,11 @@ class UmbilicHighCurvature2(_Objective):
 
         self._constants = {
             "curve_transforms": curve_transforms,
+            "curve_grid": curve_grid,
             "eq_profiles1": eq_profiles1,
             "eq_transforms1": eq_transforms1,
             "quad_weights": 1,
         }
-
-        if self._curve_fixed:
-            # precompute the surface coordinates
-            # as the surface is fixed during the optimization
-            curve_coords = compute_fun(
-                self._curve,
-                self._curve_data_keys,
-                params=self._curve.params_dict,
-                transforms=curve_transforms,
-                profiles={},
-                basis="rpz",
-            )
-            self._constants["curve_coords"] = curve_coords
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -2201,25 +2187,25 @@ class UmbilicHighCurvature2(_Objective):
         if constants is None:
             constants = self.constants
 
-        if self._curve_fixed:
-            curve_coords = constants["curve_coords"]
-            curve_R = curve_coords["R"]
-            curve_phi = curve_coords["phi"]
-            curve_Z = curve_coords["Z"]
-        else:
-            curve_data = compute_fun(
-                self._curve,
-                self._curve_data_keys,
-                params=params_2,
-                transforms=constants["curve_transforms"],
-                profiles={},
-            )
-            curve_R = curve_data["R"]
-            curve_phi = curve_data["phi"]
-            curve_Z = curve_data["Z"]
+        curve_data = compute_fun(
+            self._curve,
+            self._curve_data_keys,
+            params=params_2,
+            transforms=constants["curve_transforms"],
+            profiles={},
+        )
+        curve_R = curve_data["R"]
+        curve_phi = curve_data["phi"]
+        curve_Z = curve_data["Z"]
 
         # First, we obtain a grid of points on the umbilic curve
         curve_pts = rpz2xyz(jnp.array([curve_R, curve_phi, curve_Z]).T)
+
+        curve_pts = rpz2xyz(
+            self._curve._compute_position(
+                params=params_2, grid=constants["curve_grid"]
+            )[0]
+        )
 
         # Then, we obtain a grid of points on the plasma boundary
         eq_data = compute_fun(
@@ -2338,7 +2324,6 @@ class UmbilicLowCurvature2(_Objective):
         weight=1,
         curve_grid=None,
         equil_grid=None,
-        curve_fixed=False,
         normalize=True,
         normalize_target=True,
         loss_function=None,
@@ -2354,9 +2339,8 @@ class UmbilicLowCurvature2(_Objective):
         self._curve = curve
         self._curve_grid = curve_grid
         self._equil_grid = equil_grid
-        self._curve_fixed = curve_fixed
         super().__init__(
-            things=[self._eq, self._curve] if not curve_fixed else [eq],
+            things=[self._eq, self._curve],  # if not curve_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2379,7 +2363,7 @@ class UmbilicLowCurvature2(_Objective):
 
         """
         eq = self.things[0]
-        curve = self._curve if self._curve_fixed else self.things[1]
+        curve = self._curve  # if self._curve_fixed else self.things[1]
         # if things[1] is different than self._curve, update self._curve
         if curve != self._curve:
             self._curve = curve
@@ -2397,8 +2381,8 @@ class UmbilicLowCurvature2(_Objective):
         if eq != self._eq:
             self._eq = eq
         if self._equil_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
-            theta_arr = jnp.linspace(0, 2 * jnp.pi, 81)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 80)
+            theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
             equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
             equil_grid = self._equil_grid
@@ -2443,19 +2427,6 @@ class UmbilicLowCurvature2(_Objective):
             "quad_weights": 1,
         }
 
-        if self._curve_fixed:
-            # precompute the surface coordinates
-            # as the surface is fixed during the optimization
-            curve_coords = compute_fun(
-                self._curve,
-                self._curve_data_keys,
-                params=self._curve.params_dict,
-                transforms=curve_transforms,
-                profiles={},
-                basis="rpz",
-            )
-            self._constants["curve_coords"] = curve_coords
-
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -2489,22 +2460,16 @@ class UmbilicLowCurvature2(_Objective):
         if constants is None:
             constants = self.constants
 
-        if self._curve_fixed:
-            curve_coords = constants["curve_coords"]
-            curve_R = curve_coords["R"]
-            curve_phi = curve_coords["phi"]
-            curve_Z = curve_coords["Z"]
-        else:
-            curve_data = compute_fun(
-                self._curve,
-                self._curve_data_keys,
-                params=params_2,
-                transforms=constants["curve_transforms"],
-                profiles={},
-            )
-            curve_R = curve_data["R"]
-            curve_phi = curve_data["phi"]
-            curve_Z = curve_data["Z"]
+        curve_data = compute_fun(
+            self._curve,
+            self._curve_data_keys,
+            params=params_2,
+            transforms=constants["curve_transforms"],
+            profiles={},
+        )
+        curve_R = curve_data["R"]
+        curve_phi = curve_data["phi"]
+        curve_Z = curve_data["Z"]
 
         curve_pts = rpz2xyz(jnp.array([curve_R, curve_phi, curve_Z]).T)
 
@@ -2633,7 +2598,6 @@ class UmbilicDistance2(_Objective):
         weight=1,
         curve_grid=None,
         equil_grid=None,
-        curve_fixed=False,
         normalize=True,
         normalize_target=True,
         loss_function=None,
@@ -2649,9 +2613,8 @@ class UmbilicDistance2(_Objective):
         self._curve = curve
         self._curve_grid = curve_grid
         self._equil_grid = equil_grid
-        self._curve_fixed = curve_fixed
         super().__init__(
-            things=[self._eq, self._curve] if not curve_fixed else [eq],
+            things=[self._eq, self._curve],  # if not curve_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2673,8 +2636,8 @@ class UmbilicDistance2(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
-        curve = self._curve if self._curve_fixed else self.things[1]
+        eq = self._eq
+        curve = self._curve  # if self._curve_fixed else self.things[1]
         # if things[1] is different than self._curve, update self._curve
         if curve != self._curve:
             self._curve = curve
@@ -2692,8 +2655,8 @@ class UmbilicDistance2(_Objective):
         if eq != self._eq:
             self._eq = eq
         if self._equil_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
-            theta_arr = jnp.linspace(0, 2 * jnp.pi, 81)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 80)
+            theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
             equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
             equil_grid = self._equil_grid
@@ -2732,23 +2695,11 @@ class UmbilicDistance2(_Objective):
 
         self._constants = {
             "curve_transforms": curve_transforms,
+            "curve_grid": curve_grid,
             "eq_profiles1": eq_profiles1,
             "eq_transforms1": eq_transforms1,
             "quad_weights": 1,
         }
-
-        if self._curve_fixed:
-            # precompute the surface coordinates
-            # as the surface is fixed during the optimization
-            curve_coords = compute_fun(
-                self._curve,
-                self._curve_data_keys,
-                params=self._curve.params_dict,
-                transforms=curve_transforms,
-                profiles={},
-                basis="rpz",
-            )
-            self._constants["curve_coords"] = curve_coords
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -2783,24 +2734,25 @@ class UmbilicDistance2(_Objective):
         if constants is None:
             constants = self.constants
 
-        if self._curve_fixed:
-            curve_coords = constants["curve_coords"]
-            curve_R = curve_coords["R"]
-            curve_phi = curve_coords["phi"]
-            curve_Z = curve_coords["Z"]
-        else:
-            curve_data = compute_fun(
-                self._curve,
-                self._curve_data_keys,
-                params=params_2,
-                transforms=constants["curve_transforms"],
-                profiles={},
-            )
-            curve_R = curve_data["R"]
-            curve_phi = curve_data["phi"]
-            curve_Z = curve_data["Z"]
+        curve_data = compute_fun(
+            self._curve,
+            self._curve_data_keys,
+            params=params_2,
+            transforms=constants["curve_transforms"],
+            profiles={},
+        )
+
+        curve_R = curve_data["R"]
+        curve_phi = curve_data["phi"]
+        curve_Z = curve_data["Z"]
 
         curve_pts = rpz2xyz(jnp.array([curve_R, curve_phi, curve_Z]).T)
+
+        curve_pts = rpz2xyz(
+            self._curve._compute_position(
+                params=params_2, grid=constants["curve_grid"]
+            )[0]
+        )
 
         # First, we obtain a grid of points on the plasma boundary
         eq_data = compute_fun(

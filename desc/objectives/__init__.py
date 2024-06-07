@@ -38,6 +38,7 @@ from ._omnigenity import (
 )
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import MagneticWell, MercierStability
+from ._terpsichore import TERPSICHORE
 from .getters import (
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -81,4 +82,3 @@ from .linear_objectives import (
     FixThetaSFL,
 )
 from .objective_funs import ObjectiveFunction
-from ._terpsichore import TERPSICHORE

@@ -53,7 +53,7 @@ class TERPSICHORE(_Objective):
 
 
     # Need to sure up the paths
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", wout_filename="wout_default.nc", try_parallel=True, path=None, bounds=None,normalize=False, submit_script_name="terps_job.submit", normalize_target=False, awall=2.0, deltajp=1.e-2, modelk=0, al0=-5.e-1, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, min_moden=-8, max_moden=11, nsurf=128):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="TERPSICHORE", wout_filename="wout_default.nc", try_parallel=True, path=None, bounds=None,normalize=False, submit_script_name="terps_job.submit", normalize_target=False, awall=2.0, deltajp=1.e-2, modelk=1, al0=-5.e-1, nev=1, nfp=2, xplo=1.e-6, max_bozm=19, max_bozn=14, mode_family=0, max_modem=55, min_moden=-8, max_moden=11, nsurf=128):
         
         if target is None and bounds is None:
             target = 0

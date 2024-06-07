@@ -6,11 +6,12 @@ difference in areas between constant theta and rho contours.
 
 import numpy as np
 import pytest
+from netCDF4 import Dataset
 from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp
-from desc.coils import FourierRZCoil
+from desc.coils import FourierPlanarCoil, FourierRZCoil, MixedCoilSet
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -21,6 +22,7 @@ from desc.magnetic_fields import (
     OmnigenousField,
     SplineMagneticField,
     ToroidalMagneticField,
+    VerticalMagneticField,
 )
 from desc.objectives import (
     AspectRatio,
@@ -29,13 +31,14 @@ from desc.objectives import (
     CoilLength,
     CoilTorsion,
     CurrentDensity,
+    ExternalObjective,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
     FixIota,
     FixOmniBmax,
     FixOmniMap,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -58,6 +61,7 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.vmec import VMECIO
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -504,7 +508,7 @@ def test_NAE_QSC_solve():
         np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
         np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
-        ### check lambda to match near axis
+        # check lambda to match near axis
         # Evaluate lambda near the axis
         data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
         lam_nae = data_nae["lambda"]
@@ -639,8 +643,8 @@ def test_multiobject_optimization_al():
     constraints = (
         ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
         FixPressure(eq=eq),
-        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
-        FixParameter(eq, ["Psi", "i_l"]),
+        FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
@@ -678,8 +682,8 @@ def test_multiobject_optimization_prox():
     constraints = (
         ForceBalance(eq=eq),
         FixPressure(eq=eq),
-        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
-        FixParameter(eq, ["Psi", "i_l"]),
+        FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
     )
 
@@ -969,7 +973,7 @@ def test_non_eq_optimization():
 
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(eq),
+        FixParameters(eq),
         MeanCurvature(surf, bounds=(-8, 8)),
         PrincipalCurvature(surf, bounds=(0, 15)),
     )
@@ -998,17 +1002,14 @@ def test_only_non_eq_optimization():
     """Test for optimizing only a non-eq object."""
     eq = get("DSHAPE")
     surf = eq.surface
-
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(surf, params="R_lmn", indices=surf.R_basis.get_idx(0, 0, 0)),
+        FixParameters(surf, {"R_lmn": np.array(surf.R_basis.get_idx(0, 0, 0))}),
     )
-
     obj = PrincipalCurvature(surf, target=1)
-
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-exact")
-    (surf), result = optimizer.optimize(
+    (surf), _ = optimizer.optimize(
         (surf), objective, constraints, verbose=3, maxiter=100
     )
     surf = surf[0]
@@ -1032,9 +1033,9 @@ def test_freeb_vacuum():
         modes_Z=[[-1, 0]],
         NFP=5,
     )
-
     eq = Equilibrium(M=6, N=6, Psi=-0.035, surface=surf)
     eq.solve()
+
     constraints = (
         ForceBalance(eq=eq),
         FixCurrent(eq=eq),
@@ -1044,15 +1045,15 @@ def test_freeb_vacuum():
     objective = ObjectiveFunction(
         VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
     )
-    eq, out = eq.optimize(
+    eq, _ = eq.optimize(
         objective,
         constraints,
         optimizer="proximal-lsq-exact",
         verbose=3,
         options={},
     )
-    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
 
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=4e-2)  # only check rho=1
 
 
@@ -1090,9 +1091,9 @@ def test_freeb_axisym():
         modes_Z=[[-1, 0]],
         NFP=1,
     )
-
     eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
     eq.solve()
+
     constraints = (
         ForceBalance(eq=eq),
         FixIota(eq=eq),
@@ -1104,27 +1105,26 @@ def test_freeb_axisym():
     )
 
     # we know this is a pretty simple shape so we'll only use |m| <= 2
-    R_modes = (
-        eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :],
-    )
-
+    R_modes = eq.surface.R_basis.modes[
+        np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :
+    ]
     Z_modes = eq.surface.Z_basis.modes[
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > 2, :
     ]
-
     bdry_constraints = (
         FixBoundaryR(eq=eq, modes=R_modes),
         FixBoundaryZ(eq=eq, modes=Z_modes),
     )
-    eq, out = eq.optimize(
+
+    eq, _ = eq.optimize(
         objective,
         constraints + bdry_constraints,
         optimizer="proximal-lsq-exact",
         verbose=3,
         options={},
     )
-    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
 
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=2e-2)  # only check rho=1
 
 
@@ -1255,7 +1255,7 @@ def test_quadratic_flux_optimization_with_analytic_field():
 
     optimizer = Optimizer("lsq-exact")
 
-    constraints = (FixParameter(field, ["R0"]),)
+    constraints = (FixParameters(field, {"R0": True}),)
     quadflux_obj = QuadraticFlux(
         eq=eq,
         field=field,
@@ -1276,3 +1276,121 @@ def test_quadratic_flux_optimization_with_analytic_field():
     # optimizer should zero out field since that's the easiest way
     # to get to Bnorm = 0
     np.testing.assert_allclose(things[0].B0, 0, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_second_stage_optimization():
+    """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
+    eq = get("DSHAPE")
+    field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field, vacuum=True))
+    constraints = FixParameters(field, [{"R0": True}, {}])
+    optimizer = Optimizer("scipy-trf")
+    (field,), _ = optimizer.optimize(
+        things=field,
+        objective=objective,
+        constraints=constraints,
+        ftol=0,
+        xtol=0,
+        verbose=2,
+    )
+    np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
+    np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
+    np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
+
+
+# TODO: replace this with the solution to Issue #1021
+@pytest.mark.unit
+def test_optimize_with_fourier_planar_coil():
+    """Test optimizing a FourierPlanarCoil."""
+    # single coil
+    c = FourierPlanarCoil()
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
+
+    # in MixedCoilSet
+    c = MixedCoilSet(FourierRZCoil(), FourierPlanarCoil())
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")[1]["length"], 11, atol=1e-3)
+
+
+@pytest.mark.unit
+def test_external_vs_generic_objectives(tmpdir_factory):
+    """Test ExternalObjective compared to GenericObjective."""
+    target = np.array([6.2e-3, 1.1e-1, 6.5e-3, 0])  # values at p_l = [2e2, -2e2]
+
+    def data_from_vmec(eq, path=""):
+        VMECIO.save(eq, path, surfs=8, verbose=0)
+        file = Dataset(path, mode="r")
+        betatot = float(file.variables["betatotal"][0])
+        betapol = float(file.variables["betapol"][0])
+        betator = float(file.variables["betator"][0])
+        presf1 = float(file.variables["presf"][-1])
+        file.close()
+        return np.atleast_1d([betatot, betapol, betator, presf1])
+
+    eq0 = get("SOLOVEV")
+    optimizer = Optimizer("lsq-exact")
+
+    # generic
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("<beta>_vol", eq=eq0, target=target[0]),
+            GenericObjective("<beta_pol>_vol", eq=eq0, target=target[1]),
+            GenericObjective("<beta_tor>_vol", eq=eq0, target=target[2]),
+            GenericObjective("p", eq=eq0, target=0, grid=LinearGrid(rho=[1], M=0, N=0)),
+        )
+    )
+    constraints = FixParameters(
+        eq0,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "p_l": np.arange(2, len(eq0.p_l)),
+            "i_l": True,
+            "Psi": True,
+        },
+    )
+    [eq_generic], _ = optimizer.optimize(
+        things=eq0,
+        objective=objective,
+        constraints=constraints,
+        copy=True,
+        ftol=0,
+        verbose=2,
+    )
+
+    # external
+    dir = tmpdir_factory.mktemp("results")
+    path = dir.join("wout_result.nc")
+    objective = ObjectiveFunction(
+        ExternalObjective(eq=eq0, fun=data_from_vmec, dim_f=4, target=target, path=path)
+    )
+    constraints = FixParameters(
+        eq0,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "p_l": np.arange(2, len(eq0.p_l)),
+            "i_l": True,
+            "Psi": True,
+        },
+    )
+    [eq_external], _ = optimizer.optimize(
+        things=eq0,
+        objective=objective,
+        constraints=constraints,
+        copy=True,
+        ftol=0,
+        verbose=2,
+    )
+
+    np.testing.assert_allclose(eq_generic.p_l, eq_external.p_l)
+    np.testing.assert_allclose(eq_generic.p_l[:2], [2e2, -2e2], rtol=4e-2)
+    np.testing.assert_allclose(eq_external.p_l[:2], [2e2, -2e2], rtol=4e-2)

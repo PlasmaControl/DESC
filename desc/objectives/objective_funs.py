@@ -58,6 +58,7 @@ class ObjectiveFunction(IOAble):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
+        # TODO: does deriv_mode have to be "blocked" if there is an ExternalObjective?
         if self._deriv_mode == "auto":
             if all((obj._deriv_mode == "fwd") for obj in self.objectives):
                 self._deriv_mode = "batched"
@@ -90,9 +91,7 @@ class ObjectiveFunction(IOAble):
                 for obj, const in zip(self.objectives, constants):
                     # get the xs that go to that objective
                     xi = [x for x, t in zip(xs, self.things) if t in obj.things]
-                    Ji_ = getattr(obj, op)(
-                        *xi, constants=const
-                    )  # jac wrt to just those things
+                    Ji_ = getattr(obj, op)(*xi, constants=const)  # jac wrt only xi
                     Ji = []  # jac wrt all things
                     for thing in self.things:
                         if thing in obj.things:
@@ -865,17 +864,23 @@ class _Objective(IOAble, ABC):
         if self.bounds is not None:  # must be a tuple of length 2
             self._bounds = tuple([np.asarray(bound) for bound in self._bounds])
             for bound in self.bounds:
-                if not is_broadcastable((self.dim_f,), bound.shape):
+                if not is_broadcastable((self.dim_f,), bound.shape) or (
+                    self.dim_f == 1 and bound.size != 1
+                ):
                     raise ValueError("len(bounds) != dim_f")
             if np.any(self.bounds[1] < self.bounds[0]):
                 raise ValueError("bounds must be: (lower bound, upper bound)")
         else:  # target only gets used if bounds is None
             self._target = np.asarray(self._target)
-            if not is_broadcastable((self.dim_f,), self.target.shape):
+            if not is_broadcastable((self.dim_f,), self.target.shape) or (
+                self.dim_f == 1 and self.target.size != 1
+            ):
                 raise ValueError("len(target) != dim_f")
 
         self._weight = np.asarray(self._weight)
-        if not is_broadcastable((self.dim_f,), self.weight.shape):
+        if not is_broadcastable((self.dim_f,), self.weight.shape) or (
+            self.dim_f == 1 and self.weight.size != 1
+        ):
             raise ValueError("len(weight) != dim_f")
 
     @abstractmethod

@@ -664,7 +664,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     """
     method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    is_discontinuous = len(transforms["intervals"][0])
+    has_break_points = len(transforms["intervals"][0])
     n_dim = 3
 
     def inner_body(f, knots, period=None):
@@ -703,9 +703,9 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
 
         return fq
 
-    if is_discontinuous:
+    if has_break_points:
         # full_f, knots used in body()
-        # manually add endpoint for discontinuous
+        # manually add endpoint for broken splines
         full_knots = jnp.append(p_knots, p_knots[0] + 2 * jnp.pi)
         full_f = [jnp.append(f[i], f[i][0]) for i in range(3)]
         # query points for Xq, Yq, Zq

@@ -846,8 +846,8 @@ class TestSplineXYZCurve:
             c.compute("length", grid=np.linspace(0, 1, 10))
 
     @pytest.mark.unit
-    def test_discontinuous_knots(self):
-        """Test with discontinuous knots."""
+    def test_discontinuous_splines(self):
+        """Test splines that have break points."""
 
         def test(method, data_key):
             R = 2

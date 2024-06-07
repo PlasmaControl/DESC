@@ -828,20 +828,20 @@ class SplineXYZCurve(Curve):
             knots = knots[:-1] if closed_flag else knots
 
         if break_indices is None:
-            interval_indices = [[]]
+            unbroken_spline_intervals = [[]]
         else:
             # check that input is monotonic
             assert np.all(
                 break_indices == np.unique(sorted(break_indices))
             ), "Indices must be monotonic."
-            interval_indices = [
+            unbroken_spline_intervals = [
                 [break_indices[i - 1], break_indices[i]]
                 for i in range(len(break_indices))
             ]
 
         self._knots = knots
         self._method = method
-        self.intervals = interval_indices
+        self.intervals = unbroken_spline_intervals
 
     @optimizable_parameter
     @property

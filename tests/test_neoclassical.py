@@ -23,11 +23,9 @@ def test_field_line_average():
     grid = rtz_grid(
         eq, rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )
-    data = eq.compute(["L|r,a", "G|r,a", "V_r(r)"], grid=grid)
+    data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
-        np.squeeze(data["L|r,a"] / data["G|r,a"]),
-        grid.compress(data["V_r(r)"]) / (4 * np.pi**2),
-        rtol=2e-2,
+        data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=2e-2
     )
 
 

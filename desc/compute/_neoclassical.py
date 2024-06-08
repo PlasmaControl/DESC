@@ -55,6 +55,7 @@ def vec_quadax(quad):
 
 
 def _poloidal_mean(grid, f):
+    # Integrate f over poloidal angle and divide by 2π.
     assert f.shape[-1] == grid.num_poloidal
     if grid.spacing is None:
         warnif(
@@ -85,54 +86,56 @@ def _get_pitch(grid, data, quad, num=75):
 
 
 @register_compute_fun(
-    name="L|r,a",
+    name="<L|r,a>",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
     " \\frac{d\\zeta}{B^{\\zeta}}",
     units="m / T",
     units_long="Meter / tesla",
-    description="Length along field line",
-    dim=2,
+    description="(Mean) length along field line(s)",
+    dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="ra",
+    coordinates="r",
     data=["B^zeta"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
-def _L_ra(data, transforms, profiles, **kwargs):
+def _L_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
-    data["L|r,a"] = quadax.simpson(
+    L_ra = quadax.simpson(
         jnp.reshape(1 / data["B^zeta"], shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
+    data["<L|r,a>"] = g.expand(_poloidal_mean(g, L_ra))
     return data
 
 
 @register_compute_fun(
-    name="G|r,a",
+    name="<G|r,a>",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
     " \\frac{d\\zeta}{B^{\\zeta} \\sqrt g}",
     units="1 / Wb",
     units_long="Inverse webers",
-    description="Length over volume along field line",
-    dim=2,
+    description="(Mean) length over volume along field line(s)",
+    dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="ra",
+    coordinates="r",
     data=["B^zeta", "sqrt(g)"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
-def _G_ra(data, transforms, profiles, **kwargs):
+def _G_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
-    data["G|r,a"] = quadax.simpson(
+    G_ra = quadax.simpson(
         jnp.reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
+    data["<G|r,a>"] = g.expand(_poloidal_mean(g, G_ra))
     return data
 
 
@@ -155,7 +158,7 @@ def _G_ra(data, transforms, profiles, **kwargs):
         "|B|_z|r,a",
         "|grad(psi)|",
         "kappa_g",
-        "L|r,a",
+        "<L|r,a>",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     bounce_integral=(
@@ -210,7 +213,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         )
 
         def d_ripple(pitch):
-            """Return λ⁻²B₀⁻¹ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
+            """Return λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
 
             Parameters
             ----------
@@ -220,20 +223,19 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
             Returns
             -------
             d_ripple : Array, shape(pitch.shape)
-                λ⁻²B₀⁻¹ ∑ⱼ Hⱼ²/Iⱼ
+                λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ
 
             """
             H = bounce_integrate(
                 dH, [data["|grad(psi)|"], data["kappa_g"]], pitch, batch=batch
             )
             I = bounce_integrate(dI, [], pitch, batch=batch)
-            # (λB₀)³ db = (λB₀)³ B₀⁻¹λ⁻² (-dλ) = B₀²λ (-dλ)
-            # We chose B₀ = 1 (inverse units of λ).
-            # TODO: Think Neo chooses B₀ = "max_tz |B|".
-            # The minus sign is accounted for with the integration order.
             return pitch * jnp.nansum(H**2 / I, axis=-1)
+            # Note that (λB₀)³ db = (λB₀)³ λ⁻² B₀⁻¹ (-dλ) = λ B₀² (-dλ).
+            # We choose B₀ = max |B| on the flux surface. We multiply by B₀² at
+            # the end and account for the minus sign with the integration order.
 
-        # This has units of tesla meters.
+        # This has units of tesla meters / B₀² where B₀ has units of λ⁻¹.
         ripple = quad(d_ripple(pitch), pitch, axis=0)
     else:
         # Use adaptive quadrature.
@@ -256,8 +258,10 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         ]
         ripple = quad(d_ripple, pitch, *args)
 
-    ripple = _poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha) / data["L|r,a"])
-    data["effective ripple raw"] = g.expand(ripple)
+    ripple = _poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha))
+    data["effective ripple raw"] = (
+        g.expand(ripple) * data["max_tz |B|"] ** 2 / data["<L|r,a>"]
+    )
     return data
 
 

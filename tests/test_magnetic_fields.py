@@ -6,7 +6,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz_vec, xyz2rpz_vec
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import dot
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
@@ -70,12 +70,29 @@ class TestMagneticFields:
 
         tfield_from_A = VectorPotentialField(tfield_A, params={"B0": 2, "R0": 1})
 
+        def vfield_A(R, phi, Z, B0):
+            coords_rpz = jnp.vstack([R, phi, Z]).T
+            coords_xyz = rpz2xyz(coords_rpz)
+            ax = B0 / 2 * coords_xyz[:, 1]
+            ay = -B0 / 2 * coords_xyz[:, 0]
+
+            az = jnp.zeros_like(ax)
+            A = jnp.array([ax, -ay, az]).T
+            A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
+            return A
+
+        vfield_from_A = VectorPotentialField(vfield_A, params={"B0": 1})
+
         np.testing.assert_allclose(tfield([1, 0, 0]), [[0, 2, 0]])
         np.testing.assert_allclose((4 * tfield)([2, 0, 0]), [[0, 4, 0]])
         np.testing.assert_allclose(tfield_from_A([1, 0, 0]), [[0, 2, 0]])
         np.testing.assert_allclose(
             tfield_A(1, 0, 0),
             tfield_from_A.compute_magnetic_vector_potential([1, 0, 0]).squeeze(),
+        )
+        np.testing.assert_allclose(
+            vfield_A(1, 0, 0),
+            vfield_from_A.compute_magnetic_vector_potential([1, 0, 0]),
         )
 
         np.testing.assert_allclose((tfield + vfield)([1, 0, 0]), [[0, 2, 1]])

@@ -15,7 +15,7 @@ from desc.basis import (
     DoubleFourierSeries,
 )
 from desc.compute import compute as compute_fun
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -1070,6 +1070,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     ):
         """Compute magnetic vector potential at a set of points.
 
+            The vector potential is specified assuming the Coulomb Gauge.
+
         Parameters
         ----------
         coords : array-like shape(n,3)
@@ -1167,6 +1169,8 @@ class VerticalMagneticField(_MagneticField, Optimizable):
     ):
         """Compute magnetic vector potential at a set of points.
 
+            The vector potential is specified assuming the Coulomb Gauge.
+
         Parameters
         ----------
         coords : array-like shape(n,3)
@@ -1190,12 +1194,18 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
-            coords = xyz2rpz(coords)
-        axy = (B0 / 2) * jnp.ones_like(coords[:, 2])
-        az = jnp.zeros_like(axy)
-        A = jnp.array([axy, -axy, az]).T
-        if basis == "xyz":
-            A = rpz2xyz_vec(A, phi=coords[:, 1])
+            coords_xyz = coords
+            coords_rpz = xyz2rpz(coords)
+        else:
+            coords_rpz = coords
+            coords_xyz = rpz2xyz(coords)
+        ax = B0 / 2 * coords_xyz[:, 1]
+        ay = -B0 / 2 * coords_xyz[:, 0]
+
+        az = jnp.zeros_like(ax)
+        A = jnp.array([ax, -ay, az]).T
+        if basis == "rpz":
+            A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
 
         return A
 

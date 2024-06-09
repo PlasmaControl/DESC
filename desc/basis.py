@@ -2117,28 +2117,242 @@ class FiniteElementMesh3D:
                     tetrahedron_1_vertices[2] = rectangular_prism_vertices[2]
                     tetrahedron_1_vertices[3] = rectangular_prism_vertices[4]
 
+                    D_1 = np.array(
+                        [
+                            [
+                                1,
+                                tetrahedron_1_vertices[0, 0],
+                                tetrahedron_1_vertices[0, 1],
+                                tetrahedron_1_vertices[0, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_1_vertices[1, 0],
+                                tetrahedron_1_vertices[1, 1],
+                                tetrahedron_1_vertices[1, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_1_vertices[2, 0],
+                                tetrahedron_1_vertices[2, 1],
+                                tetrahedron_1_vertices[2, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_1_vertices[3, 0],
+                                tetrahedron_1_vertices[3, 1],
+                                tetrahedron_1_vertices[3, 2],
+                            ],
+                        ]
+                    )
+
+                    # Making sure volume is positive; if not, then we switch the first two
+                    # rows:
+                    if (np.linalg.det(D_1) < 0) and (
+                        not np.isclose(np.linalg.det(D_1), 0.0)
+                    ):
+
+                        r_0 = D_1[0].copy()
+                        D_1[0] = D_1[1]
+                        D_1[1] = r_0
+
+                        v_0 = tetrahedron_1_vertices[0].copy()
+                        tetrahedron_1_vertices[0] = tetrahedron_1_vertices[1]
+                        tetrahedron_1_vertices[1] = v_0
+
                     tetrahedron_2_vertices[0] = rectangular_prism_vertices[1]
                     tetrahedron_2_vertices[1] = rectangular_prism_vertices[2]
                     tetrahedron_2_vertices[2] = rectangular_prism_vertices[3]
                     tetrahedron_2_vertices[3] = rectangular_prism_vertices[7]
+
+                    D_2 = np.array(
+                        [
+                            [
+                                1,
+                                tetrahedron_2_vertices[0, 0],
+                                tetrahedron_2_vertices[0, 1],
+                                tetrahedron_2_vertices[0, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_2_vertices[1, 0],
+                                tetrahedron_2_vertices[1, 1],
+                                tetrahedron_2_vertices[1, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_2_vertices[2, 0],
+                                tetrahedron_2_vertices[2, 1],
+                                tetrahedron_2_vertices[2, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_2_vertices[3, 0],
+                                tetrahedron_2_vertices[3, 1],
+                                tetrahedron_2_vertices[3, 2],
+                            ],
+                        ]
+                    )
+
+                    # Making sure volume is positive; if not, then we switch the first two
+                    # rows:
+                    if (np.linalg.det(D_2) < 0) and (
+                        not np.isclose(np.linalg.det(D_2), 0.0)
+                    ):
+
+                        r_0 = D_2[0].copy()
+                        D_2[0] = D_2[1]
+                        D_2[1] = r_0
+
+                        v_0 = tetrahedron_2_vertices[0].copy()
+                        tetrahedron_2_vertices[0] = tetrahedron_2_vertices[1]
+                        tetrahedron_2_vertices[1] = v_0
 
                     tetrahedron_3_vertices[0] = rectangular_prism_vertices[4]
                     tetrahedron_3_vertices[1] = rectangular_prism_vertices[7]
                     tetrahedron_3_vertices[2] = rectangular_prism_vertices[5]
                     tetrahedron_3_vertices[3] = rectangular_prism_vertices[1]
 
+                    D_3 = np.array(
+                        [
+                            [
+                                1,
+                                tetrahedron_3_vertices[0, 0],
+                                tetrahedron_3_vertices[0, 1],
+                                tetrahedron_3_vertices[0, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_3_vertices[1, 0],
+                                tetrahedron_3_vertices[1, 1],
+                                tetrahedron_3_vertices[1, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_3_vertices[2, 0],
+                                tetrahedron_3_vertices[2, 1],
+                                tetrahedron_3_vertices[2, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_3_vertices[3, 0],
+                                tetrahedron_3_vertices[3, 1],
+                                tetrahedron_3_vertices[3, 2],
+                            ],
+                        ]
+                    )
+
+                    # Making sure volume is positive; if not, then we switch the first two
+                    # rows:
+                    if (np.linalg.det(D_3) < 0) and (
+                        not np.isclose(np.linalg.det(D_3), 0.0)
+                    ):
+
+                        r_0 = D_3[0].copy()
+                        D_3[0] = D_3[1]
+                        D_3[1] = r_0
+
+                        v_0 = tetrahedron_3_vertices[0].copy()
+                        tetrahedron_3_vertices[0] = tetrahedron_3_vertices[1]
+                        tetrahedron_3_vertices[1] = v_0
+
                     tetrahedron_4_vertices[0] = rectangular_prism_vertices[4]
                     tetrahedron_4_vertices[1] = rectangular_prism_vertices[6]
                     tetrahedron_4_vertices[2] = rectangular_prism_vertices[7]
                     tetrahedron_4_vertices[3] = rectangular_prism_vertices[2]
+
+                    D_4 = np.array(
+                        [
+                            [
+                                1,
+                                tetrahedron_4_vertices[0, 0],
+                                tetrahedron_4_vertices[0, 1],
+                                tetrahedron_4_vertices[0, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_4_vertices[1, 0],
+                                tetrahedron_4_vertices[1, 1],
+                                tetrahedron_4_vertices[1, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_4_vertices[2, 0],
+                                tetrahedron_4_vertices[2, 1],
+                                tetrahedron_4_vertices[2, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_4_vertices[3, 0],
+                                tetrahedron_4_vertices[3, 1],
+                                tetrahedron_4_vertices[3, 2],
+                            ],
+                        ]
+                    )
+
+                    # Making sure volume is positive; if not, then we switch the first two
+                    # rows:
+                    if (np.linalg.det(D_4) < 0) and (
+                        not np.isclose(np.linalg.det(D_4), 0.0)
+                    ):
+
+                        r_0 = D_4[0].copy()
+                        D_4[0] = D_4[1]
+                        D_4[1] = r_0
+
+                        v_0 = tetrahedron_4_vertices[0].copy()
+                        tetrahedron_4_vertices[0] = tetrahedron_4_vertices[1]
+                        tetrahedron_4_vertices[1] = v_0
 
                     tetrahedron_5_vertices[0] = rectangular_prism_vertices[4]
                     tetrahedron_5_vertices[1] = rectangular_prism_vertices[1]
                     tetrahedron_5_vertices[2] = rectangular_prism_vertices[7]
                     tetrahedron_5_vertices[3] = rectangular_prism_vertices[2]
 
-                    # Grabbing the six tetrahedra in each Rectangular prism:
-                    # print(tetrahedron_1_vertices)
+                    D_5 = np.array(
+                        [
+                            [
+                                1,
+                                tetrahedron_5_vertices[0, 0],
+                                tetrahedron_5_vertices[0, 1],
+                                tetrahedron_5_vertices[0, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_5_vertices[1, 0],
+                                tetrahedron_5_vertices[1, 1],
+                                tetrahedron_5_vertices[1, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_5_vertices[2, 0],
+                                tetrahedron_5_vertices[2, 1],
+                                tetrahedron_5_vertices[2, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_5_vertices[3, 0],
+                                tetrahedron_5_vertices[3, 1],
+                                tetrahedron_5_vertices[3, 2],
+                            ],
+                        ]
+                    )
+
+                    # Making sure volume is positive; if not, then we switch the first two
+                    # rows:
+                    if (np.linalg.det(D_5) < 0) and (
+                        not np.isclose(np.linalg.det(D_5), 0.0)
+                    ):
+
+                        r_0 = D_5[0].copy()
+                        D_5[0] = D_5[1]
+                        D_5[1] = r_0
+
+                        v_0 = tetrahedron_5_vertices[0].copy()
+                        tetrahedron_5_vertices[0] = tetrahedron_5_vertices[1]
+                        tetrahedron_5_vertices[1] = v_0
+
+                    # Grabbing the five tetrahedra in each Rectangular prism:
                     tetrahedron1 = TetrahedronFiniteElement(tetrahedron_1_vertices, K=K)
                     tetrahedron2 = TetrahedronFiniteElement(tetrahedron_2_vertices, K=K)
                     tetrahedron3 = TetrahedronFiniteElement(tetrahedron_3_vertices, K=K)
@@ -2255,58 +2469,6 @@ class FiniteElementMesh3D:
 
         return coordinate_matrix
 
-    def return_quadrature_points(self):
-        """Get quadrature points for numerical integration over the mesh.
-
-        Returns
-        -------
-        quadrature points: 2D ndarray, shape (nquad * I_LMN, 3)
-            Points in (rho, theta, zeta) representing the quadrature point
-            locations for integration, return in real-space coordinates.
-
-        """
-        nquad = self.nquad
-        quadrature_points = np.zeros((self.I_LMN * nquad, 3))
-        q = 0
-        for tetrahedron in self.tetrahedra:
-            for i in range(nquad):
-                A = np.array(
-                    [
-                        [tetrahedron.b[0], tetrahedron.c[0], tetrahedron.d[0]],
-                        [tetrahedron.b[1], tetrahedron.c[1], tetrahedron.d[1]],
-                        [tetrahedron.b[2], tetrahedron.c[2], tetrahedron.d[2]],
-                        [
-                            tetrahedron.b[0]
-                            + tetrahedron.b[1]
-                            + tetrahedron.b[2]
-                            + tetrahedron.b[3],
-                            tetrahedron.c[0]
-                            + tetrahedron.c[1]
-                            + tetrahedron.c[2]
-                            + tetrahedron.c[3],
-                            tetrahedron.d[0]
-                            + tetrahedron.d[1]
-                            + tetrahedron.d[2]
-                            + tetrahedron.d[3],
-                        ],
-                    ]
-                )
-                b = np.zeros(4)
-                b[:3] = (
-                    tetrahedron.volume6 * self.integration_points[i, :3]
-                    - tetrahedron.a[:3]
-                )
-                b[3] = (
-                    tetrahedron.volume6
-                    - tetrahedron.a[0]
-                    - tetrahedron.a[1]
-                    - tetrahedron.a[2]
-                    - tetrahedron.a[3]
-                )
-                quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
-                q = q + 1
-        return quadrature_points
-
     # def return_quadrature_points(self):
     #     """Get quadrature points for numerical integration over the mesh.
 
@@ -2318,57 +2480,115 @@ class FiniteElementMesh3D:
 
     #     """
     #     nquad = self.nquad
-    #     quadrature_points = np.zeros((nquad * self.I_LMN, 3))
-    #     integration_points = self.integration_points
+    #     quadrature_points = np.zeros((self.I_LMN * nquad, 3))
     #     q = 0
     #     for tetrahedron in self.tetrahedra:
-    #         v = tetrahedron.vertices
-
-    #         A = np.array(
-    #             [
-    #                 [v[2, 0] - v[0, 0], v[1, 0] - v[0, 0], v[3, 0] - v[0, 0]],
-    #                 [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1], v[3, 1] - v[0, 1]],
-    #                 [v[2, 2] - v[0, 2], v[1, 2] - v[0, 2], v[3, 2] - v[0, 2]],
-    #             ]
-    #         )
-
-    #         q_p = integration_points
-
-    #         # Transformation of quad_points to real-coordinates. q_p is a matrix
-    #         # with size (nquad,4)
-
-    #         qp_r = np.zeros((nquad, 3))
-
     #         for i in range(nquad):
-    #             for j in range(3):
-    #                 qp_r[i, j] = (
-    #                     q_p[i, 0] * v[0, j]
-    #                     + q_p[i, 1] * v[1, j]
-    #                     + q_p[i, 2] * v[2, j]
-    #                     + q_p[i, 3] * v[3, j]
-    #                 )
-
-    #         # qp_r is now a matrix of quadrature points, in real coordinates, with shape
-    #         # (nquad,3). We now transform these real-space quadrature points
-    #         # from the reference tetrahedron to the tetrahedron of interest:
-
-    #         # For a single tetrahedron:
-    #         single_tet_quad = np.zeros((nquad, 3))
-    #         for i in range(nquad):
-    #             single_tet_quad[i, :] = np.dot(A, np.transpose(qp_r[i, :]))
-    #         # quadrature_points = np.vstack([quadrature_points, single_tet_quad]).
-
-    #         # Now have a matrix for single tetrahedron
-
-    #         for j in range(nquad):
-
-    #             quadrature_points[q * nquad + j, :] = single_tet_quad[j, :]
-
-    #         q = q + 1
+    #             A = np.array(
+    #                 [
+    #                     [tetrahedron.b[0], tetrahedron.c[0], tetrahedron.d[0]],
+    #                     [tetrahedron.b[1], tetrahedron.c[1], tetrahedron.d[1]],
+    #                     [tetrahedron.b[2], tetrahedron.c[2], tetrahedron.d[2]],
+    #                     [
+    #                         tetrahedron.b[0]
+    #                         + tetrahedron.b[1]
+    #                         + tetrahedron.b[2]
+    #                         + tetrahedron.b[3],
+    #                         tetrahedron.c[0]
+    #                         + tetrahedron.c[1]
+    #                         + tetrahedron.c[2]
+    #                         + tetrahedron.c[3],
+    #                         tetrahedron.d[0]
+    #                         + tetrahedron.d[1]
+    #                         + tetrahedron.d[2]
+    #                         + tetrahedron.d[3],
+    #                     ],
+    #                 ]
+    #             )
+    #             b = np.zeros(4)
+    #             b[:3] = (
+    #                 tetrahedron.volume6 * self.integration_points[i, :3]
+    #                 - tetrahedron.a[:3]
+    #             )
+    #             b[3] = (
+    #                 tetrahedron.volume6
+    #                 - tetrahedron.a[0]
+    #                 - tetrahedron.a[1]
+    #                 - tetrahedron.a[2]
+    #                 - tetrahedron.a[3]
+    #             )
+    #             quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
+    #             q = q + 1
 
     #     print(quadrature_points)
 
     #     return quadrature_points
+
+    def return_quadrature_points(self):
+        """Get quadrature points for numerical integration over the mesh.
+
+        Returns
+        -------
+        quadrature points: 2D ndarray, shape (nquad * I_LMN, 3)
+            Points in (rho, theta, zeta) representing the quadrature point
+            locations for integration, return in real-space coordinates.
+
+        """
+        nquad = self.nquad
+        quadrature_points = np.zeros((nquad * self.I_LMN, 3))
+        integration_points = self.integration_points
+        q = 0
+        for tetrahedron in self.tetrahedra:
+            v = tetrahedron.vertices
+
+            A = np.array(
+                [
+                    [v[2, 0] - v[0, 0], v[1, 0] - v[0, 0], v[3, 0] - v[0, 0]],
+                    [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1], v[3, 1] - v[0, 1]],
+                    [v[2, 2] - v[0, 2], v[1, 2] - v[0, 2], v[3, 2] - v[0, 2]],
+                ]
+            )
+
+            q_p = integration_points
+
+            element = fem.ElementTetP1()
+
+            v_r = element.doflocs
+
+            # Transformation of quad_points to real-coordinates. q_p is a matrix
+            # with size (nquad,4)
+
+            qp_r = np.zeros((nquad, 3))
+
+            for i in range(nquad):
+                for j in range(3):
+                    qp_r[i, j] = (
+                        q_p[i, 0] * v_r[0, j]
+                        + q_p[i, 1] * v_r[1, j]
+                        + q_p[i, 2] * v_r[2, j]
+                        + q_p[i, 3] * v_r[3, j]
+                    )
+
+            # qp_r is now a matrix of quadrature points, in real coordinates, with shape
+            # (nquad,3). We now transform these real-space quadrature points
+            # from the reference tetrahedron to the tetrahedron of interest:
+
+            # For a single tetrahedron:
+            single_tet_quad = np.zeros((nquad, 3))
+            for i in range(nquad):
+                single_tet_quad[i, :] = np.transpose(
+                    np.dot(A, np.transpose(qp_r[i, :])) + np.transpose(v[0, :])
+                )
+            # Now have a matrix for single tetrahedron
+
+            for j in range(nquad):
+
+                quadrature_points[q * nquad + j, :] = single_tet_quad[j, :]
+
+            q = q + 1
+
+        print(quadrature_points)
+        return quadrature_points
 
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
@@ -2932,8 +3152,6 @@ class TetrahedronFiniteElement:
         self.d = np.array([d1, d2, d3, d4])
         self.Q = int(((K + 1) * (K + 2) * (K + 3)) / 6)
         self.K = K
-        
-        print(self.a,self.b,self.c,self.d)
 
         D = np.array(
             [
@@ -2944,21 +3162,8 @@ class TetrahedronFiniteElement:
             ]
         )
 
-        # Making sure volume is positive; if not, then we switch the first two
-        # rows:
-        if (np.linalg.det(D) < 0) and (not np.isclose(np.linalg.det(D), 0.0)):
-
-            r_0 = D[0].copy()
-            D[0] = D[1]
-            D[1] = r_0
-
-            v_0 = self.vertices[0].copy()
-            self.vertices[0] = self.vertices[1]
-            self.vertices[1] = v_0
-
         self.volume6 = np.linalg.det(D)
         self.det = np.linalg.det(D)
-
 
         # We construct equally spaced nodes for order K tetrahedron,
         # which gives Q nodes.

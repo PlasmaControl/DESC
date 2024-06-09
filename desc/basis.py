@@ -1216,6 +1216,7 @@ class FiniteElementBasis(_FE_Basis):
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
         else:
             Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
+            # print(Rho_Theta_Zeta, Rho_Theta_Zeta.shape)
             (
                 intervals,
                 basis_functions,
@@ -1223,7 +1224,7 @@ class FiniteElementBasis(_FE_Basis):
 
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
-        print(basis_functions, inds)
+        # print(basis_functions, inds)
         return basis_functions[:, inds]
 
     def change_resolution(self, L, M, N):
@@ -2369,7 +2370,7 @@ class FiniteElementMesh3D:
         # Setup quadrature points and weights
         # for numerical integration using scikit-fem
 
-        [integration_points, weights] = fem.quadrature.get_quadrature(element, K)  # * 5
+        [integration_points, weights] = fem.quadrature.get_quadrature(element, K * 3)  # * 5
 
         weights = 6 * weights
 
@@ -2397,7 +2398,7 @@ class FiniteElementMesh3D:
         self.integration_points = np.array(integration_points)
         self.weights = np.array(weights)
         self.nquad = self.integration_points.shape[0]
-        self.plot_tetrahedra(plot_quadrature_points=True)
+        # self.plot_tetrahedra(plot_quadrature_points=True)
 
     def plot_tetrahedra(self, plot_quadrature_points=False):
         """Plot all the tetrahedra in the 2D mesh tessellation."""
@@ -2407,7 +2408,6 @@ class FiniteElementMesh3D:
             tetrahedron.plot_tetrahedron()
             if plot_quadrature_points:
                 quadpoints = self.return_quadrature_points()
-                print(quadpoints.shape)
                 for i in range(self.Q):
                     # ax = fig.get_axes()[i]
                     ax = fig.add_subplot(1, self.Q, i + 1, projection="3d")
@@ -2587,7 +2587,6 @@ class FiniteElementMesh3D:
 
             q = q + 1
 
-        print(quadrature_points)
         return quadrature_points
 
     def integrate(self, f):
@@ -2645,73 +2644,77 @@ class FiniteElementMesh3D:
 
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.I_LMN * self.Q))
         for i in range(rho_theta_zeta.shape[0]):
-            P = rho_theta_zeta[i]
+            P = rho_theta_zeta[i, :]
 
             for j, tetrahedron in enumerate(self.tetrahedra):
                 v1 = tetrahedron.vertices[0, :]
                 v2 = tetrahedron.vertices[1, :]
                 v3 = tetrahedron.vertices[2, :]
                 v4 = tetrahedron.vertices[3, :]
-                D0 = np.array(
-                    [
-                        [v1[0], v1[1], v1[2], 1],
-                        [v2[0], v2[1], v2[2], 1],
-                        [v3[0], v3[1], v3[2], 1],
-                        [v4[0], v4[1], v4[2], 1],
-                    ]
-                )
+                
+                # Alan: fixed this so D0 is just the volume
+                # and the ordering is consistent with before
+                # D0 = np.array(
+                #     [
+                #         [v1[0], v1[1], v1[2], 1],
+                #         [v2[0], v2[1], v2[2], 1],
+                #         [v3[0], v3[1], v3[2], 1],
+                #         [v4[0], v4[1], v4[2], 1],
+                #     ]
+                # )
                 D1 = np.array(
                     [
-                        [P[0], P[1], P[2], 1],
-                        [v2[0], v2[1], v2[2], 1],
-                        [v3[0], v3[1], v3[2], 1],
-                        [v4[0], v4[1], v4[2], 1],
+                        [1, P[0], P[1], P[2]],
+                        [1, v2[0], v2[1], v2[2]],
+                        [1, v3[0], v3[1], v3[2]],
+                        [1, v4[0], v4[1], v4[2]],
                     ]
                 )
                 D2 = np.array(
                     [
-                        [v1[0], v1[1], v1[2], 1],
-                        [P[0], P[1], P[2], 1],
-                        [v3[0], v3[1], v3[2], 1],
-                        [v4[0], v4[1], v4[2], 1],
+                        [1, v1[0], v1[1], v1[2]],
+                        [1, P[0], P[1], P[2]],
+                        [1, v3[0], v3[1], v3[2]],
+                        [1, v4[0], v4[1], v4[2]],
                     ]
                 )
                 D3 = np.array(
                     [
-                        [v1[0], v1[1], v1[2], 1],
-                        [v2[0], v2[1], v2[2], 1],
-                        [P[0], P[1], P[2], 1],
-                        [v4[0], v4[1], v4[2], 1],
+                        [1, v1[0], v1[1], v1[2]],
+                        [1, v2[0], v2[1], v2[2]],
+                        [1, P[0], P[1], P[2]],
+                        [1, v4[0], v4[1], v4[2]],
                     ]
                 )
                 D4 = np.array(
                     [
-                        [v1[0], v1[1], v1[2], 1],
-                        [v2[0], v2[1], v2[2], 1],
-                        [v3[0], v3[1], v3[2], 1],
-                        [P[0], P[1], P[2], 1],
+                        [1, v1[0], v1[1], v1[2]],
+                        [1, v2[0], v2[1], v2[2]],
+                        [1, v3[0], v3[1], v3[2]],
+                        [1, P[0], P[1], P[2]],
                     ]
                 )
 
-                Det0 = np.abs(np.linalg.det(D0))
-                Det1 = np.abs(np.linalg.det(D1))
-                Det2 = np.abs(np.linalg.det(D2))
-                Det3 = np.abs(np.linalg.det(D3))
-                Det4 = np.abs(np.linalg.det(D4))
+                # Det0 = np.abs(np.linalg.det(D0))
+                Det1 = np.linalg.det(D1)
+                Det2 = np.linalg.det(D2)
+                Det3 = np.linalg.det(D3)
+                Det4 = np.linalg.det(D4)
 
-                e_a = Det1 / Det0
-                e_b = Det2 / Det0
-                e_c = Det3 / Det0
-                e_d = Det4 / Det0
+                e_a = Det1 / tetrahedron.det
+                e_b = Det2 / tetrahedron.det
+                e_c = Det3 / tetrahedron.det
+                e_d = Det4 / tetrahedron.det
 
                 # Check whether point lies inside tetrahedra: to do this,
                 # we need to check if all of the barycentric
                 # coordinates are non-negative
-
+                # print(i, j, e_a, e_b, e_c, e_d)
                 if (e_a >= 0) and (e_b >= 0) and (e_c >= 0) and (e_d >= 0):
+                    # print(i, j, basis_functions.shape)
                     tetrahedra_indices[i] = j
                     basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
-                        tetrahedron.get_basis_functions(P.reshape(-1, 3))
+                        tetrahedron.get_basis_functions(P.reshape(1, 3))
                     )
 
                     break  # found the right tetrahedron, so break out of j loop
@@ -3429,7 +3432,7 @@ class TetrahedronFiniteElement:
 
         # Compute the vertex basis functions first. This will be the first 4 columns
         # of basis_functions. There are hard-coded from book.
-        print(basis_functions.shape, self.eta_nodes.shape)
+        # print(basis_functions.shape, self.eta_nodes.shape)
 
         if K == 1:
             for i in range(rho_theta_zeta.shape[0]):

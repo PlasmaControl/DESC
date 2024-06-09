@@ -81,7 +81,7 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-M_FE = 10
+M_FE = 40
 L_FE = 2
 rho = np.linspace(0.5, 1, L_FE, endpoint=True)
 nodes = (

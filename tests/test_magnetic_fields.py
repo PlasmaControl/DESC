@@ -8,6 +8,7 @@ from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import dot
+from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import LinearGrid
@@ -22,6 +23,7 @@ from desc.magnetic_fields import (
     ScalarPotentialField,
     SplineMagneticField,
     ToroidalMagneticField,
+    VectorPotentialField,
     VerticalMagneticField,
     field_line_integrate,
     read_BNORM_file,
@@ -59,8 +61,23 @@ class TestMagneticFields:
         tfield = ToroidalMagneticField(2, 1)
         vfield = VerticalMagneticField(1)
         pfield = PoloidalMagneticField(2, 1, 2)
+
+        def tfield_A(R, phi, Z, B0=2, R0=1):
+            az = -B0 * R0 * jnp.log(R)
+            arp = jnp.zeros_like(az)
+            A = jnp.array([arp, arp, az]).T
+            return A
+
+        tfield_from_A = VectorPotentialField(tfield_A, params={"B0": 2, "R0": 1})
+
         np.testing.assert_allclose(tfield([1, 0, 0]), [[0, 2, 0]])
         np.testing.assert_allclose((4 * tfield)([2, 0, 0]), [[0, 4, 0]])
+        np.testing.assert_allclose(tfield_from_A([1, 0, 0]), [[0, 2, 0]])
+        np.testing.assert_allclose(
+            tfield_A(1, 0, 0),
+            tfield_from_A.compute_magnetic_vector_potential([1, 0, 0]).squeeze(),
+        )
+
         np.testing.assert_allclose((tfield + vfield)([1, 0, 0]), [[0, 2, 1]])
         np.testing.assert_allclose(
             (tfield + vfield - pfield)([1, 0, 0.1]), [[0.4, 2, 1]]
@@ -871,9 +888,38 @@ class TestMagneticFields:
         mgrid = "tests/inputs/mgrid_test.nc"
         field3 = SplineMagneticField.from_mgrid(mgrid, extcur)
 
+        r = 0.70
+        p = 0
+        z = 0
+        # use finite diff derivatives to check A accuracy
+        tfield_A = lambda R, phi, Z: field3.compute_magnetic_vector_potential(
+            jnp.vstack([R, phi, Z]).T
+        )
+        funR = lambda x: tfield_A(x, p, z)
+        funP = lambda x: tfield_A(r, x, z)
+        funZ = lambda x: tfield_A(r, p, x)
+
+        ap = tfield_A(r, p, z)[:, 1]
+
+        # these are the gradients of each component of A
+        dAdr = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
+        dAdp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
+        dAdz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
+
+        # form the B components with the appropriate combinations
+        B2 = jnp.array(
+            [
+                dAdp[:, 2] / r - dAdz[:, 1],
+                dAdz[:, 0] - dAdr[:, 2],
+                dAdr[:, 1] + (ap - dAdp[:, 0]) / r,
+            ]
+        ).T
+
         np.testing.assert_allclose(
             field3([0.70, 0, 0]), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
         )
+        np.testing.assert_allclose(field3([0.70, 0, 0]), B2, rtol=1e-3, atol=5e-3)
+
         field3.currents *= 2
         np.testing.assert_allclose(
             field3([0.70, 0, 0]),
@@ -908,9 +954,10 @@ class TestMagneticFields:
             -2.430716e04,
             -2.380229e04,
         ]
-        field = SplineMagneticField.from_mgrid(
-            "tests/inputs/mgrid_d3d.nc", extcur=extcur
-        )
+        with pytest.warns(UserWarning):
+            field = SplineMagneticField.from_mgrid(
+                "tests/inputs/mgrid_d3d.nc", extcur=extcur
+            )
         # make sure field is invariant to shift in phi
         B1 = field.compute_magnetic_field(np.array([1.75, 0.0, 0.0]))
         B2 = field.compute_magnetic_field(np.array([1.75, 1.0, 0.0]))
@@ -1053,8 +1100,14 @@ class TestMagneticFields:
         Rmax = 7
         Zmin = -2
         Zmax = 2
-        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
-        load_field = SplineMagneticField.from_mgrid(path)
+        with pytest.warns(UserWarning):
+            # user warning because poloidal field has no vector potential
+            # and so cannot save the vector potential
+            save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid has no vector potential
+            # and so cannot load the vector potential
+            load_field = SplineMagneticField.from_mgrid(path)
 
         # check that the fields are the same
         num_nodes = 50

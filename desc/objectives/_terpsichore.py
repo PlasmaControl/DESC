@@ -10,7 +10,7 @@ from desc.utils import errorif
 from ._generic import _ExternalObjective
 
 
-def terps_fun(
+def terpsichore(
     eq,
     path="",
     exec="",
@@ -42,12 +42,6 @@ def terps_fun(
     wout_path = os.path.join(path, "wout_{}.nc".format(pid))
     fort16_path = os.path.join(path, "fort_{}.16".format(pid))
 
-    #if (process.name == 'Process-1'):
-    #    # Need to run a couple times to get LSSL and LSSD
-    #    _determine_lssl_lssd()
-
-    #barrier.wait()
-    
     _write_wout(eq=eq, path=wout_path, surfs=surfs)
     _write_terps_input(
         path=input_path,
@@ -109,7 +103,6 @@ def _write_terps_input(
     al0,
 ):
     """Write TERPSICHORE input file."""
-
     ivac = surfs // 4
     if (N_max > 8) or (M_max > 16):
         nj = 150
@@ -133,7 +126,11 @@ def _write_terps_input(
     )
     f.write("C\n")
     f.write("C        NJ    NK  IVAC  LSSL  LSSD MMAXDF NMAXDF\n")
-    f.write("        {:>3d}   {:>3d}   {:>3d}  {:>4d}  {:>4d}    120     64\n".format(nj, nk, ivac, lssl, lssd))
+    f.write(
+        "        {:>3d}   {:>3d}   {:>3d}  {:>4d}  {:>4d}    120     64\n".format(
+            nj, nk, ivac, lssl, lssd
+        )
+    )
     f.write("C\n")
     f.write("C     TABLE OF FOURIER COEFFIENTS FOR BOOZER COORDINATES\n")
     f.write("C     EQUILIBRIUM SETTINGS ARE COMPUTED FROM FIT/VMEC\n")
@@ -256,8 +253,8 @@ def _run_terps(exec, input, wout, sleep_time, stop_time):
     fout = open(stdout_path, "w")
     ferr = open(stderr_path, "w")
 
-    cmd = ["srun", "-n", "1", "-t", "00:01:00", "<", exec, wout]
-    terps_subprocess = subprocess.run(cmd, stdin=open(input), stdout=fout, stderr=ferr)
+    cmd = ["srun", "-n", "1", "-t", "00:01:00", exec, "<", input, wout]
+    terps_subprocess = subprocess.run(cmd, stdout=fout, stderr=ferr)
 
     run_time = 0.0
     tic = time.perf_counter()
@@ -395,7 +392,7 @@ class TERPSICHORE(_ExternalObjective):
     ):
         super().__init__(
             eq=eq,
-            fun=terps_fun,
+            fun=terpsichore,
             dim_f=1,
             target=target,
             bounds=bounds,

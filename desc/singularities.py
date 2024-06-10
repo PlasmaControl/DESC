@@ -299,6 +299,8 @@ class DFTInterpolator(_BIESTInterpolator):
             M=source_grid.M, N=source_grid.N, NFP=source_grid.NFP
         )
         A = basis.evaluate(source_grid.nodes)
+        # TODO: eventually rcond will be deprecated in favor of rtol
+        # in jax, so must change it when that happens
         Ainv = jnp.linalg.pinv(A, rcond=None)
 
         B = jnp.zeros((*theta_q.shape, basis.num_modes))

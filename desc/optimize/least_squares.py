@@ -1,8 +1,9 @@
 """Function for solving nonlinear least squares problems."""
 
+import pynvml
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.utils import errorif, setdefault
 
 from .bound_utils import (
@@ -24,6 +25,8 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
+
+pynvml.nvmlInit()
 
 
 def lsqtr(  # noqa: C901 - FIXME: simplify this
@@ -262,10 +265,18 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)]) if bounded else J_h
         f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)]) if bounded else f
 
+        nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+        jax.debug.print("before svd {}", all_mem_gb)
+
         if tr_method == "svd":
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
+
+        nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+        jax.debug.print("after svd {}", all_mem_gb)
 
         actual_reduction = -1
 

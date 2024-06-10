@@ -4,12 +4,15 @@ from abc import ABC, abstractmethod
 from functools import partial
 
 import numpy as np
+import pynvml
 
-from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
+from desc.backend import jax, jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
 from desc.utils import Timer, flatten_list, is_broadcastable, setdefault, unique_list
+
+pynvml.nvmlInit()
 
 
 class ObjectiveFunction(IOAble):
@@ -308,12 +311,29 @@ class ObjectiveFunction(IOAble):
         params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+
+        list0 = []
+
+        nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+        jax.debug.print("before loop {}", all_mem_gb)
+
+        for par, obj, const in zip(params, self.objectives, constants):
+            nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+            jax.debug.print("loop {}", all_mem_gb)
+            list0.append(obj.compute_scaled_error(*par, constants=const))
+
+        nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+        jax.debug.print("after loop {}", all_mem_gb)
+
+        f = jnp.concatenate(list0)
+
+        nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (1024**3)
+        jax.debug.print("after loop2 {}", all_mem_gb)
+
         return f
 
     def compute_scalar(self, x, constants=None):

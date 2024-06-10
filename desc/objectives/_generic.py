@@ -143,6 +143,7 @@ class _ExternalObjective(_Objective, ABC):
                     results = pool.map(
                         functools.partial(self._fun, **self._kwargs), eqs
                     )
+                    pool.join()
                     return jnp.vstack(results, dtype=float)
             else:  # no vectorization
                 # update equilibrium with new params

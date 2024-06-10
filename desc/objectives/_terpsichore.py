@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import shutil
 import subprocess
 import time
 
@@ -36,11 +37,19 @@ def terpsichore(
     """TERPSICHORE driver function."""
     process = multiprocessing.current_process()
     pid = str(process.pid)
+    print(pid)
 
-    exec_path = os.path.join(path, exec)
-    input_path = os.path.join(path, "{}_N{}_{}".format(eq_id, mode_family, pid))
-    wout_path = os.path.join(path, "wout_{}.nc".format(pid))
-    fort16_path = os.path.join(path, "fort_{}.16".format(pid))
+    # create temporary directory to store I/O files
+    pid_path = os.path.join(path, pid)
+    os.mkdir(pid_path)
+
+    exec_path = os.path.join(pid_path, exec)
+    input_path = os.path.join(pid_path, "input")
+    wout_path = os.path.join(pid_path, "wout.nc")
+    fort16_path = os.path.join(pid_path, "fort.16")
+
+    # copy executable to temporary directory
+    shutil.copy(os.path.join(path, exec), exec_path)
 
     _write_wout(eq=eq, path=wout_path, surfs=surfs)
     _write_terps_input(
@@ -64,6 +73,7 @@ def terpsichore(
         al0=al0,
     )
     _run_terps(
+        dir=pid_path,
         exec=exec_path,
         input=input_path,
         wout=wout_path,
@@ -72,6 +82,10 @@ def terpsichore(
     )
     growth_rate = _read_terps_output(path=fort16_path)
 
+    # remove temporary directory
+    shutil.rmtree(pid_path)
+
+    print(growth_rate)
     return np.atleast_1d(growth_rate)
 
 
@@ -245,16 +259,18 @@ def _write_terps_input(
     f.close()
 
 
-def _run_terps(exec, input, wout, sleep_time, stop_time):
+def _run_terps(dir, exec, input, wout, sleep_time, stop_time):
     """Run TERPSICHORE."""
-    stdout_path = "stdout.terps"
-    stderr_path = "stderr.terps"
+    stdout_path = os.path.join(dir, "stdout.terps")
+    stderr_path = os.path.join(dir, "stderr.terps")
 
     fout = open(stdout_path, "w")
     ferr = open(stderr_path, "w")
 
     cmd = "srun -n 1 -t 00:01:00 " + exec + " < " + input + " " + wout
-    terps_subprocess = subprocess.run(cmd, stdout=fout, stderr=ferr, shell=True)
+    terps_subprocess = subprocess.run(
+        cmd, cwd=dir, shell=True, stdout=fout, stderr=ferr
+    )
 
     run_time = 0.0
     tic = time.perf_counter()

@@ -178,17 +178,17 @@ class Curve(IOAble, Optimizable, ABC):
         return data
 
     def translate(self, displacement=[0, 0, 0]):
-        """Translate the curve by a rigid displacement in X, Y, Z."""
+        """Translate the curve by a rigid displacement in X,Y,Z coordinates."""
         self.shift = self.shift + jnp.asarray(displacement)
 
     def rotate(self, axis=[0, 0, 1], angle=0):
-        """Rotate the curve by a fixed angle about axis in X, Y, Z coordinates."""
+        """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""
         R = rotation_matrix(axis=axis, angle=angle)
         self.rotmat = (R @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ R.T
 
     def flip(self, normal=[0, 0, 1]):
-        """Flip the curve about the plane with specified normal."""
+        """Flip the curve about the plane with specified normal in X,Y,Z coordinates."""
         F = reflection_matrix(normal)
         self.rotmat = (F @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ F.T

@@ -1798,7 +1798,7 @@ class UmbilicDistance(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 6 * curve.N)
             phi_arr = jnp.concatenate(
                 (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
             )
@@ -2093,7 +2093,7 @@ class UmbilicHighCurvature2(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 6 * curve.N)
             phi_arr = jnp.concatenate(
                 (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
             )
@@ -2106,8 +2106,8 @@ class UmbilicHighCurvature2(_Objective):
         if eq != self._eq:
             self._eq = eq
         if self._equil_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 80)
-            theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 250)
+            theta_arr = jnp.linspace(0, 2 * jnp.pi, 250)
             equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
             equil_grid = self._equil_grid
@@ -2159,7 +2159,7 @@ class UmbilicHighCurvature2(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._normalization = 1.0
+            self._normalization = 0.01
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -2368,7 +2368,7 @@ class UmbilicLowCurvature2(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 2 * curve.N)
             phi_arr = jnp.concatenate(
                 (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
             )
@@ -2642,7 +2642,7 @@ class UmbilicDistance2(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 4 * curve.N)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 6 * curve.N)
             phi_arr = jnp.concatenate(
                 (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
             )
@@ -2655,8 +2655,8 @@ class UmbilicDistance2(_Objective):
         if eq != self._eq:
             self._eq = eq
         if self._equil_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 80)
-            theta_arr = jnp.linspace(0, 2 * jnp.pi, 100)
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 250)
+            theta_arr = jnp.linspace(0, 2 * jnp.pi, 250)
             equil_grid = LinearGrid(rho=1.0, theta=theta_arr, zeta=phi_arr)
         else:
             equil_grid = self._equil_grid
@@ -2706,7 +2706,7 @@ class UmbilicDistance2(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._normalization = 1.0
+            self._normalization = 0.01
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -2769,10 +2769,12 @@ class UmbilicDistance2(_Objective):
         # arranged as (number_of_equilibrium_points, number_of_curve points)
         dist = safenorm(eq_pts[:, None, :] - curve_pts[None, :, :], axis=-1)
 
+        min_dist_points = jnp.argmax(dist, axis=0)
         min_dist_points = jnp.argmin(dist, axis=0)
 
         distance = jnp.linalg.norm(
             jnp.take_along_axis(dist, min_dist_points[None, :], axis=0)[0]
         )
 
-        return distance
+        distance = jnp.take_along_axis(dist, min_dist_points[None, :], axis=0)[0]
+        return distance.ravel()

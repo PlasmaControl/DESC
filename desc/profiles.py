@@ -796,7 +796,7 @@ class SplineProfile(_Profile):
 
     Parameters
     ----------
-    params: array-like
+    values: array-like
         Values of the function at knot locations.
     knots : int or ndarray
         x locations to use for spline. If an integer, uses that many points linearly

@@ -983,7 +983,7 @@ def test_non_eq_optimization():
         use_softmin=True,
         surface_grid=grid,
         plasma_grid=grid,
-        alpha=5000,
+        softmin_alpha=5000,
     )
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-auglag")

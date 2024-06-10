@@ -3,9 +3,8 @@
 import warnings
 
 import numpy as np
-from jax import vmap
 
-from desc.backend import jnp
+from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
@@ -522,10 +521,10 @@ class PlasmaVesselDistance(_Objective):
     points on surface corresponding to the grid that the plasma-vessel distance
     is evaluated at, which can cause cusps or regions of very large curvature.
 
-    NOTE: When use_softmin=True, ensures that alpha*values passed in is
+    NOTE: When use_softmin=True, ensures that softmin_alpha*values passed in is
     at least >1, otherwise the softmin will return inaccurate approximations
     of the minimum. Will automatically multiply array values by 2 / min_val if the min
-    of alpha*array is <1. This is to avoid inaccuracies that arise when values <1
+    of softmin_alpha*array is <1. This is to avoid inaccuracies when values <1
     are present in the softmin, which can cause inaccurate mins or even incorrect
     signs of the softmin versus the actual min.
 
@@ -581,13 +580,13 @@ class PlasmaVesselDistance(_Objective):
         self.things = [eq] only.
         If False, the surface coordinates are computed at every iteration.
         False by default, so that self.things = [eq, surface]
-    alpha: float, optional
-        Parameter used for softmin. The larger alpha, the closer the softmin
-        approximates the hardmin. softmin -> hardmin as alpha -> infinity.
-        if alpha*array < 1, the underlying softmin will automatically multiply
-        the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
-        than this minimum value will make the softmin a more accurate approximation
-        of the true min.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger softmin_alpha, the closer the softmin
+        approximates the hardmin. softmin -> hardmin as softmin_alpha -> infinity.
+        if softmin_alpha*array < 1, the underlying softmin will automatically multiply
+        the array by 2/min_val to ensure that softmin_alpha*array>1. Making
+        softmin_alpha larger than this minimum value will make the softmin a
+        more accurate approximation of the true min.
     name : str, optional
         Name of the objective function.
     """
@@ -612,7 +611,7 @@ class PlasmaVesselDistance(_Objective):
         use_softmin=False,
         use_signed_distance=False,
         surface_fixed=False,
-        alpha=1.0,
+        softmin_alpha=1.0,
         name="plasma-vessel distance",
     ):
         if target is None and bounds is None:
@@ -623,7 +622,7 @@ class PlasmaVesselDistance(_Objective):
         self._use_softmin = use_softmin
         self._use_signed_distance = use_signed_distance
         self._surface_fixed = surface_fixed
-        self._alpha = alpha
+        self._softmin_alpha = softmin_alpha
         super().__init__(
             things=[eq, self._surface] if not surface_fixed else [eq],
             target=target,
@@ -875,7 +874,9 @@ class PlasmaVesselDistance(_Objective):
             # inside the plasma
 
         if self._use_softmin:  # do softmin
-            return jnp.apply_along_axis(softmin, 0, d, self._alpha) * point_signs
+            return (
+                jnp.apply_along_axis(softmin, 0, d, self._softmin_alpha) * point_signs
+            )
         else:  # do hardmin
             return d.min(axis=0) * point_signs
 

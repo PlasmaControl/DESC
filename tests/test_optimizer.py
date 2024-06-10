@@ -1025,7 +1025,7 @@ def test_signed_PlasmaVesselDistance():
         plasma_grid=grid,
         use_signed_distance=True,
         use_softmin=True,
-        alpha=100,
+        softmin_alpha=100,
     )
     objective = ObjectiveFunction((obj,))
 

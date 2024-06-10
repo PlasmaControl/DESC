@@ -248,13 +248,13 @@ def _write_terps_input(
 def _run_terps(exec, input, wout, sleep_time, stop_time):
     """Run TERPSICHORE."""
     stdout_path = "stdout.terps"
-    stderr_path = "error.terps"
+    stderr_path = "stderr.terps"
 
     fout = open(stdout_path, "w")
     ferr = open(stderr_path, "w")
 
-    cmd = ["srun", "-n", "1", "-t", "00:01:00", exec, "<", input, wout]
-    terps_subprocess = subprocess.run(cmd, stdout=fout, stderr=ferr)
+    cmd = "srun -n 1 -t 00:01:00 " + exec + " < " + input + " " + wout
+    terps_subprocess = subprocess.run(cmd, stdout=fout, stderr=ferr, shell=True)
 
     run_time = 0.0
     tic = time.perf_counter()

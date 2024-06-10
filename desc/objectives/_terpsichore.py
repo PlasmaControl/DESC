@@ -147,7 +147,6 @@ class TERPSICHORE(_Objective):
             constants = self.constants
 
         self.write_vmec()   # Write VMEC file from DESC equilibrium
-        #self.compute_fort18() # No longer needed
         self.write_terps_io()
         self.run_terps()
         self.terps_outfile = os.path.join(self.path,'fort.16') # Let's change the name of this at some point
@@ -162,18 +161,6 @@ class TERPSICHORE(_Objective):
 
         from desc.vmec import VMECIO
         VMECIO.save(self.eq, self.wout_file, surfs=self.nsurf)
-
-'''
-    I think this function is defunct now
-    
-    def compute_fort18(self):
-
-        print("Figure out how to do this directly from DESC equilibrium quantities!!")
-        
-        head, tail = os.path.split(self.wout_file)
-        cmd = [self.vmec2terps_app, tail]
-        subprocess.run(cmd,stdout=subprocess.PIPE, check=True)
-'''
 
     def remove_terps_files(self):
 
@@ -208,17 +195,13 @@ class TERPSICHORE(_Objective):
             f_slurm.close()
             #self.remove_terps_files()
             return True
-
-        else:
-            f_slurm.close()
-            return False
-
+        
         elif 'PARAMETER LSSL' in terps_out_contents:
             if terps_subprocess.returncode == None:
                 terps_subprocess.terminate()
             f_slurm.seek(0)
             line = f_slurm.readline()
-v            while line:
+            while line:
                 if 'PARAMETER LSSL' in line:
                     self.lssl = int(line.split("TO:")[1])
                     break
@@ -238,7 +221,11 @@ v            while line:
                 line = f_slurm.readline()
             self.write_terps_io() # Rewrite the input file with suggested value of LSSD and re-run
             return True
-        
+
+        else:
+            f_slurm.close()
+            return False
+
 
     def run_terps(self):
         
@@ -357,6 +344,8 @@ v            while line:
         f.write("C        MM  NMIN  NMAX   MMS NSMIN NSMAX NPROCS INSOL\n")
         f.write("         {:>2d}   {:>3d}   {:>3d}    55    -8    10    1     0\n".format(self.max_bozm, -self.max_bozn, self.max_bozn))
         f.write("C\n")
+        f.write("C        NJ    NK  IVAC  LSSL  LSSD MMAXDF NMAXDF\n")
+        f.write("        {:>3d}   {:>3d}   {:>3d}  {:>4d}  {:>4d}    120     64\n".format(nj, nk, ivac, self.lssl, self.lssd))
         f.write("C     TABLE OF FOURIER COEFFIENTS FOR BOOZER COORDINATES\n")
         f.write("C     EQUILIBRIUM SETTINGS ARE COMPUTED FROM FIT/VMEC\n")
         f.write("C\n")

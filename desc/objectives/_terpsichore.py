@@ -17,8 +17,8 @@ def terps_fun(
     eq_id="",
     mode_family=0,
     surfs=16,
-    lssl=1,
-    lssd=1,
+    lssl=200,
+    lssd=100,
     M_max=2,
     N_min=-2,
     N_max=2,
@@ -42,6 +42,12 @@ def terps_fun(
     wout_path = os.path.join(path, "wout_{}.nc".format(pid))
     fort16_path = os.path.join(path, "fort_{}.16".format(pid))
 
+    #if (process.name == 'Process-1'):
+    #    # Need to run a couple times to get LSSL and LSSD
+    #    _determine_lssl_lssd()
+
+    #barrier.wait()
+    
     _write_wout(eq=eq, path=wout_path, surfs=surfs)
     _write_terps_input(
         path=input_path,
@@ -103,7 +109,7 @@ def _write_terps_input(
     al0,
 ):
     """Write TERPSICHORE input file."""
-    """
+
     ivac = surfs // 4
     if (N_max > 8) or (M_max > 16):
         nj = 150
@@ -114,7 +120,6 @@ def _write_terps_input(
     else:
         nj = 50
         nk = 50
-    """
 
     f = open(path, "w")
 
@@ -126,6 +131,9 @@ def _write_terps_input(
             M_booz_max, -N_booz_max, N_booz_max
         )
     )
+    f.write("C\n")
+    f.write("C        NJ    NK  IVAC  LSSL  LSSD MMAXDF NMAXDF\n")
+    f.write("        {:>3d}   {:>3d}   {:>3d}  {:>4d}  {:>4d}    120     64\n".format(nj, nk, ivac, lssl, lssd))
     f.write("C\n")
     f.write("C     TABLE OF FOURIER COEFFIENTS FOR BOOZER COORDINATES\n")
     f.write("C     EQUILIBRIUM SETTINGS ARE COMPUTED FROM FIT/VMEC\n")

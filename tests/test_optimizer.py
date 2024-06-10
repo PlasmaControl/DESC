@@ -1339,7 +1339,7 @@ def test_quad_flux_with_surface_current_field():
             field_grid=LinearGrid(M=2, N=2),
         ),
     )
-    constraints = FixParameter(field, ["I", "G"])
+    constraints = FixParameters(field, {"I": True, "G": True})
     opt = Optimizer("lsq-exact")
     # this should run without an error
     (field_modular_opt,), result = opt.optimize(
@@ -1362,7 +1362,7 @@ def test_tor_flux_with_surface_current_field():
             field_grid=LinearGrid(M=2, N=2),
         ),
     )
-    constraints = FixParameter(field, ["I", "G"])
+    constraints = FixParameters(field, {"I": True, "G": True})
     opt = Optimizer("fmintr")
     # this should run without an error
     (field_modular_opt,), result = opt.optimize(

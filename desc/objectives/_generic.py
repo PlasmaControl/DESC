@@ -2,7 +2,7 @@
 
 import functools
 import inspect
-import multiprocessing
+import multiprocessing as mp
 import os
 import re
 from abc import ABC
@@ -81,10 +81,11 @@ class _ExternalObjective(_Objective, ABC):
         normalize_target=False,
         loss_function=None,
         fd_step=1e-4,  # TODO: generalize this to allow a vector of different scales
-        vectorized=False,
+        vectorized=False,  # False or int
         name="external",
         **kwargs,
     ):
+        assert isinstance(vectorized, bool) or isinstance(vectorized, int)
         if target is None and bounds is None:
             target = 0
         self._eq = eq.copy()
@@ -95,7 +96,7 @@ class _ExternalObjective(_Objective, ABC):
         self._kwargs = kwargs
         if self._vectorized:
             try:  # spawn a new environment so the backend can be set to numpy
-                multiprocessing.set_start_method("spawn")
+                mp.set_start_method("spawn")
             except RuntimeError:  # context can only be set once
                 pass
         super().__init__(
@@ -140,12 +141,16 @@ class _ExternalObjective(_Objective, ABC):
                         if len(param_value):
                             setattr(eq, param_key, param_value)
                 # parallelize calls to external function
-                with multiprocessing.Pool(
-                    processes=min(os.cpu_count(), num_eq)
-                ) as pool:
+                max_processes = (
+                    self._vectorized
+                    if isinstance(self._vectorized, int)
+                    else os.cpu_count()
+                )
+                with mp.Pool(processes=min(max_processes, num_eq)) as pool:
                     results = pool.map(
                         functools.partial(self._fun, **self._kwargs), eqs
                     )
+                    pool.close()
                     pool.join()
                     return jnp.vstack(results, dtype=float)
             else:  # no vectorization
@@ -228,7 +233,7 @@ class _ExternalObjective(_Objective, ABC):
                     func,
                     result_shape_dtype,
                     *args,
-                    vectorized=self._vectorized,
+                    vectorized=bool(self._vectorized),
                     **kwargs,
                 )
 

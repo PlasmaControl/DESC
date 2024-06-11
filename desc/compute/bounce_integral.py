@@ -128,7 +128,7 @@ def _root_cubic(a, b, c, d, distinct=False):
         return jnp.stack([r1, r2, r3], axis=-1)
 
     def reducible(Q, R, b):
-        # 1 real, two complex roots.
+        # One real and two complex roots.
         A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(R**2 - Q**3)) ** (1 / 3)
         B = safediv(Q, A)
         r1 = (A + B) - b / 3
@@ -435,9 +435,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     """
     B_c, B_z_ra_c, _ = _check_shape(knots, B_c, B_z_ra_c)
     S, N, degree = B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
-    extrema = _poly_root(
-        c=B_z_ra_c, a_min=jnp.array([0]), a_max=jnp.diff(knots), distinct=True
-    )
+    extrema = _poly_root(c=B_z_ra_c, a_min=jnp.array([0]), a_max=jnp.diff(knots))
     assert extrema.shape == (S, N, degree - 1)
     B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis])
     B_zz_ra_extrema = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
@@ -617,6 +615,8 @@ def plot_field_line(
     title=r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$",
     id=None,
     include_knots=True,
+    alpha_knot=0.1,
+    alpha_pitch=0.25,
     show=True,
 ):
     """Plot the field line given spline of |B| and bounce points etc.
@@ -636,11 +636,17 @@ def plot_field_line(
     stop : float
         Maximum ζ of plot.
     num : int
-        Number of ζ points to plot.
+        Number of ζ points to plot. Pick a big number.
     title : str
         Plot title.
     id : str
         Identifier string to append to plot title.
+    include_knots : bool
+        Whether to plot vertical lines at the knots.
+    alpha_knot : float
+        Transparency of knot lines.
+    alpha_pitch : float
+        Transparency of pitch lines.
     show : bool
         Whether to show the plot.
 
@@ -662,7 +668,7 @@ def plot_field_line(
     fig, ax = plt.subplots()
     if include_knots:
         for knot in B.x:
-            add(ax.axvline(x=knot, color="tab:blue", alpha=0.1, label="knot"))
+            add(ax.axvline(x=knot, color="tab:blue", alpha=alpha_knot, label="knot"))
     z = jnp.linspace(
         start=B.x[0] if start is None else start,
         stop=B.x[-1] if stop is None else stop,
@@ -673,7 +679,11 @@ def plot_field_line(
     if pitch is not None:
         b = 1 / jnp.atleast_1d(pitch)
         for val in b:
-            add(ax.axhline(val, color="tab:purple", alpha=0.25, label=r"$1 / \lambda$"))
+            add(
+                ax.axhline(
+                    val, color="tab:purple", alpha=alpha_pitch, label=r"$1 / \lambda$"
+                )
+            )
         bp1, bp2 = jnp.atleast_2d(bp1, bp2)
         for i in range(bp1.shape[0]):
             bp1_i, bp2_i = map(_filter_not_nan, (bp1[i], bp2[i]))
@@ -702,8 +712,8 @@ def plot_field_line(
     if id is not None:
         title = f"{title}. id = {id}."
     ax.set_title(title)
+    plt.tight_layout()
     if show:
-        plt.tight_layout()
         plt.show()
         plt.close()
     return fig, ax
@@ -882,21 +892,13 @@ _delimiter = "Returns"
 
 
 _interp1d_vec = jnp.vectorize(
-    interp1d,
-    signature="(m),(n),(n)->(m)",
-    excluded={"method", "derivative", "extrap", "period"},
+    interp1d, signature="(m),(n),(n)->(m)", excluded={"method"}
 )
 
 
-@partial(
-    jnp.vectorize,
-    signature="(m),(n),(n),(n)->(m)",
-    excluded={"method", "derivative", "extrap", "period"},
-)
-def _interp1d_vec_with_df(
-    xq, x, f, fx, method="cubic", derivative=0, extrap=False, period=None
-):
-    return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
+@partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)", excluded={"method"})
+def _interp1d_vec_with_df(xq, x, f, fx, method="cubic"):
+    return interp1d(xq, x, f, method, fx=fx)
 
 
 def _interpolatory_quadrature(
@@ -1206,21 +1208,13 @@ def bounce_integral(
         the labels (ρ, α) are interpreted as the index into the first axis that
         corresponds to that field line.
     knots : Array, shape(knots.size, )
-        Field line following coordinate values at which ``B_sup_z``,
-        ``B``, and ``B_z_ra`` were evaluated.
-        These knots are used to compute a spline of |B| and interpolate
-        the integrand.  The number of knots specifies a grid resolution
-        as increasing the number of knots increases the accuracy of
-        representing the integrand and the accuracy of the locations of
-        the bounce points. The default spline method for |B| is a cubic
-        Hermite spline. This is preferred because the strength of the
-        singularity typical in bounce integral is ~ 1 / |∂|B|/∂_ζ|, so
-        the derivative information should be captured without compromise.
-        Can also specify to use a monotonic interpolation for |B| rather
-        than a cubic Hermite spline with keyword argument ``monotonic=True``.
+        Field line following coordinate values at which ``B_sup_z``, ``B``, and
+        ``B_z_ra`` were evaluated. These knots are used to compute a spline of |B|
+        and interpolate the integrand. A good reference density is 100 knots per
+        toroidal transit.
     quad : (Array, Array)
         Quadrature points xₖ and weights wₖ for the approximate evaluation
-        of an integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
+        of an integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 21 points.
     automorphism : (callable, callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
@@ -1230,9 +1224,9 @@ def bounce_integral(
         augment or suppress singularities.
         Keep this in mind when choosing the quadrature method.
     B_ref : float
-        Reference magnetic field strength for normalization.
+        Optional. Reference magnetic field strength for normalization.
     L_ref : float
-        Reference length scale for normalization.
+        Optional. Reference length scale for normalization.
     check : bool
         Flag for debugging.
     plot : bool

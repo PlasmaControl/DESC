@@ -50,6 +50,7 @@ def terpsichore(
     # copy executable to temporary directory
     shutil.copy(os.path.join(path, exec), exec_path)
 
+    # FIXME: remove this from the vectorized part?
     _write_wout(eq=eq, path=wout_path, surfs=surfs)
     _write_terps_input(
         path=input_path,

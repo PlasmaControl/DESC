@@ -28,6 +28,8 @@ class _ExternalObjective(_Objective, ABC):
     The user supplied function must take an Equilibrium as its only positional argument,
     but can take additional keyword arguments.
 
+    # TODO: document that driver script has to include ``if __name__ == "__main__":``
+
     # TODO: add Parameters documentation
 
     Parameters
@@ -146,6 +148,7 @@ class _ExternalObjective(_Objective, ABC):
                     if isinstance(self._vectorized, int)
                     else os.cpu_count()
                 )
+                # TODO: re-use same pool
                 with mp.Pool(processes=min(max_processes, num_eq)) as pool:
                     results = pool.map(
                         functools.partial(self._fun, **self._kwargs), eqs

@@ -92,7 +92,6 @@ not_implemented_limits = {
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
-    "ripple",  # implemented but requires source grid
 }
 
 
@@ -131,6 +130,14 @@ def _skip_this(eq, name):
         or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
         or (eq.current is None and "iota_num" in name)
+        # These quantities require a coordinate mapping to compute and special grids, so
+        # it's not economical to test their axis limits here. Instead, a grid that
+        # includes the axis should be used in existing unit tests for these quantities.
+        or bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "source_grid_requirement"
+            ]
+        )
     )
 
 

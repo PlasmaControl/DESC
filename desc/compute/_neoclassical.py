@@ -12,9 +12,10 @@ expensive computations.
 from functools import partial
 
 import quadax
+from orthax.legendre import leggauss
 from termcolor import colored
 
-from desc.backend import jit, jnp, trapezoid
+from desc.backend import imap, jit, jnp, trapezoid
 
 from ..utils import warnif
 from .bounce_integral import bounce_integral, get_pitch
@@ -29,7 +30,7 @@ def _is_adaptive(quad):
 
 
 def vec_quadax(quad):
-    """Vectorize an adaptive quadrature method from quadax to compute ripple.
+    """Vectorize an adaptive quadrature method from quadax.
 
     Parameters
     ----------
@@ -56,7 +57,6 @@ def vec_quadax(quad):
 
 def _poloidal_mean(grid, f):
     # Integrate f over poloidal angle and divide by 2π.
-    assert f.shape[-1] == grid.num_poloidal
     if grid.spacing is None:
         warnif(
             grid.num_poloidal != 1,
@@ -69,19 +69,19 @@ def _poloidal_mean(grid, f):
         return f @ dp / jnp.sum(dp)
 
 
-def _get_pitch(grid, data, quad, num=75):
+def _get_pitch(grid, data, quad, num=73):
     # Get endpoints of integral over pitch for each flux surface.
     # with num values uniformly spaced in between.
     min_B = grid.compress(data["min_tz |B|"])
     max_B = grid.compress(data["max_tz |B|"])
-    if not _is_adaptive(quad):
+    if _is_adaptive(quad):
+        pitch = 1 / jnp.stack([max_B, min_B], axis=-1)[:, jnp.newaxis]
+        assert pitch.shape == (grid.num_rho, 1, 2)
+    else:
         pitch = get_pitch(min_B, max_B, num)
         pitch = jnp.broadcast_to(
             pitch[..., jnp.newaxis], (pitch.shape[0], grid.num_rho, grid.num_alpha)
         ).reshape(pitch.shape[0], grid.num_rho * grid.num_alpha)
-    else:
-        pitch = 1 / jnp.stack([max_B, min_B], axis=-1)[:, jnp.newaxis]
-        assert pitch.shape == (grid.num_rho, 1, 2)
     return pitch
 
 
@@ -161,40 +161,50 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "<L|r,a>",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    bounce_integral=(
-        "callable : Method to compute bounce integrals. "
-        "(You may want to wrap desc.compute.bounce_integral.bounce_integral "
-        "to change optional parameters such as quadrature resolution, etc.)."
-    ),
-    batch="bool : Whether to perform computation in a batched manner.",
-    # Composite quadrature should perform better than higher order methods.
-    quad=(
-        "callable : Quadrature method over velocity coordinate. "
-        "Default is composite Simpson's rule. "
-        "Accepts any callable with signature matching quad(f(λ), λ, ..., axis). "
-        "Accepts adaptive quadrature methods from quadax wrapped with vec_quadax. "
-        "If using an adaptive method, it is highly recommended to set batch=True."
+    num_quad=(
+        "int : Resolution for quadrature of bounce integrals. Default is 31, "
+        "which gets sufficient convergence, so higher values are unnecessary."
     ),
     num_pitch=(
-        "int : Resolution for quadrature over velocity coordinate. "
-        "Default is 75. This setting is ignored for adaptive quadrature."
+        "int : Resolution for quadrature over velocity coordinate, preferably odd. "
+        "Default is 125. Effective ripple will look smoother at high values."
+        "(If computed on many flux surfaces and micro oscillation is seen "
+        "between neighboring surfaces, increasing num_pitch will smooth the profile)."
     ),
+    # Some notes on choosing the resolution hyperparameters:
+    # The default settings above were chosen such that the effective ripple profile on
+    # the W7-X stellarator looks similar to the profile computed at higher resolution,
+    # indicating convergence. The final resolution parameter to keep in mind is that
+    # the supplied grid should sufficiently cover the flux surfaces. At/above the
+    # num_quad and num_pitch parameters chosen above, the grid coverage should be the
+    # parameter that has the strongest effect on the profile.
+    # As a reference for W7-X, when computing the effective ripple by tracing a single
+    # field line on each flux surface, a density of 100 knots per toroidal transit
+    # accurately reconstructs the ripples along the field line. Truncating the field
+    # line to [0, 20π] offers good convergence (after [0, 30π] the returns diminish).
+    # Note that when further truncating the field line to [0, 10π], a dip/cusp appears
+    # between the rho=0.7 and rho=0.8 surfaces, indicating that more coverage is
+    # required to resolve the effective ripple in this region.
+    # TODO: Improve performance... related to GitHub issue #1045.
+    #  The difficulty is computing the magnetic field is expensive:
+    #  the ripples along field lines are fine compared to the length of the field line
+    #  required for sufficient coverage of the surface. This requires many knots to
+    #  for the spline of the magnetic field to capture fine ripples in a large interval.
 )
-# temporary
-@partial(jit, static_argnames=["bounce_integral", "batch", "quad", "num_pitch"])
+@partial(jit, static_argnames=["num_quad", "num_pitch"])
 def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
-    bounce = kwargs.get("bounce_integral", bounce_integral)
-    batch = kwargs.get("batch", False)
-    quad = kwargs.get("quad", quadax.simpson)
-    num_pitch = kwargs.get("num_pitch", 75)
-
     g = transforms["grid"].source_grid
-    knots = g.compress(g.nodes[:, 2], surface_label="zeta")
-    pitch = _get_pitch(g, data, quad, num_pitch)
+    bounce_integrate, _ = bounce_integral(
+        data["B^zeta"],
+        data["|B|"],
+        data["|B|_z|r,a"],
+        knots=g.compress(g.nodes[:, 2], surface_label="zeta"),
+        quad=leggauss(kwargs.get("num_quad", 31)),
+    )
 
     def dH(grad_psi_norm, kappa_g, B, pitch):
-        # Pulled out dimensionless factor of (λB₀)¹ᐧ⁵ from integrand of
-        # Nemov equation 30. Multiplied back in at end.
+        # Removed dimensionless (λB₀)¹ᐧ⁵ from integrand of Nemov equation 30.
+        # Reintroduced later.
         return (
             jnp.sqrt(1 - pitch * B)
             * (4 / (pitch * B) - 1)
@@ -203,64 +213,36 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
             / B
         )
 
-    def dI(B, pitch):
-        # Integrand of Nemov equation 31.
+    def dI(B, pitch):  # Integrand of Nemov equation 31.
         return jnp.sqrt(1 - pitch * B) / B
 
-    if not _is_adaptive(quad):
-        bounce_integrate, _ = bounce(
-            data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots
-        )
+    def d_ripple(pitch):
+        """Return λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
 
-        def d_ripple(pitch):
-            """Return λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
+        Parameters
+        ----------
+        pitch : Array, shape(*pitch.shape[:-1], g.num_rho * g.num_alpha)
+            Pitch angle.
 
-            Parameters
-            ----------
-            pitch : Array, shape(*pitch.shape[:-1], g.num_rho * g.num_alpha)
-                Pitch angle.
+        Returns
+        -------
+        d_ripple : Array, shape(pitch.shape)
+            λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ
 
-            Returns
-            -------
-            d_ripple : Array, shape(pitch.shape)
-                λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ
+        """
+        H = bounce_integrate(dH, [data["|grad(psi)|"], data["kappa_g"]], pitch)
+        I = bounce_integrate(dI, [], pitch)
+        return pitch * jnp.nansum(H**2 / I, axis=-1)
+        # (λB₀)³ db = (λB₀)³ λ⁻² B₀⁻¹ (-dλ) = λ B₀² (-dλ) where B₀ has units of λ⁻¹.
 
-            """
-            H = bounce_integrate(
-                dH, [data["|grad(psi)|"], data["kappa_g"]], pitch, batch=batch
-            )
-            I = bounce_integrate(dI, [], pitch, batch=batch)
-            return pitch * jnp.nansum(H**2 / I, axis=-1)
-            # Note that (λB₀)³ db = (λB₀)³ λ⁻² B₀⁻¹ (-dλ) = λ B₀² (-dλ).
-            # We choose B₀ = max |B| on the flux surface. We multiply by B₀² at
-            # the end and account for the minus sign with the integration order.
-
-        # This has units of tesla meters / B₀² where B₀ has units of λ⁻¹.
-        ripple = quad(d_ripple(pitch), pitch, axis=0)
-    else:
-        # Use adaptive quadrature.
-
-        def d_ripple(pitch, B_sup_z, B, B_z_ra, grad_psi_norm, kappa_g):
-            bounce_integrate, _ = bounce(B_sup_z, B, B_z_ra, knots)
-            H = bounce_integrate(dH, [grad_psi_norm, kappa_g], pitch, batch=batch)
-            I = bounce_integrate(dI, [], pitch, batch=batch)
-            return jnp.squeeze(pitch * jnp.nansum(H**2 / I, axis=-1))
-
-        args = [
-            f.reshape(g.num_rho, g.num_alpha, g.num_zeta)
-            for f in [
-                data["B^zeta"],
-                data["|B|"],
-                data["|B|_z|r,a"],
-                data["|grad(psi)|"],
-                data["kappa_g"],
-            ]
-        ]
-        ripple = quad(d_ripple, pitch, *args)
-
-    ripple = _poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha))
+    # The integrand is continuous and likely poorly approximated by a polynomial,
+    # so composite quadrature should perform better than higher order methods.
+    pitch = _get_pitch(g, data, quadax.simpson, kwargs.get("num_pitch", 125))
+    ripple = quadax.simpson(jnp.squeeze(imap(d_ripple, pitch), axis=1), pitch, axis=0)
     data["effective ripple raw"] = (
-        g.expand(ripple) * data["max_tz |B|"] ** 2 / data["<L|r,a>"]
+        g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))
+        * data["max_tz |B|"] ** 2
+        / data["<L|r,a>"]
     )
     return data
 

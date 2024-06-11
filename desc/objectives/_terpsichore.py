@@ -15,7 +15,6 @@ def terpsichore(
     eq,
     path="",
     exec="",
-    eq_id="",
     mode_family=0,
     surfs=16,
     lssl=200,
@@ -50,11 +49,9 @@ def terpsichore(
     # copy executable to temporary directory
     shutil.copy(os.path.join(path, exec), exec_path)
 
-    # FIXME: remove this from the vectorized part?
     _write_wout(eq=eq, path=wout_path, surfs=surfs)
     _write_terps_input(
         path=input_path,
-        eq_id=eq_id,
         mode_family=mode_family,
         surfs=surfs,
         lssl=lssl,
@@ -97,7 +94,6 @@ def _write_wout(eq, path, surfs):
 
 def _write_terps_input(
     path,
-    eq_id,
     mode_family,
     surfs,
     lssl,
@@ -129,7 +125,7 @@ def _write_terps_input(
 
     f = open(path, "w")
 
-    f.write("               {}\n".format(eq_id))
+    f.write("               TERPSICHORE\n")
     f.write("C\n")
     f.write("C        MM  NMIN  NMAX   MMS NSMIN NSMAX NPROCS INSOL\n")
     f.write(
@@ -385,7 +381,6 @@ class TERPSICHORE(_ExternalObjective):
         vectorized=True,
         path="",
         exec="",
-        eq_id="",
         mode_family=0,
         surfs=16,
         lssl=1,
@@ -420,7 +415,6 @@ class TERPSICHORE(_ExternalObjective):
             name=name,
             path=path,
             exec=exec,
-            eq_id=eq_id,
             mode_family=mode_family,
             surfs=surfs,
             lssl=lssl,

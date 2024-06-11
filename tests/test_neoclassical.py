@@ -15,9 +15,9 @@ def test_field_line_average():
     eq = examples.get("W7-X")
     grid = rtz_grid(
         eq,
-        radial=np.linspace(0, 1, 5),
-        poloidal=np.array([0]),
-        toroidal=np.linspace(0, 60 * np.pi, 900),
+        np.array([0, 0.5]),
+        np.array([0]),
+        np.linspace(0, 40 * np.pi, 200),
         coordinates="raz",
         period=(np.inf, 2 * np.pi, np.inf),
     )

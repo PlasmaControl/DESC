@@ -56,20 +56,19 @@ def vec_quadax(quad):
 
 
 def _poloidal_mean(grid, f):
-    # Integrate f over poloidal angle and divide by 2π.
-    if grid.spacing is None:
-        warnif(
-            grid.num_poloidal != 1,
-            msg=colored("Reduced via uniform poloidal mean.", "yellow"),
-        )
+    """Integrate f over poloidal angle and divide by 2π."""
+    assert f.shape[-1] == grid.num_poloidal
+    if grid.num_poloidal == 1:
+        return jnp.squeeze(f, axis=-1)
+    if not hasattr(grid, "spacing"):
+        warnif(True, msg=colored("Reduced via uniform poloidal mean.", "yellow"))
         return jnp.mean(f, axis=-1)
-    else:
-        assert grid.is_meshgrid
-        dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
-        return f @ dp / jnp.sum(dp)
+    assert grid.is_meshgrid
+    dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
+    return f @ dp / jnp.sum(dp)
 
 
-def _get_pitch(grid, data, quad, num=73):
+def _get_pitch(grid, data, quad, num):
     # Get endpoints of integral over pitch for each flux surface.
     # with num values uniformly spaced in between.
     min_B = grid.compress(data["min_tz |B|"])
@@ -163,11 +162,11 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     num_quad=(
         "int : Resolution for quadrature of bounce integrals. Default is 31, "
-        "which gets sufficient convergence, so higher values are unnecessary."
+        "which gets sufficient convergence, so higher values are likely unnecessary."
     ),
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate, preferably odd. "
-        "Default is 125. Effective ripple will look smoother at high values."
+        "Default is 125. Effective ripple will look smoother at high values. "
         "(If computed on many flux surfaces and micro oscillation is seen "
         "between neighboring surfaces, increasing num_pitch will smooth the profile)."
     ),

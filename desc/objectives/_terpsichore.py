@@ -1,4 +1,4 @@
-import multiprocessing
+import multiprocessing as mp
 import os
 import shutil
 import subprocess
@@ -35,7 +35,7 @@ def terpsichore(
     stop_time=60,
 ):
     """TERPSICHORE driver function."""
-    process = multiprocessing.current_process()
+    process = mp.current_process()
     pid = str(process.pid)
 
     # create temporary directory to store I/O files
@@ -265,7 +265,7 @@ def _run_terps(dir, exec, input, wout, sleep_time, stop_time):
     fout = open(stdout_path, "w")
     ferr = open(stderr_path, "w")
 
-    cmd = "srun -n 1 -t 00:01:00 " + exec + " < " + input + " " + wout
+    cmd = exec + " < " + input + " " + wout
     terps_subprocess = subprocess.run(
         cmd, cwd=dir, shell=True, stdout=fout, stderr=ferr
     )

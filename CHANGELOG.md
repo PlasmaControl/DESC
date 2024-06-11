@@ -10,6 +10,7 @@ to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` c
 - Add ``compute_magnetic_vector_potential`` methods to most ``MagneticField`` objects to allow vector potential
   computation.
 - Add ability to save and load vector potential information from ``mgrid`` files.
+
 v0.11.1
 -------
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.11.0...v0.11.1)

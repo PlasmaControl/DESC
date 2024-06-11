@@ -972,6 +972,7 @@ class TestMagneticFields:
             -2.380229e04,
         ]
         with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
             field = SplineMagneticField.from_mgrid(
                 "tests/inputs/mgrid_d3d.nc", extcur=extcur
             )

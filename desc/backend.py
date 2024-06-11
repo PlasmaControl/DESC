@@ -501,7 +501,7 @@ else:  # pragma: no cover
             val = body_fun(i, val)
         return val
 
-    def cond(pred, true_fun, false_fun, *operand):
+    def cond(pred, true_fun, false_fun, *operands):
         """Conditionally apply true_fun or false_fun.
 
         This version is for the numpy backend, for jax backend see jax.lax.cond
@@ -514,7 +514,7 @@ else:  # pragma: no cover
             Function (A -> B), to be applied if pred is True.
         false_fun: callable
             Function (A -> B), to be applied if pred is False.
-        operand: any
+        operands: any
             input to either branch depending on pred. The type can be a scalar, array,
             or any pytree (nested Python tuple/list/dict) thereof.
 
@@ -527,9 +527,9 @@ else:  # pragma: no cover
 
         """
         if pred:
-            return true_fun(*operand)
+            return true_fun(*operands)
         else:
-            return false_fun(*operand)
+            return false_fun(*operands)
 
     def switch(index, branches, operand):
         """Apply exactly one of branches given by index.

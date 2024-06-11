@@ -3,6 +3,7 @@
 import functools
 import inspect
 import multiprocessing
+import os
 import re
 from abc import ABC
 
@@ -139,7 +140,9 @@ class _ExternalObjective(_Objective, ABC):
                         if len(param_value):
                             setattr(eq, param_key, param_value)
                 # parallelize calls to external function
-                with multiprocessing.Pool(processes=num_eq) as pool:
+                with multiprocessing.Pool(
+                    processes=min(os.cpu_count(), num_eq)
+                ) as pool:
                     results = pool.map(
                         functools.partial(self._fun, **self._kwargs), eqs
                     )

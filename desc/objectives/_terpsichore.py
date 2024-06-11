@@ -37,7 +37,6 @@ def terpsichore(
     """TERPSICHORE driver function."""
     process = multiprocessing.current_process()
     pid = str(process.pid)
-    print(pid)
 
     # create temporary directory to store I/O files
     pid_path = os.path.join(path, pid)
@@ -85,7 +84,6 @@ def terpsichore(
     # remove temporary directory
     shutil.rmtree(pid_path)
 
-    print(growth_rate)
     return np.atleast_1d(growth_rate)
 
 

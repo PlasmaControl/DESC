@@ -7,7 +7,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
+from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.io import IOAble
 from desc.utils import check_nonnegint, check_posint, flatten_list
 
@@ -1773,12 +1773,16 @@ def _jacobi(n, alpha, beta, x, dx=0):
     n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
 
     # coefficient for derivative
-    c = (
-        gammaln(alpha + beta + n + 1 + dx)
-        - dx * jnp.log(2)
-        - gammaln(alpha + beta + n + 1)
+    coeffs = jnp.array(
+        [
+            1,
+            (alpha + n + 1) / 2,
+            (alpha + n + 2) * (alpha + n + 1) / 4,
+            (alpha + n + 3) * (alpha + n + 2) * (alpha + n + 1) / 8,
+            (alpha + n + 4) * (alpha + n + 3) * (alpha + n + 2) * (alpha + n + 1) / 16,
+        ]
     )
-    c = jnp.exp(c)
+    c = coeffs[dx]
     # taking derivative is same as coeff*jacobi but for shifted n,a,b
     n -= dx
     alpha += dx

@@ -792,6 +792,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
+        chunk_size=1,
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -802,6 +803,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
         assert deriv_mode in {"auto", "fwd", "rev"}
+        self.chunk_size = chunk_size
 
         self._target = target
         self._bounds = bounds
@@ -1033,7 +1035,7 @@ class _Objective(IOAble, ABC):
         fun = lambda *x: getattr(self, op)(*x, constants=constants)
         jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
         sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
-        return batched_vectorize(jvpfun, signature=sig)(*v)
+        return batched_vectorize(jvpfun, signature=sig, chunk_size=self.chunk_size)(*v)
 
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.

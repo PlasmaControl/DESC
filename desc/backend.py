@@ -405,25 +405,13 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         )
         return x, (jnp.linalg.norm(res), niter)
 
-    def complex_sqrt(x):
-        """Compute the square root of x.
-
-        For negative input elements, a complex value is returned
-        (unlike numpy.sqrt which returns NaN).
-
-        Parameters
-        ----------
-        x : array_like
-            The input value(s).
-
-        Returns
-        -------
-        out : ndarray
-            The square root of x.
-
-        """
-        out = jnp.sqrt(x.astype("complex128"))
-        return out
+    def trapezoid(y, x=None, dx=1.0, axis=-1):
+        """Integrate along the given axis using the composite trapezoidal rule."""
+        if hasattr(jnp, "trapezoid"):
+            # https://github.com/google/jax/issues/20410
+            return jnp.trapezoid(y, x, dx, axis)
+        else:
+            return jax.scipy.integrate.trapezoid(y, x, dx, axis)
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
@@ -441,7 +429,6 @@ else:  # pragma: no cover
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
 
-    complex_sqrt = np.emath.sqrt
     put_along_axis = np.put_along_axis
 
     def imap(f, xs, in_axes=0, out_axes=0):
@@ -822,6 +809,14 @@ else:  # pragma: no cover
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
+
+    def trapezoid(y, x=None, dx=1.0, axis=-1):
+        """Integrate along the given axis using the composite trapezoidal rule."""
+        if hasattr(np, "trapezoid"):
+            # https://github.com/numpy/numpy/issues/25586
+            return np.trapezoid(y, x, dx, axis)
+        else:
+            return np.trapz(y, x, dx, axis)
 
     def flatnonzero(a, size=None, fill_value=0):
         """A numpy implementation of jnp.flatnonzero."""

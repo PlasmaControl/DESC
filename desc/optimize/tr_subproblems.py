@@ -377,15 +377,14 @@ def trust_region_step_exact_qr(
     """Solve a trust-region problem using a semi-exact method.
 
     Solves problems of the form
-        (J.T@J + alpha*I)*p = -g,  ||p|| < trust_radius
-    for symmetric B. A modified Cholesky factorization is used to deal with indefinite B
+        min_p ||J*p + f||^2,  ||p|| < trust_radius
 
     Parameters
     ----------
-    g : ndarray
-        gradient vector
-    B : ndarray
-        Hessian or approximate Hessian
+    f : ndarray
+        Vector of residuals.
+    J : ndarray
+        Jacobian matrix.
     trust_radius : float
         Radius of a trust region.
     initial_alpha : float, optional
@@ -405,7 +404,7 @@ def trust_region_step_exact_qr(
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
     alpha : float
-        Positive value such that (B + alpha*I)*p = -g.
+        Positive value such that (J.T*J + alpha*I)*p = -J.T*f.
         Sometimes called Levenberg-Marquardt parameter.
 
     """

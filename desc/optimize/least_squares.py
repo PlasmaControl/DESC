@@ -132,11 +132,12 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         - ``"tr_decrease_ratio"`` : (0 < float < 1) Factor to decrease the trust region
           radius by when  the ratio of actual to predicted reduction falls below
           threshold. Default 0.25.
-        - ``"tr_method"`` : ``"svd"``, ``"cho"``) Method to use for solving the trust
-          region subproblem. ``"cho"`` uses a sequence of cholesky factorizations
-          (generally 2-3), while ``"svd"`` uses one singular value decomposition.
-          ``"cho"`` is generally faster for large systems, especially on GPU, but may
-          be less accurate for badly scaled systems. Default ``"svd"``
+        - ``"tr_method"`` : ``"qr"``, ``"svd"``, ``"cho"``) Method to use for solving
+          the trust region subproblem. ``"qr"`` and ``"cho"`` uses a sequence of QR or
+          Cholesky factorizations (generally 2-3), while ``"svd"`` uses one singular
+          value decomposition. ``"cho"`` is generally the fastest for large systems,
+          especially on GPU, but may be less accurate for badly scaled systems.
+          ``"svd"`` is the most accurate but significantly slower. Default ``"qr"``
 
     Returns
     -------
@@ -222,7 +223,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
-    tr_method = options.pop("tr_method", "svd")
+    tr_method = options.pop("tr_method", "qr")
 
     errorif(
         len(options) > 0,

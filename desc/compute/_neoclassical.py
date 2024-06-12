@@ -11,25 +11,18 @@ expensive computations.
 
 from functools import partial
 
-import quadax
 from orthax.legendre import leggauss
+from quadax import simpson
 from termcolor import colored
 
-from desc.backend import imap, jit, jnp, trapezoid
+from desc.backend import imap, jit, jnp
 
 from ..utils import warnif
 from .bounce_integral import bounce_integral, get_pitch
 from .data_index import register_compute_fun
 
 
-def _is_adaptive(quad):
-    if hasattr(quad, "is_adaptive"):
-        return quad.is_adaptive
-    else:
-        return quad not in [trapezoid, quadax.trapezoid, quadax.simpson]
-
-
-def vec_quadax(quad):
+def _vec_quadax(quad, **kwargs):
     """Vectorize an adaptive quadrature method from quadax.
 
     Parameters
@@ -43,11 +36,9 @@ def vec_quadax(quad):
         Vectorized adaptive quadrature method.
 
     """
-    if not _is_adaptive(quad):
-        return quad
 
     def vec_quad(fun, interval, B_sup_z, B, B_z_ra, arg1, arg2):
-        return quad(fun, interval, args=(B_sup_z, B, B_z_ra, arg1, arg2))[0]
+        return quad(fun, interval, args=(B_sup_z, B, B_z_ra, arg1, arg2), **kwargs)[0]
 
     vec_quad = jnp.vectorize(
         vec_quad, signature="(2),(m),(m),(m),(m),(m)->()", excluded={0}
@@ -68,13 +59,30 @@ def _poloidal_mean(grid, f):
     return f @ dp / jnp.sum(dp)
 
 
-def _get_pitch(grid, data, quad, num):
-    # Get endpoints of integral over pitch for each flux surface.
-    # with num values uniformly spaced in between.
+def _get_pitch(grid, data, num, for_adaptive=False):
+    """Get points for quadrature over velocity coordinate.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid on which data is computed.
+    data : dict
+        Dictionary containing min and max |B| over each flux surface.
+    num : int
+        Number of values to uniformly space in between.
+    for_adaptive : bool
+        Whether to return just the points useful for an adaptive quadrature.
+
+    Returns
+    -------
+    pitch : Array
+        Pitch values in the desired shape to use in compute methods.
+
+    """
     min_B = grid.compress(data["min_tz |B|"])
     max_B = grid.compress(data["max_tz |B|"])
-    if _is_adaptive(quad):
-        pitch = 1 / jnp.stack([max_B, min_B], axis=-1)[:, jnp.newaxis]
+    if for_adaptive:
+        pitch = jnp.expand_dims(1 / jnp.stack([max_B, min_B], axis=-1), axis=1)
         assert pitch.shape == (grid.num_rho, 1, 2)
     else:
         pitch = get_pitch(min_B, max_B, num)
@@ -102,7 +110,7 @@ def _get_pitch(grid, data, quad, num):
 def _L_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
-    L_ra = quadax.simpson(
+    L_ra = simpson(
         jnp.reshape(1 / data["B^zeta"], shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
@@ -129,7 +137,7 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
 def _G_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
-    G_ra = quadax.simpson(
+    G_ra = simpson(
         jnp.reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
@@ -201,15 +209,11 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         quad=leggauss(kwargs.get("num_quad", 31)),
     )
 
-    def dH(grad_psi_norm, kappa_g, B, pitch):
+    def dH(grad_psi_norm_kappa_g, B, pitch):
         # Removed dimensionless (λB₀)¹ᐧ⁵ from integrand of Nemov equation 30.
         # Reintroduced later.
         return (
-            jnp.sqrt(1 - pitch * B)
-            * (4 / (pitch * B) - 1)
-            * grad_psi_norm
-            * kappa_g
-            / B
+            jnp.sqrt(1 - pitch * B) * (4 / (pitch * B) - 1) * grad_psi_norm_kappa_g / B
         )
 
     def dI(B, pitch):  # Integrand of Nemov equation 31.
@@ -225,19 +229,20 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
 
         Returns
         -------
-        d_ripple : Array, shape(pitch.shape)
-            λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ
+        d_ripple : Array
+            Returned array has shape atleast_2d(pitch.shape).
 
         """
-        H = bounce_integrate(dH, [data["|grad(psi)|"], data["kappa_g"]], pitch)
+        # Interpolate |∇ψ| κ_g together since it is smoother than κ_g alone.
+        H = bounce_integrate(dH, data["|grad(psi)|"] * data["kappa_g"], pitch)
         I = bounce_integrate(dI, [], pitch)
         return pitch * jnp.nansum(H**2 / I, axis=-1)
-        # (λB₀)³ db = (λB₀)³ λ⁻² B₀⁻¹ (-dλ) = λ B₀² (-dλ) where B₀ has units of λ⁻¹.
+        # (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) where B₀ has units of λ⁻¹.
 
+    pitch = _get_pitch(g, data, kwargs.get("num_pitch", 125))
     # The integrand is continuous and likely poorly approximated by a polynomial,
     # so composite quadrature should perform better than higher order methods.
-    pitch = _get_pitch(g, data, quadax.simpson, kwargs.get("num_pitch", 125))
-    ripple = quadax.simpson(jnp.squeeze(imap(d_ripple, pitch), axis=1), pitch, axis=0)
+    ripple = simpson(jnp.squeeze(imap(d_ripple, pitch), axis=1), pitch, axis=0)
     data["effective ripple raw"] = (
         g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))
         * data["max_tz |B|"] ** 2
@@ -248,7 +253,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="effective ripple",  # this is ε¹ᐧ⁵
-    label="π/(8√2) (R₀(∂V/∂ψ)/S)² ∫dλ λ⁻²B₀⁻¹ \\langle ∑ⱼ Hⱼ²/Iⱼ \\rangle",
+    label="ε¹ᐧ⁵ = π/(8√2) (R₀(∂V/∂ψ)/S)² ∫dλ λ⁻²B₀⁻¹ \\langle ∑ⱼ Hⱼ²/Iⱼ \\rangle",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude",
@@ -260,8 +265,9 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     data=["R0", "V_r(r)", "psi_r", "S(r)", "effective ripple raw"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
-    """Evaluation of 1/ν neoclassical transport in stellarators.
+    """ε¹ᐧ⁵ = π/(8√2) (R₀(∂V/∂ψ)/S)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉.
 
+    Evaluation of 1/ν neoclassical transport in stellarators.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     https://doi.org/10.1063/1.873749.

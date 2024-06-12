@@ -335,9 +335,6 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
-    # λ is the pitch angle. Note Nemov dimensionless integration variable b = (λB₀)⁻¹.
-    # Uniformly space in pitch (as opposed to 1/pitch) to get faster convergence in
-    # an integration over pitch.
     pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
     assert pitch.shape == (num + 2, *pitch.shape[1:])
     return pitch

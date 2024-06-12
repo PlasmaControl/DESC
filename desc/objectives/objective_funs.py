@@ -5,7 +5,14 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
+from desc.backend import (
+    batched_vectorize,
+    jit,
+    jnp,
+    tree_flatten,
+    tree_unflatten,
+    use_jax,
+)
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -444,15 +451,17 @@ class ObjectiveFunction(IOAble):
         fun = lambda x: getattr(self, op)(x, constants)
         if len(v) == 1:
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
-            return jnp.vectorize(jvpfun, signature="(n)->(k)")(v[0])
+            return batched_vectorize(jvpfun, signature="(n)->(k)")(v[0])
         elif len(v) == 2:
             jvpfun = lambda dx1, dx2: Derivative.compute_jvp2(fun, 0, 0, dx1, dx2, x)
-            return jnp.vectorize(jvpfun, signature="(n),(n)->(k)")(v[0], v[1])
+            return batched_vectorize(jvpfun, signature="(n),(n)->(k)")(v[0], v[1])
         elif len(v) == 3:
             jvpfun = lambda dx1, dx2, dx3: Derivative.compute_jvp3(
                 fun, 0, 0, 0, dx1, dx2, dx3, x
             )
-            return jnp.vectorize(jvpfun, signature="(n),(n),(n)->(k)")(v[0], v[1], v[2])
+            return batched_vectorize(jvpfun, signature="(n),(n),(n)->(k)")(
+                v[0], v[1], v[2]
+            )
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
@@ -1024,7 +1033,7 @@ class _Objective(IOAble, ABC):
         fun = lambda *x: getattr(self, op)(*x, constants=constants)
         jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
         sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
-        return jnp.vectorize(jvpfun, signature=sig)(*v)
+        return batched_vectorize(jvpfun, signature=sig)(*v)
 
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.

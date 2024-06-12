@@ -207,6 +207,9 @@ class AutoDiffDerivative(_Derivative):
         argnum = (argnum,) if jnp.isscalar(argnum) else tuple(argnum)
         v = (v,) if not isinstance(v, (tuple, list)) else v
 
+        # Casting v into float32
+        v = jax.tree_map(lambda x: jnp.asarray(x, jnp.float32), v)
+
         def _fun(*x):
             _args = list(args)
             for i, xi in zip(argnum, x):

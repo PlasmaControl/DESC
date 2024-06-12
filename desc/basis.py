@@ -1312,16 +1312,20 @@ def _polyder_exact(p, m):
 
 @jit
 def _polyder_jax(p, m):
-    p = jnp.atleast_2d(jnp.asarray(p))
+
+    # Casting p into float32. m should be stay int
+    p = jnp.atleast_2d(jnp.asarray(p)).astype(jnp.float32)
     m = jnp.asarray(m).astype(int)
     order = p.shape[1] - 1
     D = jnp.arange(order, -1, -1)
 
     def body(i, Di):
         return Di * jnp.maximum(D - i, 1)
+    
+    D = fori_loop(0, m, body, jnp.ones_like(D, dtype=int))
 
-    D = fori_loop(0, m, body, jnp.ones_like(D))
-
+    # D needs to be float32
+    D = jnp.astype(D, jnp.float32)
     p = jnp.roll(D * p, m, axis=1)
     idx = jnp.arange(p.shape[1])
     p = jnp.where(idx < m, 0, p)
@@ -1371,12 +1375,12 @@ def _polyval_exact(p, x, prec):
 
 @jit
 def _polyval_jax(p, x):
-    p = jnp.atleast_2d(jnp.asarray(p))
-    x = jnp.atleast_1d(jnp.asarray(x)).flatten()
+    p = jnp.atleast_2d(jnp.asarray(p)).astype(jnp.float32)
+    x = jnp.atleast_1d(jnp.asarray(x)).flatten().astype(jnp.float32)
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
     nx = len(x)  # number of coordinates
-    y = jnp.zeros((npoly, nx))
+    y = jnp.zeros((npoly, nx), dtype=jnp.float32)
 
     def body(k, y):
         return y * x + jnp.atleast_2d(p[:, k]).T

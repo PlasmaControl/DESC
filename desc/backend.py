@@ -96,13 +96,22 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 
         return jnp.astype(x, jnp.float64)
 
+    def _print_type(x):
+        print(x.dtype)
+
     def in32bit(fun, *args, **kwargs):
         """Perform a function call in 32 bit and cast back to 64."""
         args = jax.tree_map(_as32bit, args)
         kwargs = jax.tree_map(_as32bit, kwargs)
-        out = fun(*args, **kwargs)
+
+        jax.tree_map(_print_type, args)
+        jax.tree_map(_print_type, kwargs)
+
         with jax.numpy_dtype_promotion("strict"):
-            return jax.tree_map(_as64bit, out)
+            out = fun(*args, **kwargs)
+
+        jax.tree_map(_print_type, out)
+        return jax.tree_map(_as64bit, out)
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".

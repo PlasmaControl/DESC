@@ -88,21 +88,21 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     )
 
     def _as32bit(x):
-        if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
-            return jnp.astype(x, jnp.float32)
-        return x
+        # if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
+        return jnp.astype(x, jnp.float32)
 
     def _as64bit(x):
-        if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
-            return jnp.astype(x, jnp.float64)
-        return x
+        # if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
+
+        return jnp.astype(x, jnp.float64)
 
     def in32bit(fun, *args, **kwargs):
         """Perform a function call in 32 bit and cast back to 64."""
         args = jax.tree_map(_as32bit, args)
         kwargs = jax.tree_map(_as32bit, kwargs)
         out = fun(*args, **kwargs)
-        return jax.tree_map(_as64bit, out)
+        with jax.numpy_dtype_promotion("strict"):
+            return jax.tree_map(_as64bit, out)
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".

@@ -268,6 +268,7 @@ def _optimize_desc_least_squares(
     options["max_nfev"] = stoptol["max_nfev"]
 
     def jac(*args, **kwargs):
+
         return in32bit(objective.jac_scaled_error, *args, **kwargs)
 
     result = lsqtr(

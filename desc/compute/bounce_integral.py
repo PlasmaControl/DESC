@@ -6,7 +6,7 @@ from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
 from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
 
-from desc.backend import complex_sqrt, flatnonzero, imap, jnp, put_along_axis, take
+from desc.backend import flatnonzero, imap, jnp, put_along_axis, take
 from desc.compute.utils import safediv
 from desc.utils import errorif
 
@@ -90,56 +90,75 @@ def _filter_real(a, a_min=-jnp.inf, a_max=jnp.inf):
     )
 
 
+def _nan_concat(r, num=1):
+    # Concat nan num times to r on last axis.
+    nan = jnp.broadcast_to(jnp.nan, (*r.shape[:-1], num))
+    return jnp.concatenate([r, nan], axis=-1)
+
+
 def _root_linear(a, b, distinct=False):
     """Return r such that a r + b = 0."""
     return safediv(-b, a, fill=jnp.where(jnp.isclose(b, 0), 0, jnp.nan))
 
 
 def _root_quadratic(a, b, c, distinct=False):
-    """Return r such that a r² + b r + c = 0."""
+    """Return r such that a r² + b r + c = 0, assuming real coefficients."""
     # numerical.recipes/book.html, page 227
     discriminant = b**2 - 4 * a * c
-    C = complex_sqrt(discriminant)
-    sgn = jnp.sign(jnp.real(jnp.conj(b) * C))
-    q = -0.5 * (b + sgn * C)
-    is_linear = jnp.isclose(a, 0)
-    suppress_root = distinct & jnp.isclose(discriminant, 0)
-    r1 = jnp.where(is_linear, _root_linear(b, c), safediv(q, a))
-    r2 = jnp.where(is_linear | suppress_root, jnp.nan, safediv(c, q))
-    return r1, r2
+    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(discriminant))
+    r1 = safediv(q, a, _root_linear(b, c, distinct))
+    # more robust to remove repeated roots with discriminant
+    r2 = jnp.where(
+        distinct & jnp.isclose(discriminant, 0), jnp.nan, safediv(c, q, jnp.nan)
+    )
+    return jnp.stack([r1, r2], axis=-1)
 
 
 def _root_cubic(a, b, c, d, distinct=False):
-    """Return r such that a r³ + b r² + c r + d = 0."""
-    # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
-    t_0 = b**2 - 3 * a * c
-    t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
-    discriminant = t_1**2 - 4 * t_0**3
-    C = ((t_1 + complex_sqrt(discriminant)) / 2) ** (1 / 3)
-    C_is_zero = jnp.isclose(C, 0)
+    """Return r such that a r³ + b r² + c r + d = 0, assuming real coefficients."""
+    # numerical.recipes/book.html, page 228
 
-    def root(xi):
-        return safediv(b + xi * C + jnp.where(C_is_zero, 0, t_0 / (xi * C)), -3 * a)
+    def irreducible(Q, R, b):
+        # Three irrational real roots.
+        theta = jnp.arccos(R / jnp.sqrt(Q**3))
+        j = -2 * jnp.sqrt(Q)
+        r1 = j * jnp.cos(theta / 3) - b / 3
+        r2 = j * jnp.cos((theta + 2 * jnp.pi) / 3) - b / 3
+        r3 = j * jnp.cos((theta - 2 * jnp.pi) / 3) - b / 3
+        return jnp.stack([r1, r2, r3], axis=-1)
 
-    xi0 = 1
-    xi1 = (-1 + (-3) ** 0.5) / 2
-    xi2 = xi1**2
-    is_quadratic = jnp.isclose(a, 0)
-    # C = 0 is equivalent to existence of triple root.
-    # Assuming the coefficients are real, it is also equivalent to
-    # existence of any real roots with multiplicity > 1.
-    suppress_root = distinct & C_is_zero
-    q1, q2 = _root_quadratic(b, c, d, distinct)
-    r1 = jnp.where(is_quadratic, q1, root(xi0))
-    r2 = jnp.where(is_quadratic, q2, jnp.where(suppress_root, jnp.nan, root(xi1)))
-    r3 = jnp.where(is_quadratic | suppress_root, jnp.nan, root(xi2))
-    return r1, r2, r3
+    def reducible(Q, R, b):
+        # One real and two complex roots.
+        A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(R**2 - Q**3)) ** (1 / 3)
+        B = safediv(Q, A)
+        r1 = (A + B) - b / 3
+        return _nan_concat(r1[..., jnp.newaxis], 2)
+
+    def root(b, c, d):
+        b = safediv(b, a)
+        c = safediv(c, a)
+        d = safediv(d, a)
+        Q = (b**2 - 3 * c) / 9
+        R = (2 * b**3 - 9 * b * c + 27 * d) / 54
+        return jnp.where(
+            jnp.expand_dims(R**2 < Q**3, axis=-1),
+            irreducible(Q, R, b),
+            reducible(Q, R, b),
+        )
+
+    return jnp.where(
+        jnp.isclose(a, 0)[..., jnp.newaxis],
+        _nan_concat(_root_quadratic(b, c, d, distinct)),
+        root(b, c, d),
+    )
 
 
 _roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
 
 
-def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
+def _poly_root(
+    c, k=0, a_min=None, a_max=None, sort=False, distinct=False, real_coef=True
+):
     """Roots of polynomial with given coefficients.
 
     Parameters
@@ -161,6 +180,8 @@ def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
     distinct : bool
         Whether to only return the distinct roots. If true, when the
         multiplicity is greater than one, the repeated roots are set to nan.
+    real_coef : bool
+        Whether the coefficients ``c`` and ``k`` are real.
 
     Returns
     -------
@@ -168,31 +189,26 @@ def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         The roots of the polynomial, iterated over the last axis.
 
     """
-    keep_only_real = not (a_min is None and a_max is None)
+    just_real = not (a_min is None and a_max is None)
     func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
-    if c.shape[0] in func:
-        # Compute from analytic formula.
+    if c.shape[0] in func and real_coef and just_real:
+        # Compute from analytic formula to avoid the issue of complex roots
+        # with small imaginary parts.
         r = func[c.shape[0]](*c[:-1], c[-1] - k, distinct)
-        if keep_only_real:
-            r = [_filter_real(rr, a_min, a_max) for rr in r]
-        r = jnp.stack(r, axis=-1)
-        # We had ignored the case of double complex roots.
-        distinct = distinct and c.shape[0] > 3 and not keep_only_real
+        distinct = distinct and c.shape[0] > 3
     else:
         # Compute from eigenvalues of polynomial companion matrix.
-        # This method can fail to detect roots near extrema, which is often
-        # where we want to detect roots for bounce integrals.
         c_n = c[-1] - k
         c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
         c.append(c_n)
         c = jnp.stack(c, axis=-1)
         r = _roots(c)
-        if keep_only_real:
-            if a_min is not None:
-                a_min = a_min[..., jnp.newaxis]
-            if a_max is not None:
-                a_max = a_max[..., jnp.newaxis]
-            r = _filter_real(r, a_min, a_max)
+    if just_real:
+        if a_min is not None:
+            a_min = a_min[..., jnp.newaxis]
+        if a_max is not None:
+            a_max = a_max[..., jnp.newaxis]
+        r = _filter_real(r, a_min, a_max)
 
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
@@ -200,7 +216,7 @@ def _poly_root(c, k=0, a_min=None, a_max=None, sort=False, distinct=False):
         # Atol needs to be low enough that distinct roots which are close do not
         # get removed, otherwise algorithms that rely on continuity of the spline
         # such as bounce_points() will fail. The current atol was chosen so that
-        # test_bounce_points() passes when this block is forced to run.
+        # test_bounce_points() passes.
         mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=jnp.nan), 0, atol=1e-15)
         r = jnp.where(mask, jnp.nan, r)
     return r
@@ -319,9 +335,6 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
-    # λ is the pitch angle. Note Nemov dimensionless integration variable b = (λB₀)⁻¹.
-    # Uniformly space in pitch (as opposed to 1/pitch) to get faster convergence in
-    # an integration over pitch.
     pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
     assert pitch.shape == (num + 2, *pitch.shape[1:])
     return pitch
@@ -419,9 +432,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     """
     B_c, B_z_ra_c, _ = _check_shape(knots, B_c, B_z_ra_c)
     S, N, degree = B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
-    extrema = _poly_root(
-        c=B_z_ra_c, a_min=jnp.array([0]), a_max=jnp.diff(knots), distinct=True
-    )
+    extrema = _poly_root(c=B_z_ra_c, a_min=jnp.array([0]), a_max=jnp.diff(knots))
     assert extrema.shape == (S, N, degree - 1)
     B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis])
     B_zz_ra_extrema = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
@@ -442,7 +453,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     return B_extrema
 
 
-def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False):
+def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False, **kwargs):
     """Compute the bounce points given spline of |B| and pitch λ.
 
     Parameters
@@ -534,11 +545,11 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False):
     # we ignore the bounce points of particles assigned to a class that are
     # trapped outside this snapshot of the field line.
     if check:
-        _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot)
+        _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot, **kwargs)
     return bp1, bp2
 
 
-def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
+def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False, **kwargs):
     """Check that bounce points are computed correctly.
 
     Parameters
@@ -573,8 +584,8 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
                     _filter_not_nan, (bp1[p, s], bp2[p, s], B_mid)
                 )
                 if plot:
-                    plot_field_line_with_ripple(
-                        B, pitch[p, s], bp1_p, bp2_p, id=f"{p},{s}"
+                    plot_field_line(
+                        B, pitch[p, s], bp1_p, bp2_p, id=f"{p},{s}", **kwargs
                     )
                 print("bp1:", bp1_p)
                 print("bp2:", bp2_p)
@@ -587,19 +598,22 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot=False):
                 )
                 assert not err_3, msg_3
         if plot:
-            plot_field_line_with_ripple(B, pitch[:, s], bp1[:, s], bp2[:, s], id=str(s))
+            plot_field_line(B, pitch[:, s], bp1[:, s], bp2[:, s], id=str(s), **kwargs)
 
 
-def plot_field_line_with_ripple(
+def plot_field_line(
     B,
     pitch=None,
     bp1=jnp.array([]),
     bp2=jnp.array([]),
     start=None,
     stop=None,
-    num=500,
+    num=1000,
     title=r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$",
     id=None,
+    include_knots=True,
+    alpha_knot=0.1,
+    alpha_pitch=0.25,
     show=True,
 ):
     """Plot the field line given spline of |B| and bounce points etc.
@@ -619,11 +633,17 @@ def plot_field_line_with_ripple(
     stop : float
         Maximum ζ of plot.
     num : int
-        Number of ζ points to plot.
+        Number of ζ points to plot. Pick a big number.
     title : str
         Plot title.
     id : str
         Identifier string to append to plot title.
+    include_knots : bool
+        Whether to plot vertical lines at the knots.
+    alpha_knot : float
+        Transparency of knot lines.
+    alpha_pitch : float
+        Transparency of pitch lines.
     show : bool
         Whether to show the plot.
 
@@ -643,8 +663,9 @@ def plot_field_line_with_ripple(
                 legend[label] = line
 
     fig, ax = plt.subplots()
-    for knot in B.x:
-        add(ax.axvline(x=knot, color="tab:blue", alpha=0.25, label="knot"))
+    if include_knots:
+        for knot in B.x:
+            add(ax.axvline(x=knot, color="tab:blue", alpha=alpha_knot, label="knot"))
     z = jnp.linspace(
         start=B.x[0] if start is None else start,
         stop=B.x[-1] if stop is None else stop,
@@ -655,7 +676,11 @@ def plot_field_line_with_ripple(
     if pitch is not None:
         b = 1 / jnp.atleast_1d(pitch)
         for val in b:
-            add(ax.axhline(val, color="tab:purple", alpha=0.25, label=r"$1 / \lambda$"))
+            add(
+                ax.axhline(
+                    val, color="tab:purple", alpha=alpha_pitch, label=r"$1 / \lambda$"
+                )
+            )
         bp1, bp2 = jnp.atleast_2d(bp1, bp2)
         for i in range(bp1.shape[0]):
             bp1_i, bp2_i = map(_filter_not_nan, (bp1[i], bp2[i]))
@@ -680,12 +705,12 @@ def plot_field_line_with_ripple(
 
     ax.set_xlabel(r"Field line $\zeta$")
     ax.set_ylabel(r"$\vert B \vert \sim 1 / \lambda$")
-    ax.legend(legend.values(), legend.keys())
+    ax.legend(legend.values(), legend.keys(), loc="lower right")
     if id is not None:
         title = f"{title}. id = {id}."
     ax.set_title(title)
+    plt.tight_layout()
     if show:
-        plt.tight_layout()
         plt.show()
         plt.close()
     return fig, ax
@@ -706,15 +731,10 @@ def grad_affine_bijection(a, b):
 def automorphism_arcsin(x):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    The gradient of the arcsin automorphism introduces a singularity that augments
-    the singularity in the bounce integral. Therefore, the quadrature scheme
+    The arcsin transformation introduces a singularity that augments
+    the singularity in the bounce integral, so the quadrature scheme
     used to evaluate the integral must work well on functions with large
     derivative near the boundary.
-
-    The arcsin automorphism pulls points in [−1, 1] away from the boundary.
-    This can reduce floating point error if paired with a quadrature
-    scheme that is aggressive with placing nodes near endpoints, such as
-    Tanh-Sinh quadrature.
 
     Parameters
     ----------
@@ -743,21 +763,17 @@ grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 def automorphism_sin(x, s=0, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    The gradient of the sin automorphism is Lipschitz.
-    When this automorphism is used as the change of variable map for the bounce
-    integral, the Lipschitzness prevents generation of new singularities.
+    The sin transformation is Lipschitz.
+    When used as the change of variable map for the bounce integral, the
+    Lipschitzness prevents generation of new singularities.
     Furthermore, its derivative vanishes to zero slowly near the boundary,
     which will suppress the large derivatives near the boundary of singular
     integrals.
 
-    Therefore, this automorphism pulls the mass of the bounce integral away
+    In effect, this automorphism pulls the mass of the bounce integral away
     from the singularities, which should improve convergence of the quadrature
     to the true integral, so long as the quadrature performs better on less
     singular integrands. Pairs well with Gauss-Legendre quadrature.
-
-    The sin automorphism pushes points in [−1, 1] toward the boundary.
-    This can increase floating point error if paired with a quadrature
-    scheme that is aggressive with placing nodes near endpoints.
 
     Parameters
     ----------
@@ -777,16 +793,11 @@ def automorphism_sin(x, s=0, m=10):
     errorif(not (0 <= s <= 1))
     # s = 0 -> derivative vanishes like cosine.
     # s = 1 -> derivative vanishes like cosine^k.
-    # Integrate cosine, cosine^k, and normalize codomain to [-1, 1] to get
-    # two automorphisms. Connect with homotopy, jointly continuous in s ∈ [0, 1].
-    # Then derivative suppression is continuous in s for finite k.
-    # As k → ∞ and s → 1, all integrable singularities and oscillations
-    # are removed; the integrand becomes a delta function.
-    # Setting s = 0 is optimal to integrate singularities of the form 1 / (1 - |x|)
-    # Setting s = 1 is optimal to integrate singularities of the form 1 / (1 - |x|)^k.
     y0 = jnp.sin(jnp.pi * x / 2)
     y1 = x + jnp.sin(jnp.pi * x) / jnp.pi  # k = 2
     y = (1 - s) * y0 + s * y1
+    # y is an expansion, so y(x) > x near x ∈ {−1, 1} and there is a tendency
+    # for floating point error to overshoot the true value.
     eps = m * jnp.finfo(jnp.array(1.0).dtype).eps
     return jnp.clip(y, -1 + eps, 1 - eps)
 
@@ -878,21 +889,13 @@ _delimiter = "Returns"
 
 
 _interp1d_vec = jnp.vectorize(
-    interp1d,
-    signature="(m),(n),(n)->(m)",
-    excluded={"method", "derivative", "extrap", "period"},
+    interp1d, signature="(m),(n),(n)->(m)", excluded={"method"}
 )
 
 
-@partial(
-    jnp.vectorize,
-    signature="(m),(n),(n),(n)->(m)",
-    excluded={"method", "derivative", "extrap", "period"},
-)
-def _interp1d_vec_with_df(
-    xq, x, f, fx, method="cubic", derivative=0, extrap=False, period=None
-):
-    return interp1d(xq, x, f, method, derivative, extrap, period, fx=fx)
+@partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)", excluded={"method"})
+def _interp1d_vec_with_df(xq, x, f, fx, method="cubic"):
+    return interp1d(xq, x, f, method, fx=fx)
 
 
 def _interpolatory_quadrature(
@@ -953,7 +956,7 @@ def _interpolatory_quadrature(
     )
     if check:
         Z = Z.reshape(shape)
-        _assert_finite_and_hairy(Z, f, b_sup_z, B, B_z_ra, inner_product)
+        _check_interpolation(Z, f, b_sup_z, B, B_z_ra, inner_product)
         if plot:
             _plot(Z, B, id=r"$\vert B \vert$")
             _plot(Z, b_sup_z, id=r"$ (B/\vert B \vert) \cdot e^{\zeta}$")
@@ -968,7 +971,7 @@ _interpolatory_quadrature.__doc__ = _interpolatory_quadrature.__doc__.replace(
 )
 
 
-def _assert_finite_and_hairy(Z, f, B_sup_z, B, B_z_ra, inner_product):
+def _check_interpolation(Z, f, B_sup_z, B, B_z_ra, inner_product):
     """Check for floating point errors.
 
     Parameters
@@ -1202,21 +1205,13 @@ def bounce_integral(
         the labels (ρ, α) are interpreted as the index into the first axis that
         corresponds to that field line.
     knots : Array, shape(knots.size, )
-        Field line following coordinate values at which ``B_sup_z``,
-        ``B``, and ``B_z_ra`` were evaluated.
-        These knots are used to compute a spline of |B| and interpolate
-        the integrand.  The number of knots specifies a grid resolution
-        as increasing the number of knots increases the accuracy of
-        representing the integrand and the accuracy of the locations of
-        the bounce points. The default spline method for |B| is a cubic
-        Hermite spline. This is preferred because the strength of the
-        singularity typical in bounce integral is ~ 1 / |∂|B|/∂_ζ|, so
-        the derivative information should be captured without compromise.
-        Can also specify to use a monotonic interpolation for |B| rather
-        than a cubic Hermite spline with keyword argument ``monotonic=True``.
+        Field line following coordinate values at which ``B_sup_z``, ``B``, and
+        ``B_z_ra`` were evaluated. These knots are used to compute a spline of |B|
+        and interpolate the integrand. A good reference density is 100 knots per
+        toroidal transit.
     quad : (Array, Array)
         Quadrature points xₖ and weights wₖ for the approximate evaluation
-        of an integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
+        of an integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 21 points.
     automorphism : (callable, callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first.
@@ -1226,9 +1221,9 @@ def bounce_integral(
         augment or suppress singularities.
         Keep this in mind when choosing the quadrature method.
     B_ref : float
-        Reference magnetic field strength for normalization.
+        Optional. Reference magnetic field strength for normalization.
     L_ref : float
-        Reference length scale for normalization.
+        Optional. Reference length scale for normalization.
     check : bool
         Flag for debugging.
     plot : bool

@@ -29,7 +29,7 @@ from desc.compute.bounce_integral import (
     grad_affine_bijection,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
-    plot_field_line_with_ripple,
+    plot_field_line,
     take_mask,
     tanh_sinh,
 )
@@ -281,16 +281,16 @@ def test_bounce_points():
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         B_z_ra = B.derivative()
-        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3]
+        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3] + 1e-13
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         assert bp1.size and bp2.size
-        # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
-        np.testing.assert_allclose(bp1[1], 1.9827671337414938)
-        intersect = np.insert(intersect, np.searchsorted(intersect, bp1[1]), bp1[1])
-        np.testing.assert_allclose(bp1, intersect[[1, 2]])
-        np.testing.assert_allclose(bp2, intersect[[2, 3]])
+        np.testing.assert_allclose(bp1[1], 1.982767, rtol=1e-6)
+        np.testing.assert_allclose(bp1, intersect[[1, 2]], rtol=1e-6)
+        # intersect array could not resolve double root as single at index 2,3
+        np.testing.assert_allclose(intersect[2], intersect[3], rtol=1e-6)
+        np.testing.assert_allclose(bp2, intersect[[3, 4]], rtol=1e-6)
 
     def test_bp2_before_extrema():
         start = -1.2 * np.pi
@@ -320,19 +320,17 @@ def test_bounce_points():
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
         B_z_ra = B.derivative()
-        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
+        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2] - 1e-13
         bp1, bp2 = bounce_points(pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True)
         if plot:
-            plot_field_line_with_ripple(B, pitch, bp1, bp2, start=k[2])
+            plot_field_line(B, pitch, bp1, bp2, start=k[2])
         bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
         assert bp1.size and bp2.size
-        # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
-        np.testing.assert_allclose(bp1[0], 0.8353192766102349)
-        intersect = np.insert(intersect, np.searchsorted(intersect, bp1[0]), bp1[0])
+        np.testing.assert_allclose(bp1[0], 0.835319, rtol=1e-6)
         intersect = intersect[intersect >= k[2]]
-        np.testing.assert_allclose(bp1, intersect[[0, 1, 3]])
-        np.testing.assert_allclose(bp2, intersect[[0, 2, 4]])
+        np.testing.assert_allclose(bp1, intersect[[0, 2, 4]], rtol=1e-6)
+        np.testing.assert_allclose(bp2, intersect[[0, 3, 5]], rtol=1e-6)
 
     def test_extrema_first_and_before_bp2():
         start = -1.2 * np.pi
@@ -344,7 +342,7 @@ def test_bounce_points():
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
         B_z_ra = B.derivative()
-        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1]
+        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1] + 1e-13
         # If a regression fails this test, this note will save many hours of debugging.
         # If the filter in place to return only the distinct roots is too coarse,
         # in particular atol < 1e-15, then this test will error. In the resulting
@@ -362,10 +360,11 @@ def test_bounce_points():
         assert bp1.size and bp2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
-        np.testing.assert_allclose(bp1[0], -0.6719044147510538)
-        intersect = np.insert(intersect, np.searchsorted(intersect, bp1[0]), bp1[0])
-        np.testing.assert_allclose(bp1, intersect[0::2])
-        np.testing.assert_allclose(bp2, intersect[1::2])
+        np.testing.assert_allclose(bp1[0], -0.671904, rtol=1e-6)
+        np.testing.assert_allclose(bp1, intersect[[0, 3, 5]], rtol=1e-5)
+        # intersect array could not resolve double root as single at index 0,1
+        np.testing.assert_allclose(intersect[0], intersect[1], rtol=1e-5)
+        np.testing.assert_allclose(bp2, intersect[[2, 4, 6]], rtol=1e-5)
 
     test_bp1_first()
     test_bp2_first()

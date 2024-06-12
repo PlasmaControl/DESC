@@ -370,6 +370,108 @@ def trust_region_step_exact_cho(
     return cond(jnp.linalg.norm(p_newton) <= trust_radius, truefun, falsefun, None)
 
 
+@jit
+def trust_region_step_exact_qr(
+    f, J, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
+):
+    """Solve a trust-region problem using a semi-exact method.
+
+    Solves problems of the form
+        (J.T@J + alpha*I)*p = -g,  ||p|| < trust_radius
+    for symmetric B. A modified Cholesky factorization is used to deal with indefinite B
+
+    Parameters
+    ----------
+    g : ndarray
+        gradient vector
+    B : ndarray
+        Hessian or approximate Hessian
+    trust_radius : float
+        Radius of a trust region.
+    initial_alpha : float, optional
+        Initial guess for alpha, which might be available from a previous
+        iteration. If None, determined automatically.
+    rtol : float, optional
+        Stopping tolerance for the root-finding procedure. Namely, the
+        solution ``p`` will satisfy
+        ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
+    max_iter : int, optional
+        Maximum allowed number of iterations for the root-finding procedure.
+
+    Returns
+    -------
+    p : ndarray, shape (n,)
+        Found solution of a trust-region problem.
+    hits_boundary : bool
+        True if the proposed step is on the boundary of the trust region.
+    alpha : float
+        Positive value such that (B + alpha*I)*p = -g.
+        Sometimes called Levenberg-Marquardt parameter.
+
+    """
+    # try full newton step
+    Q, R = qr(J, mode="economic")
+    p_newton = solve_triangular(R, -Q.T @ f)
+
+    def truefun(*_):
+        return p_newton, False, 0.0
+
+    def falsefun(*_):
+        alpha_upper = jnp.linalg.norm(J.T @ f) / trust_radius
+        alpha_lower = 0.0
+        alpha = setdefault(
+            initial_alpha,
+            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+        )
+        k = 0
+        # algorithm 4.3 from Nocedal & Wright
+        fp = jnp.pad(f, (0, J.shape[1]))
+
+        def loop_cond(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+            return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
+
+        def loop_body(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
+
+            Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
+            Q, R = qr(Ji, mode="economic")
+            p = solve_triangular(R, -Q.T @ fp)
+            p_norm = jnp.linalg.norm(p)
+            phi = p_norm - trust_radius
+            alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
+            alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
+
+            q = solve_triangular(R.T, p, lower=False)
+            q_norm = jnp.linalg.norm(q)
+
+            alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
+            k += 1
+            return alpha, alpha_lower, alpha_upper, phi, k
+
+        alpha, *_ = while_loop(
+            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, jnp.inf, k)
+        )
+        Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
+        Q, R = qr(Ji, mode="economic")
+        p = solve_triangular(R, -Q.T @ fp)
+
+        # Make the norm of p equal to trust_radius; p is changed only slightly.
+        # This is done to prevent p from lying outside the trust region
+        # (which can cause problems later).
+        p *= trust_radius / jnp.linalg.norm(p)
+
+        return p, True, alpha
+
+    return cond(jnp.linalg.norm(p_newton) <= trust_radius, truefun, falsefun, None)
+
+
 def update_tr_radius(
     trust_radius,
     actual_reduction,

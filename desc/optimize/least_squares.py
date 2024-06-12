@@ -14,6 +14,7 @@ from .bound_utils import (
 )
 from .tr_subproblems import (
     trust_region_step_exact_cho,
+    trust_region_step_exact_qr,
     trust_region_step_exact_svd,
     update_tr_radius,
 )
@@ -229,9 +230,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         "Unknown options: {}".format([key for key in options]),
     )
     errorif(
-        tr_method not in ["cho", "svd"],
+        tr_method not in ["cho", "svd", "qr"],
         ValueError,
-        "tr_method should be one of 'cho', 'svd', got {}".format(tr_method),
+        "tr_method should be one of 'cho', 'svd', 'qr', got {}".format(tr_method),
     )
 
     callback = setdefault(callback, lambda *args: False)
@@ -284,6 +285,10 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             elif tr_method == "cho":
                 step_h, hits_boundary, alpha = trust_region_step_exact_cho(
                     g_h, B_h, trust_radius, alpha
+                )
+            elif tr_method == "qr":
+                step_h, hits_boundary, alpha = trust_region_step_exact_qr(
+                    f_a, J_a, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 

@@ -2188,20 +2188,20 @@ class FiniteElementMesh3D:
         self.integration_points = np.array(integration_points)
         self.weights = np.array(weights)
         self.nquad = self.integration_points.shape[0]
-        self.plot_tetrahedra(plot_quadrature_points=True)
+        # self.plot_tetrahedra() #plot_quadrature_points=True)
         
     def plot_tetrahedra(self, plot_quadrature_points=False):
         """Plot all the tetrahedra in the 2D mesh tessellation."""
         nquad = self.nquad
-        fig = plt.figure(100)
         for j, tetrahedron in enumerate(self.tetrahedra):
-            tetrahedron.plot_tetrahedron()
+            fig1 = plt.figure()
+            tetrahedron.plot_tetrahedron(fig1)
             if plot_quadrature_points:
                 quadpoints = self.return_quadrature_points()
-                print(quadpoints.shape)
+                fig2 = plt.figure(100)
                 for i in range(self.Q):
                     # ax = fig.get_axes()[i]
-                    ax = fig.add_subplot(1, self.Q, i + 1, projection='3d')
+                    ax = fig2.add_subplot(1, self.Q, i + 1, projection='3d')
                     ax.scatter(quadpoints[i * nquad: (i + 1) * nquad, 0], 
                                quadpoints[i * nquad: (i + 1) * nquad, 1], 
                                quadpoints[i * nquad: (i + 1) * nquad, 2], 
@@ -2256,121 +2256,124 @@ class FiniteElementMesh3D:
 
         return coordinate_matrix
 
-    # def return_quadrature_points(self):
-    #     """Get quadrature points for numerical integration over the mesh.
-
-    #     Returns
-    #     -------
-    #     quadrature points: 2D ndarray, shape (nquad * I_LMN, 3)
-    #         Points in (rho, theta, zeta) representing the quadrature point
-    #         locations for integration, return in real-space coordinates.
-
-    #     """
-    #     nquad = self.nquad
-    #     quadrature_points = np.zeros((self.I_LMN * nquad, 3))
-    #     q = 0
-    #     for tetrahedron in self.tetrahedra:
-    #         for i in range(nquad):
-    #             A = np.array(
-    #                 [
-    #                     [tetrahedron.b[0], tetrahedron.c[0], tetrahedron.d[0]],
-    #                     [tetrahedron.b[1], tetrahedron.c[1], tetrahedron.d[1]],
-    #                     [tetrahedron.b[2], tetrahedron.c[2], tetrahedron.d[2]],
-    #                     [
-    #                         tetrahedron.b[0]
-    #                         + tetrahedron.b[1]
-    #                         + tetrahedron.b[2]
-    #                         + tetrahedron.b[3],
-    #                         tetrahedron.c[0]
-    #                         + tetrahedron.c[1]
-    #                         + tetrahedron.c[2]
-    #                         + tetrahedron.c[3],
-    #                         tetrahedron.d[0]
-    #                         + tetrahedron.d[1]
-    #                         + tetrahedron.d[2]
-    #                         + tetrahedron.d[3],
-    #                     ],
-    #                 ]
-    #             )
-    #             b = np.zeros(4)
-    #             b[:3] = (
-    #                 tetrahedron.volume6 * self.integration_points[i, :3]
-    #                 - tetrahedron.a[:3]
-    #             )
-    #             b[3] = (
-    #                 tetrahedron.volume6
-    #                 - tetrahedron.a[0]
-    #                 - tetrahedron.a[1]
-    #                 - tetrahedron.a[2]
-    #                 - tetrahedron.a[3]
-    #             )
-    #             quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
-    #             q = q + 1
-    #     return quadrature_points
-    
-    
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
-    
+
         Returns
         -------
         quadrature points: 2D ndarray, shape (nquad * I_LMN, 3)
             Points in (rho, theta, zeta) representing the quadrature point
             locations for integration, return in real-space coordinates.
-    
+
         """
         nquad = self.nquad
-        quadrature_points = np.zeros((nquad *self.I_LMN, 3))
-        integration_points = self.integration_points
+        quadrature_points = np.zeros((self.I_LMN * nquad, 3))
         q = 0
         for tetrahedron in self.tetrahedra:
-            v = tetrahedron.vertices
+            for i in range(nquad):
+                A = np.array(
+                    [
+                        [tetrahedron.b[0], tetrahedron.c[0], tetrahedron.d[0]],
+                        [tetrahedron.b[1], tetrahedron.c[1], tetrahedron.d[1]],
+                        [tetrahedron.b[2], tetrahedron.c[2], tetrahedron.d[2]],
+                        [
+                            tetrahedron.b[0]
+                            + tetrahedron.b[1]
+                            + tetrahedron.b[2]
+                            + tetrahedron.b[3],
+                            tetrahedron.c[0]
+                            + tetrahedron.c[1]
+                            + tetrahedron.c[2]
+                            + tetrahedron.c[3],
+                            tetrahedron.d[0]
+                            + tetrahedron.d[1]
+                            + tetrahedron.d[2]
+                            + tetrahedron.d[3],
+                        ],
+                    ]
+                )
+                b = np.zeros(4)
+                b[:3] = (
+                    tetrahedron.volume6 * self.integration_points[i, :3]
+                    - tetrahedron.a[:3]
+                )
+                b[3] = (
+                    tetrahedron.volume6
+                    - tetrahedron.a[0]
+                    - tetrahedron.a[1]
+                    - tetrahedron.a[2]
+                    - tetrahedron.a[3]
+                )
+                quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
+                q = q + 1
+        print(quadrature_points)
+        exit()
+        return quadrature_points
+    
+    
+    # def return_quadrature_points(self):
+    #     """Get quadrature points for numerical integration over the mesh.
+    
+    #     Returns
+    #     -------
+    #     quadrature points: 2D ndarray, shape (nquad * I_LMN, 3)
+    #         Points in (rho, theta, zeta) representing the quadrature point
+    #         locations for integration, return in real-space coordinates.
+    
+    #     """
+    #     nquad = self.nquad
+    #     quadrature_points = np.zeros((nquad *self.I_LMN, 3))
+    #     integration_points = self.integration_points
+    #     q = 0
+    #     for tetrahedron in self.tetrahedra:
+    #         v = tetrahedron.vertices
             
           
-            A = np.array([
-                [v[2,0]-v[0,0], v[1,0] - v[0,0], v[3,0]-v[0,0]],
-                [v[2,1]-v[0,1], v[1,1] - v[0,1], v[3,1]-v[0,1]],
-                [v[2,2]-v[0,2], v[1,2] - v[0,2], v[3,2]-v[0,2]]
-                ])
+    #         A = np.array([
+    #             [v[2,0]-v[0,0], v[1,0] - v[0,0], v[3,0]-v[0,0]],
+    #             [v[2,1]-v[0,1], v[1,1] - v[0,1], v[3,1]-v[0,1]],
+    #             [v[2,2]-v[0,2], v[1,2] - v[0,2], v[3,2]-v[0,2]]
+    #             ])
         
-            q_p = integration_points
+    #         q_p = integration_points
             
             
-            # Transformation of quad_points to real-coordinates. q_p is a matrix
-            # with size (nquad,4)
+    #         # Transformation of quad_points to real-coordinates. q_p is a matrix
+    #         # with size (nquad,4)
             
-            qp_r = np.zeros((nquad,3))
+    #         qp_r = np.zeros((nquad,3))
             
-            for i in range(nquad):
-                for j in range(3):
-                    qp_r[i,j] = q_p[i,0]*v[0,j] + q_p[i,1]*v[1,j] +  q_p[i,2]*v[2,j] + q_p[i,3]*v[3,j]
+    #         for i in range(nquad):
+    #             for j in range(3):
+    #                 qp_r[i,j] = q_p[i,0]*v[0,j] + q_p[i,1]*v[1,j] +  q_p[i,2]*v[2,j] + q_p[i,3]*v[3,j]
                     
                     
              
-            # qp_r is now a matrix of quadrature points, in real coordinates, with shape
-            # (nquad,3). We now transform these real-space quadrature points
-            # from the reference tetrahedron to the tetrahedron of interest:
+    #         # qp_r is now a matrix of quadrature points, in real coordinates, with shape
+    #         # (nquad,3). We now transform these real-space quadrature points
+    #         # from the reference tetrahedron to the tetrahedron of interest:
                 
       
     
-            # For a single tetrahedron:
-            single_tet_quad = np.zeros((nquad, 3))
-            for i in range(nquad):
-                single_tet_quad[i,:] = np.dot(A,np.transpose(qp_r[i,:]))
-               # quadrature_points = np.vstack([quadrature_points, single_tet_quad]).
+    #         # For a single tetrahedron:
+    #         single_tet_quad = np.zeros((nquad, 3))
+    #         for i in range(nquad):
+    #             single_tet_quad[i,:] = np.dot(A,np.transpose(qp_r[i,:]))
+    #            # quadrature_points = np.vstack([quadrature_points, single_tet_quad]).
         
-            # Now have a matrix for single tetrahedron
+    #         # Now have a matrix for single tetrahedron
             
-            for j in range(nquad):
+    #         for j in range(nquad):
             
-                quadrature_points[q*nquad+j, :] =  single_tet_quad[j,:]
+    #             quadrature_points[q*nquad+j, :] =  single_tet_quad[j,:]
             
             
-            q = q+1
+    #         q = q+1
             
-        print(quadrature_points)
+    #     print(quadrature_points)
+    #     # exit()
         
-        return quadrature_points
+    #     return quadrature_points
 
     def integrate(self, f):
         """Integrates a function over the 3D mesh in (rho, theta, zeta).
@@ -2967,6 +2970,8 @@ class TetrahedronFiniteElement:
 
         self.volume6 = np.linalg.det(D)
         self.det = np.linalg.det(D)
+        print(self.a, self.b, self.c, self.d, self.volume6)
+        print(self.vertices)
 
         # We construct equally spaced nodes for order K tetrahedron,
         # which gives Q nodes.
@@ -3368,7 +3373,7 @@ class TetrahedronFiniteElement:
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
     
-    def plot_tetrahedron(self):
+    def plot_tetrahedron(self, fig):
         """
         Plot the tetrahedron in (rho, theta, zeta) coordinates.
 
@@ -3396,7 +3401,7 @@ class TetrahedronFiniteElement:
         # Get the basis functions in the triangle
         psi_q, Rho_Theta_Zeta_in_tetrahedron = self.get_basis_functions(Rho_Theta_Zeta)
 
-        fig = plt.figure(100)
+        # fig = plt.figure(100)
         for i in range(self.Q):
             ax = fig.add_subplot(1, self.Q, i + 1, projection='3d')
             plt.grid()

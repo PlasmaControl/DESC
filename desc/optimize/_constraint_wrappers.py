@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp
+from desc.backend import jit, jnp, qr
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -15,7 +15,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer, errorif, get_instance, setdefault
 
-from .utils import f_where_x
+from .utils import f_where_x, solve_triangular_regularized
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -1021,12 +1021,15 @@ class ProximalProjection(ObjectiveFunction):
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Fc = Fx @ (self._dxdc @ dc)
         Fxh = Fx_reduced
-        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-        sf += sf[-1]  # add a tiny bit of regularization
-        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-        Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
-        return Fxh_inv @ Fc
+
+        tall = Fxh.shape[0] >= Fxh.shape[1]
+        if tall:
+            Q, R = qr(Fxh, mode="economic")
+            out = solve_triangular_regularized(R, Q.T @ Fc)
+        else:
+            Q, R = qr(Fxh.T, mode="economic")
+            out = Q @ solve_triangular_regularized(R.T, Fc, lower=True)
+        return out
 
     @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp(self, v, xf, xg, constants, op):

@@ -748,14 +748,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
-        self._NFP = NFP
-        self._sym = sym
+        self._NFP = int(NFP)
+        self._sym = bool(sym)
         self._name = str(name)
 
     @property
     def name(self):
         """str: Name of the curve."""
-        return self._name
+        return str(self._name)
 
     @name.setter
     def name(self, new):
@@ -769,12 +769,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""
-        return self._NFP
+        return int(self._NFP)
 
     @property
     def sym(self):
         """bool: Whether this coil set is stellarator symmetric."""
-        return self._sym
+        return bool(self._sym)
 
     @property
     def current(self):

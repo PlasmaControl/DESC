@@ -124,7 +124,7 @@ class FourierRZToroidalSurface(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
-        self._sym = sym
+        self._sym = bool(sym)
         self._rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
@@ -142,7 +142,7 @@ class FourierRZToroidalSurface(Surface):
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""
-        return self._NFP
+        return int(self._NFP)
 
     @property
     def R_basis(self):
@@ -870,8 +870,8 @@ class ZernikeRZToroidalSection(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._zeta = zeta
 
@@ -889,7 +889,7 @@ class ZernikeRZToroidalSection(Surface):
     @property
     def spectral_indexing(self):
         """str: Type of spectral indexing for Zernike basis."""
-        return self._spectral_indexing
+        return str(self._spectral_indexing)
 
     @property
     def R_basis(self):

@@ -125,6 +125,10 @@ class _CoilObjective(_Objective):
             self._grid = LinearGrid(N=self._grid, endpoint=False)
         # all of these cases return a container MixedCoilSet that contains
         # LinearGrids. i.e. MixedCoilSet.coils = list of LinearGrid
+        leaves = tree_leaves(
+            self.things[0], is_leaf=lambda x: not hasattr(x, "__len__")
+        )
+        print(leaves)
         if self._grid is None:
             # map default grid to structure of inputted coils
             self._grid = tree_map(

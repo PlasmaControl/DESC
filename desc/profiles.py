@@ -42,11 +42,11 @@ class _Profile(IOAble, ABC):
     @property
     def name(self):
         """str: Name of the profile."""
-        return self._name
+        return str(self._name)
 
     @name.setter
     def name(self, new):
-        self._name = new
+        self._name = str(new)
 
     @property
     @abstractmethod
@@ -536,6 +536,7 @@ class PowerSeriesProfile(_Profile):
         Whether the basis should only contain even powers (True) or all powers (False).
     name : str
         Name of the profile.
+
     """
 
     _io_attrs_ = _Profile._io_attrs_ + ["_basis"]
@@ -1176,8 +1177,7 @@ class FourierZernikeProfile(_Profile):
             else:
                 sym = False
 
-        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=NFP, sym=sym)
-
+        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=int(NFP), sym=sym)
         self._params = copy_coeffs(params, modes, self.basis.modes)
 
     def __repr__(self):

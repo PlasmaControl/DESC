@@ -389,7 +389,7 @@ def _solve_triangular_regularized(R, b, lower=False):
     return solve_triangular(Rs, b, unit_diagonal=True, lower=lower)
 
 
-# @jit
+@jit
 def trust_region_step_exact_qr(
     f, J, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
 ):

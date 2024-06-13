@@ -1197,12 +1197,12 @@ def bounce_integral(
             First axis enumerates the coefficients of power series. Second axis
             enumerates the splines along the field lines. Last axis enumerates the
             polynomials that compose the spline along a particular field line.
-        B_z_ra.c : jnp.ndarray
+        B_z_ra_c : jnp.ndarray
             Shape (3, S, knots.size - 1).
             Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
             First axis enumerates the coefficients of power series. Second axis
             enumerates the splines along the field lines. Last axis enumerates the
-            polynomials that compose spline along a particular field line.
+            polynomials that compose the spline along a particular field line.
 
     """
     B_sup_z = B_sup_z * L_ref / B_ref

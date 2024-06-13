@@ -484,7 +484,7 @@ def test_bounce_integral_checks():
 
     pitch = 1 / get_extrema(**spline)
     num = bounce_integrate(numerator, data["g_zz"], pitch)
-    # Can reduce memory usage by specifying by not batching.
+    # Can reduce memory usage by not batching.
     den = bounce_integrate(denominator, [], pitch, batch=False)
     avg = num / den
     assert np.isfinite(avg).any()
@@ -493,10 +493,10 @@ def test_bounce_integral_checks():
     avg = np.nansum(avg, axis=-1)
     # Group the data by field line.
     avg = avg.reshape(pitch.shape[0], rho.size, alpha.size)
-    # The bounce averages stored at index i, j
+    # The mean bounce average stored at index i, j
     i, j = 0, 0
     print(avg[:, i, j])
-    # are the bounce averages along the field line with nodes
+    # is the mean bounce average among wells along the field line with nodes
     # given in Clebsch-Type field-line coordinates ρ, α, ζ
     raz_grid = grid.source_grid
     nodes = raz_grid.nodes.reshape(rho.size, alpha.size, -1, 3)

@@ -111,7 +111,11 @@ def map_coordinates(  # noqa: C901
 
     # do surface average to get iota once
     if "iota" in profiles and profiles["iota"] is None:
-        profiles["iota"] = eq.get_profile("iota", params=params)
+        profiles["iota"] = (
+            kwargs.pop("iota")
+            if "iota" in kwargs
+            else eq.get_profile("iota", params=params)
+        )
         params["i_l"] = profiles["iota"].params
 
     @functools.partial(jit, static_argnums=1)
@@ -119,11 +123,15 @@ def map_coordinates(  # noqa: C901
         grid = Grid(y, sort=False, jitable=True)
         data = {}
         if "iota" in deps:
-            data["iota"] = profiles["iota"](grid, params=params["i_l"])
+            data["iota"] = profiles["iota"](grid, params=params["i_l"], jitable=True)
         if "iota_r" in deps:
-            data["iota_r"] = profiles["iota"](grid, dr=1, params=params["i_l"])
+            data["iota_r"] = profiles["iota"](
+                grid, dr=1, params=params["i_l"], jitable=True
+            )
         if "iota_rr" in deps:
-            data["iota_rr"] = profiles["iota"](grid, dr=2, params=params["i_l"])
+            data["iota_rr"] = profiles["iota"](
+                grid, dr=2, params=params["i_l"], jitable=True
+            )
         transforms = get_transforms(basis, eq, grid, jitable=True)
         data = compute_fun(eq, basis, params, transforms, profiles, data)
         x = jnp.array([data[k] for k in basis]).T
@@ -202,7 +210,7 @@ def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
         theta = coords[:, inbasis.index(poloidal)]
     elif poloidal == "alpha":
         alpha = coords[:, inbasis.index("alpha")]
-        iota = profiles["iota"](rho)
+        iota = profiles["iota"](rho, jitable=True)
         theta = (alpha + iota * zeta) % (2 * jnp.pi)
 
     yk = jnp.array([rho, theta, zeta]).T
@@ -505,7 +513,9 @@ def to_sfl(
     return eq_sfl
 
 
-def rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
+def rtz_grid(
+    eq, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+):
     """Return DESC coordinate grid from given coordinates.
 
     Create a meshgrid from the given coordinates, and return the
@@ -554,6 +564,7 @@ def rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
         inbasis=[inbasis[char] for char in coordinates],
         outbasis=("rho", "theta", "zeta"),
         period=period,
+        **kwargs,
     )
     desc_grid = Grid(
         nodes=rtz_nodes,

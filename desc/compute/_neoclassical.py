@@ -13,11 +13,9 @@ from functools import partial
 
 from orthax.legendre import leggauss
 from quadax import simpson
-from termcolor import colored
 
 from desc.backend import imap, jit, jnp
 
-from ..utils import warnif
 from .bounce_integral import bounce_integral, get_pitch
 from .data_index import register_compute_fun
 
@@ -44,19 +42,6 @@ def _vec_quadax(quad, **kwargs):
         vec_quad, signature="(2),(m),(m),(m),(m),(m)->()", excluded={0}
     )
     return vec_quad
-
-
-def _poloidal_mean(grid, f):
-    """Integrate f over poloidal angle and divide by 2π."""
-    assert f.shape[-1] == grid.num_poloidal
-    if grid.num_poloidal == 1:
-        return jnp.squeeze(f, axis=-1)
-    if not hasattr(grid, "spacing"):
-        warnif(True, msg=colored("Reduced via uniform poloidal mean.", "yellow"))
-        return jnp.mean(f, axis=-1)
-    assert grid.is_meshgrid
-    dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
-    return f @ dp / jnp.sum(dp)
 
 
 def _get_pitch(grid, data, num, for_adaptive=False):
@@ -90,6 +75,18 @@ def _get_pitch(grid, data, num, for_adaptive=False):
             pitch[..., jnp.newaxis], (pitch.shape[0], grid.num_rho, grid.num_alpha)
         ).reshape(pitch.shape[0], grid.num_rho * grid.num_alpha)
     return pitch
+
+
+def _poloidal_mean(grid, f):
+    """Integrate f over poloidal angle and divide by 2π."""
+    assert f.shape[-1] == grid.num_poloidal
+    if grid.num_poloidal == 1:
+        return jnp.squeeze(f, axis=-1)
+    if not hasattr(grid, "spacing"):
+        return jnp.mean(f, axis=-1)
+    assert grid.is_meshgrid
+    dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
+    return f @ dp / jnp.sum(dp)
 
 
 @register_compute_fun(
@@ -148,9 +145,9 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 
 @register_compute_fun(
     name="effective ripple raw",
-    label="∫dλ λ⁻²B₀⁻¹ \\langle ∑ⱼ Hⱼ²/Iⱼ \\rangle",
-    units="T^2",
-    units_long="Tesla squared",
+    label="(∂ψ/∂ρ)⁻² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
+    units="m^{-4}",
+    units_long="Inverse meters quarted",
     description="Effective ripple modulation amplitude, not dimensionless",
     dim=1,
     params=[],
@@ -163,7 +160,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "B^zeta",
         "|B|",
         "|B|_z|r,a",
-        "|grad(psi)|",
+        "|grad(rho)|",
         "kappa_g",
         "<L|r,a>",
     ],
@@ -178,6 +175,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "(If computed on many flux surfaces and micro oscillation is seen "
         "between neighboring surfaces, increasing num_pitch will smooth the profile)."
     ),
+    batch="bool : Whether to vectorize part of the computation. Default is true.",
     # Some notes on choosing the resolution hyperparameters:
     # The default settings above were chosen such that the effective ripple profile on
     # the W7-X stellarator looks similar to the profile computed at higher resolution,
@@ -198,8 +196,9 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     #  required for sufficient coverage of the surface. This requires many knots to
     #  for the spline of the magnetic field to capture fine ripples in a large interval.
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch"])
+@partial(jit, static_argnames=["num_quad", "num_pitch", "batch"])
 def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
+    batch = kwargs.get("batch", True)
     g = transforms["grid"].source_grid
     bounce_integrate, _ = bounce_integral(
         data["B^zeta"],
@@ -209,39 +208,28 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         quad=leggauss(kwargs.get("num_quad", 31)),
     )
 
-    def dH(grad_psi_norm_kappa_g, B, pitch):
-        # Removed dimensionless (λB₀)¹ᐧ⁵ from integrand of Nemov equation 30.
-        # Reintroduced later.
+    def dH(grad_rho_norm_kappa_g, B, pitch):
+        # Removed |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ from integrand of Nemov eq. 30. Reintroduced later.
         return (
-            jnp.sqrt(1 - pitch * B) * (4 / (pitch * B) - 1) * grad_psi_norm_kappa_g / B
+            jnp.sqrt(1 - pitch * B) * (4 / (pitch * B) - 1) * grad_rho_norm_kappa_g / B
         )
 
-    def dI(B, pitch):  # Integrand of Nemov equation 31.
+    def dI(B, pitch):  # Integrand of Nemov eq. 31.
         return jnp.sqrt(1 - pitch * B) / B
 
     def d_ripple(pitch):
-        """Return λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
-
-        Parameters
-        ----------
-        pitch : Array, shape(*pitch.shape[:-1], g.num_rho * g.num_alpha)
-            Pitch angle.
-
-        Returns
-        -------
-        d_ripple : Array
-            Returned array has shape atleast_2d(pitch.shape).
-
-        """
-        # Interpolate |∇ψ| κ_g together since it is smoother than κ_g alone.
-        H = bounce_integrate(dH, data["|grad(psi)|"] * data["kappa_g"], pitch)
-        I = bounce_integrate(dI, [], pitch)
+        # Return (∂ψ/∂ρ)⁻² λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
+        # Note (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) where B₀ has units of λ⁻¹.
+        # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
+        H = bounce_integrate(
+            dH, data["|grad(rho)|"] * data["kappa_g"], pitch, batch=batch
+        )
+        I = bounce_integrate(dI, [], pitch, batch=batch)
         return pitch * jnp.nansum(H**2 / I, axis=-1)
-        # (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) where B₀ has units of λ⁻¹.
 
+    # The integrand is continuous and likely poorly approximated by a polynomial.
+    # Composite quadrature should perform better than higher order methods.
     pitch = _get_pitch(g, data, kwargs.get("num_pitch", 125))
-    # The integrand is continuous and likely poorly approximated by a polynomial,
-    # so composite quadrature should perform better than higher order methods.
     ripple = simpson(jnp.squeeze(imap(d_ripple, pitch), axis=1), pitch, axis=0)
     data["effective ripple raw"] = (
         g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))
@@ -253,7 +241,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="effective ripple",  # this is ε¹ᐧ⁵
-    label="ε¹ᐧ⁵ = π/(8√2) (R₀(∂V/∂ψ)/S)² ∫dλ λ⁻²B₀⁻¹ \\langle ∑ⱼ Hⱼ²/Iⱼ \\rangle",
+    label="ε¹ᐧ⁵ = π/(8√2) (R₀(∂V/∂ψ)/S)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude",
@@ -262,21 +250,19 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["R0", "V_r(r)", "psi_r", "S(r)", "effective ripple raw"],
+    data=["R0", "V_r(r)", "S(r)", "effective ripple raw"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
-    """ε¹ᐧ⁵ = π/(8√2) (R₀(∂V/∂ψ)/S)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉.
+    """https://doi.org/10.1063/1.873749.
 
     Evaluation of 1/ν neoclassical transport in stellarators.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-    https://doi.org/10.1063/1.873749.
-
     """
     data["effective ripple"] = (
         jnp.pi
         / (8 * 2**0.5)
-        * (data["R0"] * data["V_r(r)"] / data["psi_r"] / data["S(r)"]) ** 2
+        * (data["R0"] * data["V_r(r)"] / data["S(r)"]) ** 2
         * data["effective ripple raw"]
     )
     return data

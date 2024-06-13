@@ -17,6 +17,7 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import GenericObjective, ObjectiveFunction
+from desc.objectives._neoclassical import EffectiveRipple
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -383,6 +384,19 @@ def test_reverse_mode_ad_axis(name):
     eq.change_resolution(2, 2, 2, 4, 4, 4)
 
     obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), use_jit=False)
+    obj.build(verbose=0)
+    g = obj.grad(obj.x())
+    assert not np.any(np.isnan(g))
+
+
+@pytest.mark.unit
+def test_reverse_mode_ad_ripple():
+    """Asserts that the rho=0 axis limits are reverse mode differentiable."""
+    eq = get("ESTELL")
+    rho = np.array([0, 0.5, 1])
+    grid = LinearGrid(rho=rho, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
+    eq.change_resolution(2, 2, 2, 4, 4, 4)
+    obj = ObjectiveFunction(EffectiveRipple(eq, grid=grid))
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))

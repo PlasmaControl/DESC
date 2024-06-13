@@ -42,6 +42,7 @@ def test_effective_ripple():
         period=(np.inf, 2 * np.pi, np.inf),
     )
     data = eq.compute("effective ripple", grid=grid)
+    assert np.isfinite(data["effective ripple"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["effective ripple"]), marker="o")
     return fig

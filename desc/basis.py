@@ -169,27 +169,32 @@ class _Basis(IOAble, ABC):
     @property
     def L(self):
         """int: Maximum radial resolution."""
-        return self.__dict__.setdefault("_L", 0)
+        return int(self.__dict__.setdefault("_L", 0))
 
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
-        return self.__dict__.setdefault("_M", 0)
+        return int(self.__dict__.setdefault("_M", 0))
 
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
-        return self.__dict__.setdefault("_N", 0)
+        return int(self.__dict__.setdefault("_N", 0))
 
     @property
     def NFP(self):
         """int: Number of field periods."""
-        return self.__dict__.setdefault("_NFP", 1)
+        return int(self.__dict__.setdefault("_NFP", 1))
 
     @property
     def sym(self):
-        """str: {``'cos'``, ``'sin'``, ``False``} Type of symmetry."""
-        return self.__dict__.setdefault("_sym", False)
+        """str: Type of symmetry."""
+        # one of: {'even', 'sin', 'cos', 'cos(t)', False}
+        sym = self.__dict__.setdefault("_sym", False)
+        if not sym:
+            return bool(sym)
+        else:
+            return str(sym)
 
     @property
     def modes(self):
@@ -199,12 +204,12 @@ class _Basis(IOAble, ABC):
     @property
     def num_modes(self):
         """int: Total number of modes in the spectral basis."""
-        return self.modes.shape[0]
+        return int(self.modes.shape[0])
 
     @property
     def spectral_indexing(self):
         """str: Type of indexing used for the spectral basis."""
-        return self.__dict__.setdefault("_spectral_indexing", "linear")
+        return str(self.__dict__.setdefault("_spectral_indexing", "linear"))
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -238,7 +243,7 @@ class PowerSeries(_Basis):
         self._M = 0
         self._N = 0
         self._NFP = 1
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)
@@ -351,7 +356,7 @@ class FourierSeries(_Basis):
         self._M = 0
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(N=self.N)
@@ -474,7 +479,7 @@ class DoubleFourierSeries(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(M=self.M, N=self.N)
@@ -635,8 +640,8 @@ class ZernikePolynomial(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = 0
         self._NFP = 1
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._modes = self._get_modes(
             L=self.L, M=self.M, spectral_indexing=self.spectral_indexing
@@ -831,7 +836,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
@@ -983,8 +988,8 @@ class FourierZernikeBasis(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._modes = self._get_modes(
             L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing

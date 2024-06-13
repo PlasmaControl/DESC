@@ -635,41 +635,41 @@ class ObjectiveFunction(IOAble):
     @property
     def use_jit(self):
         """bool: Whether to just-in-time compile the objective and derivatives."""
-        return self._use_jit
+        return bool(self._use_jit)
 
     @property
     def scalar(self):
         """bool: Whether default "compute" method is a scalar or vector."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._scalar
+        return bool(self._scalar)
 
     @property
     def built(self):
         """bool: Whether the objectives have been built or not."""
-        return self._built
+        return bool(self._built)
 
     @property
     def compiled(self):
         """bool: Whether the functions have been compiled or not."""
-        return self._compiled
+        return bool(self._compiled)
 
     @property
     def dim_x(self):
         """int: Dimensional of the state vector."""
-        return sum(t.dim_x for t in self.things)
+        return int(sum(t.dim_x for t in self.things))
 
     @property
     def dim_f(self):
         """int: Number of objective equations."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._dim_f
+        return int(self._dim_f)
 
     @property
     def name(self):
         """Name of objective function (str)."""
-        return self._name
+        return str(self.__dict__.setdefault("_name", ""))
 
     @property
     def target_scaled(self):
@@ -1198,22 +1198,22 @@ class _Objective(IOAble, ABC):
     @property
     def built(self):
         """bool: Whether the transforms have been precomputed (or not)."""
-        return self._built
+        return bool(self._built)
 
     @property
     def dim_f(self):
         """int: Number of objective equations."""
-        return self._dim_f
+        return int(self._dim_f)
 
     @property
     def scalar(self):
         """bool: Whether default "compute" method is a scalar or vector."""
-        return self._scalar
+        return bool(self._scalar)
 
     @property
     def linear(self):
         """bool: Whether the objective is a linear function (or nonlinear)."""
-        return self._linear
+        return bool(self._linear)
 
     @property
     def fixed(self):
@@ -1226,7 +1226,7 @@ class _Objective(IOAble, ABC):
     @property
     def name(self):
         """Name of objective (str)."""
-        return self._name
+        return str(self.__dict__.setdefault("_name", ""))
 
     @property
     def things(self):

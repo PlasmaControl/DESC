@@ -1245,17 +1245,17 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def L(self):
         """int: Maximum radial mode number."""
-        return self._L
+        return int(self._L)
 
     @property
     def M(self):
         """int: Maximum poloidal fourier mode number."""
-        return self._M
+        return int(self._M)
 
     @property
     def N(self):
         """int: Maximum toroidal fourier mode number."""
-        return self._N
+        return int(self._N)
 
     @optimizable_parameter
     @property

@@ -298,13 +298,9 @@ class GammaC(_Objective):
         Unique coordinate values for field line label alpha, and field line following
         coordinate zeta.
     num_quad : int
-        Resolution for quadrature of bounce integrals. Default is 31,
-        which gets sufficient convergence, so higher values are likely unnecessary.
+        Resolution for quadrature of bounce integrals. Default is 31.
     num_pitch : int
-        Resolution for quadrature over velocity coordinate, preferably odd.
-        Default is 99. Effective ripple will look smoother at high values.
-        (If computed on many flux surfaces and micro oscillation is seen
-        between neighboring surfaces, increasing num_pitch will smooth the profile).
+        Resolution for quadrature over velocity coordinate. Default is 99.
     batch : bool
         Whether to vectorize part of the computation. Default is true.
     name : str, optional
@@ -411,7 +407,7 @@ class GammaC(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute the effective ripple.
+        """Compute Γ_c.
 
         Parameters
         ----------
@@ -423,7 +419,7 @@ class GammaC(_Objective):
 
         Returns
         -------
-        effective_ripple : ndarray
+        Gamma_c : ndarray
 
         """
         if constants is None:
@@ -447,16 +443,17 @@ class GammaC(_Objective):
             period=(np.inf, 2 * np.pi, np.inf),
             iota=SplineProfile(iota, df=iota_r, knots=self._rho, name="iota", jnp=jnp),
         )
+        data = {
+            key: grid.copy_data_from_other(data[key], self._grid_1dr)
+            for key in self._keys_1dr
+        }
         data = compute_fun(
             eq,
             self._keys,
             params,
             get_transforms(self._keys, eq, grid, jitable=True),
             get_profiles(self._keys, eq, grid, jitable=True),
-            data={
-                key: grid.copy_data_from_other(data[key], self._grid_1dr)
-                for key in self._keys_1dr
-            },
+            data=data,
             **self._hyperparameters,
         )
         return grid.compress(data["Gamma_c"])

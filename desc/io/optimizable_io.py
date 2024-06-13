@@ -32,6 +32,7 @@ def load(load_from, file_format=None):
     -------
     obj :
         The object saved in the file
+
     """
     if file_format is None and isinstance(load_from, (str, os.PathLike)):
         name = str(load_from)

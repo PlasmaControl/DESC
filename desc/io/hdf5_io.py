@@ -129,6 +129,8 @@ class hdf5Reader(hdf5IO, Reader):
                 continue
             if isinstance(loc[attr], h5py.Dataset):
                 s = self._decode_attr(loc, attr)
+                if isinstance(s, np.bool_):
+                    s = bool(s)  # cast numpy.bool_ to native Python bool
                 if not isinstance(s, str) or s != "__class__":
                     setattr(obj, attr, s)
             elif isinstance(loc[attr], h5py.Group):
@@ -332,7 +334,7 @@ class hdf5Writer(hdf5IO, Writer):
                 group = loc.create_group(attr)
                 self.write_list(data, where=group)
             else:
-                from .equilibrium_io import IOAble
+                from .optimizable_io import IOAble
 
                 if isinstance(data, IOAble):
                     group = loc.create_group(attr)

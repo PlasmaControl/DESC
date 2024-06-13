@@ -15,7 +15,7 @@ def terpsichore(
     eq,
     path="",
     exec="",
-    mode_family=0,
+    mode_family=-1,
     surfs=16,
     lssl=200,
     lssd=100,
@@ -222,6 +222,8 @@ def _write_terps_input(
 
     for n in range(-8, 11):
 
+        # If mode_family < 0, includes all modes in desired range
+        
         in_family = False
         if n % 2 == mode_family:  # FIXME: must be modified for nfp != 2,3
             in_family = True
@@ -229,17 +231,19 @@ def _write_terps_input(
         if n <= 0:
             mode_str = "      0"
         else:
-            if (n <= N_max) and (n >= N_min) and (in_family):
-                mode_str = "      1"
+            if (n <= N_max) and (n >= N_min):
+                if (mode_family < 0) or (in_family):
+                    mode_str = "      1"
             else:
                 mode_str = "      0"
 
         for m in range(1, 55 + 1):
-            if (m <= M_max) and (in_family):
-                if (n <= N_max) and (n >= N_min):
-                    mode_str += " 1"
-                else:
-                    mode_str += " 0"
+            if (m <= M_max):
+                if (mode_family < 0) or (in_family):
+                    if (n <= N_max) and (n >= N_min):
+                        mode_str += " 1"
+                    else:
+                        mode_str += " 0"
             else:
                 mode_str += " 0"
 

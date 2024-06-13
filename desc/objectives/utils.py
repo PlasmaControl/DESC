@@ -148,7 +148,11 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     else:
         Ainv_full = A.T
         Z = np.eye(A.shape[1])
+    Ainv_full = jnp.asarray(Ainv_full)
+    Z = jnp.asarray(Z)
+    b = jnp.asarray(b)
     xp = put(xp, unfixed_idx, Ainv_full @ b)
+    xp = jnp.asarray(xp)
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""

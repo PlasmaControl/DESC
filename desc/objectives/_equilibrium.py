@@ -8,7 +8,7 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-
+import jax
 
 class ForceBalance(_Objective):
     r"""Radial and helical MHD force balance.
@@ -183,10 +183,11 @@ class ForceBalance(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        print(f"{data=}")
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
 
+        jax.debug.print("x: {}", fr.dtype)
+        jax.debug.print("x: {}", fb.dtype)
         return jnp.concatenate([fr, fb])
 
 

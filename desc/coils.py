@@ -755,7 +755,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     @property
     def name(self):
         """str: Name of the curve."""
-        return str(self._name)
+        return str(self.__dict__.setdefault("_name", ""))
 
     @name.setter
     def name(self, new):

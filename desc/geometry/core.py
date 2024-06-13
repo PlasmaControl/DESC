@@ -68,7 +68,7 @@ class Curve(IOAble, Optimizable, ABC):
     @property
     def name(self):
         """Name of the curve."""
-        return str(self._name)
+        return str(self.__dict__.setdefault("_name", ""))
 
     @name.setter
     def name(self, new):
@@ -323,7 +323,7 @@ class Surface(IOAble, Optimizable, ABC):
     @property
     def name(self):
         """str: Name of the surface."""
-        return str(self._name)
+        return str(self.__dict__.setdefault("_name", ""))
 
     @name.setter
     def name(self, new):

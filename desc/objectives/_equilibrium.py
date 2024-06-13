@@ -1,5 +1,9 @@
 """Objectives for solving equilibrium problems."""
 
+import pdb
+
+import jax
+
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
@@ -8,7 +12,7 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-import jax
+
 
 class ForceBalance(_Objective):
     r"""Radial and helical MHD force balance.
@@ -174,7 +178,7 @@ class ForceBalance(_Objective):
         """
         if constants is None:
             constants = self.constants
-        
+
         print("Printing _equilibrium.py line 177...")
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -186,8 +190,9 @@ class ForceBalance(_Objective):
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
 
-        jax.debug.print("x: {}", fr.dtype)
-        jax.debug.print("x: {}", fb.dtype)
+        pdb.set_trace()
+        jax.debug.print("{x}", x=str(fr.dtype))
+        jax.debug.print("{x}", x=str(fb.dtype))
         return jnp.concatenate([fr, fb])
 
 

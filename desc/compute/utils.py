@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import cond, fori_loop, jnp, put
+from desc.backend import cond, fori_loop, jax, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from .data_index import allowed_kwargs, data_index
@@ -108,6 +108,8 @@ def _compute(
         data = {}
 
     for name in names:
+        jax.debug.print("{x}", x=name)
+
         if name in data:
             # don't compute something that's already been computed
             continue
@@ -140,6 +142,7 @@ def _compute(
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+        jax.debug.print("{x}", x=str(data[name].dtype))
 
     return data
 

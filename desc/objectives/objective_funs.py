@@ -977,7 +977,7 @@ class _Objective(IOAble, ABC):
                 target = self.target
             else:
                 target = self.target * self.normalization
-            f_target = f - target
+            f_target = f - target.astype(f.dtype)
         return f_target
 
     def _scale(self, f, *args, **kwargs):
@@ -987,7 +987,9 @@ class _Objective(IOAble, ABC):
             w = jnp.ones_like(f)
         else:
             w = constants["quad_weights"]
-        f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
+        f_norm = jnp.atleast_1d(f) / jnp.astype(
+            self.normalization, f.dtype
+        )  # normalization
         return f_norm * w * self.weight
 
     def compute_scalar(self, *args, **kwargs):

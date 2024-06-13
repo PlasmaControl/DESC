@@ -108,7 +108,7 @@ def _compute(
         data = {}
 
     for name in names:
-        jax.debug.print("{x}", x=name)
+        # --no-verify jax.debug.print("{x}", x=name)
 
         if name in data:
             # don't compute something that's already been computed

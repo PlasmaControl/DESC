@@ -193,6 +193,7 @@ class ForceBalance(_Objective):
         # --no-verify pdb.set_trace()
         jax.debug.print("{x}", x=str(fr.dtype))
         jax.debug.print("{x}", x=str(fb.dtype))
+
         return jnp.concatenate([fr, fb])
 
 

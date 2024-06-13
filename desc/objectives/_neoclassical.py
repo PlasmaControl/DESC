@@ -110,14 +110,7 @@ class EffectiveRipple(_Objective):
         # Assign here.
         self._alpha = alpha
         self._zeta = zeta
-        self._keys_1dr = [
-            "iota",
-            "iota_r",
-            "S(r)",
-            "V_r(r)",
-            "min_tz |B|",
-            "max_tz |B|",
-        ]
+        self._keys_1dr = ["iota", "iota_r", "<|grad(rho)|>", "min_tz |B|", "max_tz |B|"]
         self._keys_0d = ["R0"]
         self._keys = ["effective ripple"]
         self._hyperparameters = {

@@ -14,7 +14,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
+from .utils import cross, dot, safediv, safenorm, surface_averages
 
 
 @register_compute_fun(
@@ -1776,6 +1776,31 @@ def _g_sup_zz_z(params, transforms, profiles, data, **kwargs):
 )
 def _gradrho(params, transforms, profiles, data, **kwargs):
     data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
+    return data
+
+
+@register_compute_fun(
+    name="<|grad(rho)|>",  # same as S(r) / V_r(r)
+    label="\\langle \\vert \\nabla \\rho \\vert \\rangle|",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Magnitude of contravariant radial basis vector, flux surface average",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|grad(rho)|", "sqrt(g)"],
+    axis_limit_data=["sqrt(g)_r"],
+)
+def _gradrho_norm_fsa(params, transforms, profiles, data, **kwargs):
+    data["<|grad(rho)|>"] = surface_averages(
+        transforms["grid"],
+        data["|grad(rho)|"],
+        transforms["grid"].replace_at_axis(
+            data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
+        ),
+    )
     return data
 
 

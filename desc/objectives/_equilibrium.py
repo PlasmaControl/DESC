@@ -174,6 +174,8 @@ class ForceBalance(_Objective):
         """
         if constants is None:
             constants = self.constants
+        
+        print("Printing _equilibrium.py line 177...")
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -181,6 +183,7 @@ class ForceBalance(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
+        print(f"{data=}")
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
 

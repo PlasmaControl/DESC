@@ -290,7 +290,8 @@ class LinearConstraintProjection(ObjectiveFunction):
             return fun(x, constants)[:, self._unfixed_idx] @ self._Z
 
         v = self._unfixed_idx_mat
-        df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
+        # Here v is float64, convert it to float32
+        df = getattr(self._objective, "jvp_" + op)(jnp.asarray(v.T, jnp.float32), x, constants)
         return df.T
 
     def jac_scaled(self, x_reduced, constants=None):

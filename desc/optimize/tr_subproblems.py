@@ -350,6 +350,12 @@ def trust_region_step_exact_cho(
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
+
             k += 1
             return alpha, alpha_lower, alpha_upper, phi, k
 
@@ -451,6 +457,11 @@ def trust_region_step_exact_qr(
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
             k += 1
             return alpha, alpha_lower, alpha_upper, phi, k
 

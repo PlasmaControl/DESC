@@ -413,26 +413,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         else:
             return jax.scipy.integrate.trapezoid(y, x, dx, axis)
 
-    def complex_sqrt(x):
-        """Compute the square root of x.
-
-        For negative input elements, a complex value is returned
-        (unlike numpy.sqrt which returns NaN).
-
-        Parameters
-        ----------
-        x : array_like
-            The input value(s).
-
-        Returns
-        -------
-        out : ndarray
-            The square root of x.
-
-        """
-        out = jnp.sqrt(x.astype("complex128"))
-        return out
-
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -449,7 +429,6 @@ else:  # pragma: no cover
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
 
-    complex_sqrt = np.emath.sqrt
     put_along_axis = np.put_along_axis
 
     def imap(f, xs, in_axes=0, out_axes=0):

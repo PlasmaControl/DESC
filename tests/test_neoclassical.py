@@ -5,14 +5,17 @@ import numpy as np
 import pytest
 from tests.test_plotting import tol_1d
 
-from desc import examples
 from desc.equilibrium.coords import rtz_grid
+from desc.examples import get
+from desc.grid import LinearGrid
+from desc.objectives import ObjectiveFunction
+from desc.objectives._neoclassical import EffectiveRipple, GammaC
 
 
 @pytest.mark.unit
 def test_field_line_average():
     """Test that field line average converges to surface average."""
-    eq = examples.get("W7-X")
+    eq = get("W7-X")
     grid = rtz_grid(
         eq,
         np.array([0, 0.5]),
@@ -31,7 +34,7 @@ def test_field_line_average():
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_effective_ripple():
     """Test effective ripple with W7-X."""
-    eq = examples.get("W7-X")
+    eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = rtz_grid(
         eq,
@@ -49,10 +52,23 @@ def test_effective_ripple():
 
 
 @pytest.mark.unit
+def test_ad_ripple():
+    """Make sure we can differentiate."""
+    eq = get("ESTELL")
+    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP, sym=eq.sym, axis=False)
+    eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+    obj = ObjectiveFunction(EffectiveRipple(eq, grid=grid))
+    obj.build(verbose=0)
+    g = obj.grad(obj.x())
+    assert not np.any(np.isnan(g))  # FIXME
+
+
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_Gamma_c():
     """Test Γ_c with W7-X."""
-    eq = examples.get("W7-X")
+    eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = rtz_grid(
         eq,
@@ -67,3 +83,16 @@ def test_Gamma_c():
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")
     return fig
+
+
+@pytest.mark.unit
+def test_ad_gamma():
+    """Make sure we can differentiate."""
+    eq = get("ESTELL")
+    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP, sym=eq.sym, axis=False)
+    eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+    obj = ObjectiveFunction(GammaC(eq, grid=grid))
+    obj.build(verbose=0)
+    g = obj.grad(obj.x())
+    assert not np.any(np.isnan(g))  # FIXME

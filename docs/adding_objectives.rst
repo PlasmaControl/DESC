@@ -54,10 +54,10 @@ A full example objective with comments describing key points is given below:
             Must be broadcastable to Objective.dim_f.
         bounds : tuple of {float, ndarray}, optional
             Lower and upper bounds on the objective. Overrides target.
-            Both bounds must be broadcastable to to Objective.dim_f
+            Both bounds must be broadcastable to Objective.dim_f
         weight : {float, ndarray}, optional
             Weighting to apply to the Objective, relative to other Objectives.
-            Must be broadcastable to to Objective.dim_f
+            Must be broadcastable to Objective.dim_f
         normalize : bool, optional
             Whether to compute the error in physical units or non-dimensionalize.
         normalize_target : bool, optional
@@ -207,7 +207,7 @@ A full example objective with comments describing key points is given below:
             # and to make the objective value independent of grid resolution.
             return f
 
-Adapting Existing Objectives with Different Loss Funtions
+Adapting Existing Objectives with Different Loss Functions
 ---------------------------------------------------------
 
 If your desired objective is already implemented in DESC, but not in the correct form, a few different

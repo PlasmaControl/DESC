@@ -197,13 +197,13 @@ class _Profile(IOAble, ABC):
             **kwargs,
         )
 
-    def __call__(self, grid, params=None, dr=0, dt=0, dz=0):
+    def __call__(self, grid, params=None, dr=0, dt=0, dz=0, jitable=False):
         """Evaluate the profile at a given set of points."""
         if not isinstance(grid, _Grid):
             grid = jnp.atleast_1d(jnp.asarray(grid))
             if grid.ndim == 1:
                 grid = jnp.array([grid, jnp.zeros_like(grid), jnp.zeros_like(grid)]).T
-            grid = Grid(grid, sort=False)
+            grid = Grid(grid, sort=False, jitable=jitable)
         return self.compute(grid, params, dr, dt, dz)
 
     def __repr__(self):
@@ -810,23 +810,28 @@ class SplineProfile(_Profile):
         - `'catmull-rom'`: C1 cubic centripetal "tension" splines
     name : str
         name of the profile
+    df : array-like
+        Optional. Values of the function derivative at knot locations.
 
     """
 
     _io_attrs_ = _Profile._io_attrs_ + ["_knots", "_method"]
 
-    def __init__(self, values=None, knots=None, method="cubic2", name=""):
+    def __init__(
+        self, values=None, knots=None, method="cubic2", name="", df=None, jnp=np
+    ):
         super().__init__(name)
 
         if values is None:
             values = [0, 0, 0]
-        values = np.atleast_1d(values)
+        values = jnp.atleast_1d(values)
         if knots is None:
-            knots = np.linspace(0, 1, values.size)
+            knots = jnp.linspace(0, 1, values.size)
         else:
-            knots = np.atleast_1d(knots)
+            knots = jnp.atleast_1d(knots)
         self._knots = knots
         self._params = values
+        self._params_derivative = df
         self._method = method
 
     def __repr__(self):
@@ -850,13 +855,14 @@ class SplineProfile(_Profile):
     def params(self, new):
         if len(new) == len(self._knots):
             self._params = jnp.asarray(new)
+            self._params_derivative = None
         else:
             raise ValueError(
                 "params should have the same size as the knots, "
                 + f"got {len(new)} values for {len(self._knots)} knots"
             )
 
-    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0, params_derivative=None):
         """Compute values of profile at specified nodes.
 
         Parameters
@@ -868,6 +874,9 @@ class SplineProfile(_Profile):
             values given by the params attribute
         dr, dt, dz : int
             derivative order in rho, theta, zeta
+        params_derivative : array-like
+            spline derivative values to use. If not given, uses the
+            values given by the params_derivative attribute
 
         Returns
         -------
@@ -877,12 +886,17 @@ class SplineProfile(_Profile):
         """
         if params is None:
             params = self.params
+        if params_derivative:
+            params_derivative = self._params_derivative
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
         x = self.knots
         f = params
+        fx = {}
+        if params_derivative is not None:
+            fx["fx"] = params_derivative
         xq = grid.nodes[:, 0]
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
+        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, **fx)
         return fq
 
 

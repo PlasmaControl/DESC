@@ -97,11 +97,12 @@ def convert_spectral_to_FE(
     elif N == 0:
         quadpoints = np.hstack((quadpoints_mesh, np.zeros((I * nquad, 1))))
     else:
+        # Attempting to impose the periodicity on the finite elements
+        # quadpoints_mesh = np.vstack((quadpoints_mesh, quadpoints_mesh[:nquad, :]))
         quadpoints = quadpoints_mesh  # transpose here?
 
     # Compute the A matrix in Ax = b, should be exactly the same
     # as in the 2D case.
-    
     # Actually only need to do this once since assembly matrix is the
     # same for R, Z, and L variables and same for the Fourier-Zernike basis
     IQ = I * Q

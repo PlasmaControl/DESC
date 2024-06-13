@@ -2069,6 +2069,7 @@ class FiniteElementMesh3D:
 
         # We wish to compute the tetrahedral elements for all 5MNL tetrahedra:
         tetrahedra = []
+        vertices_final = []
         # Pick four points of tetrahedral elements:
 
         for i in range(L - 1):
@@ -2364,8 +2365,15 @@ class FiniteElementMesh3D:
                     tetrahedra.append(tetrahedron3)
                     tetrahedra.append(tetrahedron4)
                     tetrahedra.append(tetrahedron5)
+                    vertices_final.append(tetrahedron_1_vertices)
+                    vertices_final.append(tetrahedron_2_vertices)
+                    vertices_final.append(tetrahedron_3_vertices)
+                    vertices_final.append(tetrahedron_4_vertices)
+                    vertices_final.append(tetrahedron_5_vertices)
 
+        self.vertices_final = vertices_final
         self.vertices = vertices
+        print(self.vertices, self.vertices.shape)
         self.tetrahedra = tetrahedra
         # Setup quadrature points and weights
         # for numerical integration using scikit-fem
@@ -3109,8 +3117,7 @@ class TetrahedronFiniteElement:
 
         self.volume6 = np.linalg.det(D)
         self.det = np.linalg.det(D)
-        print(self.a, self.b, self.c, self.d, self.volume6)
-        print(self.vertices)
+        # print(self.a, self.b, self.c, self.d, self.volume6)
 
         # We construct equally spaced nodes for order K tetrahedron,
         # which gives Q nodes.

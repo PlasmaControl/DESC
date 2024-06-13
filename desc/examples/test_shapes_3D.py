@@ -10,8 +10,11 @@ from desc.basis import (
     FiniteElementBasis,
     FourierZernikeBasis,
 )
+from pyevtk.hl import pointsToVTK, gridToVTK, unstructuredGridToVTK
+from pyevtk.vtk import VtkTetra
 from desc.geometry import convert_spectral_to_FE
 
+np.random.seed(1)
 L = 2
 M = 5
 N = 2
@@ -19,8 +22,8 @@ K = 2
 
 # Make a surface in (R, phi=0, Z), (R, phi=pi / N, Z), ...
 nt = 100
-theta = np.linspace(0, 2 * np.pi, nt, endpoint=False)
-zeta = np.linspace(0, 2 * np.pi, nt, endpoint=False)
+theta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
+zeta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -53,17 +56,17 @@ Z_lmn = np.zeros(num_modes * (2 * N + 1))
 Z_lmn[num_modes * N] = 2.0
 Z_lmn[num_modes * N + 1] = 5.0
 L_lmn = np.zeros(R_lmn.shape)
-# amp = 1
-# R_lmn[np.isclose(R_lmn, 0.0)] = (
-#     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
-#     * amp
-#     / np.arange(1, len(R_lmn[np.isclose(R_lmn, 0.0)]) + 1)
-# )
-# Z_lmn[np.isclose(Z_lmn, 0.0)] = (
-#     (np.random.rand(np.sum(np.isclose(Z_lmn, 0.0))) - 0.5)
-#     * amp
-#     / np.arange(1, len(R_lmn[np.isclose(Z_lmn, 0.0)]) + 1)
-# )
+amp = 1
+R_lmn[np.isclose(R_lmn, 0.0)] = (
+    (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
+    * amp
+    / np.arange(1, len(R_lmn[np.isclose(R_lmn, 0.0)]) + 1)
+)
+Z_lmn[np.isclose(Z_lmn, 0.0)] = (
+    (np.random.rand(np.sum(np.isclose(Z_lmn, 0.0))) - 0.5)
+    * amp
+    / np.arange(1, len(R_lmn[np.isclose(Z_lmn, 0.0)]) + 1)
+)
 
 # Set the coefficients in the basis class
 print(R_basis.modes, R_basis.modes[num_modes * N])
@@ -74,7 +77,7 @@ L_basis.L_lmn = L_lmn
 # Replot original boundary using the Zernike polynomials
 M_FE = 20
 L_FE = 2
-rho = np.linspace(0.5, 1, L_FE, endpoint=True)
+rho = np.linspace(0.1, 1, L_FE, endpoint=True)
 nodes = (
     np.array(np.meshgrid(rho, theta, np.zeros(1), indexing="ij"))
     .reshape(3, len(theta) * len(rho))
@@ -106,6 +109,19 @@ R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 ax.scatter(R, nodes[:, -1], Z, label="DESC rep")
+contig = np.ascontiguousarray
+X = R * np.cos(nodes[:, -1])
+Y = R * np.sin(nodes[:, -1])
+X = X.reshape(1, 1, X.shape[0])
+Y = Y.reshape(1, 1, Y.shape[0])
+Z = Z.reshape(1, 1, Z.shape[0])
+pointData = {"dummy_variable": np.ones((1, 1, X.shape[-1]))}
+for ll in range(L_FE):
+    XX = X[:, :, X.shape[-1] // L_FE * ll : X.shape[-1] // L_FE * (ll + 1)]
+    YY = Y[:, :, Y.shape[-1] // L_FE * ll : Y.shape[-1] // L_FE * (ll + 1)]
+    ZZ = Z[:, :, Z.shape[-1] // L_FE * ll : Z.shape[-1] // L_FE * (ll + 1)]
+    gridToVTK('RZ_Fourier_basis_surf' + str(ll), contig(XX), contig(YY), contig(ZZ), pointData=pointData)
+# pointsToVTK('RZ_Fourier_basis', X, Y, contig(Z))
 
 Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
 Zprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
@@ -132,6 +148,19 @@ Zprime_basis.Z_lmn = Zprime_lmn
 nmodes = len(Rprime_basis.modes)
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+X = R * np.cos(nodes[:, -1])
+Y = R * np.sin(nodes[:, -1])
+X = X.reshape(1, 1, X.shape[0])
+Y = Y.reshape(1, 1, Y.shape[0])
+Z = Z.reshape(1, 1, Z.shape[0])
+pointData = {"dummy_variable": np.ones((1, 1, X.shape[-1]))}
+for ll in range(L_FE):
+    XX = X[:, :, X.shape[-1] // L_FE * ll : X.shape[-1] // L_FE * (ll + 1)]
+    YY = Y[:, :, Y.shape[-1] // L_FE * ll : Y.shape[-1] // L_FE * (ll + 1)]
+    ZZ = Z[:, :, Z.shape[-1] // L_FE * ll : Z.shape[-1] // L_FE * (ll + 1)]
+    gridToVTK('RZ_FE_basis_surf' + str(ll), contig(XX), contig(YY), contig(ZZ), pointData=pointData)
+# pointsToVTK('RZ_FE_basis', X, Y, contig(Z))
+
 t2 = time.time()
 print(R.shape, Z.shape)
 print('Time for R, Z conversion = ', t2 - t1)
@@ -141,8 +170,6 @@ plt.legend()
 plt.grid()
 plt.show()
 
-from pyevtk.hl import pointsToVTK, unstructuredGridToVTK
-from pyevtk.vtk import VtkTetra
 
 def _tetrahedra_to_vtk(
     filename,
@@ -172,37 +199,31 @@ def _tetrahedra_to_vtk(
     # https://github.com/pyscience-projects/pyevtk/blob/v1.2.0/pyevtk/hl.py
     # https://python.hotexamples.com/examples/vtk/-/vtkVoxel/python-vtkvoxel-function-examples.html
 
-    assert points.ndim == 2
+    # assert points.ndim == 2
     nvoxels = points.shape[0]
-    contig = np.ascontiguousarray
-    points = contig(points)
+    nvertices = points.shape[1]
+    # contig = np.ascontiguousarray
+    # points = contig(points)
     # assert points.shape[2] == 3
 
     cell_types = np.empty(nvoxels, dtype="uint8")
     cell_types[:] = VtkTetra.tid
-    connectivity = np.arange(8 * nvoxels, dtype=np.int64)
-    offsets = (np.arange(nvoxels, dtype=np.int64) + 1) * 8
+    connectivity = np.arange(4 * nvoxels, dtype=np.int64)
+    offsets = (np.arange(nvoxels, dtype=np.int64) + 1) * 4
+    print(offsets, nvoxels)
 
-    base_x = np.array([0, 1, 1, 0, 2, 3, 3, 2])
-    base_y = np.array([0, 0, 1, 1, 2, 2, 3, 3])
-    base_z = np.array([0, 0, 0, 1, 2, 2, 2, 3])
-    x = np.zeros(8 * nvoxels)
-    y = np.zeros(8 * nvoxels)
-    z = np.zeros(8 * nvoxels)
+    # base_x = np.array([0, 1, 1, 0, 2, 3, 3, 2])
+    # base_y = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+    # base_z = np.array([0, 0, 0, 1, 2, 2, 2, 3])
+    
+    x = np.zeros(4 * nvoxels)
+    y = np.zeros(4 * nvoxels)
+    z = np.zeros(4 * nvoxels)
 
     for j in range(nvoxels):
-        x[8 * j: 8 * (j + 1)] = (
-            np.min(points[j, 0])
-            + (np.max(points[j, 0]) - np.min(points[j, 0])) * base_x
-        )
-        y[8 * j: 8 * (j + 1)] = (
-            np.min(points[j, 1])
-            + (np.max(points[j, 1]) - np.min(points[j, 1])) * base_y
-        )
-        z[8 * j: 8 * (j + 1)] = (
-            np.min(points[j, 2])
-            + (np.max(points[j, 2]) - np.min(points[j, 2])) * base_z
-        )
+        x[4 * j: 4 * (j + 1)] = points[j, :, 0]
+        y[4 * j: 4 * (j + 1)] = points[j, :, 1]
+        z[4 * j: 4 * (j + 1)] = points[j, :, 2]
 
     unstructuredGridToVTK(
         filename,
@@ -217,12 +238,15 @@ def _tetrahedra_to_vtk(
         fieldData=fieldData,
     )
     
-nodes = Rprime_basis.mesh.vertices
-nodes_xyz = np.zeros(nodes.shape)
-nodes_xyz[:, 0] = nodes[:, 0] * np.cos(nodes[:, -1])
-nodes_xyz[:, 1] = nodes[:, 0] * np.sin(nodes[:, -1])
-nodes_xyz[:, 2] = nodes[:, 2]
+# First plot FE basis in the (rho, theta, zeta) space
+nodes = np.array(Rprime_basis.mesh.vertices_final)
+print(nodes.shape)
 _tetrahedra_to_vtk(
     'finite_element_mesh',
-    nodes_xyz
+    nodes
 )
+# print(nodes)
+# nodes_xyz = np.zeros(nodes.shape)
+# nodes_xyz[:, 0] = nodes[:, 0] * np.cos(nodes[:, -1])
+# nodes_xyz[:, 1] = nodes[:, 0] * np.sin(nodes[:, -1])
+# nodes_xyz[:, 2] = nodes[:, 2]

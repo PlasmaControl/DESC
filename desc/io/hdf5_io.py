@@ -129,8 +129,11 @@ class hdf5Reader(hdf5IO, Reader):
                 continue
             if isinstance(loc[attr], h5py.Dataset):
                 s = self._decode_attr(loc, attr)
+                # cast NumPy data types to native Python types
                 if isinstance(s, np.bool_):
-                    s = bool(s)  # cast numpy.bool_ to native Python bool
+                    s = bool(s)
+                elif isinstance(s, np.int_):
+                    s = int(s)
                 if not isinstance(s, str) or s != "__class__":
                     setattr(obj, attr, s)
             elif isinstance(loc[attr], h5py.Group):

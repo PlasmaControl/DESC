@@ -16,10 +16,10 @@ from matplotlib import pyplot as plt
 from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-M = 4  # Note M > 2 required
+M = 20  # Note M > 2 required
 N = 0
 L = 0
-K = 1
+K = 2
 mesh = FiniteElementMesh1D(M, K=K)
 integral = mesh.integrate(np.ones((M * mesh.nquad, 1000)))
 length_total = 0.0

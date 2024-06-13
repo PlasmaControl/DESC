@@ -241,8 +241,8 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="effective ripple",  # this is ε¹ᐧ⁵
-    # 〈 ∇ψ 〉= S/(∂V/∂ψ) = 〈 ∇ρ 〉 ∂ψ/∂ρ
-    label="ε¹ᐧ⁵ = π/(8√2) (R₀/〈 ∇ψ 〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
+    # 〈 |∇ψ| 〉= S/(∂V/∂ψ) = 〈 |∇ρ| 〉 ∂ψ/∂ρ
+    label="ε¹ᐧ⁵ = π/(8√2) (R₀/〈 |∇ψ| 〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude",

@@ -664,7 +664,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     """
     method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    is_discontinuous = len(transforms["intervals"][0])
+    has_break_points = len(transforms["intervals"][0])
     n_dim = 3
 
     def inner_body(f, knots, period=None):
@@ -703,9 +703,9 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
 
         return fq
 
-    if is_discontinuous:
+    if has_break_points:
         # full_f, knots used in body()
-        # manually add endpoint for discontinuous
+        # manually add endpoint for broken splines
         full_knots = jnp.append(p_knots, p_knots[0] + 2 * jnp.pi)
         full_f = [jnp.append(f[i], f[i][0]) for i in range(3)]
         # query points for Xq, Yq, Zq
@@ -950,11 +950,40 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x_s", "x_ss", "x_sss"],
-    parameterization="desc.geometry.core.Curve",
+    parameterization=[
+        "desc.geometry.curve.FourierRZCurve",
+        "desc.geometry.curve.FourierXYZCurve",
+        "desc.geometry.curve.FourierPlanarCurve",
+    ],
 )
 def _torsion(params, transforms, profiles, data, **kwargs):
     dxd2x = cross(data["x_s"], data["x_ss"])
     data["torsion"] = dot(dxd2x, data["x_sss"]) / jnp.linalg.norm(dxd2x, axis=-1) ** 2
+    return data
+
+
+@register_compute_fun(
+    name="torsion",
+    label="\\tau",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Scalar torsion of the curve",
+    dim=1,
+    params=[],
+    transforms={"intervals": []},
+    profiles=[],
+    coordinates="s",
+    data=["x_s", "x_ss", "x_sss"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
+)
+def _torsion_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    dxd2x = cross(data["x_s"], data["x_ss"])
+    data["torsion"] = dot(dxd2x, data["x_sss"]) / jnp.linalg.norm(dxd2x, axis=-1) ** 2
+    # set torsion to zero at break points
+    if len(transforms["intervals"][0]):
+        data["torsion"] = data["torsion"].at[transforms["intervals"][:, 1]].set(0.0)
+
     return data
 
 

@@ -242,7 +242,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         )
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", discontinuous_indices=None
+        self, knots=None, grid=None, method="cubic", name="", break_indices=None
     ):
         """Convert coil to SplineXYZCoil.
 
@@ -269,8 +269,15 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for this coil
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------
@@ -288,7 +295,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             method=method,
             name=name,
             basis="xyz",
-            discontinuous_indices=discontinuous_indices,
+            break_indices=break_indices,
         )
 
 
@@ -564,8 +571,15 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     name : str
         name for this curve
-    discontinuous_indices : ndarray
-        indices of knots at which the curve is discontinuous (i.e. only C0)
+    break_indices : ndarray
+        Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+        continuous but with "corners" where the derivative jumps). In between each set
+        of break points, there is an unbroken spline whose start and endpoints are
+        given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+        Each (the ith) spline is interpolated independently of all other unbroken
+        splines (i+1th, i-1th, etc.) and does not consider their query points
+        (knots) when interpolating. The boundary conditions are evaluated using
+        interpax's default where non-periodicity is assumed.
 
     """
 
@@ -580,9 +594,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         knots=None,
         method="cubic",
         name="",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
-        super().__init__(current, X, Y, Z, knots, method, name, discontinuous_indices)
+        super().__init__(current, X, Y, Z, knots, method, name, break_indices)
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -651,7 +665,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         method="cubic",
         name="",
         basis="xyz",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -683,8 +697,15 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             name for this curve
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------
@@ -701,7 +722,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             knots=curve.knots,
             method=curve.method,
             name=name,
-            discontinuous_indices=discontinuous_indices,
+            break_indices=break_indices,
         )
 
 
@@ -1356,7 +1377,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", discontinuous_indices=None
+        self, knots=None, grid=None, method="cubic", name="", break_indices=None
     ):
         """Convert all coils to SplineXYZCoil.
 
@@ -1382,8 +1403,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for the new CoilSet
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------
@@ -1392,9 +1420,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [
-            coil.to_SplineXYZ(
-                knots, grid, method, discontinuous_indices=discontinuous_indices
-            )
+            coil.to_SplineXYZ(knots, grid, method, break_indices=break_indices)
             for coil in self
         ]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
@@ -1575,7 +1601,7 @@ class MixedCoilSet(CoilSet):
         grid=None,
         method="cubic",
         name="",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
         """Convert all coils to SplineXYZCoil.
 
@@ -1601,8 +1627,15 @@ class MixedCoilSet(CoilSet):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for the new CoilSet
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------
@@ -1611,9 +1644,7 @@ class MixedCoilSet(CoilSet):
 
         """
         coils = [
-            coil.to_SplineXYZ(
-                knots, grid, method, discontinuous_indices=discontinuous_indices
-            )
+            coil.to_SplineXYZ(knots, grid, method, break_indices=break_indices)
             for coil in self
         ]
         return self.__class__(*coils, name=name)

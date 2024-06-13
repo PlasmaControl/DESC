@@ -770,8 +770,15 @@ class SplineXYZCurve(Curve):
 
     name : str
         name for this curve
-    discontinuous_indices : ndarray
-        indices of knots at which the curve is discontinuous (i.e. only C0)
+    break_indices : ndarray
+        Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+        continuous but with "corners" where the derivative jumps). In between each set
+        of break points, there is an unbroken spline whose start and endpoints are
+        given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+        Each (the ith) spline is interpolated independently of all other unbroken
+        splines (i+1th, i-1th, etc.) and does not consider their query points
+        (knots) when interpolating. The boundary conditions are evaluated using
+        interpax's default where non-periodicity is assumed.
 
     """
 
@@ -785,7 +792,7 @@ class SplineXYZCurve(Curve):
         knots=None,
         method="cubic",
         name="",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
         super().__init__(name)
         X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
@@ -820,21 +827,21 @@ class SplineXYZCurve(Curve):
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
             knots = knots[:-1] if closed_flag else knots
 
-        if discontinuous_indices is None:
-            interval_indices = [[]]
+        if break_indices is None:
+            unbroken_spline_intervals = [[]]
         else:
             # check that input is monotonic
             assert np.all(
-                discontinuous_indices == np.unique(sorted(discontinuous_indices))
+                break_indices == np.unique(sorted(break_indices))
             ), "Indices must be monotonic."
-            interval_indices = [
-                [discontinuous_indices[i - 1], discontinuous_indices[i]]
-                for i in range(len(discontinuous_indices))
+            unbroken_spline_intervals = [
+                [break_indices[i - 1], break_indices[i]]
+                for i in range(len(break_indices))
             ]
 
         self._knots = knots
         self._method = method
-        self.intervals = interval_indices
+        self.intervals = unbroken_spline_intervals
 
     @optimizable_parameter
     @property
@@ -987,7 +994,7 @@ class SplineXYZCurve(Curve):
         method="cubic",
         name="",
         basis="xyz",
-        discontinuous_indices=None,
+        break_indices=None,
     ):
         """Create SplineXYZCurve from coordinate values.
 
@@ -1025,8 +1032,15 @@ class SplineXYZCurve(Curve):
             name for this curve
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
-        discontinuous_indices : ndarray
-            indices of knots at which the curve is discontinuous (i.e. only C0)
+        break_indices : ndarray
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
 
         Returns
         -------
@@ -1043,5 +1057,5 @@ class SplineXYZCurve(Curve):
             knots,
             method,
             name,
-            discontinuous_indices,
+            break_indices,
         )

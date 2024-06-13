@@ -6,9 +6,10 @@ import numpy as np
 import scipy.linalg
 from termcolor import colored
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, _as32bit, _print_type, in32bit
 from desc.io import IOAble
 from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
+
 
 
 class Transform(IOAble):
@@ -483,7 +484,7 @@ class Transform(IOAble):
             return np.zeros(self.grid.num_nodes)
 
         if self.method in ["direct1", "jitable"]:
-            A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
+            A = jnp.asarray(self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {}), dtype=jnp.float32)
             if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
@@ -491,29 +492,30 @@ class Transform(IOAble):
             return A @ c
 
         elif self.method == "direct2":
-            A = self.matrices["fft"].get(dr, {}).get(dt, {})
-            B = self.matrices["direct2"].get(dz, {})
+            A = jnp.asarray(self.matrices["fft"].get(dr, {}).get(dt, {}), dtype=jnp.float32)
+            B = jnp.asarray(self.matrices["direct2"].get(dz, {}), dtype=jnp.float32)
             if isinstance(A, dict) or isinstance(B, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
-            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,), dtype=jnp.float32)
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
             cc = A @ c_mtrx
             return (cc @ B.T).flatten(order="F")
 
         elif self.method == "fft":
-            A = self.matrices["fft"].get(dr, {}).get(dt, {})
+            A = jnp.asarray(self.matrices["fft"].get(dr, {}).get(dt, {}), dtype=jnp.float32)
             if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
             # reshape coefficients
-            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,), dtype=jnp.float32)
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
             # differentiate
             c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
             # re-format in complex notation
+            #_print_type(self.dk)
             c_real = jnp.pad(
                 (self.num_z_nodes / 2)
                 * (c_diff[:, self.N + 1 :] - 1j * c_diff[:, self.N - 1 :: -1]),

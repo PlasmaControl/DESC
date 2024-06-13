@@ -31,6 +31,7 @@ else:
             from jax import config as jax_config
 
             jax_config.update("jax_enable_x64", True)
+            jax.config.update("jax_numpy_dtype_promotion", "standard")
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "
@@ -98,7 +99,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         return x
 
     def _print_type(x):
-        print(x.dtype)
+        #print(x.dtype)
+        return None
 
     def in32bit(fun, *args, **kwargs):
         """Perform a function call in 32 bit and cast back to 64."""
@@ -108,9 +110,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         jax.tree_map(_print_type, args)
         jax.tree_map(_print_type, kwargs)
 
-        with jax.numpy_dtype_promotion("strict"):
-            out = fun(*args, **kwargs)
+        #with jax.numpy_dtype_promotion("strict"):
+        #    out = fun(*args, **kwargs)
 
+        out = fun(*args, **kwargs)
         jax.tree_map(_print_type, out)
 
         return jax.tree_map(_as64bit, out)

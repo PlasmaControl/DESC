@@ -256,7 +256,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
-    alpha = 0  # "Levenberg-Marquardt" parameter
+    alpha = None  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
 

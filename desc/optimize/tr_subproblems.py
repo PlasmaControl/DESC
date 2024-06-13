@@ -376,7 +376,20 @@ def trust_region_step_exact_cho(
     return cond(jnp.linalg.norm(p_newton) <= trust_radius, truefun, falsefun, None)
 
 
-@jit
+def _solve_triangular_regularized(R, b, lower=False):
+    # for rank deficient triangular matrix, we basically set the 0 diagonal
+    # elements to 1, and then zero out the corresponding component of the output
+    # not exactly the same as truncated SVD but gives reasonable results and is usually
+    # only needed to get something in roughly the right direction for future refinement.
+    dr = jnp.diag(R)
+    denom = jnp.where(dr == 0, 1, dr)
+    dri = jnp.where(dr == 0, 0, 1 / denom)
+    Rs = R * dri[:, None]
+    b = dri * b
+    return solve_triangular(Rs, b, unit_diagonal=True, lower=lower)
+
+
+# @jit
 def trust_region_step_exact_qr(
     f, J, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
 ):
@@ -415,8 +428,13 @@ def trust_region_step_exact_qr(
 
     """
     # try full newton step
-    Q, R = qr(J, mode="economic")
-    p_newton = solve_triangular(R, -Q.T @ f)
+    tall = J.shape[0] >= J.shape[1]
+    if tall:
+        Q, R = qr(J, mode="economic")
+        p_newton = _solve_triangular_regularized(R, -Q.T @ f)
+    else:
+        Q, R = qr(J.T, mode="economic")
+        p_newton = Q @ _solve_triangular_regularized(R.T, f, lower=True)
 
     def truefun(*_):
         return p_newton, False, 0.0
@@ -446,14 +464,15 @@ def trust_region_step_exact_qr(
             )
 
             Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
+            # Ji is always tall since its padded by alpha*I
             Q, R = qr(Ji, mode="economic")
-            p = solve_triangular(R, -Q.T @ fp)
+            p = _solve_triangular_regularized(R, -Q.T @ fp)
             p_norm = jnp.linalg.norm(p)
             phi = p_norm - trust_radius
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
             alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
 
-            q = solve_triangular(R.T, p, lower=False)
+            q = _solve_triangular_regularized(R.T, p, lower=True)
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius

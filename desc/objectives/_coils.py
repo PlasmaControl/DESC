@@ -2,7 +2,7 @@ import numbers
 
 import numpy as np
 
-from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
+from desc.backend import jnp, tree_leaves
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid, _Grid
@@ -48,8 +48,8 @@ class _CoilObjective(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, list, optional
-        Collocation grid containing the nodes to evaluate at. If list, has to adhere to
-        Objective.dim_f
+        Collocation grid containing the nodes to evaluate at.
+        If a list, must have a length of Objective.dim_f.
     name : str, optional
         Name of the objective function.
 
@@ -96,82 +96,36 @@ class _CoilObjective(_Objective):
 
         """
         # local import to avoid circular import
-        from desc.coils import CoilSet, MixedCoilSet
+        from desc.coils import MixedCoilSet
 
         self._dim_f = 0
         self._quad_weights = jnp.array([])
 
-        def to_list(coilset):
-            """Turn a MixedCoilSet container into a list of what it's containing."""
-            if isinstance(coilset, list):
-                return [to_list(x) for x in coilset]
-            elif isinstance(coilset, MixedCoilSet):
-                return [to_list(x) for x in coilset]
-            elif isinstance(coilset, CoilSet):
-                # use the same grid/transform for CoilSet
-                return to_list(coilset.coils[0])
-            else:
-                return [coilset]
+        # get individual coils from coilset
+        coils = tree_leaves(self.things[0], is_leaf=lambda x: hasattr(x, "_current"))
+        self._num_coils = len(coils)
 
-        # gives structure of coils, e.g. MixedCoilSet(coils, coils) would give a
-        # a structure of [[*, *], [*, *]] if n = 2 coils
-        coil_leaves, coil_structure = tree_flatten(
-            self.things[0], is_leaf=lambda x: not hasattr(x, "__len__")
-        )
-        self._num_coils = len(coil_leaves)
-
-        # check type
+        # map grid to list with the same length as coils
         if isinstance(self._grid, numbers.Integral):
             self._grid = LinearGrid(N=self._grid, endpoint=False)
-        # all of these cases return a container MixedCoilSet that contains
-        # LinearGrids. i.e. MixedCoilSet.coils = list of LinearGrid
         if self._grid is None:
-            # map default grid to structure of inputted coils
-            self._grid = tree_map(
-                lambda x: LinearGrid(
-                    N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
-                ),
-                self.things[0],
-                is_leaf=lambda x: not hasattr(x, "__len__"),
-            )
+            self._grid = [LinearGrid(N=2 * c.N + 5, endpoint=False) for c in coils]
         elif isinstance(self._grid, _Grid):
-            # map inputted single LinearGrid to structure of inputted coils
             self._grid = [self._grid] * self._num_coils
-            self._grid = tree_unflatten(coil_structure, self._grid)
-        else:
-            # this case covers an inputted list of grids that matches the size
-            # of the inputted coils. Can be a 1D list or nested list.
-            flattened_grid = tree_leaves(
-                self._grid, is_leaf=lambda x: isinstance(x, _Grid)
-            )
-            self._grid = tree_unflatten(coil_structure, flattened_grid)
+        assert len(self._grid) == len(coils)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        print(self.things[0])
-        print(self._grid)
+        transforms = [
+            get_transforms(self._data_keys, obj=coil, grid=grid)
+            for coil, grid in zip(coils, self._grid)
+        ]
 
-        transforms = tree_map(
-            lambda x, y: get_transforms(self._data_keys, obj=x, grid=y),
-            self.things[0],
-            self._grid,
-            is_leaf=lambda x: not hasattr(x, "__len__"),
-        )
-
-        grids = tree_leaves(self._grid, is_leaf=lambda x: hasattr(x, "num_nodes"))
-        self._dim_f = np.sum([grid.num_nodes for grid in grids])
-        self._quad_weights = np.concatenate([grid.spacing[:, 2] for grid in grids])
-
-        # get only needed grids (1 per CoilSet) and flatten that list
-        self._grid = tree_leaves(
-            to_list(self._grid), is_leaf=lambda x: isinstance(x, _Grid)
-        )
-        transforms = tree_leaves(
-            to_list(transforms), is_leaf=lambda x: isinstance(x, dict)
-        )
+        self._dim_f = np.sum([grid.num_nodes for grid in self._grid])
+        self._quad_weights = np.concatenate([grid.spacing[:, 2] for grid in self._grid])
 
         errorif(
             np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]),
@@ -194,7 +148,7 @@ class _CoilObjective(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._scales = [compute_scaling_factors(coil) for coil in coil_leaves]
+            self._scales = [compute_scaling_factors(coil) for coil in coils]
 
         super().build(use_jit=use_jit, verbose=verbose)
 

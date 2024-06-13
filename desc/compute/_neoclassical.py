@@ -241,16 +241,18 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="effective ripple",  # this is ε¹ᐧ⁵
-    label="ε¹ᐧ⁵ = π/(8√2) (R₀(∂V/∂ψ)/S)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
+    # 〈 ∇ψ 〉= S/(∂V/∂ψ) = 〈 ∇ρ 〉 ∂ψ/∂ρ
+    label="ε¹ᐧ⁵ = π/(8√2) (R₀/〈 ∇ψ 〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude",
     dim=1,
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[],
     coordinates="r",
     data=["R0", "V_r(r)", "S(r)", "effective ripple raw"],
+    axis_limit_data=["V_rr(r)", "S_r(r)"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
@@ -259,10 +261,13 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
+    grad_rho_norm_fsa = transforms["grid"].replace_at_axis(
+        data["S(r)"] / data["V_r(r)"], lambda: data["S_r(r)"] / data["V_rr(r)"]
+    )
     data["effective ripple"] = (
         jnp.pi
         / (8 * 2**0.5)
-        * (data["R0"] * data["V_r(r)"] / data["S(r)"]) ** 2
+        * (data["R0"] / grad_rho_norm_fsa) ** 2
         * data["effective ripple raw"]
     )
     return data

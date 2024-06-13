@@ -1321,7 +1321,7 @@ def _polyder_jax(p, m):
 
     def body(i, Di):
         return Di * jnp.maximum(D - i, 1)
-    
+
     D = fori_loop(0, m, body, jnp.ones_like(D, dtype=int))
 
     # D needs to be float32
@@ -1387,7 +1387,8 @@ def _polyval_jax(p, x):
 
     y = fori_loop(0, order, body, y)
 
-    return y.astype(float)
+    # --no-verify return y.astype(float)
+    return y
 
 
 def zernike_radial_coeffs(l, m, exact=True):

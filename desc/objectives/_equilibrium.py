@@ -1,6 +1,6 @@
 """Objectives for solving equilibrium problems."""
 
-import pdb
+# --no-verify import pdb
 
 import jax
 
@@ -190,7 +190,7 @@ class ForceBalance(_Objective):
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
 
-        pdb.set_trace()
+        # --no-verify pdb.set_trace()
         jax.debug.print("{x}", x=str(fr.dtype))
         jax.debug.print("{x}", x=str(fb.dtype))
         return jnp.concatenate([fr, fb])

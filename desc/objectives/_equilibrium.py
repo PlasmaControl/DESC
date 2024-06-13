@@ -2,7 +2,7 @@
 
 # --no-verify import pdb
 
-import jax
+# --no-verify import jax
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
@@ -179,7 +179,7 @@ class ForceBalance(_Objective):
         if constants is None:
             constants = self.constants
 
-        print("Printing _equilibrium.py line 177...")
+        # --no-verify  print("Printing _equilibrium.py line 177...")
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -190,9 +190,9 @@ class ForceBalance(_Objective):
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
 
-        # --no-verify pdb.set_trace()
-        jax.debug.print("{x}", x=str(fr.dtype))
-        jax.debug.print("{x}", x=str(fb.dtype))
+        ## --no-verify pdb.set_trace()
+        # --no-verify  jax.debug.print("{x}", x=str(fr.dtype))
+        # --no-verify  jax.debug.print("{x}", x=str(fb.dtype))
 
         return jnp.concatenate([fr, fb])
 

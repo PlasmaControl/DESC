@@ -31,7 +31,7 @@ else:
             from jax import config as jax_config
 
             jax_config.update("jax_enable_x64", True)
-            # --no-verify  jax.config.update("jax_numpy_dtype_promotion", "standard")
+            # --no-verify jax.config.update("jax_numpy_dtype_promotion", "standard")
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "
@@ -66,8 +66,8 @@ print(
 )
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
-    # --no-verify jit = jax.jit --no-verify
-    jit = lambda func, *args, **kwargs: func
+    jit = jax.jit
+    # --no-verify jit = lambda func, *args, **kwargs: func
     fori_loop = jax.lax.fori_loop
     cond = jax.lax.cond
     switch = jax.lax.switch
@@ -108,10 +108,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         args = jax.tree_map(_as32bit, args)
         kwargs = jax.tree_map(_as32bit, kwargs)
 
-        print("Printing input precision...")
+        # --no-verify print("Printing input precision...")
         jax.tree_map(_print_type, args)
         jax.tree_map(_print_type, kwargs)
-        print("Input precision done!")
+        # --no-verify  print("Input precision done!")
 
         # --no-verify with jax.numpy_dtype_promotion("strict"):
         # --no-verify    out = fun(*args, **kwargs)

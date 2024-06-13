@@ -208,7 +208,7 @@ A full example objective with comments describing key points is given below:
             return f
 
 Adapting Existing Objectives with Different Loss Functions
----------------------------------------------------------
+----------------------------------------------------------
 
 If your desired objective is already implemented in DESC, but not in the correct form, a few different
 loss functions are available through the the `loss_function` kwarg when instantiating an Objective objective to

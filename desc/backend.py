@@ -108,19 +108,19 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         args = jax.tree_map(_as32bit, args)
         kwargs = jax.tree_map(_as32bit, kwargs)
 
-        # --no-verify print("Printing input precision...")
-        jax.tree_map(_print_type, args)
-        jax.tree_map(_print_type, kwargs)
-        # --no-verify  print("Input precision done!")
+        ## --no-verify print("Printing input precision...")
+        # --no-verify jax.tree_map(_print_type, args)
+        # --no-verify jax.tree_map(_print_type, kwargs)
+        ## --no-verify  print("Input precision done!")
 
         # --no-verify with jax.numpy_dtype_promotion("strict"):
         # --no-verify    out = fun(*args, **kwargs)
 
         out = fun(*args, **kwargs)
 
-        print("Printing output precision...")
-        jax.tree_map(_print_type, out)
-        print("output precision done!")
+        # --no-verify print("Printing output precision...")
+        # --no-verify jax.tree_map(_print_type, out)
+        # --no-verify print("output precision done!")
 
         return jax.tree_map(_as64bit, out)
 

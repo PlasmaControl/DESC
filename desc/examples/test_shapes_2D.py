@@ -63,7 +63,7 @@ Z_lmn[0, 0] = 2.0
 Z_lmn[1, 0] = 5.0
 Z_lmn = Z_lmn.reshape(-1)  # num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
-amp = 1
+amp = 3
 R_lmn[np.isclose(R_lmn, 0.0)] = (
     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
     * amp
@@ -81,7 +81,7 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-M_FE = 40
+M_FE = 10
 L_FE = 2
 rho = np.linspace(0.5, 1, L_FE, endpoint=True)
 nodes = (

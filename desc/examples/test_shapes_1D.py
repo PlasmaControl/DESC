@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-M = 20  # Note M > 2 required
+M = 5  # Note M > 2 required
 N = 0
 L = 0
 K = 2
@@ -34,7 +34,7 @@ integral = mesh.integrate(np.array([np.cos(quadpoints) ** 2]).T)
 assert np.allclose(integral, np.pi)
 
 # Define an interval in theta
-theta = np.linspace(0, 2 * np.pi, endpoint=False)
+theta = np.linspace(0, 2 * np.pi, endpoint=True)
 # Initialize the FourierZernike bases
 R_basis = FourierZernikeBasis(
     L=L,
@@ -104,6 +104,10 @@ Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+
+r_eval = Rprime_basis.evaluate(nodes=np.array([[1, 0.0, 0.0], [1, 2 * np.pi, 0.0]])) @ Rprime_lmn
+z_eval = Zprime_basis.evaluate(nodes=np.array([[1, 0.0, 0.0], [1, 2 * np.pi, 0.0]])) @ Zprime_lmn
+print(r_eval, z_eval)
 
 # Plot original boundary and difference between Fourier and FE
 # representation of 1D surface in theta

@@ -22,8 +22,8 @@ K = 2
 
 # Make a surface in (R, phi=0, Z), (R, phi=pi / N, Z), ...
 nt = 100
-theta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
-zeta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
+theta = np.linspace(0, 2 * np.pi, nt, endpoint=False)
+zeta = np.linspace(0, 2 * np.pi, nt, endpoint=False)
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -143,6 +143,10 @@ print('Done with conversion')
 t1 = time.time()
 Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
+
+nt = 100
+theta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
+zeta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
 
 # Replot the surface in the finite element basis
 nmodes = len(Rprime_basis.modes)

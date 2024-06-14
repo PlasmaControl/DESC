@@ -379,7 +379,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from netket.jax import vmap_chunked
 
     def batched_vectorize(
-        pyfunc, *, excluded=frozenset(), signature=None, chunk_size=12
+        pyfunc, *, excluded=frozenset(), signature=None, chunk_size=None
     ):
         """Define a vectorized function with broadcasting and batching.
 

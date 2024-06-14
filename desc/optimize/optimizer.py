@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
+from desc.backend import jax
 from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
@@ -213,12 +214,13 @@ class Optimizer(IOAble):
         nonlinear_constraint = _combine_constraints(nonlinear_constraints)
 
         # make sure everything is built
-        if objective is not None and not objective.built:
-            objective.build(verbose=verbose)
-        if linear_constraint is not None and not linear_constraint.built:
-            linear_constraint.build(verbose=verbose)
-        if nonlinear_constraint is not None and not nonlinear_constraint.built:
-            nonlinear_constraint.build(verbose=verbose)
+        with jax.default_device(jax.devices("cpu")[0]):
+            if objective is not None and not objective.built:
+                objective.build(verbose=verbose)
+            if linear_constraint is not None and not linear_constraint.built:
+                linear_constraint.build(verbose=verbose)
+            if nonlinear_constraint is not None and not nonlinear_constraint.built:
+                nonlinear_constraint.build(verbose=verbose)
 
         # combine arguments from all three objective functions
         if linear_constraint is not None and nonlinear_constraint is not None:

@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 
-from desc.backend import block_diag, jit, jnp, put, root_scalar, sign, vmap
+from desc.backend import block_diag, jax, jit, jnp, put, root_scalar, sign, vmap
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
@@ -71,73 +71,74 @@ class FourierRZToroidalSurface(Surface):
         name="",
         check_orientation=True,
     ):
-        if R_lmn is None:
-            R_lmn = np.array([10, 1])
-            modes_R = np.array([[0, 0], [1, 0]])
-        if Z_lmn is None:
-            Z_lmn = np.array([0, -1])
-            modes_Z = np.array([[0, 0], [-1, 0]])
-        if modes_Z is None:
-            modes_Z = modes_R
-        R_lmn, Z_lmn, modes_R, modes_Z = map(
-            np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
-        )
-
-        assert (
-            R_lmn.size == modes_R.shape[0]
-        ), "R_lmn size and modes_R.shape[0] must be the same size!"
-        assert (
-            Z_lmn.size == modes_Z.shape[0]
-        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
-
-        assert issubclass(modes_R.dtype.type, np.integer)
-        assert issubclass(modes_Z.dtype.type, np.integer)
-
-        MR = np.max(abs(modes_R[:, 0]))
-        NR = np.max(abs(modes_R[:, 1]))
-        MZ = np.max(abs(modes_Z[:, 0]))
-        NZ = np.max(abs(modes_Z[:, 1]))
-        self._L = 0
-        M = check_nonnegint(M, "M")
-        N = check_nonnegint(N, "N")
-        NFP = check_posint(NFP, "NFP", False)
-        self._M = setdefault(M, max(MR, MZ))
-        self._N = setdefault(N, max(NR, NZ))
-        self._NFP = NFP
-
-        if sym == "auto":
-            if np.all(
-                R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
-            ) and np.all(
-                Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
-            ):
-                sym = True
-            else:
-                sym = False
-
-        self._R_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
-        )
-        self._Z_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
-        )
-
-        self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
-        self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
-        self._sym = sym
-        self._rho = rho
-
-        if check_orientation and self._compute_orientation() == -1:
-            warnings.warn(
-                "Left handed coordinates detected, switching sign of theta."
-                + " To avoid this warning in the future, switch the sign of all"
-                + " modes with m<0. You may also need to switch the sign of iota or"
-                + " current profiles."
+        with jax.default_device(jax.devices("cpu")[0]):
+            if R_lmn is None:
+                R_lmn = np.array([10, 1])
+                modes_R = np.array([[0, 0], [1, 0]])
+            if Z_lmn is None:
+                Z_lmn = np.array([0, -1])
+                modes_Z = np.array([[0, 0], [-1, 0]])
+            if modes_Z is None:
+                modes_Z = modes_R
+            R_lmn, Z_lmn, modes_R, modes_Z = map(
+                np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
             )
-            self._flip_orientation()
-            assert self._compute_orientation() == 1
 
-        self.name = name
+            assert (
+                R_lmn.size == modes_R.shape[0]
+            ), "R_lmn size and modes_R.shape[0] must be the same size!"
+            assert (
+                Z_lmn.size == modes_Z.shape[0]
+            ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
+
+            assert issubclass(modes_R.dtype.type, np.integer)
+            assert issubclass(modes_Z.dtype.type, np.integer)
+
+            MR = np.max(abs(modes_R[:, 0]))
+            NR = np.max(abs(modes_R[:, 1]))
+            MZ = np.max(abs(modes_Z[:, 0]))
+            NZ = np.max(abs(modes_Z[:, 1]))
+            self._L = 0
+            M = check_nonnegint(M, "M")
+            N = check_nonnegint(N, "N")
+            NFP = check_posint(NFP, "NFP", False)
+            self._M = setdefault(M, max(MR, MZ))
+            self._N = setdefault(N, max(NR, NZ))
+            self._NFP = NFP
+
+            if sym == "auto":
+                if np.all(
+                    R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
+                ) and np.all(
+                    Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
+                ):
+                    sym = True
+                else:
+                    sym = False
+
+            self._R_basis = DoubleFourierSeries(
+                M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+            )
+            self._Z_basis = DoubleFourierSeries(
+                M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+            )
+
+            self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
+            self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
+            self._sym = sym
+            self._rho = rho
+
+            if check_orientation and self._compute_orientation() == -1:
+                warnings.warn(
+                    "Left handed coordinates detected, switching sign of theta."
+                    + " To avoid this warning in the future, switch the sign of all"
+                    + " modes with m<0. You may also need to switch the sign of iota or"
+                    + " current profiles."
+                )
+                self._flip_orientation()
+                assert self._compute_orientation() == 1
+
+            self.name = name
 
     @property
     def NFP(self):
@@ -167,54 +168,56 @@ class FourierRZToroidalSurface(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
-        assert (
-            ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
-            or (len(args) == 0)
-        ), (
-            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
-            + "positional arguments or only keyword arguments."
-        )
-        L = kwargs.pop("L", None)
-        M = kwargs.pop("M", None)
-        N = kwargs.pop("N", None)
-        NFP = kwargs.pop("NFP", None)
-        sym = kwargs.pop("sym", None)
-        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        if L is not None:
-            warnings.warn(
-                "FourierRZToroidalSurface does not have radial resolution, ignoring L"
+        with jax.default_device(jax.devices("cpu")[0]):
+            assert (
+                ((len(args) in [2, 3]) and len(kwargs) == 0)
+                or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+                or (len(args) == 0)
+            ), (
+                "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+                + "positional arguments or only keyword arguments."
             )
-        if len(args) == 2:
-            M, N = args
-        elif len(args) == 3:
-            _, M, N = args
+            L = kwargs.pop("L", None)
+            M = kwargs.pop("M", None)
+            N = kwargs.pop("N", None)
+            NFP = kwargs.pop("NFP", None)
+            sym = kwargs.pop("sym", None)
+            assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+            if L is not None:
+                warnings.warn(
+                    "FourierRZToroidalSurface does not have radial resolution, "
+                    + "ignoring L"
+                )
+            if len(args) == 2:
+                M, N = args
+            elif len(args) == 3:
+                _, M, N = args
 
-        M = check_nonnegint(M, "M")
-        N = check_nonnegint(N, "N")
-        NFP = check_posint(NFP, "NFP")
-        self._NFP = int(NFP if NFP is not None else self.NFP)
-        self._sym = sym if sym is not None else self.sym
+            M = check_nonnegint(M, "M")
+            N = check_nonnegint(N, "N")
+            NFP = check_posint(NFP, "NFP")
+            self._NFP = int(NFP if NFP is not None else self.NFP)
+            self._sym = sym if sym is not None else self.sym
 
-        if (
-            ((N is not None) and (N != self.N))
-            or ((M is not None) and (M != self.M))
-            or (NFP is not None)
-        ):
-            M = int(M if M is not None else self.M)
-            N = int(N if N is not None else self.N)
-            R_modes_old = self.R_basis.modes
-            Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
-            )
-            self.Z_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
-            )
-            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
-            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
-            self._M = M
-            self._N = N
+            if (
+                ((N is not None) and (N != self.N))
+                or ((M is not None) and (M != self.M))
+                or (NFP is not None)
+            ):
+                M = int(M if M is not None else self.M)
+                N = int(N if N is not None else self.N)
+                R_modes_old = self.R_basis.modes
+                Z_modes_old = self.Z_basis.modes
+                self.R_basis.change_resolution(
+                    M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+                )
+                self.Z_basis.change_resolution(
+                    M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                )
+                self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+                self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+                self._M = M
+                self._N = N
 
     @optimizable_parameter
     @property
@@ -813,78 +816,79 @@ class ZernikeRZToroidalSection(Surface):
         name="",
         check_orientation=True,
     ):
-        if R_lmn is None:
-            R_lmn = np.array([10, 1])
-            modes_R = np.array([[0, 0], [1, 1]])
-        if Z_lmn is None:
-            Z_lmn = np.array([0, -1])
-            modes_Z = np.array([[0, 0], [1, -1]])
-        if modes_Z is None:
-            modes_Z = modes_R
-        R_lmn, Z_lmn, modes_R, modes_Z = map(
-            np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
-        )
-
-        assert (
-            R_lmn.size == modes_R.shape[0]
-        ), "R_lmn size and modes_R.shape[0] must be the same size!"
-        assert (
-            Z_lmn.size == modes_Z.shape[0]
-        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
-
-        assert issubclass(modes_R.dtype.type, np.integer)
-        assert issubclass(modes_Z.dtype.type, np.integer)
-
-        LR = np.max(abs(modes_R[:, 0]))
-        MR = np.max(abs(modes_R[:, 1]))
-        LZ = np.max(abs(modes_Z[:, 0]))
-        MZ = np.max(abs(modes_Z[:, 1]))
-        L = check_nonnegint(L, "L")
-        M = check_nonnegint(M, "M")
-        self._L = setdefault(L, max(LR, LZ))
-        self._M = setdefault(M, max(MR, MZ))
-        self._N = 0
-
-        if sym == "auto":
-            if np.all(
-                R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
-            ) and np.all(
-                Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
-            ):
-                sym = True
-            else:
-                sym = False
-
-        self._R_basis = ZernikePolynomial(
-            L=self._L,
-            M=self._M,
-            spectral_indexing=spectral_indexing,
-            sym="cos" if sym else False,
-        )
-        self._Z_basis = ZernikePolynomial(
-            L=self._L,
-            M=self._M,
-            spectral_indexing=spectral_indexing,
-            sym="sin" if sym else False,
-        )
-
-        self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
-        self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
-
-        self._zeta = zeta
-
-        if check_orientation and self._compute_orientation() == -1:
-            warnings.warn(
-                "Left handed coordinates detected, switching sign of theta."
-                + " To avoid this warning in the future, switch the sign of all"
-                + " modes with m<0"
+        with jax.default_device(jax.devices("cpu")[0]):
+            if R_lmn is None:
+                R_lmn = np.array([10, 1])
+                modes_R = np.array([[0, 0], [1, 1]])
+            if Z_lmn is None:
+                Z_lmn = np.array([0, -1])
+                modes_Z = np.array([[0, 0], [1, -1]])
+            if modes_Z is None:
+                modes_Z = modes_R
+            R_lmn, Z_lmn, modes_R, modes_Z = map(
+                np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
             )
-            self._flip_orientation()
-            assert self._compute_orientation() == 1
 
-        self.name = name
+            assert (
+                R_lmn.size == modes_R.shape[0]
+            ), "R_lmn size and modes_R.shape[0] must be the same size!"
+            assert (
+                Z_lmn.size == modes_Z.shape[0]
+            ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
+
+            assert issubclass(modes_R.dtype.type, np.integer)
+            assert issubclass(modes_Z.dtype.type, np.integer)
+
+            LR = np.max(abs(modes_R[:, 0]))
+            MR = np.max(abs(modes_R[:, 1]))
+            LZ = np.max(abs(modes_Z[:, 0]))
+            MZ = np.max(abs(modes_Z[:, 1]))
+            L = check_nonnegint(L, "L")
+            M = check_nonnegint(M, "M")
+            self._L = setdefault(L, max(LR, LZ))
+            self._M = setdefault(M, max(MR, MZ))
+            self._N = 0
+
+            if sym == "auto":
+                if np.all(
+                    R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
+                ) and np.all(
+                    Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
+                ):
+                    sym = True
+                else:
+                    sym = False
+
+            self._R_basis = ZernikePolynomial(
+                L=self._L,
+                M=self._M,
+                spectral_indexing=spectral_indexing,
+                sym="cos" if sym else False,
+            )
+            self._Z_basis = ZernikePolynomial(
+                L=self._L,
+                M=self._M,
+                spectral_indexing=spectral_indexing,
+                sym="sin" if sym else False,
+            )
+
+            self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
+            self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
+            self._sym = sym
+            self._spectral_indexing = spectral_indexing
+
+            self._zeta = zeta
+
+            if check_orientation and self._compute_orientation() == -1:
+                warnings.warn(
+                    "Left handed coordinates detected, switching sign of theta."
+                    + " To avoid this warning in the future, switch the sign of all"
+                    + " modes with m<0"
+                )
+                self._flip_orientation()
+                assert self._compute_orientation() == 1
+
+            self.name = name
 
     @property
     def spectral_indexing(self):
@@ -912,47 +916,51 @@ class ZernikeRZToroidalSection(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
-        assert (
-            ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
-            or (len(args) == 0)
-        ), (
-            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
-            + "positional arguments or only keyword arguments."
-        )
-        L = kwargs.pop("L", None)
-        M = kwargs.pop("M", None)
-        N = kwargs.pop("N", None)
-        sym = kwargs.pop("sym", None)
-        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        if N is not None:
-            warnings.warn(
-                "ZernikeRZToroidalSection does not have toroidal resolution, ignoring N"
+        with jax.default_device(jax.devices("cpu")[0]):
+            assert (
+                ((len(args) in [2, 3]) and len(kwargs) == 0)
+                or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+                or (len(args) == 0)
+            ), (
+                "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+                + "positional arguments or only keyword arguments."
             )
-        if len(args) == 2:
-            L, M = args
-        elif len(args) == 3:
-            L, M, _ = args
+            L = kwargs.pop("L", None)
+            M = kwargs.pop("M", None)
+            N = kwargs.pop("N", None)
+            sym = kwargs.pop("sym", None)
+            assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+            if N is not None:
+                warnings.warn(
+                    "ZernikeRZToroidalSection does not have toroidal resolution, "
+                    + "ignoring N"
+                )
+            if len(args) == 2:
+                L, M = args
+            elif len(args) == 3:
+                L, M, _ = args
 
-        L = check_nonnegint(L, "L")
-        M = check_nonnegint(M, "M")
-        self._sym = sym if sym is not None else self.sym
+            L = check_nonnegint(L, "L")
+            M = check_nonnegint(M, "M")
+            self._sym = sym if sym is not None else self.sym
 
-        if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
-            L = int(L if L is not None else self.L)
-            M = int(M if M is not None else self.M)
-            R_modes_old = self.R_basis.modes
-            Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(
-                L=L, M=M, sym="cos" if self.sym else self.sym
-            )
-            self.Z_basis.change_resolution(
-                L=L, M=M, sym="sin" if self.sym else self.sym
-            )
-            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
-            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
-            self._L = L
-            self._M = M
+            if ((L is not None) and (L != self.L)) or (
+                (M is not None) and (M != self.M)
+            ):
+                L = int(L if L is not None else self.L)
+                M = int(M if M is not None else self.M)
+                R_modes_old = self.R_basis.modes
+                Z_modes_old = self.Z_basis.modes
+                self.R_basis.change_resolution(
+                    L=L, M=M, sym="cos" if self.sym else self.sym
+                )
+                self.Z_basis.change_resolution(
+                    L=L, M=M, sym="sin" if self.sym else self.sym
+                )
+                self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+                self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+                self._L = L
+                self._M = M
 
     @optimizable_parameter
     @property

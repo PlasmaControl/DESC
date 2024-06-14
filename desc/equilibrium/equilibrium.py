@@ -10,7 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
@@ -182,211 +182,217 @@ class Equilibrium(IOAble, Optimizable):
         ensure_nested=True,
         **kwargs,
     ):
-        errorif(
-            not isinstance(Psi, numbers.Real),
-            ValueError,
-            f"Psi should be a real integer or float, got {type(Psi)}",
-        )
-        self._Psi = float(Psi)
-
-        errorif(
-            spectral_indexing
-            not in [
-                None,
-                "ansi",
-                "fringe",
-            ],
-            ValueError,
-            "spectral_indexing should be one of 'ansi', 'fringe', None, got "
-            + f"{spectral_indexing}",
-        )
-        self._spectral_indexing = setdefault(
-            spectral_indexing, getattr(surface, "spectral_indexing", "ansi")
-        )
-
-        NFP = check_posint(NFP, "NFP")
-        self._NFP = int(
-            setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
-        )
-
-        # stellarator symmetry for bases
-        errorif(
-            sym
-            not in [
-                None,
-                True,
-                False,
-            ],
-            ValueError,
-            f"sym should be one of True, False, None, got {sym}",
-        )
-        self._sym = setdefault(sym, getattr(surface, "sym", False))
-        self._R_sym = "cos" if self.sym else False
-        self._Z_sym = "sin" if self.sym else False
-
-        # surface
-        self._surface, self._bdry_mode = parse_surface(
-            surface, self.NFP, self.sym, self.spectral_indexing
-        )
-
-        # magnetic axis
-        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
-
-        # resolution
-        L = check_nonnegint(L, "L")
-        M = check_nonnegint(M, "M")
-        N = check_nonnegint(N, "N")
-        L_grid = check_nonnegint(L_grid, "L_grid")
-        M_grid = check_nonnegint(M_grid, "M_grid")
-        N_grid = check_nonnegint(N_grid, "N_grid")
-
-        self._N = int(setdefault(N, self.surface.N))
-        self._M = int(setdefault(M, self.surface.M))
-        self._L = int(
-            setdefault(
-                L,
-                max(
-                    self.surface.L,
-                    self.M if (self.spectral_indexing == "ansi") else 2 * self.M,
-                ),
-            )
-        )
-        self._L_grid = setdefault(L_grid, 2 * self.L)
-        self._M_grid = setdefault(M_grid, 2 * self.M)
-        self._N_grid = setdefault(N_grid, 2 * self.N)
-
-        self._surface.change_resolution(self.L, self.M, self.N)
-        self._axis.change_resolution(self.N)
-
-        # bases
-        self._R_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._R_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
-        self._Z_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._Z_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
-        self._L_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._Z_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
-
-        # profiles
-        self._pressure = None
-        self._iota = None
-        self._current = None
-        self._electron_temperature = None
-        self._electron_density = None
-        self._ion_temperature = None
-        self._atomic_number = None
-
-        if current is None and iota is None:
-            current = 0
-        use_kinetic = any(
-            [electron_temperature is not None, electron_density is not None]
-        )
-        errorif(
-            current is not None and iota is not None,
-            ValueError,
-            "Cannot specify both iota and current profiles.",
-        )
-        errorif(
-            ((pressure is not None) or (anisotropy is not None)) and use_kinetic,
-            ValueError,
-            "Cannot specify both pressure and kinetic profiles.",
-        )
-        errorif(
-            use_kinetic and (electron_temperature is None or electron_density is None),
-            ValueError,
-            "Must give at least electron temperature and density to use "
-            + "kinetic profiles.",
-        )
-        if use_kinetic and atomic_number is None:
-            atomic_number = 1
-        if use_kinetic and ion_temperature is None:
-            ion_temperature = electron_temperature
-        if not use_kinetic and pressure is None:
-            pressure = 0
-
-        self._electron_temperature = parse_profile(
-            electron_temperature, "electron temperature"
-        )
-        self._electron_density = parse_profile(electron_density, "electron density")
-        self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
-        self._atomic_number = parse_profile(atomic_number, "atomic number")
-        self._pressure = parse_profile(pressure, "pressure")
-        self._anisotropy = parse_profile(anisotropy, "anisotropy")
-        self._iota = parse_profile(iota, "iota")
-        self._current = parse_profile(current, "current")
-
-        # ensure profiles have the right resolution
-        for profile in [
-            "pressure",
-            "iota",
-            "current",
-            "electron_temperature",
-            "electron_density",
-            "ion_temperature",
-            "atomic_number",
-            "anisotropy",
-        ]:
-            p = getattr(self, profile)
-            if hasattr(p, "change_resolution"):
-                p.change_resolution(max(p.basis.L, self.L))
-            if isinstance(p, PowerSeriesProfile) and p.sym != "even":
-                warnings.warn(
-                    colored(f"{profile} profile is not an even power series.", "yellow")
-                )
-
-        # ensure number of field periods agree before setting guesses
-        eq_NFP = self.NFP
-        surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
-        axis_NFP = self._axis.NFP
-        errorif(
-            not (eq_NFP == surf_NFP == axis_NFP),
-            ValueError,
-            "Unequal number of field periods for equilibrium "
-            + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}",
-        )
-
-        # make sure symmetry agrees
-        errorif(
-            self.sym != self.surface.sym,
-            ValueError,
-            "Surface and Equilibrium must have the same symmetry",
-        )
-        self._R_lmn = np.zeros(self.R_basis.num_modes)
-        self._Z_lmn = np.zeros(self.Z_basis.num_modes)
-        self._L_lmn = np.zeros(self.L_basis.num_modes)
-
-        if ("R_lmn" in kwargs) or ("Z_lmn" in kwargs):
-            assert ("R_lmn" in kwargs) and ("Z_lmn" in kwargs), "Must give both R and Z"
-            self.R_lmn = kwargs.pop("R_lmn")
-            self.Z_lmn = kwargs.pop("Z_lmn")
-            self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
-        else:
-            self.set_initial_guess(ensure_nested=ensure_nested)
-        if check_orientation:
-            ensure_positive_jacobian(self)
-        if kwargs.get("check_kwargs", True):
+        with jax.default_device(jax.devices("cpu")[0]):
             errorif(
-                len(kwargs),
-                TypeError,
-                f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
+                not isinstance(Psi, numbers.Real),
+                ValueError,
+                f"Psi should be a real integer or float, got {type(Psi)}",
             )
+            self._Psi = float(Psi)
+
+            errorif(
+                spectral_indexing
+                not in [
+                    None,
+                    "ansi",
+                    "fringe",
+                ],
+                ValueError,
+                "spectral_indexing should be one of 'ansi', 'fringe', None, got "
+                + f"{spectral_indexing}",
+            )
+            self._spectral_indexing = setdefault(
+                spectral_indexing, getattr(surface, "spectral_indexing", "ansi")
+            )
+
+            NFP = check_posint(NFP, "NFP")
+            self._NFP = int(
+                setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
+            )
+
+            # stellarator symmetry for bases
+            errorif(
+                sym
+                not in [
+                    None,
+                    True,
+                    False,
+                ],
+                ValueError,
+                f"sym should be one of True, False, None, got {sym}",
+            )
+            self._sym = setdefault(sym, getattr(surface, "sym", False))
+            self._R_sym = "cos" if self.sym else False
+            self._Z_sym = "sin" if self.sym else False
+
+            # surface
+            self._surface, self._bdry_mode = parse_surface(
+                surface, self.NFP, self.sym, self.spectral_indexing
+            )
+
+            # magnetic axis
+            self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
+
+            # resolution
+            L = check_nonnegint(L, "L")
+            M = check_nonnegint(M, "M")
+            N = check_nonnegint(N, "N")
+            L_grid = check_nonnegint(L_grid, "L_grid")
+            M_grid = check_nonnegint(M_grid, "M_grid")
+            N_grid = check_nonnegint(N_grid, "N_grid")
+
+            self._N = int(setdefault(N, self.surface.N))
+            self._M = int(setdefault(M, self.surface.M))
+            self._L = int(
+                setdefault(
+                    L,
+                    max(
+                        self.surface.L,
+                        self.M if (self.spectral_indexing == "ansi") else 2 * self.M,
+                    ),
+                )
+            )
+            self._L_grid = setdefault(L_grid, 2 * self.L)
+            self._M_grid = setdefault(M_grid, 2 * self.M)
+            self._N_grid = setdefault(N_grid, 2 * self.N)
+
+            self._surface.change_resolution(self.L, self.M, self.N)
+            self._axis.change_resolution(self.N)
+
+            # bases
+            self._R_basis = FourierZernikeBasis(
+                L=self.L,
+                M=self.M,
+                N=self.N,
+                NFP=self.NFP,
+                sym=self._R_sym,
+                spectral_indexing=self.spectral_indexing,
+            )
+            self._Z_basis = FourierZernikeBasis(
+                L=self.L,
+                M=self.M,
+                N=self.N,
+                NFP=self.NFP,
+                sym=self._Z_sym,
+                spectral_indexing=self.spectral_indexing,
+            )
+            self._L_basis = FourierZernikeBasis(
+                L=self.L,
+                M=self.M,
+                N=self.N,
+                NFP=self.NFP,
+                sym=self._Z_sym,
+                spectral_indexing=self.spectral_indexing,
+            )
+
+            # profiles
+            self._pressure = None
+            self._iota = None
+            self._current = None
+            self._electron_temperature = None
+            self._electron_density = None
+            self._ion_temperature = None
+            self._atomic_number = None
+
+            if current is None and iota is None:
+                current = 0
+            use_kinetic = any(
+                [electron_temperature is not None, electron_density is not None]
+            )
+            errorif(
+                current is not None and iota is not None,
+                ValueError,
+                "Cannot specify both iota and current profiles.",
+            )
+            errorif(
+                ((pressure is not None) or (anisotropy is not None)) and use_kinetic,
+                ValueError,
+                "Cannot specify both pressure and kinetic profiles.",
+            )
+            errorif(
+                use_kinetic
+                and (electron_temperature is None or electron_density is None),
+                ValueError,
+                "Must give at least electron temperature and density to use "
+                + "kinetic profiles.",
+            )
+            if use_kinetic and atomic_number is None:
+                atomic_number = 1
+            if use_kinetic and ion_temperature is None:
+                ion_temperature = electron_temperature
+            if not use_kinetic and pressure is None:
+                pressure = 0
+
+            self._electron_temperature = parse_profile(
+                electron_temperature, "electron temperature"
+            )
+            self._electron_density = parse_profile(electron_density, "electron density")
+            self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
+            self._atomic_number = parse_profile(atomic_number, "atomic number")
+            self._pressure = parse_profile(pressure, "pressure")
+            self._anisotropy = parse_profile(anisotropy, "anisotropy")
+            self._iota = parse_profile(iota, "iota")
+            self._current = parse_profile(current, "current")
+
+            # ensure profiles have the right resolution
+            for profile in [
+                "pressure",
+                "iota",
+                "current",
+                "electron_temperature",
+                "electron_density",
+                "ion_temperature",
+                "atomic_number",
+                "anisotropy",
+            ]:
+                p = getattr(self, profile)
+                if hasattr(p, "change_resolution"):
+                    p.change_resolution(max(p.basis.L, self.L))
+                if isinstance(p, PowerSeriesProfile) and p.sym != "even":
+                    warnings.warn(
+                        colored(
+                            f"{profile} profile is not an even power series.", "yellow"
+                        )
+                    )
+
+            # ensure number of field periods agree before setting guesses
+            eq_NFP = self.NFP
+            surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
+            axis_NFP = self._axis.NFP
+            errorif(
+                not (eq_NFP == surf_NFP == axis_NFP),
+                ValueError,
+                "Unequal number of field periods for equilibrium "
+                + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}",
+            )
+
+            # make sure symmetry agrees
+            errorif(
+                self.sym != self.surface.sym,
+                ValueError,
+                "Surface and Equilibrium must have the same symmetry",
+            )
+            self._R_lmn = np.zeros(self.R_basis.num_modes)
+            self._Z_lmn = np.zeros(self.Z_basis.num_modes)
+            self._L_lmn = np.zeros(self.L_basis.num_modes)
+
+            if ("R_lmn" in kwargs) or ("Z_lmn" in kwargs):
+                assert ("R_lmn" in kwargs) and (
+                    "Z_lmn" in kwargs
+                ), "Must give both R and Z"
+                self.R_lmn = kwargs.pop("R_lmn")
+                self.Z_lmn = kwargs.pop("Z_lmn")
+                self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
+            else:
+                self.set_initial_guess(ensure_nested=ensure_nested)
+            if check_orientation:
+                ensure_positive_jacobian(self)
+            if kwargs.get("check_kwargs", True):
+                errorif(
+                    len(kwargs),
+                    TypeError,
+                    f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
+                )
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -558,51 +564,64 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
-        self._L = int(setdefault(L, self.L))
-        self._M = int(setdefault(M, self.M))
-        self._N = int(setdefault(N, self.N))
-        self._L_grid = int(setdefault(L_grid, self.L_grid))
-        self._M_grid = int(setdefault(M_grid, self.M_grid))
-        self._N_grid = int(setdefault(N_grid, self.N_grid))
-        self._NFP = int(setdefault(NFP, self.NFP))
-        self._sym = setdefault(sym, self.sym)
+        with jax.default_device(jax.devices("cpu")[0]):
+            self._L = int(setdefault(L, self.L))
+            self._M = int(setdefault(M, self.M))
+            self._N = int(setdefault(N, self.N))
+            self._L_grid = int(setdefault(L_grid, self.L_grid))
+            self._M_grid = int(setdefault(M_grid, self.M_grid))
+            self._N_grid = int(setdefault(N_grid, self.N_grid))
+            self._NFP = int(setdefault(NFP, self.NFP))
+            self._sym = setdefault(sym, self.sym)
 
-        old_modes_R = self.R_basis.modes
-        old_modes_Z = self.Z_basis.modes
-        old_modes_L = self.L_basis.modes
+            old_modes_R = self.R_basis.modes
+            old_modes_Z = self.Z_basis.modes
+            old_modes_L = self.L_basis.modes
 
-        self.R_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
-        )
-        self.Z_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
-        )
-        self.L_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
-        )
+            self.R_basis.change_resolution(
+                self.L,
+                self.M,
+                self.N,
+                NFP=self.NFP,
+                sym="cos" if self.sym else self.sym,
+            )
+            self.Z_basis.change_resolution(
+                self.L,
+                self.M,
+                self.N,
+                NFP=self.NFP,
+                sym="sin" if self.sym else self.sym,
+            )
+            self.L_basis.change_resolution(
+                self.L,
+                self.M,
+                self.N,
+                NFP=self.NFP,
+                sym="sin" if self.sym else self.sym,
+            )
 
-        for profile in [
-            "pressure",
-            "iota",
-            "current",
-            "electron_temperature",
-            "electron_density",
-            "ion_temperature",
-            "atomic_number",
-            "anisotropy",
-        ]:
-            p = getattr(self, profile)
-            if hasattr(p, "change_resolution"):
-                p.change_resolution(max(p.basis.L, self.L))
+            for profile in [
+                "pressure",
+                "iota",
+                "current",
+                "electron_temperature",
+                "electron_density",
+                "ion_temperature",
+                "atomic_number",
+                "anisotropy",
+            ]:
+                p = getattr(self, profile)
+                if hasattr(p, "change_resolution"):
+                    p.change_resolution(max(p.basis.L, self.L))
 
-        self.surface.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
-        )
-        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
+            self.surface.change_resolution(
+                self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+            )
+            self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
 
-        self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
-        self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
-        self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+            self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
+            self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
+            self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
@@ -621,94 +640,95 @@ class Equilibrium(IOAble, Optimizable):
             surfaces of constant zeta.
 
         """
-        errorif(
-            not only1(rho is not None, theta is not None, zeta is not None),
-            ValueError,
-            f"Only one coordinate can be specified, got {rho}, {theta}, {zeta}",
-        )
-        errorif(
-            theta is not None,
-            NotImplementedError,
-            "Constant theta surfaces have not been implemented yet",
-        )
-        if rho is not None:
-            assert (rho >= 0) and (rho <= 1)
-            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
-            surface.change_resolution(self.M, self.N)
-
-            AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
-            AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
-
-            Js = []
-            zernikeR = zernike_radial(
-                rho, self.R_basis.modes[:, 0], self.R_basis.modes[:, 1]
+        with jax.default_device(jax.devices("cpu")[0]):
+            errorif(
+                not only1(rho is not None, theta is not None, zeta is not None),
+                ValueError,
+                f"Only one coordinate can be specified, got {rho}, {theta}, {zeta}",
             )
-            for i, (l, m, n) in enumerate(self.R_basis.modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        surface.R_basis.modes[:, 1] == m,
-                        surface.R_basis.modes[:, 2] == n,
-                    )
-                )
-                Js.append(j.flatten())
-            Js = np.array(Js)
-            # Broadcasting at once is faster. We need to use np.arange to avoid
-            # setting the value to the whole row.
-            AR[Js[:, 0], np.arange(self.R_basis.num_modes)] = zernikeR
-
-            Js = []
-            zernikeZ = zernike_radial(
-                rho, self.Z_basis.modes[:, 0], self.Z_basis.modes[:, 1]
+            errorif(
+                theta is not None,
+                NotImplementedError,
+                "Constant theta surfaces have not been implemented yet",
             )
-            for i, (l, m, n) in enumerate(self.Z_basis.modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        surface.Z_basis.modes[:, 1] == m,
-                        surface.Z_basis.modes[:, 2] == n,
-                    )
+            if rho is not None:
+                assert (rho >= 0) and (rho <= 1)
+                surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
+                surface.change_resolution(self.M, self.N)
+
+                AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
+                AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+
+                Js = []
+                zernikeR = zernike_radial(
+                    rho, self.R_basis.modes[:, 0], self.R_basis.modes[:, 1]
                 )
-                Js.append(j.flatten())
-            Js = np.array(Js)
-            # Broadcasting at once is faster. We need to use np.arange to avoid
-            # setting the value to the whole row.
-            AZ[Js[:, 0], np.arange(self.Z_basis.num_modes)] = zernikeZ
-
-            Rb = AR @ self.R_lmn
-            Zb = AZ @ self.Z_lmn
-            surface.R_lmn = Rb
-            surface.Z_lmn = Zb
-            return surface
-
-        if zeta is not None:
-            assert (zeta >= 0) and (zeta <= 2 * np.pi)
-            surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
-            surface.change_resolution(self.L, self.M)
-
-            AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
-            AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
-
-            for i, (l, m, n) in enumerate(self.R_basis.modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        surface.R_basis.modes[:, 0] == l,
-                        surface.R_basis.modes[:, 1] == m,
+                for i, (l, m, n) in enumerate(self.R_basis.modes):
+                    j = np.argwhere(
+                        np.logical_and(
+                            surface.R_basis.modes[:, 1] == m,
+                            surface.R_basis.modes[:, 2] == n,
+                        )
                     )
-                )
-                AR[j, i] = fourier(zeta, n, self.NFP)
+                    Js.append(j.flatten())
+                Js = np.array(Js)
+                # Broadcasting at once is faster. We need to use np.arange to avoid
+                # setting the value to the whole row.
+                AR[Js[:, 0], np.arange(self.R_basis.num_modes)] = zernikeR
 
-            for i, (l, m, n) in enumerate(self.Z_basis.modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        surface.Z_basis.modes[:, 0] == l,
-                        surface.Z_basis.modes[:, 1] == m,
-                    )
+                Js = []
+                zernikeZ = zernike_radial(
+                    rho, self.Z_basis.modes[:, 0], self.Z_basis.modes[:, 1]
                 )
-                AZ[j, i] = fourier(zeta, n, self.NFP)
-            Rb = AR @ self.R_lmn
-            Zb = AZ @ self.Z_lmn
-            surface.R_lmn = Rb
-            surface.Z_lmn = Zb
-            return surface
+                for i, (l, m, n) in enumerate(self.Z_basis.modes):
+                    j = np.argwhere(
+                        np.logical_and(
+                            surface.Z_basis.modes[:, 1] == m,
+                            surface.Z_basis.modes[:, 2] == n,
+                        )
+                    )
+                    Js.append(j.flatten())
+                Js = np.array(Js)
+                # Broadcasting at once is faster. We need to use np.arange to avoid
+                # setting the value to the whole row.
+                AZ[Js[:, 0], np.arange(self.Z_basis.num_modes)] = zernikeZ
+
+                Rb = AR @ self.R_lmn
+                Zb = AZ @ self.Z_lmn
+                surface.R_lmn = Rb
+                surface.Z_lmn = Zb
+                return surface
+
+            if zeta is not None:
+                assert (zeta >= 0) and (zeta <= 2 * np.pi)
+                surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
+                surface.change_resolution(self.L, self.M)
+
+                AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
+                AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+
+                for i, (l, m, n) in enumerate(self.R_basis.modes):
+                    j = np.argwhere(
+                        np.logical_and(
+                            surface.R_basis.modes[:, 0] == l,
+                            surface.R_basis.modes[:, 1] == m,
+                        )
+                    )
+                    AR[j, i] = fourier(zeta, n, self.NFP)
+
+                for i, (l, m, n) in enumerate(self.Z_basis.modes):
+                    j = np.argwhere(
+                        np.logical_and(
+                            surface.Z_basis.modes[:, 0] == l,
+                            surface.Z_basis.modes[:, 1] == m,
+                        )
+                    )
+                    AZ[j, i] = fourier(zeta, n, self.NFP)
+                Rb = AR @ self.R_lmn
+                Zb = AZ @ self.Z_lmn
+                surface.R_lmn = Rb
+                surface.Z_lmn = Zb
+                return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
@@ -1130,7 +1150,8 @@ class Equilibrium(IOAble, Optimizable):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg)
+        with jax.default_device(jax.devices("cpu")[0]):
+            return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg)
 
     def to_sfl(
         self,

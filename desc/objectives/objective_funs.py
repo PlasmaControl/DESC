@@ -51,7 +51,7 @@ class ObjectiveFunction(IOAble):
         use_jit=True,
         deriv_mode="auto",
         name="ObjectiveFunction",
-        chunk_size=1,
+        chunk_size=None,
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -805,7 +805,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
-        chunk_size=1,
+        chunk_size=None,
     ):
         if self._scalar:
             assert self._coordinates == ""

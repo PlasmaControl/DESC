@@ -73,6 +73,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     vmap = jax.vmap
     scan = jax.lax.scan
     bincount = jnp.bincount
+    set_default_cpu = jax.default_device(jax.devices("cpu")[0])
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -374,6 +375,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
+    set_default_cpu = lambda func: func
     import scipy.optimize
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401

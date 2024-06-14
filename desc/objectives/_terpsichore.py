@@ -69,6 +69,7 @@ def terpsichore(
         nev=nev,
         al0=al0,
     )
+    exit()
     _run_terps(
         dir=pid_path,
         exec=exec_path,
@@ -247,7 +248,7 @@ def _write_terps_input(
             else:
                 mode_str += " 0"
 
-        mode_str += "{:>3}\n".format(_in)
+        mode_str += "{:>3}\n".format(n)
         f.write(mode_str)
 
     f.write("C\n")

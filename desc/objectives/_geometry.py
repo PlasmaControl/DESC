@@ -339,6 +339,146 @@ class Elongation(_Objective):
         )
 
 
+class SpectralCondensation(_Objective):
+    """Spectral width as described in Hirshman & Breslau (1988).
+
+    TODO: add equations
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Has no effect for this objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _units = "(m^2)"
+    _print_value_fmt = "Spectral width: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="spectral width",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self.grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
+
+        self._dim_f = eq.L_basis.num_modes
+        self._data_keys = ["R_t", "R_tt", "Z_t", "Z_tt", "lambda"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["A"]
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute spectral width.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        I : float
+            spectral width, dimensionless.
+
+        """
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+
+        W = -(data["R_t"] * data["R_tt"] + data["Z_t"] * data["Z_tt"])
+        W_proj = constants["transforms"]["L"].project(W)
+        return jnp.atleast_1d(W_proj)
+
+
 class Volume(_Objective):
     """Plasma volume.
 
@@ -379,7 +519,6 @@ class Volume(_Objective):
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
-
     """
 
     _scalar = True
@@ -423,7 +562,6 @@ class Volume(_Objective):
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
-
         """
         eq = self.things[0]
         if self._grid is None:

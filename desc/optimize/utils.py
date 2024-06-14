@@ -1,6 +1,7 @@
 """Utility functions used in optimization problems."""
 
 import copy
+import functools
 
 import numpy as np
 
@@ -535,7 +536,7 @@ def f_where_x(x, xs, fs, dim=0):
     return f
 
 
-@jit
+@functools.partial(jit, static_argnames="lower")
 def solve_triangular_regularized(R, b, lower=False):
     """Solve Rx=b for triangular, possibly rank deficient R.
 

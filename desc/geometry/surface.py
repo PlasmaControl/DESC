@@ -121,6 +121,16 @@ def convert_spectral_to_FE(
             * FE_basis_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
     ).reshape(IQ, IQ)
+    
+    
+    # Add row
+    
+    add_row = np.zeros((1,IQ))
+    add_row[0,0] = 1
+    add_row[0,IQ-1]=-1
+    FE_assembly_matrix = np.vstack((FE_assembly_matrix,add_row))
+    
+    
     # print(FE_basis_pre_evaluated)
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)
@@ -139,12 +149,17 @@ def convert_spectral_to_FE(
     Aj_Z = mesh.integrate(
         (ZZ).reshape(I * nquad, -1),
     )
+    
+    Aj_Z = np.append(Aj_Z,[0])
+
     Aj_R = mesh.integrate(
         (RR).reshape(I * nquad, -1),
     )
+    Aj_R = np.append(Aj_R,[0])
     Aj_L = mesh.integrate(
         (LL).reshape(I * nquad, -1),
     )
+    Aj_L = np.append(Aj_L,[0])
     t2 = time.time()
     print("Time to construct vector b = ", t2 - t1)
 
@@ -159,14 +174,25 @@ def convert_spectral_to_FE(
     Zprime_lmn = np.zeros(Aj_Z.shape)
     Lprime_lmn = np.zeros(Aj_L.shape)
 
-    # Sparse LU solve since Bjb_R is sparse
-    lu = splu(FE_assembly_matrix)
-    Rprime = lu.solve(Aj_R)
+    
+    Rprime = np.linalg.lstsq(FE_assembly_matrix, Aj_R)[0]
+
     Rprime_lmn = Rprime.reshape(nmodes)
-    Zprime = lu.solve(Aj_Z)
+    
+    Zprime = np.linalg.lstsq(FE_assembly_matrix, Aj_Z)[0]
+
     Zprime_lmn = Zprime.reshape(nmodes)
-    Lprime = lu.solve(Aj_L)
+    
+    Lprime = np.linalg.lstsq(FE_assembly_matrix, Aj_L)[0]
+
     Lprime_lmn = Lprime.reshape(nmodes)
+    # lu = splu(FE_assembly_matrix)
+    # Rprime = lu.solve(Aj_R)
+    # Rprime_lmn = Rprime.reshape(nmodes)
+    # Zprime = lu.solve(Aj_Z)
+    # Zprime_lmn = Zprime.reshape(nmodes)
+    # Lprime = lu.solve(Aj_L)
+    # Lprime_lmn = Lprime.reshape(nmodes)
     t2 = time.time()
     print("Time to solve Ax = b, ", t2 - t1)
     return Rprime_lmn, Zprime_lmn, Lprime_lmn

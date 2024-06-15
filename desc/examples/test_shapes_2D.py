@@ -23,7 +23,7 @@ from desc.geometry import convert_spectral_to_FE
 L = 2
 M = 5
 N = 0
-K = 2
+K = 3
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary

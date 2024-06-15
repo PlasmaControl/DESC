@@ -3563,7 +3563,7 @@ class TriangleFiniteElement:
         angle2 = np.arccos((d1**2 + d3**2 - d2**2) / (2 * d1 * d3))
         angle3 = np.arccos((d2**2 + d1**2 - d3**2) / (2 * d2 * d1))
         self.angles = np.array([angle1, angle2, angle3]).T
-
+        
         # Going to construct equally spaced nodes for order K triangle,
         # which gives Q such nodes.
         nodes = []
@@ -3575,38 +3575,125 @@ class TriangleFiniteElement:
             node_tuple = [0, 0, 0]
             node_tuple[i] = K
             node_mapping.append(node_tuple)
+            
+            
+            
+        if K == 2:
+            
+        # We create one additional midpoint node
+           # on each of the three triangle edges
+           # for a total of 3 more nodes
+           # Checked that the order matches sci-kit
 
-        # If K = 1, the vertices are the only nodes for basis functions
-        if K > 1:
-            # Add (k-1) equally spaced nodes on each triangle edge
-            # for k = 1, ..., K - 1
-            # for total of 3(K - 1)K / 2 more nodes
-            # This is certainly incorrect for K = 3 !!!!
-            for i in range(3):
-                for j in range(i + 1, 3):
-                    for k in range(K - 1):
-                        edge_node = (vertices[i, :] + vertices[j, :]) / K * (k + 1)
-                        nodes.append(edge_node)
-                        node_tuple = [0, 0, 0]
-                        node_tuple[i] = k + 1
-                        node_tuple[j] = k + 1
-                        node_mapping.append(node_tuple)
+           midpoints = np.zeros([3, 2])
 
-            # Once all the edge nodes are placed, place the interior nodes
-            # This is certainly incorrect for K = 3 !!!!
+           for i in range(2):
+               midpoints[i] = (vertices[i, :] + vertices[i + 1, :]) / 2
+
+
+           midpoints[2] = (vertices[0, :] + vertices[2, :]) / 2
+
+           # Now, we add all of these nodes to our list of nodes
+
+           for j in range(3):
+               nodes.append(midpoints[j, :])
+           node_tuple = [K, K, K]
+           node_mapping.append(node_tuple)
+
+           # We next place the interior nodes in the tetrahedra.
+           
+           
+           
+        if K==3:
+            
+    
+            # We place the edge nodes first, spaced out by thirds:
+    
+            one_third = np.zeros([3, 2])
+            two_thirds = np.zeros([3, 2])
+            
+            for i in range(2):
+               one_third[i, :] = (1 / 3) * vertices[i + 1, :] + (2 / 3) * vertices[
+                   i, :
+               ]
+               two_thirds[i, :] = (2 / 3) * vertices[i + 1, :] + (1 / 3) * vertices[
+                   i, :
+               ]
+                   
+                   
+            # p0p2
+
+            one_third[2, :] = (1 / 3) * vertices[2, :] + (2 / 3) * vertices[0, :]
+            two_thirds[2, :] = (2 / 3) * vertices[2, :] + (1 / 3) * vertices[0, :]
+            
+            
+            
+            
             for i in range(3):
-                # Fill in any nodes within the triangle by drawing rays between
-                # the edge nodes that are more than 1 spacing away'
-                if i == 0 and K > 2:
-                    for k in range(1, K - 1):
-                        edge_node1 = (vertices[i, :] + vertices[1, :]) / K * (k + 1)
-                        edge_node2 = (vertices[i, :] + vertices[2, :]) / K * (k + 1)
-                        center_node = (edge_node1 + edge_node2) / (K - 1) * k
-                        nodes.append(center_node)
-                        node_tuple = [0, 0, 0]
-                        node_tuple[i] = 1
-                        node_tuple[j] = 1
-                        node_mapping.append(node_tuple)
+               nodes.append(one_third[i, :])
+               nodes.append(two_thirds[i, :])
+               node_tuple = [K, K, K]
+               # Not entirely sure the usage of node_tuple
+
+               node_mapping.append(node_tuple)
+
+           # Next we place the interior nodes. We use the barycenter of
+           # each of the four faces.
+
+            barycenter = np.zeros([1, 2])
+           
+            barycenter[0,:] =  (vertices[0, :] + vertices[1, :] + vertices[2, :]) / 3
+
+         
+
+            nodes.append(barycenter[0, :])
+            node_tuple = [K, K, K]
+            node_mapping.append(node_tuple)
+
+
+        # # Going to construct equally spaced nodes for order K triangle,
+        # # which gives Q such nodes.
+        # nodes = []
+
+        # # Start with the vertices of the triangle
+        # node_mapping = []
+        # for i in range(3):
+        #     nodes.append(vertices[i, :])
+        #     node_tuple = [0, 0, 0]
+        #     node_tuple[i] = K
+        #     node_mapping.append(node_tuple)
+
+        # # If K = 1, the vertices are the only nodes for basis functions
+        # if K > 1:
+        #     # Add (k-1) equally spaced nodes on each triangle edge
+        #     # for k = 1, ..., K - 1
+        #     # for total of 3(K - 1)K / 2 more nodes
+        #     # This is certainly incorrect for K = 3 !!!!
+        #     for i in range(3):
+        #         for j in range(i + 1, 3):
+        #             for k in range(K - 1):
+        #                 edge_node = (vertices[i, :] + vertices[j, :]) / K * (k + 1)
+        #                 nodes.append(edge_node)
+        #                 node_tuple = [0, 0, 0]
+        #                 node_tuple[i] = k + 1
+        #                 node_tuple[j] = k + 1
+        #                 node_mapping.append(node_tuple)
+
+        #     # Once all the edge nodes are placed, place the interior nodes
+        #     # This is certainly incorrect for K = 3 !!!!
+        #     for i in range(3):
+        #         # Fill in any nodes within the triangle by drawing rays between
+        #         # the edge nodes that are more than 1 spacing away'
+        #         if i == 0 and K > 2:
+        #             for k in range(1, K - 1):
+        #                 edge_node1 = (vertices[i, :] + vertices[1, :]) / K * (k + 1)
+        #                 edge_node2 = (vertices[i, :] + vertices[2, :]) / K * (k + 1)
+        #                 center_node = (edge_node1 + edge_node2) / (K - 1) * k
+        #                 nodes.append(center_node)
+        #                 node_tuple = [0, 0, 0]
+        #                 node_tuple[i] = 1
+        #                 node_tuple[j] = 1
+        #                 node_mapping.append(node_tuple)
 
         self.node_mapping = np.array(node_mapping)
         self.nodes = np.array(nodes)
@@ -3625,200 +3712,287 @@ class TriangleFiniteElement:
 
         # Check we have the same number of basis functions as nodes.
         assert self.nodes.shape[0] == self.Q
-
+        
+        
     def get_basis_functions(self, rho_theta):
         """
         Gets the barycentric basis functions.
 
-        Return the triangle basis functions, evaluated at the 2D rho
-        and theta mesh points provided to the function.
+        Return the tetrahedron basis functions, evaluated at the 2D rho and theta
+        mesh points provided to the function.
+
 
         Parameters
         ----------
-        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
-            Coordinates of the original grid, lying inside this triangle.
+        rho_theta = 2D ndarray, shape(nrho * ntheta, 2)
+            Coordinates of the origininal grid, lying inside this triangle.
 
         Returns
         -------
-        psi_q : (rho_theta, Q)
+         psi_q = (rho_theta, Q)
 
-        """
+         """
         eta, rho_theta_in_triangle = self.get_barycentric_coordinates(rho_theta)
         rho_theta = rho_theta_in_triangle
+  
+        # Now, we have the rho_theta points that lie in the triangle.
+        # Recall that eta_nodes is the set of barycentric coordinates for the points
+        # lying in the specific triangle.
+        basis_functions = np.zeros((rho_theta.shape[0], self.Q))
+        # At each of the rho_theta points that lie in the given triangle,
+        # we wish to evaluate the Q = (K+1)(K+2)/2 basis functions.
         K = self.K
 
-        # Compute the vertex basis functions first
-        basis_functions = np.zeros((rho_theta.shape[0], self.Q))
-        for i in range(3):
-            inds_x0 = np.ravel(
-                np.where(
-                    np.logical_not(
-                        np.isclose(self.eta_nodes[:, 0], self.eta_nodes[i, 0])
-                    )
-                )
-            )
-            inds_y0 = np.ravel(
-                np.where(
-                    np.logical_not(
-                        np.isclose(self.eta_nodes[:, 1], self.eta_nodes[i, 1])
-                    )
-                )
-            )
-            inds_z0 = np.ravel(
-                np.where(
-                    np.logical_not(
-                        np.isclose(self.eta_nodes[:, 2], self.eta_nodes[i, 2])
-                    )
-                )
-            )
+        # Compute the vertex basis functions first. This will be the first 3 columns
+        # of basis_functions. There are hard-coded from book.
+        # print(basis_functions.shape, self.eta_nodes.shape)
 
-            # take appropriate intersections of the indices depending on
-            # which vertex we have.
-            if len(inds_x0) >= len(inds_y0) and len(inds_x0) >= len(inds_z0):
-                inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
-                inds_y0_prime = np.setdiff1d(inds_y0, inds_x0)
-                inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
-            elif len(inds_y0) >= len(inds_x0) and len(inds_y0) >= len(inds_z0):
-                inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
-                inds_x0_prime = np.setdiff1d(inds_x0, inds_y0)
-                inds_z0_prime = np.setdiff1d(inds_z0, inds_y0)
-            elif len(inds_z0) >= len(inds_y0) and len(inds_z0) >= len(inds_x0):
-                inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
-                inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
-                inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
-            # Subtract off the node i from this list of indices
-            inds_x0 = np.setdiff1d(inds_x0_prime, [0])
-            inds_y0 = np.setdiff1d(inds_y0_prime, [1])
-            inds_z0 = np.setdiff1d(inds_z0_prime, [2])
+        if K == 1:
+            for i in range(rho_theta.shape[0]):
+                for j in range(3):
+                    basis_functions[i, j] = eta[i, j]
+              
+        # Next, we deal with the edge nodes. This will provide an additional 6 columns.
 
-            # Now use these nodes to define the basis function
-            node_indices = [0, 0, 0]
-            node_indices[i] = K
-
-            basis_functions[:, i] = (
-                self.lagrange_polynomial(
-                    eta[:, 0], self.eta_nodes[:, 0], node_indices[0], inds_x0, i
-                )
-                * self.lagrange_polynomial(
-                    eta[:, 1], self.eta_nodes[:, 1], node_indices[1], inds_y0, i
-                )
-                * self.lagrange_polynomial(
-                    eta[:, 2], self.eta_nodes[:, 2], node_indices[2], inds_z0, i
-                )
-            )
-            if K == 1:
-                assert np.allclose(basis_functions[:, i], eta[:, i])
-            elif K == 2:
-                assert np.allclose(
-                    basis_functions[:, i], eta[:, i] * (2 * eta[:, i] - 1)
-                )
-
-        # Now we repeat the basis function calculation for the edge nodes
-        # Note that this probably only works for K = 1 and K = 2
-        # and we have not dealt with interior nodes when K = 3
-        q = 3
-        for node in self.node_mapping[3:, :]:
-            inds_x0 = np.ravel(
-                np.where(
-                    np.logical_not(
-                        np.isclose(self.eta_nodes[:, 0], self.eta_nodes[q, 0])
-                    )
-                )
-            )
-            inds_y0 = np.ravel(
-                np.where(
-                    np.logical_not(
-                        np.isclose(self.eta_nodes[:, 1], self.eta_nodes[q, 1])
-                    )
-                )
-            )
-            inds_z0 = np.ravel(
-                np.where(
-                    np.logical_not(
-                        np.isclose(self.eta_nodes[:, 2], self.eta_nodes[q, 2])
-                    )
-                )
-            )
-
-            # take appropriate intersections of the indices depending on
-            # which vertex we have.
-            if len(inds_x0) <= len(inds_y0) and len(inds_x0) <= len(inds_z0):
-                inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
-                inds_y0_prime = np.setdiff1d(inds_y0, inds_x0)
-                inds_y0_prime = np.setdiff1d(inds_y0_prime, [1])
-                inds_z0_prime = np.setdiff1d(inds_z0_prime, [2])
-                inds_x0_prime = []
-            elif len(inds_y0) <= len(inds_x0) and len(inds_y0) <= len(inds_z0):
-                inds_z0_prime = np.setdiff1d(inds_z0, inds_y0)
-                inds_x0_prime = np.setdiff1d(inds_x0, inds_y0)
-                inds_x0_prime = np.setdiff1d(inds_x0_prime, [0])
-                inds_z0_prime = np.setdiff1d(inds_z0_prime, [2])
-                inds_y0_prime = []
-            elif len(inds_z0) <= len(inds_y0) and len(inds_z0) <= len(inds_x0):
-                inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
-                inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
-                inds_x0_prime = np.setdiff1d(inds_x0_prime, [0])
-                inds_y0_prime = np.setdiff1d(inds_y0_prime, [1])
-                inds_z0_prime = []
-            inds_x0 = inds_x0_prime
-            inds_y0 = inds_y0_prime
-            inds_z0 = inds_z0_prime
-
-            # Now use these nodes to define the basis function
-            basis_functions[:, q] = (
-                self.lagrange_polynomial(
-                    eta[:, 0], self.eta_nodes[:, 0], node[0], inds_x0, q
-                )
-                * self.lagrange_polynomial(
-                    eta[:, 1], self.eta_nodes[:, 1], node[1], inds_y0, q
-                )
-                * self.lagrange_polynomial(
-                    eta[:, 2], self.eta_nodes[:, 2], node[2], inds_z0, q
-                )
-            )
-            q += 1
         if K == 2:
-            assert np.allclose(basis_functions[:, 3], 4 * eta[:, 0] * eta[:, 1])
-            assert np.allclose(basis_functions[:, 4], 4 * eta[:, 2] * eta[:, 0])
-            assert np.allclose(basis_functions[:, 5], 4 * eta[:, 1] * eta[:, 2])
+            
+            #Vertices
+            for i in range(rho_theta.shape[0]):
+                for j in range(3):
+                    basis_functions[i, j] = eta[i, j] * (2 * eta[i, j] - 1)
+
+            for i in range(rho_theta.shape[0]):
+                basis_functions[i, 3] = 4 * eta[i, 1] * eta[i, 0]
+                basis_functions[i, 4] = 4 * eta[i, 1] * eta[i, 2]
+                basis_functions[i, 5] = 4 * eta[i, 0] * eta[i, 2]
+
+        if K == 3:
+            for i in range(rho_theta.shape[0]):
+                for j in range(3):
+                    basis_functions[i, j] = (
+                        (1 / 2) * eta[i, j] * (3 * eta[i, j] - 1) * (3 * eta[i, j] - 2)
+                    )
+            for i in range(rho_theta.shape[0]):
+                # Edge nodes
+                
+                basis_functions[i, 3] = (
+                    (9 / 2) * eta[i, 0] * eta[i, 1] * (3 * eta[i, 0] - 1)
+                )
+                basis_functions[i, 4] = (
+                    (9 / 2) * eta[i, 0] * eta[i, 1] * (3 * eta[i, 1] - 1)
+                )
+                basis_functions[i, 5] = (
+                    (9 / 2) * eta[i, 2] * eta[i, 1] * (3 * eta[i, 1] - 1)
+                )
+                basis_functions[i, 6] = (
+                    (9 / 2) * eta[i, 2] * eta[i, 1] * (3 * eta[i, 2] - 1)
+                )
+                basis_functions[i, 7] = (
+                    (9 / 2) * eta[i, 0] * eta[i, 2] * (3 * eta[i, 0] - 1)
+                )
+                basis_functions[i, 8] = (
+                    (9 / 2) * eta[i, 0] * eta[i, 2] * (3 * eta[i, 2] - 1)
+                )
+               
+               
+                # Mid-face node
+                basis_functions[i, 9] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 2]
+
         return basis_functions, rho_theta_in_triangle
 
-    def lagrange_polynomial(self, eta_i, eta_nodes_i, order, inds_minus_q, q):
-        """
-        Computes lagrange polynomials.
+    # def get_basis_functions(self, rho_theta):
+    #     """
+    #     Gets the barycentric basis functions.
 
-        Computes the lagrange polynomial given the ith component of the
-        Barycentric coordinates on a (theta, zeta) mesh, the ith component
-        of the triangle nodes defined for the basis functions, the order
-        of the polynomial, and the index q of which node this is.
+    #     Return the triangle basis functions, evaluated at the 2D rho
+    #     and theta mesh points provided to the function.
 
-        Parameters
-        ----------
-        eta_i : 1D ndarray, shape(ntheta * nzeta)
-            The barycentric coordinate i defined at (theta, zeta) points.
-        eta_nodes_i : 1D ndarray, shape(Q)
-            The barycentric coordinate i defined at the triangle nodes.
-        order : integer
-            Order of the polynomial.
-        q : integer
-            The index of the node we are using to define the basis function.
-            Options are 0, ..., Q - 1
+    #     Parameters
+    #     ----------
+    #     rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
+    #         Coordinates of the original grid, lying inside this triangle.
 
-        Returns
-        -------
-        lp : 1D ndarray, shape(ntheta * nzeta)
-            The lagrange polynomial associated with the barycentric
-            coordinate i, the polynomial order (order), and the node q.
+    #     Returns
+    #     -------
+    #     psi_q : (rho_theta, Q)
 
-        """
-        denom = 1.0
-        numerator = np.ones(len(eta_i))
-        # Avoid choosing the node q associated with this basis function
-        for i in inds_minus_q:
-            numerator *= eta_i - eta_nodes_i[i]
-            denom *= eta_nodes_i[q] - eta_nodes_i[i]
-        lp = numerator / denom
-        return lp
+    #     """
+    #     eta, rho_theta_in_triangle = self.get_barycentric_coordinates(rho_theta)
+    #     rho_theta = rho_theta_in_triangle
+    #     K = self.K
+
+    #     # Compute the vertex basis functions first
+    #     basis_functions = np.zeros((rho_theta.shape[0], self.Q))
+    #     for i in range(3):
+    #         inds_x0 = np.ravel(
+    #             np.where(
+    #                 np.logical_not(
+    #                     np.isclose(self.eta_nodes[:, 0], self.eta_nodes[i, 0])
+    #                 )
+    #             )
+    #         )
+    #         inds_y0 = np.ravel(
+    #             np.where(
+    #                 np.logical_not(
+    #                     np.isclose(self.eta_nodes[:, 1], self.eta_nodes[i, 1])
+    #                 )
+    #             )
+    #         )
+    #         inds_z0 = np.ravel(
+    #             np.where(
+    #                 np.logical_not(
+    #                     np.isclose(self.eta_nodes[:, 2], self.eta_nodes[i, 2])
+    #                 )
+    #             )
+    #         )
+
+    #         # take appropriate intersections of the indices depending on
+    #         # which vertex we have.
+    #         if len(inds_x0) >= len(inds_y0) and len(inds_x0) >= len(inds_z0):
+    #             inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
+    #             inds_y0_prime = np.setdiff1d(inds_y0, inds_x0)
+    #             inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
+    #         elif len(inds_y0) >= len(inds_x0) and len(inds_y0) >= len(inds_z0):
+    #             inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
+    #             inds_x0_prime = np.setdiff1d(inds_x0, inds_y0)
+    #             inds_z0_prime = np.setdiff1d(inds_z0, inds_y0)
+    #         elif len(inds_z0) >= len(inds_y0) and len(inds_z0) >= len(inds_x0):
+    #             inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
+    #             inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
+    #             inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
+    #         # Subtract off the node i from this list of indices
+    #         inds_x0 = np.setdiff1d(inds_x0_prime, [0])
+    #         inds_y0 = np.setdiff1d(inds_y0_prime, [1])
+    #         inds_z0 = np.setdiff1d(inds_z0_prime, [2])
+
+    #         # Now use these nodes to define the basis function
+    #         node_indices = [0, 0, 0]
+    #         node_indices[i] = K
+
+    #         basis_functions[:, i] = (
+    #             self.lagrange_polynomial(
+    #                 eta[:, 0], self.eta_nodes[:, 0], node_indices[0], inds_x0, i
+    #             )
+    #             * self.lagrange_polynomial(
+    #                 eta[:, 1], self.eta_nodes[:, 1], node_indices[1], inds_y0, i
+    #             )
+    #             * self.lagrange_polynomial(
+    #                 eta[:, 2], self.eta_nodes[:, 2], node_indices[2], inds_z0, i
+    #             )
+    #         )
+    #         if K == 1:
+    #             assert np.allclose(basis_functions[:, i], eta[:, i])
+    #         elif K == 2:
+    #             assert np.allclose(
+    #                 basis_functions[:, i], eta[:, i] * (2 * eta[:, i] - 1)
+    #             )
+
+    #     # Now we repeat the basis function calculation for the edge nodes
+    #     # Note that this probably only works for K = 1 and K = 2
+    #     # and we have not dealt with interior nodes when K = 3
+    #     q = 3
+    #     for node in self.node_mapping[3:, :]:
+    #         inds_x0 = np.ravel(
+    #             np.where(
+    #                 np.logical_not(
+    #                     np.isclose(self.eta_nodes[:, 0], self.eta_nodes[q, 0])
+    #                 )
+    #             )
+    #         )
+    #         inds_y0 = np.ravel(
+    #             np.where(
+    #                 np.logical_not(
+    #                     np.isclose(self.eta_nodes[:, 1], self.eta_nodes[q, 1])
+    #                 )
+    #             )
+    #         )
+    #         inds_z0 = np.ravel(
+    #             np.where(
+    #                 np.logical_not(
+    #                     np.isclose(self.eta_nodes[:, 2], self.eta_nodes[q, 2])
+    #                 )
+    #             )
+    #         )
+
+    #         # take appropriate intersections of the indices depending on
+    #         # which vertex we have.
+    #         if len(inds_x0) <= len(inds_y0) and len(inds_x0) <= len(inds_z0):
+    #             inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
+    #             inds_y0_prime = np.setdiff1d(inds_y0, inds_x0)
+    #             inds_y0_prime = np.setdiff1d(inds_y0_prime, [1])
+    #             inds_z0_prime = np.setdiff1d(inds_z0_prime, [2])
+    #             inds_x0_prime = []
+    #         elif len(inds_y0) <= len(inds_x0) and len(inds_y0) <= len(inds_z0):
+    #             inds_z0_prime = np.setdiff1d(inds_z0, inds_y0)
+    #             inds_x0_prime = np.setdiff1d(inds_x0, inds_y0)
+    #             inds_x0_prime = np.setdiff1d(inds_x0_prime, [0])
+    #             inds_z0_prime = np.setdiff1d(inds_z0_prime, [2])
+    #             inds_y0_prime = []
+    #         elif len(inds_z0) <= len(inds_y0) and len(inds_z0) <= len(inds_x0):
+    #             inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
+    #             inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
+    #             inds_x0_prime = np.setdiff1d(inds_x0_prime, [0])
+    #             inds_y0_prime = np.setdiff1d(inds_y0_prime, [1])
+    #             inds_z0_prime = []
+    #         inds_x0 = inds_x0_prime
+    #         inds_y0 = inds_y0_prime
+    #         inds_z0 = inds_z0_prime
+
+    #         # Now use these nodes to define the basis function
+    #         basis_functions[:, q] = (
+    #             self.lagrange_polynomial(
+    #                 eta[:, 0], self.eta_nodes[:, 0], node[0], inds_x0, q
+    #             )
+    #             * self.lagrange_polynomial(
+    #                 eta[:, 1], self.eta_nodes[:, 1], node[1], inds_y0, q
+    #             )
+    #             * self.lagrange_polynomial(
+    #                 eta[:, 2], self.eta_nodes[:, 2], node[2], inds_z0, q
+    #             )
+    #         )
+    #         q += 1
+    #     if K == 2:
+    #         assert np.allclose(basis_functions[:, 3], 4 * eta[:, 0] * eta[:, 1])
+    #         assert np.allclose(basis_functions[:, 4], 4 * eta[:, 2] * eta[:, 0])
+    #         assert np.allclose(basis_functions[:, 5], 4 * eta[:, 1] * eta[:, 2])
+    #     return basis_functions, rho_theta_in_triangle
+
+    # def lagrange_polynomial(self, eta_i, eta_nodes_i, order, inds_minus_q, q):
+    #     """
+    #     Computes lagrange polynomials.
+
+    #     Computes the lagrange polynomial given the ith component of the
+    #     Barycentric coordinates on a (theta, zeta) mesh, the ith component
+    #     of the triangle nodes defined for the basis functions, the order
+    #     of the polynomial, and the index q of which node this is.
+
+    #     Parameters
+    #     ----------
+    #     eta_i : 1D ndarray, shape(ntheta * nzeta)
+    #         The barycentric coordinate i defined at (theta, zeta) points.
+    #     eta_nodes_i : 1D ndarray, shape(Q)
+    #         The barycentric coordinate i defined at the triangle nodes.
+    #     order : integer
+    #         Order of the polynomial.
+    #     q : integer
+    #         The index of the node we are using to define the basis function.
+    #         Options are 0, ..., Q - 1
+
+    #     Returns
+    #     -------
+    #     lp : 1D ndarray, shape(ntheta * nzeta)
+    #         The lagrange polynomial associated with the barycentric
+    #         coordinate i, the polynomial order (order), and the node q.
+
+    #     """
+    #     denom = 1.0
+    #     numerator = np.ones(len(eta_i))
+    #     # Avoid choosing the node q associated with this basis function
+    #     for i in inds_minus_q:
+    #         numerator *= eta_i - eta_nodes_i[i]
+    #         denom *= eta_nodes_i[q] - eta_nodes_i[i]
+    #     lp = numerator / denom
+    #     return lp
 
     def get_barycentric_coordinates(self, rho_theta):
         """

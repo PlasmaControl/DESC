@@ -67,7 +67,7 @@ def _get_pitch(grid, data, num, for_adaptive=False):
     min_B = grid.compress(data["min_tz |B|"])
     max_B = grid.compress(data["max_tz |B|"])
     if for_adaptive:
-        pitch = jnp.expand_dims(1 / jnp.stack([max_B, min_B], axis=-1), axis=1)
+        pitch = jnp.reciprocal(jnp.stack([max_B, min_B], axis=-1))[:, jnp.newaxis]
         assert pitch.shape == (grid.num_rho, 1, 2)
     else:
         pitch = get_pitch(min_B, max_B, num)
@@ -108,7 +108,7 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     L_ra = simpson(
-        jnp.reshape(1 / data["B^zeta"], shape),
+        jnp.reciprocal(data["B^zeta"]).reshape(shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
@@ -135,7 +135,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     G_ra = simpson(
-        jnp.reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), shape),
+        jnp.reciprocal(data["B^zeta"] * data["sqrt(g)"]).reshape(shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )

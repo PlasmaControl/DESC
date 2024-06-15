@@ -8,7 +8,8 @@ import pytest
 from scipy.signal import convolve2d
 
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
-from desc.compute import data_index, rpz2xyz_vec
+from desc.compute import data_index, get_data_deps, rpz2xyz_vec
+from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import (
@@ -1688,3 +1689,14 @@ def test_surface_equilibrium_geometry():
                 rtol=3e-13,
                 atol=1e-13,
             )
+
+
+@pytest.mark.unit
+def test_parallel_gradient():
+    """Test different ways of computing this partial derivative agree."""
+    eq = get("W7-X")
+    assert {"B_r", "iota_r"}.isdisjoint(get_data_deps("|B|_z|r,a", eq))
+    data = eq.compute(["|B|_z|r,a", "grad(|B|)", "b"])
+    #  df = ∇f . dR
+    #  ∂f/∂ζ (constant ρ and α) = ∇f . ∂R/∂ζ (constant ρ and α)
+    np.testing.assert_allclose(data["|B|_z|r,a"], dot(data["grad(|B|)"], data["b"]))

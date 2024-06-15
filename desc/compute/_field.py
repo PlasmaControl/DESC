@@ -2328,7 +2328,7 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
 )
 def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
     # constant ρ and ζ
-    data["|B|_alpha"] = safediv(data["|B|_t"], data["alpha_t"])
+    data["|B|_alpha"] = data["|B|_t"] / data["alpha_t"]
     return data
 
 

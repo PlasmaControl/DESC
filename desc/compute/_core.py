@@ -1518,7 +1518,7 @@ def _alpha_r(params, transforms, profiles, data, **kwargs):
     data=["theta_PEST_t", "phi_t", "iota"],
 )
 def _alpha_t(params, transforms, profiles, data, **kwargs):
-    data["alpha_t"] = data["theta_PEST_t"] + data["iota"] * data["phi_t"]
+    data["alpha_t"] = data["theta_PEST_t"] - data["iota"] * data["phi_t"]
     return data
 
 

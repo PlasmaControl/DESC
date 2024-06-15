@@ -354,7 +354,7 @@ def plot_field_line(
     add(ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$"))
 
     if pitch is not None:
-        b = 1 / jnp.atleast_1d(pitch)
+        b = jnp.reciprocal(pitch)
         for val in b:
             add(
                 ax.axhline(
@@ -527,7 +527,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False, **kwargs
     P, S, N, degree = pitch.shape[0], B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
     intersect = _poly_root(
         c=B_c,
-        k=1 / pitch[..., jnp.newaxis],
+        k=jnp.reciprocal(pitch)[..., jnp.newaxis],
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
         sort=True,
@@ -624,7 +624,7 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
-    pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
+    pitch = composite_linspace(jnp.reciprocal(jnp.stack([max_B, min_B])), num)
     assert pitch.shape == (num + 2, *pitch.shape[1:])
     return pitch
 
@@ -949,6 +949,7 @@ def _interpolate_and_integrate(
     shape = Z.shape
     Z = Z.reshape(Z.shape[0], Z.shape[1], -1)
     f = [_interp1d_vec(Z, knots, f_i, method=method).reshape(shape) for f_i in f]
+    # TODO: Pass in derivative; add (∂e^ζ/∂_ζ) at constant ρ, α; use method_B.
     b_sup_z = _interp1d_vec(Z, knots, B_sup_z / B, method=method).reshape(shape)
     B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method=method_B).reshape(shape)
     pitch = jnp.expand_dims(pitch, axis=(2, 3) if len(shape) == 4 else 2)

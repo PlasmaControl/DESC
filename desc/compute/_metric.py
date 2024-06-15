@@ -1797,7 +1797,7 @@ def _gradrho_norm_fsa(params, transforms, profiles, data, **kwargs):
     data["<|grad(rho)|>"] = surface_averages(
         transforms["grid"],
         data["|grad(rho)|"],
-        transforms["grid"].replace_at_axis(
+        sqrt_g=transforms["grid"].replace_at_axis(
             data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
         ),
     )

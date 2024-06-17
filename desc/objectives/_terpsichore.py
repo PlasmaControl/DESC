@@ -69,7 +69,6 @@ def terpsichore(
         nev=nev,
         al0=al0,
     )
-    exit()
     _run_terps(
         dir=pid_path,
         exec=exec_path,
@@ -93,7 +92,7 @@ def _write_wout(eq, path, surfs):
     VMECIO.save(eq=eq, path=path, surfs=surfs, verbose=0)
 
 
-def _write_terps_input(
+def _write_terps_input(  # noqa: C901
     path,
     mode_family,
     surfs,
@@ -223,8 +222,6 @@ def _write_terps_input(
 
     for n in range(-8, 11):
 
-        # If mode_family < 0, includes all modes in desired range
-        
         in_family = False
         if n % 2 == mode_family:  # FIXME: must be modified for nfp != 2,3
             in_family = True
@@ -239,7 +236,7 @@ def _write_terps_input(
                 mode_str = "      0"
 
         for m in range(1, 55 + 1):
-            if (m <= M_max):
+            if m <= M_max:
                 if (mode_family < 0) or (in_family):
                     if (n <= N_max) and (n >= N_min):
                         mode_str += " 1"
@@ -367,6 +364,7 @@ class TERPSICHORE(_ExternalObjective):
         Name of the objective function.
 
     # TODO: update Parameters docs
+    # If mode_family < 0, includes all modes in desired range
 
     """
 
@@ -386,10 +384,10 @@ class TERPSICHORE(_ExternalObjective):
         vectorized=True,
         path="",
         exec="",
-        mode_family=0,
+        mode_family=-1,
         surfs=16,
-        lssl=1,
-        lssd=1,
+        lssl=200,
+        lssd=100,
         M_max=2,
         N_min=-2,
         N_max=2,

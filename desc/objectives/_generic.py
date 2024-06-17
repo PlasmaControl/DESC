@@ -125,6 +125,14 @@ class _ExternalObjective(_Objective, ABC):
         self._scalar = self._dim_f == 1
         self._constants = {"quad_weights": 1.0}
 
+        if self._vectorized:
+            max_processes = (
+                self._vectorized
+                if isinstance(self._vectorized, int)
+                else os.cpu_count()
+            )
+            self._pool = mp.Pool(processes=max_processes)
+
         def fun_wrapped(params):
             """Wrap external function with possibly vectorized params."""
             # number of equilibria for vectorized computations

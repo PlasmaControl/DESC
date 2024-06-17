@@ -785,6 +785,28 @@ class Equilibrium(IOAble, Optimizable):
         axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
         return axis
 
+    @staticmethod
+    def is_0d(name):
+        """Is name constant throughout the plasma volume?."""
+        # Should compute on a grid that samples entire plasma volume.
+        # In particular, a QuadratureGrid for accurate radial integration.
+        p = "desc.equilibrium.equilibrium.Equilibrium"
+        return data_index[p][name]["coordinates"] == ""
+
+    @staticmethod
+    def is_1dr(name):
+        """Is name constant over flux surfaces?."""
+        # Should compute on a grid that samples entire radial surfaces.
+        p = "desc.equilibrium.equilibrium.Equilibrium"
+        return data_index[p][name]["coordinates"] == "r"
+
+    @staticmethod
+    def is_1dz(name):
+        """Is name constant over toroidal surfaces?."""
+        # Should compute on a grid that samples entire toroidal surfaces.
+        p = "desc.equilibrium.equilibrium.Equilibrium"
+        return data_index[p][name]["coordinates"] == "z"
+
     def compute(  # noqa: C901
         self,
         names,
@@ -888,20 +910,7 @@ class Equilibrium(IOAble, Optimizable):
 
         need_src_deps = _grow_seeds(set(filter(need_src, deps)), deps)
 
-        def is_0d(name):
-            # Should compute on a grid that samples entire plasma volume.
-            # In particular, a QuadratureGrid for accurate radial integration.
-            return data_index[p][name]["coordinates"] == ""
-
-        def is_1dr(name):
-            # Should compute on a grid that samples entire radial surfaces.
-            return data_index[p][name]["coordinates"] == "r"
-
-        def is_1dz(name):
-            # Should compute on a grid that samples entire toroidal surfaces.
-            return data_index[p][name]["coordinates"] == "z"
-
-        dep0d = {dep for dep in deps if is_0d(dep) and dep not in need_src_deps}
+        dep0d = {dep for dep in deps if self.is_0d(dep) and dep not in need_src_deps}
         # Unless user asks, don't try to recompute stuff which are only dependencies
         # of dep0d. Example, need R0. R0 <- A <- A(z) computable on dep0d grid.
         # But A(z) in dep1dz and attempt to recompute on dep1dz grid will error
@@ -913,12 +922,12 @@ class Equilibrium(IOAble, Optimizable):
         dep1dr = {
             dep
             for dep in deps
-            if is_1dr(dep) and not just_dep0d_dep(dep) and dep not in need_src_deps
+            if self.is_1dr(dep) and not just_dep0d_dep(dep) and dep not in need_src_deps
         }
         dep1dz = {
             dep
             for dep in deps
-            if is_1dz(dep) and not just_dep0d_dep(dep) and dep not in need_src_deps
+            if self.is_1dz(dep) and not just_dep0d_dep(dep) and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
@@ -970,7 +979,7 @@ class Equilibrium(IOAble, Optimizable):
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-            data0d_seed = {key: data[key] for key in data if is_0d(key)}
+            data0d_seed = {key: data[key] for key in data if self.is_0d(key)}
             data0d = compute_fun(
                 self,
                 list(dep0d),
@@ -989,7 +998,7 @@ class Equilibrium(IOAble, Optimizable):
             data.update(data0d)
 
         if (calc1dr or calc1dz) and override_grid:
-            data0d_seed = {key: data[key] for key in data if is_0d(key)}
+            data0d_seed = {key: data[key] for key in data if self.is_0d(key)}
         else:
             data0d_seed = {}
         if calc1dr and override_grid:
@@ -1003,7 +1012,7 @@ class Equilibrium(IOAble, Optimizable):
             data1dr_seed = {
                 key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
                 for key in data
-                if is_1dr(key)
+                if self.is_1dr(key)
             }
             data1dr = compute_fun(
                 self,
@@ -1037,7 +1046,7 @@ class Equilibrium(IOAble, Optimizable):
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
                 for key in data
-                if is_1dz(key)
+                if self.is_1dz(key)
             }
             data1dz = compute_fun(
                 self,

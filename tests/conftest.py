@@ -260,12 +260,13 @@ def DummyCoilSet():
 
 
 @pytest.fixture(scope="session")
-def DummyMixedCoilSet(DummyCoilSet):
+def DummyMixedCoilSet():
     """Create and save a dummy mixed coil set for testing."""
     tf_coil = FourierPlanarCoil(current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+    tf_coilset = CoilSet(tf_coilset.coils, NFP=tf_coilset.NFP, sym=True)
+
     vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
-    # TODO make this symmetric
     vf_coilset = CoilSet.linspaced_linear(
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )

@@ -10,15 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp, tree_leaves
-from desc.coils import (
-    CoilSet,
-    FourierPlanarCoil,
-    FourierRZCoil,
-    FourierXYZCoil,
-    MixedCoilSet,
-    SplineXYZCoil,
-)
-from desc.compute.geom_utils import rpz2xyz_vec
+from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -1307,58 +1299,8 @@ def test_second_stage_optimization():
 @pytest.mark.unit
 def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     """Test optimizing for every type of coil and dummy coil sets."""
-    # TODO: replace with DummyCoilSet, DummyMixedCoilSet when bool bug is fixed
-
-    def get_coilset():
-        eq = get("precise_QH")
-        minor_radius = eq.compute("a")["a"]
-
-        # CoilSet with symmetry
-        num_coils = 3  # number of unique coils per half field period
-        grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
-        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-            data_center = eq.axis.compute("x", grid=grid, basis="xyz")
-            data_normal = eq.compute("e^zeta", grid=grid)
-        centers = data_center["x"]
-        normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
-        coils = []
-        for k in range(1, 2 * num_coils + 1, 2):
-            coil = FourierPlanarCoil(
-                current=1e6,
-                center=centers[k, :],
-                normal=normals[k, :],
-                r_n=[0, minor_radius + 0.5, 0],
-            )
-            coils.append(coil)
-        coilset_sym = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
-        coilset_asym = CoilSet.from_symmetry(coilset_sym, NFP=eq.NFP, sym=eq.sym)
-
-        return coilset_sym, coilset_asym
-
-    def get_mixed_coilset():
-        tf_coil = FourierPlanarCoil(
-            current=3, center=[4, 0, 0], normal=[0, 1, 0], r_n=[1]
-        )
-        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=2)
-        tf_coilset = CoilSet(tf_coilset.coils, NFP=tf_coilset.NFP, sym=True)
-
-        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
-        vf_coilset = CoilSet.linspaced_linear(
-            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
-        )
-        xyz_coil = FourierXYZCoil(current=2)
-        R = 2
-        phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
-        knots = np.linspace(0, 2 * np.pi, len(phi))
-        spline_coil = SplineXYZCoil(
-            current=1,
-            X=R * np.cos(phi),
-            Y=R * np.sin(phi),
-            Z=np.zeros_like(phi),
-            knots=knots,
-        )
-        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil, spline_coil))
-        return full_coilset
+    sym_coilset, asym_coilset = DummyCoilSet
+    mixed_coilset = DummyMixedCoilSet
 
     def test(c, maxiter=200, constraints=()):
         obj = ObjectiveFunction(CoilLength(c, target=11))
@@ -1372,24 +1314,19 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
         assert obj.dim_f == len(flattened_coils)
         np.testing.assert_allclose(lengths, 11, atol=1e-3)
 
-    sym_coilset, asym_coilset = get_coilset()
-    mixed_coilset = get_mixed_coilset()
-
     spline_coil = mixed_coilset.coils[-1].copy()
 
     # single coil
     test(FourierPlanarCoil())
     test(FourierRZCoil())
     test(FourierXYZCoil())
-    test(spline_coil)
+    test(spline_coil, constraints=(FixParameters(spline_coil, {"knots": True}),))
 
     # CoilSet
     test(sym_coilset, maxiter=500)
     test(asym_coilset, maxiter=500)
 
     # MixedCoilSet
-    # TODO: why does this take so many iterations?
-    # in particular, vf_coilset takes a long time to converge
     params = [
         {"center": True, "normal": True},
         {"R_n": True, "Z_n": True},

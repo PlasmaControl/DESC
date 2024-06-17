@@ -10,8 +10,8 @@ from desc.backend import (
     tree_map,
     tree_unflatten,
 )
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
 from desc.singularities import compute_B_plasma
@@ -1049,6 +1049,7 @@ class PlasmaCoilsetMinDistance(_Objective):
         if self._eq_fixed:
             plasma_pts = constants["plasma_coords"]
         else:
+            print(eq_params)
             data = compute_fun(
                 self._eq,
                 self._eq_data_keys,

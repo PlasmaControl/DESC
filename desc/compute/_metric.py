@@ -56,6 +56,26 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="sqrt(g)_Clebsch",
+    label="\\sqrt{g}_{\\text{Clebsch}}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of Clebsch field line coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "alpha_t"],
+)
+def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
+    # Same as dot(data["e_rho|a,z"], cross(data["e_alpha"], data["e_zeta|r,a"])), but
+    # more efficient as it avoids computing radial derivative of alpha and hence iota.
+    data["sqrt(g)_Clebsch"] = data["sqrt(g)"] / data["alpha_t"]
+    return data
+
+
+@register_compute_fun(
     name="|e_theta x e_zeta|",
     label="|\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
     units="m^{2}",
@@ -222,6 +242,27 @@ def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
 )
 def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
     data["|e_rho x e_theta|"] = safenorm(cross(data["e_rho"], data["e_theta"]), axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="|e_rho x e_alpha|",
+    label="|\\mathbf{e}_{\\rho} \\times \\mathbf{e}_{\\alpha}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant zeta surface in Clebsch "
+    "field line coordinates",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|e_rho x e_theta|", "alpha_t"],
+)
+def _e_rho_x_e_alpha(params, transforms, profiles, data, **kwargs):
+    # Same as safenorm(cross(data["e_rho|a,z"], data["e_alpha"]), axis=-1), but more
+    # efficient as it avoids computing radial derivative of alpha and hence iota.
+    data["|e_rho x e_alpha|"] = data["|e_rho x e_theta|"] / jnp.abs(data["alpha_t"])
     return data
 
 

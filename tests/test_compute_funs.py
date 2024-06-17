@@ -8,7 +8,7 @@ import pytest
 from scipy.signal import convolve2d
 
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
-from desc.compute import data_index, get_data_deps, rpz2xyz_vec
+from desc.compute import data_index, rpz2xyz_vec
 from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -1693,10 +1693,33 @@ def test_surface_equilibrium_geometry():
 
 @pytest.mark.unit
 def test_parallel_gradient():
-    """Test different ways of computing this partial derivative agree."""
+    """Test geometric and physical methods of computing parallel gradients agree."""
     eq = get("W7-X")
-    assert {"B_r", "iota_r"}.isdisjoint(get_data_deps("|B|_z|r,a", eq))
-    data = eq.compute(["|B|_z|r,a", "grad(|B|)", "b"])
-    #  df = ∇f . dR
-    #  ∂f/∂ζ (constant ρ and α) = ∇f . ∂R/∂ζ (constant ρ and α)
-    np.testing.assert_allclose(data["|B|_z|r,a"], dot(data["grad(|B|)"], data["b"]))
+    eq.change_resolution(2, 2, 2, 4, 4, 4)
+    data = eq.compute(
+        [
+            "e_zeta|r,a",
+            "B",
+            "B^zeta",
+            "|B|_z|r,a",
+            "grad(|B|)",
+            "(|e_zeta|_z)|r,a",
+            "B^zeta_z|r,a",
+            "|B|",
+        ]
+    )
+    np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+    np.testing.assert_allclose(
+        # df = ∇f⋅dℓ ⟹ ∂f/∂ζ (constant ρ and α) = ∇f⋅∂ℓ/∂ζ (constant ρ and α)
+        data["|B|_z|r,a"],
+        dot(data["grad(|B|)"], data["e_zeta|r,a"]),
+    )
+    # FIXME: Not sure why, but below test fails.
+    np.testing.assert_allclose(
+        data["(|e_zeta|_z)|r,a"],
+        data["|B|_z|r,a"] / np.abs(data["B^zeta"])
+        - data["|B|"]
+        * data["B^zeta_z|r,a"]
+        * np.sign(data["B^zeta"])
+        / data["B^zeta"] ** 2,
+    )

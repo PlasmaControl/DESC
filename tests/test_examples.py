@@ -31,7 +31,6 @@ from desc.objectives import (
     CoilLength,
     CoilTorsion,
     CurrentDensity,
-    ExternalObjective,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -56,6 +55,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     VacuumBoundaryError,
     Volume,
+    _ExternalObjective,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
@@ -1319,6 +1319,7 @@ def test_optimize_with_fourier_planar_coil():
 
 
 @pytest.mark.unit
+@pytest.mark.slow
 def test_external_vs_generic_objectives(tmpdir_factory):
     """Test ExternalObjective compared to GenericObjective."""
     target = np.array([6.2e-3, 1.1e-1, 6.5e-3, 0])  # values at p_l = [2e2, -2e2]
@@ -1332,6 +1333,36 @@ def test_external_vs_generic_objectives(tmpdir_factory):
         presf1 = float(file.variables["presf"][-1])
         file.close()
         return np.atleast_1d([betatot, betapol, betator, presf1])
+
+    class TestExternalObjective(_ExternalObjective):
+
+        def __init__(
+            self,
+            eq,
+            target=None,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            loss_function=None,
+            path="",
+            name="external",
+        ):
+            super().__init__(
+                eq=eq,
+                fun=data_from_vmec,
+                dim_f=4,
+                target=target,
+                bounds=bounds,
+                weight=weight,
+                normalize=normalize,
+                normalize_target=normalize_target,
+                loss_function=loss_function,
+                fd_step=1e-4,
+                vectorized=False,
+                name=name,
+                path=path,
+            )
 
     eq0 = get("SOLOVEV")
     optimizer = Optimizer("lsq-exact")
@@ -1369,7 +1400,7 @@ def test_external_vs_generic_objectives(tmpdir_factory):
     dir = tmpdir_factory.mktemp("results")
     path = dir.join("wout_result.nc")
     objective = ObjectiveFunction(
-        ExternalObjective(eq=eq0, fun=data_from_vmec, dim_f=4, target=target, path=path)
+        TestExternalObjective(eq=eq0, target=target, path=path)
     )
     constraints = FixParameters(
         eq0,

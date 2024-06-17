@@ -39,7 +39,6 @@ from desc.objectives import (
     CoilTorsion,
     Elongation,
     Energy,
-    ExternalObjective,
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
@@ -1755,7 +1754,6 @@ class TestComputeScalarResolution:
         # need to avoid blowup near the axis
         MercierStability,
         # don't test these since they depend on what user wants
-        ExternalObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
     ]
@@ -2077,7 +2075,6 @@ class TestObjectiveNaNGrad:
         QuadraticFlux,
         ToroidalFlux,
         # we don't test these since they depend too much on what exactly the user wants
-        ExternalObjective,
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,

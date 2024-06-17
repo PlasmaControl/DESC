@@ -848,7 +848,7 @@ class TestSplineXYZCurve:
     def test_discontinuous_splines(self):
         """Test splines that have break points."""
 
-        def test(method, data_key, include_breaks=True):
+        def test(method, data_key, compare_breaks=True):
             R = 2
             phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
 
@@ -876,7 +876,7 @@ class TestSplineXYZCurve:
             discon_data = discontinuous.compute(data_key)[data_key]
             cont_data = continuous.compute(data_key)[data_key]
 
-            if include_breaks:
+            if compare_breaks:
                 np.testing.assert_allclose(discon_data, cont_data, rtol=1e-3)
             else:
                 np.testing.assert_allclose(
@@ -891,9 +891,9 @@ class TestSplineXYZCurve:
         test("linear", "length")
         test("linear", "curvature")
         # torsion = 0 for breakpoints, but otherwise torsion = NaN, so can't compare
-        test("linear", "torsion", include_breaks=False)
+        test("linear", "torsion", compare_breaks=False)
 
         test("cubic", "length")
-        # don't include discon knots because of interpolator BCs
-        test("cubic", "curvature", include_breaks=False)
+        # don't include break points because of interpolator BCs
+        test("cubic", "curvature", compare_breaks=False)
         test("cubic", "torsion")

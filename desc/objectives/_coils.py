@@ -49,7 +49,7 @@ class _CoilObjective(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, list, optional
         Collocation grid containing the nodes to evaluate at.
-        If a list, must have a length of Objective.dim_f.
+        If a list, must have the same length as coil.
     name : str, optional
         Name of the objective function.
 
@@ -96,13 +96,15 @@ class _CoilObjective(_Objective):
 
         """
         # local import to avoid circular import
-        from desc.coils import MixedCoilSet
+        from desc.coils import CoilSet, MixedCoilSet
+
+        coil = self.things[0]
 
         self._dim_f = 0
         self._quad_weights = jnp.array([])
 
         # get individual coils from coilset
-        coils = tree_leaves(self.things[0], is_leaf=lambda x: hasattr(x, "_current"))
+        coils = tree_leaves(coil, is_leaf=lambda x: hasattr(x, "_current"))
         self._num_coils = len(coils)
 
         # map grid to list with the same length as coils
@@ -112,7 +114,22 @@ class _CoilObjective(_Objective):
             self._grid = [LinearGrid(N=2 * c.N + 5, endpoint=False) for c in coils]
         elif isinstance(self._grid, _Grid):
             self._grid = [self._grid] * self._num_coils
-        assert len(self._grid) == len(coils)
+        assert isinstance(self._grid, list)
+
+        self._dim_f = np.sum(
+            [
+                (
+                    grid.num_nodes * len(coil)
+                    if isinstance(coil, CoilSet)
+                    else grid.num_nodes
+                )
+                for coil, grid in zip(
+                    (coil if isinstance(coil, CoilSet) else [coil]),
+                    self._grid,
+                )
+            ]
+        )
+        quad_weights = np.concatenate([grid.spacing[:, 2] for grid in self._grid])
 
         timer = Timer()
         if verbose > 0:
@@ -124,9 +141,6 @@ class _CoilObjective(_Objective):
             for coil, grid in zip(coils, self._grid)
         ]
 
-        self._dim_f = np.sum([grid.num_nodes for grid in self._grid])
-        self._quad_weights = np.concatenate([grid.spacing[:, 2] for grid in self._grid])
-
         errorif(
             np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]),
             ValueError,
@@ -134,14 +148,13 @@ class _CoilObjective(_Objective):
         )
 
         # CoilSet and _Coil have one grid/transform
-        if not isinstance(self.things[0], MixedCoilSet):
+        if isinstance(coil, MixedCoilSet):
+            assert len(self._grid) == len(coil)
+        else:
             self._grid = self._grid[0]
             transforms = transforms[0]
 
-        self._constants = {
-            "transforms": transforms,
-            "quad_weights": self._quad_weights,
-        }
+        self._constants = {"transforms": transforms, "quad_weights": quad_weights}
 
         timer.stop("Precomputing transforms")
         if verbose > 1:

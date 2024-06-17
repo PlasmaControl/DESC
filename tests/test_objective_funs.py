@@ -760,15 +760,12 @@ class TestObjectiveFunction:
         coils = CoilSet.linspaced_linear(coil, n=2)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
         nested_coils = MixedCoilSet(coils, coils)
+        grids = [LinearGrid(N=5), LinearGrid(N=5)]
 
-        nested_grids = [
-            [LinearGrid(N=5), LinearGrid(N=5)],
-            [LinearGrid(N=5), LinearGrid(N=5)],
-        ]
         test(coil, grid=LinearGrid(N=5))
         test(coils)
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
-        test(nested_coils, grid=nested_grids)
+        test(nested_coils, grid=grids)
 
     @pytest.mark.unit
     def test_coil_current_length(self):
@@ -785,15 +782,12 @@ class TestObjectiveFunction:
         coils = CoilSet.linspaced_linear(coil, n=2)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
         nested_coils = MixedCoilSet(coils, coils)
+        grids = [LinearGrid(N=5), LinearGrid(N=5)]
 
-        nested_grids = [
-            [LinearGrid(N=5), LinearGrid(N=5)],
-            [LinearGrid(N=5), LinearGrid(N=5)],
-        ]
         test(coil, grid=LinearGrid(N=5))
         test(coils)
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
-        test(nested_coils, grid=nested_grids)
+        test(nested_coils, grid=grids)
 
     @pytest.mark.unit
     def test_coil_curvature(self):
@@ -810,16 +804,12 @@ class TestObjectiveFunction:
         coils = CoilSet.linspaced_linear(coil, n=2)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
         nested_coils = MixedCoilSet(coils, coils)
-
-        nested_grids = [
-            [LinearGrid(N=5), LinearGrid(N=5)],
-            [LinearGrid(N=5), LinearGrid(N=5)],
-        ]
+        grids = [LinearGrid(N=5), LinearGrid(N=5)]
 
         test(coil, grid=LinearGrid(N=5))
         test(coils)
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
-        test(nested_coils, grid=nested_grids)
+        test(nested_coils, grid=grids)
 
     @pytest.mark.unit
     def test_coil_torsion(self):
@@ -836,16 +826,12 @@ class TestObjectiveFunction:
         coils = CoilSet.linspaced_linear(coil, n=2)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
         nested_coils = MixedCoilSet(coils, coils)
-
-        nested_grids = [
-            [LinearGrid(N=5), LinearGrid(N=5)],
-            [LinearGrid(N=5), LinearGrid(N=5)],
-        ]
+        grids = [LinearGrid(N=5), LinearGrid(N=5)]
 
         test(coil, grid=LinearGrid(N=5))
         test(coils)
         test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
-        test(nested_coils, grid=nested_grids)
+        test(nested_coils, grid=grids)
 
     @pytest.mark.unit
     def test_quadratic_flux(self):
@@ -2068,9 +2054,9 @@ class TestObjectiveNaNGrad:
         BootstrapRedlConsistency,
         BoundaryError,
         VacuumBoundaryError,
-        CoilLength,
-        CoilCurvature,
         CoilCurrentLength,
+        CoilCurvature,
+        CoilLength,
         CoilTorsion,
         QuadraticFlux,
         ToroidalFlux,

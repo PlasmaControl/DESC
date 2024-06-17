@@ -848,7 +848,7 @@ class TestSplineXYZCurve:
     def test_discontinuous_splines(self):
         """Test splines that have break points."""
 
-        def test(method, data_key):
+        def test(method, data_key, include_breaks=True):
             R = 2
             phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
 
@@ -876,20 +876,24 @@ class TestSplineXYZCurve:
             discon_data = discontinuous.compute(data_key)[data_key]
             cont_data = continuous.compute(data_key)[data_key]
 
+            if include_breaks:
+                np.testing.assert_allclose(discon_data, cont_data, rtol=1e-3)
+            else:
+                np.testing.assert_allclose(
+                    discon_data[~np.array(break_indices)],
+                    cont_data[~np.array(break_indices)],
+                    rtol=1e-3,
+                )
             return discon_data, cont_data
 
         break_indices = [0, 250, 500, 750]
 
-        np.testing.assert_allclose(*test("linear", "length"), rtol=1e-3)
-        np.testing.assert_allclose(*test("linear", "curvature"), rtol=1e-3)
-        np.testing.assert_allclose(*test("linear", "torsion"), rtol=1e-3)
+        test("linear", "length")
+        test("linear", "curvature")
+        # torsion = 0 for breakpoints, but otherwise torsion = NaN, so can't compare
+        test("linear", "torsion", include_breaks=False)
 
-        np.testing.assert_allclose(*test("cubic", "length"), rtol=1e-3)
-        discont_data, cont_data = test("cubic", "curvature")
-        np.testing.assert_allclose(
-            # don't include discon knots because of interpolator BCs
-            discont_data[~np.array(break_indices)],
-            cont_data[~np.array(break_indices)],
-            rtol=1e-3,
-        )
-        np.testing.assert_allclose(*test("cubic", "torsion"))
+        test("cubic", "length")
+        # don't include discon knots because of interpolator BCs
+        test("cubic", "curvature", include_breaks=False)
+        test("cubic", "torsion")

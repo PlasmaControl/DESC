@@ -723,25 +723,28 @@ class Grid(_Grid):
             self._weights = weights
         if sort:
             self._sort_nodes()
+        setable_attr = [
+            "_unique_rho_idx",
+            "_unique_poloidal_idx",
+            "_unique_zeta_idx",
+            "_inverse_rho_idx",
+            "_inverse_poloidal_idx",
+            "_inverse_zeta_idx",
+        ]
         if jitable:
             # Don't do anything with symmetry since that changes # of nodes
             # avoid point at the axis, for now.
             r, t, z = self._nodes.T
             r = jnp.where(r == 0, 1e-12, r)
-            self._nodes = jnp.array([r, t, z]).T
+            self._nodes = jnp.column_stack([r, t, z])
             self._axis = np.array([], dtype=int)
             # allow for user supplied indices/inverse indices for special cases
-            for attr in [
-                "_unique_rho_idx",
-                "_unique_poloidal_idx",
-                "_unique_zeta_idx",
-                "_inverse_rho_idx",
-                "_inverse_poloidal_idx",
-                "_inverse_zeta_idx",
-            ]:
+            for attr in setable_attr:
                 if attr in kwargs:
                     setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
         else:
+            for attr in setable_attr:
+                kwargs.pop(attr, None)
             self._axis = self._find_axis()
             (
                 self._unique_rho_idx,

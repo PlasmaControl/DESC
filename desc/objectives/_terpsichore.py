@@ -5,8 +5,13 @@ import subprocess
 import time
 
 import numpy as np
+from netCDF4 import Dataset, stringtochar
 
+from desc.basis import DoubleFourierSeries
+from desc.grid import LinearGrid
+from desc.transform import Transform
 from desc.utils import errorif
+from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 
 from ._generic import _ExternalObjective
 
@@ -79,17 +84,282 @@ def terpsichore(
     )
     growth_rate = _read_terps_output(path=fort16_path)
 
+    # TODO: default value for when growth rate is not found (al0?)
+
     # remove temporary directory
     shutil.rmtree(pid_path)
 
     return np.atleast_1d(growth_rate)
 
 
-def _write_wout(eq, path, surfs):
+def _write_wout(eq, path, surfs):  # noqa: C901
     """Write the wout NetCDF file from the equilibrium."""
-    from desc.vmec import VMECIO
+    # this is a lightweight version of VMECIO.save
+    file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
-    VMECIO.save(eq=eq, path=path, surfs=surfs, verbose=0)
+    Psi = eq.Psi
+    NFP = eq.NFP
+    M = eq.M
+    N = eq.N
+    M_nyq = M + 4
+    N_nyq = N + 2 if N > 0 else 0
+
+    # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
+    s_full = np.linspace(0, 1, surfs)
+    s_half = s_full[0:-1] + 0.5 / (surfs - 1)
+    r_full = np.sqrt(s_full)
+    r_half = np.sqrt(s_half)
+
+    # dimensions
+    file.createDimension("radius", surfs)  # number of flux surfaces
+    file.createDimension("mn_mode", (2 * N + 1) * M + N + 1)  # number of Fourier modes
+    file.createDimension(
+        "mn_mode_nyq", (2 * N_nyq + 1) * M_nyq + N_nyq + 1
+    )  # number of Nyquist Fourier modes
+    file.createDimension("n_tor", N + 1)  # number of toroidal Fourier modes
+    file.createDimension("preset", 21)  # dimension of profile inputs
+    file.createDimension("ndfmax", 101)  # used for am_aux & ai_aux
+    file.createDimension("time", 100)  # used for fsq* & wdot
+    file.createDimension("dim_00001", 1)
+    file.createDimension("dim_00020", 20)
+    file.createDimension("dim_00100", 100)
+    file.createDimension("dim_00200", 200)
+
+    grid_lcfs = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1.0]), NFP=NFP)
+    grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
+    data_half = eq.compute(
+        [
+            "B_rho",
+            "B_theta",
+            "B_zeta",
+            "G",
+            "I",
+            "J",
+            "iota",
+            "p",
+            "sqrt(g)",
+            "V_r(r)",
+            "|B|",
+            "<|B|^2>",
+        ],
+        grid=grid_half,
+    )
+
+    mgrid_file = file.createVariable("mgrid_file", "S1", ("dim_00200",))
+    mgrid_file[:] = stringtochar(
+        np.array(["none" + " " * 196], "S" + str(file.dimensions["dim_00200"].size))
+    )
+
+    lasym = file.createVariable("lasym__logical__", np.int32)
+    lasym.long_name = "asymmetry logical (0 = stellarator symmetry)"
+    lasym[:] = int(not eq.sym)
+
+    nfp = file.createVariable("nfp", np.int32)
+    nfp.long_name = "number of field periods"
+    nfp[:] = NFP
+
+    ns = file.createVariable("ns", np.int32)
+    ns.long_name = "number of flux surfaces"
+    ns[:] = surfs
+
+    mpol = file.createVariable("mpol", np.int32)
+    mpol.long_name = "number of poloidal Fourier modes"
+    mpol[:] = M + 1
+
+    ntor = file.createVariable("ntor", np.int32)
+    ntor.long_name = "number of positive toroidal Fourier modes"
+    ntor[:] = N
+
+    mnmax = file.createVariable("mnmax", np.int32)
+    mnmax.long_name = "total number of Fourier modes"
+    mnmax[:] = file.dimensions["mn_mode"].size
+
+    xm = file.createVariable("xm", np.float64, ("mn_mode",))
+    xm.long_name = "poloidal mode numbers"
+    xm[:] = np.tile(np.linspace(0, M, M + 1), (2 * N + 1, 1)).T.flatten()[
+        -file.dimensions["mn_mode"].size :
+    ]
+
+    xn = file.createVariable("xn", np.float64, ("mn_mode",))
+    xn.long_name = "toroidal mode numbers"
+    xn[:] = np.tile(np.linspace(-N, N, 2 * N + 1) * NFP, M + 1)[
+        -file.dimensions["mn_mode"].size :
+    ]
+
+    mnmax_nyq = file.createVariable("mnmax_nyq", np.int32)
+    mnmax_nyq.long_name = "total number of Nyquist Fourier modes"
+    mnmax_nyq[:] = file.dimensions["mn_mode_nyq"].size
+
+    xm_nyq = file.createVariable("xm_nyq", np.float64, ("mn_mode_nyq",))
+    xm_nyq.long_name = "poloidal Nyquist mode numbers"
+    xm_nyq[:] = np.tile(
+        np.linspace(0, M_nyq, M_nyq + 1), (2 * N_nyq + 1, 1)
+    ).T.flatten()[-file.dimensions["mn_mode_nyq"].size :]
+
+    xn_nyq = file.createVariable("xn_nyq", np.float64, ("mn_mode_nyq",))
+    xn_nyq.long_name = "toroidal Nyquist mode numbers"
+    xn_nyq[:] = np.tile(np.linspace(-N_nyq, N_nyq, 2 * N_nyq + 1) * NFP, M_nyq + 1)[
+        -file.dimensions["mn_mode_nyq"].size :
+    ]
+
+    gamma = file.createVariable("gamma", np.float64)
+    gamma.long_name = "compressibility index (0 = pressure prescribed)"
+    gamma[:] = 0
+
+    # half mesh quantities
+
+    pres = file.createVariable("pres", np.float64, ("radius",))
+    pres.long_name = "pressure on half mesh"
+    pres.units = "Pa"
+    pres[0] = 0
+    pres[1:] = grid_half.compress(data_half["p"])
+
+    mass = file.createVariable("mass", np.float64, ("radius",))
+    mass.long_name = "mass on half mesh"
+    mass.units = "Pa"
+    mass[:] = pres[:]
+
+    iotas = file.createVariable("iotas", np.float64, ("radius",))
+    iotas.long_name = "rotational transform on half mesh"
+    iotas.units = "None"
+    iotas[0] = 0
+    iotas[1:] = -grid_half.compress(data_half["iota"])  # - for negative Jacobian
+
+    phips = file.createVariable("phips", np.float64, ("radius",))
+    phips.long_name = "d(phi)/ds * -1/2pi: toroidal flux derivative, on half mesh"
+    phips[0] = 0
+    phips[1:] = -Psi * np.ones((surfs - 1,)) / (2 * np.pi)
+
+    vp = file.createVariable("vp", np.float64, ("radius",))
+    vp.long_name = "dV/ds normalized by 4*pi^2, on half mesh"
+    vp.units = "m^3"
+    vp[1:] = grid_half.compress(data_half["V_r(r)"]) / (
+        8 * np.pi**2 * grid_half.compress(data_half["rho"])
+    )
+    vp[0] = 0
+
+    # R
+    rmnc = file.createVariable("rmnc", np.float64, ("radius", "mn_mode"))
+    rmnc.long_name = "cos(m*t-n*p) component of cylindrical R, on full mesh"
+    rmnc.units = "m"
+    if not eq.sym:
+        rmns = file.createVariable("rmns", np.float64, ("radius", "mn_mode"))
+        rmns.long_name = "sin(m*t-n*p) component of cylindrical R, on full mesh"
+        rmns.units = "m"
+    r1 = np.ones_like(eq.R_lmn)
+    r1[eq.R_basis.modes[:, 1] < 0] *= -1
+    m, n, x_mn = zernike_to_fourier(r1 * eq.R_lmn, basis=eq.R_basis, rho=r_full)
+    xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+    rmnc[:] = c
+    if not eq.sym:
+        rmns[:] = s
+
+    # Z
+    zmns = file.createVariable("zmns", np.float64, ("radius", "mn_mode"))
+    zmns.long_name = "sin(m*t-n*p) component of cylindrical Z, on full mesh"
+    zmns.units = "m"
+    if not eq.sym:
+        zmnc = file.createVariable("zmnc", np.float64, ("radius", "mn_mode"))
+        zmnc.long_name = "cos(m*t-n*p) component of cylindrical Z, on full mesh"
+        zmnc.units = "m"
+    z1 = np.ones_like(eq.Z_lmn)
+    z1[eq.Z_basis.modes[:, 1] < 0] *= -1
+    m, n, x_mn = zernike_to_fourier(z1 * eq.Z_lmn, basis=eq.Z_basis, rho=r_full)
+    xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+    zmns[:] = s
+    if not eq.sym:
+        zmnc[:] = c
+
+    # derived quantities (approximate conversion)
+
+    if eq.sym:
+        cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
+        cos_transform = Transform(
+            grid=grid_lcfs, basis=cos_basis, build=False, build_pinv=True
+        )
+
+        def cosfit(x):
+            y = cos_transform.fit(x)
+            return np.where(cos_transform.basis.modes[:, 1] < 0, -y, y)
+
+    else:
+        full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
+        full_transform = Transform(
+            grid=grid_lcfs, basis=full_basis, build=False, build_pinv=True
+        )
+
+        def fullfit(x):
+            y = full_transform.fit(x)
+            return np.where(full_transform.basis.modes[:, 1] < 0, -y, y)
+
+    # Jacobian
+    gmnc = file.createVariable("gmnc", np.float64, ("radius", "mn_mode_nyq"))
+    gmnc.long_name = "cos(m*t-n*p) component of Jacobian, on half mesh"
+    gmnc.units = "m"
+    m = cos_basis.modes[:, 1]
+    n = cos_basis.modes[:, 2]
+    if not eq.sym:
+        gmns = file.createVariable("gmns", np.float64, ("radius", "mn_mode_nyq"))
+        gmns.long_name = "sin(m*t-n*p) component of Jacobian, on half mesh"
+        gmns.units = "m"
+        m = full_basis.modes[:, 1]
+        n = full_basis.modes[:, 2]
+    # d(rho)/d(s) = 1/(2*rho)
+    data = (
+        (data_half["sqrt(g)"] / (2 * data_half["rho"]))
+        .reshape(
+            (grid_half.num_theta, grid_half.num_rho, grid_half.num_zeta), order="F"
+        )
+        .transpose((1, 0, 2))
+        .reshape((grid_half.num_rho, -1), order="F")
+    )
+    x_mn = np.zeros((surfs - 1, m.size))
+    for i in range(surfs - 1):
+        if eq.sym:
+            x_mn[i, :] = cosfit(data[i, :])
+        else:
+            x_mn[i, :] = fullfit(data[i, :])
+    xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+    gmnc[0, :] = 0
+    gmnc[1:, :] = -c  # negative sign for negative Jacobian
+    if not eq.sym:
+        gmns[0, :] = 0
+        gmns[1:, :] = -s
+
+    # |B|
+    bmnc = file.createVariable("bmnc", np.float64, ("radius", "mn_mode_nyq"))
+    bmnc.long_name = "cos(m*t-n*p) component of |B|, on half mesh"
+    bmnc.units = "T"
+    m = cos_basis.modes[:, 1]
+    n = cos_basis.modes[:, 2]
+    if not eq.sym:
+        bmns = file.createVariable("bmns", np.float64, ("radius", "mn_mode_nyq"))
+        bmns.long_name = "sin(m*t-n*p) component of |B|, on half mesh"
+        bmns.units = "T"
+        m = full_basis.modes[:, 1]
+        n = full_basis.modes[:, 2]
+    data = (
+        data_half["|B|"]
+        .reshape(
+            (grid_half.num_theta, grid_half.num_rho, grid_half.num_zeta), order="F"
+        )
+        .transpose((1, 0, 2))
+        .reshape((grid_half.num_rho, -1), order="F")
+    )
+    x_mn = np.zeros((surfs - 1, m.size))
+    for i in range(surfs - 1):
+        if eq.sym:
+            x_mn[i, :] = cosfit(data[i, :])
+        else:
+            x_mn[i, :] = full_transform.fit(data[i, :])
+    xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+    bmnc[0, :] = 0
+    bmnc[1:, :] = c
+    if not eq.sym:
+        bmns[0, :] = 0
+        bmns[1:, :] = s
+
+    file.close()
 
 
 def _write_terps_input(  # noqa: C901

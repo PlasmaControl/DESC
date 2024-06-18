@@ -9,6 +9,7 @@ from scipy.constants import mu_0
 from desc.backend import fori_loop, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safediv
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
@@ -988,9 +989,23 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     # compute surface current, and store grid quantities
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = field.compute(
-        ["K", "x"], grid=source_grid, basis="xyz", params=params, transforms=transforms
-    )
+    if not params and not transforms:
+        data = field.compute(
+            ["K", "x"],
+            grid=source_grid,
+            basis="xyz",
+            params=params,
+            transforms=transforms,
+        )
+    else:
+        data = compute_fun(
+            field,
+            names=["K", "x"],
+            params=params,
+            transforms=transforms,
+            profiles={},
+            basis="xyz",
+        )
 
     _rs = xyz2rpz(data["x"])
     _K = xyz2rpz_vec(data["K"], phi=source_grid.nodes[:, 2])

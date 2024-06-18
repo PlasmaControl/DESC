@@ -33,7 +33,6 @@ from desc.compute.bounce_integral import (
     take_mask,
     tanh_sinh,
 )
-from desc.compute.utils import safediv
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import rtz_grid
 from desc.examples import get
@@ -426,7 +425,7 @@ def test_bounce_quadrature():
     rtol = 1e-4
 
     def integrand(B, pitch):
-        return 1 / jnp.sqrt(1 - pitch * m * B)
+        return jnp.reciprocal(jnp.sqrt(1 - pitch * m * B))
 
     bp1 = -np.pi / 2 * v
     bp2 = -bp1
@@ -477,14 +476,15 @@ def test_bounce_integral_checks():
 
     def numerator(g_zz, B, pitch):
         f = (1 - pitch * B) * g_zz
-        return safediv(f, jnp.sqrt(1 - pitch * B))
+        return f / jnp.sqrt(1 - pitch * B)
 
     def denominator(B, pitch):
-        return safediv(1, jnp.sqrt(1 - pitch * B))
+        return jnp.reciprocal(jnp.sqrt(1 - pitch * B))
 
+    # Usually it's better to get values with get_pitch instead of get_extrema.
     pitch = 1 / get_extrema(**spline)
     num = bounce_integrate(numerator, data["g_zz"], pitch)
-    # Can reduce memory usage by specifying by not batching.
+    # Can reduce memory usage by not batching.
     den = bounce_integrate(denominator, [], pitch, batch=False)
     avg = num / den
     assert np.isfinite(avg).any()
@@ -493,10 +493,10 @@ def test_bounce_integral_checks():
     avg = np.nansum(avg, axis=-1)
     # Group the data by field line.
     avg = avg.reshape(pitch.shape[0], rho.size, alpha.size)
-    # The bounce averages stored at index i, j
+    # The mean bounce average stored at index i, j
     i, j = 0, 0
     print(avg[:, i, j])
-    # are the bounce averages along the field line with nodes
+    # is the mean bounce average among wells along the field line with nodes
     # given in Clebsch-Type field-line coordinates ρ, α, ζ
     raz_grid = grid.source_grid
     nodes = raz_grid.nodes.reshape(rho.size, alpha.size, -1, 3)
@@ -626,6 +626,7 @@ def test_drift():
     )
     np.testing.assert_allclose(data["psi"], psi)
     np.testing.assert_allclose(data["iota"], iota)
+    assert np.all(np.sign(data["B^zeta"]) > 0)
     data["iota"] = grid.compress(data["iota"]).item()
     data["shear"] = grid.compress(data["shear"]).item()
 
@@ -723,8 +724,7 @@ def test_drift():
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
     def integrand_den(B, pitch):
-        g = jnp.sqrt(1 - pitch * B)
-        return 1 / g
+        return jnp.reciprocal(jnp.sqrt(1 - pitch * B))
 
     drift_numerical_num = bounce_integrate(
         integrand=integrand_num,

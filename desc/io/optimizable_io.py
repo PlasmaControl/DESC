@@ -84,6 +84,8 @@ def _unjittable(x):
         return any([_unjittable(y) for y in x])
     if isinstance(x, dict):
         return any([_unjittable(y) for y in x.values()])
+    if hasattr(x, "dtype") and np.ndim(x) == 0:
+        return np.issubdtype(x.dtype, np.bool_) or np.issubdtype(x.dtype, np.int_)
     return isinstance(x, (str, types.FunctionType, bool, int, np.int_))
 
 

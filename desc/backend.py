@@ -116,38 +116,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
 
-    def put_along_axis(arr, indices, values, axis):
-        """Put values into the destination array by matching 1d index and data slices.
-
-        This iterates over matching 1d slices oriented along the specified axis in
-        the index and data arrays, and uses the former to place values into the
-        latter.
-
-        Parameters
-        ----------
-        arr : ndarray (Ni..., M, Nk...)
-            Destination array.
-        indices : ndarray (Ni..., J, Nk...)
-            Indices to change along each 1d slice of `arr`. This must match the
-            dimension of arr, but dimensions in Ni and Nj may be 1 to broadcast
-            against `arr`.
-        values : array_like (Ni..., J, Nk...)
-            values to insert at those indices. Its shape and dimension are
-            broadcast to match that of `indices`.
-        axis : int
-            The axis to take 1d slices along. If axis is None, the destination
-            array is treated as if a flattened 1d view had been created of it.
-
-        """
-        if not (axis == -1 or axis == arr.ndim - 1):
-            raise NotImplementedError(
-                f"put_along_axis for axis={axis} not implemented yet."
-            )
-        if isinstance(arr, np.ndarray):
-            arr[..., indices] = values
-            return arr
-        return jnp.asarray(arr).at[..., indices].set(values)
-
     def sign(x):
         """Sign function, but returns 1 for x==0.
 
@@ -428,8 +396,6 @@ else:  # pragma: no cover
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
-
-    put_along_axis = np.put_along_axis
 
     def imap(f, xs, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""

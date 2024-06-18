@@ -6,9 +6,9 @@ from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
 from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
 
-from desc.backend import flatnonzero, imap, jnp, put_along_axis, take
+from desc.backend import flatnonzero, imap, jnp, put, take
 from desc.compute.utils import safediv
-from desc.utils import errorif, warnif
+from desc.utils import Index, errorif, warnif
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={2, 3})
@@ -457,26 +457,34 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
         λ values to evaluate the bounce integral at each field line.
 
     """
-    errorif(knots.ndim != 1)
+    errorif(knots.ndim != 1, msg=f"knots should be 1d; got shape {knots.shape}.")
     if B_c.ndim == 2 and B_z_ra_c.ndim == 2:
         # Add axis which enumerates field lines.
         B_c = B_c[:, jnp.newaxis]
         B_z_ra_c = B_z_ra_c[:, jnp.newaxis]
-    msg = "Supplied invalid shape for splines."
+    msg = (
+        "Invalid shape for spline arrays. "
+        f"B_c.shape={B_c.shape}. B_z_ra_c.shape={B_z_ra_c.shape}."
+    )
     errorif(not (B_c.ndim == B_z_ra_c.ndim == 3), msg=msg)
     errorif(B_c.shape[0] - 1 != B_z_ra_c.shape[0], msg=msg)
     errorif(B_c.shape[1:] != B_z_ra_c.shape[1:], msg=msg)
-    msg = "Last axis fails to enumerate spline polynomials."
-    errorif(B_c.shape[-1] != knots.size - 1, msg=msg)
+    errorif(
+        B_c.shape[-1] != knots.size - 1,
+        msg=(
+            "Last axis does not enumerate polynomials of spline. "
+            f"B_c.shape={B_c.shape}. knots.shape={knots.shape}."
+        ),
+    )
     if pitch is not None:
         pitch = jnp.atleast_2d(pitch)
-        msg = "Supplied invalid shape for pitch angles."
+        msg = f"Invalid shape {pitch.shape} for pitch angles."
         errorif(pitch.ndim != 2, msg=msg)
         errorif(pitch.shape[-1] != 1 and pitch.shape[-1] != B_c.shape[1], msg=msg)
     return B_c, B_z_ra_c, pitch
 
 
-def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False, **kwargs):
+def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs):
     """Compute the bounce points given spline of |B| and pitch λ.
 
     Parameters
@@ -561,7 +569,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False, **kwargs
     # At each step, the likelihood that an intersection has already been lost
     # due to floating point errors grows, so the real solution is to pick a less
     # degenerate pitch value - one that does not ride the global extrema of |B|.
-    is_bp2 = put_along_axis(is_bp2, jnp.array(0), edge_case, axis=-1)
+    is_bp2 = put(is_bp2, Index[..., 0], edge_case)
     # Get ζ values of bounce points from the masks.
     bp1 = take_mask(intersect, is_bp1)
     bp2 = take_mask(intersect, is_bp2)
@@ -606,8 +614,10 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
 
     Parameters
     ----------
-    min_B, max_B : jnp.ndarray, jnp.ndarray
-        Minimum and maximum |B| values.
+    min_B : jnp.ndarray
+        Minimum |B| value.
+    max_B : jnp.ndarray
+        Maximum |B| value.
     num : int
         Number of values, not including endpoints.
     relative_shift : float
@@ -1106,48 +1116,6 @@ def _bounce_quadrature(
     return result
 
 
-def _fix_sign_and_normalize(B_sup_z, B, B_z_ra, B_ref=1, L_ref=1, check=False):
-    """Correct signs for consistency with strictly increasing zeta requirement.
-
-    Parameters
-    ----------
-    B_sup_z : jnp.ndarray
-        Contravariant field-line following toroidal component of magnetic field.
-    B : jnp.ndarray
-        Norm of magnetic field.
-    B_z_ra : jnp.ndarray
-        Norm of magnetic field, derivative with respect to field-line following
-        coordinate.
-    B_ref : float
-        Optional. Reference magnetic field strength for normalization.
-    L_ref : float
-        Optional. Reference length scale for normalization.
-    check : bool
-        Flag for debugging. Must be false for jax transformations.
-
-    Returns
-    -------
-    B_sup_z, B, B_z_ra : (jnp.ndarray, jnp.ndarray, jnp.ndarray)
-        Same as inputs but with corrected sign and normalized by length scales.
-
-    """
-    warnif(
-        check and jnp.any(jnp.sign(B_sup_z) <= 0),
-        msg="(∂ℓ/∂ζ)|ρ,a > 0 is required. Correcting signs of B^ζ and (∂|B|/∂ζ)|ρ,α.",
-    )
-    # Strictly increasing zeta knots enforces dζ > 0.
-    # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require B^ζ = B⋅∇ζ > 0.
-    # This is equivalent to changing the sign of ∇ζ (or [∂/∂ζ]|ρ,a).
-    # Recall dζ = ∇ζ⋅dR, implying 1 = ∇ζ⋅(e_ζ|ρ,a). Hence, a sign change in ∇ζ
-    # induces the same sign change in e_ζ|ρ,a to retain the metric identity. For any
-    # quantity f, we may write df = ∇f⋅dR, implying ∂f/∂ζ|ρ,α = ∇f ⋅ e_ζ|ρ,a. Therefore,
-    # a sign change in e_ζ|ρ,a induces the same sign change in ∂f/∂ζ|ρ,α.
-    B_z_ra = B_z_ra / B_ref * jnp.sign(B_sup_z)
-    B_sup_z = jnp.abs(B_sup_z) * L_ref / B_ref
-    B = B / B_ref
-    return B_sup_z, B, B_z_ra
-
-
 def bounce_integral(
     B_sup_z,
     B,
@@ -1183,11 +1151,6 @@ def bounce_integral(
     via ``.reshape(S,knots.size)``. One way to satisfy this is to compute stuff on the
     grid returned from the method ``desc.equilibrium.coords.rtz_grid``. See
     ``tests.test_bounce_integral.test_bounce_integral_checks`` for example use.
-
-    The strictly increasing knots requirement enforces dζ > 0, which constraints the
-    signs of B^ζ and ∂/∂ζ. The signs of B^ζ and (∂|B|/∂ζ)|ρ,α will automatically be
-    corrected to match this requirement. Pass in ``check=True`` to be notified if the
-    signs for B^ζ and (∂|B|/∂ζ)|ρ,α required correction.
 
     Parameters
     ----------
@@ -1254,10 +1217,22 @@ def bounce_integral(
             polynomials that compose the spline along a particular field line.
 
     """
-    B_sup_z, B, B_z_ra = (
-        f.reshape(-1, knots.size)  # group data by field line
-        for f in _fix_sign_and_normalize(B_sup_z, B, B_z_ra, B_ref, L_ref, check)
+    warnif(
+        check and kwargs.pop("warn", True) and jnp.any(jnp.sign(B_sup_z) <= 0),
+        msg="(∂ℓ/∂ζ)|ρ,a > 0 is required. Enforcing positive B^ζ.",
     )
+    # Strictly increasing zeta knots enforces dζ > 0.
+    # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require B^ζ = B⋅∇ζ > 0.
+    # This is equivalent to changing the sign of ∇ζ (or [∂/∂ζ]|ρ,a).
+    # Recall dζ = ∇ζ⋅dR, implying 1 = ∇ζ⋅(e_ζ|ρ,a). Hence, a sign change in ∇ζ
+    # requires the same sign change in e_ζ|ρ,a to retain the metric identity. For any
+    # quantity f, we may write df = ∇f⋅dR, implying ∂f/∂ζ|ρ,α = ∇f ⋅ e_ζ|ρ,a. Hence,
+    # a sign change in e_ζ|ρ,a requires the same sign change in ∂f/∂ζ|ρ,α.
+    B_sup_z = jnp.abs(B_sup_z) * L_ref / B_ref
+    B = B / B_ref
+    B_z_ra = B_z_ra / B_ref  # This is already the correct sign.
+    # group data by field line
+    B_sup_z, B, B_z_ra = (f.reshape(-1, knots.size) for f in [B_sup_z, B, B_z_ra])
 
     # Compute splines.
     monotonic = kwargs.pop("monotonic", False)

@@ -29,6 +29,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
+from ._neoclassical import EffectiveRipple
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,

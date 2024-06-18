@@ -61,7 +61,9 @@ def ensure_positive_jacobian(eq):
         eq.axis = eq.get_axis()
         eq.surface = eq.get_surface_at(rho=1)
 
-    sign = np.sign(eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        sign = np.sign(
+            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+        )
     assert sign == 1
     return eq
 

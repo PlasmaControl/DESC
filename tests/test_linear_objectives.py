@@ -416,7 +416,7 @@ def test_correct_indexing_passed_modes():
     objective = ObjectiveFunction(
         (
             # just need dummy objective for factorizing constraints
-            GenericObjective("0", eq=eq),
+            GenericObjective("0", thing=eq),
         ),
         use_jit=False,
     )
@@ -467,7 +467,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()
@@ -530,7 +530,7 @@ def test_correct_indexing_passed_modes_axis():
     eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()
@@ -590,7 +590,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()

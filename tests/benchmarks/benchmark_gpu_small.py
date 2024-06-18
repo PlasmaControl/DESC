@@ -407,3 +407,17 @@ def test_proximal_freeb_jac(benchmark):
         obj.jac_scaled(x, prox.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_solve_fixed_iter(benchmark):
+    """Benchmark running eq.solve for fixed iteration count."""
+    jax.clear_caches()
+    eq = desc.examples.get("ESTELL")
+    eq.change_resolution(6, 6, 6, 12, 12, 12)
+
+    def run(eq):
+        eq.solve(maxiter=20, ftol=0, xtol=0, gtol=0)
+
+    benchmark.pedantic(run, args=(eq,), rounds=10, iterations=1)

@@ -860,7 +860,6 @@ def test_plot_coefficients():
 # has to run a bunch on different nodes for no reason. Should load in
 # a saved result instead.
 # FIXME: there is a warning if we open too many figures
-@pytest.mark.xfail
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_Bn_scan_regcoil(regcoil_helical_coils_scan):
@@ -873,12 +872,13 @@ def test_plot_Bn_scan_regcoil(regcoil_helical_coils_scan):
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_scan_Bn"]
-
+    for key in figdata.keys():
+        if key != "fig_scan_Bn":
+            plt.close(figdata[key])
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.xfail
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_Phi_scan_regcoil(regcoil_helical_coils_scan):
     """Test Phi scan plot from run_regcoil method."""
@@ -890,12 +890,14 @@ def test_plot_Phi_scan_regcoil(regcoil_helical_coils_scan):
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_scan_Phi"]
+    for key in figdata.keys():
+        if key != "fig_scan_Phi":
+            plt.close(figdata[key])
     return fig
 
 
 # TODO: close any figs that are not being used in testing
 @pytest.mark.unit
-@pytest.mark.xfail
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_chi2B_alpha_scan_regcoil(regcoil_helical_coils_scan):
     """Test chi^2_B vs alpha plot from run_regcoil method."""
@@ -904,14 +906,17 @@ def test_plot_chi2B_alpha_scan_regcoil(regcoil_helical_coils_scan):
         surface_current,
         eq,
     ) = regcoil_helical_coils_scan
+    # with pytest.warns(UserWarning, match="20 figures"):
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_chi^2_B_vs_alpha"]
+    for key in figdata.keys():
+        if key != "fig_chi^2_B_vs_alpha":
+            plt.close(figdata[key])
 
     return fig
 
 
-@pytest.mark.xfail
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_chi2B_chi2K_scan_regcoil(regcoil_helical_coils_scan):
@@ -921,13 +926,20 @@ def test_plot_chi2B_chi2K_scan_regcoil(regcoil_helical_coils_scan):
         surface_current,
         eq,
     ) = regcoil_helical_coils_scan
+    # with pytest.warns(UserWarning, match="20 figures"):
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_chi^2_B_vs_chi^2_K"]
+    for key in figdata.keys():
+        if key != "fig_chi^2_B_vs_chi^2_K":
+            plt.close(figdata[key])
 
     return fig
 
 
+# TODO: can just call one single function to plot inside conftest,
+# then pass the dictionary and grab the fig for each of these tests?
+# Unsure though if pytest will try to close all the figs each time...
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_Bn_regcoil(regcoil_modular_coils):
@@ -940,6 +952,9 @@ def test_plot_Bn_regcoil(regcoil_modular_coils):
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_Bn"]
+    for key in figdata.keys():
+        if key != "fig_Bn":
+            plt.close(figdata[key])
 
     return fig
 
@@ -957,6 +972,9 @@ def test_plot_Phi_regcoil(regcoil_modular_coils):
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_Phi"]
+    for key in figdata.keys():
+        if key != "fig_Phi":
+            plt.close(figdata[key])
     return fig
 
 

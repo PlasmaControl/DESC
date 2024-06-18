@@ -214,14 +214,11 @@ def assert_is_continuous(
         else:
             assert np.isfinite(data[name]).all(), name
 
-        if (
-            data_index[p][name]["coordinates"] == ""
-            or data_index[p][name]["coordinates"] == "z"
-        ):
+        if eq.is_0d(name) or eq.is_1dz(name):
             # can't check continuity of global scalar or function of toroidal angle
             continue
         # make single variable function of rho
-        if data_index[p][name]["coordinates"] == "r":
+        if eq.is_1dr(name):
             # already single variable function of rho
             profile = grid.compress(data[name])
         else:

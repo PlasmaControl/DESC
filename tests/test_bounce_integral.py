@@ -626,6 +626,7 @@ def test_drift():
     )
     np.testing.assert_allclose(data["psi"], psi)
     np.testing.assert_allclose(data["iota"], iota)
+    assert np.all(np.sign(data["B^zeta"]) > 0)
     data["iota"] = grid.compress(data["iota"]).item()
     data["shear"] = grid.compress(data["shear"]).item()
 

@@ -8,7 +8,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import flatnonzero, imap, jnp, put_along_axis, take
 from desc.compute.utils import safediv
-from desc.utils import errorif
+from desc.utils import errorif, warnif
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={2, 3})
@@ -55,7 +55,7 @@ def take_mask(a, mask, size=None, fill_value=None):
 def _filter_not_nan(a):
     """Filter out nan from ``a`` while asserting nan is padded at right."""
     is_nan = jnp.isnan(a)
-    assert jnp.array_equal(is_nan, jnp.sort(is_nan, axis=-1)), "take_mask() has a bug."
+    assert jnp.array_equal(is_nan, jnp.sort(is_nan, axis=-1))
     return a[~is_nan]
 
 
@@ -305,9 +305,9 @@ def plot_field_line(
     pitch : jnp.ndarray
         λ value.
     bp1 : jnp.ndarray
-        Bounce points with ∂|B|/∂_ζ <= 0.
+        Bounce points with (∂|B|/∂ζ)|ρ,α <= 0.
     bp2 : jnp.ndarray
-        Bounce points with ∂|B|/∂_ζ >= 0.
+        Bounce points with (∂|B|/∂ζ)|ρ,α >= 0.
     start : float
         Minimum ζ on plot.
     stop : float
@@ -354,7 +354,7 @@ def plot_field_line(
     add(ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$"))
 
     if pitch is not None:
-        b = 1 / jnp.atleast_1d(pitch)
+        b = jnp.reciprocal(pitch)
         for val in b:
             add(
                 ax.axhline(
@@ -451,7 +451,7 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
         Polynomial coefficients of the spline of |B| in local power basis.
     B_z_ra_c : jnp.ndarray
         Shape (B_c.shape[0] - 1, *B_c.shape[1:]).
-        Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
+        Polynomial coefficients of the spline of (∂|B|/∂ζ)|ρ,α in local power basis.
     pitch : jnp.ndarray
         Shape (P, S).
         λ values to evaluate the bounce integral at each field line.
@@ -489,7 +489,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False, **kwargs
         line. If two-dimensional, the first axis is the batch axis.
     knots : jnp.ndarray
         Shape (knots.size, ).
-        Field line-following ζ coordinates of spline knots.
+        Field line-following ζ coordinates of spline knots. Must be strictly increasing.
     B_c : jnp.ndarray
         Shape (B_c.shape[0], S, knots.size - 1).
         Polynomial coefficients of the spline of |B| in local power basis.
@@ -498,7 +498,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False, **kwargs
         polynomials that compose the spline along a particular field line.
     B_z_ra_c : jnp.ndarray
         Shape (B_c.shape[0] - 1, *B_c.shape[1:]).
-        Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
+        Polynomial coefficients of the spline of (∂|B|/∂ζ)|ρ,α in local power basis.
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines along the field lines. Last axis enumerates the
         polynomials that compose the spline along a particular field line.
@@ -527,7 +527,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=False, **kwargs
     P, S, N, degree = pitch.shape[0], B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
     intersect = _poly_root(
         c=B_c,
-        k=1 / pitch[..., jnp.newaxis],
+        k=jnp.reciprocal(pitch)[..., jnp.newaxis],
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
         sort=True,
@@ -624,7 +624,7 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
-    pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
+    pitch = composite_linspace(jnp.reciprocal(jnp.stack([max_B, min_B])), num)
     assert pitch.shape == (num + 2, *pitch.shape[1:])
     return pitch
 
@@ -633,7 +633,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     """Return |B| values at extrema.
 
     The quantity 1 / √(1 − λ |B|) common to bounce integrals is singular with
-    strength ~ |ζ_b₂ - ζ_b₁| / |∂|B|/∂_ζ|. Therefore, an integral over the pitch
+    strength ~ |ζ_b₂ - ζ_b₁| / |(∂|B|/∂ζ)|ρ,α|. Therefore, an integral over the pitch
     angle λ may have mass concentrated near λ = 1 / |B|(ζ*) where |B|(ζ*) is a
     local maximum. Depending on the quantity to integrate, it may be beneficial
     to place quadrature points at these regions.
@@ -642,7 +642,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     ----------
     knots : jnp.ndarray
         Shape (knots.size, ).
-        Field line-following ζ coordinates of spline knots.
+        Field line-following ζ coordinates of spline knots. Must be strictly increasing.
     B_c : jnp.ndarray
         Shape (B_c.shape[0], S, knots.size - 1).
         Polynomial coefficients of the spline of |B| in local power basis.
@@ -651,7 +651,7 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
         polynomials that compose the spline along a particular field line.
     B_z_ra_c : jnp.ndarray
         Shape (B_c.shape[0] - 1, *B_c.shape[1:]).
-        Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
+        Polynomial coefficients of the spline of (∂|B|/∂ζ)|ρ,α in local power basis.
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines along the field lines. Last axis enumerates the
         polynomials that compose the spline along a particular field line.
@@ -949,6 +949,7 @@ def _interpolate_and_integrate(
     shape = Z.shape
     Z = Z.reshape(Z.shape[0], Z.shape[1], -1)
     f = [_interp1d_vec(Z, knots, f_i, method=method).reshape(shape) for f_i in f]
+    # TODO: Pass in derivative and use method_B.
     b_sup_z = _interp1d_vec(Z, knots, B_sup_z / B, method=method).reshape(shape)
     B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method=method_B).reshape(shape)
     pitch = jnp.expand_dims(pitch, axis=(2, 3) if len(shape) == 4 else 2)
@@ -1024,8 +1025,9 @@ def _bounce_quadrature(
         λ values to evaluate the bounce integral at each field line.
     knots : jnp.ndarray
         Shape (knots.size, ).
-        Field line following coordinate values where ``B_sup_z``, ``B``, and ``B_z_ra``,
-        and the quantities in ``f`` were evaluated.
+        Field line following coordinate values where ``B_sup_z``, ``B``, ``B_z_ra``, and
+        those in ``f`` supplied to the returned method were evaluated. Must be strictly
+        increasing.
     method : str
         Method of interpolation for functions contained in ``f``.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -1052,7 +1054,7 @@ def _bounce_quadrature(
     if not isinstance(f, (list, tuple)):
         f = [f]
     # group data by field line
-    f = map(lambda f_i: f_i.reshape(S, knots.size), f)
+    f = map(lambda f_i: f_i.reshape(-1, knots.size), f)
 
     # Integrate and complete the change of variable.
     if batch:
@@ -1104,6 +1106,48 @@ def _bounce_quadrature(
     return result
 
 
+def _fix_sign_and_normalize(B_sup_z, B, B_z_ra, B_ref=1, L_ref=1, check=False):
+    """Correct signs for consistency with strictly increasing zeta requirement.
+
+    Parameters
+    ----------
+    B_sup_z : jnp.ndarray
+        Contravariant field-line following toroidal component of magnetic field.
+    B : jnp.ndarray
+        Norm of magnetic field.
+    B_z_ra : jnp.ndarray
+        Norm of magnetic field, derivative with respect to field-line following
+        coordinate.
+    B_ref : float
+        Optional. Reference magnetic field strength for normalization.
+    L_ref : float
+        Optional. Reference length scale for normalization.
+    check : bool
+        Flag for debugging. Must be false for jax transformations.
+
+    Returns
+    -------
+    B_sup_z, B, B_z_ra : (jnp.ndarray, jnp.ndarray, jnp.ndarray)
+        Same as inputs but with corrected sign and normalized by length scales.
+
+    """
+    warnif(
+        check and jnp.any(jnp.sign(B_sup_z) <= 0),
+        msg="(∂ℓ/∂ζ)|ρ,a > 0 is required. Correcting signs of B^ζ and (∂|B|/∂ζ)|ρ,α.",
+    )
+    # Strictly increasing zeta knots enforces dζ > 0.
+    # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require B^ζ = B⋅∇ζ > 0.
+    # This is equivalent to changing the sign of ∇ζ (or [∂/∂ζ]|ρ,a).
+    # Recall dζ = ∇ζ⋅dR, implying 1 = ∇ζ⋅(e_ζ|ρ,a). Hence, a sign change in ∇ζ
+    # induces the same sign change in e_ζ|ρ,a to retain the metric identity. For any
+    # quantity f, we may write df = ∇f⋅dR, implying ∂f/∂ζ|ρ,α = ∇f ⋅ e_ζ|ρ,a. Therefore,
+    # a sign change in e_ζ|ρ,a induces the same sign change in ∂f/∂ζ|ρ,α.
+    B_z_ra = B_z_ra / B_ref * jnp.sign(B_sup_z)
+    B_sup_z = jnp.abs(B_sup_z) * L_ref / B_ref
+    B = B / B_ref
+    return B_sup_z, B, B_z_ra
+
+
 def bounce_integral(
     B_sup_z,
     B,
@@ -1140,6 +1184,11 @@ def bounce_integral(
     grid returned from the method ``desc.equilibrium.coords.rtz_grid``. See
     ``tests.test_bounce_integral.test_bounce_integral_checks`` for example use.
 
+    The strictly increasing knots requirement enforces dζ > 0, which constraints the
+    signs of B^ζ and ∂/∂ζ. The signs of B^ζ and (∂|B|/∂ζ)|ρ,α will automatically be
+    corrected to match this requirement. Pass in ``check=True`` to be notified if the
+    signs for B^ζ and (∂|B|/∂ζ)|ρ,α required correction.
+
     Parameters
     ----------
     B_sup_z : jnp.ndarray
@@ -1156,15 +1205,15 @@ def bounce_integral(
     B_z_ra : jnp.ndarray
         Shape (S, knots.size) or (S * knots.size).
         Norm of magnetic field, derivative with respect to field-line following
-        coordinate. ∂|B|/∂_ζ(ρ, α, ζ) is specified by ``B_z_ra[(ρ,α),ζ]``, where in the
-        latter the labels (ρ,α) are interpreted as the index into the first axis that
-        corresponds to that field line.
+        coordinate. (∂|B|/∂ζ)|ρ,α(ρ, α, ζ) is specified by ``B_z_ra[(ρ,α),ζ]``, where in
+        the latter the labels (ρ,α) are interpreted as the index into the first axis
+        that corresponds to that field line.
     knots : jnp.ndarray
         Shape (knots.size, ).
-        Field line following coordinate values where ``B_sup_z``, ``B``, and ``B_z_ra``,
-        and those in ``f`` supplied to the returned method were evaluated.
-        These knots are used to compute a spline of |B| and interpolate the integrand.
-        A good reference density is 100 knots per toroidal transit.
+        Field line following coordinate values where ``B_sup_z``, ``B``, ``B_z_ra``, and
+        those in ``f`` supplied to the returned method were evaluated. Must be strictly
+        increasing. These knots are used to compute a spline of |B| and interpolate the
+        integrand. A good reference density is 100 knots per toroidal transit.
     quad : (jnp.ndarray, jnp.ndarray)
         Quadrature points xₖ and weights wₖ for the approximate evaluation of an
         integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 21 points.
@@ -1199,21 +1248,20 @@ def bounce_integral(
             polynomials that compose the spline along a particular field line.
         B_z_ra_c : jnp.ndarray
             Shape (3, S, knots.size - 1).
-            Polynomial coefficients of the spline of ∂|B|/∂_ζ in local power basis.
+            Polynomial coefficients of the spline of (∂|B|/∂ζ)|ρ,α in local power basis.
             First axis enumerates the coefficients of power series. Second axis
             enumerates the splines along the field lines. Last axis enumerates the
             polynomials that compose the spline along a particular field line.
 
     """
-    B_sup_z = B_sup_z * L_ref / B_ref
-    B = B / B_ref
-    B_z_ra = B_z_ra / B_ref
-    # group data by field line
-    B_sup_z, B, B_z_ra = (g.reshape(-1, knots.size) for g in [B_sup_z, B, B_z_ra])
-    errorif(not (B_sup_z.shape == B.shape == B_z_ra.shape))
+    B_sup_z, B, B_z_ra = (
+        f.reshape(-1, knots.size)  # group data by field line
+        for f in _fix_sign_and_normalize(B_sup_z, B, B_z_ra, B_ref, L_ref, check)
+    )
 
     # Compute splines.
     monotonic = kwargs.pop("monotonic", False)
+    # Interpax interpolation requires strictly increasing knots.
     B_c = (
         PchipInterpolator(knots, B, axis=-1, check=check).c
         if monotonic

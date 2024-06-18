@@ -886,7 +886,7 @@ class SplineProfile(_Profile):
         """
         if params is None:
             params = self.params
-        if params_derivative:
+        if params_derivative is None:
             params_derivative = self._params_derivative
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])

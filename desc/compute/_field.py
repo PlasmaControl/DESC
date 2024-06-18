@@ -502,6 +502,49 @@ def _B_sup_zeta_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="B^zeta_a",
+    label="\\partial_{\\alpha} B^{\\zeta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant toroidal component of magnetic field, derivative wrt field"
+        " line angle"
+    ),
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^zeta_t", "alpha_t"],
+)
+def _B_sup_zeta_a(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ζ
+    data["B^zeta_a"] = data["B^zeta_t"] / data["alpha_t"]
+    return data
+
+
+@register_compute_fun(
+    name="B^zeta_z|r,a",
+    label="(\\partial_{\\zeta} B^{\\zeta})_{\\rho, \\alpha}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant toroidal component of magnetic field, derivative along field"
+        " line"
+    ),
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^zeta_z", "B^zeta_a", "alpha_z"],
+)
+def _B_sup_zeta_z_ra(params, transforms, profiles, data, **kwargs):
+    data["B^zeta_z|r,a"] = data["B^zeta_z"] - data["B^zeta_a"] * data["alpha_z"]
+    return data
+
+
+@register_compute_fun(
     name="B_z",
     label="\\partial_{\\zeta} \\mathbf{B}",
     units="T",
@@ -2314,7 +2357,7 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|B|_alpha",
+    name="|B|_a",
     label="\\partial_{\\alpha} |\\mathbf{B}|",
     units="T",
     units_long="Tesla",
@@ -2328,7 +2371,7 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
 )
 def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
     # constant ρ and ζ
-    data["|B|_alpha"] = safediv(data["|B|_t"], data["alpha_t"])
+    data["|B|_a"] = data["|B|_t"] / data["alpha_t"]
     return data
 
 
@@ -2343,12 +2386,12 @@ def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|_z", "|B|_alpha", "alpha_z"],
+    data=["|B|_z", "|B|_a", "alpha_z"],
 )
 def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
     # ∂|B|/∂ζ (constant ρ and α) = ∂|B|/∂ζ (constant ρ and θ)
     #                            - ∂|B|/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
-    data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_alpha"] * data["alpha_z"]
+    data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_a"] * data["alpha_z"]
     return data
 
 

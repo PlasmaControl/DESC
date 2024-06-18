@@ -44,15 +44,15 @@ def _vec_quadax(quad, **kwargs):
     return vec_quad
 
 
-def _get_pitch(grid, data, num, for_adaptive=False):
+def _get_pitch(grid, min_B, max_B, num, for_adaptive=False):
     """Get points for quadrature over velocity coordinate.
 
     Parameters
     ----------
     grid : Grid
         The grid on which data is computed.
-    data : dict
-        Dictionary containing min and max |B| over each flux surface.
+    min_B, max_B : jnp.ndarray, jnp.ndarray
+        Minimum and maximum |B| values.
     num : int
         Number of values to uniformly space in between.
     for_adaptive : bool
@@ -64,10 +64,10 @@ def _get_pitch(grid, data, num, for_adaptive=False):
         Pitch values in the desired shape to use in compute methods.
 
     """
-    min_B = grid.compress(data["min_tz |B|"])
-    max_B = grid.compress(data["max_tz |B|"])
+    min_B = grid.compress(min_B)
+    max_B = grid.compress(max_B)
     if for_adaptive:
-        pitch = jnp.expand_dims(1 / jnp.stack([max_B, min_B], axis=-1), axis=1)
+        pitch = jnp.reciprocal(jnp.stack([max_B, min_B], axis=-1))[:, jnp.newaxis]
         assert pitch.shape == (grid.num_rho, 1, 2)
     else:
         pitch = get_pitch(min_B, max_B, num)
@@ -92,10 +92,10 @@ def _poloidal_mean(grid, f):
 @register_compute_fun(
     name="<L|r,a>",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
-    " \\frac{d\\zeta}{B^{\\zeta}}",
+    " \\frac{d\\zeta}{|B^{\\zeta}|}",
     units="m / T",
     units_long="Meter / tesla",
-    description="(Mean) length along field line(s)",
+    description="(Mean) proper length of field line(s)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -108,21 +108,21 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     L_ra = simpson(
-        jnp.reshape(1 / data["B^zeta"], shape),
+        jnp.reciprocal(data["B^zeta"]).reshape(shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
-    data["<L|r,a>"] = g.expand(_poloidal_mean(g, L_ra))
+    data["<L|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, L_ra)))
     return data
 
 
 @register_compute_fun(
     name="<G|r,a>",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
-    " \\frac{d\\zeta}{B^{\\zeta} \\sqrt g}",
+    " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
     units="1 / Wb",
     units_long="Inverse webers",
-    description="(Mean) length over volume along field line(s)",
+    description="(Mean) proper length over volume of field line(s)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -135,11 +135,11 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     G_ra = simpson(
-        jnp.reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), shape),
+        jnp.reciprocal(data["B^zeta"] * data["sqrt(g)"]).reshape(shape),
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
-    data["<G|r,a>"] = g.expand(_poloidal_mean(g, G_ra))
+    data["<G|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, G_ra)))
     return data
 
 
@@ -229,7 +229,9 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
 
     # The integrand is continuous and likely poorly approximated by a polynomial.
     # Composite quadrature should perform better than higher order methods.
-    pitch = _get_pitch(g, data, kwargs.get("num_pitch", 125))
+    pitch = _get_pitch(
+        g, data["min_tz |B|"], data["max_tz |B|"], kwargs.get("num_pitch", 125)
+    )
     ripple = simpson(jnp.squeeze(imap(d_ripple, pitch), axis=1), pitch, axis=0)
     data["effective ripple raw"] = (
         g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))

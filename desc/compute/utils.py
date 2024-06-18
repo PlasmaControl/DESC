@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import cond, fori_loop, jnp, put
+from desc.backend import cond, fori_loop, jit, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from .data_index import allowed_kwargs, data_index
@@ -137,7 +137,7 @@ def _compute(
                     **kwargs,
                 )
         # now compute the quantity
-        data = data_index[parameterization][name]["fun"](
+        data = jit(data_index[parameterization][name]["fun"])(
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
 

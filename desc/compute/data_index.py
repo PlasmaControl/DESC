@@ -5,8 +5,6 @@ from collections import deque
 
 import numpy as np
 
-from desc.backend import jit
-
 
 def find_permutations(primary, separator="_"):
     """Finds permutations of quantity names for aliases."""
@@ -139,7 +137,7 @@ def register_compute_fun(
             "units": units,
             "units_long": units_long,
             "description": description,
-            "fun": jit(func),
+            "fun": func,
             "dim": dim,
             "coordinates": coordinates,
             "dependencies": deps,

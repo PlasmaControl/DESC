@@ -157,7 +157,7 @@ to
 
 .. code-block:: sh
 
-    scipy >= 1.7.0, < 1.11.3
+    scipy >= 1.7.0, <= 1.11.3
 
 Clone and install DESC
 

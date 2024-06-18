@@ -95,7 +95,7 @@ class FourierRZCurve(Curve):
     @property
     def sym(self):
         """bool: Whether or not the curve is stellarator symmetric."""
-        return bool(self._sym)
+        return self._sym
 
     @property
     def R_basis(self):
@@ -110,7 +110,7 @@ class FourierRZCurve(Curve):
     @property
     def NFP(self):
         """Number of field periods."""
-        return int(self._NFP)
+        return self._NFP
 
     @property
     def N(self):
@@ -371,7 +371,7 @@ class FourierXYZCurve(Curve):
     @property
     def N(self):
         """Maximum mode number."""
-        return int(max(self.X_basis.N, self.Y_basis.N, self.Z_basis.N))
+        return max(self.X_basis.N, self.Y_basis.N, self.Z_basis.N)
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
@@ -609,7 +609,7 @@ class FourierPlanarCurve(Curve):
     @property
     def N(self):
         """Maximum mode number."""
-        return int(self.r_basis.N)
+        return self.r_basis.N
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
@@ -894,12 +894,12 @@ class SplineXYZCurve(Curve):
     @property
     def N(self):
         """Number of knots in the spline."""
-        return int(self.knots.size)
+        return self.knots.size
 
     @property
     def method(self):
         """Method of interpolation to use."""
-        return str(self._method)
+        return self._method
 
     @method.setter
     def method(self, new):

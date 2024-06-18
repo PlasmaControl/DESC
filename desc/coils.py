@@ -755,7 +755,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     @property
     def name(self):
         """str: Name of the curve."""
-        return str(self.__dict__.setdefault("_name", ""))
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
@@ -769,12 +769,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""
-        return int(self._NFP)
+        return self._NFP
 
     @property
     def sym(self):
         """bool: Whether this coil set is stellarator symmetric."""
-        return bool(self._sym)
+        return self._sym
 
     @property
     def current(self):

@@ -142,7 +142,7 @@ class FourierRZToroidalSurface(Surface):
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""
-        return int(self._NFP)
+        return self._NFP
 
     @property
     def R_basis(self):
@@ -889,7 +889,7 @@ class ZernikeRZToroidalSection(Surface):
     @property
     def spectral_indexing(self):
         """str: Type of spectral indexing for Zernike basis."""
-        return str(self._spectral_indexing)
+        return self._spectral_indexing
 
     @property
     def R_basis(self):

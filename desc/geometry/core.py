@@ -68,7 +68,7 @@ class Curve(IOAble, Optimizable, ABC):
     @property
     def name(self):
         """Name of the curve."""
-        return str(self.__dict__.setdefault("_name", ""))
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
@@ -323,7 +323,7 @@ class Surface(IOAble, Optimizable, ABC):
     @property
     def name(self):
         """str: Name of the surface."""
-        return str(self.__dict__.setdefault("_name", ""))
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
@@ -332,22 +332,22 @@ class Surface(IOAble, Optimizable, ABC):
     @property
     def L(self):
         """int: Maximum radial mode number."""
-        return int(self._L)
+        return self._L
 
     @property
     def M(self):
         """int: Maximum poloidal mode number."""
-        return int(self._M)
+        return self._M
 
     @property
     def N(self):
         """int: Maximum toroidal mode number."""
-        return int(self._N)
+        return self._N
 
     @property
     def sym(self):
         """bool: Whether or not the surface is stellarator symmetric."""
-        return bool(self._sym)
+        return self._sym
 
     def _compute_orientation(self):
         """Handedness of coordinate system.

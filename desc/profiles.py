@@ -42,7 +42,7 @@ class _Profile(IOAble, ABC):
     @property
     def name(self):
         """str: Name of the profile."""
-        return str(self.__dict__.setdefault("_name", ""))
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):

@@ -1220,7 +1220,7 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def sym(self):
         """bool: Whether this equilibrium is stellarator symmetric."""
-        return bool(self._sym)
+        return self._sym
 
     @property
     def bdry_mode(self):
@@ -1240,22 +1240,22 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""
-        return int(self._NFP)
+        return self._NFP
 
     @property
     def L(self):
         """int: Maximum radial mode number."""
-        return int(self._L)
+        return self._L
 
     @property
     def M(self):
         """int: Maximum poloidal fourier mode number."""
-        return int(self._M)
+        return self._M
 
     @property
     def N(self):
         """int: Maximum toroidal fourier mode number."""
-        return int(self._N)
+        return self._N
 
     @optimizable_parameter
     @property

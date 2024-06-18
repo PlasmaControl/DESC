@@ -147,6 +147,18 @@ Create a conda environment for DESC
     conda activate desc-env
     pip install --no-cache-dir "jax==0.4.23" "jax[cuda12_cudnn89]==0.4.23" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
+For Perlmutter installation, please change the scipy version from
+
+.. code-block:: sh
+
+    scipy >= 1.7.0, < 2.0.0
+
+to
+
+.. code-block:: sh
+
+    scipy >= 1.7.0, < 1.11.3
+
 Clone and install DESC
 
 .. code-block:: sh

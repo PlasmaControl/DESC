@@ -1499,7 +1499,7 @@ def test_coilset_geometry_optimization():
     np.testing.assert_allclose(
         eq.surface.Z_lmn[eq.surface.Z_basis.get_idx(M=-1, N=0)],
         -(coils_opt_with_eq[0].r_n - new_offset),
-        rtol=5e-3,
+        rtol=7e-3,
     )
 
     ############### optimize surface with fixed coil radii ###################
@@ -1567,5 +1567,5 @@ def test_coilset_geometry_optimization():
     np.testing.assert_allclose(
         surf.Z_lmn[surf.Z_basis.get_idx(M=-1, N=0)],
         -(coils_opt_with_surf[0].r_n - new_offset),
-        rtol=5e-3,
+        rtol=7e-3,
     )

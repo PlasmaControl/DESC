@@ -8,8 +8,9 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import get_profiles, get_transforms
+from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
+from desc.utils import errorif
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
@@ -22,8 +23,8 @@ class GenericObjective(_Objective):
     ----------
     f : str
         Name of the quantity to compute.
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    thing : Optimizable
+        Object that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
@@ -51,19 +52,19 @@ class GenericObjective(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
     name : str, optional
         Name of the objective function.
 
     """
 
-    _print_value_fmt = "GenericObjective value: {:10.3e} "
+    _print_value_fmt = "Generic objective value: {:10.3e} "
 
     def __init__(
         self,
         f,
-        eq,
+        thing,
         target=None,
         bounds=None,
         weight=1,
@@ -79,7 +80,7 @@ class GenericObjective(_Objective):
         self.f = f
         self._grid = grid
         super().__init__(
-            things=eq,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -89,17 +90,10 @@ class GenericObjective(_Objective):
             deriv_mode=deriv_mode,
             name=name,
         )
-        self._scalar = not bool(
-            data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["dim"]
-        )
-        self._coordinates = data_index["desc.equilibrium.equilibrium.Equilibrium"][
-            self.f
-        ]["coordinates"]
-        self._units = (
-            "("
-            + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]
-            + ")"
-        )
+        self._p = _parse_parameterization(thing)
+        self._scalar = not bool(data_index[self._p][self.f]["dim"])
+        self._coordinates = data_index[self._p][self.f]["coordinates"]
+        self._units = "(" + data_index[self._p][self.f]["units"] + ")"
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -112,21 +106,27 @@ class GenericObjective(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
+        thing = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
-        else:
-            grid = self._grid
+            errorif(
+                self._p != "desc.equilibrium.equilibrium.Equilibrium",
+                ValueError,
+                "grid must be supplied for things besides an Equilibrium.",
+            )
+            self._grid = QuadratureGrid(
+                thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP
+            )
 
-        p = "desc.equilibrium.equilibrium.Equilibrium"
-        if data_index[p][self.f]["dim"] == 0:
+        if data_index[self._p][self.f]["dim"] == 0:
             self._dim_f = 1
-        elif data_index[p][self.f]["coordinates"] == "r":
-            self._dim_f = grid.num_rho
+        elif data_index[self._p][self.f]["coordinates"] == "r":
+            self._dim_f = self._grid.num_rho
         else:
-            self._dim_f = grid.num_nodes * np.prod(data_index[p][self.f]["dim"])
-        profiles = get_profiles(self.f, obj=eq, grid=grid)
-        transforms = get_transforms(self.f, obj=eq, grid=grid)
+            self._dim_f = self._grid.num_nodes * np.prod(
+                data_index[self._p][self.f]["dim"]
+            )
+        profiles = get_profiles(self.f, obj=thing, grid=self._grid)
+        transforms = get_transforms(self.f, obj=thing, grid=self._grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -141,8 +141,8 @@ class GenericObjective(_Objective):
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self.constants
 
         Returns
         -------
@@ -153,7 +153,7 @@ class GenericObjective(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self._p,
             self.f,
             params=params,
             transforms=constants["transforms"],
@@ -207,7 +207,7 @@ class LinearObjectiveFromUser(_FixedObjective):
     _linear = True
     _fixed = True
     _units = "(Unknown)"
-    _print_value_fmt = "Custom linear Objective value: {:10.3e}"
+    _print_value_fmt = "Custom linear objective value: {:10.3e}"
 
     def __init__(
         self,
@@ -302,8 +302,8 @@ class ObjectiveFromUser(_Objective):
     ----------
     fun : callable
         Custom objective function.
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    thing : Optimizable
+        Object that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
@@ -331,17 +331,17 @@ class ObjectiveFromUser(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
     name : str, optional
         Name of the objective function.
-
 
     Examples
     --------
     .. code-block:: python
 
         from desc.compute.utils import surface_averages
+
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
@@ -351,17 +351,17 @@ class ObjectiveFromUser(_Objective):
             # the unique values:
             return grid.compress(f_fsa)
 
-        myobj = ObjectiveFromUser(myfun)
+        myobj = ObjectiveFromUser(fun=myfun, thing=eq)
 
     """
 
     _units = "(Unknown)"
-    _print_value_fmt = "Custom Objective value: {:10.3e}"
+    _print_value_fmt = "Custom objective value: {:10.3e}"
 
     def __init__(
         self,
         fun,
-        eq,
+        thing,
         target=None,
         bounds=None,
         weight=1,
@@ -377,7 +377,7 @@ class ObjectiveFromUser(_Objective):
         self._fun = fun
         self._grid = grid
         super().__init__(
-            things=eq,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -387,6 +387,7 @@ class ObjectiveFromUser(_Objective):
             deriv_mode=deriv_mode,
             name=name,
         )
+        self._p = _parse_parameterization(thing)
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -399,11 +400,16 @@ class ObjectiveFromUser(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
+        thing = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
-        else:
-            grid = self._grid
+            errorif(
+                self._p != "desc.equilibrium.equilibrium.Equilibrium",
+                ValueError,
+                "grid must be supplied for things besides an Equilibrium.",
+            )
+            self._grid = QuadratureGrid(
+                thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP
+            )
 
         def get_vars(fun):
             pattern = r"data\[(.*?)\]"
@@ -414,23 +420,22 @@ class ObjectiveFromUser(_Objective):
 
         self._data_keys = get_vars(self._fun)
         dummy_data = {}
-        p = "desc.equilibrium.equilibrium.Equilibrium"
         for key in self._data_keys:
-            assert key in data_index[p], f"Don't know how to compute {key}"
-            if data_index[p][key]["dim"] == 0:
+            assert key in data_index[self._p], f"Don't know how to compute {key}"
+            if data_index[self._p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:
                 dummy_data[key] = jnp.empty(
-                    (grid.num_nodes, data_index[p][key]["dim"])
+                    (self._grid.num_nodes, data_index[self._p][key]["dim"])
                 ).squeeze()
 
-        self._fun_wrapped = lambda data: self._fun(grid, data)
+        self._fun_wrapped = lambda data: self._fun(self._grid, data)
         import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=thing, grid=self._grid)
+        transforms = get_transforms(self._data_keys, obj=thing, grid=self._grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -459,7 +464,7 @@ class ObjectiveFromUser(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self._p,
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

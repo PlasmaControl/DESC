@@ -1184,7 +1184,7 @@ def bounce_integral(
     grid returned from the method ``desc.equilibrium.coords.rtz_grid``. See
     ``tests.test_bounce_integral.test_bounce_integral_checks`` for example use.
 
-    The strictly increasing knots requirement enforces dζ > 0, which constraints the
+    The strictly increasing knots requirement enforces dζ > 0, which constrains the
     signs of B^ζ and ∂/∂ζ. The signs of B^ζ and (∂|B|/∂ζ)|ρ,α will automatically be
     corrected to match this requirement. Pass in ``check=True`` to be notified if the
     signs for B^ζ and (∂|B|/∂ζ)|ρ,α required correction.

@@ -324,7 +324,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     quad = leggauss(kwargs.get("num_quad", 31))
     num_pitch = kwargs.get("num_pitch", 125)
     adaptive = kwargs.get("adaptive", False)
-    pitch = _get_pitch(g, data, num_pitch, adaptive)
+    pitch = _get_pitch(g, data["min_tz |B|"], data["max_tz |B|"], num_pitch, adaptive)
 
     def d_v_tau(B, pitch):
         return 2 / jnp.sqrt(1 - pitch * B)
@@ -353,7 +353,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             return jnp.nansum(v_tau * gamma_c**2, axis=-1)
 
         # The integrand is piecewise continuous and likely poorly approximated by a
-        # polynomial, so composite quadrature should perform better than higher order
+        # polynomial. Composite quadrature should perform better than higher order
         # methods.
         Gamma_c = trapezoid(jnp.squeeze(imap(d_Gamma_c, pitch), axis=1), pitch, axis=0)
     else:

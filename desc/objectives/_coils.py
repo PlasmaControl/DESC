@@ -96,7 +96,7 @@ class _CoilObjective(_Objective):
 
         """
         # local import to avoid circular import
-        from desc.coils import CoilSet, MixedCoilSet
+        from desc.coils import CoilSet, MixedCoilSet, _Coil
 
         coil = self.things[0]
 
@@ -104,7 +104,9 @@ class _CoilObjective(_Objective):
         self._quad_weights = jnp.array([])
 
         # get individual coils from coilset
-        coils = tree_leaves(coil, is_leaf=lambda x: hasattr(x, "_current"))
+        coils = tree_leaves(
+            coil, is_leaf=lambda c: isinstance(c, _Coil) and not isinstance(c, CoilSet)
+        )
         self._num_coils = len(coils)
 
         # map grid to list with the same length as coils
@@ -129,7 +131,19 @@ class _CoilObjective(_Objective):
                 )
             ]
         )
-        quad_weights = np.concatenate([grid.spacing[:, 2] for grid in self._grid])
+        quad_weights = np.concatenate(
+            [
+                (
+                    np.tile(grid.spacing[:, 2], len(coil))
+                    if isinstance(coil, CoilSet)
+                    else grid.spacing[:, 2]
+                )
+                for coil, grid in zip(
+                    (coil if isinstance(coil, CoilSet) else [coil]),
+                    self._grid,
+                )
+            ]
+        )
 
         timer = Timer()
         if verbose > 0:

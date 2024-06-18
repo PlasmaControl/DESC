@@ -344,10 +344,13 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         modes_R=None,
         modes_Z=None,
         NFP=1,
+        NFP_umbilic_factor=1,
         sym="auto",
         name="",
     ):
-        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
+        super().__init__(
+            current, R_n, Z_n, modes_R, modes_Z, NFP, NFP_umbilic_factor, sym, name
+        )
 
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):

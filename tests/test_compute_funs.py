@@ -185,9 +185,9 @@ def test_elongation():
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
-    eq1 = Equilibrium()  # elongation = 1
-    eq2 = Equilibrium(surface=surf2)  # elongation = 2
-    eq3 = Equilibrium(surface=surf3)  # elongation = 3
+    eq1 = Equilibrium(NFP_umbilic_factor=1)  # elongation = 1
+    eq2 = Equilibrium(surface=surf2, NFP_umbilic_factor=1)  # elongation = 2
+    eq3 = Equilibrium(surface=surf3, NFP_umbilic_factor=1)  # elongation = 3
     grid = LinearGrid(L=5, M=2 * eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym)
     data1 = eq1.compute(["a_major/a_minor"], grid=grid)
     data2 = eq2.compute(["a_major/a_minor"], grid=grid)
@@ -1117,7 +1117,8 @@ def test_BdotgradB(DummyStellarator):
 def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
     # TODO: add test with stellarator example
-    eq = get("DSHAPE_CURRENT")
+    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
+        eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
@@ -1300,7 +1301,8 @@ def test_compute_everything():
 @pytest.mark.unit
 def test_compute_averages():
     """Test that computing averages uses the correct grid."""
-    eq = get("HELIOTRON")
+    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
+        eq = get("HELIOTRON")
     V_r = eq.get_profile("V_r(r)")
     rho = np.linspace(0.01, 1, 20)
     grid = LinearGrid(rho=rho, NFP=eq.NFP)
@@ -1423,7 +1425,8 @@ def test_covariant_basis_vectors(DummyStellarator):
 @pytest.mark.unit
 def test_contravariant_basis_vectors():
     """Test calculation of contravariant basis vectors by comparing to finite diff."""
-    eq = get("HELIOTRON")
+    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
+        eq = get("HELIOTRON")
     keys = [
         "e^rho",
         "e^theta",
@@ -1599,8 +1602,9 @@ def test_contravariant_basis_vectors():
 def test_iota_components():
     """Test that iota components are computed correctly."""
     # axisymmetric, so all rotational transform should be from the current
-    eq_i = get("DSHAPE")  # iota profile assigned
-    eq_c = get("DSHAPE_CURRENT")  # current profile assigned
+    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
+        eq_i = get("DSHAPE")  # iota profile assigned
+        eq_c = get("DSHAPE_CURRENT")  # current profile assigned
     grid = LinearGrid(L=100, M=max(eq_i.M_grid, eq_c.M_grid), N=0, NFP=1, axis=True)
     data_i = eq_i.compute(["iota", "iota current", "iota vacuum"], grid)
     data_c = eq_c.compute(["iota", "iota current", "iota vacuum"], grid)
@@ -1610,7 +1614,8 @@ def test_iota_components():
     np.testing.assert_allclose(data_c["iota vacuum"], 0)
 
     # vacuum stellarator, so all rotational transform should be from the external field
-    eq = get("ESTELL")
+    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
+        eq = get("ESTELL")
     grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
     np.testing.assert_allclose(data["iota"], data["iota vacuum"])
@@ -1643,7 +1648,8 @@ def test_surface_equilibrium_geometry():
         "e_theta_t",
     ]
     for name in names:
-        eq = get(name)
+        with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
+            eq = get(name)
         for key in data:
             x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
             y = eq.surface.compute(key)[key].max()

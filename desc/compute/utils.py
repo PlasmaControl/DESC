@@ -368,6 +368,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
                     NFP=obj.NFP,
+                    NFP_umbilic_factor=obj.NFP_umbilic_factor,
                     sym=obj.R_basis.sym,
                 ),
                 derivs=derivs["B"],
@@ -382,6 +383,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
                     NFP=obj.NFP,
+                    NFP_umbilic_factor=obj.NFP_umbilic_factor,
                     sym=obj.Z_basis.sym,
                 ),
                 derivs=derivs["w"],
@@ -718,13 +720,17 @@ def _get_grid_surface(grid, surface_label):
         )
     else:
         spacing = grid.spacing[:, :2]
+
         unique_size = getattr(grid, "num_zeta", -1)
         inverse_idx = getattr(grid, "_inverse_zeta_idx", jnp.array([]))
         has_endpoint_dupe = (
             isinstance(grid, LinearGrid)
             and hasattr(grid, "_unique_zeta_idx")
             and (grid.nodes[grid.unique_zeta_idx[0], 2] == 0)
-            & (grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP)
+            & (
+                grid.nodes[grid.unique_zeta_idx[-1], 2]
+                == 2 * np.pi / grid.NFP * grid.NFP_umbilic_factor
+            )
         )
 
     return unique_size, inverse_idx, spacing, has_endpoint_dupe

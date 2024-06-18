@@ -291,15 +291,16 @@ class TestCoilSet:
     @pytest.mark.unit
     def test_symmetry_magnetic_field(self):
         """Tests that compute magnetic field is correct from symmetry."""
-        eq = get("precise_QH")
+        with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
+            eq = get("precise_QH")
+
         minor_radius = eq.compute("a")["a"]
 
         # initialize CoilSet with symmetry
         num_coils = 3  # number of unique coils per half field period
         grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
-        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-            data_center = eq.axis.compute("x", grid=grid, basis="xyz")
-            data_normal = eq.compute("e^zeta", grid=grid)
+        data_center = eq.axis.compute("x", grid=grid, basis="xyz")
+        data_normal = eq.compute("e^zeta", grid=grid)
         centers = data_center["x"]
         normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
         coils = []
@@ -318,8 +319,7 @@ class TestCoilSet:
 
         # test that both coil sets compute the same field on the plasma surface
         grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
-        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-            data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
+        data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
 
         # test in (R, phi, Z) coordinates
         nodes_rpz = np.array([data["R"], data["phi"], data["Z"]]).T

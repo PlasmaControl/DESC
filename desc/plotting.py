@@ -219,6 +219,7 @@ def _get_grid(**kwargs):
         "rho": np.array([1.0]),
         "theta": np.array([0.0]),
         "zeta": np.array([0.0]),
+        "NFP_umbilic_factor": int(1),
     }
     for key in kwargs.keys():
         if key in grid_args.keys():
@@ -1798,25 +1799,35 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
+        phi = np.linspace(
+            0, 2 * np.pi * eq.NFP_umbilic_factor / eq.NFP, phi + 1
+        )  # +1 to include pi and 2pi
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     # don't plot axis for FourierRZToroidalSurface, since it's not defined.
     plot_axis = plot_axis and eq.L > 0
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
-    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
+    grid_kwargs = {
+        "NFP": eq.NFP,
+        "NFP_umbilic_factor": eq.NFP_umbilic_factor,
+        "rho": rho,
+        "theta": 100,
+        "zeta": phi,
+    }
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+    coords = map_coordinates(
+        eq,
+        grid.nodes,
+        ["rho", "theta", "phi"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 2 * np.pi * eq.NFP_umbilic_factor),
+        guess=grid.nodes,
+    )
+
     grid = Grid(
-        map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        ),
+        coords,
         sort=False,
     )
 

@@ -3,6 +3,7 @@
 # global parameters
 sym =  1
 NFP =  5
+NFP_umbilic_factor=1
 Psi = -2.13300000E+00
 
 # spectral resolution

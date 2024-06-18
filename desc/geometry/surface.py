@@ -31,6 +31,9 @@ class FourierRZToroidalSurface(Surface):
         mode numbers associated with Z_lmn, defaults to modes_R
     NFP : int
         number of field periods
+    NFP_umbilic_factor : float
+        Rational number of the form 1/integer with integer>=1.
+        This is needed for the umbilic torus design.
     sym : bool
         whether to enforce stellarator symmetry. Default is "auto" which enforces if
         modes are symmetric. If True, non-symmetric modes will be truncated.
@@ -54,6 +57,7 @@ class FourierRZToroidalSurface(Surface):
         "_R_basis",
         "_Z_basis",
         "_NFP",
+        "_NFP_umbilic_factor",
         "_rho",
     ]
 
@@ -64,6 +68,7 @@ class FourierRZToroidalSurface(Surface):
         modes_R=None,
         modes_Z=None,
         NFP=1,
+        NFP_umbilic_factor=1,
         sym="auto",
         M=None,
         N=None,
@@ -92,7 +97,6 @@ class FourierRZToroidalSurface(Surface):
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
         MZ = np.max(abs(modes_Z[:, 0]))
@@ -101,9 +105,13 @@ class FourierRZToroidalSurface(Surface):
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
         NFP = check_posint(NFP, "NFP", False)
+        NFP_umbilic_factor = check_posint(
+            NFP_umbilic_factor, "NFP_umbilic_factor", False
+        )
         self._M = setdefault(M, max(MR, MZ))
         self._N = setdefault(N, max(NR, NZ))
         self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
 
         if sym == "auto":
             if np.all(
@@ -116,14 +124,24 @@ class FourierRZToroidalSurface(Surface):
                 sym = False
 
         self._R_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+            M=MR,
+            N=NR,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            sym="cos" if sym else False,
         )
         self._Z_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+            M=MZ,
+            N=NZ,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            sym="sin" if sym else False,
         )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
+        self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
         self._sym = sym
         self._rho = rho
 
@@ -143,6 +161,22 @@ class FourierRZToroidalSurface(Surface):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
+
+    @property
+    def NFP_umbilic_factor(self):
+        """NFP umbilic factor."""
+        return self._NFP_umbilic_factor
+
+    @NFP_umbilic_factor.setter
+    def NFP_umbilic_factor(self, NFP_umbilic_factor):
+        if (
+            not (hasattr(self, "_NFP_umbilic_factor"))
+            or self._NFP_umbilic_factor is None
+        ):
+            self._NFP_umbilic_factor = int(1)
+
+        if check_posint(self._NFP_umbilic_factor) is False:
+            self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
 
     @property
     def R_basis(self):
@@ -169,16 +203,18 @@ class FourierRZToroidalSurface(Surface):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
             ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 3])
             or (len(args) == 0)
         ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
-            + "positional arguments or only keyword arguments."
+            + "positional arguments or only keyword arguments"
+            + f"but got {len(args)} positional arguments and {len(kwargs)} kwargs."
         )
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
         NFP = kwargs.pop("NFP", None)
+        NFP_umbilic_factor = kwargs.pop("NFP_umbilic_factor", None)
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
         if L is not None:
@@ -200,16 +236,25 @@ class FourierRZToroidalSurface(Surface):
             ((N is not None) and (N != self.N))
             or ((M is not None) and (M != self.M))
             or (NFP is not None)
+            or (NFP_umbilic_factor is not None)
         ):
             M = int(M if M is not None else self.M)
             N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+                M=M,
+                N=N,
+                NFP=self.NFP,
+                NFP_umbilic_factor=self.NFP_umbilic_factor,
+                sym="cos" if self.sym else self.sym,
             )
             self.Z_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                M=M,
+                N=N,
+                NFP=self.NFP,
+                NFP_umbilic_factor=self.NFP_umbilic_factor,
+                sym="sin" if self.sym else self.sym,
             )
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
@@ -314,6 +359,7 @@ class FourierRZToroidalSurface(Surface):
             inputs["surface"][:, 1:3].astype(int),
             inputs["surface"][:, 1:3].astype(int),
             inputs["NFP"],
+            inputs["NFP_umbilic_factor"],
             inputs["sym"],
         )
         return surf
@@ -402,6 +448,7 @@ class FourierRZToroidalSurface(Surface):
         M=6,
         N=6,
         NFP=1,
+        NFP_umbilic_factor=1,
         sym=True,
         check_orientation=True,
         rcond=None,
@@ -468,11 +515,23 @@ class FourierRZToroidalSurface(Surface):
             sort=False,
             jitable=True,
         )
-
         R = coords[:, 0]
         Z = coords[:, 2]
-        R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
-        Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        R_basis = DoubleFourierSeries(
+            M=M,
+            N=N,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            sym="cos" if sym else False,
+        )
+        Z_basis = DoubleFourierSeries(
+            M=M,
+            N=N,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            sym="sin" if sym else False,
+        )
+
         if w is None:  # unweighted fit
             transform = Transform(
                 nodes, R_basis, build=False, build_pinv=True, rcond=rcond
@@ -514,6 +573,7 @@ class FourierRZToroidalSurface(Surface):
             R_basis.modes[:, 1:],
             Z_basis.modes[:, 1:],
             NFP,
+            NFP_umbilic_factor,
             sym,
             check_orientation=check_orientation,
         )

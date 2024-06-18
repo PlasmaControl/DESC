@@ -803,20 +803,19 @@ class PlasmaVesselDistance(_Objective):
                 Rbool = R[:, None] > Rsurf
                 Zbool = Z[:, None] > Zsurf
                 # these are now size (Nplasma, Nsurf)
-                quads = jnp.zeros_like(Rbool)
-                quads = jnp.where(jnp.logical_and(Rbool, Zbool), 0, quads)
-                quads = jnp.where(
-                    jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quads
+                quadrants = jnp.zeros_like(Rbool)
+                quadrants = jnp.where(
+                    jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quadrants
                 )
-                quads = jnp.where(
+                quadrants = jnp.where(
                     jnp.logical_and(jnp.logical_not(Rbool), jnp.logical_not(Zbool)),
                     2,
-                    quads,
+                    quadrants,
                 )
-                quads = jnp.where(
-                    jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quads
+                quadrants = jnp.where(
+                    jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quadrants
                 )
-                deltas = quads[1:, :] - quads[0:-1, :]
+                deltas = quadrants[1:, :] - quadrants[0:-1, :]
                 deltas = jnp.where(deltas == 3, -1, deltas)
                 deltas = jnp.where(deltas == -3, 1, deltas)
                 # then flip sign if the R intercept is > Rsurf and the

@@ -129,8 +129,8 @@ Set up the correct cuda environment for jax installation
 
 .. code-block:: sh
 
-    module load cudatoolkit/11.7
-    module load cudnn/8.9.1_cuda11
+    module load cudatoolkit/12.2
+    module load cudnn/8.9.3_cuda12
     module load python
 
 Check that you have loaded these modules
@@ -145,7 +145,7 @@ Create a conda environment for DESC
 
     conda create -n desc-env python=3.9
     conda activate desc-env
-    pip install --no-cache-dir "jax[cuda11_cudnn82]==0.4.7" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    pip install --no-cache-dir "jax==0.4.23" "jax[cuda12_cudnn89]==0.4.23" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 Clone and install DESC
 

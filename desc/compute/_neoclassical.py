@@ -92,7 +92,7 @@ def _poloidal_mean(grid, f):
 @register_compute_fun(
     name="<L|r,a>",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
-    " \\frac{d\\zeta}{B^{\\zeta}}",
+    " \\frac{d\\zeta}{|B^{\\zeta}|}",
     units="m / T",
     units_long="Meter / tesla",
     description="(Mean) proper length of field line(s)",
@@ -112,14 +112,14 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
-    data["<L|r,a>"] = g.expand(_poloidal_mean(g, L_ra))
+    data["<L|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, L_ra)))
     return data
 
 
 @register_compute_fun(
     name="<G|r,a>",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
-    " \\frac{d\\zeta}{B^{\\zeta} \\sqrt g}",
+    " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
     units="1 / Wb",
     units_long="Inverse webers",
     description="(Mean) proper length over volume of field line(s)",
@@ -139,7 +139,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
-    data["<G|r,a>"] = g.expand(_poloidal_mean(g, G_ra))
+    data["<G|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, G_ra)))
     return data
 
 

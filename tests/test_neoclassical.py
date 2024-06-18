@@ -28,6 +28,8 @@ def test_field_line_average():
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
     )
+    assert np.all(np.sign(data["<L|r,a>"]) > 0)
+    assert np.all(np.sign(data["<G|r,a>"]) > 0)
 
 
 @pytest.mark.unit

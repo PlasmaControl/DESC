@@ -1178,17 +1178,16 @@ def bounce_integral(
 
     Notes
     -----
-    The strictly increasing knots requirement enforces dζ > 0, which constraints the
-    signs of B^ζ and ∂/∂ζ. The signs of B^ζ and (∂|B|/∂ζ)|ρ,α will automatically be
-    corrected to match this requirement, but this correction cannot be automated for
-    arbitrary f(ℓ) in the integrand. Pass in ``check=True`` to be notified if the signs
-    for B^ζ and (∂|B|/∂ζ)|ρ,α required correction.
-
     The quantities ``B_sup_z``, ``B``, ``B_z_ra``, and those in ``f`` supplied to the
     returned method must be separable into data evaluated along particular field lines
     via ``.reshape(S,knots.size)``. One way to satisfy this is to compute stuff on the
     grid returned from the method ``desc.equilibrium.coords.rtz_grid``. See
     ``tests.test_bounce_integral.test_bounce_integral_checks`` for example use.
+
+    The strictly increasing knots requirement enforces dζ > 0, which constraints the
+    signs of B^ζ and ∂/∂ζ. The signs of B^ζ and (∂|B|/∂ζ)|ρ,α will automatically be
+    corrected to match this requirement. Pass in ``check=True`` to be notified if the
+    signs for B^ζ and (∂|B|/∂ζ)|ρ,α required correction.
 
     Parameters
     ----------

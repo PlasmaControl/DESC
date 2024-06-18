@@ -8,19 +8,38 @@ from tests.test_plotting import tol_1d
 from desc.equilibrium.coords import rtz_grid
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.objectives import ObjectiveFunction
-from desc.objectives._neoclassical import EffectiveRipple, GammaC
+from desc.objectives import EffectiveRipple, GammaC, ObjectiveFunction
 
 
 @pytest.mark.unit
 def test_field_line_average():
     """Test that field line average converges to surface average."""
+    # For axisymmetric devices, one toroidal transit must be exact.
+    rho = np.array([1])
+    alpha = np.array([0])
+    eq = get("DSHAPE")
+    grid = rtz_grid(
+        eq,
+        rho,
+        alpha,
+        np.linspace(0, 2 * np.pi, 20),
+        coordinates="raz",
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
+    data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
+    np.testing.assert_allclose(
+        data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
+    )
+    assert np.all(np.sign(data["<L|r,a>"]) > 0)
+    assert np.all(np.sign(data["<G|r,a>"]) > 0)
+
+    # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     grid = rtz_grid(
         eq,
-        np.array([0, 0.5]),
-        np.array([0]),
-        np.linspace(0, 40 * np.pi, 200),
+        rho,
+        alpha,
+        np.linspace(0, 40 * np.pi, 300),
         coordinates="raz",
         period=(np.inf, 2 * np.pi, np.inf),
     )
@@ -60,7 +79,7 @@ def test_ad_ripple():
     grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP, sym=eq.sym, axis=False)
     eq.change_resolution(2, 2, 2, 4, 4, 4)
 
-    obj = ObjectiveFunction(EffectiveRipple(eq, grid=grid))
+    obj = ObjectiveFunction([EffectiveRipple(eq, grid=grid)])
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))  # FIXME
@@ -94,7 +113,7 @@ def test_ad_gamma():
     grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP, sym=eq.sym, axis=False)
     eq.change_resolution(2, 2, 2, 4, 4, 4)
 
-    obj = ObjectiveFunction(GammaC(eq, grid=grid))
+    obj = ObjectiveFunction([GammaC(eq, grid=grid)])
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))  # FIXME

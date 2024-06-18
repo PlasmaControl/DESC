@@ -51,8 +51,10 @@ def _get_pitch(grid, min_B, max_B, num, for_adaptive=False):
     ----------
     grid : Grid
         The grid on which data is computed.
-    min_B, max_B : jnp.ndarray, jnp.ndarray
-        Minimum and maximum |B| values.
+    min_B : jnp.ndarray
+        Minimum |B| value.
+    max_B : jnp.ndarray
+        Maximum |B| value.
     num : int
         Number of values to uniformly space in between.
     for_adaptive : bool

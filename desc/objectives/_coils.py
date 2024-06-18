@@ -1049,7 +1049,6 @@ class PlasmaCoilsetMinDistance(_Objective):
         if self._eq_fixed:
             plasma_pts = constants["plasma_coords"]
         else:
-            print(eq_params)
             data = compute_fun(
                 self._eq,
                 self._eq_data_keys,

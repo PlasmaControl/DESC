@@ -123,7 +123,7 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 Perlmutter (NERSC)
 ++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 11-02-2023
+These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 18-06-2024
 
 Set up the correct cuda environment for jax installation
 
@@ -139,7 +139,7 @@ Check that you have loaded these modules
 
     module list
 
-Create a conda environment for DESC (`borrowed from here https://docs.nersc.gov/development/languages/python/using-python-perlmutter/#jax`)
+Create a conda environment for DESC (`following these instructions <https://docs.nersc.gov/development/languages/python/using-python-perlmutter/#jax>`__ )
 
 .. code-block:: sh
 

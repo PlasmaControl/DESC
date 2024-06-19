@@ -28,10 +28,10 @@ else:
             import jax
             import jax.numpy as jnp
             import jaxlib
-            from jax import config as jax_config
 
-            jax_config.update("jax_enable_x64", True)
-            # --no-verify jax.config.update("jax_numpy_dtype_promotion", "standard")
+            # --no-verify from jax import config as jax_config
+            # --no-verify jax_config.update("jax_enable_x64", True)
+            jax.config.update("jax_numpy_dtype_promotion", "standard")
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "

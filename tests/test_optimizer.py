@@ -695,6 +695,9 @@ def test_solve_with_x_scale():
                 + eq.Za_n.size
                 + eq.Rb_lmn.size
                 + eq.Zb_lmn.size
+                + eq.Rp_lmn.size
+                + eq.Zp_lmn.size
+                + eq.Lp_lmn.size
                 + 1
             ),
         ]
@@ -1107,6 +1110,7 @@ def test_optimize_with_single_constraint():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.filterwarnings("ignore::UserWarning")
 def test_proximal_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")

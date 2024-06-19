@@ -189,8 +189,9 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         # else check with tighter tols and throw an error, these tolerances
         # could be tripped due to just numerical roundoff or poor scaling between
         # constraints, so don't want to error out but we do want to warn the user.
-        atol = 3e-14
-        rtol = 3e-14
+        size = max(A.shape)
+        atol = 1e-16 * size
+        rtol = 1e-16 * size
 
         try:
             np.testing.assert_allclose(

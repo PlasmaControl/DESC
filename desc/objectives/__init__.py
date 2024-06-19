@@ -42,6 +42,7 @@ from .getters import (
     get_equilibrium_objective,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
+    get_fixed_xsection_constraints,
     get_NAE_constraints,
     maybe_add_self_consistency,
 )
@@ -74,10 +75,16 @@ from .linear_objectives import (
     FixParameters,
     FixPressure,
     FixPsi,
+    FixSectionLambda,
+    FixSectionR,
+    FixSectionZ,
     FixSheetCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    SectionLambdaSelfConsistency,
+    SectionRSelfConsistency,
+    SectionZSelfConsistency,
 )
 from .objective_funs import ObjectiveFunction

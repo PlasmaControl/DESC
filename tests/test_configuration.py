@@ -9,11 +9,7 @@ import desc.examples
 from desc.backend import put
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.initial_guess import _initial_guess_surface
-from desc.geometry import (
-    FourierRZCurve,
-    FourierRZToroidalSurface,
-    ZernikeRZToroidalSection,
-)
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, PoincareRZLSection
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
@@ -45,6 +41,7 @@ class TestConstructor:
         iota = SplineProfile([2, 3, 4])
         surface = FourierRZToroidalSurface(NFP=2, sym=False)
         axis = FourierRZCurve([-0.2, 10, 0.3], [0.3, 0, -0.2], NFP=2, sym=False)
+        xsection = PoincareRZLSection(spectral_indexing="ansi")
         eq = Equilibrium(
             M=2,
             pressure=pressure,
@@ -64,17 +61,15 @@ class TestConstructor:
         np.testing.assert_allclose(axis.R_n, eq.Ra_n)
         np.testing.assert_allclose(axis.Z_n, eq.Za_n)
 
-        surface2 = ZernikeRZToroidalSection(spectral_indexing="ansi")
+        surface2 = FourierRZToroidalSurface(NFP=3)
         eq2 = Equilibrium(surface=surface2)
+        assert eq2.NFP == 3
+        assert eq2.axis.NFP == 3
         assert eq2.surface.equiv(surface2)
 
-        surface3 = FourierRZToroidalSurface(NFP=3)
-        eq3 = Equilibrium(surface=surface3)
-        assert eq3.NFP == 3
-        assert eq3.axis.NFP == 3
-
-        eq4 = Equilibrium(surface=surface2, axis=None)
-        np.testing.assert_allclose(eq4.axis.R_n, [10])
+        eq3 = Equilibrium(xsection=xsection, axis=None)
+        np.testing.assert_allclose(eq3.axis.R_n, [10])
+        assert eq3.xsection.equiv(xsection)
 
     @pytest.mark.unit
     def test_dict(self):
@@ -95,6 +90,7 @@ class TestConstructor:
                 ]
             ),
             "axis": np.array([[0, 10, 0]]),
+            "xsection": None,
             "pressure": np.array([[0, 10], [2, 5]]),
             "iota": np.array([[0, 1], [2, 3]]),
         }
@@ -169,22 +165,17 @@ class TestConstructor:
             ],
         )
 
-        inputs["surface"] = np.array(
+        inputs["xsection"] = np.array(
             [
                 [0, 0, 0, 10, 0],
                 [1, 1, 0, 1, 0.1],
                 [1, -1, 0, 0.2, -1],
             ]
         )
+        inputs.pop("surface")
 
-        eq = Equilibrium(**inputs)
-        assert eq.bdry_mode == "poincare"
-        np.testing.assert_allclose(
-            eq.Rb_lmn, [10.0, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        )
-        np.testing.assert_allclose(
-            eq.Zb_lmn, [0.0, -1.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        )
+        with pytest.raises(NotImplementedError):
+            eq = Equilibrium(**inputs)
 
     @pytest.mark.unit
     def test_asserts(self):
@@ -272,10 +263,6 @@ class TestInitialGuess:
             eq.surface = eq.get_surface_at(rho=1)
             eq.change_resolution(2, 2, 2)
             _ = _initial_guess_surface(eq.R_basis, eq.R_lmn, eq.R_basis)
-        with pytest.raises(ValueError):
-            _ = _initial_guess_surface(
-                eq.R_basis, eq.surface.R_lmn, eq.surface.R_basis, mode="foo"
-            )
 
     @pytest.mark.unit
     def test_guess_from_other(self):

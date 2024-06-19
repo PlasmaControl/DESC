@@ -17,6 +17,8 @@ from desc.compute import get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 
+jac32 = True
+
 
 class TestTransform:
     """Tests Transform classes."""
@@ -74,8 +76,12 @@ class TestTransform:
         correct_vals = c[0] + c[1] * x + c[2] * x**2
         correct_ders = c[1] + c[2] * 2 * x
 
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
+        np.testing.assert_allclose(
+            values, correct_vals, atol=1e-8 + 2e-7 * jac32, rtol=1e-7 + 6e-7 * jac32
+        )
+        np.testing.assert_allclose(
+            derivs, correct_ders, atol=1e-8 + 2e-7 * jac32, rtol=1e-7 + 6e-7 * jac32
+        )
 
     @pytest.mark.unit
     def test_surface(self):
@@ -108,10 +114,12 @@ class TestTransform:
         dz = transf.transform(c, 0, 0, 1)  # zeta derivative
         dtz = transf.transform(c, 0, 1, 1)  # mixed derivative
 
-        np.testing.assert_allclose(d0, correct_d0, atol=1e-8)
-        np.testing.assert_allclose(dt, correct_dt, atol=1e-8)
-        np.testing.assert_allclose(dz, correct_dz, atol=1e-8)
-        np.testing.assert_allclose(dtz, correct_dtz, atol=1e-8)
+        np.testing.assert_allclose(d0, correct_d0, atol=1e-8, rtol=1e-7 + 6e-7 * jac32)
+        np.testing.assert_allclose(dt, correct_dt, atol=1e-8, rtol=1e-7 + 6e-7 * jac32)
+        np.testing.assert_allclose(dz, correct_dz, atol=1e-8, rtol=1e-7 + 6e-7 * jac32)
+        np.testing.assert_allclose(
+            dtz, correct_dtz, atol=1e-8, rtol=1e-7 + 6e-7 * jac32
+        )
 
     @pytest.mark.unit
     def test_volume_chebyshev(self):
@@ -140,7 +148,9 @@ class TestTransform:
 
         values = transf.transform(c, 0, 0, 0)
 
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(
+            values, correct_vals, atol=1e-8 + 1e-7 * jac32, rtol=1e-7 + 1e-6 * jac32
+        )
 
     @pytest.mark.unit
     def test_volume_zernike(self):
@@ -168,7 +178,9 @@ class TestTransform:
 
         values = transf.transform(c, 0, 0, 0)
 
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(
+            values, correct_vals, atol=1e-8 + 1e-7 * jac32, rtol=1e-7 + 1e-6 * jac32
+        )
 
     @pytest.mark.unit
     def test_set_grid(self):
@@ -245,12 +257,24 @@ class TestTransform:
         f0 = for_tform.transform(for_coeffs, 0, 0, 0)
         f1 = for_tform.transform(for_coeffs, 0, 0, 1)
 
-        np.testing.assert_allclose(s0, correct_s0, atol=1e-8)
-        np.testing.assert_allclose(s1, correct_s1, atol=1e-8)
-        np.testing.assert_allclose(c0, correct_c0, atol=1e-8)
-        np.testing.assert_allclose(c1, correct_c1, atol=1e-8)
-        np.testing.assert_allclose(f0, correct_f0, atol=1e-8)
-        np.testing.assert_allclose(f1, correct_f1, atol=1e-8)
+        np.testing.assert_allclose(
+            s0, correct_s0, atol=1e-8 + 2e-7 * jac32, rtol=1e-7 + 9e-7 * jac32
+        )
+        np.testing.assert_allclose(
+            s1, correct_s1, atol=1e-8 + 2e-7 * jac32, rtol=1e-7 + 9e-7 * jac32
+        )
+        np.testing.assert_allclose(
+            c0, correct_c0, atol=1e-8 + 2e-7 * jac32, rtol=1e-7 + 9e-7 * jac32
+        )
+        np.testing.assert_allclose(
+            c1, correct_c1, atol=1e-8 + 2e-7 * jac32, rtol=1e-7 + 9e-7 * jac32
+        )
+        np.testing.assert_allclose(
+            f0, correct_f0, atol=1e-8 + 2e-7 * jac32, rtol=1e-7 + 9e-7 * jac32
+        )
+        np.testing.assert_allclose(
+            f1, correct_f1, atol=1e-8 + 2e-7 * jac32, rtol=1e-7 + 9e-7 * jac32
+        )
 
     @pytest.mark.slow
     @pytest.mark.unit
@@ -290,30 +314,54 @@ class TestTransform:
             y2 = t1d1.transform(x, dr, dv, dz)
             y3 = t1d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, atol=1e-12, err_msg="failed on zernike, d={}".format(d)
+                y1,
+                y2,
+                atol=1e-12 + 1e-10 * jac32,
+                rtol=1e-7 + 8e-5 * jac32,
+                err_msg="failed on zernike, d={}".format(d),
             )
             np.testing.assert_allclose(
-                y3, y2, atol=1e-12, err_msg="failed on zernike, d={}".format(d)
+                y3,
+                y2,
+                atol=1e-12 + 1e-10 * jac32,
+                rtol=1e-7 + 8e-5 * jac32,
+                err_msg="failed on zernike, d={}".format(d),
             )
             x = np.random.random(basis2.num_modes)
             y1 = t2f.transform(x, dr, dv, dz)
             y2 = t2d1.transform(x, dr, dv, dz)
             y3 = t2d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, atol=1e-12, err_msg="failed on fourier, d={}".format(d)
+                y1,
+                y2,
+                atol=1e-12 + 1e-10 * jac32,
+                rtol=1e-7 + 4e-5 * jac32,
+                err_msg="failed on fourier, d={}".format(d),
             )
             np.testing.assert_allclose(
-                y3, y2, atol=1e-12, err_msg="failed on fourier, d={}".format(d)
+                y3,
+                y2,
+                atol=1e-12 + 1e-10 * jac32,
+                rtol=1e-7 + 4e-5 * jac32,
+                err_msg="failed on fourier, d={}".format(d),
             )
             x = np.random.random(basis3.num_modes)
             y1 = t3f.transform(x, dr, dv, dz)
             y2 = t3d1.transform(x, dr, dv, dz)
             y3 = t3d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, atol=1e-12, err_msg="failed on double fourier, d={}".format(d)
+                y1,
+                y2,
+                atol=1e-12 + 1e-10 * jac32,
+                rtol=1e-7 + 6e-5 * jac32,
+                err_msg="failed on double fourier, d={}".format(d),
             )
             np.testing.assert_allclose(
-                y3, y2, atol=1e-12, err_msg="failed on double fourier, d={}".format(d)
+                y3,
+                y2,
+                atol=1e-12 + 1e-10 * jac32,
+                rtol=1e-7 + 6e-5 * jac32,
+                err_msg="failed on double fourier, d={}".format(d),
             )
 
         M += 1
@@ -348,12 +396,14 @@ class TestTransform:
                 y1,
                 y2,
                 atol=1e-12,
+                rtol=1e-7 + 4e-5 * jac32,
                 err_msg="failed on zernike after change, d={}".format(d),
             )
             np.testing.assert_allclose(
                 y3,
                 y2,
                 atol=1e-12,
+                rtol=1e-7 + 4e-5 * jac32,
                 err_msg="failed on zernike after change, d={}".format(d),
             )
             x = np.random.random(basis2.num_modes)
@@ -364,12 +414,14 @@ class TestTransform:
                 y1,
                 y2,
                 atol=1e-12,
+                rtol=1e-7 + 4e-5 * jac32,
                 err_msg="failed on fourier after change, d={}".format(d),
             )
             np.testing.assert_allclose(
                 y3,
                 y2,
                 atol=1e-12,
+                rtol=1e-7 + 4e-5 * jac32,
                 err_msg="failed on fourier after change, d={}".format(d),
             )
             x = np.random.random(basis3.num_modes)
@@ -380,12 +432,14 @@ class TestTransform:
                 y1,
                 y2,
                 atol=1e-12,
+                rtol=1e-7 + 4e-5 * jac32,
                 err_msg="failed on double fourier after change, d={}".format(d),
             )
             np.testing.assert_allclose(
                 y3,
                 y2,
                 atol=1e-12,
+                rtol=1e-7 + 4e-5 * jac32,
                 err_msg="failed on double fourier after change, d={}".format(d),
             )
 
@@ -553,7 +607,7 @@ class TestTransform:
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
         x = transform.transform(c)
         c1 = transform.fit(x)
-        np.testing.assert_allclose(c, c1, atol=1e-12)
+        np.testing.assert_allclose(c, c1, atol=1e-12 + 1e-7 * jac32)
 
     @pytest.mark.unit
     def test_fit_direct2(self):
@@ -565,7 +619,8 @@ class TestTransform:
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
         x = transform.transform(c)
         c1 = transform.fit(x)
-        np.testing.assert_allclose(c, c1, atol=1e-12)
+        # Matrix multiplication compunds error
+        np.testing.assert_allclose(c, c1, atol=1e-12 + 2e-7 * jac32)
 
     @pytest.mark.unit
     def test_fit_fft(self):
@@ -577,7 +632,9 @@ class TestTransform:
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
         x = transform.transform(c)
         c1 = transform.fit(x)
-        np.testing.assert_allclose(c, c1, atol=1e-12)
+        np.testing.assert_allclose(
+            c, c1, atol=1e-12 + 2.0e-7 * jac32, rtol=1e-7 + 1e-5 * jac32
+        )
 
     @pytest.mark.unit
     def test_empty_grid(self):
@@ -635,8 +692,18 @@ def test_transform_pytree():
         return transform.transform(x)
 
     x = np.random.random(basis.num_modes)
-    np.testing.assert_allclose(foo(x, transform), transform.transform(x))
-    np.testing.assert_allclose(bar(x), transform.transform(x))
+    np.testing.assert_allclose(
+        foo(x, transform),
+        transform.transform(x),
+        atol=1e-12 + 1e-12 * jac32,
+        rtol=1e-7 + 3e-5 * jac32,
+    )
+    np.testing.assert_allclose(
+        bar(x),
+        transform.transform(x),
+        atol=1e-12 + 1e-12 * jac32,
+        rtol=1e-7 + 3e-5 * jac32,
+    )
 
 
 @pytest.mark.unit

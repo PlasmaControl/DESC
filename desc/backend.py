@@ -28,9 +28,12 @@ else:
             import jax
             import jax.numpy as jnp
             import jaxlib
+            from jax import config as jax_config
 
             # --no-verify from jax import config as jax_config
             # --no-verify jax_config.update("jax_enable_x64", True)
+            jax_config.update("jax_enable_x64", True)
+            # standard promotion needed for int64 and float32 operation
             jax.config.update("jax_numpy_dtype_promotion", "standard")
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(

@@ -122,6 +122,9 @@ v0.10.3
 use forward or reverse mode automatic differentiation.
 - Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
 strength.
+- Adds ``desc.vmec_utils.make_boozmn_output `` for writing boozmn.nc style output files
+for compatibility with other codes which expect such files from the Booz_Xform code.
+- Renames compute quantity ``sqrt(g)_B`` to ``jac_Boozer_DESC`` to more accurately reflect what the quantiy is (the jacobian from (rho,theta_B,zeta_B) to (rho,theta,zeta)), and adds a new function to compute ``sqrt(g)_B`` which is the jacobian from (rho,theta_B,zeta_B) to (R,phi,Z)
  - Adds new keyword ``surface_fixed`` to ``PlasmaVesselDistance`` objective which says
 whether or not the surface comparing the distance from the plasma to is fixed or not.
 If True, then the surface coordinates can be precomputed, saving on computation during

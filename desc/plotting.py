@@ -2425,7 +2425,7 @@ def plot_boozer_modes(  # noqa: C901
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     basis = get_transforms(
-        "|B|_mn", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
     )["B"].basis
     if helicity:
         matrix, modes, symidx = ptolemy_linear_transform(
@@ -2437,12 +2437,12 @@ def plot_boozer_modes(  # noqa: C901
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
-            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-        b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
+            data = eq.compute("|B|_mn_B", grid=grid, transforms=transforms)
+        b_mn = np.atleast_2d(matrix @ data["|B|_mn_B"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
     zidx = np.where((modes[:, 1:] == np.array([[0, 0]])).all(axis=1))[0]
@@ -2493,7 +2493,7 @@ def plot_boozer_modes(  # noqa: C901
             )
 
     plot_data = {
-        "|B|_mn": B_mn,
+        "|B|_mn_B": B_mn,
         "B modes": modes,
         "rho": rho,
     }
@@ -2638,12 +2638,12 @@ def plot_boozer_surface(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(
-                "|B|_mn", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn_B", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
             )
         B_transform = get_transforms(
-            "|B|_mn", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
         )["B"]
-        B = B_transform.transform(data["|B|_mn"]).reshape(
+        B = B_transform.transform(data["|B|_mn_B"]).reshape(
             (grid_plot.num_theta, grid_plot.num_zeta), order="F"
         )
         theta_B = (
@@ -2845,7 +2845,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             transforms = get_transforms(
-                "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
             )
             if i == 0:  # only need to do this once for the first rho surface
                 matrix, modes, idx = ptolemy_linear_transform(
@@ -2856,9 +2856,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 data = eq.compute(
-                    ["|B|_mn", "B modes"], grid=grid, transforms=transforms
+                    ["|B|_mn_B", "B modes"], grid=grid, transforms=transforms
                 )
-            B_mn = matrix @ data["|B|_mn"]
+            B_mn = matrix @ data["|B|_mn_B"]
             f_b = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))
             f_B = np.append(f_B, f_b)
         if fC:

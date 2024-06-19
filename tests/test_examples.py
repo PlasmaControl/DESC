@@ -6,6 +6,7 @@ difference in areas between constant theta and rho contours.
 
 import numpy as np
 import pytest
+from netCDF4 import Dataset
 from qic import Qic
 from qsc import Qsc
 
@@ -54,11 +55,13 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     VacuumBoundaryError,
     Volume,
+    _ExternalObjective,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.vmec import VMECIO
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -1313,3 +1316,112 @@ def test_optimize_with_fourier_planar_coil():
     optimizer = Optimizer("fmintr")
     (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
     np.testing.assert_allclose(c.compute("length")[1]["length"], 11, atol=1e-3)
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_external_vs_generic_objectives(tmpdir_factory):
+    """Test ExternalObjective compared to GenericObjective."""
+    target = np.array([6.2e-3, 1.1e-1, 6.5e-3, 0])  # values at p_l = [2e2, -2e2]
+
+    def data_from_vmec(eq, path=""):
+        VMECIO.save(eq, path, surfs=8, verbose=0)
+        file = Dataset(path, mode="r")
+        betatot = float(file.variables["betatotal"][0])
+        betapol = float(file.variables["betapol"][0])
+        betator = float(file.variables["betator"][0])
+        presf1 = float(file.variables["presf"][-1])
+        file.close()
+        return np.atleast_1d([betatot, betapol, betator, presf1])
+
+    class TestExternalObjective(_ExternalObjective):
+
+        def __init__(
+            self,
+            eq,
+            target=None,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            loss_function=None,
+            path="",
+            name="external",
+        ):
+            super().__init__(
+                eq=eq,
+                fun=data_from_vmec,
+                dim_f=4,
+                target=target,
+                bounds=bounds,
+                weight=weight,
+                normalize=normalize,
+                normalize_target=normalize_target,
+                loss_function=loss_function,
+                fd_step=1e-4,
+                vectorized=False,
+                name=name,
+                path=path,
+            )
+
+    eq0 = get("SOLOVEV")
+    optimizer = Optimizer("lsq-exact")
+
+    # generic
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("<beta>_vol", eq=eq0, target=target[0]),
+            GenericObjective("<beta_pol>_vol", eq=eq0, target=target[1]),
+            GenericObjective("<beta_tor>_vol", eq=eq0, target=target[2]),
+            GenericObjective("p", eq=eq0, target=0, grid=LinearGrid(rho=[1], M=0, N=0)),
+        )
+    )
+    constraints = FixParameters(
+        eq0,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "p_l": np.arange(2, len(eq0.p_l)),
+            "i_l": True,
+            "Psi": True,
+        },
+    )
+    [eq_generic], _ = optimizer.optimize(
+        things=eq0,
+        objective=objective,
+        constraints=constraints,
+        copy=True,
+        ftol=0,
+        verbose=2,
+    )
+
+    # external
+    dir = tmpdir_factory.mktemp("results")
+    path = dir.join("wout_result.nc")
+    objective = ObjectiveFunction(
+        TestExternalObjective(eq=eq0, target=target, path=path)
+    )
+    constraints = FixParameters(
+        eq0,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "p_l": np.arange(2, len(eq0.p_l)),
+            "i_l": True,
+            "Psi": True,
+        },
+    )
+    [eq_external], _ = optimizer.optimize(
+        things=eq0,
+        objective=objective,
+        constraints=constraints,
+        copy=True,
+        ftol=0,
+        verbose=2,
+    )
+
+    np.testing.assert_allclose(eq_generic.p_l, eq_external.p_l)
+    np.testing.assert_allclose(eq_generic.p_l[:2], [2e2, -2e2], rtol=4e-2)
+    np.testing.assert_allclose(eq_external.p_l[:2], [2e2, -2e2], rtol=4e-2)

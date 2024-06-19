@@ -139,7 +139,7 @@ Check that you have loaded these modules
 
     module list
 
-Create a conda environment for DESC
+Create a conda environment for DESC (`borrowed from here https://docs.nersc.gov/development/languages/python/using-python-perlmutter/#jax`)
 
 .. code-block:: sh
 

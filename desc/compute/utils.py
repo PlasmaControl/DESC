@@ -99,24 +99,16 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         if (
             data_index[parameterization][name]["dim"] == 3  # it should be 3D
             and kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
+            and data_index[parameterization][name]["coordinates"] != "s"
             and ("phi" in data)  # phi is needed for conversion
             and name != "x"  # x is not a vector, it is coordinates
-            and data_index[parameterization][name]["coordinates"] != "s"
         ):
             from .geom_utils import rpz2xyz_vec
 
             data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
         elif (
-            data_index[parameterization][name]["dim"] == 3  # it should be 3D
-            and kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
-            and name != "x"  # x is not a vector, it is coordinates
-            and data_index[parameterization][name]["coordinates"] != "s"
-        ):
-            from .geom_utils import rpz2xyz_vec
-
-            data[name] = rpz2xyz_vec(data[name], phi=transforms["grid"].nodes[:, 2])
-        elif (
             kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
+            and data_index[parameterization][name]["coordinates"] != "s"
             and name == "x"  # x is the only coordinate value
         ):
             from .geom_utils import rpz2xyz

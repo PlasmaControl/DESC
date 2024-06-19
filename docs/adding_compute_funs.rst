@@ -104,9 +104,7 @@ metadata about the quantity. The necessary fields are detailed below:
   and then if a specific subclass requires a different method, one may define a second compute function for
   the same quantity, with a parameterization for that subclass (e.g. ``desc.geometry.curve.SplineXYZCurve``).
   See the compute definitions for the ``length`` quantity in ``compute/_curve.py`` for an example of this,
-  which is similar to the inheritance structure of Python classes. Note that for the compute function inheritance to work
-  properly, the definition of the compute function for the subclass implementation must come AFTER
-  the superclass compute function's definition, otherwise an error will be thrown when the data index is created.
+  which is similar to the inheritance structure of Python classes.
 * ``kwargs``: If the compute function requires any additional arguments they should
   be specified like ``kwarg="description"`` where ``kwarg`` is replaced by the actual
   keyword argument, and ``"description"`` is a string describing what it is.

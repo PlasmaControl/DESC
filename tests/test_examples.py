@@ -10,7 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp
-from desc.coils import FourierRZCoil
+from desc.coils import FourierPlanarCoil, FourierRZCoil, MixedCoilSet
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -1294,3 +1294,22 @@ def test_second_stage_optimization():
     np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
     np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
     np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
+
+
+# TODO: replace this with the solution to Issue #1021
+@pytest.mark.unit
+def test_optimize_with_fourier_planar_coil():
+    """Test optimizing a FourierPlanarCoil."""
+    # single coil
+    c = FourierPlanarCoil()
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
+
+    # in MixedCoilSet
+    c = MixedCoilSet(FourierRZCoil(), FourierPlanarCoil())
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")[1]["length"], 11, atol=1e-3)

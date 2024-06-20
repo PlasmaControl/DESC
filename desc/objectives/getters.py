@@ -1,8 +1,6 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-import numpy as np
-
-from desc.utils import is_any_instance
+from desc.utils import flatten_list, is_any_instance, unique_list
 
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
@@ -24,9 +22,9 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
-    FixParameter,
     FixPressure,
     FixPsi,
+    FixSheetCurrent,
 )
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
@@ -61,18 +59,15 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
     -------
     objective, ObjectiveFunction
         An objective function with default force balance objectives.
+
     """
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
     if mode == "energy":
-        objectives = Energy(eq=eq, normalize=normalize, normalize_target=normalize)
+        objectives = Energy(**kwargs)
     elif mode == "force":
-        objectives = ForceBalance(
-            eq=eq, normalize=normalize, normalize_target=normalize
-        )
+        objectives = ForceBalance(**kwargs)
     elif mode == "forces":
-        objectives = (
-            RadialForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
-            HelicalForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
-        )
+        objectives = (RadialForceBalance(**kwargs), HelicalForceBalance(**kwargs))
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)
@@ -96,20 +91,13 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
         A list of the linear constraints used in fixed-axis problems.
 
     """
-    constraints = (
-        FixAxisR(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixAxisZ(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
-    )
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
+    constraints = (FixAxisR(**kwargs), FixAxisZ(**kwargs), FixPsi(**kwargs))
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
-                constraints += (
-                    con(eq=eq, normalize=normalize, normalize_target=normalize),
-                )
-    for param in ["I", "G", "Phi_mn"]:
-        if np.array(getattr(eq, param, [])).size:
-            constraints += (FixParameter(eq, param),)
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
 
     return constraints
 
@@ -132,20 +120,13 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
         A list of the linear constraints used in fixed-boundary problems.
 
     """
-    constraints = (
-        FixBoundaryR(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
-    )
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
+    constraints = (FixBoundaryR(**kwargs), FixBoundaryZ(**kwargs), FixPsi(**kwargs))
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
-                constraints += (
-                    con(eq=eq, normalize=normalize, normalize_target=normalize),
-                )
-    for param in ["I", "G", "Phi_mn"]:
-        if np.array(getattr(eq, param, [])).size:
-            constraints += (FixParameter(eq, param),)
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
 
     return constraints
 
@@ -186,24 +167,18 @@ def get_NAE_constraints(
     -------
     constraints, tuple of _Objectives
         A list of the linear constraints used in fixed-axis problems.
+
     """
+    kwargs = {"eq": desc_eq, "normalize": normalize, "normalize_target": normalize}
     if not isinstance(fix_lambda, bool):
         fix_lambda = int(fix_lambda)
-    constraints = (
-        FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-        FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-        FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-    )
+    constraints = (FixAxisR(**kwargs), FixAxisZ(**kwargs), FixPsi(**kwargs))
 
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(desc_eq, name) is not None:
-                constraints += (
-                    con(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-                )
-    for param in ["I", "G", "Phi_mn"]:
-        if np.array(getattr(desc_eq, param, [])).size:
-            constraints += (FixParameter(desc_eq, param),)
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
 
     if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(
@@ -222,30 +197,32 @@ def get_NAE_constraints(
 
 def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
+    params = set(unique_list(flatten_list(thing.optimizable_params))[0])
+
     # Equilibrium
-    if (
-        hasattr(thing, "Ra_n")
-        and hasattr(thing, "Za_n")
-        and hasattr(thing, "Rb_lmn")
-        and hasattr(thing, "Zb_lmn")
-        and hasattr(thing, "L_lmn")
+    if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
+        constraints, BoundaryRSelfConsistency
     ):
-        if not is_any_instance(constraints, BoundaryRSelfConsistency):
-            constraints += (BoundaryRSelfConsistency(eq=thing),)
-        if not is_any_instance(constraints, BoundaryZSelfConsistency):
-            constraints += (BoundaryZSelfConsistency(eq=thing),)
-        if not is_any_instance(constraints, FixLambdaGauge):
-            constraints += (FixLambdaGauge(eq=thing),)
-        if not is_any_instance(constraints, AxisRSelfConsistency):
-            constraints += (AxisRSelfConsistency(eq=thing),)
-        if not is_any_instance(constraints, AxisZSelfConsistency):
-            constraints += (AxisZSelfConsistency(eq=thing),)
+        constraints += (BoundaryRSelfConsistency(eq=thing),)
+    if {"Z_lmn", "Zb_lmn"} <= params and not is_any_instance(
+        constraints, BoundaryZSelfConsistency
+    ):
+        constraints += (BoundaryZSelfConsistency(eq=thing),)
+    if {"L_lmn"} <= params and not is_any_instance(constraints, FixLambdaGauge):
+        constraints += (FixLambdaGauge(eq=thing),)
+    if {"R_lmn", "Ra_n"} <= params and not is_any_instance(
+        constraints, AxisRSelfConsistency
+    ):
+        constraints += (AxisRSelfConsistency(eq=thing),)
+    if {"Z_lmn", "Za_n"} <= params and not is_any_instance(
+        constraints, AxisZSelfConsistency
+    ):
+        constraints += (AxisZSelfConsistency(eq=thing),)
 
     # Curve
-    elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):
-        if not is_any_instance(constraints, FixCurveShift):
-            constraints += (FixCurveShift(curve=thing),)
-        if not is_any_instance(constraints, FixCurveRotation):
-            constraints += (FixCurveRotation(curve=thing),)
+    if {"shift"} <= params and not is_any_instance(constraints, FixCurveShift):
+        constraints += (FixCurveShift(curve=thing),)
+    if {"rotmat"} <= params and not is_any_instance(constraints, FixCurveRotation):
+        constraints += (FixCurveRotation(curve=thing),)
 
     return constraints

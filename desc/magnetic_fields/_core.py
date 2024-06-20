@@ -24,7 +24,7 @@ from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.singularities import compute_B_plasma_lcfs
 from desc.transform import Transform
-from desc.utils import copy_coeffs, flatten_list, setdefault, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -540,6 +540,85 @@ class _MagneticField(IOAble, ABC):
         bz_001[:] = B_Z
 
         file.close()
+
+
+class MagneticFieldFromUser(_MagneticField, Optimizable):
+    """Wrap an arbitrary function for calculating magnetic field in lab coordinates.
+
+    Parameters
+    ----------
+    fun : callable
+        Function to compute magnetic field at arbitrary points. Should have a signature
+        of the form ``fun(coords, params) -> B`` where
+
+          - ``coords`` is a (n,3) array of positions in R, phi, Z coordinates where
+            the field is to be evaluated.
+          - ``params`` is an array of optional parameters, eg for optimizing the field.
+          - ``B`` is the returned value of the magnetic field as a (n,3) array in R,
+            phi, Z coordinates.
+
+    params : ndarray, optional
+        Default values for parameters. Defaults to an empty array.
+
+    """
+
+    def __init__(self, fun, params=None):
+        errorif(not callable(fun), ValueError, "fun must be callable")
+        self._params = jnp.asarray(setdefault(params, jnp.array([])))
+
+        import jax
+
+        dummy_coords = np.empty((7, 3))
+        dummy_B = jax.eval_shape(fun, dummy_coords, self.params)
+        errorif(
+            dummy_B.shape != (7, 3),
+            ValueError,
+            "fun should return an array of the same shape as coords",
+        )
+        self._fun = fun
+
+    @optimizable_parameter
+    @property
+    def params(self):
+        """ndarray: Parameters of the field allowed to vary during optimization."""
+        return self._params
+
+    @params.setter
+    def params(self, params):
+        self._params = params
+
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : array-like, optional
+            Optimizable parameters, defaults to field.params.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this class, only kept for API compatibility
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if params is None:
+            params = self.params
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+
+        B = self._fun(coords, params)
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+        return B
 
 
 class ScaledMagneticField(_MagneticField, Optimizable):

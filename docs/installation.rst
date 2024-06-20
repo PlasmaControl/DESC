@@ -163,13 +163,16 @@ Clone and install DESC
 Della and Stellar Clusters (Princeton)
 ++++++++++++++++++++++++++++++++++++++
 
-First, install JAX (we base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters:
+First, install JAX for the latest version of `jaxlib` available on the Princeton clusters.
+
+We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__, if the below instructions do not work please
+check the link to install JAX with the most up-to-date recommendations from the Princeton computing services:
 
 .. code-block:: sh
 
-    module load anaconda3/2023.3
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env "jax==0.4.14" "jaxlib==0.4.14=cuda112*" -c conda-forge
+    conda create --name desc-env 'python==3.11'
     conda activate desc-env
+    pip install -U "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 Then, install DESC,
 
@@ -184,7 +187,7 @@ Then, install DESC,
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Second option was tested and confirmed to work on the Della cluster as of 12-2-23 and Stellar cluster at Princeton as of 11-14-2023.
+Tested and confirmed to work on the Della cluster as of 6-20-24 and Stellar cluster at Princeton as of 6-20-24.
 
 On Clusters with IBM Power Architecture
 ***************************************
@@ -273,3 +276,12 @@ Try ensuring you've activated the conda environment that DESC is in ( ``conda ac
 **Solution**:
 
 You likely are not running python from the environment in which you've installed DESC. Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.
+
+**Problem**: I'm attempting to install jax with pip on a cluster, I get an error ``ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+desc-opt 0.9.2+587.gc0b44414.dirty...`` with a list of incompatiblities.
+
+**Solution**:
+
+This may be caused by a version of DESC already having been installed in your base conda environment.
+
+Try removing the ``DESC`` folder completely, ensuring that ``pip list`` in your base conda environment no longer lists ``desc-opt`` as a package, then redo the installation instructions.

@@ -49,7 +49,7 @@ class _CoilObjective(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, list, optional
         Collocation grid containing the nodes to evaluate at.
-        If a list, must have the same length as coil.
+        If a list, must have the same structure as coil.
     name : str, optional
         Name of the objective function.
 

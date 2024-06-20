@@ -10,7 +10,7 @@ from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
-from desc.utils import errorif
+from desc.utils import errorif, parse_argname_change
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
@@ -74,7 +74,9 @@ class GenericObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name="generic",
+        **kwargs,
     ):
+        thing = parse_argname_change(thing, kwargs, "eq", "thing")
         if target is None and bounds is None:
             target = 0
         self.f = f
@@ -113,20 +115,18 @@ class GenericObjective(_Objective):
                 ValueError,
                 "grid must be supplied for things besides an Equilibrium.",
             )
-            self._grid = QuadratureGrid(
-                thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP
-            )
+            grid = QuadratureGrid(thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP)
+        else:
+            grid = self._grid
 
         if data_index[self._p][self.f]["dim"] == 0:
             self._dim_f = 1
         elif data_index[self._p][self.f]["coordinates"] == "r":
-            self._dim_f = self._grid.num_rho
+            self._dim_f = grid.num_rho
         else:
-            self._dim_f = self._grid.num_nodes * np.prod(
-                data_index[self._p][self.f]["dim"]
-            )
-        profiles = get_profiles(self.f, obj=thing, grid=self._grid)
-        transforms = get_transforms(self.f, obj=thing, grid=self._grid)
+            self._dim_f = grid.num_nodes * np.prod(data_index[self._p][self.f]["dim"])
+        profiles = get_profiles(self.f, obj=thing, grid=grid)
+        transforms = get_transforms(self.f, obj=thing, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -371,7 +371,9 @@ class ObjectiveFromUser(_Objective):
         deriv_mode="auto",
         grid=None,
         name="custom",
+        **kwargs,
     ):
+        thing = parse_argname_change(thing, kwargs, "eq", "thing")
         if target is None and bounds is None:
             target = 0
         self._fun = fun
@@ -407,9 +409,9 @@ class ObjectiveFromUser(_Objective):
                 ValueError,
                 "grid must be supplied for things besides an Equilibrium.",
             )
-            self._grid = QuadratureGrid(
-                thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP
-            )
+            grid = QuadratureGrid(thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP)
+        else:
+            grid = self._grid
 
         def get_vars(fun):
             pattern = r"data\[(.*?)\]"
@@ -426,16 +428,16 @@ class ObjectiveFromUser(_Objective):
                 dummy_data[key] = jnp.array(0.0)
             else:
                 dummy_data[key] = jnp.empty(
-                    (self._grid.num_nodes, data_index[self._p][key]["dim"])
+                    (grid.num_nodes, data_index[self._p][key]["dim"])
                 ).squeeze()
 
-        self._fun_wrapped = lambda data: self._fun(self._grid, data)
+        self._fun_wrapped = lambda data: self._fun(grid, data)
         import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        profiles = get_profiles(self._data_keys, obj=thing, grid=self._grid)
-        transforms = get_transforms(self._data_keys, obj=thing, grid=self._grid)
+        profiles = get_profiles(self._data_keys, obj=thing, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=thing, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,

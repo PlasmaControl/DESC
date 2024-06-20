@@ -910,13 +910,22 @@ class TestObjectiveFunction:
     def test_plasma_coil_min_distance(self):
         """Tests minimum distance between plasma and a coilset."""
 
-        def test(eq, coils, mindist, plasma_grid=None, coil_grid=None, eq_fixed=False):
+        def test(
+            eq,
+            coils,
+            mindist,
+            plasma_grid=None,
+            coil_grid=None,
+            eq_fixed=False,
+            coils_fixed=False,
+        ):
             obj = PlasmaCoilsetMinDistance(
                 eq=eq,
                 coils=coils,
                 plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=eq_fixed,
+                coils_fixed=coils_fixed,
             )
             obj.build()
             f = obj.compute(coils_params=coils.params_dict, eq_params=eq.params_dict)
@@ -985,6 +994,30 @@ class TestObjectiveFunction:
             plasma_grid=plasma_grid,
             coil_grid=coil_grid,
             eq_fixed=False,
+        )
+
+        # fixed planar toroidal coils with symmetry, around unfixed circular tokamak
+        R0 = 5
+        a = 1.5
+        offset = 0.75
+        surf = FourierRZToroidalSurface(
+            R_lmn=np.array([R0, a]),
+            Z_lmn=np.array([0, -a]),
+            modes_R=np.array([[0, 0], [1, 0]]),
+            modes_Z=np.array([[0, 0], [-1, 0]]),
+        )
+        eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
+        coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
+        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils = CoilSet(coils[1::2], NFP=2, sym=True)
+        test(
+            eq,
+            coils,
+            offset,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=False,
+            coils_fixed=True,
         )
 
         # TODO: add more complex test case with a stellarator and/or MixedCoilSet

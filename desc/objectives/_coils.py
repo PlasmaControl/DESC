@@ -910,6 +910,12 @@ class PlasmaCoilsetMinDistance(_Objective):
         during optimization, and self.things = [coils] only.
         If False, the surface coordinates are computed at every iteration.
         False by default, so that self.things = [coils, eq].
+    coils_fixed: bool, optional
+        Whether the coils are fixed or not. If True, the coils
+        are fixed and their coordinates are precomputed, which saves on computation time
+        during optimization, and self.things = [eq] only.
+        If False, the coil coordinates are computed at every iteration.
+        False by default, so that self.things = [coils, eq].
     name : str, optional
         Name of the objective function.
 
@@ -933,16 +939,25 @@ class PlasmaCoilsetMinDistance(_Objective):
         plasma_grid=None,
         coil_grid=None,
         eq_fixed=False,
+        coils_fixed=False,
         name="plasma-coil minimum distance",
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._eq = eq
+        self._coils = coils
         self._plasma_grid = plasma_grid
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
+        self._coils_fixed = coils_fixed
+        errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coils")
+        things = []
+        if not coils_fixed:
+            things.append(coils)
+        if not eq_fixed:
+            things.append(eq)
         super().__init__(
-            things=[coils, eq] if not eq_fixed else [coils],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -964,8 +979,15 @@ class PlasmaCoilsetMinDistance(_Objective):
             Level of output.
 
         """
-        coilset = self.things[0]
-        eq = self._eq if self._eq_fixed else self.things[1]
+        if self._coils_fixed:
+            eq = self.things[0]
+            coilset = self._coils
+        elif self._eq_fixed:
+            coilset = self.things[0]
+            eq = self._eq
+        else:
+            coilset = self.things[0]
+            eq = self.things[1]
         plasma_grid = self._plasma_grid or LinearGrid(M=eq.M_grid, N=eq.N_grid)
         coil_grid = self._coil_grid or LinearGrid(N=16)
         warnif(
@@ -1009,6 +1031,11 @@ class PlasmaCoilsetMinDistance(_Objective):
             )
             plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
             self._constants["plasma_coords"] = plasma_coords
+        if self._coils_fixed:
+            coils_pts = coilset._compute_position(
+                params=coilset.params_dict, grid=coil_grid
+            )
+            self._constants["coil_coords"] = coils_pts
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -1016,14 +1043,16 @@ class PlasmaCoilsetMinDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, coils_params, eq_params=None, constants=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute minimum distance between coils and the plasma/surface.
 
         Parameters
         ----------
-        coils_params : dict
-            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict``
-        eq_params : dict
+        params_1 : dict
+            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict`` if
+            self._coils_fixed is False, else is the equilibrium or surface degrees of
+            freedom
+        params_2 : dict
             Dictionary of equilibrium or surface degrees of freedom,
             eg ``Equilibrium.params_dict``
             Only required if ``self._eq_fixed = False``.
@@ -1039,11 +1068,20 @@ class PlasmaCoilsetMinDistance(_Objective):
         """
         if constants is None:
             constants = self.constants
-
+        if self._coils_fixed:
+            eq_params = params_1
+        elif self._eq_fixed:
+            coils_params = params_1
+        else:
+            coils_params = params_1
+            eq_params = params_2
         # coil pts; shape(ncoils,coils_grid.num_nodes,3)
-        coils_pts = constants["coilset"]._compute_position(
-            params=coils_params, grid=constants["coil_grid"]
-        )
+        if self._coils_fixed:
+            coils_pts = constants["coil_coords"]
+        else:
+            coils_pts = constants["coilset"]._compute_position(
+                params=coils_params, grid=constants["coil_grid"]
+            )
 
         # plasma pts; shape(plasma_grid.num_nodes,3)
         if self._eq_fixed:

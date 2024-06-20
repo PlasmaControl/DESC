@@ -1431,6 +1431,7 @@ def test_coilset_geometry_optimization():
                 plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=False,
+                coils_fixed=True,
             ),
             CoilsetMinDistance(
                 coils_opt_with_eq,
@@ -1500,6 +1501,7 @@ def test_coilset_geometry_optimization():
                 plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=False,
+                coils_fixed=True,
             ),
             CoilsetMinDistance(
                 coils_opt_with_surf,

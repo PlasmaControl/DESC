@@ -59,7 +59,6 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
 
@@ -177,25 +176,6 @@ def test_1d_optimization():
         eq.optimize(objective, constraints, optimizer="lsq-exact", options=options)
 
     np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
-
-
-@pytest.mark.regression
-@pytest.mark.optimize
-def test_1d_optimization_old():
-    """Tests 1D optimization for target aspect ratio."""
-    eq = get("SOLOVEV")
-    objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
-    eq._optimize(
-        objective,
-        copy=False,
-        solve_options={"verbose": 0},
-        perturb_options={
-            "dZb": True,
-            "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1]),
-        },
-    )
-
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=1e-3)
 
 
 def run_qh_step(n, eq):

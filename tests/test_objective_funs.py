@@ -940,6 +940,88 @@ class TestObjectiveFunction:
 
         test(eq, field, psi_from_field)
 
+    @pytest.mark.unit
+    def test_signed_plasma_vessel_distance(self):
+        """Test calculation of signed distance from plasma to vessel."""
+        R0 = 10.0
+        a_p = 1.0
+        a_s = 2.0
+        # default eq has R0=10, a=1
+        eq = Equilibrium(M=3, N=2)
+        # surface with same R0, a=2, so true d=1 for all pts
+        surface = FourierRZToroidalSurface(
+            R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        )
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=grid,
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        np.testing.assert_allclose(d, a_s - a_p)
+
+        # ensure that it works (dimension-wise) when compute_scaled is called
+        _ = obj.compute_scaled(*obj.xs(eq, surface))
+
+        # For plasma outside surface, should get signed distance
+        surface = FourierRZToroidalSurface(
+            R_lmn=[R0, a_p * 0.5],
+            Z_lmn=[-a_p * 0.5],
+            modes_R=[[0, 0], [1, 0]],
+            modes_Z=[[-1, 0]],
+        )
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=grid,
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        np.testing.assert_allclose(d, -0.5 * a_p)
+
+        # ensure it works with different sized grids (poloidal resolution different)
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=LinearGrid(M=10, N=6),
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        assert abs(d.max() - (-0.5 * a_p)) < 1e-14
+        assert abs(d.min() - (-0.5 * a_p)) < grid.spacing[0, 1] * a_p * 0.5
+
+        # ensure it works with different sized grids (poloidal resolution different)
+        # and using softmin (with deprecated name alpha)
+        grid = LinearGrid(M=5, N=6)
+        with pytest.raises(FutureWarning):
+            obj = PlasmaVesselDistance(
+                eq=eq,
+                surface_grid=grid,
+                plasma_grid=LinearGrid(M=10, N=6),
+                surface=surface,
+                use_signed_distance=True,
+                use_softmin=True,
+                alpha=4000,
+            )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        assert abs(d.max() - (-0.5 * a_p)) < 1e-14
+        assert abs(d.min() - (-0.5 * a_p)) < grid.spacing[0, 1] * a_p * 0.5
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -1122,70 +1204,6 @@ def test_target_profiles():
             objp.constants["transforms"]["grid"].unique_rho_idx, 0
         ],
     )
-
-
-@pytest.mark.unit
-def test_signed_plasma_vessel_distance():
-    """Test calculation of signed distance from plasma to vessel."""
-    R0 = 10.0
-    a_p = 1.0
-    a_s = 2.0
-    # default eq has R0=10, a=1
-    eq = Equilibrium(M=3, N=2)
-    # surface with same R0, a=2, so true d=1 for all pts
-    surface = FourierRZToroidalSurface(
-        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
-    )
-    grid = LinearGrid(M=5, N=6)
-    obj = PlasmaVesselDistance(
-        eq=eq,
-        surface_grid=grid,
-        plasma_grid=grid,
-        surface=surface,
-        use_signed_distance=True,
-    )
-    obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq, surface))
-    assert obj.dim_f == d.size
-    np.testing.assert_allclose(d, a_s - a_p)
-
-    # ensure that it works (dimension-wise) when compute_scaled is called
-    _ = obj.compute_scaled(*obj.xs(eq, surface))
-
-    # For plasma outside surface, should get signed distance
-    surface = FourierRZToroidalSurface(
-        R_lmn=[R0, a_p * 0.5],
-        Z_lmn=[-a_p * 0.5],
-        modes_R=[[0, 0], [1, 0]],
-        modes_Z=[[-1, 0]],
-    )
-    grid = LinearGrid(M=5, N=6)
-    obj = PlasmaVesselDistance(
-        eq=eq,
-        surface_grid=grid,
-        plasma_grid=grid,
-        surface=surface,
-        use_signed_distance=True,
-    )
-    obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq, surface))
-    assert obj.dim_f == d.size
-    np.testing.assert_allclose(d, -0.5 * a_p)
-
-    # ensure it works with different sized grids (poloidal resolution different)
-    grid = LinearGrid(M=5, N=6)
-    obj = PlasmaVesselDistance(
-        eq=eq,
-        surface_grid=grid,
-        plasma_grid=LinearGrid(M=10, N=6),
-        surface=surface,
-        use_signed_distance=True,
-    )
-    obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq, surface))
-    assert obj.dim_f == d.size
-    assert abs(d.max() - (-0.5 * a_p)) < 1e-14
-    assert abs(d.min() - (-0.5 * a_p)) < grid.spacing[0, 1] * a_p * 0.5
 
 
 @pytest.mark.unit

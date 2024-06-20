@@ -9,7 +9,7 @@ from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif, parse_argname_change
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -609,10 +609,11 @@ class PlasmaVesselDistance(_Objective):
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
-        use_signed_distance=False,
         surface_fixed=False,
         softmin_alpha=1.0,
         name="plasma-vessel distance",
+        use_signed_distance=False,
+        **kwargs
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -622,7 +623,9 @@ class PlasmaVesselDistance(_Objective):
         self._use_softmin = use_softmin
         self._use_signed_distance = use_signed_distance
         self._surface_fixed = surface_fixed
-        self._softmin_alpha = softmin_alpha
+        self._softmin_alpha = parse_argname_change(
+            softmin_alpha, kwargs, "alpha", "softmin_alpha"
+        )
         super().__init__(
             things=[eq, self._surface] if not surface_fixed else [eq],
             target=target,

@@ -984,17 +984,18 @@ def test_constrained_AL_scalar():
 
 
 @pytest.mark.slow
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.optimize
 def test_signed_PlasmaVesselDistance():
     """Tests that signed distance works with surface optimization."""
     eq = desc.examples.get("HELIOTRON")
+    eq.change_resolution(M=2, N=2)
 
     constraints = (FixParameters(eq),)  # don't want eq to change
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
 
-    grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP)
+    grid = LinearGrid(M=10, N=2, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
@@ -1048,7 +1049,7 @@ def test_signed_PlasmaVesselDistance():
     eq = Equilibrium(M=1, N=1)
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
-    grid = LinearGrid(M=12, N=2, NFP=eq.NFP)
+    grid = LinearGrid(M=10, N=2, NFP=eq.NFP)
 
     obj = PlasmaVesselDistance(
         surface=surf,

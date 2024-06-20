@@ -928,7 +928,7 @@ class TestObjectiveFunction:
                 coils_fixed=coils_fixed,
             )
             obj.build()
-            f = obj.compute(coils_params=coils.params_dict, eq_params=eq.params_dict)
+            f = obj.compute(params_1=coils.params_dict, params_2=eq.params_dict)
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
 

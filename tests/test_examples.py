@@ -1433,20 +1433,11 @@ def test_coilset_geometry_optimization():
                 eq_fixed=False,
                 coils_fixed=True,
             ),
-            CoilsetMinDistance(
-                coils_opt_with_eq,
-                target=2 * np.pi * (R0 - offset) / coils.num_coils,
-                grid=coil_grid,
-            ),
         )
     )
     # TODO: use FixCoilCurrent instead
     # only 2 free optimization variables are coil center position phi and radius r_n
     constraints = (
-        FixParameters(
-            coils_opt_with_eq,
-            {"current": True, "center": True, "normal": True, "r_n": True},
-        ),
         FixCurrent(eq),
         FixPressure(eq),
         FixPsi(eq),
@@ -1454,8 +1445,8 @@ def test_coilset_geometry_optimization():
         FixBoundaryZ(eq, modes=np.array([[0, -2, 0]])),
     )
     optimizer = Optimizer("scipy-trf")
-    [coils_opt_with_eq, eq], _ = optimizer.optimize(
-        things=[coils_opt_with_eq, eq],
+    [eq], _ = optimizer.optimize(
+        things=[eq],
         objective=objective,
         constraints=constraints,
         verbose=2,

@@ -837,6 +837,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(names, coil) for coil in self]
         if data is None:
             data = [{}] * len(self)
+
         # if user supplied initial data for each coil we also need to vmap over that.
         data = vmap(
             lambda d, x: self[0].compute(

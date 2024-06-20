@@ -2,7 +2,7 @@ import numbers
 
 import numpy as np
 
-from desc.backend import jnp, tree_leaves
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid, _Grid
@@ -98,75 +98,63 @@ class _CoilObjective(_Objective):
         # local import to avoid circular import
         from desc.coils import CoilSet, MixedCoilSet, _Coil
 
-        coil = self.things[0]
+        def _is_single_coil(c):
+            return isinstance(c, _Coil) and not isinstance(c, CoilSet)
 
-        self._dim_f = 0
-        self._quad_weights = jnp.array([])
+        def _prune_coilset_tree(coilset):
+            """Remove extra members from CoilSets (but not MixedCoilSets)."""
+            if isinstance(coilset, list) or isinstance(coilset, MixedCoilSet):
+                return [_prune_coilset_tree(c) for c in coilset]
+            elif isinstance(coilset, CoilSet):
+                # CoilSet only uses a single grid/transform for all coils
+                return _prune_coilset_tree(coilset.coils[0])
+            else:
+                return coilset  # single coil
+
+        coil = self.things[0]
+        grid = self._grid
 
         # get individual coils from coilset
-        coils = tree_leaves(
-            coil, is_leaf=lambda c: isinstance(c, _Coil) and not isinstance(c, CoilSet)
-        )
+        coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
         self._num_coils = len(coils)
 
-        # map grid to list with the same length as coils
-        if isinstance(self._grid, numbers.Integral):
-            self._grid = LinearGrid(N=self._grid, endpoint=False)
-        if self._grid is None:
-            self._grid = [LinearGrid(N=2 * c.N + 5, endpoint=False) for c in coils]
-        elif isinstance(self._grid, _Grid):
-            self._grid = [self._grid] * self._num_coils
-        assert isinstance(self._grid, list)
+        # map grid to list of length coils
+        if grid is None:
+            grid = [LinearGrid(N=2 * c.N + 5, endpoint=False) for c in coils]
+        if isinstance(grid, numbers.Integral):
+            grid = LinearGrid(N=self._grid, endpoint=False)
+        if isinstance(grid, _Grid):
+            grid = [grid] * self._num_coils
+        if isinstance(grid, list):
+            grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, _Grid))
+        assert len(grid) == len(coils)
 
-        self._dim_f = np.sum(
-            [
-                (
-                    grid.num_nodes * len(coil)
-                    if isinstance(coil, CoilSet)
-                    else grid.num_nodes
-                )
-                for coil, grid in zip(
-                    (coil if isinstance(coil, CoilSet) else [coil]),
-                    self._grid,
-                )
-            ]
+        errorif(
+            np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),
+            ValueError,
+            "Only use toroidal resolution for coil grids.",
         )
-        quad_weights = np.concatenate(
-            [
-                (
-                    np.tile(grid.spacing[:, 2], len(coil))
-                    if isinstance(coil, CoilSet)
-                    else grid.spacing[:, 2]
-                )
-                for coil, grid in zip(
-                    (coil if isinstance(coil, CoilSet) else [coil]),
-                    self._grid,
-                )
-            ]
-        )
+
+        self._dim_f = np.sum([g.num_nodes for g in grid])
+        quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        transforms = [
-            get_transforms(self._data_keys, obj=coil, grid=grid)
-            for coil, grid in zip(coils, self._grid)
-        ]
-
-        errorif(
-            np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]),
-            ValueError,
-            "Only use toroidal resolution for coil grids.",
+        # map grid/transform to the same structure as coil
+        grid = tree_unflatten(structure, grid)
+        transforms = tree_map(
+            lambda c, g: get_transforms(self._data_keys, obj=c, grid=g),
+            coil,
+            grid,
+            is_leaf=lambda x: _is_single_coil(x) or isinstance(x, _Grid),
         )
 
-        # CoilSet and _Coil have one grid/transform
-        if isinstance(coil, MixedCoilSet):
-            assert len(self._grid) == len(coil)
-        else:
-            self._grid = self._grid[0]
-            transforms = transforms[0]
+        # remove unnecessary members from coil tree structure
+        self._grid = _prune_coilset_tree(grid)
+        transforms = _prune_coilset_tree(transforms)
 
         self._constants = {"transforms": transforms, "quad_weights": quad_weights}
 

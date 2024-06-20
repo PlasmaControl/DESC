@@ -1152,7 +1152,7 @@ class FiniteElementBasis(_FE_Basis):
             self.Q = int((K + 1) * (K + 2) / 2.0)
         else:
             self.mesh = FiniteElementMesh3D(L, M, N, K=K)
-            self.I_LMN = 5 * (M - 1) * (N - 1) * (L - 1)
+            self.I_LMN = 6 * (M - 1) * (N - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
         self.nmodes = self.I_LMN * self.Q
         self._modes = self._get_modes()
@@ -2001,7 +2001,7 @@ def zernike_norm(l, m):
 class FiniteElementMesh3D:
     """Class representing a 3D mesh in (rho, theta, zeta) using scikit-fem.
 
-    This class represents a set of I_LMN = 5LMN tetrahedra obtained by tessalation
+    This class represents a set of I_LMN = 6LMN tetrahedra obtained by tessalation
     f a uniform  L x M x N mesh in rho, theta, zeta. The point of this class is to
     predefine all the tetrahedra and their associated basis functions so that, given
     a new point (rho_i, theta_i, zeta_i), we can quickly return which tetrahedron
@@ -2025,7 +2025,7 @@ class FiniteElementMesh3D:
         self.L = L
         self.N = N
         self.I_LMN = (
-            5 * (L - 1) * (M - 1) * (N - 1)
+            6 * (L - 1) * (M - 1) * (N - 1)
         )  # Considering how to incorporate n_p
         self.Q = int((K + 1) * (K + 2) * (K + 3) / 6)
         self.K = K
@@ -2067,7 +2067,7 @@ class FiniteElementMesh3D:
 
         self.assembly_matrix = assembly.assemble(basis).todense()
 
-        # We wish to compute the tetrahedral elements for all 5MNL tetrahedra:
+        # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
         tetrahedra = []
         vertices_final = []
         # Pick four points of tetrahedral elements:
@@ -2105,18 +2105,19 @@ class FiniteElementMesh3D:
                     rectangular_prism_vertices[6] = vertices[t_l_2]
                     rectangular_prism_vertices[7] = vertices[t_r_2]
 
-                    # Form five tetrahedra out of rectangular prisms.
-                    # Basing this on the way MeshTet functions
+                    #Deciding now to form six tetrahedra out of rectangular prisms.
+                    # Basing this on the way MeshHex.to_meshtet functions
 
                     tetrahedron_1_vertices = np.zeros([4, 3])
                     tetrahedron_2_vertices = np.zeros([4, 3])
                     tetrahedron_3_vertices = np.zeros([4, 3])
                     tetrahedron_4_vertices = np.zeros([4, 3])
                     tetrahedron_5_vertices = np.zeros([4, 3])
+                    tetrahedron_6_vertices = np.zeros([4, 3])
 
                     tetrahedron_1_vertices[0] = rectangular_prism_vertices[0]
                     tetrahedron_1_vertices[1] = rectangular_prism_vertices[1]
-                    tetrahedron_1_vertices[2] = rectangular_prism_vertices[2]
+                    tetrahedron_1_vertices[2] = rectangular_prism_vertices[3]
                     tetrahedron_1_vertices[3] = rectangular_prism_vertices[4]
 
                     D_1 = np.array(
@@ -2162,10 +2163,10 @@ class FiniteElementMesh3D:
                         tetrahedron_1_vertices[0] = tetrahedron_1_vertices[1]
                         tetrahedron_1_vertices[1] = v_0
 
-                    tetrahedron_2_vertices[0] = rectangular_prism_vertices[1]
-                    tetrahedron_2_vertices[1] = rectangular_prism_vertices[2]
-                    tetrahedron_2_vertices[2] = rectangular_prism_vertices[3]
-                    tetrahedron_2_vertices[3] = rectangular_prism_vertices[7]
+                    tetrahedron_2_vertices[0] = rectangular_prism_vertices[0]
+                    tetrahedron_2_vertices[1] = rectangular_prism_vertices[3]
+                    tetrahedron_2_vertices[2] = rectangular_prism_vertices[2]
+                    tetrahedron_2_vertices[3] = rectangular_prism_vertices[4]
 
                     D_2 = np.array(
                         [
@@ -2210,10 +2211,10 @@ class FiniteElementMesh3D:
                         tetrahedron_2_vertices[0] = tetrahedron_2_vertices[1]
                         tetrahedron_2_vertices[1] = v_0
 
-                    tetrahedron_3_vertices[0] = rectangular_prism_vertices[4]
-                    tetrahedron_3_vertices[1] = rectangular_prism_vertices[7]
-                    tetrahedron_3_vertices[2] = rectangular_prism_vertices[5]
-                    tetrahedron_3_vertices[3] = rectangular_prism_vertices[1]
+                    tetrahedron_3_vertices[0] = rectangular_prism_vertices[2]
+                    tetrahedron_3_vertices[1] = rectangular_prism_vertices[3]
+                    tetrahedron_3_vertices[2] = rectangular_prism_vertices[4]
+                    tetrahedron_3_vertices[3] = rectangular_prism_vertices[6]
 
                     D_3 = np.array(
                         [
@@ -2258,10 +2259,10 @@ class FiniteElementMesh3D:
                         tetrahedron_3_vertices[0] = tetrahedron_3_vertices[1]
                         tetrahedron_3_vertices[1] = v_0
 
-                    tetrahedron_4_vertices[0] = rectangular_prism_vertices[4]
-                    tetrahedron_4_vertices[1] = rectangular_prism_vertices[6]
-                    tetrahedron_4_vertices[2] = rectangular_prism_vertices[7]
-                    tetrahedron_4_vertices[3] = rectangular_prism_vertices[2]
+                    tetrahedron_4_vertices[0] = rectangular_prism_vertices[3]
+                    tetrahedron_4_vertices[1] = rectangular_prism_vertices[4]
+                    tetrahedron_4_vertices[2] = rectangular_prism_vertices[6]
+                    tetrahedron_4_vertices[3] = rectangular_prism_vertices[7]
 
                     D_4 = np.array(
                         [
@@ -2306,10 +2307,10 @@ class FiniteElementMesh3D:
                         tetrahedron_4_vertices[0] = tetrahedron_4_vertices[1]
                         tetrahedron_4_vertices[1] = v_0
 
-                    tetrahedron_5_vertices[0] = rectangular_prism_vertices[4]
-                    tetrahedron_5_vertices[1] = rectangular_prism_vertices[1]
-                    tetrahedron_5_vertices[2] = rectangular_prism_vertices[7]
-                    tetrahedron_5_vertices[3] = rectangular_prism_vertices[2]
+                    tetrahedron_5_vertices[0] = rectangular_prism_vertices[3]
+                    tetrahedron_5_vertices[1] = rectangular_prism_vertices[4]
+                    tetrahedron_5_vertices[2] = rectangular_prism_vertices[5]
+                    tetrahedron_5_vertices[3] = rectangular_prism_vertices[7]
 
                     D_5 = np.array(
                         [
@@ -2353,6 +2354,56 @@ class FiniteElementMesh3D:
                         v_0 = tetrahedron_5_vertices[0].copy()
                         tetrahedron_5_vertices[0] = tetrahedron_5_vertices[1]
                         tetrahedron_5_vertices[1] = v_0
+                        
+                        
+                        
+                    tetrahedron_6_vertices[0] = rectangular_prism_vertices[1]
+                    tetrahedron_6_vertices[1] = rectangular_prism_vertices[3]
+                    tetrahedron_6_vertices[2] = rectangular_prism_vertices[4]
+                    tetrahedron_6_vertices[3] = rectangular_prism_vertices[5]
+                    
+                    D_6 = np.array(
+                         [
+                             [
+                                 1,
+                                 tetrahedron_6_vertices[0, 0],
+                                 tetrahedron_6_vertices[0, 1],
+                                 tetrahedron_6_vertices[0, 2],
+                             ],
+                             [
+                                 1,
+                                 tetrahedron_6_vertices[1, 0],
+                                 tetrahedron_6_vertices[1, 1],
+                                 tetrahedron_6_vertices[1, 2],
+                             ],
+                             [
+                                 1,
+                                 tetrahedron_6_vertices[2, 0],
+                                 tetrahedron_6_vertices[2, 1],
+                                 tetrahedron_6_vertices[2, 2],
+                             ],
+                             [
+                                 1,
+                                 tetrahedron_6_vertices[3, 0],
+                                 tetrahedron_6_vertices[3, 1],
+                                 tetrahedron_6_vertices[3, 2],
+                             ],
+                         ]
+                     )
+
+                     # Making sure volume is positive; if not, then we switch the first two
+                     # rows:
+                    if (np.linalg.det(D_6) < 0) and (
+                         not np.isclose(np.linalg.det(D_6), 0.0)
+                     ):
+
+                         r_0 = D_6[0].copy()
+                         D_6[0] = D_6[1]
+                         D_6[1] = r_0
+
+                         v_0 = tetrahedron_6_vertices[0].copy()
+                         tetrahedron_6_vertices[0] = tetrahedron_6_vertices[1]
+                         tetrahedron_6_vertices[1] = v_0
 
                     # Grabbing the five tetrahedra in each Rectangular prism:
                     tetrahedron1 = TetrahedronFiniteElement(tetrahedron_1_vertices, K=K)
@@ -2360,16 +2411,20 @@ class FiniteElementMesh3D:
                     tetrahedron3 = TetrahedronFiniteElement(tetrahedron_3_vertices, K=K)
                     tetrahedron4 = TetrahedronFiniteElement(tetrahedron_4_vertices, K=K)
                     tetrahedron5 = TetrahedronFiniteElement(tetrahedron_5_vertices, K=K)
+                    tetrahedron6 = TetrahedronFiniteElement(tetrahedron_6_vertices, K=K)
                     tetrahedra.append(tetrahedron1)
                     tetrahedra.append(tetrahedron2)
                     tetrahedra.append(tetrahedron3)
                     tetrahedra.append(tetrahedron4)
                     tetrahedra.append(tetrahedron5)
+                    tetrahedra.append(tetrahedron6)
                     vertices_final.append(tetrahedron_1_vertices)
                     vertices_final.append(tetrahedron_2_vertices)
                     vertices_final.append(tetrahedron_3_vertices)
                     vertices_final.append(tetrahedron_4_vertices)
                     vertices_final.append(tetrahedron_5_vertices)
+                    vertices_final.append(tetrahedron_6_vertices)
+
 
         self.vertices_final = vertices_final
         self.vertices = vertices
@@ -2548,7 +2603,7 @@ class FiniteElementMesh3D:
 
         Parameters
         ----------
-        f : 3D ndarray, shape (nquad * 5MLN, num_functions)
+        f : 3D ndarray, shape (nquad * 6MLN, num_functions)
             Vector function defined on the L x M mesh in (rho, theta, zeta)
             that we would like to integrate component-wise with respect
             to the basis functions. For integration over the barycentric
@@ -3117,7 +3172,7 @@ class TetrahedronFiniteElement:
 
         self.volume6 = np.linalg.det(D)
         self.det = np.linalg.det(D)
-        # print(self.a, self.b, self.c, self.d, self.volume6)
+        print(self.volume6)
 
         # We construct equally spaced nodes for order K tetrahedron,
         # which gives Q nodes.
@@ -4411,6 +4466,7 @@ class FiniteElementMesh1D:
                     basis_functions[i, j, :] = bfs
                     break
         return basis_functions
+    
 
     def find_intervals_corresponding_to_points(self, theta):
         """Given a point on the mesh, find which interval it lies inside.
@@ -4440,6 +4496,8 @@ class FiniteElementMesh1D:
                     interval_indices[i] = j
                     basis_functions[i, :], _ = interval.get_basis_functions(v)
         return interval_indices, basis_functions
+    
+    
 
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
@@ -4464,6 +4522,7 @@ class FiniteElementMesh1D:
                 q = q + 1
 
         return quadrature_points
+    
 
     def integrate(self, f):
         """Integrates a function over the 1D mesh in theta.

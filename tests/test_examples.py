@@ -10,7 +10,13 @@ from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp
-from desc.coils import FourierPlanarCoil, FourierRZCoil, MixedCoilSet
+from desc.coils import (
+    CoilSet,
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+)
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -1262,6 +1268,48 @@ def test_second_stage_optimization():
     field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field, vacuum=True))
     constraints = FixParameters(field, [{"R0": True}, {}])
+    optimizer = Optimizer("scipy-trf")
+    (field,), _ = optimizer.optimize(
+        things=field,
+        objective=objective,
+        constraints=constraints,
+        ftol=0,
+        xtol=0,
+        verbose=2,
+    )
+    np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
+    np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
+    np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
+
+
+@pytest.mark.unit
+def test_second_stage_optimization_CoilSet():
+    """Test optimizing CoilSet for a fixed axisymmetric equilibrium."""
+    eq = Equilibrium()
+    R_coil = 10
+    I = 100
+    field = FourierXYZCoil(
+        current=I,
+        X_n=[0, R_coil, 0],
+        Y_n=[0, 0, R_coil],
+        Z_n=[0, 0, 0],
+        modes=[0, 1, -1],
+    ) + CoilSet(
+        FourierRZCoil(
+            current=I,
+        ),
+        NFP=5,
+        sym=True,
+    )
+
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field, vacuum=True))
+    constraints = FixParameters(
+        field,
+        [
+            {"X_n": True, "Y_n": True, "Z_n": True},
+            {"R_n": True, "Z_n": True, "current": True},
+        ],
+    )
     optimizer = Optimizer("scipy-trf")
     (field,), _ = optimizer.optimize(
         things=field,

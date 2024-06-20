@@ -457,8 +457,8 @@ def combination_permutation(m, n, equals=True):
 def multinomial_coefficients(m, n):
     """Number of ways to place n objects into m bins."""
     k = combination_permutation(m, n)
-    num = factorial(n)
-    den = factorial(k).prod(axis=-1)
+    num = factorial(n, exact=True)
+    den = factorial(k, exact=True).prod(axis=-1)
     return num / den
 
 

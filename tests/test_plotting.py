@@ -664,7 +664,7 @@ class TestPlotBoozerModes:
             rho=5,
         )
         ax.set_ylim([1e-6, 5e0])
-        for string in ["|B|_mn", "B modes", "rho"]:
+        for string in ["|B|_mn_B", "B modes", "rho"]:
             assert string in data.keys()
         return fig
 

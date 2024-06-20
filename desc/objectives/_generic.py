@@ -10,6 +10,7 @@ from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
+from desc.optimizable import OptimizableCollection
 from desc.utils import errorif, parse_argname_change
 
 from .linear_objectives import _FixedObjective
@@ -76,6 +77,11 @@ class GenericObjective(_Objective):
         name="generic",
         **kwargs,
     ):
+        errorif(
+            isinstance(thing, OptimizableCollection),
+            NotImplementedError,
+            "thing must be of type Optimizable and not OptimizableCollection.",
+        )
         thing = parse_argname_change(thing, kwargs, "eq", "thing")
         if target is None and bounds is None:
             target = 0
@@ -373,6 +379,11 @@ class ObjectiveFromUser(_Objective):
         name="custom",
         **kwargs,
     ):
+        errorif(
+            isinstance(thing, OptimizableCollection),
+            NotImplementedError,
+            "thing must be of type Optimizable and not OptimizableCollection.",
+        )
         thing = parse_argname_change(thing, kwargs, "eq", "thing")
         if target is None and bounds is None:
             target = 0
@@ -423,7 +434,7 @@ class ObjectiveFromUser(_Objective):
         self._data_keys = get_vars(self._fun)
         dummy_data = {}
         for key in self._data_keys:
-            assert key in data_index[self._p], f"Don't know how to compute {key}"
+            assert key in data_index[self._p], f"Don't know how to compute {key}."
             if data_index[self._p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:

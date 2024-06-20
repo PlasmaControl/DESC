@@ -5,7 +5,11 @@ New Features
 
 - Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
 to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
-
+- Add ``VectorPotentialField`` class to allow calculation of magnetic fields from a user-specified
+  vector potential function.
+- Add ``compute_magnetic_vector_potential`` methods to most ``MagneticField`` objects to allow vector potential
+  computation.
+- Add ability to save and load vector potential information from ``mgrid`` files.
 v0.11.1
 -------
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.11.0...v0.11.1)

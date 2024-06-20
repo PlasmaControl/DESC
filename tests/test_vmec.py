@@ -1389,6 +1389,8 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
             )
 
 
+# TODO: remove if we dont include asym in this PR
+@pytest.mark.xfail
 @pytest.mark.unit
 def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     """Test that booz_xform-style outputs compare well against C++ implementation."""

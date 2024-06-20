@@ -145,7 +145,7 @@ Create a conda environment for DESC (`following these instructions <https://docs
 
     conda create -n desc-env python=3.9
     conda activate desc-env
-    pip install --no-cache-dir "jax==0.4.23" "jax[cuda12_cudnn89]==0.4.23" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    pip install --no-cache-dir "jax==0.4.23" "jaxlib[cuda12_cudnn89]==0.4.23" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 For Perlmutter installation, please change the scipy version from
 

@@ -1,12 +1,16 @@
 Changelog
 =========
 
+New Features
+
+- Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
+to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
 - Adds method ``run_regcoil`` to ``FourierCurrentPotentialField`` that implements the
 REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
     * Can specify ``current_helicity`` to determine if resulting contours correspond to
     helical topology (``current_helicity`` not equal to 0) or
     modular (``current_helicity``equal to 0)
-- Adds method ``cut_surface_current_into_coils`` to ``FourierCurrentPotentialField``
+- Adds method ``.to_CoilSet`` to ``FourierCurrentPotentialField``
 which implements a coil cutting algorithm to discretize the surface current into coils
     * works for both modular and helical coils
 - Adds two new objectives, ``QuadraticFlux`` (which minimizes Bn on plasma surface due to
@@ -15,6 +19,7 @@ regularization term from surface current in the REGCOIL algorithm)
     * use of both of these functions allows for REGCOIL solutions to be obtained through
     the optimization framework, and combined with other objectives as well.
 - Adds functionality to optimize for omnigenity. This includes the ``OmnigenousField`` magnetic field class, the ``Omnigenity`` objective function, and an accompanying tutorial.
+
 v0.11.1
 -------
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.11.0...v0.11.1)

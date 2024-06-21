@@ -944,15 +944,3 @@ def test_repr():
 
     coils.name = "MyCoils"
     assert "MyCoils" in str(coils)
-
-
-@pytest.mark.unit
-def test_compute_minimum_distance():
-    """Test minimum distance compuation for CoilSet objects."""
-    dist = 1
-    coil1 = FourierRZCoil()
-    coil2 = FourierRZCoil(Z_n=np.array([dist]), modes_Z=np.array([0]))
-
-    coils = MixedCoilSet(coil1, coil2)
-
-    np.testing.assert_allclose(coils.compute_minimum_distance(), dist)

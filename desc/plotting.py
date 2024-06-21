@@ -3701,6 +3701,7 @@ def plot_regcoil_outputs(
             source_grid.nodes[source_grid.unique_theta_idx, 1],
             (phi_tot).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
             levels=ncontours,
+            cmap="viridis",
         )
         plt.colorbar()
         plt.ylabel("theta")
@@ -3774,6 +3775,7 @@ def plot_regcoil_outputs(
                     source_grid.num_theta, source_grid.num_zeta, order="F"
                 ),
                 levels=ncontours,
+                cmap="viridis",
             )
             plt.ylabel("theta")
             plt.xlabel("zeta")
@@ -3819,6 +3821,7 @@ def plot_regcoil_outputs(
                 eval_grid.nodes[eval_grid.unique_theta_idx, 1],
                 (Bn).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
                 levels=ncontours,
+                cmap="viridis",
             )
             plt.ylabel("theta")
             plt.xlabel("zeta")

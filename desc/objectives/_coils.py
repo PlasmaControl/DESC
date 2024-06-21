@@ -126,14 +126,13 @@ class _CoilObjective(_Objective):
         if isinstance(grid, _Grid):
             grid = [grid] * self._num_coils
         if isinstance(grid, list):
-            errorif(
-                len(grid) != len(coils),
-                ValueError,
-                "grid list input must have a length equal to the number of coils. "
-                + f"Got {len(grid)} grids for {len(coils)} coils.",
-            )
             grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, _Grid))
 
+        errorif(
+            len(grid) != len(coils),
+            ValueError,
+            "grid input must be broadcastable to the coil structure.",
+        )
         errorif(
             np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),
             ValueError,
@@ -143,13 +142,16 @@ class _CoilObjective(_Objective):
         self._dim_f = np.sum([g.num_nodes for g in grid])
         quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])
 
+        # map grid to the same structure as coil and then remove unnecessary members
+        grid = tree_unflatten(structure, grid)
+        grid = _prune_coilset_tree(grid)
+        coil = _prune_coilset_tree(coil)
+
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        # map grid/transform to the same structure as coil
-        grid = tree_unflatten(structure, grid)
         transforms = tree_map(
             lambda c, g: get_transforms(self._data_keys, obj=c, grid=g),
             coil,
@@ -157,10 +159,7 @@ class _CoilObjective(_Objective):
             is_leaf=lambda x: _is_single_coil(x) or isinstance(x, _Grid),
         )
 
-        # remove unnecessary members from coil tree structure
-        self._grid = _prune_coilset_tree(grid)
-        transforms = _prune_coilset_tree(transforms)
-
+        self._grid = grid
         self._constants = {"transforms": transforms, "quad_weights": quad_weights}
 
         timer.stop("Precomputing transforms")

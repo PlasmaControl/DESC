@@ -965,7 +965,7 @@ def test_constrained_AL_scalar():
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
     )
     # Dummy objective to return 0, we just want a feasible solution.
-    obj = ObjectiveFunction(GenericObjective("0", eq=eq))
+    obj = ObjectiveFunction(GenericObjective("0", thing=eq))
     ctol = 1e-4
     eq2, result = eq.optimize(
         objective=obj,

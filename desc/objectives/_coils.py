@@ -126,8 +126,13 @@ class _CoilObjective(_Objective):
         if isinstance(grid, _Grid):
             grid = [grid] * self._num_coils
         if isinstance(grid, list):
+            errorif(
+                len(grid) != len(coils),
+                ValueError,
+                "grid list input must have a length equal to the number of coils. "
+                + f"Got {len(grid)} grids for {len(coils)} coils.",
+            )
             grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, _Grid))
-        assert len(grid) == len(coils)
 
         errorif(
             np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),

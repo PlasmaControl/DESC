@@ -1398,7 +1398,7 @@ def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_z",
-    label="g^{\\rho}{\\rho}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\rho}{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1417,13 +1417,13 @@ def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_zz",
-    label="g^{rr}_{zz}",
-    units="~",
+    label="\\partial_{\\zeta \\zeta} g^{rr}",
+    units="m^-2",
     units_long="None",
     description="Double zeta derivative of the flux expansion term",
-    dim=3,
+    dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -1441,7 +1441,7 @@ def _g_sup_rr_sub_zz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_t",
-    label="g^{\\rho}{\\rho}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\rho}{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1460,7 +1460,7 @@ def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_tt",
-    label="g^{\\rho}{\\rho}_{\\theta \\theta}",
+    label="\\partial_{\\theta \\theta} g^{\\rho}{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1481,7 +1481,7 @@ def _g_sup_rr_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_tz",
-    label="g^{\\rho}{\\rho}_{\\theta \\zeta}",
+    label="\\partial_{\\theta \\zeta} g^{\\rho}{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1502,7 +1502,7 @@ def _g_sup_rr_tz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rt_r",
-    label="g^{\\rho}{\\theta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\rho}{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1523,7 +1523,7 @@ def _g_sup_rt_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_r",
-    label="g^{\\rho}{\\zeta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\rho}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1544,7 +1544,7 @@ def _g_sup_rz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_r",
-    label="g^{\\theta}{\\theta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\theta}{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1563,7 +1563,7 @@ def _g_sup_tt_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_r",
-    label="g^{\\theta}{\\zeta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\theta}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1584,7 +1584,7 @@ def _g_sup_tz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_r",
-    label="g^{\\zeta}{\\zeta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\zeta}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
@@ -1603,7 +1603,7 @@ def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rt_t",
-    label="g^{\\rho}{\\theta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\rho}{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1624,7 +1624,7 @@ def _g_sup_rt_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_t",
-    label="g^{\\rho}{\\zeta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\rho}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1645,7 +1645,7 @@ def _g_sup_rz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_t",
-    label="g^{\\theta}{\\theta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\theta}{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1664,7 +1664,7 @@ def _g_sup_tt_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_t",
-    label="g^{\\theta}{\\zeta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\theta}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1685,7 +1685,7 @@ def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_t",
-    label="g^{\\zeta}{\\zeta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\zeta}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
@@ -1704,7 +1704,7 @@ def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rt_z",
-    label="g^{\\rho}{\\theta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\rho}{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1725,7 +1725,7 @@ def _g_sup_rt_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_z",
-    label="g^{\\rho}{\\zeta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\rho}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1746,7 +1746,7 @@ def _g_sup_rz_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_z",
-    label="g^{\\theta}{\\theta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\theta}{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1765,7 +1765,7 @@ def _g_sup_tt_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_z",
-    label="g^{\\theta}{\\zeta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\theta}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1786,7 +1786,7 @@ def _g_sup_tz_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_z",
-    label="g^{\\zeta}{\\zeta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\zeta}{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
@@ -1901,7 +1901,7 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
     description="Fieldline bending term1",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=["grad(alpha)"],
@@ -1913,13 +1913,13 @@ def _g_sup_aa(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^aa_t",
-    label="g^{\\alpha \\alpha}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\alpha \\alpha}",
     units="~",
     units_long="None",
     description="Poloidal derivative of the fieldline bending term",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -1934,13 +1934,13 @@ def _g_sup_aa_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^aa_z",
-    label="g^{\\alpha \\alpha}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\alpha \\alpha}",
     units="~",
     units_long="None",
     description="Toroidal derivative of the fieldline bending term",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -1955,13 +1955,13 @@ def _g_sup_aa_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^aa_zz",
-    label="g^{\\alpha \\alpha}_{\\zeta \\zeta}",
+    label="\\partial_{\\zeta \\zeta} g^{\\alpha \\alpha}",
     units="~",
     units_long="None",
     description="Toroidal derivative of the fieldline bending term",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -1980,13 +1980,13 @@ def _g_sup_aa_zz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^aa_tt",
-    label="g^{\\alpha \\alpha}_{\\theta \\theta}",
+    label="\\partial_{\\theta \\theta} g^{\\alpha \\alpha}_{\\theta \\theta}",
     units="~",
     units_long="None",
     description="Poloidal derivative of the fieldline bending term",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -2005,13 +2005,13 @@ def _g_sup_aa_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^aa_tz",
-    label="g^{\\alpha \\alpha}_{\\theta \\zeta}",
+    label="\\partial_{\\theta \\zeta} g^{\\alpha \\alpha}",
     units="~",
     units_long="None",
     description="Mixed derivative of the fieldline bending term",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -2038,7 +2038,7 @@ def _g_sup_aa_tz(params, transforms, profiles, data, **kwargs):
     description="Fieldline bending term2",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=["grad(alpha)", "e^rho"],
@@ -2050,13 +2050,13 @@ def _g_sup_ra(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^ra_z",
-    label="g^{\\rho \\alpha}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\rho \\alpha}",
     units="~",
     units_long="None",
     description="Single zeta derivative of a fieldline bending term2",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -2075,13 +2075,13 @@ def _g_sup_ra_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^ra_t",
-    label="g^{\\rho \\alpha}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\rho \\alpha}",
     units="~",
     units_long="None",
     description="Poloidal theta derivative of a fieldline bending term2",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -2100,13 +2100,13 @@ def _g_sup_ra_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^ra_zz",
-    label="g^{\\rho \\alpha}_{\\zeta \\zeta}",
+    label="\\partial_{\\zeta \\zeta} g^{\\rho \\alpha}",
     units="~",
     units_long="None",
     description="Double zeta derivative of a fieldline bending term2",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -2127,13 +2127,13 @@ def _g_sup_ra_zz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^ra_tt",
-    label="g^{\\rho \\alpha}_{\\theta \\theta}",
+    label="\\partial_{\\theta \\theta} g^{\\rho \\alpha}",
     units="~",
     units_long="None",
     description="Double zeta derivative of a fieldline bending term2",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -2154,13 +2154,13 @@ def _g_sup_ra_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^ra_tz",
-    label="g^{\\rho \\alpha}_{\\theta \\zeta}",
+    label="\\partial_{\\theta \\zeta} g^{\\rho \\alpha}",
     units="~",
     units_long="None",
     description="Mixed derivative of a fieldline bending term2",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="rtz",
     data=[

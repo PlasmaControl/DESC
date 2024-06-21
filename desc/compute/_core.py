@@ -2997,7 +2997,7 @@ def _phi_rzz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\rho \\theta \\theta} \\phi",
     units="rad",
     units_long="radians",
-    description="Toroidal angle in lab frame, mixed derivative" "coordinate",
+    description="Toroidal angle in lab frame, mixed derivative",
     dim=1,
     params=[],
     transforms={},
@@ -3090,7 +3090,7 @@ def _phi_ttz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta \\zeta \\zeta} \\phi",
     units="rad",
     units_long="radians",
-    description="Toroidal angle in lab frame, mixed derivative" "toroidal coordinate",
+    description="Toroidal angle in lab frame, mixed derivative",
     dim=1,
     params=[],
     transforms={},
@@ -3353,8 +3353,8 @@ def _theta_PEST_t(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta \\theta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, derivative wrt "
-    "poloidal coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    "second derivative wrt poloidal coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -3372,8 +3372,8 @@ def _theta_PEST_tt(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta \\theta \\theta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, derivative wrt "
-    "poloidal coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    "third derivative wrt poloidal coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -3391,8 +3391,8 @@ def _theta_PEST_ttt(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho \\theta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, derivative wrt "
-    "poloidal and radial coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    "derivative wrt poloidal and radial coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -3469,8 +3469,8 @@ def _theta_PEST_tzz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, derivative wrt "
-    "toroidal coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    " derivative wrt toroidal coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -3488,8 +3488,8 @@ def _theta_PEST_z(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta \\zeta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, derivative wrt "
-    "toroidal coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    "second derivative wrt toroidal coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -3507,8 +3507,8 @@ def _theta_PEST_zz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta \\zeta \\zeta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, derivative wrt "
-    "toroidal coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    "third derivative wrt toroidal coordinate",
     dim=1,
     params=[],
     transforms={},

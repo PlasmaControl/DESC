@@ -979,12 +979,12 @@ class PlasmaCoilsetMinDistance(_Objective):
             Level of output.
 
         """
-        if self._coils_fixed:
+        if self._eq_fixed:
+            eq = self._eq
+            coils = self.things[0]
+        elif self._coils_fixed:
             eq = self.things[0]
             coils = self._coils
-        elif self._eq_fixed:
-            coils = self.things[0]
-            eq = self._eq
         else:
             eq = self.things[0]
             coils = self.things[1]
@@ -1059,10 +1059,10 @@ class PlasmaCoilsetMinDistance(_Objective):
         """
         if constants is None:
             constants = self.constants
-        if self._coils_fixed:
-            eq_params = params_1
-        elif self._eq_fixed:
+        if self._eq_fixed:
             coils_params = params_1
+        elif self._coils_fixed:
+            eq_params = params_1
         else:
             eq_params = params_1
             coils_params = params_2

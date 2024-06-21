@@ -9,9 +9,7 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-import scipy
 from scipy.constants import mu_0
-from scipy.integrate import simpson as simps
 
 from desc.backend import eigvals, jax, jit, jnp, vmap
 
@@ -744,11 +742,12 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
 
 
 @register_compute_fun(
-    name="ideal_ball_gamma3",
-    label="\\gamma^2",
+    name="effective ballooning potential",
+    label="V_{ball}",
     units=" ",
     units_long=" ",
-    description="ideal ballooning growth rate" + "requires data along a field line",
+    description="ideal ballooning effect potential"
+    + "requires data along a field line",
     dim=1,
     params=["Psi"],
     transforms={"grid": []},
@@ -836,11 +835,6 @@ def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
 
-    phi = data["phi"]
-
-    N_alpha = int(2)
-    N = int(len(phi) / N_alpha)
-
     temp_fac1 = 1 / (1 + data["lambda_t"])
     temp_fac2 = (iota - data["lambda_z"]) * temp_fac1
 
@@ -930,7 +924,6 @@ def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
 
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = a_N * B_N**3 * gds2 / modB**3 * 1 / gradpar
     g = a_N**3 * B_N * gds2 / modB * gradpar
     g_z = (
         a_N**3
@@ -968,328 +961,5 @@ def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
 
     V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
 
-    b = f / g
-
-    # grid spacing
-    h = phi[1] - phi[0]
-
-    sub_diag = (
-        1
-        / h**2
-        * jnp.ones(
-            N - 3,
-        )
-    )
-    sup_diag = sub_diag
-    diag = (
-        -2
-        / h**2
-        * jnp.ones(
-            N - 2,
-        )
-    )
-
-    D2 = jnp.diag(sub_diag, -1) + jnp.diag(diag + V[1:-1], 0) + jnp.diag(sup_diag, 1)
-
-    b = f / g
-    M = jnp.diag(b[1:-1], 0)
-
-    w, v = jax.linlag.eigh(D2, k=1, M=M, sigma=2.0, OPpart="r")
-
-    # variational refinement here
-    X = jnp.zeros((N,))
-    dX = jnp.zeros((N,))
-
-    X[1:-1] = jnp.reshape(v[:, 0].real, (-1,)) / jnp.max(jnp.abs(v[:, 0].real))
-
-    X[0] = 0.0
-    X[-1] = 0.0
-
-    dX[0] = (-1.5 * X[0] + 2 * X[1] - 0.5 * X[2]) / h
-    dX[1] = (X[2] - X[0]) / (2 * h)
-
-    dX[-2] = (X[-1] - X[-3]) / (2 * h)
-    dX[-1] = (0.5 * X[-3] - 2 * X[-2] + 1.5 * 0.0) / (h)
-
-    dX[2:-2] = 2 / (3 * h) * (X[3:-1] - X[1:-3]) - (X[4:] - X[0:-4]) / (12 * h)
-
-    Y0 = -1 * dX**2 + V * X**2
-    Y1 = b * X**2
-    lam = simps(Y0) / simps(Y1)
-
-    data["ideal_ball_gamma3"] = lam * (lam > 0)
-    return data
-
-
-@register_compute_fun(
-    name="ideal_ball_gamma4",
-    label="\\gamma^2",
-    units=" ",
-    units_long=" ",
-    description="ideal ballooning growth rate" + "requires data along a field line",
-    dim=1,
-    params=["Psi"],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="rtz",
-    data=[
-        "a",
-        "rho",
-        "p_r",
-        "psi_r",
-        "phi",
-        "iota",
-        "psi",
-        "g^aa",
-        "g^ra",
-        "g^rr",
-        "g^aa_z",
-        "g^aa_t",
-        "g^aa_zz",
-        "g^aa_tt",
-        "g^aa_tz",
-        "g^ra_z",
-        "g^ra_t",
-        "g^ra_zz",
-        "g^ra_tt",
-        "g^ra_tz",
-        "g^rr_z",
-        "g^rr_t",
-        "g^rr_zz",
-        "g^rr_tt",
-        "g^rr_tz",
-        "cvdrift",
-        "cvdrift0",
-        "lambda_t",
-        "lambda_z",
-        "lambda_tt",
-        "lambda_zz",
-        "lambda_tz",
-        "|B|",
-        "|B|_z",
-        "|B|_t",
-        "|B|_zz",
-        "|B|_tt",
-        "|B|_tz",
-        "B^zeta",
-        "B^zeta_t",
-        "B^zeta_z",
-        "B^zeta_tt",
-        "B^zeta_zz",
-        "B^zeta_tz",
-    ],
-)
-def _ideal_ballooning_gamma4(params, transforms, profiles, data, *kwargs):
-    """
-    Ideal-ballooning growth rate finder.
-
-    This function uses a pseudospectral Fourier technique to
-    calculate the maximum growth rate against the infinite-n
-    ideal ballooning mode
-
-    d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0
-
-    where
-
-    kappa = b dot grad b
-    g = a_N^3 * B_N* (b dot grad zeta) * |grad alpha|^2 / B,
-    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
-        * (b cross kappa) dot grad alpha/ B**2,
-    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
-
-    Parameters
-    ----------
-    eq :  Input equilibrium object
-    D2 = jax.scipy.linalg.toeplitz(col1, row1) + np.diag(V, 0)
-    x = jax.scipy.linalg.eikh(D2, b * np.eye(N))
-    """
-    rho = data["rho"]
-
-    psi_b = params["Psi"] / (2 * jnp.pi)
-    a_N = data["a"]
-    B_N = 2 * psi_b / a_N**2
-
-    N_zeta0 = int(11)
-    zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
-
-    iota = data["iota"]
-    psi = data["psi"]
-    sign_psi = jnp.sign(psi[-1])
-    sign_iota = jnp.sign(iota[-1])
-
-    phi = data["phi"]
-
-    ntor = int((jnp.max(phi) - jnp.min(phi)) / (2 * jnp.pi))
-
-    N_alpha = int(2)
-    N = int(len(phi) / N_alpha)
-
-    temp_fac1 = 1 / (1 + data["lambda_t"])
-    temp_fac2 = (iota - data["lambda_z"]) * temp_fac1
-
-    g_sup_rr_z0 = data["g^rr_z"] + data["g^rr_t"] * temp_fac2
-    g_sup_rr_zz0 = (
-        data["g^rr_zz"]
-        + 2 * data["g^rr_tz"] * temp_fac2
-        - data["g^rr_t"]
-        * (
-            data["lambda_zz"] * temp_fac1
-            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-        )
-        + data["g^rr_tt"] * temp_fac2**2
-    )
-
-    g_sup_ra_z0 = data["g^ra_z"] + data["g^ra_t"] * temp_fac2
-    g_sup_ra_zz0 = (
-        data["g^ra_zz"]
-        + 2 * data["g^ra_tz"] * temp_fac2
-        - data["g^ra_t"]
-        * (
-            data["lambda_zz"] * temp_fac1
-            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-        )
-        + data["g^ra_tt"] * temp_fac2**2
-    )
-
-    g_sup_aa_z0 = data["g^aa_z"] + data["g^aa_t"] * temp_fac2
-    g_sup_aa_zz0 = (
-        data["g^aa_zz"]
-        + 2 * data["g^aa_tz"] * temp_fac2
-        - data["g^aa_t"]
-        * (
-            data["lambda_zz"] * temp_fac1
-            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-        )
-        + data["g^aa_tt"] * temp_fac2**2
-    )
-
-    modB = data["|B|"]
-    modB_z0 = data["|B|_z"] + data["|B|_t"] * temp_fac2
-    modB_zz0 = (
-        data["|B|_zz"]
-        + 2 * data["|B|_tz"] * temp_fac2
-        - data["|B|_t"]
-        * (
-            data["lambda_zz"] * temp_fac1
-            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-        )
-        + data["|B|_tt"] * temp_fac2**2
-    )
-
-    B_sup_zeta = data["B^zeta"]
-    B_sup_zeta_z0 = data["B^zeta_z"] + temp_fac2 * data["B^zeta_t"]
-    B_sup_zeta_zz0 = (
-        data["B^zeta_zz"]
-        + 2 * data["B^zeta_tz"] * temp_fac2
-        - data["B^zeta_t"]
-        * (
-            data["lambda_zz"] * temp_fac1
-            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-        )
-        + data["B^zeta_tt"] * temp_fac2**2
-    )
-
-    gradpar = B_sup_zeta / modB
-    gradpar_z = B_sup_zeta_z0 / modB - modB_z0 * B_sup_zeta / modB**2
-    gradpar_zz = (
-        B_sup_zeta_zz0 / modB
-        - 2 * modB_z0 * B_sup_zeta_z0 / modB**2
-        - modB_z0 * B_sup_zeta / modB**2
-        + modB_zz0 * B_sup_zeta / modB**2
-    )
-
-    gds2 = data["g^aa"] + 2 * zeta0 * data["g^ra"] + zeta0**2 * data["g^rr"]
-    gds2_z = rho**2 * (
-        g_sup_aa_z0 - 2 * sign_iota * zeta0 * g_sup_ra_z0 + zeta0**2 * g_sup_rr_z0
-    )
-    gds2_zz = rho**2 * (
-        g_sup_aa_zz0 - 2 * sign_iota * zeta0 * g_sup_ra_zz0 + zeta0**2 * g_sup_rr_zz0
-    )
-
-    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
-
-    f = a_N * B_N**3 * gds2 / modB**3 * 1 / gradpar
-    g = a_N**3 * B_N * gds2 / modB * gradpar
-    g_z = (
-        a_N**3
-        * B_N
-        * (
-            (gds2_z * gradpar + gds2 * gradpar_z) / modB
-            - gds2 * gradpar * modB_z0 / modB**2
-        )
-    )
-    g_zz = (
-        a_N**3
-        * B_N
-        * (
-            (gds2_zz * gradpar + 2 * gds2_z * gradpar_z + gds2 * gradpar_zz) / modB
-            - (gds2_z * gradpar + gds2 * gradpar_z) * modB_z0 / modB**2
-            - (
-                gds2_z * gradpar * modB_z0
-                + gds2 * gradpar_z * modB_z0
-                + gds2 * gradpar * modB_zz0
-            )
-            / modB**2
-            + 2 * (gds2_z * gradpar * modB_z0**2) / modB**3
-        )
-    )
-
-    c = (
-        a_N
-        * 2
-        / data["B^zeta"]
-        * rho
-        * sign_psi
-        * dpdpsi
-        * (data["cvdrift"] + zeta0 * data["cvdrift0"])
-    )
-
-    V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
-
-    b = f / g
-
-    # Since N remains fixed during optimization, we don't need to recalculate
-    # the matrix
-    h = 2 * jnp.pi / N
-    n1 = int(jnp.ceil((N - 1) / 2))
-    n2 = int(jnp.floor((N - 1) / 2))
-    kk1 = jnp.linspace(1, n1, n1)
-    kk2 = jnp.linspace(n1 + 1, n1 + n2, n2)
-
-    if jnp.mod(N, 2) == 0:  # of 2nd derivative matrix
-        topc = 1 / (jnp.sin(jnp.linspace(1, n1, n1) * h / 2)) ** 2
-        col1 = jnp.concatenate(
-            (
-                jnp.array([-(jnp.pi**2 / 3) / h**2 - 1 / 6]),
-                -0.5 * ((-1) ** kk1) * topc,
-                -0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
-            )
-        )
-    else:
-        topc = 1 / (
-            jnp.sin(jnp.linspace(h / 2, h / 2 * n1, n1))
-            * jnp.tan(jnp.linspace(h / 2, h / 2 * n1, n1))
-        )
-        col1 = jnp.concatenate(
-            (
-                jnp.array([-(jnp.pi**2 / 3) / h**2 + 1 / 12]),
-                0.5 * ((-1) ** kk1) * topc,
-                -0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
-            )
-        )
-
-    row1 = col1  # first row
-
-    D2 = scipy.linalg.toeplitz(col1, r=row1) * (1 / ntor) ** 2 + jnp.diag(V, 0)
-
-    ## eigvals will be deprecated, replace by subset_by_idx in scipy >= 1.12
-    w, v = scipy.linalg.eigh(D2, b=jnp.diag(b, 0), eigvals=[N - 1, N - 1])
-
-    lam = w + 0.01
-    data["ideal_ball_gamma4"] = lam * (lam > 0)
+    data["effective ballooning potential"] = V
     return data

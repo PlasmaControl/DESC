@@ -832,7 +832,7 @@ def test_omnigenity_optimization():
 
     objective = ObjectiveFunction(
         (
-            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
             Omnigenity(
                 eq=eq,
@@ -907,7 +907,7 @@ def test_omnigenity_proximal():
     # first, test optimizing the equilibrium with the field fixed
     objective = ObjectiveFunction(
         (
-            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
             Omnigenity(eq=eq, field=field, field_fixed=True),  # field is fixed
         )
@@ -919,12 +919,12 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
-    eq, _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
+    [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
 
     # second, test optimizing both the equilibrium and the field simultaneously
     objective = ObjectiveFunction(
         (
-            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
             Omnigenity(eq=eq, field=field),  # field is not fixed
         )

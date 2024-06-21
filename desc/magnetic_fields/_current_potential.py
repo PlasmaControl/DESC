@@ -647,7 +647,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     # compute surface current, and store grid quantities
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    if not params and not transforms:
+    if not params or not transforms:
         data = field.compute(
             ["K", "x"],
             grid=source_grid,

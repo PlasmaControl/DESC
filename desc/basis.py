@@ -7,7 +7,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
+from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.io import IOAble
 from desc.utils import check_nonnegint, check_posint, flatten_list
 
@@ -1394,6 +1394,16 @@ def _polyval_jax(p, x):
 def zernike_radial_coeffs(l, m, exact=True):
     """Polynomial coefficients for radial part of zernike basis.
 
+    The for loop ranges from m to l+1 in steps of 2, as opposed to the
+    formula in the zernike_eval notebook. This is to make the coeffs array in
+    ascending powers of r, which is more natural for polynomial evaluation.
+    So, one should substitute s=(l-k)/s in the formula in the notebook to get
+    the coding implementation below.
+
+                                 (-1)^((l-k)/2) * ((l+k)/2)!
+    R_l^m(r) = sum_{k=m}^l  -------------------------------------
+                             ((l-k)/2)! * ((k+m)/2)! * ((k-m)/2)!
+
     Parameters
     ----------
     l : ndarray of int, shape(K,)
@@ -1429,14 +1439,15 @@ def zernike_radial_coeffs(l, m, exact=True):
         ll = lms[ii, 0]
         mm = lms[ii, 1]
         for s in range(mm, ll + 1, 2):
-            coeffs[ii, s] = (
-                (-1) ** ((ll - s) // 2)
-                * factorial((ll + s) // 2)
-                // (
-                    factorial((ll - s) // 2)
-                    * factorial((s + mm) // 2)
-                    * factorial((s - mm) // 2)
-                )
+            # Zernike polynomials can also be written in the form of [1] which
+            # states that the coefficients are given by the binomial coefficients
+            # hence they are all integers. So, we can use exact arithmetic with integer
+            # division instead of floating point division.
+            # [1]https://en.wikipedia.org/wiki/Zernike_polynomials#Other_representations
+            coeffs[ii, s] = ((-1) ** ((ll - s) // 2) * factorial((ll + s) // 2)) // (
+                factorial((ll - s) // 2)
+                * factorial((s + mm) // 2)
+                * factorial((s - mm) // 2)
             )
     c = np.fliplr(np.where(lm_even, coeffs, 0))
     if not exact:
@@ -1767,12 +1778,16 @@ def _jacobi(n, alpha, beta, x, dx=0):
     n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
 
     # coefficient for derivative
-    c = (
-        gammaln(alpha + beta + n + 1 + dx)
-        - dx * jnp.log(2)
-        - gammaln(alpha + beta + n + 1)
+    coeffs = jnp.array(
+        [
+            1,
+            (alpha + n + 1) / 2,
+            (alpha + n + 2) * (alpha + n + 1) / 4,
+            (alpha + n + 3) * (alpha + n + 2) * (alpha + n + 1) / 8,
+            (alpha + n + 4) * (alpha + n + 3) * (alpha + n + 2) * (alpha + n + 1) / 16,
+        ]
     )
-    c = jnp.exp(c)
+    c = coeffs[dx]
     # taking derivative is same as coeff*jacobi but for shifted n,a,b
     n -= dx
     alpha += dx

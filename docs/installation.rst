@@ -123,14 +123,14 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 Perlmutter (NERSC)
 ++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 11-02-2023
+These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 18-06-2024
 
 Set up the correct cuda environment for jax installation
 
 .. code-block:: sh
 
-    module load cudatoolkit/11.7
-    module load cudnn/8.9.1_cuda11
+    module load cudatoolkit/12.2
+    module load cudnn/8.9.3_cuda12
     module load python
 
 Check that you have loaded these modules
@@ -139,13 +139,25 @@ Check that you have loaded these modules
 
     module list
 
-Create a conda environment for DESC
+Create a conda environment for DESC (`following these instructions <https://docs.nersc.gov/development/languages/python/using-python-perlmutter/#jax>`__ )
 
 .. code-block:: sh
 
     conda create -n desc-env python=3.9
     conda activate desc-env
-    pip install --no-cache-dir "jax[cuda11_cudnn82]==0.4.7" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    pip install --no-cache-dir "jax==0.4.23" "jaxlib[cuda12_cudnn89]==0.4.23" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+For Perlmutter installation, please change the scipy version from
+
+.. code-block:: sh
+
+    scipy >= 1.7.0, < 2.0.0
+
+to
+
+.. code-block:: sh
+
+    scipy >= 1.7.0, <= 1.11.3
 
 Clone and install DESC
 

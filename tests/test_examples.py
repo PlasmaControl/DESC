@@ -10,14 +10,19 @@ from qic import Qic
 from qsc import Qsc
 
 from desc.backend import jnp
-from desc.coils import FourierRZCoil
-from desc.continuation import _solve_axisym, solve_continuation_automatic
+from desc.coils import FourierPlanarCoil, FourierRZCoil, MixedCoilSet
+from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, SplineMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    SplineMagneticField,
+    ToroidalMagneticField,
+    VerticalMagneticField,
+)
 from desc.objectives import (
     AspectRatio,
     BoundaryError,
@@ -31,23 +36,22 @@ from desc.objectives import (
     FixIota,
     FixOmniBmax,
     FixOmniMap,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
-    HelicalForceBalance,
     LinearObjectiveFromUser,
     MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
-    RadialForceBalance,
     VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
@@ -55,29 +59,8 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_SOLOVEV_vacuum(SOLOVEV_vac):
-    """Tests that the SOLOVEV vacuum example gives no rotational transform."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
-    data = eq.compute("|J|")
-
-    np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
-    np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
-
-    # test that solving with the continuation method works correctly
-    # when eq resolution is lower than the mres_step
-    eq.change_resolution(L=3, M=3)
-    eqf = _solve_axisym(eq, mres_step=6)
-    assert len(eqf) == 1
-    assert eqf[-1].L == eq.L
-    assert eqf[-1].M == eq.M
-    assert eqf[-1].N == eq.N
 
 
 @pytest.mark.regression
@@ -156,66 +139,6 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
-    """Tests that the 2 methods for solving vacuum give the same results."""
-    eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
-    eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
-    rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
-    curr1 = eq1.get_profile("current")
-    curr2 = eq2.get_profile("current")
-    iota1 = eq1.get_profile("iota")
-    iota2 = eq2.get_profile("iota")
-    np.testing.assert_allclose(curr1(np.linspace(0, 1, 20)), 0, atol=1e-8)
-    np.testing.assert_allclose(curr2(np.linspace(0, 1, 20)), 0, atol=1e-8)
-    np.testing.assert_allclose(iota1.params, iota2.params, rtol=1e-1, atol=1e-1)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_force_balance_grids():
-    """Compares radial & helical force balance on same vs different grids."""
-    # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
-    # defaulted to cos, sin rotation, respectively.
-    # This test has been kept to increase code coverage.
-
-    def test(iota=False):
-        if iota:
-            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
-            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
-        else:
-            eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
-            eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
-
-        res = 3
-        eq1.change_resolution(L=res, M=res)
-        eq1.L_grid = res
-        eq1.M_grid = res
-        eq2.change_resolution(L=res, M=res)
-        eq2.L_grid = res
-        eq2.M_grid = res
-
-        # force balances on the same grids
-        obj1 = ObjectiveFunction(ForceBalance(eq=eq1))
-        eq1.solve(objective=obj1)
-
-        # force balances on different grids
-        obj2 = ObjectiveFunction(
-            (RadialForceBalance(eq=eq2), HelicalForceBalance(eq=eq2))
-        )
-        eq2.solve(objective=obj2)
-
-        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)
-        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=5e-4)
-        np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=2e-3)
-
-    test(iota=True)
-    test(iota=False)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
 def test_solve_bounds():
     """Tests optimizing with bounds=(lower bound, upper bound)."""
     # decrease resolution and double pressure so no longer in force balance
@@ -253,25 +176,6 @@ def test_1d_optimization():
         eq.optimize(objective, constraints, optimizer="lsq-exact", options=options)
 
     np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
-
-
-@pytest.mark.regression
-@pytest.mark.optimize
-def test_1d_optimization_old():
-    """Tests 1D optimization for target aspect ratio."""
-    eq = get("SOLOVEV")
-    objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
-    eq._optimize(
-        objective,
-        copy=False,
-        solve_options={"verbose": 0},
-        perturb_options={
-            "dZb": True,
-            "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1]),
-        },
-    )
-
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=1e-3)
 
 
 def run_qh_step(n, eq):
@@ -394,38 +298,6 @@ def test_ATF_results(tmpdir_factory):
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
     np.testing.assert_allclose(rho_err[:, 4:], 0, atol=4e-2)
     np.testing.assert_allclose(theta_err, 0, atol=5e-4)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_ESTELL_results(tmpdir_factory):
-    """Test automatic continuation method with ESTELL."""
-    output_dir = tmpdir_factory.mktemp("result")
-    eq0 = get("ESTELL")
-    eq = Equilibrium(
-        Psi=eq0.Psi,
-        NFP=eq0.NFP,
-        L=eq0.L,
-        M=eq0.M,
-        N=eq0.N,
-        L_grid=eq0.L_grid,
-        M_grid=eq0.M_grid,
-        N_grid=eq0.N_grid,
-        pressure=eq0.pressure,
-        current=eq0.current,
-        surface=eq0.get_surface_at(rho=1),
-        sym=eq0.sym,
-        spectral_indexing=eq0.spectral_indexing,
-    )
-    eqf = EquilibriaFamily.solve_continuation_automatic(
-        eq,
-        verbose=2,
-        checkpoint_path=output_dir.join("ESTELL.h5"),
-    )
-    eqf = load(output_dir.join("ESTELL.h5"))
-    rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
-    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=5e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 @pytest.mark.regression
@@ -613,7 +485,7 @@ def test_NAE_QSC_solve():
         np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
         np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
-        ### check lambda to match near axis
+        # check lambda to match near axis
         # Evaluate lambda near the axis
         data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
         lam_nae = data_nae["lambda"]
@@ -735,7 +607,7 @@ def test_NAE_QIC_solve():
 
 @pytest.mark.unit
 @pytest.mark.optimize
-def test_multiobject_optimization():
+def test_multiobject_optimization_al():
     """Test for optimizing multiple objects at once."""
     eq = Equilibrium(L=4, M=4, N=0, iota=2)
     surf = FourierRZToroidalSurface(
@@ -748,8 +620,8 @@ def test_multiobject_optimization():
     constraints = (
         ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
         FixPressure(eq=eq),
-        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
-        FixParameter(eq, ["Psi", "i_l"]),
+        FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
@@ -787,8 +659,8 @@ def test_multiobject_optimization_prox():
     constraints = (
         ForceBalance(eq=eq),
         FixPressure(eq=eq),
-        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
-        FixParameter(eq, ["Psi", "i_l"]),
+        FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
     )
 
@@ -1078,7 +950,7 @@ def test_non_eq_optimization():
 
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(eq),
+        FixParameters(eq),
         MeanCurvature(surf, bounds=(-8, 8)),
         PrincipalCurvature(surf, bounds=(0, 15)),
     )
@@ -1107,17 +979,14 @@ def test_only_non_eq_optimization():
     """Test for optimizing only a non-eq object."""
     eq = get("DSHAPE")
     surf = eq.surface
-
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(surf, params="R_lmn", indices=surf.R_basis.get_idx(0, 0, 0)),
+        FixParameters(surf, {"R_lmn": np.array(surf.R_basis.get_idx(0, 0, 0))}),
     )
-
     obj = PrincipalCurvature(surf, target=1)
-
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-exact")
-    (surf), result = optimizer.optimize(
+    (surf), _ = optimizer.optimize(
         (surf), objective, constraints, verbose=3, maxiter=100
     )
     surf = surf[0]
@@ -1141,9 +1010,9 @@ def test_freeb_vacuum():
         modes_Z=[[-1, 0]],
         NFP=5,
     )
-
     eq = Equilibrium(M=6, N=6, Psi=-0.035, surface=surf)
     eq.solve()
+
     constraints = (
         ForceBalance(eq=eq),
         FixCurrent(eq=eq),
@@ -1153,15 +1022,15 @@ def test_freeb_vacuum():
     objective = ObjectiveFunction(
         VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
     )
-    eq, out = eq.optimize(
+    eq, _ = eq.optimize(
         objective,
         constraints,
         optimizer="proximal-lsq-exact",
         verbose=3,
         options={},
     )
-    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
 
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=4e-2)  # only check rho=1
 
 
@@ -1199,9 +1068,9 @@ def test_freeb_axisym():
         modes_Z=[[-1, 0]],
         NFP=1,
     )
-
     eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
     eq.solve()
+
     constraints = (
         ForceBalance(eq=eq),
         FixIota(eq=eq),
@@ -1213,27 +1082,26 @@ def test_freeb_axisym():
     )
 
     # we know this is a pretty simple shape so we'll only use |m| <= 2
-    R_modes = (
-        eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :],
-    )
-
+    R_modes = eq.surface.R_basis.modes[
+        np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :
+    ]
     Z_modes = eq.surface.Z_basis.modes[
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > 2, :
     ]
-
     bdry_constraints = (
         FixBoundaryR(eq=eq, modes=R_modes),
         FixBoundaryZ(eq=eq, modes=Z_modes),
     )
-    eq, out = eq.optimize(
+
+    eq, _ = eq.optimize(
         objective,
         constraints + bdry_constraints,
         optimizer="proximal-lsq-exact",
         verbose=3,
         options={},
     )
-    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
 
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=2e-2)  # only check rho=1
 
 
@@ -1344,3 +1212,84 @@ def test_single_coil_optimization():
     np.testing.assert_allclose(
         coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
     )
+
+
+@pytest.mark.unit
+def test_quadratic_flux_optimization_with_analytic_field():
+    """Test analytic field optimization to reduce quadratic flux.
+
+    Checks that B goes to zero for non-axisymmetric eq and axisymmetric field.
+    """
+    eq = get("precise_QA")
+    field = ToroidalMagneticField(1, 1)
+    eval_grid = LinearGrid(
+        rho=np.array([1.0]),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        sym=False,
+    )
+
+    optimizer = Optimizer("lsq-exact")
+
+    constraints = (FixParameters(field, {"R0": True}),)
+    quadflux_obj = QuadraticFlux(
+        eq=eq,
+        field=field,
+        eval_grid=eval_grid,
+        vacuum=True,
+    )
+    objective = ObjectiveFunction(quadflux_obj)
+    things, __ = optimizer.optimize(
+        field,
+        objective=objective,
+        constraints=constraints,
+        ftol=1e-14,
+        gtol=1e-14,
+        copy=True,
+        verbose=3,
+    )
+
+    # optimizer should zero out field since that's the easiest way
+    # to get to Bnorm = 0
+    np.testing.assert_allclose(things[0].B0, 0, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_second_stage_optimization():
+    """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
+    eq = get("DSHAPE")
+    field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field, vacuum=True))
+    constraints = FixParameters(field, [{"R0": True}, {}])
+    optimizer = Optimizer("scipy-trf")
+    (field,), _ = optimizer.optimize(
+        things=field,
+        objective=objective,
+        constraints=constraints,
+        ftol=0,
+        xtol=0,
+        verbose=2,
+    )
+    np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
+    np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
+    np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
+
+
+# TODO: replace this with the solution to Issue #1021
+@pytest.mark.unit
+def test_optimize_with_fourier_planar_coil():
+    """Test optimizing a FourierPlanarCoil."""
+    # single coil
+    c = FourierPlanarCoil()
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
+
+    # in MixedCoilSet
+    c = MixedCoilSet(FourierRZCoil(), FourierPlanarCoil())
+    objective = ObjectiveFunction(CoilLength(c, target=11))
+    optimizer = Optimizer("fmintr")
+    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
+    np.testing.assert_allclose(c.compute("length")[1]["length"], 11, atol=1e-3)

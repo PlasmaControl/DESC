@@ -15,6 +15,7 @@ from desc.magnetic_fields import (
     CurrentPotentialField,
     DommaschkPotentialField,
     FourierCurrentPotentialField,
+    MagneticFieldFromUser,
     OmnigenousField,
     PoloidalMagneticField,
     ScalarPotentialField,
@@ -62,6 +63,28 @@ class TestMagneticFields:
         np.testing.assert_allclose((tfield + vfield)([1, 0, 0]), [[0, 2, 1]])
         np.testing.assert_allclose(
             (tfield + vfield - pfield)([1, 0, 0.1]), [[0.4, 2, 1]]
+        )
+
+    @pytest.mark.unit
+    def test_field_from_user(self):
+        """Test for MagneticFieldFromUser."""
+        tfield = ToroidalMagneticField(2, 1)
+
+        def fun(coords, params):
+            R0, B0 = params
+            coords = jnp.atleast_2d(jnp.asarray(coords))
+            bp = B0 * R0 / coords[:, 0]
+            brz = jnp.zeros_like(bp)
+            B = jnp.array([brz, bp, brz]).T
+            return B
+
+        ufield = MagneticFieldFromUser(fun, [tfield.R0, tfield.B0])
+        np.testing.assert_allclose(
+            tfield([1, 0, 0]), ufield([1, 0, 0], params=[tfield.R0, tfield.B0])
+        )
+        np.testing.assert_allclose(
+            tfield([1, 1, 0], basis="xyz"),
+            ufield([1, 1, 0], params=[tfield.R0, tfield.B0], basis="xyz"),
         )
 
     @pytest.mark.unit
@@ -427,6 +450,7 @@ class TestMagneticFields:
         with pytest.raises(ValueError):
             field.Phi_mn = np.ones((basis.num_modes + 1,))
 
+    @pytest.mark.unit
     def test_io_fourier_current_field(self, tmpdir_factory):
         """Test that i/o works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -519,6 +543,7 @@ class TestMagneticFields:
                 NFP=10,
             )
 
+    @pytest.mark.unit
     def test_change_Phi_basis_fourier_current_field(self):
         """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -575,6 +600,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
         assert field.Phi_basis.sym == "sin"
 
+    @pytest.mark.unit
     def test_init_Phi_mn_fourier_current_field(self):
         """Test initial Phi_mn size is correct for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(

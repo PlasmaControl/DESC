@@ -9,13 +9,12 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-import numpy as np
 from interpax import interp1d
 
-from desc.backend import jnp, put, sign, vmap
+from desc.backend import jnp, sign, vmap
 
 from .data_index import register_compute_fun
-from .utils import cross, dot
+from .utils import cross, dot, safediv
 
 
 @register_compute_fun(
@@ -31,6 +30,8 @@ from .utils import cross, dot
     profiles=[],
     coordinates="rtz",
     data=["B_theta"],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data["B_theta_mn"] = transforms["B"].fit(data["B_theta"])
@@ -50,6 +51,8 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["B_zeta"],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])
@@ -69,6 +72,8 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["B_theta_mn", "B_zeta_mn"],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w_mn(params, transforms, profiles, data, **kwargs):
     w_mn = jnp.zeros((transforms["w"].basis.num_modes,))
@@ -77,15 +82,17 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     wm = transforms["w"].basis.modes[:, 1]
     wn = transforms["w"].basis.modes[:, 2]
     NFP = transforms["w"].basis.NFP
-    # indices of matching modes in w and B bases
-    # need to use np instead of jnp here as jnp.where doesn't work under jit
-    # even if the args are static
-    ib, iw = np.where((Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0))
-    jb, jw = np.where(
-        (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
-    )
-    w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
-    w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
+    mask_t = (Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0)
+    mask_z = (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
+
+    num_t = (mask_t @ sign(wn)) * data["B_theta_mn"]
+    den_t = mask_t @ jnp.abs(wm)
+    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"]
+    den_z = mask_z @ jnp.abs(NFP * wn)
+
+    w_mn = jnp.where(mask_t.any(axis=0), mask_t.T @ safediv(num_t, den_t), w_mn)
+    w_mn = jnp.where(mask_z.any(axis=0), mask_z.T @ safediv(num_z, den_z), w_mn)
+
     data["w_Boozer_mn"] = w_mn
     return data
 
@@ -103,6 +110,8 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w(params, transforms, profiles, data, **kwargs):
     data["w_Boozer"] = transforms["w"].transform(data["w_Boozer_mn"])
@@ -122,6 +131,8 @@ def _w(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w_t(params, transforms, profiles, data, **kwargs):
     data["w_Boozer_t"] = transforms["w"].transform(data["w_Boozer_mn"], dt=1)
@@ -141,6 +152,8 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w_z(params, transforms, profiles, data, **kwargs):
     data["w_Boozer_z"] = transforms["w"].transform(data["w_Boozer_mn"], dz=1)
@@ -272,6 +285,8 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
@@ -296,6 +311,8 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _B_modes(params, transforms, profiles, data, **kwargs):
     data["B modes"] = transforms["B"].basis.modes
@@ -304,8 +321,8 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="f_C",
-    label="(M \\iota - N) (\\mathbf{B} \\times \\nabla \\psi) \\cdot \\nabla B"
-    + " - (M G + N I) \\mathbf{B} \\cdot \\nabla B",
+    label="[(M \\iota - N) (\\mathbf{B} \\times \\nabla \\psi)"
+    + " - (M G + N I) \\mathbf{B}] \\cdot \\nabla B",
     units="T^{3}",
     units_long="Tesla cubed",
     description="Two-term quasisymmetry metric",
@@ -315,7 +332,7 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["iota", "B0", "B_theta", "B_zeta", "|B|_t", "|B|_z", "G", "I", "B*grad(|B|)"],
-    helicity="helicity",
+    helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
 )
 def _f_C(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
@@ -418,8 +435,8 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
     data=["alpha", "h"],
     aliases=["zeta_B"],
     parameterization="desc.magnetic_fields._core.OmnigenousField",
-    helicity="helicity",
-    iota="iota",
+    helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
+    iota="float: Value of rotational transform on the Omnigenous surface. Default 1.0",
 )
 def _omni_map(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))

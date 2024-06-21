@@ -613,7 +613,7 @@ class PlasmaVesselDistance(_Objective):
         softmin_alpha=1.0,
         name="plasma-vessel distance",
         use_signed_distance=False,
-        **kwargs
+        **kwargs,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -626,6 +626,9 @@ class PlasmaVesselDistance(_Objective):
         self._softmin_alpha = parse_argname_change(
             softmin_alpha, kwargs, "alpha", "softmin_alpha"
         )
+        assert (
+            len(kwargs) == 0
+        ), f"PlasmaVesselDistance got unexpected keyword argument: {kwargs.keys()}"
         super().__init__(
             things=[eq, self._surface] if not surface_fixed else [eq],
             target=target,

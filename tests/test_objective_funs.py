@@ -664,7 +664,7 @@ class TestObjectiveFunction:
             surface_grid=surf_grid,
             surface=surface,
             use_softmin=True,
-            sofmtin_alpha=100,
+            softmin_alpha=100,
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))

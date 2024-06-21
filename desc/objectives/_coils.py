@@ -857,8 +857,9 @@ class QuadraticFlux(_Objective):
                 eq, eval_grid, self._source_grid, normal_only=True
             )
         field = self._field
+        # FIXME: need to add case for CurrentPotentialField as well
         if hasattr(field, "Phi_mn"):
-            # make the transform for the FourierCurrentPotentialField
+            # make the transform for the CurrentPotentialField
             if self._field_grid is None:
                 self._field_grid = LinearGrid(
                     M=30 + 2 * max(field.M, field.M_Phi),
@@ -1079,9 +1080,9 @@ class ToroidalFlux(_Objective):
         plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
         field = self._field
-
+        # FIXME: need to add case for CurrentPotentialField as well
         if hasattr(field, "Phi_mn"):
-            # make the transform for the FourierCurrentPotentialField
+            # make the transform for the CurrentPotentialField
             if self._field_grid is None:
                 self._field_grid = LinearGrid(
                     M=30 + 2 * max(field.M, field.M_Phi),

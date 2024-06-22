@@ -7,7 +7,6 @@ from tests.test_plotting import tol_1d
 
 from desc.equilibrium.coords import rtz_grid
 from desc.examples import get
-from desc.grid import LinearGrid
 from desc.objectives import EffectiveRipple, GammaC, ObjectiveFunction
 
 
@@ -76,13 +75,13 @@ def test_effective_ripple():
 def test_ad_ripple():
     """Make sure we can differentiate."""
     eq = get("ESTELL")
-    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP, sym=eq.sym, axis=False)
     eq.change_resolution(2, 2, 2, 4, 4, 4)
-
-    obj = ObjectiveFunction([EffectiveRipple(eq, grid=grid)])
+    obj = ObjectiveFunction([EffectiveRipple(eq)])
     obj.build(verbose=0)
     g = obj.grad(obj.x())
-    assert not np.any(np.isnan(g))  # FIXME
+    assert not np.any(np.isnan(g))
+    # FIXME: Want to ensure nonzero gradient in test.
+    print(np.count_nonzero(g))
 
 
 @pytest.mark.unit
@@ -110,10 +109,10 @@ def test_Gamma_c():
 def test_ad_gamma():
     """Make sure we can differentiate."""
     eq = get("ESTELL")
-    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP, sym=eq.sym, axis=False)
     eq.change_resolution(2, 2, 2, 4, 4, 4)
-
-    obj = ObjectiveFunction([GammaC(eq, grid=grid)])
+    obj = ObjectiveFunction([GammaC(eq)])
     obj.build(verbose=0)
     g = obj.grad(obj.x())
-    assert not np.any(np.isnan(g))  # FIXME
+    assert not np.any(np.isnan(g))
+    # FIXME: Want to ensure nonzero gradient in test.
+    print(np.count_nonzero(g))

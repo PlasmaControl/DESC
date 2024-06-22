@@ -58,9 +58,13 @@ class EffectiveRipple(_Objective):
     grid : Grid, optional
         Collocation grid to evaluate flux surface averages.
         Should have poloidal and toroidal resolution.
-    alpha, zeta : ndarray, ndarray
-        Unique coordinate values for field line label alpha, and field line following
-        coordinate zeta.
+    alpha : ndarray
+        Unique coordinate values for field line poloidal angle label alpha.
+    zeta : ndarray
+        Unique coordinate values for field line following coordinate zeta. Must be
+        strictly increasing. A good reference density is 100 knots per toroidal transit.
+        For axisymmetric devices only one toroidal transit is necessary. Otherwise,
+        more toroidal transits will give more accurate result, with diminishing returns.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 31,
         which gets sufficient convergence, so higher values are likely unnecessary.
@@ -92,7 +96,7 @@ class EffectiveRipple(_Objective):
         deriv_mode="auto",
         grid=None,
         alpha=np.array([0]),
-        zeta=np.linspace(0, 15 * np.pi, 750),
+        zeta=np.linspace(0, 2 * np.pi, 100),
         num_quad=31,
         num_pitch=99,
         batch=True,
@@ -294,9 +298,13 @@ class GammaC(_Objective):
     grid : Grid, optional
         Collocation grid to evaluate flux surface averages.
         Should have poloidal and toroidal resolution.
-    alpha, zeta : ndarray, ndarray
-        Unique coordinate values for field line label alpha, and field line following
-        coordinate zeta.
+    alpha : ndarray
+        Unique coordinate values for field line poloidal angle label alpha.
+    zeta : ndarray
+        Unique coordinate values for field line following coordinate zeta. Must be
+        strictly increasing. A good reference density is 100 knots per toroidal transit.
+        For axisymmetric devices only one toroidal transit is necessary. Otherwise,
+        more toroidal transits will give more accurate result, with diminishing returns.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 31.
     num_pitch : int
@@ -324,7 +332,7 @@ class GammaC(_Objective):
         deriv_mode="auto",
         grid=None,
         alpha=np.array([0]),
-        zeta=np.linspace(0, 15 * np.pi, 750),
+        zeta=np.linspace(0, 2 * np.pi, 100),
         num_quad=31,
         num_pitch=99,
         batch=True,

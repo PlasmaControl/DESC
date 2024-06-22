@@ -14,6 +14,8 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import flatnonzero, jnp
 from desc.compute.bounce_integral import (
+    _composite_linspace,
+    _filter_nonzero_measure,
     _filter_not_nan,
     _poly_der,
     _poly_root,
@@ -23,7 +25,6 @@ from desc.compute.bounce_integral import (
     automorphism_sin,
     bounce_integral,
     bounce_points,
-    composite_linspace,
     get_extrema,
     get_pitch,
     grad_affine_bijection,
@@ -149,7 +150,7 @@ def test_poly_root():
     for j in range(c.shape[0]):
         unique_roots = np.unique(np.roots(c[j]))
         root_filter = _filter_not_nan(root[j])
-        assert root_filter.size == unique_roots.size
+        assert root_filter.size == unique_roots.size, j
         np.testing.assert_allclose(
             actual=root_filter,
             desired=unique_roots,
@@ -234,9 +235,7 @@ def test_composite_linspace():
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
     breaks = np.linspace(B_min_tz, B_max_tz, num=5)
-    b = composite_linspace(breaks, num=3)
-    print(breaks)
-    print(b)
+    b = _composite_linspace(breaks, num=3)
     for i in range(breaks.shape[0]):
         for j in range(breaks.shape[1]):
             assert only1(np.isclose(breaks[i, j], b[:, j]).tolist())
@@ -251,13 +250,11 @@ def test_bounce_points():
         end = 6 * np.pi
         knots = np.linspace(start, end, 5)
         B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
-        pitch = 2
-        bp1, bp2 = bounce_points(
-            pitch, knots, B.c, B.derivative().c, check=True, plot=False
-        )
-        bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        assert bp1.size and bp2.size
+        pitch = 2.0
         intersect = B.solve(1 / pitch, extrapolate=False)
+        bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
+        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
+        assert bp1.size and bp2.size
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
 
@@ -266,14 +263,13 @@ def test_bounce_points():
         end = -start
         k = np.linspace(start, end, 5)
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
-        pitch = 2
-        bp1, bp2 = bounce_points(
-            pitch, k, B.c, B.derivative().c, check=True, plot=False
-        )
-        bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
-        assert bp1.size and bp2.size
+        pitch = 2.0
         intersect = B.solve(1 / pitch, extrapolate=False)
-        np.testing.assert_allclose(bp1, intersect[1::2])
+        bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
+        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
+        assert bp1.size and bp2.size
+        # Don't include intersect[-1] for now as it doesn't have a paired bp2.
+        np.testing.assert_allclose(bp1, intersect[1:-1:2])
         np.testing.assert_allclose(bp2, intersect[0::2][1:])
 
     def test_bp1_before_extrema():
@@ -285,8 +281,8 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3] + 1e-13
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
-        bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[1], 1.982767, rtol=1e-6)
@@ -306,14 +302,14 @@ def test_bounce_points():
         )
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
-        bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
         np.testing.assert_allclose(bp2, intersect[[1, -1]])
 
-    def test_extrema_first_and_before_bp1(plot=False):
+    def test_extrema_first_and_before_bp1():
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -327,9 +323,8 @@ def test_bounce_points():
         bp1, bp2 = bounce_points(
             pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True, plot=False
         )
-        if plot:
-            plot_field_line(B, pitch, bp1, bp2, start=k[2])
-        bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        plot_field_line(B, pitch, bp1, bp2, start=k[2])
+        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], 0.835319, rtol=1e-6)
@@ -360,8 +355,8 @@ def test_bounce_points():
         # value theorem holds for the continuous spline, so when fed these sequence
         # of roots, the correct action is to ignore the first green root since
         # otherwise the interior of the bounce points would be hills and not valleys.
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True, plot=False)
-        bp1, bp2 = map(_filter_not_nan, (bp1, bp2))
+        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
         assert bp1.size and bp2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -443,16 +438,15 @@ def test_bounce_quadrature():
     bounce_integrate, _ = bounce_integral(
         B, B, B_z_ra, knots, quad=tanh_sinh(40), automorphism=None, check=True
     )
-    tanh_sinh_vanilla = _filter_not_nan(bounce_integrate(integrand, [], pitch))
-    assert tanh_sinh_vanilla.size == 1
-    np.testing.assert_allclose(tanh_sinh_vanilla, truth, rtol=rtol)
-
+    tanh_sinh_vanilla = bounce_integrate(integrand, [], pitch)
+    assert np.count_nonzero(tanh_sinh_vanilla) == 1
+    np.testing.assert_allclose(np.sum(tanh_sinh_vanilla), truth, rtol=rtol)
     bounce_integrate, _ = bounce_integral(
         B, B, B_z_ra, knots, quad=leggauss(25), check=True
     )
-    leg_gauss_sin = _filter_not_nan(bounce_integrate(integrand, [], pitch, batch=False))
-    assert leg_gauss_sin.size == 1
-    np.testing.assert_allclose(leg_gauss_sin, truth, rtol=rtol)
+    leg_gauss_sin = bounce_integrate(integrand, [], pitch, batch=False)
+    assert np.count_nonzero(tanh_sinh_vanilla) == 1
+    np.testing.assert_allclose(np.sum(leg_gauss_sin), truth, rtol=rtol)
 
 
 @pytest.mark.unit
@@ -460,22 +454,24 @@ def test_bounce_integral_checks():
     """Test that all the internal correctness checks pass for real example."""
 
     def numerator(g_zz, B, pitch):
-        f = (1 - pitch * B) * g_zz
+        f = (1 - pitch * B / 2) * g_zz
+        # You may need to clip and safediv to avoid nan gradient.
         return f / jnp.sqrt(1 - pitch * B)
 
     def denominator(B, pitch):
-        return jnp.reciprocal(jnp.sqrt(1 - pitch * B))
+        # You may need to clip and safediv to avoid nan gradient.
+        return 1 / jnp.sqrt(1 - pitch * B)
 
     # Suppose we want to compute a bounce average of the function
-    # f(ℓ) = (1 − λ |B|) * g_zz, where g_zz is the squared norm of the
+    # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
     # toroidal basis vector on some set of field lines specified by (ρ, α)
     # coordinates. This is defined as
-    # (∫ f(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ)
+    # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
     eq = get("HELIOTRON")
     # Clebsch-Type field-line coordinates ρ, α, ζ.
-    rho = np.linspace(1e-12, 1, 6)
+    rho = np.linspace(0.1, 1, 6)
     alpha = np.array([0])
-    knots = np.linspace(-2 * np.pi, 2 * np.pi, 20)
+    knots = np.linspace(-2 * np.pi, 2 * np.pi, 200)
     grid = rtz_grid(
         eq, rho, alpha, knots, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )
@@ -488,26 +484,28 @@ def test_bounce_integral_checks():
         data["|B|_z|r,a"],
         knots,
         check=True,
+        plot=False,
         quad=leggauss(3),  # not checking quadrature accuracy in this test
     )
     pitch = get_pitch(
         grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
     )
-    # To see if the knot density was sufficient to reconstruct the field line
-    # one can plot the field line by uncommenting the following line.
+    # You can also plot the field line by uncommenting the following line.
+    # Useful to see if the knot density was sufficient to reconstruct the field line.
     # _, _ = bounce_points(pitch, **spline, check=True, num=50000) # noqa: E800
     num = bounce_integrate(numerator, data["g_zz"], pitch)
     den = bounce_integrate(denominator, [], pitch)
     avg = num / den
 
-    # Sum all bounce integrals across field line
+    # Sum all bounce integrals across each particular field line.
     avg = np.nansum(avg, axis=-1)
-    # Group the data by field line.
+    assert np.count_nonzero(avg)
+    # Split the resulting data by field line.
     avg = avg.reshape(pitch.shape[0], rho.size, alpha.size)
-    # The mean bounce average stored at index i, j
+    # The sum stored at index i, j
     i, j = 0, 0
     print(avg[:, i, j])
-    # is the mean bounce average among wells along the field line with nodes
+    # is the summed bounce average among wells along the field line with nodes
     # given in Clebsch-Type field-line coordinates ρ, α, ζ
     raz_grid = grid.source_grid
     nodes = raz_grid.nodes.reshape(rho.size, alpha.size, -1, 3)
@@ -748,8 +746,8 @@ def test_drift():
         pitch=pitch[:, np.newaxis],
     )
 
-    drift_numerical_num = np.squeeze(_filter_not_nan(drift_numerical_num))
-    drift_numerical_den = np.squeeze(_filter_not_nan(drift_numerical_den))
+    drift_numerical_num = np.squeeze(drift_numerical_num[drift_numerical_num != 0])
+    drift_numerical_den = np.squeeze(drift_numerical_den[drift_numerical_den != 0])
     drift_numerical = drift_numerical_num / drift_numerical_den
     msg = "There should be one bounce integral per pitch in this example."
     assert drift_numerical.size == drift_analytic.size, msg

@@ -18,6 +18,7 @@ from desc.backend import imap, jit, jnp, trapezoid
 
 from .bounce_integral import bounce_integral, get_pitch
 from .data_index import register_compute_fun
+from .utils import safediv
 
 
 def _vec_quadax(quad, **kwargs):
@@ -213,11 +214,14 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     def dH(grad_rho_norm_kappa_g, B, pitch):
         # Removed |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ from integrand of Nemov eq. 30. Reintroduced later.
         return (
-            jnp.sqrt(1 - pitch * B) * (4 / (pitch * B) - 1) * grad_rho_norm_kappa_g / B
+            jnp.sqrt(jnp.abs(1 - pitch * B))
+            * (4 / (pitch * B) - 1)
+            * grad_rho_norm_kappa_g
+            / B
         )
 
     def dI(B, pitch):  # Integrand of Nemov eq. 31.
-        return jnp.sqrt(1 - pitch * B) / B
+        return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
     def d_ripple(pitch):
         # Return (∂ψ/∂ρ)⁻² λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
@@ -227,7 +231,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
             dH, data["|grad(rho)|"] * data["kappa_g"], pitch, batch=batch
         )
         I = bounce_integrate(dI, [], pitch, batch=batch)
-        return pitch * jnp.nansum(H**2 / I, axis=-1)
+        return pitch * jnp.sum(safediv(H**2, I), axis=-1)
 
     # The integrand is continuous and likely poorly approximated by a polynomial.
     # Composite quadrature should perform better than higher order methods.
@@ -329,10 +333,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     pitch = _get_pitch(g, data["min_tz |B|"], data["max_tz |B|"], num_pitch, adaptive)
 
     def d_v_tau(B, pitch):
-        return 2 / jnp.sqrt(1 - pitch * B)
+        return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     def d_gamma_c(f, B, pitch):
-        return f * (1 - pitch * B / 2) / jnp.sqrt(1 - pitch * B)
+        return safediv(f * (1 - pitch * B / 2), jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     if not adaptive:
         bounce_integrate, _ = bounce_integral(
@@ -348,11 +352,17 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 2
                 / jnp.pi
                 * jnp.arctan(
-                    bounce_integrate(d_gamma_c, data["cvdrift0"], pitch, batch=batch)
-                    / bounce_integrate(d_gamma_c, data["gbdrift"], pitch, batch=batch)
+                    safediv(
+                        bounce_integrate(
+                            d_gamma_c, data["cvdrift0"], pitch, batch=batch
+                        ),
+                        bounce_integrate(
+                            d_gamma_c, data["gbdrift"], pitch, batch=batch
+                        ),
+                    )
                 )
             )
-            return jnp.nansum(v_tau * gamma_c**2, axis=-1)
+            return jnp.sum(v_tau * gamma_c**2, axis=-1)
 
         # The integrand is piecewise continuous and likely poorly approximated by a
         # polynomial. Composite quadrature should perform better than higher order
@@ -367,11 +377,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 2
                 / jnp.pi
                 * jnp.arctan(
-                    bounce_integrate(d_gamma_c, cvdrift0, pitch, batch=batch)
-                    / bounce_integrate(d_gamma_c, gbdrift, pitch, batch=batch)
+                    safediv(
+                        bounce_integrate(d_gamma_c, cvdrift0, pitch, batch=batch),
+                        bounce_integrate(d_gamma_c, gbdrift, pitch, batch=batch),
+                    )
                 )
             )
-            return jnp.squeeze(jnp.nansum(v_tau * gamma_c**2, axis=-1))
+            return jnp.squeeze(jnp.sum(v_tau * gamma_c**2, axis=-1))
 
         args = [
             f.reshape(g.num_rho, g.num_alpha, g.num_zeta)

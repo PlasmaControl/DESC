@@ -25,7 +25,7 @@ def take_mask(a, mask, size=None, fill_value=None):
     size : int
         Elements of ``a`` at the first size True indices of ``mask`` will be returned.
         If there are fewer elements than size indicates, the returned array will be
-        padded with fill_value. Defaults to ``mask.size``.
+        padded with ``fill_value``. The size default is ``mask.size``.
     fill_value : Any
         When there are fewer than the indicated number of elements, the remaining
         elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
@@ -135,10 +135,10 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
 
     def irreducible(Q, R, b, mask):
         # Three irrational real roots.
-        theta = jnp.arccos(safediv(R, jnp.sqrt(jnp.where(mask, Q**3, R**2 + 1))))
+        theta = jnp.arccos(R / jnp.sqrt(jnp.where(mask, Q**3, R**2 + 1)))
         return jnp.moveaxis(
             -2
-            * jnp.sqrt(jnp.abs(Q))
+            * jnp.sqrt(Q)
             * jnp.stack(
                 [
                     jnp.cos(theta / 3),
@@ -166,7 +166,9 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
         R = (2 * b**3 - 9 * b * c + 27 * d) / 54
         mask = R**2 < Q**3
         return jnp.where(
-            mask[..., jnp.newaxis], irreducible(Q, R, b, mask), reducible(Q, R, b)
+            mask[..., jnp.newaxis],
+            irreducible(jnp.abs(Q), R, b, mask),
+            reducible(Q, R, b),
         )
 
     return jnp.where(

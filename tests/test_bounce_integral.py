@@ -5,6 +5,7 @@ from functools import partial
 
 import numpy as np
 import pytest
+from jax import grad
 from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
 from scipy import integrate
@@ -756,4 +757,11 @@ def test_drift():
     fig, ax = plt.subplots()
     ax.plot(1 / pitch, drift_analytic)
     ax.plot(1 / pitch, drift_numerical)
+
+    # Test if differentiable.
+    def dummy_fun(pitch):
+        return jnp.sum(bounce_integrate(integrand_num, [cvdrift, gbdrift], pitch))
+
+    assert np.isclose(grad(dummy_fun)(1.0), 650, rtol=1e-3)
+
     return fig

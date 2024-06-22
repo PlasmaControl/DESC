@@ -1814,8 +1814,13 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False, jnp=jnp):
         x = jnp.sort(x, axis=0)
     # choose dx to be half the distance between its neighbors
     if x.size > 1:
-        dx_0 = x[1] + (period - x[-1]) % period
-        dx_1 = x[0] + (period - x[-2]) % period
+        if np.isfinite(period):
+            dx_0 = x[1] + (period - x[-1]) % period
+            dx_1 = x[0] + (period - x[-2]) % period
+        else:
+            # just set to 0 to stop nan gradient, even though above gives expected value
+            dx_0 = 0
+            dx_1 = 0
         if x.size == 2:
             # then dx[0] == period and dx[-1] == 0, so fix this
             dx_1 = dx_0

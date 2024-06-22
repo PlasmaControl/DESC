@@ -2,6 +2,7 @@
 
 from functools import partial
 
+import numpy as np
 from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
 from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
@@ -51,23 +52,35 @@ def take_mask(a, mask, size=None, fill_value=None):
     )
 
 
-# only use for debugging
+# use for debugging and testing
 def _filter_not_nan(a):
     """Filter out nan from ``a`` while asserting nan is padded at right."""
-    is_nan = jnp.isnan(a)
-    assert jnp.array_equal(is_nan, jnp.sort(is_nan, axis=-1))
+    is_nan = np.isnan(a)
+    assert np.array_equal(is_nan, np.sort(is_nan, axis=-1))
     return a[~is_nan]
 
 
-def _filter_real(a, a_min=-jnp.inf, a_max=jnp.inf):
+# use for debugging and testing
+def _filter_nonzero_measure(bp1, bp2):
+    """Return only bounce points such that |bp2 - bp1| > 0."""
+    mask = (bp2 - bp1) != 0
+    return bp1[mask], bp2[mask]
+
+
+def _filter_real(a, a_min=-jnp.inf, a_max=jnp.inf, sentinel=jnp.nan, eps=0):
     """Keep real values inside [``a_min``, ``a_max``] and set others to nan.
 
     Parameters
     ----------
     a : jnp.ndarray
-    a_min, a_max : jnp.ndarray or float, jnp.ndarray or float
-        Minimum and maximum value to keep real values between.
-        Should broadcast with ``a``.
+    a_min : jnp.ndarray
+        Minimum value to keep real values between. Should broadcast with ``a``.
+    a_max : jnp.ndarray
+        Maximum value to keep real values between. Should broadcast with ``a``.
+    sentinel : float
+        Value with which to pad array in place of filtered elements.
+    eps : float
+        Absolute tolerance with which to consider value as zero.
 
     Returns
     -------
@@ -80,55 +93,70 @@ def _filter_real(a, a_min=-jnp.inf, a_max=jnp.inf):
     if a_max is None:
         a_max = jnp.inf
     return jnp.where(
-        jnp.isclose(jnp.imag(a), 0) & (a_min <= a) & (a <= a_max),
+        (jnp.abs(jnp.imag(a)) <= eps) & (a_min <= a) & (a <= a_max),
         jnp.real(a),
-        jnp.nan,
+        sentinel,
     )
 
 
-def _nan_concat(r, num=1):
-    # Concat nan num times to r on last axis.
-    nan = jnp.broadcast_to(jnp.nan, (*r.shape[:-1], num))
-    return jnp.concatenate([r, nan], axis=-1)
+def _sentinel_concat(r, sentinel, num=1):
+    # Concat sentinel num times to r on last axis.
+    sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
+    return jnp.concatenate([r, sent], axis=-1)
 
 
-def _root_linear(a, b, distinct=False):
+def _root_linear(a, b, sentinel, eps, distinct=False):
     """Return r such that a r + b = 0."""
-    return safediv(-b, a, fill=jnp.where(jnp.isclose(b, 0), 0, jnp.nan))
+    return safediv(-b, a, jnp.where(jnp.abs(b) <= eps, 0, sentinel))
 
 
-def _root_quadratic(a, b, c, distinct=False):
-    """Return r such that a r² + b r + c = 0, assuming real coefficients."""
+def _root_quadratic(a, b, c, sentinel, eps, distinct):
+    """Return r such that a r² + b r + c = 0, assuming real coefficients and roots."""
     # numerical.recipes/book.html, page 227
     discriminant = b**2 - 4 * a * c
-    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(discriminant))
-    r1 = safediv(q, a, _root_linear(b, c))
-    # more robust to remove repeated roots with discriminant
+    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
+    r1 = jnp.where(
+        discriminant < 0,
+        sentinel,
+        safediv(q, a, _root_linear(b, c, sentinel, eps)),
+    )
     r2 = jnp.where(
-        distinct & jnp.isclose(discriminant, 0), jnp.nan, safediv(c, q, jnp.nan)
+        # more robust to remove repeated roots with discriminant
+        (discriminant < 0) | (distinct & (discriminant <= eps)),
+        sentinel,
+        safediv(c, q, sentinel),
     )
     return jnp.stack([r1, r2], axis=-1)
 
 
-def _root_cubic(a, b, c, d, distinct=False):
-    """Return r such that a r³ + b r² + c r + d = 0, assuming real coefficients."""
+def _root_cubic(a, b, c, d, sentinel, eps, distinct):
+    """Return r such that a r³ + b r² + c r + d = 0, assuming real coef and roots."""
     # numerical.recipes/book.html, page 228
 
-    def irreducible(Q, R, b):
+    def irreducible(Q, R, b, mask):
         # Three irrational real roots.
-        theta = jnp.arccos(R / jnp.sqrt(Q**3))
-        j = -2 * jnp.sqrt(Q)
-        r1 = j * jnp.cos(theta / 3) - b / 3
-        r2 = j * jnp.cos((theta + 2 * jnp.pi) / 3) - b / 3
-        r3 = j * jnp.cos((theta - 2 * jnp.pi) / 3) - b / 3
-        return jnp.stack([r1, r2, r3], axis=-1)
+        theta = jnp.arccos(safediv(R, jnp.sqrt(jnp.where(mask, Q**3, R**2 + 1))))
+        return jnp.moveaxis(
+            -2
+            * jnp.sqrt(jnp.abs(Q))
+            * jnp.stack(
+                [
+                    jnp.cos(theta / 3),
+                    jnp.cos((theta + 2 * jnp.pi) / 3),
+                    jnp.cos((theta - 2 * jnp.pi) / 3),
+                ]
+            )
+            - b / 3,
+            source=0,
+            destination=-1,
+        )
 
     def reducible(Q, R, b):
         # One real and two complex roots.
-        A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(R**2 - Q**3)) ** (1 / 3)
+        A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3))) ** (1 / 3)
         B = safediv(Q, A)
         r1 = (A + B) - b / 3
-        return _nan_concat(r1[..., jnp.newaxis], 2)
+        return _sentinel_concat(r1[..., jnp.newaxis], sentinel, num=2)
 
     def root(b, c, d):
         b = safediv(b, a)
@@ -136,15 +164,15 @@ def _root_cubic(a, b, c, d, distinct=False):
         d = safediv(d, a)
         Q = (b**2 - 3 * c) / 9
         R = (2 * b**3 - 9 * b * c + 27 * d) / 54
+        mask = R**2 < Q**3
         return jnp.where(
-            jnp.expand_dims(R**2 < Q**3, axis=-1),
-            irreducible(Q, R, b),
-            reducible(Q, R, b),
+            mask[..., jnp.newaxis], irreducible(Q, R, b, mask), reducible(Q, R, b)
         )
 
     return jnp.where(
-        jnp.isclose(a, 0)[..., jnp.newaxis],
-        _nan_concat(_root_quadratic(b, c, d, distinct)),
+        # Tests catch failure here if eps < 1e-12 for 64 bit jax.
+        jnp.expand_dims(jnp.abs(a) <= eps, axis=-1),
+        _sentinel_concat(_root_quadratic(b, c, d, sentinel, eps, distinct), sentinel),
         root(b, c, d),
     )
 
@@ -153,7 +181,15 @@ _roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n
 
 
 def _poly_root(
-    c, k=0, a_min=None, a_max=None, sort=False, distinct=False, poly_is_real=True
+    c,
+    k=0,
+    a_min=None,
+    a_max=None,
+    sort=False,
+    sentinel=jnp.nan,
+    # About 2e-12 for 64 bit jax.
+    eps=min(jnp.finfo(jnp.array(1.0).dtype).eps * 1e4, 1e-8),
+    distinct=False,
 ):
     """Roots of polynomial with given coefficients.
 
@@ -165,18 +201,22 @@ def _poly_root(
         ``c[n-i]``.
     k : Array
         Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``. Should broadcast with arrays of
-        shape c.shape[1:].
+        shape ``c.shape[1:]``.
     a_min, a_max : jnp.ndarray, jnp.ndarray
         Minimum and maximum value to return roots between. If specified only real roots
         are returned. If None, returns all complex roots. Should broadcast with arrays
-        of shape c.shape[1:].
+        of shape ``c.shape[1:]``.
     sort : bool
         Whether to sort the roots.
+    sentinel : float
+        Value with which to pad array in place of filtered elements.
+        Anything less than ``a_min`` or greater than ``a_max`` plus some floating point
+        error buffer will work just like nan while also avoiding nan gradient.
+    eps : float
+        Absolute tolerance with which to consider value as zero.
     distinct : bool
         Whether to only return the distinct roots. If true, when the multiplicity is
         greater than one, the repeated roots are set to nan.
-    poly_is_real : bool
-        Whether the coefficients ``c`` and ``k`` are real. Default is true.
 
     Returns
     -------
@@ -185,14 +225,17 @@ def _poly_root(
         The roots of the polynomial, iterated over the last axis.
 
     """
+    is_real = not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
     get_only_real_roots = not (a_min is None and a_max is None)
+
     func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
-    if c.shape[0] in func and poly_is_real and get_only_real_roots:
+    if c.shape[0] in func and is_real and get_only_real_roots:
         # Compute from analytic formula to avoid the issue of complex roots with small
-        # imaginary parts.
-        r = func[c.shape[0]](*c[:-1], c[-1] - k, distinct)
+        # imaginary parts and to avoid nan in gradient.
+        r = func[c.shape[0]](*c[:-1], c[-1] - k, sentinel, eps, distinct)
         distinct = distinct and c.shape[0] > 3
     else:
+        warnif(not np.isnan(sentinel), msg="This may not prevent an nan gradient.")
         # Compute from eigenvalues of polynomial companion matrix.
         c_n = c[-1] - k
         c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
@@ -204,17 +247,15 @@ def _poly_root(
             a_min = a_min[..., jnp.newaxis]
         if a_max is not None:
             a_max = a_max[..., jnp.newaxis]
-        r = _filter_real(r, a_min, a_max)
+        r = _filter_real(r, a_min, a_max, sentinel, eps)
 
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
     if distinct:
-        # Atol needs to be low enough that distinct roots which are close do not
-        # get removed, otherwise algorithms that rely on continuity of the spline
-        # such as bounce_points() will fail. The current atol was chosen so that
-        # test_bounce_points() passes.
-        mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=jnp.nan), 0, atol=1e-15)
-        r = jnp.where(mask, jnp.nan, r)
+        # eps needs to be low enough that close distinct roots do not get removed.
+        # Otherwise, algorithms relying on continuity will fail.
+        mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
+        r = jnp.where(mask, sentinel, r)
     return r
 
 
@@ -284,8 +325,8 @@ def _poly_val(x, c):
 def plot_field_line(
     B,
     pitch=None,
-    bp1=jnp.array([]),
-    bp2=jnp.array([]),
+    bp1=np.array([]),
+    bp2=np.array([]),
     start=None,
     stop=None,
     num=1000,
@@ -302,11 +343,11 @@ def plot_field_line(
     ----------
     B : PPoly
         Spline of |B| over given field line.
-    pitch : jnp.ndarray
+    pitch : np.ndarray
         λ value.
-    bp1 : jnp.ndarray
+    bp1 : np.ndarray
         Bounce points with (∂|B|/∂ζ)|ρ,α <= 0.
-    bp2 : jnp.ndarray
+    bp2 : np.ndarray
         Bounce points with (∂|B|/∂ζ)|ρ,α >= 0.
     start : float
         Minimum ζ on plot.
@@ -346,7 +387,7 @@ def plot_field_line(
     if include_knots:
         for knot in B.x:
             add(ax.axvline(x=knot, color="tab:blue", alpha=alpha_knot, label="knot"))
-    z = jnp.linspace(
+    z = np.linspace(
         start=B.x[0] if start is None else start,
         stop=B.x[-1] if stop is None else stop,
         num=num,
@@ -354,20 +395,24 @@ def plot_field_line(
     add(ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$"))
 
     if pitch is not None:
-        b = jnp.reciprocal(pitch)
+        b = 1 / np.atleast_1d(pitch)
         for val in b:
             add(
                 ax.axhline(
                     val, color="tab:purple", alpha=alpha_pitch, label=r"$1 / \lambda$"
                 )
             )
-        bp1, bp2 = jnp.atleast_2d(bp1, bp2)
+        bp1, bp2 = np.atleast_2d(bp1, bp2)
         for i in range(bp1.shape[0]):
-            bp1_i, bp2_i = map(_filter_not_nan, (bp1[i], bp2[i]))
+            if bp1.shape == bp2.shape:
+                bp1_i, bp2_i = _filter_nonzero_measure(bp1[i], bp2[i])
+            else:
+                bp1_i, bp2_i = bp1[i], bp2[i]
+            bp1_i, bp2_i = map(_filter_not_nan, (bp1_i, bp2_i))
             add(
                 ax.scatter(
                     bp1_i,
-                    jnp.full_like(bp1_i, b[i]),
+                    np.full_like(bp1_i, b[i]),
                     marker="v",
                     color="tab:red",
                     label="bp1",
@@ -376,7 +421,7 @@ def plot_field_line(
             add(
                 ax.scatter(
                     bp2_i,
-                    jnp.full_like(bp2_i, b[i]),
+                    np.full_like(bp2_i, b[i]),
                     marker="^",
                     color="tab:green",
                     label="bp2",
@@ -396,11 +441,13 @@ def plot_field_line(
     return fig, ax
 
 
-def _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot, **kwargs):
+def _check_bounce_points(bp1, bp2, sentinel, pitch, knots, B_c, plot, **kwargs):
     """Check that bounce points are computed correctly."""
-    eps = 10 * jnp.finfo(jnp.array(1.0).dtype).eps
-    P, S = bp1.shape[:-1]
+    bp1 = jnp.where(bp1 > sentinel, bp1, jnp.nan)
+    bp2 = jnp.where(bp2 > sentinel, bp2, jnp.nan)
 
+    eps = jnp.finfo(jnp.array(1.0).dtype).eps * 10
+    P, S = bp1.shape[:-1]
     msg_1 = "Bounce points have an inversion."
     err_1 = jnp.any(bp1 > bp2, axis=-1)
     msg_2 = "Discontinuity detected."
@@ -528,62 +575,78 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
         ``knots.size-1``, and the number of field lines is denoted by ``S``.
         If there were less than ``N*degree`` bounce points detected along a field line,
         then the last axis, which enumerates the bounce points for a particular field
-        line, is padded with nan.
+        line, is padded with zero.
 
     """
     B_c, B_z_ra_c, pitch = _check_shape(knots, B_c, B_z_ra_c, pitch)
     P, S, N, degree = pitch.shape[0], B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
+    # Intersection points in local power basis.
     intersect = _poly_root(
         c=B_c,
         k=jnp.reciprocal(pitch)[..., jnp.newaxis],
         a_min=jnp.array([0]),
         a_max=jnp.diff(knots),
         sort=True,
+        sentinel=-1,
         distinct=True,
     )
     assert intersect.shape == (P, S, N, degree)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
+    # Only consider intersect if it is within knots that bound that polynomial.
+    is_intersect = intersect.reshape(P, S, -1) >= 0
     B_z_ra = _poly_val(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
+    # Gather intersects along a field line to be contiguous.
+    B_z_ra = take_mask(B_z_ra, is_intersect, fill_value=0)
+
+    sentinel = knots[0] - 1
     # Transform out of local power basis expansion.
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
-
-    # Only consider intersect if it is within knots that bound that polynomial.
-    is_intersect = ~jnp.isnan(intersect)
-    # Reorder so that all intersects along a field line are contiguous.
-    intersect = take_mask(intersect, is_intersect)
-    B_z_ra = take_mask(B_z_ra, is_intersect)
-    assert intersect.shape == B_z_ra.shape == (P, S, N * degree)
-    is_bp1 = B_z_ra <= 0
-    is_bp2 = B_z_ra >= 0
+    # Gather intersects along a field line to be contiguous, followed by some sentinel.
+    intersect = take_mask(intersect, is_intersect, fill_value=sentinel)
+    is_intersect = intersect > sentinel
+    is_bp1 = (B_z_ra <= 0) & is_intersect
+    is_bp2 = (B_z_ra >= 0) & is_intersect
+    edge_case = (
+        (B_z_ra[..., 0] == 0)
+        & (B_z_ra[..., 1] < 0)
+        & is_intersect[..., 0]
+        & is_intersect[..., 1]
+        # In theory, we need to keep propagating this edge case,
+        # e.g (B_z_ra[..., 1] < 0) | ((B_z_ra[..., 1] == 0) & (B_z_ra[..., 2] < 0)...).
+        # At each step, the likelihood that an intersection has already been lost
+        # due to floating point errors grows, so the real solution is to pick a less
+        # degenerate pitch value - one that does not ride the global extrema of |B|.
+    )
+    is_bp2 = put(is_bp2, Index[..., 0], edge_case)
+    # Get ζ values of bounce points from the masks.
+    bp1 = take_mask(intersect, is_bp1, fill_value=sentinel)
+    bp2 = take_mask(intersect, is_bp2, fill_value=sentinel)
     # The pairs bp1[i, j, k] and bp2[i, j, k] are boundaries of an integral only
     # if bp1[i, j, k] <= bp2[i, j, k]. For correctness of the algorithm, it is
     # required that the first intersect satisfies non-positive derivative. Now,
     # because B_z_ra[i, j, k] <= 0 implies B_z_ra[i, j, k + 1] >= 0 by continuity,
     # there can be at most one inversion, and if it exists, the inversion must be
     # at the first pair. To correct the inversion, it suffices to disqualify the
-    # first intersect as a right boundary, except under the following edge case.
-    edge_case = (B_z_ra[..., 0] == 0) & (B_z_ra[..., 1] < 0)
-    # In theory, we need to keep propagating this edge case,
-    # e.g (B_z_ra[..., 1] < 0) | ((B_z_ra[..., 1] == 0) & (B_z_ra[..., 2] < 0)...).
-    # At each step, the likelihood that an intersection has already been lost
-    # due to floating point errors grows, so the real solution is to pick a less
-    # degenerate pitch value - one that does not ride the global extrema of |B|.
-    is_bp2 = put(is_bp2, Index[..., 0], edge_case)
-    # Get ζ values of bounce points from the masks.
-    bp1 = take_mask(intersect, is_bp1)
-    bp2 = take_mask(intersect, is_bp2)
+    # first intersect as a right boundary, except under the above edge case.
 
     # Following discussion on page 3 and 5 of https://doi.org/10.1063/1.873749,
     # we ignore the bounce points of particles assigned to a class that are
     # trapped outside this snapshot of the field line.
-    # TODO: Better to always consider boundary as bounce points.
+    # TODO: Better to always consider boundary as bounce points. Simple change;
+    #  do in same pull request that resolves GitHub issue #1045.
+
     if check:
-        _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot, **kwargs)
+        _check_bounce_points(bp1, bp2, sentinel, pitch, knots, B_c, plot, **kwargs)
+
+    mask = (bp1 > sentinel) & (bp2 > sentinel)
+    # Set outside mask to same value so that integration is over set of measure zero.
+    bp1 = jnp.where(mask, bp1, 0)
+    bp2 = jnp.where(mask, bp2, 0)
     return bp1, bp2
 
 
-def composite_linspace(x, num):
+def _composite_linspace(x, num):
     """Returns linearly spaced points between every pair of points ``x``.
 
     Parameters
@@ -634,7 +697,7 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
-    pitch = composite_linspace(jnp.reciprocal(jnp.stack([max_B, min_B])), num)
+    pitch = _composite_linspace(jnp.reciprocal(jnp.stack([max_B, min_B])), num)
     assert pitch.shape == (num + 2, *pitch.shape[1:])
     return pitch
 
@@ -834,8 +897,8 @@ def _plot(Z, V, title_id=""):
     """Plot V[λ, (ρ, α), (ζ₁, ζ₂)](Z)."""
     for p in range(Z.shape[0]):
         for s in range(Z.shape[1]):
-            is_quad_point_set = jnp.nonzero(~jnp.any(jnp.isnan(Z[p, s]), axis=-1))[0]
-            if not is_quad_point_set.size:
+            marked = jnp.nonzero(jnp.any(Z != 0, axis=-1))[0]
+            if marked.size == 0:
                 continue
             fig, ax = plt.subplots()
             ax.set_xlabel(r"Field line $\zeta$")
@@ -843,7 +906,7 @@ def _plot(Z, V, title_id=""):
             ax.set_title(
                 f"Interpolation of {title_id} to quadrature points. Index {p},{s}."
             )
-            for i in is_quad_point_set:
+            for i in marked:
                 ax.plot(Z[p, s, i], V[p, s, i], marker="o")
             fig.text(
                 0.01,
@@ -878,28 +941,27 @@ def _check_interpolation(Z, f, B_sup_z, B, B_z_ra, inner_product, plot):
         Whether to plot stuff.
 
     """
-    is_not_quad_point = jnp.isnan(Z)
-    # We want quantities to evaluate as finite only at quadrature points
-    # for the integrals with boundaries at valid bounce points.
+    assert jnp.isfinite(Z).all(), "NaN interpolation point."
+    # Integrals that we should be computing.
+    marked = jnp.any(Z != 0, axis=-1)
+    goal = jnp.sum(marked)
+
     msg = "Interpolation failed."
-    assert jnp.all(jnp.isfinite(B_sup_z) != is_not_quad_point), msg
-    assert jnp.all(jnp.isfinite(B) != is_not_quad_point), msg
-    assert jnp.all(jnp.isfinite(B_z_ra)), msg
+    assert jnp.isfinite(B_z_ra).all(), msg
+    assert goal == jnp.sum(marked & jnp.isfinite(jnp.sum(B_sup_z, axis=-1))), msg
+    assert goal == jnp.sum(marked & jnp.isfinite(jnp.sum(B, axis=-1))), msg
     for f_i in f:
-        assert jnp.all(jnp.isfinite(f_i) != is_not_quad_point), msg
+        assert goal == jnp.sum(marked & jnp.isfinite(jnp.sum(f_i, axis=-1))), msg
 
     msg = "|B| has vanished, violating the hairy ball theorem."
     assert not jnp.isclose(B, 0).any(), msg
     assert not jnp.isclose(B_sup_z, 0).any(), msg
 
-    quad_resolution = Z.shape[-1]
-    # Number of integrals that we should be computing.
-    goal = jnp.sum(1 - is_not_quad_point) // quad_resolution
-    # Number of integrals that were actually computed.
-    actual = jnp.isfinite(inner_product).sum()
+    # Number of those integrals that were computed.
+    actual = jnp.sum(marked & jnp.isfinite(inner_product))
     assert goal == actual, (
-        f"Lost {goal - actual} integrals "
-        "from floating point or spline approximation error."
+        f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
+        "can be caused by floating point error or a poor choice of quadrature nodes."
     )
     if plot:
         _plot(Z, B, title_id=r"$\vert B \vert$")
@@ -963,21 +1025,13 @@ def _interpolate_and_integrate(
     b_sup_z = _interp1d_vec(Z, knots, B_sup_z / B, method=method).reshape(shape)
     B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method=method_B).reshape(shape)
     pitch = jnp.expand_dims(pitch, axis=(2, 3) if len(shape) == 4 else 2)
-    # Assuming that the integrand is a well-behaved function of some interpolation
-    # points Z, it should evaluate as NaN only if Z is NaN. This condition needs to be
-    # enforced explicitly due to floating point and interpolation error. In the context
-    # of bounce integrals, the √(1 − λ |B|) terms necessitate this as interpolation
-    # error in |B| may yield λ|B| > 1 at quadrature points between bounce points. Don't
-    # suppress inf as that indicates catastrophic floating point error.
-    inner_product = jnp.dot(
-        jnp.nan_to_num(integrand(*f, B=B, pitch=pitch), posinf=jnp.inf, neginf=-jnp.inf)
-        / b_sup_z,
-        w,
-    )
+    inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch) / b_sup_z, w)
+
     if check:
         _check_interpolation(
             Z.reshape(shape), f, b_sup_z, B, B_z_ra, inner_product, plot
         )
+
     return inner_product
 
 
@@ -1002,14 +1056,22 @@ def _bounce_quadrature(
 
     Parameters
     ----------
-    bp1, bp2 : jnp.ndarray, jnp.ndarray
+    bp1 : jnp.ndarray
         Shape (P, S, bp1.shape[-1]).
         The field line-following ζ coordinates of bounce points for a given pitch along
         a field line. The pairs ``bp1[i,j,k]`` and ``bp2[i,j,k]`` form left and right
         integration boundaries, respectively, for the bounce integrals.
-    x, w : jnp.ndarray, jnp.ndarray
+    bp2 : jnp.ndarray
+        Shape (P, S, bp1.shape[-1]).
+        The field line-following ζ coordinates of bounce points for a given pitch along
+        a field line. The pairs ``bp1[i,j,k]`` and ``bp2[i,j,k]`` form left and right
+        integration boundaries, respectively, for the bounce integrals.
+    x : jnp.ndarray
         Shape (w.size, ).
-        Quadrature points in [-1, 1] and weights.
+        Quadrature points in [-1, 1].
+    w : jnp.ndarray
+        Shape (w.size, ).
+        Quadrature weights.
     integrand : callable
         The composition operator on the set of functions in ``f`` that maps the
         functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the

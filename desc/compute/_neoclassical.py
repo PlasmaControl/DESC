@@ -18,6 +18,7 @@ from desc.backend import imap, jit, jnp
 
 from .bounce_integral import bounce_integral, get_pitch
 from .data_index import register_compute_fun
+from .utils import safediv
 
 
 def _vec_quadax(quad, **kwargs):
@@ -213,11 +214,14 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
     def dH(grad_rho_norm_kappa_g, B, pitch):
         # Removed |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ from integrand of Nemov eq. 30. Reintroduced later.
         return (
-            jnp.sqrt(1 - pitch * B) * (4 / (pitch * B) - 1) * grad_rho_norm_kappa_g / B
+            jnp.sqrt(jnp.abs(1 - pitch * B))
+            * (4 / (pitch * B) - 1)
+            * grad_rho_norm_kappa_g
+            / B
         )
 
     def dI(B, pitch):  # Integrand of Nemov eq. 31.
-        return jnp.sqrt(1 - pitch * B) / B
+        return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
     def d_ripple(pitch):
         # Return (∂ψ/∂ρ)⁻² λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
@@ -227,7 +231,7 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
             dH, data["|grad(rho)|"] * data["kappa_g"], pitch, batch=batch
         )
         I = bounce_integrate(dI, [], pitch, batch=batch)
-        return pitch * jnp.nansum(H**2 / I, axis=-1)
+        return pitch * jnp.sum(safediv(H**2, I), axis=-1)
 
     # The integrand is continuous and likely poorly approximated by a polynomial.
     # Composite quadrature should perform better than higher order methods.

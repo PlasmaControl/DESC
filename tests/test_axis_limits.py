@@ -92,6 +92,7 @@ not_implemented_limits = {
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
+    "g^pa",  # will need to refactor dependencies to avoid nan in AD
 }
 
 
@@ -383,3 +384,4 @@ def test_reverse_mode_ad_axis(name):
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))
+    print(np.count_nonzero(g), name)

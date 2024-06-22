@@ -307,6 +307,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         This routine may be used on over or under-determined systems, in which case it
         will solve it in a least squares / least norm sense.
         """
+        from desc.compute.utils import safenorm
+
         if fixup is None:
             fixup = lambda x, *args: x
         if jac is None:
@@ -371,7 +373,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         x, (res, niter) = jax.lax.custom_root(
             res, x0, solve, tangent_solve, has_aux=True
         )
-        return x, (jnp.linalg.norm(res), niter)
+        return x, (safenorm(res), niter)
 
     def trapezoid(y, x=None, dx=1.0, axis=-1):
         """Integrate along the given axis using the composite trapezoidal rule."""

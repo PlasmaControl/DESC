@@ -1288,18 +1288,21 @@ def test_second_stage_optimization_CoilSet():
     eq = Equilibrium()
     R_coil = 10
     I = 100
-    field = FourierXYZCoil(
-        current=I,
-        X_n=[0, R_coil, 0],
-        Y_n=[0, 0, R_coil],
-        Z_n=[0, 0, 0],
-        modes=[0, 1, -1],
-    ) + CoilSet(
-        FourierRZCoil(
+    field = MixedCoilSet(
+        FourierXYZCoil(
             current=I,
+            X_n=[0, R_coil, 0],
+            Y_n=[0, 0, R_coil],
+            Z_n=[3, 0, 0],
+            modes=[0, 1, -1],
         ),
-        NFP=5,
-        sym=True,
+        CoilSet(
+            FourierRZCoil(
+                current=I,
+            ),
+            NFP=5,
+            sym=True,
+        ),
     )
 
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field, vacuum=True))
@@ -1310,18 +1313,20 @@ def test_second_stage_optimization_CoilSet():
             {"R_n": True, "Z_n": True, "current": True},
         ],
     )
-    optimizer = Optimizer("scipy-trf")
+    optimizer = Optimizer("lsq-exact")
     (field,), _ = optimizer.optimize(
         things=field,
         objective=objective,
         constraints=constraints,
         ftol=0,
         xtol=0,
+        gtol=0,
         verbose=2,
+        maxiter=200,
     )
-    np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
-    np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
-    np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
+
+    # 0 current in the circular coil providing the vertical field
+    np.testing.assert_allclose(field[0].current, 0, atol=5e-1)
 
 
 # TODO: replace this with the solution to Issue #1021

@@ -9,6 +9,7 @@ import numpy as np
 from desc.backend import fori_loop, jit, jnp, scan, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
+from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -193,13 +194,24 @@ class _Coil(_MagneticField, Optimizable, ABC):
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(
-            ["x", "x_s", "ds"],
-            grid=source_grid,
-            params=params,
-            transforms=transforms,
-            basis="xyz",
-        )
+        if not params or not transforms:
+            data = self.compute(
+                ["x", "x_s", "ds"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
+        else:
+            data = compute_fun(
+                self,
+                name=["x", "x_s", "ds"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+                basis="xyz",
+            )
+
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )

@@ -856,6 +856,8 @@ class QuadraticFlux(_Objective):
             )
         field = self._field
         # FIXME: need to add case for CurrentPotentialField as well
+        # FIXME: This will fail if we have a SumMagneticField where
+        # one of the constituents is a (Fourier)CurrentPotentialField
         if hasattr(field, "Phi_mn"):
             # make the transform for the CurrentPotentialField
             if self._field_grid is None:

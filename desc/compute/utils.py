@@ -361,7 +361,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                         build=False,
                         method=method,
                     )
-            else:
+            else:  # don't perform checks if jitable=True as they are not jit-safe
                 c_transform = Transform(
                     grid,
                     basis,

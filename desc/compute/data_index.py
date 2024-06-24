@@ -125,20 +125,9 @@ def register_compute_fun(
     }
     for kw in kwargs:
         allowed_kwargs.add(kw)
-    permutable_names = [
-        "R_",
-        "Z_",
-        "phi_",
-        "lambda_",
-        "omega_",
-        "e_rho_",
-        "e_theta_",
-        "e_zeta_",
-    ]
     splits = name.rsplit("_", 1)
     if (
         len(splits) > 1
-        and splits[0] + "_" in permutable_names
         # Only look for permutations of partial derivatives of same coordinate system.
         and {"r", "t", "z"}.issuperset(splits[-1])
     ):

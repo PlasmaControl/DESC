@@ -832,10 +832,17 @@ class SplineXYZCurve(Curve):
         if break_indices is None:
             intervals = [[]]
         else:
-            # check that input is monotonic
-            assert np.all(
-                break_indices == np.unique(sorted(break_indices))
-            ), "Indices must be monotonic."
+            unique_ordered_indices = np.unique(break_indices)
+            errorif(
+                len(unique_ordered_indices) != len(break_indices),
+                ValueError,
+                "break_indices must not contain any duplicated values",
+            )
+            errorif(
+                np.any(unique_ordered_indices != break_indices),
+                ValueError,
+                "break_indices must be monotonic",
+            )
             intervals = [
                 [break_indices[i - 1], break_indices[i]]
                 for i in range(len(break_indices))

@@ -770,8 +770,9 @@ class SplineXYZCurve(Curve):
 
     name : str
         name for this curve
-    break_indices : ndarray
-        Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+    break_indices : ndarray or None
+        If supplied, the spline will be a piecewise set of splines.
+        Indices are of knots at which the curve breaks and is only C0 continuous (e.g.
         continuous but with "corners" where the derivative jumps). In between each set
         of break points, there is an unbroken spline whose start and endpoints are
         given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
@@ -779,7 +780,7 @@ class SplineXYZCurve(Curve):
         splines (i+1th, i-1th, etc.) and does not consider their query points
         (knots) when interpolating. The boundary conditions are evaluated using
         interpax's default where non-periodicity is assumed.
-
+        If None (the default), the spline will be the usual periodic continuous spline.
     """
 
     _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_knots", "_method"]
@@ -1032,7 +1033,8 @@ class SplineXYZCurve(Curve):
             name for this curve
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
-        break_indices : ndarray
+        break_indices : ndarray or None
+            If supplied, the spline will be a piecewise set of splines.
             Indices of knots at which the curve breaks and is only C0 continuous (e.g.
             continuous but with "corners" where the derivative jumps). In between each
             set of break points, there is an unbroken spline whose start and endpoints
@@ -1041,6 +1043,8 @@ class SplineXYZCurve(Curve):
             splines (i+1th, i-1th, etc.) and does not consider their query points
             (knots) when interpolating. The boundary conditions are evaluated using
             Interpax's default where non-periodicity is assumed.
+            If None (the default), the spline will be the usual periodic continuous
+            spline.
 
         Returns
         -------

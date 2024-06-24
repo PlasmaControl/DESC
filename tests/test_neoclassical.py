@@ -5,7 +5,6 @@ import numpy as np
 import pytest
 from tests.test_plotting import tol_1d
 
-from desc.equilibrium.coords import rtz_grid
 from desc.examples import get
 from desc.objectives import EffectiveRipple, ObjectiveFunction
 
@@ -17,8 +16,7 @@ def test_field_line_average():
     rho = np.array([1])
     alpha = np.array([0])
     eq = get("DSHAPE")
-    grid = rtz_grid(
-        eq,
+    grid = eq.rtz_grid(
         rho,
         alpha,
         np.linspace(0, 2 * np.pi, 20),
@@ -34,8 +32,7 @@ def test_field_line_average():
 
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
-    grid = rtz_grid(
-        eq,
+    grid = eq.rtz_grid(
         rho,
         alpha,
         np.linspace(0, 40 * np.pi, 300),
@@ -56,8 +53,7 @@ def test_effective_ripple():
     """Test effective ripple with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = rtz_grid(
-        eq,
+    grid = eq.rtz_grid(
         rho,
         np.array([0]),
         np.linspace(0, 20 * np.pi, 1000),

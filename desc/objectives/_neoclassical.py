@@ -8,7 +8,6 @@ from desc.grid import QuadratureGrid
 from desc.utils import Timer
 
 from ..backend import jnp
-from ..equilibrium.coords import rtz_grid
 from ..profiles import SplineProfile
 from .objective_funs import _Objective
 from .utils import _parse_callable_target_bounds
@@ -107,6 +106,7 @@ class EffectiveRipple(_Objective):
 
         # Assign in build.
         self._grid_1dr = grid
+        # TODO: Do we need a 0d grid, just to compute R0 accurately?
         self._grid_0d = grid if isinstance(grid, QuadratureGrid) else None
         self._constants = {"quad_weights": 1}
         self._dim_f = 1
@@ -229,8 +229,7 @@ class EffectiveRipple(_Objective):
         )
         iota = self._grid_1dr.compress(data["iota"])
         iota_r = self._grid_1dr.compress(data["iota_r"])
-        grid = rtz_grid(
-            eq,
+        grid = eq.rtz_grid(
             self._rho,
             self._alpha,
             self._zeta,

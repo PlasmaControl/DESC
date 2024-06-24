@@ -52,7 +52,7 @@ from desc.utils import (
     warnif,
 )
 
-from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
+from .coords import compute_theta_coords, is_nested, map_coordinates, rtz_grid, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -1151,6 +1151,44 @@ class Equilibrium(IOAble, Optimizable):
             maxiter,
             full_output,
             **kwargs,
+        )
+
+    def rtz_grid(
+        self, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+    ):
+        """Return DESC coordinate grid from given coordinates.
+
+        Create a meshgrid from the given coordinates, and return the
+        paired DESC coordinate grid.
+
+        Parameters
+        ----------
+        radial : ndarray
+            Sorted unique radial coordinates.
+        poloidal : ndarray
+            Sorted unique poloidal coordinates.
+        toroidal : ndarray
+            Sorted unique toroidal coordinates.
+        coordinates : str
+            Input coordinates that are specified by the arguments, respectively.
+            raz : rho, alpha, zeta
+            rpz : rho, theta_PEST, zeta
+            rtz : rho, theta, zeta
+        period : tuple of float
+            Assumed periodicity for each quantity in inbasis.
+            Use np.inf to denote no periodicity.
+        jitable : bool, optional
+            If false the returned grid has additional attributes.
+            Required to be false to retain nodes at magnetic axis.
+
+        Returns
+        -------
+        desc_grid : Grid
+            DESC coordinate grid for the given coordinates.
+
+        """
+        return rtz_grid(
+            self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
     def compute_theta_coords(

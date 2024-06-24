@@ -140,7 +140,9 @@ def _compute(
             reqs = data_index[parameterization][name]["source_grid_requirement"]
             errorif(
                 reqs and not hasattr(transforms["grid"], "source_grid"),
-                msg=f"Expected grid with attribute 'source_grid' to compute {name}.",
+                msg=f"Expected grid with attribute 'source_grid' to compute {name}. "
+                f"The source grid should have coordinates: {reqs.get('coordinates')}. "
+                "The equilibrium.rtz_grid method may be useful for this purpose.",
             )
             for req in reqs:
                 errorif(

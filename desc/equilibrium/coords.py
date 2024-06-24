@@ -117,6 +117,8 @@ def map_coordinates(  # noqa: C901
             else eq.get_profile("iota", params=params)
         )
         params["i_l"] = profiles["iota"].params
+    else:
+        kwargs.pop("iota", None)
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):

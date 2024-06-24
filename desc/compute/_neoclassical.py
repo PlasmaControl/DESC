@@ -147,11 +147,11 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 
 
 @register_compute_fun(
-    name="effective ripple raw",
-    label="(∂ψ/∂ρ)⁻² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
-    units="m^{-4}",
-    units_long="Inverse meters quarted",
-    description="Effective ripple modulation amplitude, not dimensionless",
+    name="effective ripple",  # this is ε¹ᐧ⁵
+    label="ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
+    units="~",
+    units_long="None",
+    description="Effective ripple modulation amplitude",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -166,6 +166,8 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "|grad(rho)|",
         "kappa_g",
         "<L|r,a>",
+        "R0",
+        "<|grad(rho)|>",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     num_quad=(
@@ -200,15 +202,21 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     #  for the spline of the magnetic field to capture fine ripples in a large interval.
 )
 @partial(jit, static_argnames=["num_quad", "num_pitch", "batch"])
-def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
+def _effective_ripple(params, transforms, profiles, data, **kwargs):
+    """https://doi.org/10.1063/1.873749.
+
+    Evaluation of 1/ν neoclassical transport in stellarators.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    """
     batch = kwargs.get("batch", True)
     g = transforms["grid"].source_grid
     bounce_integrate, _ = bounce_integral(
         data["B^zeta"],
         data["|B|"],
         data["|B|_z|r,a"],
-        knots=g.compress(g.nodes[:, 2], surface_label="zeta"),
-        quad=leggauss(kwargs.get("num_quad", 31)),
+        g.compress(g.nodes[:, 2], surface_label="zeta"),
+        leggauss(kwargs.get("num_quad", 31)),
     )
 
     def dH(grad_rho_norm_kappa_g, B, pitch):
@@ -239,39 +247,13 @@ def _effective_ripple_raw(params, transforms, profiles, data, **kwargs):
         g, data["min_tz |B|"], data["max_tz |B|"], kwargs.get("num_pitch", 125)
     )
     ripple = simpson(jnp.squeeze(imap(d_ripple, pitch), axis=1), pitch, axis=0)
-    data["effective ripple raw"] = (
-        g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))
-        * data["max_tz |B|"] ** 2
-        / data["<L|r,a>"]
-    )
-    return data
 
-
-@register_compute_fun(
-    name="effective ripple",  # this is ε¹ᐧ⁵
-    label="ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
-    units="~",
-    units_long="None",
-    description="Effective ripple modulation amplitude",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="r",
-    data=["R0", "<|grad(rho)|>", "effective ripple raw"],
-)
-def _effective_ripple(params, transforms, profiles, data, **kwargs):
-    """https://doi.org/10.1063/1.873749.
-
-    Evaluation of 1/ν neoclassical transport in stellarators.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-    """
     data["effective ripple"] = (
         jnp.pi
         / (8 * 2**0.5)
-        * (data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * data["effective ripple raw"]
+        * (data["max_tz |B|"] * data["R0"] / data["<|grad(rho)|>"]) ** 2
+        * g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))
+        / data["<L|r,a>"]
     )
     return data
 

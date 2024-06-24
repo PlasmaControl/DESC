@@ -441,8 +441,7 @@ class GammaC(_Objective):
         )
         iota = self._grid_1dr.compress(data["iota"])
         iota_r = self._grid_1dr.compress(data["iota_r"])
-        grid = rtz_grid(
-            eq,
+        grid = eq.rtz_grid(
             self._rho,
             self._alpha,
             self._zeta,

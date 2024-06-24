@@ -86,8 +86,7 @@ def test_Gamma_c():
     """Test Γ_c with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = rtz_grid(
-        eq,
+    grid = eq.rtz_grid(
         rho,
         np.array([0]),
         np.linspace(0, 20 * np.pi, 1000),

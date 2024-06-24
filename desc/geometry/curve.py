@@ -783,7 +783,8 @@ class SplineXYZCurve(Curve):
         If None (the default), the spline will be the usual periodic continuous spline.
     """
 
-    _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_knots", "_method"]
+    attributes = ["_X", "_Y", "_Z", "_knots", "_intervals", "_method"]
+    _io_attrs_ = Curve._io_attrs_ + attributes
 
     def __init__(
         self,
@@ -829,20 +830,20 @@ class SplineXYZCurve(Curve):
             knots = knots[:-1] if closed_flag else knots
 
         if break_indices is None:
-            unbroken_spline_intervals = [[]]
+            intervals = [[]]
         else:
             # check that input is monotonic
             assert np.all(
                 break_indices == np.unique(sorted(break_indices))
             ), "Indices must be monotonic."
-            unbroken_spline_intervals = [
+            intervals = [
                 [break_indices[i - 1], break_indices[i]]
                 for i in range(len(break_indices))
             ]
 
         self._knots = knots
         self._method = method
-        self.intervals = unbroken_spline_intervals
+        self._intervals = intervals
 
     @optimizable_parameter
     @property
@@ -917,9 +918,14 @@ class SplineXYZCurve(Curve):
             )
 
     @property
+    def intervals(self):
+        """Intervals for spline determined from the inputted break indices."""
+        return self._intervals
+
+    @property
     def N(self):
         """Number of knots in the spline."""
-        return self.knots.size
+        return self._knots.size
 
     @property
     def method(self):

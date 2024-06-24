@@ -639,18 +639,16 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
+def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
     """Used to compute XYZ coordinates for the SplineXYZCurve compute functions.
 
     Parameters
     ----------
     f : list of ndarray
-        X, Y, Z function coords with shape (3, len(p_knots))
-    p_knots : ndarray
-        knots that come from params
+        X, Y, Z function coords with shape (3, len(transforms["knots"]))
     transforms : dict
         the transforms from the compute function
-    xq : ndarray
+    s_query_pts : ndarray
         query points that come from s parameterization
     kwargs : dict
         the kwargs from the compute function
@@ -660,7 +658,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     Returns
     -------
     coords : ndarray
-        Interpolated XYZ coords with shape (3, len(xq))
+        Interpolated XYZ coords with shape (3, len(s_query_pts))
     """
     method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
@@ -671,7 +669,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
         """Interpolation for spline curves."""
         fq = [
             interp1d(
-                xq,
+                s_query_pts,
                 knots,
                 f[i],
                 method=method,
@@ -690,6 +688,7 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
         return arr_temp
 
     def body(i, fq):
+        """Body of the fori_loop where the f in fq refers to xyz coords."""
         istart, istop = transforms["intervals"][i]
         # catch end-point
         istop = jnp.where(istop == 0, -1, istop)
@@ -697,26 +696,28 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
         f_in_interval = [get_interval(f, full_knots, istart, istop) for f in full_f]
         fq_temp = inner_body(f_in_interval, full_knots, period=None)
 
-        xq_range = (xq >= full_knots[istart]) & (xq <= full_knots[istop])
+        s_in_interval = (s_query_pts >= full_knots[istart]) & (
+            s_query_pts <= full_knots[istop]
+        )
         for i in range(n_dim):
-            fq = fq.at[i].set(jnp.where(xq_range, fq_temp[i], fq[i]))
+            fq = fq.at[i].set(jnp.where(s_in_interval, fq_temp[i], fq[i]))
 
         return fq
 
     if has_break_points:
-        # full_f, knots used in body()
-        # manually add endpoint for broken splines
-        full_knots = jnp.append(p_knots, p_knots[0] + 2 * jnp.pi)
+        # manually add endpoint for broken splines so that it is closed
+        full_knots = jnp.append(
+            transforms["knots"], transforms["knots"][0] + 2 * jnp.pi
+        )
         full_f = [jnp.append(f[i], f[i][0]) for i in range(3)]
-        # query points for Xq, Yq, Zq
-        fq = jnp.zeros((n_dim, len(xq)))
-        fq = fori_loop(0, len(transforms["intervals"]), body, fq)
+        xyz_query_pts = jnp.zeros((n_dim, len(s_query_pts)))
+        xyz_query_pts = fori_loop(0, len(transforms["intervals"]), body, xyz_query_pts)
     else:
         # regular interpolation where the period for interp is 2pi
-        fq = inner_body(f, p_knots, period=2 * jnp.pi)
-        fq = jnp.array(fq)
+        xyz_query_pts = inner_body(f, transforms["knots"], period=2 * jnp.pi)
+        xyz_query_pts = jnp.array(xyz_query_pts)
 
-    coords = jnp.stack(fq, axis=1)
+    coords = jnp.stack(xyz_query_pts, axis=1)
 
     return coords
 
@@ -728,8 +729,8 @@ def _splinexyz_helper(f, p_knots, transforms, xq, kwargs, derivative):
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
-    transforms={"intervals": []},
+    params=["X", "Y", "Z", "rotmat", "shift"],
+    transforms={"intervals": [], "knots": []},
     profiles=[],
     coordinates="s",
     data=["s"],
@@ -741,10 +742,9 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     derivative = 0
     xq = data["s"]
-    knots = params["knots"]
     f = [params["X"], params["Y"], params["Z"]]
 
-    coords = _splinexyz_helper(f, knots, transforms, xq, kwargs, derivative)
+    coords = _splinexyz_helper(f, transforms, xq, kwargs, derivative)
 
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
@@ -762,8 +762,8 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat"],
-    transforms={"intervals": []},
+    params=["X", "Y", "Z", "rotmat"],
+    transforms={"intervals": [], "knots": []},
     profiles=[],
     coordinates="s",
     data=["s", "x"],
@@ -774,10 +774,9 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 1
     xq = data["s"]
-    knots = params["knots"]
     f = [params["X"], params["Y"], params["Z"]]
 
-    coords_s = _splinexyz_helper(f, knots, transforms, xq, kwargs, derivative)
+    coords_s = _splinexyz_helper(f, transforms, xq, kwargs, derivative)
     coords_s = coords_s @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -795,8 +794,8 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat"],
-    transforms={"intervals": []},
+    params=["X", "Y", "Z", "rotmat"],
+    transforms={"intervals": [], "knots": []},
     profiles=[],
     coordinates="s",
     data=["s", "x"],
@@ -807,10 +806,9 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 2
     xq = data["s"]
-    knots = params["knots"]
     f = [params["X"], params["Y"], params["Z"]]
 
-    coords_ss = _splinexyz_helper(f, knots, transforms, xq, kwargs, derivative)
+    coords_ss = _splinexyz_helper(f, transforms, xq, kwargs, derivative)
     coords_ss = coords_ss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -827,8 +825,8 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat"],
-    transforms={"intervals": []},
+    params=["X", "Y", "Z", "rotmat"],
+    transforms={"intervals": [], "knots": []},
     profiles=[],
     coordinates="s",
     data=["s", "x"],
@@ -839,10 +837,9 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     derivative = 3
     xq = data["s"]
-    knots = params["knots"]
     f = [params["X"], params["Y"], params["Z"]]
 
-    coords_sss = _splinexyz_helper(f, knots, transforms, xq, kwargs, derivative)
+    coords_sss = _splinexyz_helper(f, transforms, xq, kwargs, derivative)
     coords_sss = coords_sss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":

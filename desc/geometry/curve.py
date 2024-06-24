@@ -893,7 +893,6 @@ class SplineXYZCurve(Curve):
                 + f"got {len(new)} Z values for {len(self.knots)} knots"
             )
 
-    @optimizable_parameter
     @property
     def knots(self):
         """Knots for spline."""

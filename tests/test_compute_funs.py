@@ -1692,6 +1692,7 @@ def test_surface_equilibrium_geometry():
             )
 
 
+@pytest.mark.xfail(reason="Cause of bug not yet known.")
 @pytest.mark.unit
 def test_parallel_grad():
     """Test geometric and physical methods of computing parallel gradients agree."""

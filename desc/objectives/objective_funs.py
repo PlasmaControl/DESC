@@ -40,6 +40,16 @@ class ObjectiveFunction(IOAble):
         otherwise "blocked".
     name : str
         Name of the objective function.
+    chunk_size : int, optional
+        If `"batched"` deriv_mode is used, will calculate the Jacobian
+        ``chunk_size`` columns at a time, instead of all at once. A
+        ``chunk_size`` of 1 is equivalent to using `"looped"` deriv_mode.
+        The memory usage of the Jacobian calculation is linearly proportional to
+        ``chunk_size``:the smaller the ``chunk_size``, the less memory the Jacobian
+        calculation will require (with some baseline memory usage). The time it takes
+        to compute the Jacobian roughly ``t ~1/chunk_size` with some baseline time,
+        so the larger the ``chunk_size``, the faster the calculation takes.
+        If None, it will default to the largest possible size i.e. ``dim_x``
 
     """
 

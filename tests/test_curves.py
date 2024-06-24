@@ -847,6 +847,7 @@ class TestSplineXYZCurve:
     @pytest.mark.unit
     def test_discontinuous_splines(self):
         """Test splines that have break points."""
+        break_indices = [0, 250, 500, 750]
 
         def test(method, data_key, compare_breaks=True):
             R = 2
@@ -885,8 +886,6 @@ class TestSplineXYZCurve:
                     rtol=1e-3,
                 )
             return discon_data, cont_data
-
-        break_indices = [0, 250, 500, 750]
 
         test("linear", "length")
         test("linear", "curvature")

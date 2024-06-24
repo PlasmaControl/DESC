@@ -145,7 +145,7 @@ def register_compute_fun(
         aliases_temp = np.append(np.array(aliases), find_permutations(name))
         for alias in aliases:
             aliases_temp = np.append(aliases_temp, find_permutations(alias))
-        aliases = aliases_temp
+        aliases = np.unique(aliases_temp)
 
     def _decorator(func):
         d = {

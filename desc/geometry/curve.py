@@ -770,10 +770,21 @@ class SplineXYZCurve(Curve):
 
     name : str
         name for this curve
-
+    break_indices : ndarray or None
+        If supplied, the spline will be a piecewise set of splines.
+        Indices are of knots at which the curve breaks and is only C0 continuous (e.g.
+        continuous but with "corners" where the derivative jumps). In between each set
+        of break points, there is an unbroken spline whose start and endpoints are
+        given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+        Each (the ith) spline is interpolated independently of all other unbroken
+        splines (i+1th, i-1th, etc.) and does not consider their query points
+        (knots) when interpolating. The boundary conditions are evaluated using
+        interpax's default where non-periodicity is assumed.
+        If None (the default), the spline will be the usual periodic continuous spline.
     """
 
-    _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_knots", "_method"]
+    attributes = ["_X", "_Y", "_Z", "_knots", "_intervals", "_method"]
+    _io_attrs_ = Curve._io_attrs_ + attributes
 
     def __init__(
         self,
@@ -783,6 +794,7 @@ class SplineXYZCurve(Curve):
         knots=None,
         method="cubic",
         name="",
+        break_indices=None,
     ):
         super().__init__(name)
         X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
@@ -817,8 +829,28 @@ class SplineXYZCurve(Curve):
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
             knots = knots[:-1] if closed_flag else knots
 
+        if break_indices is None:
+            intervals = [[]]
+        else:
+            unique_ordered_indices = np.unique(break_indices)
+            errorif(
+                len(unique_ordered_indices) != len(break_indices),
+                ValueError,
+                "break_indices must not contain any duplicated values",
+            )
+            errorif(
+                np.any(unique_ordered_indices != break_indices),
+                ValueError,
+                "break_indices must be monotonic",
+            )
+            intervals = [
+                [break_indices[i - 1], break_indices[i]]
+                for i in range(len(break_indices))
+            ]
+
         self._knots = knots
-        self.method = method
+        self._method = method
+        self._intervals = intervals
 
     @optimizable_parameter
     @property
@@ -892,9 +924,14 @@ class SplineXYZCurve(Curve):
             )
 
     @property
+    def intervals(self):
+        """Intervals for spline determined from the inputted break indices."""
+        return self._intervals
+
+    @property
     def N(self):
         """Number of knots in the spline."""
-        return self.knots.size
+        return self._knots.size
 
     @property
     def method(self):
@@ -921,8 +958,57 @@ class SplineXYZCurve(Curve):
                 + f"instead got unknown method {new} "
             )
 
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        return super().compute(
+            names=names,
+            grid=grid,
+            params=params,
+            transforms=transforms,
+            data=data,
+            method=self._method,
+            **kwargs,
+        )
+
     @classmethod
-    def from_values(cls, coords, knots=None, method="cubic", name="", basis="xyz"):
+    def from_values(
+        cls,
+        coords,
+        knots=None,
+        method="cubic",
+        name="",
+        basis="xyz",
+        break_indices=None,
+    ):
         """Create SplineXYZCurve from coordinate values.
 
         Parameters
@@ -943,16 +1029,34 @@ class SplineXYZCurve(Curve):
         method : str
             method of interpolation
 
-            - `'nearest'`: nearest neighbor interpolation
-            - `'linear'`: linear interpolation
-            - `'cubic'`: C1 cubic splines (aka local splines)
-            - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+            - ``'nearest'``: nearest neighbor interpolation
+            - ``'linear'``: linear interpolation
+            - ``'cubic'``: C1 cubic splines (aka local splines)
+            - ``'cubic2'``: C2 cubic splines (aka natural splines)
+            - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+            - ``'cardinal'``: C1 cubic general tension splines. If used, default tension
+              of c = 0 will be used
+            - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in
+              the data, and will not introduce new extrema in the interpolated points
+            - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
+              both endpoints
 
         name : str
             name for this curve
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        break_indices : ndarray or None
+            If supplied, the spline will be a piecewise set of splines.
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
+            If None (the default), the spline will be the usual periodic continuous
+            spline.
 
         Returns
         -------
@@ -963,5 +1067,11 @@ class SplineXYZCurve(Curve):
         if basis == "rpz":
             coords = rpz2xyz(coords)
         return SplineXYZCurve(
-            coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name
+            coords[:, 0],
+            coords[:, 1],
+            coords[:, 2],
+            knots,
+            method,
+            name,
+            break_indices,
         )

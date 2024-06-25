@@ -843,3 +843,62 @@ class TestSplineXYZCurve:
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         with pytest.raises(TypeError):
             c.compute("length", grid=np.linspace(0, 1, 10))
+
+    @pytest.mark.unit
+    def test_discontinuous_splines(self):
+        """Test splines that have break points."""
+        break_indices = [0, 250, 500, 750]
+
+        def test(method, data_key, compare_breaks=True):
+            R = 2
+            phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
+
+            discontinuous = SplineXYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                knots="arclength",
+                break_indices=break_indices,
+                method=method,
+            )
+
+            continuous = SplineXYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                knots="arclength",
+                break_indices=None,
+                method=method,
+            )
+
+            assert discontinuous.method == method
+            assert continuous.method == method
+
+            discon = discontinuous.compute([data_key, "s"])
+            discon_s = discon["s"]
+            discon_data = discon[data_key]
+            cont_data = continuous.compute(data_key)[data_key]
+
+            if compare_breaks:
+                np.testing.assert_allclose(discon_data, cont_data, rtol=1e-3)
+            else:
+                # break_indices are from knots and torsion is aligned with s
+                # so we need the indices of s where the s is equal to the break points
+                is_break_point = np.isin(discon_s, discontinuous.knots[break_indices])
+                # don't include break points
+                np.testing.assert_allclose(
+                    discon_data[~is_break_point],
+                    cont_data[~is_break_point],
+                    rtol=1e-3,
+                )
+            return discon_data, cont_data
+
+        test("linear", "length")
+        test("linear", "curvature")
+        # torsion = 0 for breakpoints, but otherwise torsion = NaN, so can't compare
+        test("linear", "torsion", compare_breaks=False)
+
+        test("cubic", "length")
+        # don't include break points because of interpolator BCs
+        test("cubic", "curvature", compare_breaks=False)
+        test("cubic", "torsion")

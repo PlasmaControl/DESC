@@ -188,7 +188,8 @@ class _Basis(IOAble, ABC):
 
     @property
     def sym(self):
-        """str: {``'cos'``, ``'sin'``, ``False``} Type of symmetry."""
+        """str: Type of symmetry."""
+        # one of: {'even', 'sin', 'cos', 'cos(t)', False}
         return self.__dict__.setdefault("_sym", False)
 
     @property
@@ -238,7 +239,7 @@ class PowerSeries(_Basis):
         self._M = 0
         self._N = 0
         self._NFP = 1
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)
@@ -351,7 +352,7 @@ class FourierSeries(_Basis):
         self._M = 0
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(N=self.N)
@@ -474,7 +475,7 @@ class DoubleFourierSeries(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(M=self.M, N=self.N)
@@ -635,8 +636,8 @@ class ZernikePolynomial(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = 0
         self._NFP = 1
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._modes = self._get_modes(
             L=self.L, M=self.M, spectral_indexing=self.spectral_indexing
@@ -831,7 +832,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
@@ -983,8 +984,8 @@ class FourierZernikeBasis(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._modes = self._get_modes(
             L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing

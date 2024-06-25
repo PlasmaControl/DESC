@@ -4,12 +4,12 @@ import warnings
 
 import numpy as np
 
-from desc.backend import jnp
-from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.backend import jnp, vmap
+from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer
+from desc.utils import Timer, errorif, parse_argname_change
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -521,10 +521,10 @@ class PlasmaVesselDistance(_Objective):
     points on surface corresponding to the grid that the plasma-vessel distance
     is evaluated at, which can cause cusps or regions of very large curvature.
 
-    NOTE: When use_softmin=True, ensures that alpha*values passed in is
+    NOTE: When use_softmin=True, ensures that softmin_alpha*values passed in is
     at least >1, otherwise the softmin will return inaccurate approximations
     of the minimum. Will automatically multiply array values by 2 / min_val if the min
-    of alpha*array is <1. This is to avoid inaccuracies that arise when values <1
+    of softmin_alpha*array is <1. This is to avoid inaccuracies when values <1
     are present in the softmin, which can cause inaccurate mins or even incorrect
     signs of the softmin versus the actual min.
 
@@ -567,6 +567,12 @@ class PlasmaVesselDistance(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     use_softmin: bool, optional
         Use softmin or hard min.
+    use_signed_distance: bool, optional
+        Whether to use absolute value of distance or a signed distance, with d
+        being positive if the plasma is inside of the bounding surface, and
+        negative if outside of the bounding surface.
+        NOTE: ``plasma_grid`` and ``surface_grid`` must have the same
+        toroidal angle values for signed distance to be used.
     surface_fixed: bool, optional
         Whether the surface the distance from the plasma is computed to
         is fixed or not. If True, the surface is fixed and its coordinates are
@@ -574,13 +580,13 @@ class PlasmaVesselDistance(_Objective):
         self.things = [eq] only.
         If False, the surface coordinates are computed at every iteration.
         False by default, so that self.things = [eq, surface]
-    alpha: float, optional
-        Parameter used for softmin. The larger alpha, the closer the softmin
-        approximates the hardmin. softmin -> hardmin as alpha -> infinity.
-        if alpha*array < 1, the underlying softmin will automatically multiply
-        the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
-        than this minimum value will make the softmin a more accurate approximation
-        of the true min.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger softmin_alpha, the closer the softmin
+        approximates the hardmin. softmin -> hardmin as softmin_alpha -> infinity.
+        if softmin_alpha*array < 1, the underlying softmin will automatically multiply
+        the array by 2/min_val to ensure that softmin_alpha*array>1. Making
+        softmin_alpha larger than this minimum value will make the softmin a
+        more accurate approximation of the true min.
     name : str, optional
         Name of the objective function.
     """
@@ -604,8 +610,10 @@ class PlasmaVesselDistance(_Objective):
         plasma_grid=None,
         use_softmin=False,
         surface_fixed=False,
-        alpha=1.0,
+        softmin_alpha=1.0,
         name="plasma-vessel distance",
+        use_signed_distance=False,
+        **kwargs,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -613,8 +621,14 @@ class PlasmaVesselDistance(_Objective):
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
         self._use_softmin = use_softmin
+        self._use_signed_distance = use_signed_distance
         self._surface_fixed = surface_fixed
-        self._alpha = alpha
+        self._softmin_alpha = parse_argname_change(
+            softmin_alpha, kwargs, "alpha", "softmin_alpha"
+        )
+        assert (
+            len(kwargs) == 0
+        ), f"PlasmaVesselDistance got unexpected keyword argument: {kwargs.keys()}"
         super().__init__(
             things=[eq, self._surface] if not surface_fixed else [eq],
             target=target,
@@ -656,9 +670,21 @@ class PlasmaVesselDistance(_Objective):
         if not np.allclose(plasma_grid.nodes[:, 0], 1):
             warnings.warn("Plasma grid includes interior points, should be rho=1")
 
+        # TODO: How to use with generalized toroidal angle?
+        errorif(
+            self._use_signed_distance
+            and not np.allclose(
+                plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2],
+                surface_grid.nodes[surface_grid.unique_zeta_idx, 2],
+            ),
+            ValueError,
+            "Plasma grid and surface grid must contain points only at the "
+            "same zeta values in order to use signed distance",
+        )
+
         self._dim_f = surface_grid.num_nodes
         self._equil_data_keys = ["R", "phi", "Z"]
-        self._surface_data_keys = ["x"]
+        self._surface_data_keys = ["x", "n_rho"] if self._use_signed_distance else ["x"]
 
         timer = Timer()
         if verbose > 0:
@@ -701,15 +727,15 @@ class PlasmaVesselDistance(_Objective):
         if self._surface_fixed:
             # precompute the surface coordinates
             # as the surface is fixed during the optimization
-            surface_coords = compute_fun(
+            data_surf = compute_fun(
                 self._surface,
                 self._surface_data_keys,
                 params=self._surface.params_dict,
                 transforms=surface_transforms,
                 profiles={},
                 basis="xyz",
-            )["x"]
-            self._constants["surface_coords"] = surface_coords
+            )
+            self._constants["data_surf"] = data_surf
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -750,24 +776,114 @@ class PlasmaVesselDistance(_Objective):
             transforms=constants["equil_transforms"],
             profiles=constants["equil_profiles"],
         )
-        plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        plasma_coords_rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+        plasma_coords = rpz2xyz(plasma_coords_rpz)
         if self._surface_fixed:
-            surface_coords = constants["surface_coords"]
+            data_surf = constants["data_surf"]
         else:
-            surface_coords = compute_fun(
+            data_surf = compute_fun(
                 self._surface,
                 self._surface_data_keys,
                 params=surface_params,
                 transforms=constants["surface_transforms"],
                 profiles={},
                 basis="xyz",
-            )["x"]
-        d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
+            )
+
+        surface_coords = data_surf["x"]
+        diff_vec = plasma_coords[:, None, :] - surface_coords[None, :, :]
+        d = safenorm(diff_vec, axis=-1)
+
+        point_signs = jnp.ones(surface_coords.shape[0])
+        if self._use_signed_distance:
+            surface_coords_rpz = xyz2rpz(surface_coords)
+
+            def _find_angle_vec(R, Z, Rsurf, Zsurf):
+                # R Z are plasma points,
+                # Rsurf Zsurf are the surface points being checked for whether
+                # or not they are inside the plasma
+
+                # algorithm based off of "An Incremental Angle Point in Polygon Test",
+                # K. Weiler, https://doi.org/10.1016/B978-0-12-336156-1.50012-4
+
+                Rbool = R[:, None] > Rsurf
+                Zbool = Z[:, None] > Zsurf
+                # these are now size (Nplasma, Nsurf)
+                quadrants = jnp.zeros_like(Rbool)
+                quadrants = jnp.where(
+                    jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quadrants
+                )
+                quadrants = jnp.where(
+                    jnp.logical_and(jnp.logical_not(Rbool), jnp.logical_not(Zbool)),
+                    2,
+                    quadrants,
+                )
+                quadrants = jnp.where(
+                    jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quadrants
+                )
+                deltas = quadrants[1:, :] - quadrants[0:-1, :]
+                deltas = jnp.where(deltas == 3, -1, deltas)
+                deltas = jnp.where(deltas == -3, 1, deltas)
+                # then flip sign if the R intercept is > Rsurf and the
+                # quadrant flipped over a diagonal
+                b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
+                Rint = Rsurf[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
+                deltas = jnp.where(
+                    jnp.logical_and(jnp.abs(deltas) == 2, Rint.T > Rsurf),
+                    -deltas,
+                    deltas,
+                )
+                pt_sign = jnp.sum(deltas, axis=0)
+                # positive distance if the plasma pt is inside the surface, else
+                # negative distance is assigned
+                # pt_sign = 0 : Means SURFACE is OUTSIDE of the PLASMA,
+                #               assign positive distance
+                # pt_sign = +/-4: Means SURFACE is INSIDE PLASMA, so
+                #                 assign negative distance
+                pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
+                return pt_sign
+
+            plasma_coords_rpz = plasma_coords_rpz.reshape(
+                constants["equil_transforms"]["grid"].num_zeta,
+                constants["equil_transforms"]["grid"].num_theta,
+                3,
+            )
+            surface_coords_rpz = surface_coords_rpz.reshape(
+                constants["surface_transforms"]["grid"].num_zeta,
+                constants["surface_transforms"]["grid"].num_theta,
+                3,
+            )
+
+            # loop over zeta planes
+            def fun(plasma_pts_at_zeta_plane, surface_pts_at_zeta_plane):
+                plasma_pts_at_zeta_plane = jnp.vstack(
+                    (plasma_pts_at_zeta_plane, plasma_pts_at_zeta_plane[0, :])
+                )
+
+                surface_pts_at_zeta_plane
+                pt_sign = _find_angle_vec(
+                    plasma_pts_at_zeta_plane[:, 0],
+                    plasma_pts_at_zeta_plane[:, 2],
+                    surface_pts_at_zeta_plane[:, 0],
+                    surface_pts_at_zeta_plane[:, 2],
+                )
+
+                return pt_sign
+
+            point_signs = vmap(fun, in_axes=0)(
+                plasma_coords_rpz, surface_coords_rpz
+            ).flatten()
+            # at end here, point_signs is either +/- 1  with
+            # positive meaning the surface pt
+            # is outside the plasma and -1 if the surface pt is
+            # inside the plasma
 
         if self._use_softmin:  # do softmin
-            return jnp.apply_along_axis(softmin, 0, d, self._alpha)
+            return (
+                jnp.apply_along_axis(softmin, 0, d, self._softmin_alpha) * point_signs
+            )
         else:  # do hardmin
-            return d.min(axis=0)
+            return d.min(axis=0) * point_signs
 
 
 class MeanCurvature(_Objective):

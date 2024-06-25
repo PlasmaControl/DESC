@@ -170,6 +170,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
           (generally 2-3), while ``"svd"`` uses one singular value decomposition.
           ``"cho"`` is generally faster for large systems, especially on GPU, but may
           be less accurate for badly scaled systems. Default ``"svd"``
+        - ``"scaled_termination"`` : Whether to evaluate termination criteria for
+          ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
     Returns
     -------
@@ -273,6 +275,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     maxiter = setdefault(maxiter, z.size * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
     max_dx = options.pop("max_dx", jnp.inf)
+    scaled_termination = options.pop("scaled_termination", True)
 
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
     if jac_scale:
@@ -288,7 +291,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
 
     g_h = g * d
     J_h = J * d
-    g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+    g_norm = jnp.linalg.norm((g_h if scaled_termination else g * v), ord=jnp.inf)
 
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
@@ -324,7 +327,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
 
     callback = setdefault(callback, lambda *args: False)
 
-    z_norm = jnp.linalg.norm(z, ord=2)
+    z_norm = jnp.linalg.norm(((z * scale_inv) if scaled_termination else z), ord=2)
     success = None
     message = None
     step_norm = jnp.inf
@@ -432,7 +435,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             success, message = check_termination(
                 actual_reduction,
                 cost,
-                step_norm,
+                (step_h_norm if scaled_termination else step_norm),
                 z_norm,
                 g_norm,
                 Lreduction_ratio,
@@ -470,7 +473,9 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
             v, dv = cl_scaling_vector(z, g, lb, ub)
             v = jnp.where(dv != 0, v * scale_inv, v)
-            g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+            g_norm = jnp.linalg.norm(
+                (g_h if scaled_termination else g * v), ord=jnp.inf
+            )
 
             # updating augmented lagrangian params
             if g_norm < gtolk:  # TODO: maybe also add ftolk, xtolk?
@@ -494,9 +499,13 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
 
                 v, dv = cl_scaling_vector(z, g, lb, ub)
                 v = jnp.where(dv != 0, v * scale_inv, v)
-                g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+                g_norm = jnp.linalg.norm(
+                    (g_h if scaled_termination else g * v), ord=jnp.inf
+                )
 
-            z_norm = jnp.linalg.norm(z, ord=2)
+            z_norm = jnp.linalg.norm(
+                ((z * scale_inv) if scaled_termination else z), ord=2
+            )
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
@@ -509,7 +518,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 success, message = False, STATUS_MESSAGES["callback"]
 
         else:
-            step_norm = actual_reduction = 0
+            step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
         if verbose > 1:

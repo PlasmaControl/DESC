@@ -84,7 +84,7 @@ L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
 M_FE = 20
-L_FE = 2
+L_FE = 3
 rho = np.linspace(0.5, 1, L_FE, endpoint=True)
 nodes = (
     np.array(np.meshgrid(rho, theta, np.zeros(1), indexing="ij"))
@@ -119,6 +119,7 @@ Zprime_basis.Z_lmn = Zprime_lmn
 
 # Replot the surface in the finite element basis
 nmodes = len(Rprime_basis.modes)
+# print('node_evaluate = ', Rprime_basis.evaluate(nodes=nodes))
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
 print('R, Z = ', R, Z)

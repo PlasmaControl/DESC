@@ -1202,8 +1202,6 @@ class FiniteElementBasis(_FE_Basis):
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
         i, q = modes.T
-        print('r, t = ', r, t)
-        print('i, q = ', i, q)
 
         if self.L == 0 and self.N == 0:
             # Get all IQ basis functions from each of the points,
@@ -1218,7 +1216,6 @@ class FiniteElementBasis(_FE_Basis):
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
         else:
             Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
-            # print(Rho_Theta_Zeta, Rho_Theta_Zeta.shape)
             (
                 intervals,
                 basis_functions,
@@ -2430,7 +2427,6 @@ class FiniteElementMesh3D:
 
         self.vertices_final = vertices_final
         self.vertices = vertices
-        print(self.vertices, self.vertices.shape)
         self.tetrahedra = tetrahedra
         # Setup quadrature points and weights
         # for numerical integration using scikit-fem
@@ -2877,6 +2873,7 @@ class FiniteElementMesh2D:
         self.weights = np.array(weights)
         self.nquad = self.integration_points.shape[0]
 
+    #### Comment from Alan -- Don't think this function is ever used
     def get_barycentric_coordinates(self, rho_theta, K=1):
         """Gets the barycentric coordinates on rho_theta mesh.
 
@@ -2895,8 +2892,6 @@ class FiniteElementMesh2D:
         triangle_location = self.find_triangles_corresponding_to_points(rho_theta)[0]
 
         # Initialize coordinate matrix, shape (num_points,3)
-        print(rho_theta[0])
-        exit()
         coordinate_matrix = np.zeros(rho_theta[0], 3)
         # Looping through points
 
@@ -2956,14 +2951,25 @@ class FiniteElementMesh2D:
                 a = (np.cross(v, v3) - np.cross(v1, v3)) / np.cross(v2, v3)
                 b = -(np.cross(v, v2) - np.cross(v1, v2)) / np.cross(v2, v3)
                 if a >= 0 and b >= 0 and (a + b) <= 1:
+                    # print(i, j, v, a, b, a + b, triangle.get_basis_functions(v.reshape(1, 2))[0])
                     # triangle.plot_triangle()
                     # plt.scatter(v[0], v[1])
                     # plt.show()
-                    triangle_indices[i] = j
-                    basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
-                        triangle.get_basis_functions(v.reshape(1, 2))
-                    )
-                    break  # found the right triangle, so break out of j loop
+                    
+                    # Special case handling for theta = 0 points
+                    if np.isclose(v[1], 0.0) and j == 0:
+                        if np.isclose(a, 0.0) and np.isclose(b, 0.0):
+                            triangle_indices[i] = j
+                            basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
+                                triangle.get_basis_functions(v.reshape(1, 2))
+                            )
+                            break
+                    else:
+                        triangle_indices[i] = j
+                        basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
+                            triangle.get_basis_functions(v.reshape(1, 2))
+                        )
+                        break  # found the right triangle, so break out of j loop
 
         # Some possible code to vectorize this function in future
         # v = rho_theta
@@ -3185,7 +3191,7 @@ class TetrahedronFiniteElement:
 
         self.volume6 = np.linalg.det(D)
         self.det = np.linalg.det(D)
-        print(self.volume6)
+        # print(self.volume6)
 
         # We construct equally spaced nodes for order K tetrahedron,
         # which gives Q nodes.

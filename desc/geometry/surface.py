@@ -132,6 +132,7 @@ def convert_spectral_to_FE(
 
     t1 = time.time()
     # Evaluate sum_lmn R_lmn * FourierZernike_lmn
+    # print('F1 = ', Fourier_basis_pre_evaluated)
     R_sum_pre_evaluated = Fourier_basis_pre_evaluated @ np.ravel(R_lmn)
     Z_sum_pre_evaluated = Fourier_basis_pre_evaluated @ np.ravel(Z_lmn)
     L_sum_pre_evaluated = Fourier_basis_pre_evaluated @ np.ravel(L_lmn)
@@ -144,7 +145,6 @@ def convert_spectral_to_FE(
     Aj_Z = mesh.integrate(
         (ZZ).reshape(I * nquad, -1),
     )
-
     Aj_R = mesh.integrate(
         (RR).reshape(I * nquad, -1),
     )
@@ -157,11 +157,18 @@ def convert_spectral_to_FE(
     # Boundary condition for 1D case
     if L == 0 and N == 0:
         add_row = np.zeros((1, IQ))
+        
+        # 1e3 instead of 1 below so that the constraint is strongly enforced
+        # During the least-squares solve. Otherwise, the constraint
+        # can be weakly broken.
         add_row[0, 0] = 1e3
         add_row[0, IQ - 1] = -1e3
         Aj_Z = np.append(Aj_Z,[0])
         Aj_R = np.append(Aj_R,[0])
         Aj_L = np.append(Aj_L,[0])
+        FE_assembly_matrix = np.vstack((FE_assembly_matrix, add_row))
+        print('A after BCs = ', FE_assembly_matrix)
+        
     # elif N == 0:
     #     add_row = np.zeros((L, IQ))
     #     add_row[0, 0] = 1
@@ -175,8 +182,6 @@ def convert_spectral_to_FE(
     #     Aj_R = np.append(Aj_R, [0])
     #     Aj_L = np.append(Aj_L, [0])
     # else:   
-    # FE_assembly_matrix = np.vstack((FE_assembly_matrix, add_row))
-    # print('A after BCs = ', FE_assembly_matrix)
 
     t1 = time.time()
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
@@ -188,18 +193,18 @@ def convert_spectral_to_FE(
     Rprime_lmn = np.zeros(Aj_R.shape)
     Zprime_lmn = np.zeros(Aj_Z.shape)
     Lprime_lmn = np.zeros(Aj_L.shape)
-    print('b = ', Aj_R)
-
+    # print('b = ', Aj_R)
+    # print('b_z = ', Aj_Z)
     
     Rprime = np.linalg.lstsq(FE_assembly_matrix, Aj_R)[0]
     print('x = ', Rprime)
-    
-    print('modes = ', Rprime_basis._get_modes())
 
     Rprime_lmn = Rprime.reshape(nmodes)
     
     Zprime = np.linalg.lstsq(FE_assembly_matrix, Aj_Z)[0]
-
+    # print('x_z = ', Zprime)
+    
+    print('modes = ', Rprime_basis._get_modes())
     Zprime_lmn = Zprime.reshape(nmodes)
     
     Lprime = np.linalg.lstsq(FE_assembly_matrix, Aj_L)[0]

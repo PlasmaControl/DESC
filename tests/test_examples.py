@@ -1469,3 +1469,54 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+    #### optimize surface and coils (coil positions fixed) ####
+    # optimizing for target coil-plasma distance only
+    # tests the logic of having both coil and surface as
+    # optimizable things. Fixes the coil geometry to still
+    # result in a testable optimum
+
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilsetMinDistance(
+                eq=surf,
+                coils=coils,
+                target=offset,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=False,
+                coils_fixed=False,
+            ),
+        )
+    )
+    # only free optimization variables are surface minor radius
+    # and coil current (which won't affect the geometry)
+    constraints = (
+        FixParameters(surf, {"R_lmn": np.array([0, 2])}),
+        LinearObjectiveFromUser(circle_constraint, surf),
+        FixParameters(
+            coils, {"current": False, "center": True, "normal": True, "r_n": True}
+        ),
+    )
+    optimizer = Optimizer("lsq-exact")
+    [coils_opt, surf_opt], _ = optimizer.optimize(
+        things=[coils, surf],
+        objective=objective,
+        constraints=constraints,
+        verbose=2,
+        copy=True,
+        ftol=1e-4,
+    )
+
+    # the R & Z boundary surface m=+/-1 coefficients should be equal magnitude and
+    # have changed to match target offset
+    np.testing.assert_allclose(
+        coils_opt[0].r_n,
+        abs(surf_opt.R_lmn[surf_opt.R_basis.get_idx(M=1, N=0)]) + offset,
+        rtol=2e-2,
+    )
+    np.testing.assert_allclose(
+        coils_opt[0].r_n,
+        abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
+        rtol=2e-2,
+    )

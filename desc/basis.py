@@ -1214,8 +1214,10 @@ class FiniteElementBasis(_FE_Basis):
                 intervals,
                 basis_functions,
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
+            print(Rho_Theta, intervals, basis_functions)
         else:
             Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
+            # print(Rho_Theta_Zeta, Rho_Theta_Zeta.shape)
             (
                 intervals,
                 basis_functions,

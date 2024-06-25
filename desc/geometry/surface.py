@@ -166,21 +166,16 @@ def convert_spectral_to_FE(
         Aj_Z = np.append(Aj_Z,[0])
         Aj_R = np.append(Aj_R,[0])
         Aj_L = np.append(Aj_L,[0])
-        FE_assembly_matrix = np.vstack((FE_assembly_matrix, add_row))
-        print('A after BCs = ', FE_assembly_matrix)
-        
-    # elif N == 0:
-    #     add_row = np.zeros((L, IQ))
-    #     add_row[0, 0] = 1
-    #     add_row[0, IQ - 1] = -1
-    #     add_row[1, IQ // 2 - 1] = -1
-    #     add_row[1, IQ // 2] = 1
-    #     Aj_Z = np.append(Aj_Z, [0])
-    #     Aj_R = np.append(Aj_R, [0])
-    #     Aj_L = np.append(Aj_L, [0])
-    #     Aj_Z = np.append(Aj_Z, [0])
-    #     Aj_R = np.append(Aj_R, [0])
-    #     Aj_L = np.append(Aj_L, [0])
+    elif N == 0:
+        add_row = np.zeros((L, IQ))
+        for ll in range(L):
+            add_row[ll, ll * Q] = 1e3
+            add_row[ll, 2 * Q * (M - 2) + 1 + ll * (Q + 1)] = -1e3
+            Aj_Z = np.append(Aj_Z, [0])
+            Aj_R = np.append(Aj_R, [0])
+            Aj_L = np.append(Aj_L, [0])
+    FE_assembly_matrix = np.vstack((FE_assembly_matrix, add_row))
+    print('A after BCs = ', FE_assembly_matrix[-L:, :])
     # else:   
 
     t1 = time.time()
@@ -204,7 +199,7 @@ def convert_spectral_to_FE(
     Zprime = np.linalg.lstsq(FE_assembly_matrix, Aj_Z)[0]
     # print('x_z = ', Zprime)
     
-    print('modes = ', Rprime_basis._get_modes())
+    # print('modes = ', Rprime_basis._get_modes())
     Zprime_lmn = Zprime.reshape(nmodes)
     
     Lprime = np.linalg.lstsq(FE_assembly_matrix, Aj_L)[0]

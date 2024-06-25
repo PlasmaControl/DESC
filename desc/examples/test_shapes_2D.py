@@ -25,11 +25,11 @@ np.random.seed(1)
 L = 2
 M = 5
 N = 0
-K = 2
+K = 1
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
-theta = np.linspace(0, 2 * np.pi, 200, endpoint=True)
+theta = np.linspace(0, 2 * np.pi, 40, endpoint=True)
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -83,7 +83,7 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-M_FE = 20
+M_FE = 4
 L_FE = 3
 rho = np.linspace(0.5, 1, L_FE, endpoint=True)
 nodes = (

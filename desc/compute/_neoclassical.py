@@ -283,7 +283,10 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         "<L|r,a>",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 31.",
+    num_quad=(
+        "int : Resolution for quadrature of bounce integrals. Default is 31, "
+        "which gets sufficient convergence, so higher values are likely unnecessary."
+    ),
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate. Default is 125."
     ),
@@ -352,7 +355,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         # The integrand is piecewise continuous and likely poorly approximated by a
         # polynomial. Composite quadrature should perform better than higher order
         # methods.
-        Gamma_c = trapezoid(jnp.squeeze(imap(d_Gamma_c, pitch), axis=1), pitch, axis=0)
+        Gamma_c = trapezoid(
+            _poloidal_mean(
+                g, imap(d_Gamma_c, pitch).reshape(-1, g.num_rho, g.num_alpha)
+            ),
+            pitch,
+            axis=0,
+        )
     else:
 
         def d_Gamma_c(pitch, B_sup_z, B, B_z_ra, cvdrift0, gbdrift):
@@ -383,11 +392,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         Gamma_c = _vec_quadax(romberg, divmax=jnp.log2(num_pitch + 1))(
             d_Gamma_c, pitch, *args
         )
+        Gamma_c = _poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha))
 
-    data["Gamma_c"] = (
-        jnp.pi
-        / (8 * 2**0.5)
-        * g.expand(_poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha)))
-        / data["<L|r,a>"]
-    )
+    data["Gamma_c"] = jnp.pi / (8 * 2**0.5) * g.expand(Gamma_c) / data["<L|r,a>"]
     return data

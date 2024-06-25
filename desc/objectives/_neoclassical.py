@@ -306,6 +306,7 @@ class GammaC(_Objective):
         more toroidal transits will give more accurate result, with diminishing returns.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 31.
+        which gets sufficient convergence, so higher values are likely unnecessary.
     num_pitch : int
         Resolution for quadrature over velocity coordinate. Default is 99.
     batch : bool

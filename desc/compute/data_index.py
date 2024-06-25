@@ -158,10 +158,20 @@ def register_compute_fun(
             flag = False
             for base_class, superclasses in _class_inheritance.items():
                 if p in superclasses or p == base_class:
+                    # already registered ?
                     if name in data_index[base_class]:
-                        raise ValueError(
-                            f"Already registered function with parameterization {p} and name {name}."
-                        )
+                        if p == data_index[base_class][name]["parameterization"]:
+                            raise ValueError(
+                                f"Already registered function with parameterization {p} and name {name}."
+                            )
+                        # if it was already registered from a parent class, we prefer
+                        # the child class.
+                        inheritance_order = [base_class] + superclasses
+                        if inheritance_order.index(p) > inheritance_order.index(
+                            data_index[base_class][name]["parameterization"]
+                        ):
+                            continue
+                    d["parameterization"] = p
                     data_index[base_class][name] = d.copy()
                     all_kwargs[base_class][name] = kwargs
                     for alias in aliases:
@@ -238,7 +248,6 @@ _class_inheritance = {
     ],
     "desc.magnetic_fields._core.OmnigenousField": [],
 }
-
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
 allowed_kwargs = set()

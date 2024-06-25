@@ -13,7 +13,7 @@ from desc.utils import Index, errorif, warnif
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={2, 3})
-def take_mask(a, mask, size=None, fill_value=None):
+def _take_mask(a, mask, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 
     Parameters
@@ -53,10 +53,11 @@ def take_mask(a, mask, size=None, fill_value=None):
 
 
 # use for debugging and testing
-def _filter_not_nan(a):
+def _filter_not_nan(a, check=False):
     """Filter out nan from ``a`` while asserting nan is padded at right."""
     is_nan = np.isnan(a)
-    assert np.array_equal(is_nan, np.sort(is_nan, axis=-1))
+    if check:
+        assert np.array_equal(is_nan, np.sort(is_nan, axis=-1))
     return a[~is_nan]
 
 
@@ -67,42 +68,10 @@ def _filter_nonzero_measure(bp1, bp2):
     return bp1[mask], bp2[mask]
 
 
-def _filter_real(a, a_min=-jnp.inf, a_max=jnp.inf, sentinel=jnp.nan, eps=0):
-    """Keep real values inside [``a_min``, ``a_max``] and set others to nan.
-
-    Parameters
-    ----------
-    a : jnp.ndarray
-    a_min : jnp.ndarray
-        Minimum value to keep real values between. Should broadcast with ``a``.
-    a_max : jnp.ndarray
-        Maximum value to keep real values between. Should broadcast with ``a``.
-    sentinel : float
-        Value with which to pad array in place of filtered elements.
-    eps : float
-        Absolute tolerance with which to consider value as zero.
-
-    Returns
-    -------
-    result : jnp.ndarray
-        The real values of ``a`` in [``a_min``, ``a_max``]; others set to nan.
-
-    """
-    if a_min is None:
-        a_min = -jnp.inf
-    if a_max is None:
-        a_max = jnp.inf
-    return jnp.where(
-        (jnp.abs(jnp.imag(a)) <= eps) & (a_min <= a) & (a <= a_max),
-        jnp.real(a),
-        sentinel,
-    )
-
-
-def _sentinel_concat(r, sentinel, num=1):
-    # Concat sentinel num times to r on last axis.
+def _sentinel_append(r, sentinel, num=1):
+    """Concat ``sentinel`` ``num`` times to ``r`` on last axis."""
     sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
-    return jnp.concatenate([r, sent], axis=-1)
+    return jnp.append(r, sent, axis=-1)
 
 
 def _root_linear(a, b, sentinel, eps, distinct=False):
@@ -156,7 +125,7 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
         A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3))) ** (1 / 3)
         B = safediv(Q, A)
         r1 = (A + B) - b / 3
-        return _sentinel_concat(r1[..., jnp.newaxis], sentinel, num=2)
+        return _sentinel_append(r1[..., jnp.newaxis], sentinel, num=2)
 
     def root(b, c, d):
         b = safediv(b, a)
@@ -174,7 +143,7 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
     return jnp.where(
         # Tests catch failure here if eps < 1e-12 for 64 bit jax.
         jnp.expand_dims(jnp.abs(a) <= eps, axis=-1),
-        _sentinel_concat(_root_quadratic(b, c, d, sentinel, eps, distinct), sentinel),
+        _sentinel_append(_root_quadratic(b, c, d, sentinel, eps, distinct), sentinel),
         root(b, c, d),
     )
 
@@ -237,19 +206,20 @@ def _poly_root(
         r = func[c.shape[0]](*c[:-1], c[-1] - k, sentinel, eps, distinct)
         distinct = distinct and c.shape[0] > 3
     else:
-        warnif(not np.isnan(sentinel), msg="This may not prevent an nan gradient.")
         # Compute from eigenvalues of polynomial companion matrix.
         c_n = c[-1] - k
         c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
         c.append(c_n)
         c = jnp.stack(c, axis=-1)
-        r = _roots(c)
+        r = jnp.nan_to_num(_roots(c), nan=sentinel)
     if get_only_real_roots:
-        if a_min is not None:
-            a_min = a_min[..., jnp.newaxis]
-        if a_max is not None:
-            a_max = a_max[..., jnp.newaxis]
-        r = _filter_real(r, a_min, a_max, sentinel, eps)
+        a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
+        a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
+        r = jnp.where(
+            (jnp.abs(jnp.imag(r)) <= eps) & (a_min <= r) & (r <= a_max),
+            jnp.real(r),
+            sentinel,
+        )
 
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
@@ -461,9 +431,9 @@ def _check_bounce_points(bp1, bp2, sentinel, pitch, knots, B_c, plot, **kwargs):
             B_mid = B((bp1[p, s] + bp2[p, s]) / 2)
             err_3 = jnp.any(B_mid > 1 / pitch[p, s] + eps)
             if err_1[p, s] or err_2[p, s] or err_3:
-                bp1_p, bp2_p, B_mid = map(
-                    _filter_not_nan, (bp1[p, s], bp2[p, s], B_mid)
-                )
+                bp1_p = _filter_not_nan(bp1[p, s], check=True)
+                bp2_p = _filter_not_nan(bp2[p, s], check=True)
+                B_mid = _filter_not_nan(B_mid, check=True)
                 if plot:
                     plot_field_line(
                         B, pitch[p, s], bp1_p, bp2_p, title_id=f"{p},{s}", **kwargs
@@ -599,13 +569,13 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
     is_intersect = intersect.reshape(P, S, -1) >= 0
     B_z_ra = _poly_val(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
     # Gather intersects along a field line to be contiguous.
-    B_z_ra = take_mask(B_z_ra, is_intersect, fill_value=0)
+    B_z_ra = _take_mask(B_z_ra, is_intersect, fill_value=0)
 
     sentinel = knots[0] - 1
     # Transform out of local power basis expansion.
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
     # Gather intersects along a field line to be contiguous, followed by some sentinel.
-    intersect = take_mask(intersect, is_intersect, fill_value=sentinel)
+    intersect = _take_mask(intersect, is_intersect, fill_value=sentinel)
     is_intersect = intersect > sentinel
     is_bp1 = (B_z_ra <= 0) & is_intersect
     is_bp2 = (B_z_ra >= 0) & is_intersect
@@ -622,8 +592,8 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
     )
     is_bp2 = put(is_bp2, Index[..., 0], edge_case)
     # Get ζ values of bounce points from the masks.
-    bp1 = take_mask(intersect, is_bp1, fill_value=sentinel)
-    bp2 = take_mask(intersect, is_bp2, fill_value=sentinel)
+    bp1 = _take_mask(intersect, is_bp1, fill_value=sentinel)
+    bp2 = _take_mask(intersect, is_bp2, fill_value=sentinel)
     # The pairs bp1[i, j, k] and bp2[i, j, k] are boundaries of an integral only
     # if bp1[i, j, k] <= bp2[i, j, k]. For correctness of the algorithm, it is
     # required that the first intersect satisfies non-positive derivative. Now,
@@ -667,9 +637,9 @@ def _composite_linspace(x, num):
 
     """
     x = jnp.atleast_1d(x)
-    pts = jnp.linspace(x[:-1, ...], x[1:, ...], num + 1, endpoint=False)
+    pts = jnp.linspace(x[:-1], x[1:], num + 1, endpoint=False)
     pts = jnp.moveaxis(pts, source=0, destination=1).reshape(-1, *x.shape[1:])
-    pts = jnp.append(pts, x[jnp.newaxis, -1, ...], axis=0)
+    pts = jnp.append(pts, x[jnp.newaxis, -1], axis=0)
     assert pts.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
     return pts
 
@@ -830,7 +800,7 @@ def automorphism_sin(x, s=0, m=10):
         Points to transform.
     s : float
         Strength of derivative suppression, s ∈ [0, 1].
-    m : int
+    m : float
         Number of machine epsilons used for floating point error buffer.
 
     Returns
@@ -872,7 +842,7 @@ def tanh_sinh(deg, m=10):
     ----------
     deg: int
         Number of quadrature points.
-    m : int
+    m : float
         Number of machine epsilons used for floating point error buffer. Larger implies
         less floating point error, but increases the minimum achievable error.
 
@@ -920,7 +890,7 @@ def _plot(Z, V, title_id=""):
             plt.show()
 
 
-def _check_interpolation(Z, f, B_sup_z, B, B_z_ra, inner_product, plot):
+def _check_interp(Z, f, B_sup_z, B, B_z_ra, inner_product, plot):
     """Check for floating point errors.
 
     Parameters
@@ -1016,23 +986,21 @@ def _interpolate_and_integrate(
     assert Z.shape[-1] == w.size
     assert knots.size == B.shape[-1]
     assert B_sup_z.shape == B.shape == B_z_ra.shape
+    pitch = jnp.expand_dims(pitch, axis=(2, 3) if (Z.ndim == 4) else 2)
+    shape = Z.shape
+    Z = Z.reshape(Z.shape[0], Z.shape[1], -1)
     # Spline the integrand so that we can evaluate it at quadrature points without
     # expensive coordinate mappings and root finding. Spline each function separately so
     # that the singularity near the bounce points can be captured more accurately than
     # can be by any polynomial.
-    shape = Z.shape
-    Z = Z.reshape(Z.shape[0], Z.shape[1], -1)
     f = [_interp1d_vec(Z, knots, f_i, method=method).reshape(shape) for f_i in f]
     # TODO: Pass in derivative and use method_B.
     b_sup_z = _interp1d_vec(Z, knots, B_sup_z / B, method=method).reshape(shape)
     B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method=method_B).reshape(shape)
-    pitch = jnp.expand_dims(pitch, axis=(2, 3) if len(shape) == 4 else 2)
     inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch) / b_sup_z, w)
 
     if check:
-        _check_interpolation(
-            Z.reshape(shape), f, b_sup_z, B, B_z_ra, inner_product, plot
-        )
+        _check_interp(Z.reshape(shape), f, b_sup_z, B, B_z_ra, inner_product, plot)
 
     return inner_product
 

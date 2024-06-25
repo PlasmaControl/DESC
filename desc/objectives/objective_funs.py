@@ -1,5 +1,6 @@
 """Base classes for objectives."""
 
+import functools
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -63,46 +64,32 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
-    # TODO: figure out how to not use jit if user requests
-    # def jit(self):  # noqa: C901
-    #     """Apply JIT to compute methods, or re-apply after updating self."""
-    #     # can't loop here because del doesn't work on getattr
-    #     # main idea is that when jitting a method, jax replaces that method
-    #     # with a CompiledFunction object, with self compiled in. To re-jit
-    #     # (ie, after updating attributes of self), we just need to delete the jax
-    #     # CompiledFunction object, which will then leave the raw method in its place,
-    #     # and then jit the raw method with the new self
-
-    #     self._use_jit = True
-
-    #     methods = [
-    #         "compute_scaled",
-    #         "compute_scaled_error",
-    #         "compute_unscaled",
-    #         "compute_scalar",
-    #         "jac_scaled",
-    #         "jac_scaled_error",
-    #         "jac_unscaled",
-    #         "hess",
-    #         "grad",
-    #         "jvp_scaled",
-    #         "jvp_scaled_error",
-    #         "jvp_unscaled",
-    #         "vjp_scaled",
-    #         "vjp_scaled_error",
-    #         "vjp_unscaled",
-    #     ]
-
-    #     for method in methods:
-    #         try:
-    #             delattr(self, method)
-    #         except AttributeError:
-    #             pass
-    #         setattr(self, method, jit(getattr(self, method)))
-
-    #     for obj in self._objectives:
-    #         if obj._use_jit:
-    #             obj.jit()
+    def _unjit(self):
+        """Remove jit compiled methods."""
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_scaled_error",
+            "jac_unscaled",
+            "hess",
+            "grad",
+            "jvp_scaled",
+            "jvp_scaled_error",
+            "jvp_unscaled",
+            "vjp_scaled",
+            "vjp_scaled_error",
+            "vjp_unscaled",
+        ]
+        for method in methods:
+            try:
+                setattr(
+                    self, method, functools.partial(getattr(self, method)._fun, self)
+                )
+            except AttributeError:
+                pass
 
     def build(self, use_jit=None, verbose=1):
         """Build the objective.
@@ -134,8 +121,8 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_derivatives()
-        # if self.use_jit:
-        # self.jit()
+        if not self.use_jit:
+            self._unjit()
 
         self._set_things()
 
@@ -856,28 +843,29 @@ class _Objective(IOAble, ABC):
                 else "rev"
             )
 
-    # def jit(self):  # noqa: C901
-    #     """Apply JIT to compute methods, or re-apply after updating self."""
-    #     self._use_jit = True
-
-    #     methods = [
-    #         "compute_scaled",
-    #         "compute_scaled_error",
-    #         "compute_unscaled",
-    #         "compute_scalar",
-    #         "jac_scaled",
-    #         "jac_scaled_error",
-    #         "jac_unscaled",
-    #         "hess",
-    #         "grad",
-    #     ]
-
-    #     for method in methods:
-    #         try:
-    #             delattr(self, method)
-    #         except AttributeError:
-    #             pass
-    #         setattr(self, method, jit(getattr(self, method)))
+    def _unjit(self):
+        """Remove jit compiled methods."""
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_scaled_error",
+            "jac_unscaled",
+            "jvp_scaled",
+            "jvp_scaled_error",
+            "jvp_unscaled",
+            "hess",
+            "grad",
+        ]
+        for method in methods:
+            try:
+                setattr(
+                    self, method, functools.partial(getattr(self, method)._fun, self)
+                )
+            except AttributeError:
+                pass
 
     def _check_dimensions(self):
         """Check that len(target) = len(bounds) = len(weight) = dim_f."""
@@ -931,8 +919,8 @@ class _Objective(IOAble, ABC):
 
         if use_jit is not None:
             self._use_jit = use_jit
-        # if self._use_jit:
-        # self.jit()
+        if not self._use_jit:
+            self._unjit()
 
         self._built = True
 

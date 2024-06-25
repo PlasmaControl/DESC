@@ -38,8 +38,8 @@ class _FixedObjective(_Objective):
         assert len(new_target) == len(self.target)
         self.target = new_target
         self._target_from_user = self.target  # in case the Objective is re-built
-        # if self._use_jit:
-        #     self.jit()
+        if not self._use_jit:
+            self._unjit()
 
     def _parse_target_from_user(
         self, target_from_user, default_target, default_bounds, idx
@@ -231,8 +231,8 @@ class FixParameters(_Objective):
 
         """
         self.target = self.compute(thing.params_dict)
-        # if self._use_jit:
-        #     self.jit()
+        if not self._use_jit:
+            self._unjit()
 
 
 class BoundaryRSelfConsistency(_Objective):

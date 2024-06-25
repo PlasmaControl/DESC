@@ -20,14 +20,16 @@ from desc.basis import (
 )
 from desc.geometry import convert_spectral_to_FE
 
+np.random.seed(1)
+
 L = 2
 M = 5
 N = 0
-K = 3
+K = 2
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
-theta = np.linspace(0, 2 * np.pi, 400, endpoint=False)
+theta = np.linspace(0, 2 * np.pi, 20, endpoint=True)
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -63,7 +65,7 @@ Z_lmn[0, 0] = 2.0
 Z_lmn[1, 0] = 5.0
 Z_lmn = Z_lmn.reshape(-1)  # num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
-amp = 3
+amp = 1
 R_lmn[np.isclose(R_lmn, 0.0)] = (
     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
     * amp
@@ -81,7 +83,7 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-M_FE = 10
+M_FE = 4
 L_FE = 2
 rho = np.linspace(0.5, 1, L_FE, endpoint=True)
 nodes = (
@@ -94,9 +96,9 @@ Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 plt.figure(10)
 plt.plot(R, Z, "ro", label="DESC rep")
 
-Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
-Zprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
-Lprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
+Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K, rho_range=rho)
+Zprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K, rho_range=rho)
+Lprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K, rho_range=rho)
 
 # Convert to the finite element basis
 Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
@@ -119,10 +121,13 @@ Zprime_basis.Z_lmn = Zprime_lmn
 nmodes = len(Rprime_basis.modes)
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+print('R, Z = ', R, Z)
 t2 = time.time()
 print('Time for R, Z conversion = ', t2 - t1)
 plt.figure(10)
 plt.plot(R, Z, "ko", label="FE rep")
+# plt.scatter(R, Z, s=np.arange(len(R)), marker="o", label="FE rep")
 plt.legend()
 plt.grid()
+Rprime_basis.mesh.plot_triangles(True)
 plt.show()

@@ -16,10 +16,10 @@ from matplotlib import pyplot as plt
 from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-M = 5  # Note M > 2 required
+M = 10  # Note M > 2 required
 N = 0
 L = 0
-K = 2
+K = 1
 mesh = FiniteElementMesh1D(M, K=K)
 integral = mesh.integrate(np.ones((M * mesh.nquad, 1000)))
 length_total = 0.0
@@ -64,7 +64,7 @@ R_lmn[0, 0] = 2.0
 R_lmn[2, 0] = 1.0
 Z_lmn = np.zeros((num_modes, 2 * N + 1))
 Z_lmn[0, 0] = 2.0
-Z_lmn[1, 0] = 5.0
+Z_lmn[1, 0] = 8.0
 R_lmn = R_lmn.reshape(num_modes * (2 * N + 1))
 Z_lmn = Z_lmn.reshape(num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
@@ -104,6 +104,7 @@ Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+print('R, Z = ', R, Z)
 
 r_eval = Rprime_basis.evaluate(nodes=np.array([[1, 0.0, 0.0], [1, 2 * np.pi, 0.0]])) @ Rprime_lmn
 z_eval = Zprime_basis.evaluate(nodes=np.array([[1, 0.0, 0.0], [1, 2 * np.pi, 0.0]])) @ Zprime_lmn
@@ -112,7 +113,7 @@ print(r_eval, z_eval)
 # Plot original boundary and difference between Fourier and FE
 # representation of 1D surface in theta
 plt.figure()
-plt.plot(2 + np.cos(theta), 2 + 5 * np.sin(theta))
+plt.plot(2 + np.cos(theta), 2 + 8 * np.sin(theta))
 plt.plot(R_fourier, Z_fourier, "ro")
 plt.plot(R, Z, "ko")
 plt.grid()

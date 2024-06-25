@@ -1135,7 +1135,7 @@ class FiniteElementBasis(_FE_Basis):
         * ``False`` for no symmetry (Default)
     """
 
-    def __init__(self, L, M, N, K=1, NFP=1, sym=False):
+    def __init__(self, L, M, N, K=1, NFP=1, sym=False, rho_range=None):
         self.L = L
         self.M = M
         self.N = N
@@ -1147,11 +1147,11 @@ class FiniteElementBasis(_FE_Basis):
             self.I_LMN = M - 1
             self.Q = K + 1
         elif N == 0:
-            self.mesh = FiniteElementMesh2D(L, M, K=K)
+            self.mesh = FiniteElementMesh2D(L, M, K=K, rho_range=rho_range)
             self.I_LMN = 2 * (M - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) / 2.0)
         else:
-            self.mesh = FiniteElementMesh3D(L, M, N, K=K)
+            self.mesh = FiniteElementMesh3D(L, M, N, K=K, rho_range=rho_range)
             self.I_LMN = 6 * (M - 1) * (N - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
         self.nmodes = self.I_LMN * self.Q
@@ -1202,6 +1202,8 @@ class FiniteElementBasis(_FE_Basis):
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
         i, q = modes.T
+        print('r, t = ', r, t)
+        print('i, q = ', i, q)
 
         if self.L == 0 and self.N == 0:
             # Get all IQ basis functions from each of the points,
@@ -2746,19 +2748,23 @@ class FiniteElementMesh2D:
         The order of the finite elements to use
     """
 
-    def __init__(self, L, M, K=1):
+    def __init__(self, L, M, K=1, rho_range=None):
         self.M = M
         self.L = L
         self.I_LMN = 2 * (M - 1) * (L - 1)
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
+        if rho_range is None:
+            rho_range = np.linspace(0, 1, L, endpoint=True)
 
         # rho_theta mesh
         # Go back later to fix visualization
         # Ensuring 2ML triangles
-        mesh = fem.MeshLine(np.linspace(0, 1, L)) * fem.MeshLine(
-            np.linspace(0, 2 * np.pi, M)
+        mesh = fem.MeshLine(rho_range) * fem.MeshLine(
+            np.linspace(0, 2 * np.pi, M, endpoint=True)
         )
+        # print(np.meshgrid(np.linspace(0, 1, L), 
+        #     np.linspace(0, 2 * np.pi, M), indexing='ij'))
 
         # Turn squares into triangles
         mesh = mesh.to_meshtri()
@@ -2780,7 +2786,6 @@ class FiniteElementMesh2D:
 
         if K == 1:
             element = fem.ElementTriP1()
-
         else:
             element = fem.ElementTriP2()
 
@@ -2794,9 +2799,11 @@ class FiniteElementMesh2D:
             return dot(u, v)
 
         self.assembly_matrix = assembly.assemble(basis).todense()
+        
+        print('Assembly matrix = ', self.assembly_matrix)
 
         # Will fix this next section later
-        # Compute the triangle elements for all 2ML triangles
+        # Compute the triangle elements for all 2(M - 1)(L - 1) triangles
         triangles = []
         for i in range(L - 1):
             for j in range(M - 1):
@@ -2888,6 +2895,8 @@ class FiniteElementMesh2D:
         triangle_location = self.find_triangles_corresponding_to_points(rho_theta)[0]
 
         # Initialize coordinate matrix, shape (num_points,3)
+        print(rho_theta[0])
+        exit()
         coordinate_matrix = np.zeros(rho_theta[0], 3)
         # Looping through points
 
@@ -2935,6 +2944,7 @@ class FiniteElementMesh2D:
             The basis functions corresponding to the triangles in
             triangle_indices.
         """
+        # print('rho_theta = ', rho_theta)
         triangle_indices = np.zeros(rho_theta.shape[0])
         basis_functions = np.zeros((rho_theta.shape[0], self.I_LMN * self.Q))
         for i in range(rho_theta.shape[0]):
@@ -2946,6 +2956,9 @@ class FiniteElementMesh2D:
                 a = (np.cross(v, v3) - np.cross(v1, v3)) / np.cross(v2, v3)
                 b = -(np.cross(v, v2) - np.cross(v1, v2)) / np.cross(v2, v3)
                 if a >= 0 and b >= 0 and (a + b) <= 1:
+                    # triangle.plot_triangle()
+                    # plt.scatter(v[0], v[1])
+                    # plt.show()
                     triangle_indices[i] = j
                     basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
                         triangle.get_basis_functions(v.reshape(1, 2))

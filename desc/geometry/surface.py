@@ -107,6 +107,7 @@ def convert_spectral_to_FE(
     # same for R, Z, and L variables and same for the Fourier-Zernike basis
     IQ = I * Q
     Fourier_basis_pre_evaluated = R_basis.evaluate(nodes=quadpoints)
+    # print('F1, F2 = ', Fourier_basis_pre_evaluated, Z_basis.evaluate(nodes=quadpoints))
     t2 = time.time()
     print("Time to evaluate Fourier basis = ", t2 - t1)
 
@@ -122,14 +123,8 @@ def convert_spectral_to_FE(
         ).reshape(I * nquad, -1)
     ).reshape(IQ, IQ)
     
-    
     # Add row
-    
-    add_row = np.zeros((1,IQ))
-    add_row[0,0] = 1
-    add_row[0,IQ-1]=-1
-    FE_assembly_matrix = np.vstack((FE_assembly_matrix,add_row))
-    
+    print('A = ', FE_assembly_matrix, np.linalg.eigvals(FE_assembly_matrix))
     
     # print(FE_basis_pre_evaluated)
     t2 = time.time()
@@ -149,19 +144,39 @@ def convert_spectral_to_FE(
     Aj_Z = mesh.integrate(
         (ZZ).reshape(I * nquad, -1),
     )
-    
-    Aj_Z = np.append(Aj_Z,[0])
 
     Aj_R = mesh.integrate(
         (RR).reshape(I * nquad, -1),
     )
-    Aj_R = np.append(Aj_R,[0])
     Aj_L = mesh.integrate(
         (LL).reshape(I * nquad, -1),
     )
-    Aj_L = np.append(Aj_L,[0])
     t2 = time.time()
     print("Time to construct vector b = ", t2 - t1)
+    
+    # Boundary condition for 1D case
+    if L == 0 and N == 0:
+        add_row = np.zeros((1, IQ))
+        add_row[0, 0] = 1e3
+        add_row[0, IQ - 1] = -1e3
+        Aj_Z = np.append(Aj_Z,[0])
+        Aj_R = np.append(Aj_R,[0])
+        Aj_L = np.append(Aj_L,[0])
+    # elif N == 0:
+    #     add_row = np.zeros((L, IQ))
+    #     add_row[0, 0] = 1
+    #     add_row[0, IQ - 1] = -1
+    #     add_row[1, IQ // 2 - 1] = -1
+    #     add_row[1, IQ // 2] = 1
+    #     Aj_Z = np.append(Aj_Z, [0])
+    #     Aj_R = np.append(Aj_R, [0])
+    #     Aj_L = np.append(Aj_L, [0])
+    #     Aj_Z = np.append(Aj_Z, [0])
+    #     Aj_R = np.append(Aj_R, [0])
+    #     Aj_L = np.append(Aj_L, [0])
+    # else:   
+    # FE_assembly_matrix = np.vstack((FE_assembly_matrix, add_row))
+    # print('A after BCs = ', FE_assembly_matrix)
 
     t1 = time.time()
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
@@ -173,9 +188,13 @@ def convert_spectral_to_FE(
     Rprime_lmn = np.zeros(Aj_R.shape)
     Zprime_lmn = np.zeros(Aj_Z.shape)
     Lprime_lmn = np.zeros(Aj_L.shape)
+    print('b = ', Aj_R)
 
     
     Rprime = np.linalg.lstsq(FE_assembly_matrix, Aj_R)[0]
+    print('x = ', Rprime)
+    
+    print('modes = ', Rprime_basis._get_modes())
 
     Rprime_lmn = Rprime.reshape(nmodes)
     

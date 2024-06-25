@@ -126,14 +126,6 @@ class ObjectiveFunction(IOAble):
 
         self._set_things()
 
-        # this is needed to know which "thing" goes with which sub-objective,
-        # ie objectives[i].things == [things[k] for k in things_per_objective_idx[i]]
-        self._things_per_objective_idx = []
-        for obj in self.objectives:
-            self._things_per_objective_idx.append(
-                [i for i, t in enumerate(self.things) if t in obj.things]
-            )
-
         self._built = True
         timer.stop("Objective build")
         if verbose > 1:
@@ -168,6 +160,14 @@ class ObjectiveFunction(IOAble):
             things_per_objective, is_leaf=lambda x: isinstance(x, Optimizable)
         )
         unique_, inds_ = unique_list(flat_)
+
+        # this is needed to know which "thing" goes with which sub-objective,
+        # ie objectives[i].things == [things[k] for k in things_per_objective_idx[i]]
+        self._things_per_objective_idx = []
+        for obj in self.objectives:
+            self._things_per_objective_idx.append(
+                [i for i, t in enumerate(unique_) if t in obj.things]
+            )
 
         def unflatten(unique):
             assert len(unique) == len(unique_)
@@ -206,6 +206,7 @@ class ObjectiveFunction(IOAble):
         params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
+        assert len(params) == len(constants) == len(self.objectives)
         f = jnp.concatenate(
             [
                 obj.compute_unscaled(*par, constants=const)
@@ -234,6 +235,7 @@ class ObjectiveFunction(IOAble):
         params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
+        assert len(params) == len(constants) == len(self.objectives)
         f = jnp.concatenate(
             [
                 obj.compute_scaled(*par, constants=const)
@@ -262,6 +264,7 @@ class ObjectiveFunction(IOAble):
         params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
+        assert len(params) == len(constants) == len(self.objectives)
         f = jnp.concatenate(
             [
                 obj.compute_scaled_error(*par, constants=const)
@@ -309,6 +312,7 @@ class ObjectiveFunction(IOAble):
             f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
         params = self.unpack_state(x)
+        assert len(params) == len(constants) == len(self.objectives)
         for par, obj, const in zip(params, self.objectives, constants):
             obj.print_value(*par, constants=const)
         return None
@@ -344,11 +348,14 @@ class ObjectiveFunction(IOAble):
 
         xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
+        xs = xs[: len(self.things)]  # jnp.split returns an empty array at the end
+        assert len(xs) == len(self.things)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
         if per_objective:
             # params is a list of lists of dicts, for each thing and for each objective
             params = self._unflatten(params)
             # this filters out the params of things that are unused by each objective
+            assert len(params) == len(self._things_per_objective_idx)
             params = [
                 [param[i] for i in idx]
                 for param, idx in zip(params, self._things_per_objective_idx)
@@ -359,6 +366,7 @@ class ObjectiveFunction(IOAble):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
         things = things or self.things
+        assert len(things) == len(self.things)
         assert all([type(t1) is type(t2) for t1, t2 in zip(things, self.things)])
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
@@ -391,6 +399,7 @@ class ObjectiveFunction(IOAble):
         xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
         J = []
+        assert len(self.objectives) == len(self.constants)
         for k, (obj, const) in enumerate(zip(self.objectives, constants)):
             # get the xs that go to that objective
             thing_idx = self._things_per_objective_idx[k]
@@ -930,6 +939,7 @@ class _Objective(IOAble, ABC):
 
     def _maybe_array_to_params(self, *args):
         argsout = tuple()
+        assert len(args) == len(self.things)
         for arg, thing in zip(args, self.things):
             if isinstance(arg, (np.ndarray, jnp.ndarray)):
                 argsout += (thing.unpack_params(arg),)
@@ -1270,6 +1280,7 @@ class _Objective(IOAble, ABC):
         if not isinstance(new, (tuple, list)):
             new = [new]
         assert all(isinstance(x, Optimizable) for x in new)
+        assert len(new) == len(self.things)
         assert all(type(a) is type(b) for a, b in zip(new, self.things))
         self._things = list(new)
         # can maybe improve this later to not rebuild if resolution is the same

@@ -29,7 +29,7 @@ K = 2
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
-theta = np.linspace(0, 2 * np.pi, 20, endpoint=True)
+theta = np.linspace(0, 2 * np.pi, 200, endpoint=True)
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -83,7 +83,7 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-M_FE = 4
+M_FE = 20
 L_FE = 2
 rho = np.linspace(0.5, 1, L_FE, endpoint=True)
 nodes = (

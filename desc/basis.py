@@ -1214,7 +1214,7 @@ class FiniteElementBasis(_FE_Basis):
                 intervals,
                 basis_functions,
             ) = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
-            print(Rho_Theta, intervals, basis_functions)
+            # print(Rho_Theta, intervals, basis_functions)
         else:
             Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
             # print(Rho_Theta_Zeta, Rho_Theta_Zeta.shape)
@@ -2021,7 +2021,7 @@ class FiniteElementMesh3D:
         basis functions.
     """
 
-    def __init__(self, L, M, N, K=1):
+    def __init__(self, L, M, N, K=1, rho_range=None):
         self.M = M
         self.L = L
         self.N = N
@@ -2032,9 +2032,11 @@ class FiniteElementMesh3D:
         self.K = K
 
         # Trying a Hex Mesh, and then adding in the tetrahedra to each prism
-
+        if rho_range is None:
+            rho_range = np.linspace(0, 1, L, endpoint=True)
+        
         mesh = fem.MeshHex.init_tensor(
-            np.linspace(0, 1, L),
+            rho_range,
             np.linspace(0, 2 * np.pi, M),
             np.linspace(0, 2 * np.pi, N),
         ).to_meshtet()
@@ -2067,6 +2069,7 @@ class FiniteElementMesh3D:
             return dot(u, v)
 
         self.assembly_matrix = assembly.assemble(basis).todense()
+        print('FE_assembly = ', self.assembly_matrix)
 
         # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
         tetrahedra = []

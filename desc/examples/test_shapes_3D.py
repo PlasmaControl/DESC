@@ -56,7 +56,7 @@ Z_lmn = np.zeros(num_modes * (2 * N + 1))
 Z_lmn[num_modes * N] = 2.0
 Z_lmn[num_modes * N + 1] = 5.0
 L_lmn = np.zeros(R_lmn.shape)
-amp = 1
+amp = 0.1 
 R_lmn[np.isclose(R_lmn, 0.0)] = (
     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
     * amp

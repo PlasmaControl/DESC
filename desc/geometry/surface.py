@@ -155,27 +155,27 @@ def convert_spectral_to_FE(
     print("Time to construct vector b = ", t2 - t1)
     
     # Boundary condition for 1D case
-    if L == 0 and N == 0:
-        add_row = np.zeros((1, IQ))
+    # if L == 0 and N == 0:
+    #     add_row = np.zeros((1, IQ))
         
-        # 1e3 instead of 1 below so that the constraint is strongly enforced
-        # During the least-squares solve. Otherwise, the constraint
-        # can be weakly broken.
-        add_row[0, 0] = 1e3
-        add_row[0, IQ - 1] = -1e3
-        Aj_Z = np.append(Aj_Z,[0])
-        Aj_R = np.append(Aj_R,[0])
-        Aj_L = np.append(Aj_L,[0])
-    elif N == 0:
-        add_row = np.zeros((L, IQ))
-        for ll in range(L):
-            add_row[ll, ll * Q] = 1e3
-            add_row[ll, 2 * Q * (M - 2) + 1 + ll * (Q + 1)] = -1e3
-            Aj_Z = np.append(Aj_Z, [0])
-            Aj_R = np.append(Aj_R, [0])
-            Aj_L = np.append(Aj_L, [0])
-    FE_assembly_matrix = np.vstack((FE_assembly_matrix, add_row))
-    print('A after BCs = ', FE_assembly_matrix[-L:, :])
+    #     # 1e3 instead of 1 below so that the constraint is strongly enforced
+    #     # During the least-squares solve. Otherwise, the constraint
+    #     # can be weakly broken.
+    #     add_row[0, 0] = 1e3
+    #     add_row[0, IQ - 1] = -1e3
+    #     Aj_Z = np.append(Aj_Z,[0])
+    #     Aj_R = np.append(Aj_R,[0])
+    #     Aj_L = np.append(Aj_L,[0])
+    # elif N == 0:
+    #     add_row = np.zeros((L, IQ))
+    #     for ll in range(L):
+    #         add_row[ll, ll * Q] = 1e3
+    #         add_row[ll, 2 * Q * (M - 2) + 1 + ll * (Q + 1)] = -1e3
+    #         Aj_Z = np.append(Aj_Z, [0])
+    #         Aj_R = np.append(Aj_R, [0])
+    #         Aj_L = np.append(Aj_L, [0])
+    # FE_assembly_matrix = np.vstack((FE_assembly_matrix, add_row))
+    # print('A after BCs = ', FE_assembly_matrix[-L:, :])
     # else:   
 
     t1 = time.time()
@@ -192,7 +192,7 @@ def convert_spectral_to_FE(
     # print('b_z = ', Aj_Z)
     
     Rprime = np.linalg.lstsq(FE_assembly_matrix, Aj_R)[0]
-    print('x = ', Rprime)
+    # print('x = ', Rprime)
 
     Rprime_lmn = Rprime.reshape(nmodes)
     

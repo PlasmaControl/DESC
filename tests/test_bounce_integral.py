@@ -21,6 +21,7 @@ from desc.compute.bounce_integral import (
     _poly_der,
     _poly_root,
     _poly_val,
+    _take_mask,
     affine_bijection,
     automorphism_arcsin,
     automorphism_sin,
@@ -32,7 +33,6 @@ from desc.compute.bounce_integral import (
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     plot_field_line,
-    take_mask,
     tanh_sinh,
 )
 from desc.equilibrium import Equilibrium
@@ -64,7 +64,7 @@ def test_mask_operations():
     a = np.random.rand(rows, cols)
     nan_idx = np.random.choice(rows * cols, size=(rows * cols) // 2, replace=False)
     a.ravel()[nan_idx] = np.nan
-    taken = take_mask(a, ~np.isnan(a))
+    taken = _take_mask(a, ~np.isnan(a))
     last = _last_value(taken)
     for i in range(rows):
         desired = a[i, ~np.isnan(a[i])]
@@ -150,7 +150,7 @@ def test_poly_root():
     root = _poly_root(c.T, sort=True, distinct=True)
     for j in range(c.shape[0]):
         unique_roots = np.unique(np.roots(c[j]))
-        root_filter = _filter_not_nan(root[j])
+        root_filter = _filter_not_nan(root[j], check=True)
         assert root_filter.size == unique_roots.size, j
         np.testing.assert_allclose(
             actual=root_filter,
@@ -158,7 +158,7 @@ def test_poly_root():
             err_msg=str(j),
         )
     c = np.array([0, 1, -1, -8, 12])
-    root = _filter_not_nan(_poly_root(c, sort=True, distinct=True))
+    root = _filter_not_nan(_poly_root(c, sort=True, distinct=True), check=True)
     unique_root = np.unique(np.roots(c))
     assert root.size == unique_root.size
     np.testing.assert_allclose(root, unique_root)

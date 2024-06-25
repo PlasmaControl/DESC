@@ -215,7 +215,6 @@ def _poly_root(
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
-        # Keep real values inside [a_min, a_max], and set others to sentinel.
         r = jnp.where(
             (jnp.abs(jnp.imag(r)) <= eps) & (a_min <= r) & (r <= a_max),
             jnp.real(r),

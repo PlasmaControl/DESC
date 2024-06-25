@@ -18,7 +18,7 @@ from desc.coils import CoilSet, FourierPlanarCoil, FourierXYZCoil, MixedCoilSet
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface
+from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.magnetic_fields import (
@@ -76,22 +76,29 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_generic(self):
-        """Test GenericObjective for arbitrary quantities."""
+        """Test GenericObjective for arbitrary Equilibrium quantities."""
 
-        def test(f, eq, compress=False):
-            obj = GenericObjective(f, eq=eq)
+        def test(f, thing, grid=None, compress=False):
+            obj = GenericObjective(f, thing=thing, grid=grid)
             obj.build()
-            val = eq.compute(f, grid=obj.constants["transforms"]["grid"])[f]
+            val = thing.compute(f, grid=obj.constants["transforms"]["grid"])[f]
             if compress:
                 val = obj.constants["transforms"]["grid"].compress(val)
             np.testing.assert_allclose(
-                obj.compute(eq.params_dict),
+                obj.compute(thing.params_dict),
                 val,
             )
 
+        test("curvature", FourierXYZCurve(Y_n=[-1, 0, 0]), LinearGrid(0, 0, 12))
+        test("length", FourierPlanarCoil(r_n=0.5), LinearGrid(0, 0, 12))
+        test(
+            "Phi",
+            FourierCurrentPotentialField(Phi_mn=np.array([0.2])),
+            LinearGrid(0, 4, 4),
+        )
         test("sqrt(g)", Equilibrium())
-        test("current", Equilibrium(iota=PowerSeriesProfile(0)), True)
-        test("iota", Equilibrium(current=PowerSeriesProfile(0)), True)
+        test("current", Equilibrium(iota=PowerSeriesProfile(0)), None, True)
+        test("iota", Equilibrium(current=PowerSeriesProfile(0)), None, True)
 
     @pytest.mark.unit
     def test_objective_from_user(self):
@@ -103,13 +110,24 @@ class TestObjectiveFunction:
             r = jnp.sqrt(x * data["X"] + y**2)
             return r
 
+        def test(thing, grid):
+            objective = ObjectiveFromUser(myfun, thing=thing, grid=grid)
+            objective.build()
+            R1 = objective.compute(*objective.xs(thing))
+            R2 = thing.compute("R", grid=grid)["R"]
+            np.testing.assert_allclose(R1, R2)
+
+        curve = FourierXYZCurve()
+        grid = LinearGrid(0, 0, 5)
+        test(curve, grid)
+
+        surf = FourierRZToroidalSurface()
+        grid = LinearGrid(2, 2, 2)
+        test(surf, grid)
+
         eq = Equilibrium()
         grid = LinearGrid(2, 2, 2)
-        objective = ObjectiveFromUser(myfun, eq=eq, grid=grid)
-        objective.build()
-        R1 = objective.compute(*objective.xs(eq))
-        R2 = eq.compute("R", grid=grid)["R"]
-        np.testing.assert_allclose(R1, R2)
+        test(eq, grid)
 
     @pytest.mark.unit
     def test_linear_objective_from_user(self):
@@ -757,18 +775,16 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=1)
-        coils = CoilSet.linspaced_linear(coil, n=2)
+        coils = CoilSet.linspaced_linear(coil, n=3)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
-        nested_coils = MixedCoilSet(coils, coils)
+        nested_coils = MixedCoilSet(coils, mixed_coils)
 
-        nested_grids = [
-            [LinearGrid(N=5), LinearGrid(N=5)],
-            [LinearGrid(N=5), LinearGrid(N=5)],
-        ]
-        test(coil, grid=LinearGrid(N=5))
+        grid = None  # default grid
+
+        test(coil)
         test(coils)
-        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
-        test(nested_coils, grid=nested_grids)
+        test(mixed_coils)
+        test(nested_coils, grid=grid)
 
     @pytest.mark.unit
     def test_coil_current_length(self):
@@ -782,18 +798,16 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=1, current=2)
-        coils = CoilSet.linspaced_linear(coil, n=2)
+        coils = CoilSet.linspaced_linear(coil, n=3)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
-        nested_coils = MixedCoilSet(coils, coils)
+        nested_coils = MixedCoilSet(coils, mixed_coils)
 
-        nested_grids = [
-            [LinearGrid(N=5), LinearGrid(N=5)],
-            [LinearGrid(N=5), LinearGrid(N=5)],
-        ]
-        test(coil, grid=LinearGrid(N=5))
+        grid = LinearGrid(N=5)  # single grid
+
+        test(coil)
         test(coils)
-        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
-        test(nested_coils, grid=nested_grids)
+        test(mixed_coils)
+        test(nested_coils, grid=grid)
 
     @pytest.mark.unit
     def test_coil_curvature(self):
@@ -806,20 +820,17 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)
             assert len(f) == obj.dim_f
 
-        coil = FourierPlanarCoil()
-        coils = CoilSet.linspaced_linear(coil, n=2)
+        coil = FourierPlanarCoil(r_n=2)
+        coils = CoilSet.linspaced_linear(coil, n=3)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
-        nested_coils = MixedCoilSet(coils, coils)
+        nested_coils = MixedCoilSet(coils, mixed_coils)
 
-        nested_grids = [
-            [LinearGrid(N=5), LinearGrid(N=5)],
-            [LinearGrid(N=5), LinearGrid(N=5)],
-        ]
+        grid = [LinearGrid(N=5)] * 5  # single list of grids
 
-        test(coil, grid=LinearGrid(N=5))
+        test(coil)
         test(coils)
-        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
-        test(nested_coils, grid=nested_grids)
+        test(mixed_coils)
+        test(nested_coils, grid=grid)
 
     @pytest.mark.unit
     def test_coil_torsion(self):
@@ -832,20 +843,17 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f, 0, atol=1e-8)
             assert len(f) == obj.dim_f
 
-        coil = FourierPlanarCoil()
-        coils = CoilSet.linspaced_linear(coil, n=2)
+        coil = FourierPlanarCoil(r_n=2)
+        coils = CoilSet.linspaced_linear(coil, n=3)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
-        nested_coils = MixedCoilSet(coils, coils)
+        nested_coils = MixedCoilSet(coils, mixed_coils)
 
-        nested_grids = [
-            [LinearGrid(N=5), LinearGrid(N=5)],
-            [LinearGrid(N=5), LinearGrid(N=5)],
-        ]
+        grid = [[LinearGrid(N=5)] * 3, [LinearGrid(N=5)] * 2]  # nested list of grids
 
-        test(coil, grid=LinearGrid(N=5))
+        test(coil)
         test(coils)
-        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
-        test(nested_coils, grid=nested_grids)
+        test(mixed_coils)
+        test(nested_coils, grid=grid)
 
     @pytest.mark.unit
     def test_quadratic_flux(self):
@@ -999,7 +1007,7 @@ def test_derivative_modes():
 def test_getter_setter():
     """Test getter and setter methods of Objectives."""
     eq = Equilibrium()
-    obj = GenericObjective("R", eq=eq)
+    obj = GenericObjective("R", thing=eq)
     obj.build()
     R = obj.compute_unscaled(*obj.xs(eq))
 
@@ -1024,11 +1032,11 @@ def test_bounds_format():
     """Test that tuple targets are in the format (lower bound, upper bound)."""
     eq = Equilibrium()
     with pytest.raises(AssertionError):
-        GenericObjective("R", bounds=(1,), eq=eq).build()
+        GenericObjective("R", bounds=(1,), thing=eq).build()
     with pytest.raises(AssertionError):
-        GenericObjective("R", bounds=(1, 2, 3), eq=eq).build()
+        GenericObjective("R", bounds=(1, 2, 3), thing=eq).build()
     with pytest.raises(ValueError):
-        GenericObjective("R", bounds=(1, -1), eq=eq).build()
+        GenericObjective("R", bounds=(1, -1), thing=eq).build()
 
 
 @pytest.mark.unit
@@ -1912,7 +1920,7 @@ class TestComputeScalarResolution:
                 NFP=self.eq.NFP,
             )
             obj = ObjectiveFunction(
-                GenericObjective("<beta>_vol", eq=self.eq, grid=grid), use_jit=False
+                GenericObjective("<beta>_vol", thing=self.eq, grid=grid), use_jit=False
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
@@ -1932,7 +1940,7 @@ class TestComputeScalarResolution:
                 axis=False,
             )
             obj = ObjectiveFunction(
-                GenericObjective("<J*B>", eq=self.eq, grid=grid), use_jit=False
+                GenericObjective("<J*B>", thing=self.eq, grid=grid), use_jit=False
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
@@ -1951,7 +1959,7 @@ class TestComputeScalarResolution:
                 sym=self.eq.sym,
             )
             obj = ObjectiveFunction(
-                GenericObjective("sqrt(g)", eq=self.eq, grid=grid), use_jit=False
+                GenericObjective("sqrt(g)", thing=self.eq, grid=grid), use_jit=False
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
@@ -2068,9 +2076,9 @@ class TestObjectiveNaNGrad:
         BootstrapRedlConsistency,
         BoundaryError,
         VacuumBoundaryError,
-        CoilLength,
-        CoilCurvature,
         CoilCurrentLength,
+        CoilCurvature,
+        CoilLength,
         CoilTorsion,
         QuadraticFlux,
         ToroidalFlux,

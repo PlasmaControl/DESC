@@ -874,15 +874,21 @@ class TestSplineXYZCurve:
             assert discontinuous.method == method
             assert continuous.method == method
 
-            discon_data = discontinuous.compute(data_key)[data_key]
+            discon = discontinuous.compute([data_key, "s"])
+            discon_s = discon["s"]
+            discon_data = discon[data_key]
             cont_data = continuous.compute(data_key)[data_key]
 
             if compare_breaks:
                 np.testing.assert_allclose(discon_data, cont_data, rtol=1e-3)
             else:
+                # break_indices are from knots and torsion is aligned with s
+                # so we need the indices of s where the s is equal to the break points
+                is_break_point = np.isin(discon_s, discontinuous.knots[break_indices])
+                # don't include break points
                 np.testing.assert_allclose(
-                    discon_data[~np.array(break_indices)],
-                    cont_data[~np.array(break_indices)],
+                    discon_data[~is_break_point],
+                    cont_data[~is_break_point],
                     rtol=1e-3,
                 )
             return discon_data, cont_data

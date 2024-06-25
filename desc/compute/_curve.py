@@ -967,19 +967,22 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     description="Scalar torsion of the curve",
     dim=1,
     params=[],
-    transforms={"intervals": []},
+    transforms={"intervals": [], "knots": []},
     profiles=[],
     coordinates="s",
-    data=["x_s", "x_ss", "x_sss"],
+    data=["s", "x_s", "x_ss", "x_sss"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _torsion_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dxd2x = cross(data["x_s"], data["x_ss"])
     data["torsion"] = dot(dxd2x, data["x_sss"]) / jnp.linalg.norm(dxd2x, axis=-1) ** 2
-    # set torsion to zero at break points
+    # set torsion to zero at break points because the curve is just
+    # 2 lines that lie in the same plane
     if len(transforms["intervals"][0]):
-        data["torsion"] = data["torsion"].at[transforms["intervals"][:, 1]].set(0.0)
+        for break_point in transforms["knots"][transforms["intervals"][:, 1]]:
+            # TODO: should I have them be approximately equal?
+            data["torsion"] = jnp.where(data["s"] == break_point, data["torsion"], 0.0)
 
     return data
 

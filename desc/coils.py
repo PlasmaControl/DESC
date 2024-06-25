@@ -781,14 +781,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
-        self._NFP = NFP
-        self._sym = sym
+        self._NFP = int(NFP)
+        self._sym = bool(sym)
         self._name = str(name)
 
     @property
     def name(self):
         """str: Name of the curve."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
@@ -875,6 +875,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(names, coil) for coil in self]
         if data is None:
             data = [{}] * len(self)
+
         # if user supplied initial data for each coil we also need to vmap over that.
         data = vmap(
             lambda d, x: self[0].compute(

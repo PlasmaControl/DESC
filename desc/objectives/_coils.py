@@ -868,8 +868,9 @@ class PlasmaCoilsetMinDistance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium (or FourierRZToroidalSurface) that will be optimized
+        to satisfy the Objective.
     coils : CoilSet
         Coils that are to be optimized.
     target : float, ndarray, optional

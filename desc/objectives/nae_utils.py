@@ -16,8 +16,10 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
 
     Parameters
     ----------
-    qsc : Qsc equilibrium
+    qsc : Qsc or None
         Qsc object to use as the NAE constraints on the DESC equilibrium.
+        if None is passed, will instead use the given DESC equilibrium's
+        current near-axis behavior for the constraint.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
     N : int,
@@ -94,8 +96,10 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
 
     Parameters
     ----------
-    qsc : Qsc equilibrium
+    qsc : Qsc or None
         Qsc object to use as the NAE constraints on the DESC equilibrium.
+        if None is passed, will instead use the given DESC equilibrium's
+        current near-axis behavior for the constraint.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
     N : int,
@@ -260,8 +264,10 @@ def _make_RZ_cons_order_rho(  # noqa: C901
 
     Parameters
     ----------
-    qsc : Qsc equilibrium
+    qsc : Qsc or None
         Qsc object to use as the NAE constraints on the DESC equilibrium.
+        if None is passed, will instead use the given DESC equilibrium's
+        current near-axis behavior for the constraint.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
     coeffs : dict
@@ -299,6 +305,9 @@ def _make_RZ_cons_order_rho(  # noqa: C901
     if qsc is not None:
         # r is the ratio  r_NAE / rho_DESC
         r = np.sqrt(2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi)
+    else:
+        # TODO: is this true?
+        r = 1  # using DESC equilibrium's behavior, no conversion is needed
 
     Rconstraints = ()
     Zconstraints = ()
@@ -406,8 +415,10 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
 
     Parameters
     ----------
-    qsc : Qsc equilibrium
+    qsc : Qsc or None
         Qsc object to use as the NAE constraints on the DESC equilibrium.
+        if None is passed, will instead use the given DESC equilibrium's
+        current near-axis behavior for the constraint.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
     fix_lambda : bool, default False

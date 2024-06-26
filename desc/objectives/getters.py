@@ -187,14 +187,14 @@ def get_NAE_constraints(
     constraints += (
         FixNearAxisR(
             eq=desc_eq,
-            nae_eq=qsc_eq,
+            target=qsc_eq,
             N=N,
             order=order,
             normalize=normalize,
         ),
         FixNearAxisZ(
             eq=desc_eq,
-            nae_eq=qsc_eq,
+            target=qsc_eq,
             N=N,
             order=order,
             normalize=normalize,
@@ -204,7 +204,7 @@ def get_NAE_constraints(
         constraints += (
             FixNearAxisLambda(
                 eq=desc_eq,
-                nae_eq=qsc_eq,
+                target=qsc_eq,
                 N=N,
                 order=int(fix_lambda),
                 normalize=normalize,

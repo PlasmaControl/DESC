@@ -3005,7 +3005,7 @@ class FixNearAxisR(_FixedObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    nae_eq : Qsc, optonal
+    target : Qsc, optional
         pyQSC Qsc object describing the NAE solution to fix the equilibrium's
         near-axis behavior to. If None, will fix the equilibrium's current near
         axis behavior.
@@ -3016,9 +3016,6 @@ class FixNearAxisR(_FixedObjective):
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Unused for this objective as these will be
-        automatically set according to the ``nae_eq``
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -3048,7 +3045,6 @@ class FixNearAxisR(_FixedObjective):
     def __init__(
         self,
         eq,
-        nae_eq=None,
         order=1,
         N=None,
         target=None,
@@ -3058,14 +3054,13 @@ class FixNearAxisR(_FixedObjective):
         normalize_target=True,
         name="Fix Near Axis R Behavior",
     ):
-        self._nae_eq = nae_eq
+        self._nae_eq = target
         self._order = order
         self._N = N
-
-        self._target_from_user = setdefault(bounds, target)
+        self._target_from_user = setdefault(bounds, None)
         super().__init__(
             things=eq,
-            target=target,
+            target=None,
             bounds=bounds,
             weight=weight,
             name=name,
@@ -3094,11 +3089,11 @@ class FixNearAxisR(_FixedObjective):
             N=self._N,
         )
         for con in cons:
-            if con._target_arg == "R_lmn":
+            if isinstance(con, FixSumModesR):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.stack([con._A for con in cons if con._target_arg == "R_lmn"])
+        self._A = np.stack([con._A for con in cons if isinstance(con, FixSumModesR)])
         self._target = np.concatenate(
-            [con.target for con in cons if con._target_arg == "R_lmn"]
+            [con.target for con in cons if isinstance(con, FixSumModesR)]
         ).squeeze()
 
         self._dim_f = self.target.size
@@ -3137,7 +3132,7 @@ class FixNearAxisZ(_FixedObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    nae_eq : Qsc, optonal
+    target : Qsc, optional
         pyQSC Qsc object describing the NAE solution to fix the equilibrium's
         near-axis behavior to. If None, will fix the equilibrium's current near
         axis behavior.
@@ -3148,9 +3143,6 @@ class FixNearAxisZ(_FixedObjective):
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Unused for this objective as these will be
-        automatically set according to the ``nae_eq``
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -3180,7 +3172,6 @@ class FixNearAxisZ(_FixedObjective):
     def __init__(
         self,
         eq,
-        nae_eq=None,
         order=1,
         N=None,
         target=None,
@@ -3190,14 +3181,13 @@ class FixNearAxisZ(_FixedObjective):
         normalize_target=True,
         name="Fix Near Axis Z Behavior",
     ):
-        self._nae_eq = nae_eq
+        self._nae_eq = target
         self._order = order
         self._N = N
-
-        self._target_from_user = setdefault(bounds, target)
+        self._target_from_user = setdefault(bounds, None)
         super().__init__(
             things=eq,
-            target=target,
+            target=None,
             bounds=bounds,
             weight=weight,
             name=name,
@@ -3226,11 +3216,11 @@ class FixNearAxisZ(_FixedObjective):
             N=self._N,
         )
         for con in cons:
-            if con._target_arg == "Z_lmn":
+            if isinstance(con, FixSumModesZ):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.stack([con._A for con in cons if con._target_arg == "Z_lmn"])
+        self._A = np.stack([con._A for con in cons if isinstance(con, FixSumModesZ)])
         self._target = np.concatenate(
-            [con.target for con in cons if con._target_arg == "Z_lmn"]
+            [con.target for con in cons if isinstance(con, FixSumModesZ)]
         ).squeeze()
 
         self._dim_f = self.target.size
@@ -3266,7 +3256,7 @@ class FixNearAxisLambda(_FixedObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    nae_eq : Qsc, optonal
+    target : Qsc, optional
         pyQSC Qsc object describing the NAE solution to fix the equilibrium's
         near-axis behavior to. If None, will fix the equilibrium's current near
         axis behavior.
@@ -3275,9 +3265,6 @@ class FixNearAxisLambda(_FixedObjective):
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Unused for this objective as these will be
-        automatically set according to the ``nae_eq``
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -3307,7 +3294,6 @@ class FixNearAxisLambda(_FixedObjective):
     def __init__(
         self,
         eq,
-        nae_eq=None,
         order=1,
         N=None,
         target=None,
@@ -3317,13 +3303,13 @@ class FixNearAxisLambda(_FixedObjective):
         normalize_target=True,
         name="Fix Near Axis Lambda Behavior",
     ):
-        self._nae_eq = nae_eq
+        self._nae_eq = target
         self._order = order
         self._N = N
-        self._target_from_user = setdefault(bounds, target)
+        self._target_from_user = setdefault(bounds, None)
         super().__init__(
             things=eq,
-            target=target,
+            target=None,
             bounds=bounds,
             weight=weight,
             name=name,
@@ -3353,11 +3339,13 @@ class FixNearAxisLambda(_FixedObjective):
             fix_lambda=self._order,
         )
         for con in cons:
-            if con._target_arg == "L_lmn":
+            if isinstance(con, FixSumModesLambda):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.vstack([con._A for con in cons if con._target_arg == "L_lmn"])
+        self._A = np.vstack(
+            [con._A for con in cons if isinstance(con, FixSumModesLambda)]
+        )
         self._target = np.concatenate(
-            [con.target for con in cons if con._target_arg == "L_lmn"]
+            [con.target for con in cons if isinstance(con, FixSumModesLambda)]
         )
 
         self._dim_f = self.target.size

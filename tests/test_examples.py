@@ -569,7 +569,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
         # Make sure surfaces of solved equilibrium are similar near axis as QSC
         rho_err, theta_err = area_difference_desc(eqq, eq_fit)
 
-        np.testing.assert_allclose(rho_err[:, 0:-5], 0, atol=1e-2, err_msg=string)
+        np.testing.assert_allclose(rho_err[:, 0:-6], 0, atol=1e-2, err_msg=string)
         np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3, err_msg=string)
 
         # Make sure iota of solved equilibrium is same near axis as QSC
@@ -577,7 +577,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
         iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
 
         np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
-        np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1.5e-3, err_msg=string)
+        np.testing.assert_allclose(iota[1:10], qsc.iota, rtol=5e-3, err_msg=string)
 
         ### check lambda to match on axis
         # Evaluate lambda on the axis

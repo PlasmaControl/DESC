@@ -893,21 +893,19 @@ class Omnigenity(_Objective):
             iota = jnp.mean(eq_data["iota"])
             # see comment in desc.compute._omnigenity for the explanation of these
             # wheres
-            mat_01 = jnp.array(
+            mat_OP = jnp.array(
                 [[N, iota / jnp.where(N == 0, 1, N)], [0, 1 / jnp.where(N == 0, 1, N)]]
-            )  # OP
-            mat_10 = jnp.array(
-                [[0, -1], [M, -1 / jnp.where(iota == 0, 1.0, iota)]]
-            )  # OT
+            )
+            mat_OT = jnp.array([[0, -1], [M, -1 / jnp.where(iota == 0, 1.0, iota)]])
             den = jnp.where((N - M * iota) == 0, 1.0, (N - M * iota))
-            mat_11 = jnp.array([[N, M * iota / den], [M, M / den]])  # OH
+            mat_OH = jnp.array([[N, M * iota / den], [M, M / den]])
             matrix = jnp.where(
                 M == 0,
-                mat_01,  # OP
+                mat_OP,
                 jnp.where(
                     N == 0,
-                    mat_10,  # OT
-                    mat_11,  # OH
+                    mat_OT,
+                    mat_OH,
                 ),
             )
             booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))

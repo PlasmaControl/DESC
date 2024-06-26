@@ -94,7 +94,7 @@ class FourierRZCurve(Curve):
 
     @property
     def sym(self):
-        """Whether this curve has stellarator symmetry."""
+        """bool: Whether or not the curve is stellarator symmetric."""
         return self._sym
 
     @property
@@ -128,7 +128,7 @@ class FourierRZCurve(Curve):
             and (sym != self.sym)
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
-            self._sym = sym if sym is not None else self.sym
+            self._sym = bool(sym) if sym is not None else self.sym
             N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes

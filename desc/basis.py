@@ -1225,7 +1225,8 @@ class FiniteElementBasis(_FE_Basis):
 
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
-        # print(basis_functions, inds)
+        print(basis_functions[:, inds])
+        
         return basis_functions[:, inds]
 
     def change_resolution(self, L, M, N):
@@ -2484,53 +2485,7 @@ class FiniteElementMesh3D:
                                c='k', marker="x", s=100)
         plt.show()
 
-    def get_barycentric_coordinates(self, rho_theta_zeta, K):
-        """Gets the barycentric coordinates, given a mesh in rho, theta, zeta.
-
-        Parameters
-        ----------
-        rho_theta_zeta : 3D ndarray, shape (num_points, 3)
-            Set of points for which we want to find the tetrahedra that
-            they lie inside of in the mesh.
-        K : Order of the finite element
-
-
-        Returns
-        -------
-        coordinate_matrix: Matrix of volume coordinates for mesh
-        (rho_theta_zeta, Q)
-        """
-        # nodes should be (4,3)
-
-        tetrahedra_location = self.find_tetrahedra_corresponding_to_points(
-            rho_theta_zeta
-        )[0]
-
-        # Initialize coordinate matrix, shape (num_points,4)
-        coordinate_matrix = np.zeros(rho_theta_zeta[0], 4)
-        # Looping through points
-
-        for i in range(rho_theta_zeta.shape[0]):
-            # grab_tetrahedron corresponding to point
-            idx = tetrahedra_location[i]
-            tetrahedron_with_point = self.tetrahedra[idx]
-            nodes = tetrahedron_with_point
-            A = np.ones((4, 4))
-            for j in range(3):
-                for l in range(4):
-                    A[j][l] = nodes[l][j]
-
-            X_vec = np.array(
-                [
-                    [rho_theta_zeta[i][0]],
-                    [rho_theta_zeta[i][1]],
-                    [rho_theta_zeta[i][2]],
-                    [1],
-                ]
-            )
-            coordinate_matrix[i] = np.dot((np.linalg.inv(A)), X_vec)
-
-        return coordinate_matrix
+    
 
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
@@ -2725,7 +2680,8 @@ class FiniteElementMesh3D:
                         tetrahedron.get_basis_functions(P.reshape(1, 3))
                     )
 
-                    break  # found the right tetrahedron, so break out of j loop
+                    
+        
         return tetrahedra_indices, basis_functions
 
 
@@ -2879,41 +2835,7 @@ class FiniteElementMesh2D:
         self.nquad = self.integration_points.shape[0]
 
     #### Comment from Alan -- Don't think this function is ever used
-    def get_barycentric_coordinates(self, rho_theta, K=1):
-        """Gets the barycentric coordinates on rho_theta mesh.
-
-        Return the triangle basis functions,
-        evaluated at the 2D rho and theta mesh points.
-
-        Parameters
-        ----------
-        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
-        Coordinates of the original grid, lying inside this triangle.
-
-        Returns
-        -------
-        coordinate_matrix: (rho_theta, Q)
-        """
-        triangle_location = self.find_triangles_corresponding_to_points(rho_theta)[0]
-
-        # Initialize coordinate matrix, shape (num_points,3)
-        coordinate_matrix = np.zeros(rho_theta[0], 3)
-        # Looping through points
-
-        for i in range(rho_theta.shape[0]):
-            # grab triangle corresponding to point
-            idx = triangle_location[i]
-            triangle_with_point = self.triangle[idx]
-            nodes = triangle_with_point
-            A = np.ones((3, 3))
-            for j in range(2):
-                for l in range(3):
-                    A[j][l] = nodes[l][j]
-
-            X_vec = np.array([[rho_theta[i][0]], [rho_theta[i][1]], [1]])
-            coordinate_matrix[i] = np.dot((np.linalg.inv(A)), X_vec)
-
-        return coordinate_matrix
+   
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""
@@ -2975,7 +2897,7 @@ class FiniteElementMesh2D:
                             triangle.get_basis_functions(v.reshape(1, 2))
                         )
                         break  # found the right triangle, so break out of j loop
-
+                           
         # Some possible code to vectorize this function in future
         # v = rho_theta
         # v1 = self.vertices[0, :, :]  # shape (num_triangles, 2)
@@ -2994,39 +2916,105 @@ class FiniteElementMesh2D:
         # basis_functions, _ = (
         #         self.get_basis_functions(v)
         #     )
+        
+        print(basis_functions)
         return triangle_indices, basis_functions
+
 
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
 
         Returns
         -------
-        quadrature points: 2D ndarray, shape (nquad * 2ML, 2)
+        quadrature points: 2D ndarray, shape (nquad * I_LMN, 2)
             Points in (rho, theta) representing the quadrature point
             locations for integration, return in real-space coordinates.
 
         """
         nquad = self.nquad
-        quadrature_points = np.zeros((self.I_LMN * nquad, 2))
+        quadrature_points = np.zeros((nquad * self.I_LMN, 2))
+        integration_points = self.integration_points
         q = 0
         for triangle in self.triangles:
+            v = triangle.vertices
+
+            A = np.array(
+                [
+                    [v[2, 0] - v[0, 0], v[1, 0] - v[0, 0]],
+                    [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1]]
+                ]
+            )
+
+            q_p = integration_points
+
+            element = fem.ElementTriP1()
+
+            v_r = element.doflocs
+
+            # Transformation of quad_points to real-coordinates. q_p is a matrix
+            # with size (nquad,3)
+
+            qp_r = np.zeros((nquad, 2))
+
             for i in range(nquad):
-                A = np.array(
-                    [
-                        [triangle.b[0], triangle.c[0]],
-                        [triangle.b[1], triangle.c[1]],
-                        [
-                            triangle.b[0] + triangle.b[1] + triangle.b[2],
-                            triangle.c[0] + triangle.c[1] + triangle.c[2],
-                        ],
-                    ]
+                for j in range(2):
+                    qp_r[i, j] = (
+                        q_p[i, 0] * v_r[0, j]
+                        + q_p[i, 1] * v_r[1, j]
+                        + q_p[i, 2] * v_r[2, j]
+                    )
+
+            # qp_r is now a matrix of quadrature points, in real coordinates, with shape
+            # (nquad,2). We now transform these real-space quadrature points
+            # from the reference triangle to the triangle of interest:
+
+            # For a single triangle:
+            single_tri_quad = np.zeros((nquad, 2))
+            for i in range(nquad):
+                single_tri_quad[i, :] = np.transpose(
+                    np.dot(A, np.transpose(qp_r[i, :])) + np.transpose(v[0, :])
                 )
-                b = np.zeros(3)
-                b[:2] = triangle.area2 * self.integration_points[i, :2] - triangle.a[:2]
-                b[2] = triangle.area2 - triangle.a[0] - triangle.a[1] - triangle.a[2]
-                quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
-                q = q + 1
+            # Now have a matrix for single triangle
+
+            for j in range(nquad):
+
+                quadrature_points[q * nquad + j, :] = single_tri_quad[j, :]
+
+            q = q + 1
+
         return quadrature_points
+
+    # def return_quadrature_points(self):
+    #     """Get quadrature points for numerical integration over the mesh.
+
+    #     Returns
+    #     -------
+    #     quadrature points: 2D ndarray, shape (nquad * 2ML, 2)
+    #         Points in (rho, theta) representing the quadrature point
+    #         locations for integration, return in real-space coordinates.
+
+    #     """
+    #     nquad = self.nquad
+    #     quadrature_points = np.zeros((self.I_LMN * nquad, 2))
+    #     q = 0
+    #     for triangle in self.triangles:
+    #         for i in range(nquad):
+    #             A = np.array(
+    #                 [
+    #                     [triangle.b[0], triangle.c[0]],
+    #                     [triangle.b[1], triangle.c[1]],
+    #                     [
+    #                         triangle.b[0] + triangle.b[1] + triangle.b[2],
+    #                         triangle.c[0] + triangle.c[1] + triangle.c[2],
+    #                     ],
+    #                 ]
+    #             )
+    #             b = np.zeros(3)
+    #             b[:2] = triangle.area2 * self.integration_points[i, :2] - triangle.a[:2]
+    #             b[2] = triangle.area2 - triangle.a[0] - triangle.a[1] - triangle.a[2]
+    #             quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
+    #             q = q + 1
+    #     return quadrature_points
 
     def integrate(self, f):
         """Integrates a function over the 2D mesh in (rho, theta).
@@ -3624,6 +3612,17 @@ class TriangleFiniteElement:
         self.area2 = self.vertices[:, 0] @ self.b
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
+        
+        D = np.array(
+            [
+                [1, vertices[0, 0], vertices[0, 1]],
+                [1, vertices[1, 0], vertices[1, 1]],
+                [1, vertices[2, 0], vertices[2, 1]]
+            ]
+        )
+        
+
+        self.det = np.linalg.det(D)
 
         # Compute the edge lengths and then the angles in the triangle
         d1 = np.sqrt(
@@ -4073,58 +4072,149 @@ class TriangleFiniteElement:
     #     lp = numerator / denom
     #     return lp
 
+
     def get_barycentric_coordinates(self, rho_theta):
-        """
-        Gets the barycentric coordinates, given a mesh in rho, theta.
+         """Gets the barycentic coordinates, given a mesh in rho, theta
 
-        Parameters
-        ----------
-        rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
-            Coordinates of the original grid, lying inside this triangle.
+         Parameters
+         ----------
+         rho_theta = 2D ndarray, shape(nrho * ntheta, 2)
+             Coordinates of the origininal grid, lying inside this triangle.
 
-        Returns
-        -------
-        eta_u: 2D array, shape (nrho * ntheta, 3)
-            Barycentric coordinates defined by the triangle and evaluated
-            at the points (theta, zeta).
-        """
-        # Get the Barycentric coordinates
-        eta1 = (
-            self.a[0] * np.ones(len(rho_theta[:, 0]))
-            + self.b[0] * rho_theta[:, 0]
-            + self.c[0] * rho_theta[:, 1]
-        ) / self.area2
-        eta2 = (
-            self.a[1] * np.ones(len(rho_theta[:, 0]))
-            + self.b[1] * rho_theta[:, 0]
-            + self.c[1] * rho_theta[:, 1]
-        ) / self.area2
-        eta3 = (
-            self.a[2] * np.ones(len(rho_theta[:, 0]))
-            + self.b[2] * rho_theta[:, 0]
-            + self.c[2] * rho_theta[:, 1]
-        ) / self.area2
+         Returns
+         -------
+         eta_final = 3D array, shape (nrho * ntheta 3)
+             Barycentric coordinates defined by the triangle and evaluated at the
+             points (rho, theta)
+         """
+         eta = []
+         rho_theta_in_triangle = []
+         for i in range(rho_theta.shape[0]):
 
-        # zero out numerical errors or weird minus signs like -0
-        eta1[np.isclose(eta1, 0.0)] = 0.0
-        eta2[np.isclose(eta2, 0.0)] = 0.0
-        eta3[np.isclose(eta3, 0.0)] = 0.0
-        eta = np.array([eta1, eta2, eta3]).T
+             g_v = self.vertices
 
-        # Check that all the points are indeed inside the triangle
-        eta_final = []
-        rho_theta_in_triangle = []
-        for i in range(eta.shape[0]):
-            if eta1[i] < 0 or eta2[i] < 0 or eta3[i] < 0:
-                warnings.warn(
-                    "Found rho_theta points outside the triangle ... "
-                    "Not using these points to evaluate the barycentric "
-                    "coordinates."
-                )
-            else:
-                eta_final.append(eta[i, :])
-                rho_theta_in_triangle.append(rho_theta[i, :])
-        return np.array(eta_final), np.array(rho_theta_in_triangle)
+             D_1 = np.array(
+                 [
+                     [
+                         1,
+                         rho_theta[i][0],
+                         rho_theta[i][1]
+                     ],
+                     [1, g_v[1][0], g_v[1][1]],
+                     [1, g_v[2][0], g_v[2][1]],
+                 ]
+             )
+
+             D_2 = np.array(
+                 [
+                     [1, g_v[0][0], g_v[0][1]],
+                     [
+                         1,
+                         rho_theta[i][0],
+                         rho_theta[i][1]
+                     ],
+                     [1, g_v[2][0], g_v[2][1]]             ]
+             )
+
+             D_3 = np.array(
+                 [
+                     [1, g_v[0][0], g_v[0][1]],
+                     [1, g_v[1][0], g_v[1][1]],
+                     [
+                         1,
+                         rho_theta[i][0],
+                         rho_theta[i][1],
+                     ],
+                 ]
+             )
+
+          
+
+             d_1 = np.linalg.det(D_1)
+             d_2 = np.linalg.det(D_2)
+             d_3 = np.linalg.det(D_3)
+      
+
+             eta_1 = d_1 / self.det
+             eta_2 = d_2 / self.det
+             eta_3 = d_3 / self.det
+        
+             # print(i, eta_1, eta_2, eta_3, eta_4)
+
+             # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
+             # is not sufficient because sometimes numerical errors
+             # have eta_i ~ -1e-16 which breaks this
+             ind_1 = (eta_1 < 0) and (not np.isclose(eta_1, 0.0))
+             ind_2 = (eta_2 < 0) and (not np.isclose(eta_2, 0.0))
+             ind_3 = (eta_3 < 0) and (not np.isclose(eta_3, 0.0))
+             if ind_1 or ind_2 or ind_3:
+                 warnings.warn(
+                     "Found rho_theta points outside the triangle ... "
+                     "Not using these points to evaluate the barycentric "
+                     "coordinates."
+                 )
+             else:
+                 eta.append(eta_1)
+                 eta.append(eta_2)
+                 eta.append(eta_3)
+                 rho_theta_in_triangle.append(rho_theta[i, :])
+
+         return np.array(eta).reshape(-1, 3), np.array(
+             rho_theta_in_triangle
+         ).reshape(-1, 2)
+
+    # def get_barycentric_coordinates(self, rho_theta):
+    #     """
+    #     Gets the barycentric coordinates, given a mesh in rho, theta.
+
+    #     Parameters
+    #     ----------
+    #     rho_theta : 2D ndarray, shape (nrho * ntheta, 2)
+    #         Coordinates of the original grid, lying inside this triangle.
+
+    #     Returns
+    #     -------
+    #     eta_u: 2D array, shape (nrho * ntheta, 3)
+    #         Barycentric coordinates defined by the triangle and evaluated
+    #         at the points (theta, zeta).
+    #     """
+    #     # Get the Barycentric coordinates
+    #     eta1 = (
+    #         self.a[0] * np.ones(len(rho_theta[:, 0]))
+    #         + self.b[0] * rho_theta[:, 0]
+    #         + self.c[0] * rho_theta[:, 1]
+    #     ) / self.area2
+    #     eta2 = (
+    #         self.a[1] * np.ones(len(rho_theta[:, 0]))
+    #         + self.b[1] * rho_theta[:, 0]
+    #         + self.c[1] * rho_theta[:, 1]
+    #     ) / self.area2
+    #     eta3 = (
+    #         self.a[2] * np.ones(len(rho_theta[:, 0]))
+    #         + self.b[2] * rho_theta[:, 0]
+    #         + self.c[2] * rho_theta[:, 1]
+    #     ) / self.area2
+
+    #     # zero out numerical errors or weird minus signs like -0
+    #     eta1[np.isclose(eta1, 0.0)] = 0.0
+    #     eta2[np.isclose(eta2, 0.0)] = 0.0
+    #     eta3[np.isclose(eta3, 0.0)] = 0.0
+    #     eta = np.array([eta1, eta2, eta3]).T
+
+    #     # Check that all the points are indeed inside the triangle
+    #     eta_final = []
+    #     rho_theta_in_triangle = []
+    #     for i in range(eta.shape[0]):
+    #         if eta1[i] < 0 or eta2[i] < 0 or eta3[i] < 0:
+    #             warnings.warn(
+    #                 "Found rho_theta points outside the triangle ... "
+    #                 "Not using these points to evaluate the barycentric "
+    #                 "coordinates."
+    #             )
+    #         else:
+    #             eta_final.append(eta[i, :])
+    #             rho_theta_in_triangle.append(rho_theta[i, :])
+    #     return np.array(eta_final), np.array(rho_theta_in_triangle)
 
     def plot_triangle(self):
         """
@@ -4138,7 +4228,7 @@ class TriangleFiniteElement:
             Flag to indicate whether or not the quadrature points for
             integration should also be plotted on the mesh.
         """
-        # Define uniform grid in (theta, zeta)
+        # Define uniform grid in (rho, theta)
         rho = np.linspace(
             np.min(self.vertices[:, 0]), np.max(self.vertices[:, 0]), endpoint=True
         )

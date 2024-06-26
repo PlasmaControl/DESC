@@ -379,32 +379,38 @@ def test_backward_compatible_load_and_resolve():
 @pytest.mark.unit
 def test_contract_equilibrium():
     """Test contract_equilibrium utility function."""
-    eq = get("HELIOTRON")
+    eq = get("ESTELL")
     rho = 0.5
     eq_half_rho = contract_equilibrium(eq, rho)
-    np.testing.assert_allclose(eq_half_rho.iota(1), eq.iota(rho), err_msg="iota")
-    np.testing.assert_allclose(
-        eq_half_rho.pressure(1), eq.pressure(rho), err_msg="pressure"
-    )
 
+    # ensure the new surface is the same as the desired inner surface
     surf_inner = eq.get_surface_at(rho)
     np.testing.assert_allclose(surf_inner.R_lmn, eq_half_rho.surface.R_lmn, err_msg="R")
     np.testing.assert_allclose(surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn, err_msg="Z")
     np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP, err_msg="NFP")
 
-    # test |B| and |F|
-    data_keys = ["|B|", "|F|", "R", "Z", "lambda"]
+    # test geometry, profiles, |B| and |F| match btwn orig eq and new contracted eq
+    data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "current"]
     contract_grid = LinearGrid(
-        rho=np.linspace(0, 1.0, eq.L), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        rho=np.linspace(0, 1.0, eq.L),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
     )
     grid = LinearGrid(
-        rho=np.linspace(0, rho, eq.L), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        rho=np.linspace(0, rho, eq.L),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
     )
     contract_data = eq_half_rho.compute(data_keys, grid=contract_grid)
     data = eq.compute(data_keys, grid=grid)
     for key in data_keys:
         if key != "|F|":
-            np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
+            # FIXME: remove atol once PR fixing current calc is merged
+            np.testing.assert_allclose(
+                contract_data[key], data[key], err_msg=key, atol=1e-10, rtol=1e-10
+            )
     np.testing.assert_allclose(
         contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
     )

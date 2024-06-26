@@ -222,7 +222,7 @@ def scale_profile(profile, inner_rho):
     return new_profile
 
 
-def contract_equilibrium(eq, inner_rho, copy=False):
+def contract_equilibrium(eq, inner_rho, copy=True):
     """Create a new equilibrium by using an inner surface of the passed-in equilibrium.
 
     Parameters

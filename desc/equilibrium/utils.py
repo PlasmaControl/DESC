@@ -11,7 +11,9 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.profiles import PowerSeriesProfile, _Profile
+from desc.grid import LinearGrid
+from desc.profiles import PowerSeriesProfile, SplineProfile, _Profile
+from desc.utils import errorif
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -181,3 +183,135 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis
+
+
+def scale_profile(profile, inner_rho):
+    """Return a new profile whose rho=1 val is value of the old profile at inner_rho.
+
+    Parameters
+    ----------
+        profile : Profile
+            Profile to scale
+        inner_rho: float
+            rho to take as the new LCFS rho for the new profile
+    Returns
+    -------
+        new_profile : Profile
+            new profile whose last value is the inner_rho value of
+        the original profile
+    """
+    if isinstance(profile, PowerSeriesProfile):
+        params_list = []
+        modes_list = []
+        for coeff, mode in zip(profile.params, profile.basis.modes):
+            l = mode[0]
+            params_list.append(coeff * inner_rho**l)
+            modes_list.append(l)
+        new_profile = PowerSeriesProfile(params=params_list, modes=modes_list)
+    elif isinstance(profile, SplineProfile):
+        n_knots = profile.params.size
+        new_knots = np.linspace(0, 1, n_knots, endpoint=True)
+        new_vals = profile(np.linspace(0, inner_rho, n_knots, endpoint=True))
+        new_profile = SplineProfile(
+            values=new_vals, knots=new_knots, method=profile._method
+        )
+    else:
+        raise NotImplementedError(
+            f"Expected PowerSeriesProfile or SplineProfile, got {type(profile)}"
+        )
+    return new_profile
+
+
+def contract_equilibrium(eq, inner_rho, copy=True):
+    """Create a new equilibrium by using an inner surface of the passed-in equilibrium.
+
+    Parameters
+    ----------
+        eq : Equilibrium
+            Equilibrium to contract.
+        inner_rho: float
+            rho value (<1) to contract the Equilibrium to
+        copy : bool
+            whether or not to return a copy or to modify the original equilibrium.
+
+    Returns
+    -------
+        eq_inner: New Equilibrium object, contracted from the old one such that
+            eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and
+            eq_inner LCFS = eq's rho=inner_rho surface.
+            Note that this will not be in force balance, and so must be re-solved.
+    """
+    errorif(
+        not (inner_rho < 1 and inner_rho > 0),
+        ValueError,
+        f"inner_rho should positive and <1, instead got {inner_rho}",
+    )
+
+    # create new profiles for contracted equilibrium
+    errorif(
+        eq.anisotropy,
+        NotImplementedError,
+        "Contract function not implemented for equilibria with pressure anisotropy",
+    )
+    # pressure
+    if eq.pressure is not None:
+        pressure = scale_profile(eq.pressure, inner_rho)
+        edensity = None
+        etemperature = None
+        itemperature = None
+        Zeff = None
+    else:
+        edensity = scale_profile(eq.electron_density, inner_rho)
+        etemperature = scale_profile(eq.electron_temperature, inner_rho)
+        itemperature = scale_profile(eq.iontemperature, inner_rho)
+        Zeff = scale_profile(eq.atomic_number, inner_rho)
+
+    current = None
+    iota = None
+    if eq.iota is not None:
+        iota = scale_profile(eq.iota, inner_rho)
+    else:
+        current = scale_profile(eq.current, inner_rho)
+
+    surf_inner = eq.get_surface_at(rho=inner_rho)
+    surf_inner.rho = 1.0
+    from .equilibrium import Equilibrium
+
+    eq_inner = Equilibrium(
+        surface=surf_inner,
+        pressure=pressure,
+        iota=iota,
+        current=current,
+        electron_density=edensity,
+        electron_temperature=etemperature,
+        ion_temperature=itemperature,
+        atomic_number=Zeff,
+        Psi=float(
+            eq.compute("Psi", grid=LinearGrid(rho=inner_rho, NFP=eq.NFP))["Psi"][0]
+        ),  # flux (in Webers) within the last closed flux surface
+        NFP=eq.NFP,
+        L=eq.L,
+        M=eq.M,
+        N=eq.N,
+        L_grid=eq.L_grid,
+        M_grid=eq.M_grid,
+        N_grid=eq.N_grid,
+        sym=eq.sym,
+    )
+    inner_grid = LinearGrid(
+        rho=np.linspace(0, inner_rho, eq.L_grid * 2),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        axis=True,
+    )
+    inner_data = eq.compute(["R", "Z", "lambda"], grid=inner_grid)
+    nodes = inner_grid.nodes
+    nodes[:, 0] = nodes[:, 0] / inner_rho
+    eq_inner.set_initial_guess(
+        nodes, inner_data["R"], inner_data["Z"], inner_data["lambda"]
+    )
+    if not copy:  # overwrite the original eq
+        eq = eq_inner
+        return eq
+    return eq_inner

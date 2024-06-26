@@ -393,7 +393,7 @@ def test_contract_equilibrium():
     np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP, err_msg="NFP")
 
     # test |B| and |F|
-    data_keys = ["|B|", "|F|"]
+    data_keys = ["|B|", "|F|", "R", "Z", "lambda"]
     contract_grid = LinearGrid(
         rho=np.linspace(0, 1.0, eq.L_grid), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
     )
@@ -402,7 +402,9 @@ def test_contract_equilibrium():
     )
     contract_data = eq_half_rho.compute(data_keys, grid=contract_grid)
     data = eq.compute(data_keys, grid=grid)
-    np.testing.assert_allclose(contract_data["|B|"], data["|B|"], err_msg="|B|")
+    for key in data_keys:
+        if key != "|F|":
+            np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
     np.testing.assert_allclose(
         contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
     )

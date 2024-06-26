@@ -869,7 +869,8 @@ class TestObjectiveFunction:
 
         # test non-axisymmetric surface
         eq = desc.examples.get("precise_QA", "all")[0]
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         eval_grid = LinearGrid(
             rho=np.array([1.0]),
             M=eq.M_grid,
@@ -1896,7 +1897,8 @@ class TestComputeScalarResolution:
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
         eq = get("precise_QA")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
 
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
@@ -2198,7 +2200,8 @@ class TestObjectiveNaNGrad:
         ext_field = ToroidalMagneticField(1, 1)
 
         eq = get("precise_QA")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
 
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()

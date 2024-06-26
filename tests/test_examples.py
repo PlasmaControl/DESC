@@ -143,7 +143,8 @@ def test_solve_bounds():
     """Tests optimizing with bounds=(lower bound, upper bound)."""
     # decrease resolution and double pressure so no longer in force balance
     eq = get("DSHAPE")
-    eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
     eq.p_l *= 2
 
     # target force balance residuals with |F| <= 1e3 N

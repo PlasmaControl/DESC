@@ -395,10 +395,10 @@ def test_contract_equilibrium():
     # test |B| and |F|
     data_keys = ["|B|", "|F|", "R", "Z", "lambda"]
     contract_grid = LinearGrid(
-        rho=np.linspace(0, 1.0, eq.L_grid), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        rho=np.linspace(0, 1.0, eq.L), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
     )
     grid = LinearGrid(
-        rho=np.linspace(0, rho, eq.L_grid), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        rho=np.linspace(0, rho, eq.L), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
     )
     contract_data = eq_half_rho.compute(data_keys, grid=contract_grid)
     data = eq.compute(data_keys, grid=grid)

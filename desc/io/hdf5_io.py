@@ -332,7 +332,7 @@ class hdf5Writer(hdf5IO, Writer):
                 group = loc.create_group(attr)
                 self.write_list(data, where=group)
             else:
-                from .equilibrium_io import IOAble
+                from .optimizable_io import IOAble
 
                 if isinstance(data, IOAble):
                     group = loc.create_group(attr)

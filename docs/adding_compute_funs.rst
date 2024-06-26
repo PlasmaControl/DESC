@@ -97,11 +97,18 @@ metadata about the quantity. The necessary fields are detailed below:
   are specified in ``axis_limit_data``. The dependencies specified in this list are
   marked to be computed only when there is a node at the magnetic axis.
 * ``parameterization``: what sorts of DESC objects is this function for. Most functions
-  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.Curve``,
-  or specific types eg ``desc.geometry.FourierRZCurve``.
+  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.core.Curve``,
+  or specific types eg ``desc.geometry.curve.FourierRZCurve``. If a quantity is computed differently
+  for a subclass versus a superclass, then one may define a compute function for the superclass
+  (e.g. for ``desc.geometry.Curve``) which will be used for that class and any of its subclasses,
+  and then if a specific subclass requires a different method, one may define a second compute function for
+  the same quantity, with a parameterization for that subclass (e.g. ``desc.geometry.curve.SplineXYZCurve``).
+  See the compute definitions for the ``length`` quantity in ``compute/_curve.py`` for an example of this,
+  which is similar to the inheritance structure of Python classes.
 * ``kwargs``: If the compute function requires any additional arguments they should
-  be specified like ``kwarg="thing"`` where the value is the name of the keyword argument
-  that will be passed to the compute function. Most quantities do not take kwargs.
+  be specified like ``kwarg="description"`` where ``kwarg`` is replaced by the actual
+  keyword argument, and ``"description"`` is a string describing what it is.
+  Most quantities do not take kwargs.
 
 
 The function itself should have a signature of the form
@@ -119,7 +126,7 @@ return it. The key in the ``data`` dictionary should match the ``name`` of the q
 
 Once a new quantity is added to the ``desc.compute`` module, there are two final steps involving the testing suite which must be checked.
 The first step is implementing the correct axis limit, or marking it as not finite or not implemented.
-We can check whether the axis limit currently evalutates as finite by computing the quantity on a grid with nodes at the axis.
+We can check whether the axis limit currently evaluates as finite by computing the quantity on a grid with nodes at the axis.
 ::
 
     from desc.examples import get

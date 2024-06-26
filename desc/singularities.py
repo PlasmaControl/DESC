@@ -299,7 +299,7 @@ class DFTInterpolator(_BIESTInterpolator):
             M=source_grid.M, N=source_grid.N, NFP=source_grid.NFP
         )
         A = basis.evaluate(source_grid.nodes)
-        Ainv = jnp.linalg.pinv(A, rcond=None)
+        Ainv = jnp.linalg.pinv(A)
 
         B = jnp.zeros((*theta_q.shape, basis.num_modes))
 
@@ -834,16 +834,7 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
             sym=False,
         )
 
-    data_keys = [
-        "K_vc",
-        "B",
-        "R",
-        "phi",
-        "Z",
-        "e^rho",
-        "n_rho",
-        "|e_theta x e_zeta|",
-    ]
+    data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
     eval_data = eq.compute(data_keys, grid=eval_grid)
     source_data = eq.compute(data_keys, grid=source_grid)
 
@@ -860,13 +851,9 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
         interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
     if hasattr(eq.surface, "Phi_mn"):
         source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
-    Bplasma = virtual_casing_biot_savart(
-        eval_data,
-        source_data,
-        interpolator,
-    )
+    Bplasma = virtual_casing_biot_savart(eval_data, source_data, interpolator)
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma = Bplasma + eval_data["B"] / 2
     if normal_only:
-        Bplasma = jnp.sum(Bplasma * source_data["n_rho"], axis=1)
+        Bplasma = jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
     return Bplasma

@@ -177,7 +177,7 @@ Objective Functions
     desc.objectives.FixOmniBmax
     desc.objectives.FixOmniMap
     desc.objectives.FixOmniWell
-    desc.objectives.FixParameter
+    desc.objectives.FixParameters
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR
@@ -258,7 +258,6 @@ Plotting
     desc.plotting.plot_coefficients
     desc.plotting.plot_coils
     desc.plotting.plot_comparison
-    desc.plotting.plot_field_lines_sfl
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
@@ -275,6 +274,7 @@ Profiles
     :template: class.rst
 
     desc.profiles.PowerSeriesProfile
+    desc.profiles.TwoPowerProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
     desc.profiles.ScaledProfile

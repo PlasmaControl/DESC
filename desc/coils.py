@@ -6,7 +6,16 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import fori_loop, jit, jnp, scan, tree_stack, tree_unstack, vmap
+from desc.backend import (
+    fori_loop,
+    jit,
+    jnp,
+    scan,
+    tree_leaves,
+    tree_stack,
+    tree_unstack,
+    vmap,
+)
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.geometry import (
@@ -146,6 +155,30 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
+
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        x = self.compute("x", grid=grid, params=params, **kwargs)["x"]
+        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
+        basis = kwargs.pop("basis", "xyz")
+        if basis.lower() == "rpz":
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -458,17 +491,19 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     Parameters
     ----------
     current : float
-        current through the coil, in Amperes
+        Current through the coil, in Amperes.
     center : array-like, shape(3,)
-        x,y,z coordinates of center of coil
+        Coordinates of center of curve, in system determined by basis.
     normal : array-like, shape(3,)
-        x,y,z components of normal vector to planar surface
+        Components of normal vector to planar surface, in system determined by basis.
     r_n : array-like
-        fourier coefficients for radius from center as function of polar angle
+        Fourier coefficients for radius from center as function of polar angle
     modes : array-like
         mode numbers associated with r_n
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        name for this coil
+        Name for this coil.
 
     Examples
     --------
@@ -514,9 +549,10 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         normal=[0, 1, 0],
         r_n=2,
         modes=None,
+        basis="xyz",
         name="",
     ):
-        super().__init__(current, center, normal, r_n, modes, name)
+        super().__init__(current, center, normal, r_n, modes, basis, name)
 
 
 class SplineXYZCoil(_Coil, SplineXYZCurve):
@@ -738,20 +774,21 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     """
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
+    _io_attrs_.remove("_current")
 
     def __init__(self, *coils, NFP=1, sym=False, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
-        self._NFP = NFP
-        self._sym = sym
+        self._NFP = int(NFP)
+        self._sym = bool(sym)
         self._name = str(name)
 
     @property
     def name(self):
         """str: Name of the curve."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
@@ -761,6 +798,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def coils(self):
         """list: coils in the coilset."""
         return self._coils
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return len(self) * (int(self.sym) + 1) * self.NFP
 
     @property
     def NFP(self):
@@ -833,13 +875,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(names, coil) for coil in self]
         if data is None:
             data = [{}] * len(self)
+
         # if user supplied initial data for each coil we also need to vmap over that.
         data = vmap(
             lambda d, x: self[0].compute(
                 names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
             )
         )(tree_stack(data), tree_stack(params))
-
         return tree_unstack(data)
 
     def translate(self, *args, **kwargs):
@@ -853,6 +895,64 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def flip(self, *args, **kwargs):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
+
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        if params is None:
+            params = [get_params("x", coil) for coil in self]
+        basis = kwargs.pop("basis", "xyz")
+        data = self.compute("x", grid=grid, params=params, basis=basis, **kwargs)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+        if basis.lower() == "rpz":
+            xyz = rpz2xyz(x)
+        else:
+            xyz = x
+
+        # if stellarator symmetric, add reflected coils from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
+
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        rpz = xyz2rpz(xyz)
+
+        # if field period symmetry, add rotated coils from other field periods
+        if self.NFP > 1:
+            rpz0 = rpz
+            for k in range(1, self.NFP):
+                rpz = jnp.vstack(
+                    (rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0]))
+                )
+
+        # ensure phi in [0, 2pi)
+        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
+
+        if basis.lower() == "xyz":
+            x = rpz2xyz(rpz)
+        else:
+            x = rpz
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -1076,6 +1176,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
+        If the MAKEGRID contains more than one coil group (denoted by the number listed
+        after the current on the last line defining a given coil), this function will
+        attempt to return only a single CoilSet of all of the coils in the file.
+
         Parameters
         ----------
         coil_file : str or path-like
@@ -1096,9 +1200,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
               both endpoints
 
         """
-        coils = []  # list of SplineXYZCoils
-        coilinds = [2]  # always start at the 3rd line after periods
-        names = []
+        coils = []  # list of SplineXYZCoils, ignoring coil groups
+        coilinds = [2]  # List of line indices where coils are at in the file.
+        # always start at the 3rd line after periods
+        coilnames = []  # the coilgroup each coil belongs to
+        # corresponds to each coil in the coilinds list
 
         # read in the coils file
         headind = -1
@@ -1108,6 +1214,31 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 if line.find("periods") != -1:
                     headind = i  # skip anything that is above the periods line
                     coilinds[0] += headind
+                    if len(lines[3 + headind].split()) != 4:
+                        raise OSError(
+                            "4th line in file must be the start of the first coil! "
+                            + "Expected a line of length 4 (after .split()), "
+                            + f"instead got length {lines[3+headind].split()}"
+                        )
+                    header_lines_not_as_expected = np.array(
+                        [
+                            len(lines[0 + headind].split()) != 2,
+                            len(lines[1 + headind].split()) != 2,
+                            len(lines[2 + headind].split()) != 2,
+                        ]
+                    )
+                    if np.any(header_lines_not_as_expected):
+                        wronglines = lines[
+                            np.where(header_lines_not_as_expected)[0] + headind
+                        ]
+                        raise OSError(
+                            "First 3 lines in file starting with the periods line "
+                            + "must be the header lines,"
+                            + " each of length 2 (after .split())! "
+                            + f"Line(s) {wronglines}"
+                            + " are not length 2"
+                        )
+
                     continue
                 if (
                     line.find("begin filament") != -1
@@ -1123,30 +1254,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     and headind != -1
                 ):
                     coilinds.append(i)
-                    names.append(" ".join(line.split()[4:]))
-        if len(lines[3 + headind].split()) != 4:
-            raise OSError(
-                "4th line in file must be the start of the first coil! "
-                + "Expected a line of length 4 (after .split()), "
-                + f"instead got length {lines[3].split()}"
-            )
-        header_lines_not_as_expected = np.array(
-            [
-                len(lines[0 + headind].split()) != 2,
-                len(lines[1 + headind].split()) != 2,
-                len(lines[2 + headind].split()) != 2,
-            ]
-        )
-        if np.any(header_lines_not_as_expected):
-            raise OSError(
-                "First 3 lines in file starting with the periods line "
-                + "must be the header lines,"
-                + " each of length 2 (after .split())! "
-                + f"Line(s) {lines[np.where(header_lines_not_as_expected)[0]+headind]}"
-                + " are not length 2"
-            )
+                    groupname = " ".join(line.split()[4:])
+                    coilnames.append(groupname)
 
-        for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
+        for i, (start, end, coilname) in enumerate(
+            zip(coilinds[0:-1], coilinds[1:], coilnames)
+        ):
             coords = np.genfromtxt(lines[start + 1 : end])
             coils.append(
                 SplineXYZCoil(
@@ -1155,11 +1268,22 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     coords[:, 1],
                     coords[:, 2],
                     method=method,
-                    name=names[i],
+                    name=coilname,
                 )
             )
 
-        return cls(*coils)
+        try:
+            return cls(*coils)
+        except ValueError as e:  # can't load as a CoilSet if any of the coils have
+            # different length of knots, tell user to load as MixedCoilSet instead
+            errorif(
+                True,
+                ValueError,
+                "Unable to create CoilSet with the coils in the file,"
+                f" got error {e}."
+                "Likely the issue is differing numbers of knots for the coils,"
+                "try using a MixedCoilSet instead of a CoilSet.",
+            )
 
     def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.
@@ -1224,8 +1348,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # at the end of each individual coil
         if hasattr(grid, "endpoint"):
             endpoint = grid.endpoint
-        elif isinstance(grid, numbers.Integral):
-            endpoint = False  # if int, will create a grid w/ endpoint=False in compute
+        elif isinstance(grid, numbers.Integral) or grid is None:
+            # if int or None, will create a grid w/ endpoint=False in compute
+            endpoint = False
         for i in range(int(len(coils))):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]
@@ -1301,7 +1426,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
         """Convert all coils to SplineXYZCoil.
@@ -1336,7 +1461,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
@@ -1391,6 +1516,8 @@ class MixedCoilSet(CoilSet):
 
     """
 
+    _io_attrs_ = CoilSet._io_attrs_
+
     def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
@@ -1398,6 +1525,11 @@ class MixedCoilSet(CoilSet):
         self._NFP = 1
         self._sym = False
         self._name = str(name)
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return sum([c.num_coils if hasattr(c, "num_coils") else 1 for c in self])
 
     def compute(
         self,
@@ -1449,6 +1581,40 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int or array-like, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+            If array-like, should be 1 value per coil.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        errorif(
+            grid is None,
+            ValueError,
+            "grid must be supplied to MixedCoilSet._compute_position, since the "
+            + "default grid for each coil could have a different number of nodes.",
+        )
+        params = self._make_arraylike(params)
+        grid = self._make_arraylike(grid)
+        x = jnp.vstack(
+            [
+                coil._compute_position(par, grd, **kwargs)
+                for coil, par, grd in zip(self.coils, params, grid)
+            ]
+        )
+        return x
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
     ):
@@ -1483,6 +1649,66 @@ class MixedCoilSet(CoilSet):
 
         return B
 
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+        """Convert all coils to FourierXYZCoil representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
+            normalized arclength
+        name : str
+            name for the new CoilSet
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for X,Y,Z.
+
+        """
+        coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
+        return self.__class__(*coils, name=name)
+
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+        """Convert all coils to SplineXYZCoil.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for the new CoilSet
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a spline for X,Y,Z.
+
+        """
+        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        return self.__class__(*coils, name=name)
+
     def __add__(self, other):
         if isinstance(other, (CoilSet, MixedCoilSet)):
             return MixedCoilSet(*self.coils, *other.coils)
@@ -1501,3 +1727,152 @@ class MixedCoilSet(CoilSet):
         if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
         self._coils.insert(i, new_item)
+
+    @classmethod
+    def from_makegrid_coilfile(  # noqa: C901 - FIXME: simplify this
+        cls, coil_file, method="cubic", ignore_groups=False
+    ):
+        """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.
+
+        If ignore_groups=False and the MAKEGRID contains more than one coil group
+        (denoted by the number listed after the current on the last line defining a
+        given coil), this function will try to return a MixedCoilSet of CoilSets, with
+        each sub CoilSet pertaining to the different coil groups. If the coils in a
+        group have differing numbers of knots, then it will return MixedCoilSets
+        instead. The name of the sub (Mixed)CoilSet will be the number and the name
+        of the group listed in the MAKEGRID file.
+
+        Parameters
+        ----------
+        coil_file : str or path-like
+            path to coil file in txt format
+        method : str
+            method of interpolation
+
+            - ``'nearest'``: nearest neighbor interpolation
+            - ``'linear'``: linear interpolation
+            - ``'cubic'``: C1 cubic splines (aka local splines)
+            - ``'cubic2'``: C2 cubic splines (aka natural splines)
+            - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+            - ``'cardinal'``: C1 cubic general tension splines. If used, default tension
+              of c = 0 will be used
+            - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in
+              the data, and will not introduce new extrema in the interpolated points
+            - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
+              both endpoints
+        ignore_groups : bool
+            If False, return the coils in a nested MixedCoilSet, with a sub coilset per
+            single coilgroup. If there is only a single group, however, this will not
+            return a nested coilset, but just a single coilset for that group. if True,
+            return the coils as just a single MixedCoilSet.
+
+        """
+        coils = {}  # dict of list of SplineXYZCoils, one list per coilgroup
+        coilinds = [2]  # List of line indices where coils are at in the file.
+        # always start at the 3rd line after periods
+        coilnames = []  # the coilgroup each coil belongs to
+        # corresponds to each coil in the coilinds list
+        groupnames = []  # this is the groupind + the name of the first coil in
+        # the group
+        groupinds = []  # the coilgroup ind each coil belongs to
+        # corresponds to each coil in the coilinds list
+        # (sometimes, coils in the same group could have different names,
+        # so this separately tracks just the number of the group)
+
+        # read in the coils file
+        headind = -1
+        with open(coil_file) as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.find("periods") != -1:
+                    headind = i  # skip anything that is above the periods line
+                    coilinds[0] += headind
+                    if len(lines[3 + headind].split()) != 4:
+                        raise OSError(
+                            "4th line in file must be the start of the first coil! "
+                            + "Expected a line of length 4 (after .split()), "
+                            + f"instead got length {lines[3+headind].split()}"
+                        )
+                    header_lines_not_as_expected = np.array(
+                        [
+                            len(lines[0 + headind].split()) != 2,
+                            len(lines[1 + headind].split()) != 2,
+                            len(lines[2 + headind].split()) != 2,
+                        ]
+                    )
+                    if np.any(header_lines_not_as_expected):
+                        wronglines = lines[
+                            np.where(header_lines_not_as_expected)[0] + headind
+                        ]
+                        raise OSError(
+                            "First 3 lines in file starting with the periods line "
+                            + "must be the header lines,"
+                            + " each of length 2 (after .split())! "
+                            + f"Line(s) {wronglines}"
+                            + " are not length 2"
+                        )
+
+                    continue
+                if (
+                    line.find("begin filament") != -1
+                    or line.find("end") != -1
+                    or line.find("mirror") != -1
+                ):
+                    continue  # skip headers and last line
+                if (
+                    len(line.split()) != 4  # find the line immediately before a coil,
+                    # where the line length is greater than 4
+                    and line.strip()  # ensure not counting blank lines
+                    # if we have not found the header yet, skip the line
+                    and headind != -1
+                ):
+                    coilinds.append(i)
+                    groupname = " ".join(line.split()[4:])
+                    groupind = int(groupname.split()[0].strip())
+                    if groupind not in coils.keys():
+                        coils[groupind] = []
+                        groupnames.append(groupname)
+                    coilnames.append(groupname)
+                    groupinds.append(groupind)
+
+        for i, (start, end, groupind, coilname) in enumerate(
+            zip(coilinds[0:-1], coilinds[1:], groupinds, coilnames)
+        ):
+            coords = np.genfromtxt(lines[start + 1 : end])
+            coils[groupind].append(
+                SplineXYZCoil(
+                    coords[:, -1][0],
+                    coords[:, 0],
+                    coords[:, 1],
+                    coords[:, 2],
+                    method=method,
+                    name=coilname,
+                )
+            )
+
+        def flatten_coils(coilset):
+            # helper function for flattening coilset
+            if hasattr(coilset, "__len__"):
+                return [a for i in coilset for a in flatten_coils(i)]
+            else:
+                return [coilset]
+
+        # if it is a single group, then only return one coilset, not a
+        # nested coilset
+        groupinds = list(coils.keys())
+        if len(groupinds) == 1:
+            return cls(*coils[groupinds[0]], name=groupnames[0])
+
+        # if not, possibly return a nested coilset, containing one coilset per coilgroup
+        coilsets = []  # list of coilsets, so we can attempt to use CoilSet for each one
+        for groupname, groupind in zip(groupnames, groupinds):
+            try:
+                # try making the coilgroup use a CoilSet
+                coilsets.append(CoilSet(*coils[groupind], name=groupname))
+            except ValueError:  # can't load as a CoilSet if any of the coils have
+                # different length of knots, so load as MixedCoilSet instead
+                coilsets.append(cls(*coils[groupind], name=groupname))
+        cset = cls(*coilsets)
+        if ignore_groups:
+            cset = cls(*flatten_coils(cset))
+        return cset

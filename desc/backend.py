@@ -84,6 +84,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         tree_map,
         tree_structure,
         tree_unflatten,
+        treedef_is_leaf,
     )
 
     def put(arr, inds, vals):
@@ -410,6 +411,10 @@ else:  # pragma: no cover
 
     def tree_leaves(*args, **kwargs):
         """Get leaves of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def treedef_is_leaf(*args, **kwargs):
+        """Check is leaf of pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

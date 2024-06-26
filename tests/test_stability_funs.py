@@ -212,7 +212,6 @@ def test_compute_d_geodesic():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 def test_compute_d_mercier():
     """Test calculation of D_Mercier stability criterion against VMEC."""
 
@@ -249,7 +248,6 @@ def test_compute_d_mercier():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 def test_compute_magnetic_well():
     """Test that D_well and magnetic_well match signs under finite pressure."""
 

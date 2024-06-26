@@ -909,8 +909,8 @@ class Omnigenity(_Objective):
                 ),
             )
             booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
-            field_data["theta_B"] = booz[0, :]
-            field_data["zeta_B"] = booz[1, :]
+            theta_B = booz[0, :]
+            zeta_B = booz[1, :]
         else:
             field_data = compute_fun(
                 "desc.magnetic_fields._core.OmnigenousField",
@@ -921,13 +921,15 @@ class Omnigenity(_Objective):
                 helicity=constants["helicity"],
                 iota=jnp.mean(eq_data["iota"]),
             )
+            theta_B = field_data["theta_B"]
+            zeta_B = field_data["zeta_B"]
 
         # additional computations that cannot be part of the regular compute API
         nodes = jnp.vstack(
             (
-                jnp.zeros_like(field_data["theta_B"]),
-                field_data["theta_B"],
-                field_data["zeta_B"],
+                jnp.zeros_like(theta_B),
+                theta_B,
+                zeta_B,
             )
         ).T
         B_eta_alpha = jnp.matmul(

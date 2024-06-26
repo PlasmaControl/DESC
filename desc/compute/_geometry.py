@@ -196,6 +196,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
             transforms["grid"],
             data["Z"] * n[:, 2] * jnp.sqrt(data["g_tt"]),
             line_label="theta",
+            # This will only work if the grid has rho=1 surface.
             fix_surface=("rho", 1.0),
             expand_out=True,
         )

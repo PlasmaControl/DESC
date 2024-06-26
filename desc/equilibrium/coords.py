@@ -40,8 +40,7 @@ def map_coordinates(  # noqa: C901
     eq : Equilibrium
         Equilibrium to use
     coords : ndarray, shape(k,3)
-        2D array of input coordinates. Each row is a different
-        point in space.
+        2D array of input coordinates. Each row is a different point in space.
     inbasis, outbasis : tuple of str
         Labels for input and output coordinates, eg ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
@@ -308,7 +307,7 @@ def compute_theta_coords(
     )
     theta_DESC, (res, niter) = vecroot(theta_star, theta_star, rho, zeta)
 
-    nodes = jnp.array([rho, theta_DESC.squeeze(), zeta]).T
+    nodes = jnp.array([rho, jnp.atleast_1d(theta_DESC.squeeze()), zeta]).T
 
     out = nodes
     if full_output:
@@ -507,3 +506,65 @@ def to_sfl(
     eq_sfl.L_lmn = L_lmn_sfl
 
     return eq_sfl
+
+
+def rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
+    """Return DESC coordinate grid from given coordinates.
+
+    Create a meshgrid from the given coordinates, and return the
+    paired DESC coordinate grid.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium on which to perform coordinate mapping.
+    radial : ndarray
+        Sorted unique radial coordinates.
+    poloidal : ndarray
+        Sorted unique poloidal coordinates.
+    toroidal : ndarray
+        Sorted unique toroidal coordinates.
+    coordinates : str
+        Input coordinates that are specified by the arguments, respectively.
+        raz : rho, alpha, zeta
+        rpz : rho, theta_PEST, zeta
+        rtz : rho, theta, zeta
+    period : tuple of float
+        Assumed periodicity for each quantity in inbasis.
+        Use np.inf to denote no periodicity.
+    jitable : bool, optional
+        If false the returned grid has additional attributes.
+        Required to be false to retain nodes at magnetic axis.
+
+    Returns
+    -------
+    desc_grid : Grid
+        DESC coordinate grid for the given coordinates.
+
+    """
+    grid = Grid.create_meshgrid(
+        [radial, poloidal, toroidal], coordinates=coordinates, period=period
+    )
+    inbasis = {
+        "r": "rho",
+        "t": "theta",
+        "p": "theta_PEST",
+        "a": "alpha",
+        "z": "zeta",
+    }
+    rtz_nodes = eq.map_coordinates(
+        grid.nodes,
+        inbasis=[inbasis[char] for char in coordinates],
+        outbasis=("rho", "theta", "zeta"),
+        period=period,
+    )
+    desc_grid = Grid(
+        nodes=rtz_nodes,
+        coordinates="rtz",
+        source_grid=grid,
+        sort=False,
+        jitable=jitable,
+        _unique_rho_idx=grid.unique_rho_idx,
+        _inverse_rho_idx=grid.inverse_rho_idx,
+    )
+    return desc_grid

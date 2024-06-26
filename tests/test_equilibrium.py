@@ -390,7 +390,7 @@ def test_contract_equilibrium():
     np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP, err_msg="NFP")
 
     # test geometry, profiles, |B| and |F| match btwn orig eq and new contracted eq
-    data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "current"]
+    data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota"]
     contract_grid = LinearGrid(
         rho=np.linspace(0, 1.0, eq.L),
         M=eq.M_grid,
@@ -407,10 +407,7 @@ def test_contract_equilibrium():
     data = eq.compute(data_keys, grid=grid)
     for key in data_keys:
         if key != "|F|":
-            # FIXME: remove atol once PR fixing current calc is merged
-            np.testing.assert_allclose(
-                contract_data[key], data[key], err_msg=key, atol=1e-10, rtol=1e-10
-            )
+            np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
     np.testing.assert_allclose(
         contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
     )

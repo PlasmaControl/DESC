@@ -1287,8 +1287,8 @@ def test_second_stage_optimization():
 @pytest.mark.unit
 def test_second_stage_optimization_CoilSet():
     """Test optimizing CoilSet for a fixed axisymmetric equilibrium."""
-    eq = Equilibrium()
-    R_coil = 10
+    eq = get("SOLOVEV")
+    R_coil = 3.5
     I = 100
     field = MixedCoilSet(
         FourierXYZCoil(
@@ -1299,24 +1299,24 @@ def test_second_stage_optimization_CoilSet():
             modes=[0, 1, -1],
         ),
         CoilSet(
-            FourierRZCoil(
-                current=I,
+            FourierPlanarCoil(
+                current=I, center=[R_coil, 0, 0], normal=[0, 1, 0], r_n=2.5
             ),
-            NFP=5,
+            NFP=4,
             sym=True,
         ),
     )
-    grid = LinearGrid(M=5, N=5)
+    grid = LinearGrid(M=5)
     objective = ObjectiveFunction(
         QuadraticFlux(
-            eq=eq, field=field, vacuum=True, eval_grid=grid, field_grid=LinearGrid(N=30)
+            eq=eq, field=field, vacuum=True, eval_grid=grid, field_grid=LinearGrid(N=15)
         )
     )
     constraints = FixParameters(
         field,
         [
             {"X_n": True, "Y_n": True, "Z_n": True},
-            {"R_n": True, "Z_n": True, "current": True},
+            {"r_n": True, "center": True, "normal": True, "current": True},
         ],
     )
     optimizer = Optimizer("lsq-exact")
@@ -1325,14 +1325,14 @@ def test_second_stage_optimization_CoilSet():
         objective=objective,
         constraints=constraints,
         ftol=0,
-        xtol=0,
+        xtol=1e-7,
         gtol=0,
         verbose=2,
-        maxiter=200,
+        maxiter=10,
     )
 
     # should be small current in the circular coil providing the vertical field
-    np.testing.assert_allclose(field[0].current, 0, atol=3e2)
+    np.testing.assert_allclose(field[0].current, 0, atol=1e-12)
 
 
 # TODO: replace this with the solution to Issue #1021

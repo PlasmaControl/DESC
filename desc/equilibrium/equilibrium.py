@@ -227,7 +227,7 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"sym should be one of True, False, None, got {sym}",
         )
-        self._sym = setdefault(sym, getattr(surface, "sym", False))
+        self._sym = bool(setdefault(sym, getattr(surface, "sym", False)))
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
 
@@ -572,7 +572,7 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
         self._NFP = int(setdefault(NFP, self.NFP))
-        self._sym = setdefault(sym, self.sym)
+        self._sym = bool(setdefault(sym, self.sym))
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes

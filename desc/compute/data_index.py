@@ -8,8 +8,7 @@ import numpy as np
 
 def find_permutations(primary, separator="_"):
     """Finds permutations of quantity names for aliases."""
-    split_name = primary.split(separator)
-    primary_permutation = split_name[-1]
+    prefix, primary_permutation = primary.rsplit(separator, 1)
     primary_permutation = deque(primary_permutation)
 
     new_permutations = []
@@ -18,10 +17,7 @@ def find_permutations(primary, separator="_"):
         new_permutations.append(list(primary_permutation))
 
     # join new permutation to form alias keys
-    aliases = [
-        "".join(split_name[:-1]) + separator + "".join(perm)
-        for perm in new_permutations
-    ]
+    aliases = [prefix + separator + "".join(perm) for perm in new_permutations]
     aliases = np.unique(aliases)
     aliases = np.delete(aliases, np.where(aliases == primary))
 
@@ -51,7 +47,7 @@ def assign_alias_data(
     return data
 
 
-def register_compute_fun(
+def register_compute_fun(  # noqa: C901
     name,
     label,
     units,
@@ -99,7 +95,7 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
-    aliases : list
+    aliases : list of str
         Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
         data.
     parameterization : str or list of str
@@ -136,9 +132,16 @@ def register_compute_fun(
     }
     for kw in kwargs:
         allowed_kwargs.add(kw)
-    permutable_names = ["R_", "Z_", "phi_", "lambda_", "omega_"]
-    if not aliases and "".join(name.split("_")[:-1]) + "_" in permutable_names:
-        aliases = find_permutations(name)
+    splits = name.rsplit("_", 1)
+    if (
+        len(splits) > 1
+        # Only look for permutations of partial derivatives of same coordinate system.
+        and {"r", "t", "z"}.issuperset(splits[-1])
+    ):
+        aliases_temp = np.append(np.array(aliases), find_permutations(name))
+        for alias in aliases:
+            aliases_temp = np.append(aliases_temp, find_permutations(alias))
+        aliases = np.unique(aliases_temp)
 
     def _decorator(func):
         d = {

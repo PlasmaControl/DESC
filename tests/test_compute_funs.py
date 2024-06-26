@@ -70,8 +70,9 @@ def test_aliases():
 
     # manual case
     primary_data = eq.compute("e_rho_rt")
-    alias_data = eq.compute("x_rrt")
+    alias_data = eq.compute(["x_rrt", "e_theta_rr"])
     np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["x_rrt"])
+    np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["e_theta_rr"])
 
 
 @pytest.mark.unit

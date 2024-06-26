@@ -48,8 +48,8 @@ class _CoilObjective(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, list, optional
-        Collocation grid containing the nodes to evaluate at. If list, has to adhere to
-        Objective.dim_f
+        Collocation grid containing the nodes to evaluate at.
+        If a list, must have the same structure as coil.
     name : str, optional
         Name of the objective function.
 
@@ -96,55 +96,56 @@ class _CoilObjective(_Objective):
 
         """
         # local import to avoid circular import
-        from desc.coils import CoilSet, MixedCoilSet
+        from desc.coils import CoilSet, MixedCoilSet, _Coil
 
-        self._dim_f = 0
-        self._quad_weights = jnp.array([])
+        def _is_single_coil(c):
+            return isinstance(c, _Coil) and not isinstance(c, CoilSet)
 
-        def to_list(coilset):
-            """Turn a MixedCoilSet container into a list of what it's containing."""
-            if isinstance(coilset, list):
-                return [to_list(x) for x in coilset]
-            elif isinstance(coilset, MixedCoilSet):
-                return [to_list(x) for x in coilset]
+        def _prune_coilset_tree(coilset):
+            """Remove extra members from CoilSets (but not MixedCoilSets)."""
+            if isinstance(coilset, list) or isinstance(coilset, MixedCoilSet):
+                return [_prune_coilset_tree(c) for c in coilset]
             elif isinstance(coilset, CoilSet):
-                # use the same grid/transform for CoilSet
-                return to_list(coilset.coils[0])
+                # CoilSet only uses a single grid/transform for all coils
+                return _prune_coilset_tree(coilset.coils[0])
             else:
-                return [coilset]
+                return coilset  # single coil
 
-        # gives structure of coils, e.g. MixedCoilSet(coils, coils) would give a
-        # a structure of [[*, *], [*, *]] if n = 2 coils
-        coil_leaves, coil_structure = tree_flatten(
-            self.things[0], is_leaf=lambda x: not hasattr(x, "__len__")
+        coil = self.things[0]
+        grid = self._grid
+
+        # get individual coils from coilset
+        coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
+        self._num_coils = len(coils)
+
+        # map grid to list of length coils
+        if grid is None:
+            grid = [LinearGrid(N=2 * c.N + 5, endpoint=False) for c in coils]
+        if isinstance(grid, numbers.Integral):
+            grid = LinearGrid(N=self._grid, endpoint=False)
+        if isinstance(grid, _Grid):
+            grid = [grid] * self._num_coils
+        if isinstance(grid, list):
+            grid = tree_leaves(grid, is_leaf=lambda g: isinstance(g, _Grid))
+
+        errorif(
+            len(grid) != len(coils),
+            ValueError,
+            "grid input must be broadcastable to the coil structure.",
         )
-        self._num_coils = len(coil_leaves)
+        errorif(
+            np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),
+            ValueError,
+            "Only use toroidal resolution for coil grids.",
+        )
 
-        # check type
-        if isinstance(self._grid, numbers.Integral):
-            self._grid = LinearGrid(N=self._grid, endpoint=False)
-        # all of these cases return a container MixedCoilSet that contains
-        # LinearGrids. i.e. MixedCoilSet.coils = list of LinearGrid
-        if self._grid is None:
-            # map default grid to structure of inputted coils
-            self._grid = tree_map(
-                lambda x: LinearGrid(
-                    N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
-                ),
-                self.things[0],
-                is_leaf=lambda x: not hasattr(x, "__len__"),
-            )
-        elif isinstance(self._grid, _Grid):
-            # map inputted single LinearGrid to structure of inputted coils
-            self._grid = [self._grid] * self._num_coils
-            self._grid = tree_unflatten(coil_structure, self._grid)
-        else:
-            # this case covers an inputted list of grids that matches the size
-            # of the inputted coils. Can be a 1D list or nested list.
-            flattened_grid = tree_leaves(
-                self._grid, is_leaf=lambda x: isinstance(x, _Grid)
-            )
-            self._grid = tree_unflatten(coil_structure, flattened_grid)
+        self._dim_f = np.sum([g.num_nodes for g in grid])
+        quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])
+
+        # map grid to the same structure as coil and then remove unnecessary members
+        grid = tree_unflatten(structure, grid)
+        grid = _prune_coilset_tree(grid)
+        coil = _prune_coilset_tree(coil)
 
         timer = Timer()
         if verbose > 0:
@@ -152,46 +153,21 @@ class _CoilObjective(_Objective):
         timer.start("Precomputing transforms")
 
         transforms = tree_map(
-            lambda x, y: get_transforms(self._data_keys, obj=x, grid=y),
-            self.things[0],
-            self._grid,
-            is_leaf=lambda x: not hasattr(x, "__len__"),
+            lambda c, g: get_transforms(self._data_keys, obj=c, grid=g),
+            coil,
+            grid,
+            is_leaf=lambda x: _is_single_coil(x) or isinstance(x, _Grid),
         )
 
-        grids = tree_leaves(self._grid, is_leaf=lambda x: hasattr(x, "num_nodes"))
-        self._dim_f = np.sum([grid.num_nodes for grid in grids])
-        self._quad_weights = np.concatenate([grid.spacing[:, 2] for grid in grids])
-
-        # get only needed grids (1 per CoilSet) and flatten that list
-        self._grid = tree_leaves(
-            to_list(self._grid), is_leaf=lambda x: isinstance(x, _Grid)
-        )
-        transforms = tree_leaves(
-            to_list(transforms), is_leaf=lambda x: isinstance(x, dict)
-        )
-
-        errorif(
-            np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]),
-            ValueError,
-            "Only use toroidal resolution for coil grids.",
-        )
-
-        # CoilSet and _Coil have one grid/transform
-        if not isinstance(self.things[0], MixedCoilSet):
-            self._grid = self._grid[0]
-            transforms = transforms[0]
-
-        self._constants = {
-            "transforms": transforms,
-            "quad_weights": self._quad_weights,
-        }
+        self._grid = grid
+        self._constants = {"transforms": transforms, "quad_weights": quad_weights}
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._scales = [compute_scaling_factors(coil) for coil in coil_leaves]
+            self._scales = [compute_scaling_factors(coil) for coil in coils]
 
         super().build(use_jit=use_jit, verbose=verbose)
 

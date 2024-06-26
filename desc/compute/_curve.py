@@ -980,9 +980,14 @@ def _torsion_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     # set torsion to zero at break points because the curve is just
     # 2 lines that lie in the same plane
     if len(transforms["intervals"][0]):
-        for break_point in transforms["knots"][transforms["intervals"][:, 1]]:
-            # TODO: should I have them be approximately equal?
-            data["torsion"] = jnp.where(data["s"] == break_point, data["torsion"], 0.0)
+        is_break_point = (
+            data["s"] == transforms["knots"][transforms["intervals"]][:, 1:]
+        )
+        data["torsion"] = jnp.where(
+            is_break_point.any(axis=0),
+            0.0,
+            data["torsion"],
+        )
 
     return data
 

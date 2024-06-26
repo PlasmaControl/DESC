@@ -847,11 +847,11 @@ class TestSplineXYZCurve:
     @pytest.mark.unit
     def test_discontinuous_splines(self):
         """Test splines that have break points."""
-        break_indices = [0, 250, 500, 750]
+        break_indices = [0, 3, 7]
 
         def test(method, data_key, compare_breaks=True):
             R = 2
-            phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
+            phi = 2 * np.pi * np.linspace(0, 1, 2000, endpoint=True) ** 2
 
             discontinuous = SplineXYZCurve(
                 X=R * np.cos(phi),
@@ -874,24 +874,24 @@ class TestSplineXYZCurve:
             assert discontinuous.method == method
             assert continuous.method == method
 
-            discon = discontinuous.compute([data_key, "s"])
-            discon_s = discon["s"]
-            discon_data = discon[data_key]
-            cont_data = continuous.compute(data_key)[data_key]
+            discont_data = discontinuous.compute([data_key])
+            discont_quantity = discont_data[data_key]
+            cont_quantity = continuous.compute(data_key)[data_key]
 
             if compare_breaks:
-                np.testing.assert_allclose(discon_data, cont_data, rtol=1e-3)
+                np.testing.assert_allclose(discont_quantity, cont_quantity, rtol=1e-3)
             else:
-                # break_indices are from knots and torsion is aligned with s
-                # so we need the indices of s where the s is equal to the break points
-                is_break_point = np.isin(discon_s, discontinuous.knots[break_indices])
+                # coil quantities aligned with s array so need to find breaks in s
+                is_break_point = np.isin(
+                    discont_data["s"], discontinuous.knots[break_indices]
+                )
                 # don't include break points
                 np.testing.assert_allclose(
-                    discon_data[~is_break_point],
-                    cont_data[~is_break_point],
+                    discont_quantity[~is_break_point],
+                    cont_quantity[~is_break_point],
                     rtol=1e-3,
                 )
-            return discon_data, cont_data
+            return discont_quantity, cont_quantity
 
         test("linear", "length")
         test("linear", "curvature")

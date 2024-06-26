@@ -1756,14 +1756,19 @@ def _G_rr(params, transforms, profiles, data, **kwargs):
     units_long="Amperes",
     description="Net toroidal current enclosed by flux surfaces",
     dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
+    params=["c_l"],
+    transforms={"grid": []},
+    profiles=["current"],
     coordinates="r",
     data=["I"],
 )
 def _current(params, transforms, profiles, data, **kwargs):
-    data["current"] = 2 * jnp.pi / mu_0 * data["I"]
+    if profiles["current"] is not None:
+        data["current"] = profiles["curent"].compute(
+            transforms["grid"], params["c_l"], dr=0
+        )
+    else:
+        data["current"] = 2 * jnp.pi / mu_0 * data["I"]
     return data
 
 
@@ -1775,14 +1780,19 @@ def _current(params, transforms, profiles, data, **kwargs):
     description="Net toroidal current enclosed by flux surfaces, derivative "
     + "wrt radial coordinate",
     dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
+    params=["c_l"],
+    transforms={"grid": []},
+    profiles=["current"],
     coordinates="r",
     data=["I_r"],
 )
 def _current_r(params, transforms, profiles, data, **kwargs):
-    data["current_r"] = 2 * jnp.pi / mu_0 * data["I_r"]
+    if profiles["current"] is not None:
+        data["current_r"] = profiles["curent"].compute(
+            transforms["grid"], params["c_l"], dr=1
+        )
+    else:
+        data["current_r"] = 2 * jnp.pi / mu_0 * data["I_r"]
     return data
 
 
@@ -1794,14 +1804,19 @@ def _current_r(params, transforms, profiles, data, **kwargs):
     description="Net toroidal current enclosed by flux surfaces, second derivative "
     + "wrt radial coordinate",
     dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
+    params=["c_l"],
+    transforms={"grid": []},
+    profiles=["current"],
     coordinates="r",
     data=["I_rr"],
 )
 def _current_rr(params, transforms, profiles, data, **kwargs):
-    data["current_rr"] = 2 * jnp.pi / mu_0 * data["I_rr"]
+    if profiles["current"] is not None:
+        data["current_rr"] = profiles["curent"].compute(
+            transforms["grid"], params["c_l"], dr=2
+        )
+    else:
+        data["current_rr"] = 2 * jnp.pi / mu_0 * data["I_rr"]
     return data
 
 

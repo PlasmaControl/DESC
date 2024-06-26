@@ -245,7 +245,7 @@ class FourierRZToroidalSurface(Surface):
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
+                + f"basis with {self.Z_basis.num_modes} modes."
             )
 
     def get_coeffs(self, m, n=0):

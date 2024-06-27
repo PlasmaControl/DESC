@@ -1,5 +1,5 @@
-from desc import set_device
-set_device("gpu")
+# from desc import set_device
+# set_device("gpu")
 from desc.objectives import ParticleTracer
 from desc.grid import Grid
 import desc.io
@@ -11,7 +11,7 @@ from time import time as timet
 
 initial_time = timet()
 
-filename = "optimized_eq_2411_M1_N1.h5"
+filename = "eq_2411_M1_N1.h5"
 eq = desc.io.load(filename)
 save_text_name = "solution" + filename
 
@@ -61,14 +61,14 @@ ini_cond = jnp.array([float(psi_i), theta_i, zeta_i, float(vpar_i)])
 
 # Time
 tmin = 0
-tmax = 1e-2
+tmax = 1e-6
 nt = 500
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-grid = Grid(jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=True, sort=False)
+grid = Grid(nodes=jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=False, sort=False)
 data = eq.compute(["|B|", "R"], grid=grid)
 
 mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])

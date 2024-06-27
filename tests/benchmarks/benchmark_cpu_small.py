@@ -367,7 +367,8 @@ def test_proximal_freeb_compute(benchmark):
     """Benchmark computing free boundary objective with proximal constraint."""
     jax.clear_caches()
     eq = desc.examples.get("ESTELL")
-    eq.change_resolution(6, 6, 6, 12, 12, 12)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(6, 6, 6, 12, 12, 12)
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
@@ -391,7 +392,8 @@ def test_proximal_freeb_jac(benchmark):
     """Benchmark computing free boundary jacobian with proximal constraint."""
     jax.clear_caches()
     eq = desc.examples.get("ESTELL")
-    eq.change_resolution(6, 6, 6, 12, 12, 12)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(6, 6, 6, 12, 12, 12)
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
@@ -415,7 +417,8 @@ def test_solve_fixed_iter(benchmark):
     """Benchmark running eq.solve for fixed iteration count."""
     jax.clear_caches()
     eq = desc.examples.get("ESTELL")
-    eq.change_resolution(6, 6, 6, 12, 12, 12)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(6, 6, 6, 12, 12, 12)
 
     def run(eq):
         eq.solve(maxiter=20, ftol=0, xtol=0, gtol=0)

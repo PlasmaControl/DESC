@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
+
 from scipy.optimize import NonlinearConstraint
 
-from desc.backend import in32bit, jnp
+from desc.backend import jnp
 
 from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag
@@ -267,14 +269,10 @@ def _optimize_desc_least_squares(
         options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
 
-    def jac(*args, **kwargs):
-
-        return in32bit(objective.jac_scaled_error, *args, **kwargs)
-
     result = lsqtr(
         objective.compute_scaled_error,
         x0=x0,
-        jac=jac,
+        jac=objective.jac_scaled_error,
         args=(objective.constants,),
         x_scale=x_scale,
         ftol=stoptol["ftol"],

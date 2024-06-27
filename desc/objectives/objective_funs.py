@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
+from desc.backend import _as64bit, jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -31,6 +31,10 @@ class ObjectiveFunction(IOAble):
         Jacobian column by column. Generally the slowest, but most memory efficient.
         "auto" defaults to "batched" if all sub-objectives are set to "fwd",
         otherwise "blocked".
+    jac_precision: {"float64", "float32"}
+        Precision of the jacobian calculated by jac_scaled_error to reduce memory
+        consumption due to the jacobian calculation.
+        Default precision is float64
     name : str
         Name of the objective function.
 
@@ -39,7 +43,12 @@ class ObjectiveFunction(IOAble):
     _io_attrs_ = ["_objectives"]
 
     def __init__(
-        self, objectives, use_jit=True, deriv_mode="auto", name="ObjectiveFunction"
+        self,
+        objectives,
+        use_jit=True,
+        deriv_mode="auto",
+        jac_precision="float64",
+        name="ObjectiveFunction",
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -48,10 +57,12 @@ class ObjectiveFunction(IOAble):
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
         assert deriv_mode in {"auto", "batched", "looped", "blocked"}
+        assert jac_precision in {"float32", "float64"}
 
         self._objectives = objectives
         self._use_jit = use_jit
         self._deriv_mode = deriv_mode
+        self._jac_precision = jac_precision
         self._built = False
         self._compiled = False
         self._name = name
@@ -287,6 +298,8 @@ class ObjectiveFunction(IOAble):
                 for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
+        # , dtype=self._jac_precision)
+
         return f
 
     def compute_scaled_error(self, x, constants=None):
@@ -432,7 +445,7 @@ class ObjectiveFunction(IOAble):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         if constants is None:
             constants = self.constants
-        return jnp.atleast_2d(self._jac_scaled_error(x, constants).squeeze())
+        return jnp.atleast_2d(self._jac_scaled_error(x, constants)).squeeze()
 
     def jac_unscaled(self, x, constants=None):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
@@ -442,7 +455,6 @@ class ObjectiveFunction(IOAble):
 
     def _jvp(self, v, x, constants=None, op="compute_scaled"):
         v = v if isinstance(v, (tuple, list)) else (v,)
-
         fun = lambda x: getattr(self, op)(x, constants)
         if len(v) == 1:
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
@@ -785,6 +797,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
+        jac_precision="float64",
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -795,6 +808,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
         assert deriv_mode in {"auto", "fwd", "rev"}
+        assert jac_precision in {"float32", "float64"}
 
         self._target = target
         self._bounds = bounds
@@ -812,6 +826,7 @@ class _Objective(IOAble, ABC):
             "min": jnp.min,
             None: None,
         }[loss_function]
+        self._jac_precision = jac_precision
 
         self._things = flatten_list([things], True)
 
@@ -926,6 +941,7 @@ class _Objective(IOAble, ABC):
     def _maybe_array_to_params(self, *args):
         argsout = tuple()
         for arg, thing in zip(args, self.things):
+            arg = _as64bit(arg)
             if isinstance(arg, (np.ndarray, jnp.ndarray)):
                 argsout += (thing.unpack_params(arg),)
             else:
@@ -942,6 +958,7 @@ class _Objective(IOAble, ABC):
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
+        # , dtype=self._jac_precision)
         args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:

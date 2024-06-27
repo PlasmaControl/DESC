@@ -69,8 +69,8 @@ print(
 )
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
-    jit = jax.jit
-    # --no-verify jit = lambda func, *args, **kwargs: func
+    # --no-verify jit = jax.jit
+    jit = lambda func, *args, **kwargs: func
     fori_loop = jax.lax.fori_loop
     cond = jax.lax.cond
     switch = jax.lax.switch
@@ -93,14 +93,20 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     )
 
     def _as32bit(x):
-        if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
-            return jnp.astype(x, jnp.float32)
-        return x
+        try:
+            if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
+                return jnp.astype(x, jnp.float32)
+            return x
+        except TypeError:
+            return x
 
     def _as64bit(x):
-        if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
-            return jnp.astype(x, jnp.float64)
-        return x
+        try:
+            if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
+                return jnp.astype(x, jnp.float64)
+            return x
+        except TypeError:
+            return x
 
     def _print_type(x):
         print(x.dtype)
@@ -112,9 +118,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         kwargs = jax.tree_map(_as32bit, kwargs)
 
         ## --no-verify print("Printing input precision...")
-        # --no-verify jax.tree_map(_print_type, args)
-        # --no-verify jax.tree_map(_print_type, kwargs)
-        ## --no-verify  print("Input precision done!")
+        jax.tree_map(_print_type, args)
+        jax.tree_map(_print_type, kwargs)
+        print("Input precision done!")
 
         # --no-verify with jax.numpy_dtype_promotion("strict"):
         # --no-verify    out = fun(*args, **kwargs)
@@ -122,8 +128,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         out = fun(*args, **kwargs)
 
         # --no-verify print("Printing output precision...")
-        # --no-verify jax.tree_map(_print_type, out)
-        # --no-verify print("output precision done!")
+        jax.tree_map(_print_type, out)
+        print("output precision done!")
 
         return jax.tree_map(_as64bit, out)
 

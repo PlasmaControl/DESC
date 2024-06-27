@@ -24,7 +24,7 @@ from .data_index import register_compute_fun
     ],
 )
 def _0(params, transforms, profiles, data, **kwargs):
-    data["0"] = jnp.zeros(transforms["grid"].num_nodes, dtype=jnp.float32)
+    data["0"] = jnp.zeros(transforms["grid"].num_nodes, dtype=jnp.float64)
     return data
 
 

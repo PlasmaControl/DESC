@@ -1,5 +1,9 @@
 """Objectives for solving equilibrium problems."""
 
+# --no-verify import pdb
+
+# --no-verify import jax
+
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
@@ -174,6 +178,8 @@ class ForceBalance(_Objective):
         """
         if constants is None:
             constants = self.constants
+
+        # --no-verify  print("Printing _equilibrium.py line 177...")
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -183,6 +189,10 @@ class ForceBalance(_Objective):
         )
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
         fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
+
+        ## --no-verify pdb.set_trace()
+        # --no-verify  jax.debug.print("{x}", x=str(fr.dtype))
+        # --no-verify  jax.debug.print("{x}", x=str(fb.dtype))
 
         return jnp.concatenate([fr, fb])
 

@@ -1,5 +1,6 @@
 """Wrapper classes for JAX automatic differentiation and finite differences."""
 
+import pdb
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -214,6 +215,8 @@ class AutoDiffDerivative(_Derivative):
             return fun(*_args, **kwargs)
 
         y, u = jax.jvp(_fun, tuple(args[i] for i in argnum), v)
+        print(jnp.dtype(y), jnp.dtype(u))
+        pdb.set_trace()
         return u
 
     @classmethod

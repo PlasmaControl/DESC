@@ -277,11 +277,13 @@ class TestAxisLimits:
         kwargs = weaker_tolerance | zero_map
         # fixed iota
         eq = get("W7-X")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
         eq = get("NCSX")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
@@ -316,10 +318,12 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
         eq = get("W7-X")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         test(eq)
         eq = get("NCSX")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         test(eq)
 
 
@@ -370,7 +374,8 @@ def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""
     eq = get("ESTELL")
     grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
-    eq.change_resolution(2, 2, 2, 4, 4, 4)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 2, 4, 4, 4)
 
     obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), use_jit=False)
     obj.build(verbose=0)

@@ -1,6 +1,6 @@
 from interpax import interp1d
 
-from desc.backend import jnp
+from desc.backend import jnp, sign
 
 from .data_index import register_compute_fun
 from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
@@ -143,6 +143,50 @@ def _phi_Curve(params, transforms, profiles, data, **kwargs):
 )
 def _Z_Curve(params, transforms, profiles, data, **kwargs):
     data["Z"] = data["x"][:, 2]
+    return data
+
+
+@register_compute_fun(
+    name="center",
+    label="\\langle\\mathbf{x}\\rangle",
+    units="m",
+    units_long="meters",
+    description="Centroid of the curve",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.core.Curve",
+)
+def _center_Curve(params, transforms, profiles, data, **kwargs):
+    data["center"] = jnp.mean(data["x"], axis=0) * jnp.ones_like(data["x"])
+    return data
+
+
+@register_compute_fun(
+    name="center",
+    label="\\langle\\mathbf{x}\\rangle",
+    units="m",
+    units_long="meters",
+    description="Centroid of the curve",
+    dim=3,
+    params=["center"],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.curve.FourierPlanarCurve",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
+)
+def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    # convert to rpz
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
+        center = params["center"]
+    else:
+        center = rpz2xyz(params["center"])
+    data["center"] = center * jnp.ones_like(data["x"])
     return data
 
 
@@ -958,20 +1002,22 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     label="\\kappa",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Scalar curvature of the curve",
+    description="Scalar curvature of the curve, positive/negative = concave/convex",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["x_s", "x_ss"],
+    data=["center", "x", "x_s", "x_ss"],
     parameterization="desc.geometry.core.Curve",
 )
 def _curvature(params, transforms, profiles, data, **kwargs):
+    # magnitude of curvature
     dxn = jnp.linalg.norm(data["x_s"], axis=-1)[:, jnp.newaxis]
-    data["curvature"] = jnp.linalg.norm(
-        cross(data["x_s"], data["x_ss"]) / dxn**3, axis=-1
-    )
+    curvature = jnp.linalg.norm(cross(data["x_s"], data["x_ss"]) / dxn**3, axis=-1)
+    # sign of curvature (positive = "concave", negative = "convex")
+    r = data["x"] - data["center"]
+    data["curvature"] = curvature * sign(dot(r, data["x_ss"]))
     return data
 
 

@@ -58,6 +58,12 @@ class _Grid(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
+        if hasattr(self, "_inverse_theta_idx"):
+            self._inverse_poloidal_idx = self._inverse_theta_idx
+            del self._inverse_theta_idx
+        if hasattr(self, "_unique_theta_idx"):
+            self._unique_poloidal_idx = self._unique_theta_idx
+            del self._unique_theta_idx
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry.
@@ -205,7 +211,7 @@ class _Grid(IOAble, ABC):
 
     @property
     def is_meshgrid(self):
-        """bool: Whether this grid is separable into coordinate chunks.
+        """bool: Whether this grid is a tensor-product grid.
 
         Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
         coordinate value. The is_meshgrid flag denotes whether any coordinate
@@ -221,6 +227,7 @@ class _Grid(IOAble, ABC):
 
     @property
     def period(self):
+        """Periodicity of coordinates."""
         return self.__dict__.setdefault(
             "_period", (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
         )
@@ -426,7 +433,7 @@ class _Grid(IOAble, ABC):
         if label in {"rho", "poloidal", "zeta"}:
             return label
         rad = {"r": "rho"}[self.coordinates[0]]
-        pol = {"a": "alpha", "t": "theta", "p": "theta_PEST"}[self.coordinates[1]]
+        pol = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
         tor = {"z": "zeta"}[self.coordinates[2]]
         return {rad: "rho", pol: "poloidal", tor: "zeta"}[label]
 
@@ -582,7 +589,7 @@ class Grid(_Grid):
     coordinates : str
         Coordinates that are specified by the nodes.
         raz : rho, alpha, zeta
-        rpz : rho, theta_PEST, zeta
+        rvz : rho, theta_PEST, zeta
         rtz : rho, theta, zeta
     period : tuple of float
         Assumed periodicity for each coordinate.
@@ -592,7 +599,7 @@ class Grid(_Grid):
     sort : bool
         Whether to sort the nodes for use with FFT method.
     is_meshgrid : bool
-        Whether this grid is separable into coordinate chunks.
+        Whether this grid is a tensor-product grid.
         Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
         coordinate value. The is_meshgrid flag denotes whether any coordinate
         can be iterated over along the relevant axis of the reshaped grid:
@@ -602,85 +609,6 @@ class Grid(_Grid):
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
         etc. may be wrong if grid contains duplicate nodes.
     """
-
-    @classmethod
-    def create_meshgrid(
-        cls,
-        nodes,
-        spacing=None,
-        coordinates="rtz",
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
-        **kwargs,
-    ):
-        """Create a meshgrid from the given coordinates in a jitable manner.
-
-        Parameters
-        ----------
-        nodes : Array, Array, Array
-            Sorted unique values of each coordinate.
-        spacing : Array, Array, Array
-            Weights for integration. Defaults to a midpoint rule.
-        coordinates : str
-            Coordinates that are specified by the nodes a, b, c, respectively.
-            raz : rho, alpha, zeta
-            rpz : rho, theta_PEST, zeta
-            rtz : rho, theta, zeta
-        period : tuple of float
-            Assumed periodicity for each coordinate.
-            Use np.inf to denote no periodicity.
-
-        Returns
-        -------
-        grid : Grid
-            Meshgrid.
-
-        """
-        a, b, c = jnp.atleast_1d(*nodes)
-        if spacing is None:
-            errorif(coordinates[0] != "r", NotImplementedError)
-            da = _midpoint_spacing(a)
-            db = _periodic_spacing(b, period[1])[1]
-            dc = _periodic_spacing(c, period[2])[1]
-        else:
-            da, db, dc = spacing
-        nodes = jnp.column_stack(
-            list(map(jnp.ravel, jnp.meshgrid(a, b, c, indexing="ij")))
-        )
-        spacing = jnp.column_stack(
-            list(map(jnp.ravel, jnp.meshgrid(da, db, dc, indexing="ij")))
-        )
-        weights = spacing.prod(axis=1) if np.prod(period) == 4 * jnp.pi**2 else None
-
-        unique_a_idx = jnp.arange(a.size) * b.size * c.size
-        unique_b_idx = jnp.arange(b.size) * c.size
-        unique_c_idx = jnp.arange(c.size)
-        inverse_a_idx = repeat(
-            unique_a_idx // (b.size * c.size),
-            b.size * c.size,
-            total_repeat_length=a.size * b.size * c.size,
-        )
-        inverse_b_idx = jnp.tile(
-            repeat(unique_b_idx // c.size, c.size, total_repeat_length=b.size * c.size),
-            a.size,
-        )
-        inverse_c_idx = jnp.tile(unique_c_idx, a.size * b.size)
-        return cls(
-            nodes=nodes,
-            spacing=spacing,
-            weights=weights,
-            coordinates=coordinates,
-            period=period,
-            sort=False,
-            is_meshgrid=True,
-            jitable=True,
-            _unique_rho_idx=unique_a_idx,
-            _unique_poloidal_idx=unique_b_idx,
-            _unique_zeta_idx=unique_c_idx,
-            _inverse_rho_idx=inverse_a_idx,
-            _inverse_poloidal_idx=inverse_b_idx,
-            _inverse_zeta_idx=inverse_c_idx,
-            **kwargs,
-        )
 
     def __init__(
         self,
@@ -760,6 +688,92 @@ class Grid(_Grid):
         self._N = self.num_nodes
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
+    @classmethod
+    def create_meshgrid(
+        cls,
+        nodes,
+        spacing=None,
+        coordinates="rtz",
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        **kwargs,
+    ):
+        """Create a tensor-product grid from the given coordinates in a jitable manner.
+
+        Parameters
+        ----------
+        nodes : list of ndarray
+            Three arrays, one for each coordinate.
+            Sorted unique values of each coordinate.
+        spacing : list of ndarray
+            Three arrays, one for each coordinate.
+            Weights for integration. Defaults to a midpoint rule.
+        coordinates : str
+            Coordinates that are specified by the ``nodes[0]``, ``nodes[1]``,
+            and ``nodes[2]``, respectively.
+            raz : rho, alpha, zeta
+            rvz : rho, theta_PEST, zeta
+            rtz : rho, theta, zeta
+        period : tuple of float
+            Assumed periodicity for each coordinate.
+            Use np.inf to denote no periodicity.
+
+        Returns
+        -------
+        grid : Grid
+            Meshgrid.
+
+        """
+        a, b, c = jnp.atleast_1d(*nodes)
+        if spacing is None:
+            errorif(coordinates[0] != "r", NotImplementedError)
+            da = _midpoint_spacing(a)
+            db = _periodic_spacing(b, period[1])[1]
+            dc = _periodic_spacing(c, period[2])[1]
+        else:
+            da, db, dc = spacing
+        nodes = jnp.column_stack(
+            list(map(jnp.ravel, jnp.meshgrid(a, b, c, indexing="ij")))
+        )
+        spacing = jnp.column_stack(
+            list(map(jnp.ravel, jnp.meshgrid(da, db, dc, indexing="ij")))
+        )
+        # Doesn't make sense to assign weights if the coordinates aren't periodic
+        # since it's not clear how to form a surface and  hence it's enclosed volume.
+        weights = (
+            spacing.prod(axis=1) if (period[1] * period[2]) == 4 * jnp.pi**2 else None
+        )
+
+        unique_a_idx = jnp.arange(a.size) * b.size * c.size
+        unique_b_idx = jnp.arange(b.size) * c.size
+        unique_c_idx = jnp.arange(c.size)
+        inverse_a_idx = repeat(
+            unique_a_idx // (b.size * c.size),
+            b.size * c.size,
+            total_repeat_length=a.size * b.size * c.size,
+        )
+        inverse_b_idx = jnp.tile(
+            repeat(unique_b_idx // c.size, c.size, total_repeat_length=b.size * c.size),
+            a.size,
+        )
+        inverse_c_idx = jnp.tile(unique_c_idx, a.size * b.size)
+        return cls(
+            nodes=nodes,
+            spacing=spacing,
+            weights=weights,
+            coordinates=coordinates,
+            period=period,
+            sort=False,
+            is_meshgrid=True,
+            jitable=True,
+            _unique_rho_idx=unique_a_idx,
+            _unique_poloidal_idx=unique_b_idx,
+            _unique_zeta_idx=unique_c_idx,
+            _inverse_rho_idx=inverse_a_idx,
+            _inverse_poloidal_idx=inverse_b_idx,
+            _inverse_zeta_idx=inverse_c_idx,
+            **kwargs,
+        )
+
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
         sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
@@ -834,14 +848,6 @@ class LinearGrid(_Grid):
         Toroidal coordinates (Default = 0.0).
         Alternatively, the number of toroidal coordinates (if an integer).
         Note that if supplied the values may be reordered in the resulting grid.
-    coordinates : str
-        Coordinates that are specified by the nodes.
-        raz : rho, alpha, zeta
-        rpz : rho, theta_PEST, zeta
-        rtz : rho, theta, zeta
-    period : tuple of float
-        Assumed periodicity for each coordinate.
-        Use np.inf to denote no periodicity.
     """
 
     def __init__(
@@ -856,8 +862,6 @@ class LinearGrid(_Grid):
         rho=np.array(1.0),
         theta=np.array(0.0),
         zeta=np.array(0.0),
-        coordinates="rtz",
-        period=None,
     ):
         self._L = check_nonnegint(L, "L")
         self._M = check_nonnegint(M, "M")
@@ -868,10 +872,8 @@ class LinearGrid(_Grid):
         self._poloidal_endpoint = False
         self._toroidal_endpoint = False
         self._node_pattern = "linear"
-        self._coordinates = coordinates
-        self._period = (
-            (np.inf, 2 * np.pi, 2 * np.pi / NFP) if period is None else period
-        )
+        self._coordinates = "rtz"
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L,
             M=M,
@@ -907,7 +909,6 @@ class LinearGrid(_Grid):
         rho=1.0,
         theta=0.0,
         zeta=0.0,
-        period=None,
     ):
         """Create grid nodes and weights.
 
@@ -936,9 +937,6 @@ class LinearGrid(_Grid):
         zeta : int or ndarray of float, optional
             Toroidal coordinates (Default = 0.0).
             Alternatively, the number of toroidal coordinates (if an integer).
-        period : tuple of float
-            Assumed periodicity for each coordinate.
-            Use np.inf to denote no periodicity.
 
         Returns
         -------
@@ -949,9 +947,7 @@ class LinearGrid(_Grid):
 
         """
         self._NFP = check_posint(NFP, "NFP", False)
-        self._period = (
-            (np.inf, 2 * np.pi, 2 * np.pi / NFP) if period is None else period
-        )
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         axis = bool(axis)
         endpoint = bool(endpoint)
         theta_period = self.period[1]
@@ -1158,22 +1154,18 @@ class QuadratureGrid(_Grid):
         toroidal grid resolution (exactly integrates toroidal modes up to order N)
     NFP : int
         number of field periods (Default = 1)
-    coordinates : str
-        Coordinates that are specified by the nodes.
-        raz : rho, alpha, zeta
-        rpz : rho, theta_PEST, zeta
-        rtz : rho, theta, zeta
 
     """
 
-    def __init__(self, L, M, N, NFP=1, coordinates="rtz"):
+    def __init__(self, L, M, N, NFP=1):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "N", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "quad"
-        self._coordinates = coordinates
+        self._coordinates = "rtz"
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
@@ -1215,6 +1207,7 @@ class QuadratureGrid(_Grid):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         L = L + 1
         M = 2 * M + 1
         N = 2 * N + 1
@@ -1302,32 +1295,18 @@ class ConcentricGrid(_Grid):
             * ``'ocs'``: optimal concentric sampling to minimize the condition number
               of the resulting transform matrix, for doing inverse transform.
             * ``linear`` : linear spacing in r=[0,1]
-    coordinates : str
-        Coordinates that are specified by the nodes.
-        raz : rho, alpha, zeta
-        rpz : rho, theta_PEST, zeta
-        rtz : rho, theta, zeta
 
     """
 
-    def __init__(
-        self,
-        L,
-        M,
-        N,
-        NFP=1,
-        sym=False,
-        axis=False,
-        node_pattern="jacobi",
-        coordinates="rtz",
-    ):
+    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._node_pattern = node_pattern
-        self._coordinates = coordinates
+        self._coordinates = "rtz"
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
         )
@@ -1382,6 +1361,7 @@ class ConcentricGrid(_Grid):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
 
         def ocs(L):
             # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
@@ -1798,7 +1778,7 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False, jnp=jnp):
         Points, assumed sorted in the cyclic domain [0, period], unless
         specified otherwise.
     period : float
-        Number such that x + period = x.
+        Number such that f(x + period) = f(x) for any function f on this domain.
     sort : bool
         Set to true if x is not sorted in the cyclic domain [0, period].
 

@@ -79,6 +79,24 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
             name, transforms, p
         ), f"Don't have transforms to compute {name}"
 
+        if "grid" in transforms:
+            if transforms["grid"].axis.size:
+                deps = data_index[p][name]["full_with_axis_dependencies"]["data"]
+            else:
+                deps = data_index[p][name]["full_dependencies"]["data"]
+            for dep in deps:
+                reqs = data_index[p][dep]["source_grid_requirement"]
+                errorif(
+                    reqs and not hasattr(transforms["grid"], "source_grid"),
+                    msg=f"Expected grid with attribute 'source_grid' to compute {dep}.",
+                )
+                for req in reqs:
+                    errorif(
+                        not hasattr(transforms["grid"].source_grid, req)
+                        or reqs[req] != getattr(transforms["grid"].source_grid, req),
+                        msg=f"Expected grid with '{req}:{reqs[req]}' to compute {dep}.",
+                    )
+
     if data is None:
         data = {}
 
@@ -135,18 +153,6 @@ def _compute(
                     profiles=profiles,
                     data=data,
                     **kwargs,
-                )
-        if "grid" in transforms:
-            reqs = data_index[parameterization][name]["source_grid_requirement"]
-            errorif(
-                reqs and not hasattr(transforms["grid"], "source_grid"),
-                msg=f"Expected grid with attribute 'source_grid' to compute {name}.",
-            )
-            for req in reqs:
-                errorif(
-                    not hasattr(transforms["grid"].source_grid, req)
-                    or reqs[req] != getattr(transforms["grid"].source_grid, req),
-                    msg=f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](

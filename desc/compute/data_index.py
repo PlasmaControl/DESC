@@ -103,10 +103,17 @@ def register_compute_fun(  # noqa: C901
         or `'desc.equilibrium.Equilibrium'`.
     resolution_requirement : str
         Resolution requirements in coordinates. I.e. "r" expects radial resolution
-        in the grid, "rtz" expects grid to radial, poloidal, and toroidal resolution.
+        in the grid, "rtz" expects a grid with radial, poloidal, and toroidal resolution.
     source_grid_requirement : dict
         Attributes of the source grid that the compute function requires.
         Also assumes dependencies were computed on such a grid.
+        By default, the source grid is assumed to be ``transforms["grid"]`` and
+        no requirements are expected of it. As an example, quantities that require
+        integration along field lines may specify
+        ``source_grid_requirement={"coordinates": "raz"}``.
+        which will allow accessing the Clebsch-Type rho, alpha, zeta coordinates in
+        ``transforms["grid"].source_grid``` that correspond to the DESC rho, theta,
+        zeta coordinates in ``transforms["grid"]``.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
 
@@ -254,3 +261,22 @@ _class_inheritance = {
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
 allowed_kwargs = set()
+
+
+def is_0d(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant throughout the plasma volume?."""
+    # Should compute on a grid that samples entire plasma volume.
+    # In particular, a QuadratureGrid for accurate radial integration.
+    return data_index[p][name]["coordinates"] == ""
+
+
+def is_1dr(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant over flux surfaces?."""
+    # Should compute on a grid that samples entire radial surfaces.
+    return data_index[p][name]["coordinates"] == "r"
+
+
+def is_1dz(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant over toroidal surfaces?."""
+    # Should compute on a grid that samples entire toroidal surfaces.
+    return data_index[p][name]["coordinates"] == "z"

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from time import time as timet
 import desc.equilibrium
 from desc.objectives import (ParticleTracer, AspectRatio, ObjectiveFunction, ForceBalance, 
-                                FixBoundaryR, FixBoundaryZ, FixPressure, FixIota, FixPsi, FixParameter)
+                                FixBoundaryR, FixBoundaryZ, FixPressure, FixIota, FixPsi, FixParameters)
 from desc.geometry import FourierRZToroidalSurface
 from desc.equilibrium import Equilibrium
 from desc.continuation import solve_continuation_automatic
@@ -127,7 +127,7 @@ initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
 # Mu 
-grid = Grid(jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=True, sort=False)
+grid = Grid(jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=False, sort=False)
 data = eq.compute("|B|", grid=grid)
 mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 

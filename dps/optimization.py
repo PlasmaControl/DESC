@@ -15,7 +15,7 @@ initial_time = timet()
 
 # filename = "input.final_freeb_output.h5"
 # filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
-filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+filename = "eq_2411_M1_N1.h5"
 savename = "optimized_" + filename
 
 print("*************** START ***************")
@@ -30,10 +30,9 @@ eq._current = None
 # eq.solve()
 
 # Energy and Mass info
-Energy_eV = 3.52e6
+Energy_eV = 100
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
-
 Energy_SI = Energy_eV*Proton_Charge
 
 # Particle Info
@@ -41,27 +40,27 @@ Mass = 4*Proton_Mass
 Charge = 2*Proton_Charge
 
 # Initial State
-psi_i = 0.2
-zeta_i = 0
-theta_i = 0
+psi_i = 0.8
+zeta_i = 0.5
+theta_i = jnp.pi/2
 vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
-ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
+ini_cond = jnp.array([float(psi_i), theta_i, zeta_i, float(vpar_i)])
 
 # Time
 tmin = 0
-tmax = 1e-4
-nt = 250
+tmax = 1e-6
+nt = 500
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-grid = Grid(jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=True, sort=False)
-data = eq.compute("|B|", grid=grid)
+grid = Grid(nodes=jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=False, sort=False)
+data = eq.compute(["|B|", "R"], grid=grid)
 
 mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
-ini_param = [float(mu), Mass_Charge_Ratio]
+ini_param = jnp.array([mu[0], Mass_Charge_Ratio])
 
 intermediate_time = timet()
 print(f"Time from beginning until here: {intermediate_time - initial_time}s")

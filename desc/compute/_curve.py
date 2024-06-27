@@ -172,7 +172,7 @@ def _center_Curve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Centroid of the curve",
     dim=3,
-    params=["center"],
+    params=["center", "shift"],
     transforms={},
     profiles=[],
     coordinates="s",
@@ -185,8 +185,8 @@ def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     if kwargs.get("basis_in", "xyz").lower() == "rpz":
         center = params["center"]
     else:
-        center = rpz2xyz(params["center"])
-    data["center"] = center * jnp.ones_like(data["x"])
+        center = xyz2rpz(params["center"])
+    data["center"] = (center + xyz2rpz(params["shift"])) * jnp.ones_like(data["x"])
     return data
 
 
@@ -834,13 +834,12 @@ def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["x_ss"],
+    data=["x_s", "x_ss", "frenet_tangent"],
     parameterization="desc.geometry.core.Curve",
 )
 def _frenet_normal(params, transforms, profiles, data, **kwargs):
-    data["frenet_normal"] = (
-        data["x_ss"] / jnp.linalg.norm(data["x_ss"], axis=-1)[:, None]
-    )
+    normal = cross(data["x_s"], cross(data["x_ss"], data["x_s"]))
+    data["frenet_normal"] = normal / jnp.linalg.norm(normal, axis=-1)[:, None]
     return data
 
 
@@ -876,7 +875,7 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["center", "x", "x_s", "x_ss"],
+    data=["center", "x", "x_s", "x_ss", "frenet_normal"],
     parameterization="desc.geometry.core.Curve",
 )
 def _curvature(params, transforms, profiles, data, **kwargs):
@@ -885,7 +884,7 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     curvature = jnp.linalg.norm(cross(data["x_s"], data["x_ss"]) / dxn**3, axis=-1)
     # sign of curvature (positive = "concave", negative = "convex")
     r = data["x"] - data["center"]
-    data["curvature"] = curvature * sign(dot(r, data["x_ss"]))
+    data["curvature"] = curvature * sign(dot(r, data["frenet_normal"]))
     return data
 
 

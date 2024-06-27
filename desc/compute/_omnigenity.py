@@ -112,6 +112,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -133,6 +134,7 @@ def _w(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -154,6 +156,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -416,6 +419,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["eta"],
+    resolution_requirement="tz",
     parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _omni_angle(params, transforms, profiles, data, **kwargs):

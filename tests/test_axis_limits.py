@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.data_index import is_0d, is_1dr, is_1dz
 from desc.compute.utils import _grow_seeds, dot, surface_integrals_map
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -208,11 +207,14 @@ def assert_is_continuous(
         else:
             assert np.isfinite(data[name]).all(), name
 
-        if is_0d(name) or is_1dz(name):
-            # can't check continuity of global scalar or function of toroidal angle
+        if (
+            data_index[p][name]["coordinates"] == ""
+            or data_index[p][name]["coordinates"] == "z"
+        ):
+            # can't check radial continuity of scalar or function of toroidal angle
             continue
         # make single variable function of rho
-        if is_1dr(name):
+        if data_index[p][name]["coordinates"] == "r":
             # already single variable function of rho
             profile = grid.compress(data[name])
         else:

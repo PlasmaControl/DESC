@@ -59,11 +59,11 @@ def register_compute_fun(  # noqa: C901
     profiles,
     coordinates,
     data,
+    axis_limit_data=None,
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
     resolution_requirement="",
     source_grid_requirement=None,
-    axis_limit_data=None,
     **kwargs,
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
@@ -95,6 +95,8 @@ def register_compute_fun(  # noqa: C901
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
+    axis_limit_data : list of str
+        Names of other items in the data index needed to compute axis limit of qty.
     aliases : list of str
         Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
         data.
@@ -114,8 +116,6 @@ def register_compute_fun(  # noqa: C901
         which will allow accessing the Clebsch-Type rho, alpha, zeta coordinates in
         ``transforms["grid"].source_grid``` that correspond to the DESC rho, theta,
         zeta coordinates in ``transforms["grid"]``.
-    axis_limit_data : list of str
-        Names of other items in the data index needed to compute axis limit of qty.
 
     Notes
     -----
@@ -263,20 +263,27 @@ all_kwargs = {p: {} for p in _class_inheritance.keys()}
 allowed_kwargs = set()
 
 
-def is_0d(name, p="desc.equilibrium.equilibrium.Equilibrium"):
-    """Is name constant throughout the plasma volume?."""
+def is_0d_vol_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant throughout plasma volume and needs full volume to compute?."""
     # Should compute on a grid that samples entire plasma volume.
     # In particular, a QuadratureGrid for accurate radial integration.
-    return data_index[p][name]["coordinates"] == ""
+    return (
+        data_index[p][name]["coordinates"] == ""
+        and data_index[p][name]["resolution_requirement"] != ""
+    )
 
 
-def is_1dr(name, p="desc.equilibrium.equilibrium.Equilibrium"):
-    """Is name constant over flux surfaces?."""
-    # Should compute on a grid that samples entire radial surfaces.
-    return data_index[p][name]["coordinates"] == "r"
+def is_1dr_rad_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant over radial surfaces and needs full surface to compute?."""
+    return (
+        data_index[p][name]["coordinates"] == "r"
+        and data_index[p][name]["resolution_requirement"] == "tz"
+    )
 
 
-def is_1dz(name, p="desc.equilibrium.equilibrium.Equilibrium"):
-    """Is name constant over toroidal surfaces?."""
-    # Should compute on a grid that samples entire toroidal surfaces.
-    return data_index[p][name]["coordinates"] == "z"
+def is_1dz_tor_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant over toroidal surfaces and needs full surface to compute?."""
+    return (
+        data_index[p][name]["coordinates"] == "z"
+        and data_index[p][name]["resolution_requirement"] == "rt"
+    )

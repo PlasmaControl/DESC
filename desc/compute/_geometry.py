@@ -27,6 +27,7 @@ from .utils import cross, dot, line_integrals, surface_integrals
     profiles=[],
     coordinates="",
     data=["sqrt(g)"],
+    resolution_requirement="rtz",
 )
 def _V(params, transforms, profiles, data, **kwargs):
     data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
@@ -46,6 +47,7 @@ def _V(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["e_theta", "e_zeta", "x"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    resolution_requirement="tz",
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
@@ -73,6 +75,7 @@ def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["e_theta", "e_zeta", "Z"],
+    resolution_requirement="tz",
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
@@ -97,6 +100,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)"],
+    resolution_requirement="tz",
 )
 def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
@@ -117,6 +121,7 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     # The sign of sqrt(g) is enforced to be non-negative.
@@ -137,6 +142,7 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)_rr"],
+    resolution_requirement="tz",
 )
 def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     # The sign of sqrt(g) is enforced to be non-negative.
@@ -160,6 +166,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+    resolution_requirement="rt",
 )
 def _A_of_z(params, transforms, profiles, data, **kwargs):
     data["A(z)"] = surface_integrals(
@@ -184,6 +191,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     coordinates="z",
     data=["Z", "n_rho", "g_tt"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    resolution_requirement="rt",
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # divergence theorem: integral(dA div [0, 0, Z]) = integral(ds n dot [0, 0, Z])
@@ -219,6 +227,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
+    resolution_requirement="z",
 )
 def _A(params, transforms, profiles, data, **kwargs):
     data["A"] = jnp.mean(
@@ -261,13 +270,12 @@ def _A_of_r(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
+    resolution_requirement="tz",
 )
 def _S(params, transforms, profiles, data, **kwargs):
     data["S"] = jnp.max(
         surface_integrals(
-            transforms["grid"],
-            data["|e_theta x e_zeta|"],
-            expand_out=False,
+            transforms["grid"], data["|e_theta x e_zeta|"], expand_out=False
         )
     )
     return data
@@ -285,6 +293,7 @@ def _S(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|"],
+    resolution_requirement="tz",
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
     data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
@@ -303,6 +312,7 @@ def _S_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|_r"],
+    resolution_requirement="tz",
 )
 def _S_r_of_r(params, transforms, profiles, data, **kwargs):
     data["S_r(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|_r"])
@@ -322,6 +332,7 @@ def _S_r_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|_rr"],
+    resolution_requirement="tz",
 )
 def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
     data["S_rr(r)"] = surface_integrals(
@@ -412,6 +423,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
+    resolution_requirement="rt",  # just need r near lcfs
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     max_rho = jnp.max(data["rho"])

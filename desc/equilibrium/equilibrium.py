@@ -52,7 +52,7 @@ from desc.utils import (
     warnif,
 )
 
-from ..compute.data_index import is_0d, is_1dr, is_1dz
+from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
@@ -883,11 +883,18 @@ class Equilibrium(IOAble, Optimizable):
             # the compute logic assume input data is evaluated on those coordinates.
             # We exclude these from the depXdx sets below since the grids we will
             # use to compute those dependencies are coordinate-blind.
+            # Example, "<L|r,a>" has coordinates="r", but requires computing on
+            # field line following source grid.
             return bool(data_index[p][name]["source_grid_requirement"])
 
+        # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
+        # which does not need a source grid to evaluate, does not compute <L|r,a> on a
+        # grid that does not follow field lines.
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
 
-        dep0d = {dep for dep in deps if is_0d(dep) and dep not in need_src_deps}
+        dep0d = {
+            dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
+        }
         # Unless user asks, don't try to recompute stuff which are only dependencies
         # of dep0d. Example, suppose the user supplied grid is a field-line following
         # grid, and the user would like to compute the effective ripple, which requires
@@ -910,7 +917,9 @@ class Equilibrium(IOAble, Optimizable):
         dep1dr = {
             dep
             for dep in deps
-            if is_1dr(dep) and not just_dep0d_dep(dep) and dep not in need_src_deps
+            if is_1dr_rad_grid(dep)
+            and not just_dep0d_dep(dep)
+            and dep not in need_src_deps
         }
         dep1dz = {
             dep
@@ -919,7 +928,9 @@ class Equilibrium(IOAble, Optimizable):
             # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
             # compute things like A(z) when it was only needed to compute R0, as in the
             # example above.
-            if is_1dz(dep) and not just_dep0d_dep(dep) and dep not in need_src_deps
+            if is_1dz_tor_grid(dep)
+            and not just_dep0d_dep(dep)
+            and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
@@ -980,7 +991,7 @@ class Equilibrium(IOAble, Optimizable):
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-            data0d_seed = {key: data[key] for key in data if is_0d(key)}
+            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
             data0d = compute_fun(
                 self,
                 list(dep0d),
@@ -999,7 +1010,7 @@ class Equilibrium(IOAble, Optimizable):
             data.update(data0d)
 
         if (calc1dr or calc1dz) and override_grid:
-            data0d_seed = {key: data[key] for key in data if is_0d(key)}
+            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
         else:
             data0d_seed = {}
         if calc1dr and override_grid:
@@ -1013,7 +1024,7 @@ class Equilibrium(IOAble, Optimizable):
             data1dr_seed = {
                 key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
                 for key in data
-                if is_1dr(key)
+                if is_1dr_rad_grid(key)
             }
             data1dr = compute_fun(
                 self,
@@ -1047,7 +1058,7 @@ class Equilibrium(IOAble, Optimizable):
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
                 for key in data
-                if is_1dz(key)
+                if is_1dz_tor_grid(key)
             }
             data1dz = compute_fun(
                 self,

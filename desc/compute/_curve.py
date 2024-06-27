@@ -1,6 +1,6 @@
 from interpax import interp1d
 
-from desc.backend import fori_loop, jnp
+from desc.backend import jnp, vmap
 
 from .data_index import register_compute_fun
 from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
@@ -664,7 +664,6 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
     method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
     has_break_points = len(transforms["intervals"][0])
-    n_dim = 3
 
     def inner_body(f, knots, period=None):
         """Interpolation for spline curves."""
@@ -679,27 +678,25 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
 
         return fq.T
 
-    def get_interval(arr, knots, istart, istop):
-        arr_temp = jnp.where(knots > knots[istop], arr[istop], arr)
-        arr_temp = jnp.where(knots < knots[istart], arr[istart], arr_temp)
-
-        return arr_temp
-
-    def body(i, fq):
-        """Body of the fori_loop where the f in fq refers to xyz coords."""
-        istart, istop = transforms["intervals"][i]
+    def body(interval, full_f, full_knots):
+        """Body used if there are break points."""
+        istart, istop = interval
         # catch end-point
         istop = jnp.where(istop == 0, -1, istop)
 
-        f_in_interval = get_interval(full_f, full_knots, istart, istop)
+        # fill f values outside of interval with break point values so that
+        # interpolation only takes into consideration the interval
+        f_in_interval = jnp.where(full_knots > full_knots[istop], full_f[istop], full_f)
+        f_in_interval = jnp.where(
+            full_knots < full_knots[istart], full_f[istart], f_in_interval
+        )
         fq_temp = inner_body(f_in_interval, full_knots, period=None)
 
-        s_in_interval = (s_query_pts >= full_knots[istart]) & (
-            s_query_pts <= full_knots[istop]
-        )
-        fq = jnp.where(s_in_interval, fq_temp, fq)
+        # replace values outside of interval with 0
+        fq_temp = jnp.where(s_query_pts >= full_knots[istop], 0, fq_temp)
+        fq_temp = jnp.where(s_query_pts <= full_knots[istart], 0, fq_temp)
 
-        return fq
+        return fq_temp
 
     if has_break_points:
         # manually add endpoint for broken splines so that it is closed
@@ -707,8 +704,8 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
             transforms["knots"], transforms["knots"][0] + 2 * jnp.pi
         )
         full_f = jnp.append(f, f[:, 0][..., None], axis=1)
-        xyz_query_pts = jnp.zeros((n_dim, len(s_query_pts)))
-        xyz_query_pts = fori_loop(0, len(transforms["intervals"]), body, xyz_query_pts)
+        xyz_query_pts = vmap(lambda interval: body(interval, full_f, full_knots))
+        xyz_query_pts = xyz_query_pts(transforms["intervals"]).sum(axis=0)
     else:
         # regular interpolation where the period for interp is 2pi
         xyz_query_pts = inner_body(f, transforms["knots"], period=2 * jnp.pi)

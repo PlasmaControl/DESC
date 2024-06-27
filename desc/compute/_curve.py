@@ -1,6 +1,6 @@
 from interpax import interp1d
 
-from desc.backend import fori_loop, jnp, vmap
+from desc.backend import fori_loop, jnp
 
 from .data_index import register_compute_fun
 from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
@@ -668,18 +668,16 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
 
     def inner_body(f, knots, period=None):
         """Interpolation for spline curves."""
-        fq = vmap(
-            lambda dummy_f: interp1d(
-                s_query_pts,
-                knots,
-                dummy_f,
-                method=method,
-                derivative=derivative,
-                period=period,
-            )
-        )(f)
+        fq = interp1d(
+            s_query_pts,
+            knots,
+            f.T,
+            method=method,
+            derivative=derivative,
+            period=period,
+        )
 
-        return jnp.asarray(fq)
+        return fq.T
 
     def get_interval(arr, knots, istart, istop):
         arr_temp = jnp.where(knots > knots[istop], arr[istop], arr)
@@ -714,7 +712,6 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
     else:
         # regular interpolation where the period for interp is 2pi
         xyz_query_pts = inner_body(f, transforms["knots"], period=2 * jnp.pi)
-        xyz_query_pts = jnp.array(xyz_query_pts)
 
     coords = jnp.stack(xyz_query_pts, axis=1)
 

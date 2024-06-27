@@ -355,7 +355,8 @@ def test_overstepping():
             return x
 
     eq = desc.examples.get("DSHAPE")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
 
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
@@ -417,7 +418,8 @@ def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
     eq = desc.examples.get("SOLOVEV")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
     constraints = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -496,7 +498,8 @@ def test_not_implemented_error():
 def test_wrappers():
     """Tests for using wrapped objectives."""
     eq = desc.examples.get("SOLOVEV")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
     con = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -570,7 +573,8 @@ class TestAllOptimizers:
     """Tests all optimizers run without error, eg tests for wrappers."""
 
     eqf = desc.examples.get("SOLOVEV")
-    eqf.change_resolution(3, 3, 0, 6, 6, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eqf.change_resolution(3, 3, 0, 6, 6, 0)
     eqe = eqf.copy()
     fobj = ObjectiveFunction(ForceBalance(eq=eqf))
     eobj = ObjectiveFunction(Energy(eq=eqe))
@@ -1114,7 +1118,8 @@ def test_optimize_with_single_constraint():
 def test_proximal_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
-    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
@@ -1230,7 +1235,8 @@ def test_proximal_jacobian():
 def test_LinearConstraint_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
-    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()

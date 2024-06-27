@@ -13,6 +13,7 @@ from termcolor import colored
 
 from desc.backend import jnp, tree_leaves, tree_map, tree_structure
 from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -2998,9 +2999,6 @@ class FixSheetCurrent(FixParameters):
 class FixNearAxisR(_FixedObjective):
     """Fixes an equilibrium's near-axis behavior in R to specified order.
 
-        NOTE: does not also fix the axis R , for that
-        use the FixAxisR objectives.
-
     Parameters
     ----------
     eq : Equilibrium
@@ -3009,10 +3007,8 @@ class FixNearAxisR(_FixedObjective):
         pyQSC Qsc object describing the NAE solution to fix the equilibrium's
         near-axis behavior to. If None, will fix the equilibrium's current near
         axis behavior.
-    order : int
+    order : {0,1,2}
         order (in rho) of near-axis behavior to constrain
-        NOTE: if order=0 is specified, no constraints will be given,
-        as those are given by the FixAxisR objectives.
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
@@ -3055,6 +3051,7 @@ class FixNearAxisR(_FixedObjective):
         name="Fix Near Axis R Behavior",
     ):
         self._nae_eq = target
+        self._eq = eq
         self._order = order
         self._N = N
         self._target_from_user = setdefault(bounds, None)
@@ -3083,18 +3080,40 @@ class FixNearAxisR(_FixedObjective):
 
         eq = self.things[0]
         cons = _get_NAE_constraints(
-            eq,
-            self._nae_eq,
-            order=self._order,
-            N=self._N,
+            eq, self._nae_eq, order=self._order, N=self._N, fix_lambda=False
         )
         for con in cons:
-            if isinstance(con, FixSumModesR):
+            if isinstance(con, FixSumModesR) or isinstance(con, AxisRSelfConsistency):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.stack([con._A for con in cons if isinstance(con, FixSumModesR)])
+        self._A = np.stack(
+            [con._A for con in cons if isinstance(con, FixSumModesR)]
+        ).squeeze()
+        # add the axis constraint last if it is in cons
+        axis_con = None
+        for con in cons:
+            if isinstance(con, AxisRSelfConsistency):
+                self._A = np.vstack([self._A, con._A]).squeeze()
+                axis_con = con
+
         self._target = np.concatenate(
             [con.target for con in cons if isinstance(con, FixSumModesR)]
-        ).squeeze()
+        )
+        if axis_con:
+            if self._nae_eq is not None:
+                # use NAE axis as target
+                axis = FourierRZCurve(
+                    R_n=np.concatenate(
+                        (np.flipud(self._nae_eq.rs[1:]), self._nae_eq.rc)
+                    ),
+                    Z_n=np.concatenate(
+                        (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
+                    ),
+                    NFP=self._nae_eq.nfp,
+                )
+                axis_target = axis.R_n
+            else:  # else use eq axis a target
+                axis_target = self._eq.Ra_n
+            self._target = np.append(self._target, axis_target).squeeze()
 
         self._dim_f = self.target.size
 
@@ -3125,9 +3144,6 @@ class FixNearAxisR(_FixedObjective):
 class FixNearAxisZ(_FixedObjective):
     """Fixes an equilibrium's near-axis behavior in Z to specified order.
 
-        NOTE: does not also fix the axis Z , for that
-        use the FixAxisZ objectives.
-
     Parameters
     ----------
     eq : Equilibrium
@@ -3136,10 +3152,8 @@ class FixNearAxisZ(_FixedObjective):
         pyQSC Qsc object describing the NAE solution to fix the equilibrium's
         near-axis behavior to. If None, will fix the equilibrium's current near
         axis behavior.
-    order : int
+    order : {0,1,2}
         order (in rho) of near-axis behavior to constrain
-        NOTE: if order=0 is specified, no constraints will be given,
-        as those are given by the FixAxisR objectives.
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
@@ -3182,6 +3196,7 @@ class FixNearAxisZ(_FixedObjective):
         name="Fix Near Axis Z Behavior",
     ):
         self._nae_eq = target
+        self._eq = eq
         self._order = order
         self._N = N
         self._target_from_user = setdefault(bounds, None)
@@ -3210,18 +3225,54 @@ class FixNearAxisZ(_FixedObjective):
 
         eq = self.things[0]
         cons = _get_NAE_constraints(
-            eq,
-            self._nae_eq,
-            order=self._order,
-            N=self._N,
+            eq, self._nae_eq, order=self._order, N=self._N, fix_lambda=False
         )
         for con in cons:
-            if isinstance(con, FixSumModesZ):
+            if isinstance(con, FixSumModesZ) or isinstance(con, AxisZSelfConsistency):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.stack([con._A for con in cons if isinstance(con, FixSumModesZ)])
+        self._A = np.stack(
+            [con._A for con in cons if isinstance(con, FixSumModesZ)]
+        ).squeeze()
+        # add the axis constraint last if it is in cons
+        axis_con = None
+        for con in cons:
+            if isinstance(con, AxisZSelfConsistency):
+                self._A = np.vstack([self._A, con._A]).squeeze()
+                axis_con = con
+        if axis_con:
+            if self._nae_eq is not None:
+                # use NAE axis as target
+                axis = FourierRZCurve(
+                    R_n=np.concatenate(
+                        (np.flipud(self._nae_eq.rs[1:]), self._nae_eq.rc)
+                    ),
+                    Z_n=np.concatenate(
+                        (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
+                    ),
+                    NFP=self._nae_eq.nfp,
+                )
+                axis_target = axis.Z_n
+            else:  # else use eq axis a target
+                axis_target = self._eq.Ra_n
         self._target = np.concatenate(
             [con.target for con in cons if isinstance(con, FixSumModesZ)]
-        ).squeeze()
+        )
+        if axis_con:
+            if self._nae_eq is not None:
+                # use NAE axis as target
+                axis = FourierRZCurve(
+                    R_n=np.concatenate(
+                        (np.flipud(self._nae_eq.rs[1:]), self._nae_eq.rc)
+                    ),
+                    Z_n=np.concatenate(
+                        (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
+                    ),
+                    NFP=self._nae_eq.nfp,
+                )
+                axis_target = axis.Z_n
+            else:  # else use eq axis a target
+                axis_target = self._eq.Za_n
+            self._target = np.append(self._target, axis_target).squeeze()
 
         self._dim_f = self.target.size
 

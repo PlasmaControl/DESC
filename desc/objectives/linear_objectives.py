@@ -3110,13 +3110,12 @@ class FixNearAxisR(_FixedObjective):
                     ),
                     NFP=self._nae_eq.nfp,
                 )
+                axis.change_resolution(N=self._eq.N)
                 axis_target = axis.R_n
             else:  # else use eq axis a target
                 axis_target = self._eq.Ra_n
             self._target = np.append(self._target, axis_target).squeeze()
-
         self._dim_f = self.target.size
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -3239,21 +3238,6 @@ class FixNearAxisZ(_FixedObjective):
             if isinstance(con, AxisZSelfConsistency):
                 self._A = np.vstack([self._A, con._A]).squeeze()
                 axis_con = con
-        if axis_con:
-            if self._nae_eq is not None:
-                # use NAE axis as target
-                axis = FourierRZCurve(
-                    R_n=np.concatenate(
-                        (np.flipud(self._nae_eq.rs[1:]), self._nae_eq.rc)
-                    ),
-                    Z_n=np.concatenate(
-                        (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
-                    ),
-                    NFP=self._nae_eq.nfp,
-                )
-                axis_target = axis.Z_n
-            else:  # else use eq axis a target
-                axis_target = self._eq.Ra_n
         self._target = np.concatenate(
             [con.target for con in cons if isinstance(con, FixSumModesZ)]
         )
@@ -3269,6 +3253,7 @@ class FixNearAxisZ(_FixedObjective):
                     ),
                     NFP=self._nae_eq.nfp,
                 )
+                axis.change_resolution(N=self._eq.N)
                 axis_target = axis.Z_n
             else:  # else use eq axis a target
                 axis_target = self._eq.Za_n

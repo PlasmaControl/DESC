@@ -1,14 +1,12 @@
 """Objectives related to the bootstrap current profile."""
 
-import warnings
-
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -35,10 +33,11 @@ class BootstrapRedlConsistency(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -59,6 +58,7 @@ class BootstrapRedlConsistency(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
         First entry must be M=1. Second entry is the toroidal mode number N,
@@ -127,57 +127,83 @@ class BootstrapRedlConsistency(_Objective):
         else:
             grid = self._grid
 
-        assert (
-            self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP
-        ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "BootstrapRedlConsistency objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "BootstrapRedlConsistency objective grid requires toroidal "
+            "resolution for surface averages",
+        )
+
+        errorif(
+            not (self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP),
+            ValueError,
+            "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)",
+        )
+
         self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
 
-        if eq.electron_temperature is None:
-            raise RuntimeError(
-                "Bootstrap current calculation requires an electron temperature "
-                "profile."
-            )
-        if eq.electron_density is None:
-            raise RuntimeError(
-                "Bootstrap current calculation requires an electron density profile."
-            )
-        if eq.ion_temperature is None:
-            raise RuntimeError(
-                "Bootstrap current calculation requires an ion temperature profile."
-            )
+        errorif(
+            eq.electron_temperature is None,
+            RuntimeError,
+            "Bootstrap current calculation requires an electron temperature "
+            "profile.",
+        )
+        errorif(
+            eq.electron_density is None,
+            RuntimeError,
+            "Bootstrap current calculation requires an electron density profile.",
+        )
+        errorif(
+            eq.ion_temperature is None,
+            RuntimeError,
+            "Bootstrap current calculation requires an ion temperature profile.",
+        )
 
         # Try to catch cases in which density or temperatures are specified in the
         # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
         rho = eq.compute("rho", grid=grid)["rho"]
-        if jnp.any(eq.electron_density(rho) > 1e22):
-            warnings.warn(
-                "Electron density is surprisingly high. It should have units of "
-                "1/meters^3"
-            )
-        if jnp.any(eq.electron_temperature(rho) > 50e3):
-            warnings.warn(
-                "Electron temperature is surprisingly high. It should have units of eV"
-            )
-        if jnp.any(eq.ion_temperature(rho) > 50e3):
-            warnings.warn(
-                "Ion temperature is surprisingly high. It should have units of eV"
-            )
+
+        warnif(
+            jnp.any(eq.electron_density(rho) > 1e22),
+            UserWarning,
+            "Electron density is surprisingly high. It should have units of "
+            "1/meters^3",
+        )
+        warnif(
+            jnp.any(eq.electron_temperature(rho) > 50e3),
+            UserWarning,
+            "Electron temperature is surprisingly high. It should have units of eV",
+        )
+        warnif(
+            jnp.any(eq.ion_temperature(rho) > 50e3),
+            UserWarning,
+            "Ion temperature is surprisingly high. It should have units of eV",
+        )
         # Profiles may go to 0 at rho=1, so exclude the last few grid points from lower
         # bounds:
         rho = rho[rho < 0.85]
-        if jnp.any(eq.electron_density(rho) < 1e17):
-            warnings.warn(
-                "Electron density is surprisingly low. It should have units 1/meters^3"
-            )
-        if jnp.any(eq.electron_temperature(rho) < 30):
-            warnings.warn(
-                "Electron temperature is surprisingly low. It should have units of eV"
-            )
-        if jnp.any(eq.ion_temperature(rho) < 30):
-            warnings.warn(
-                "Ion temperature is surprisingly low. It should have units of eV"
-            )
+        warnif(
+            jnp.any(eq.electron_density(rho) < 1e17),
+            UserWarning,
+            "Electron density is surprisingly low. It should have units 1/meters^3",
+        )
+        warnif(
+            jnp.any(eq.electron_temperature(rho) < 30),
+            UserWarning,
+            "Electron temperature is surprisingly low. It should have units of eV",
+        )
+        warnif(
+            jnp.any(eq.ion_temperature(rho) < 30),
+            UserWarning,
+            "Ion temperature is surprisingly low. It should have units of eV",
+        )
 
         timer = Timer()
         if verbose > 0:

@@ -3,8 +3,9 @@
 import numpy as np
 import pytest
 
+from desc.backend import tree_leaves, tree_structure
 from desc.grid import LinearGrid
-from desc.utils import isalmostequal, islinspaced
+from desc.utils import broadcast_tree, isalmostequal, islinspaced
 
 
 @pytest.mark.unit
@@ -53,3 +54,146 @@ def test_islinspaced():
 
     # 0D arrays will return True
     assert islinspaced(np.array(0))
+
+
+@pytest.mark.unit
+def test_broadcast_tree():
+    """Test that broadcast_tree works on various pytree structures."""
+    tree_out = [
+        {"a": np.arange(1), "b": np.arange(2), "c": np.arange(3)},
+        [
+            {"a": np.arange(2)},
+            [{"a": np.arange(1), "d": np.arange(3)}, {"a": np.arange(2)}],
+        ],
+    ]
+
+    # tree with tuples, not lists
+    tree_in = [{}, ({}, [{}, {}])]
+    with pytest.raises(ValueError):
+        _ = broadcast_tree(tree_in, tree_out)
+
+    # tree_in is deeper than tree_out
+    tree_in = [
+        [{"a": np.arange(1)}, {"b": np.arange(2), "c": np.arange(3)}],
+        [{}, [{}, {"a": np.arange(2)}]],
+    ]
+    with pytest.raises(ValueError):
+        _ = broadcast_tree(tree_in, tree_out)
+
+    # tree_in has different number of branches as tree_out
+    tree_in = [{}, [{}, [{}]]]
+    with pytest.raises(ValueError):
+        _ = broadcast_tree(tree_in, tree_out)
+
+    # tree with incorrect keys
+    tree_in = [{"a": np.arange(1), "b": np.arange(2)}, {"d": np.arange(2)}]
+    with pytest.raises(ValueError):
+        _ = broadcast_tree(tree_in, tree_out)
+
+    # tree with incorrect values
+    tree_in = [{"a": np.arange(1), "b": np.arange(2)}, {"a": np.arange(2)}]
+    with pytest.raises(ValueError):
+        _ = broadcast_tree(tree_in, tree_out)
+
+    # tree with proper structure already does not change
+    tree_in = tree_out.copy()
+    tree = broadcast_tree(tree_in, tree_out)
+    assert tree_structure(tree) == tree_structure(tree_out)
+    for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_out)):
+        np.testing.assert_allclose(leaf, leaf_correct)
+
+    # broadcast single leaf to full tree
+    tree_in = {"a": np.arange(1)}
+    tree = broadcast_tree(tree_in, tree_out)
+    assert tree_structure(tree) == tree_structure(tree_out)
+    tree_correct = [
+        {"a": np.arange(1), "b": np.array([], dtype=int), "c": np.array([], dtype=int)},
+        [
+            {"a": np.arange(1)},
+            [{"a": np.arange(1), "d": np.array([], dtype=int)}, {"a": np.arange(1)}],
+        ],
+    ]
+    for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
+        np.testing.assert_allclose(leaf, leaf_correct)
+
+    # broadcast from only major branches
+    tree_in = [{"b": np.arange(2), "c": np.arange(1, 3)}, {"a": np.arange(1)}]
+    tree = broadcast_tree(tree_in, tree_out)
+    assert tree_structure(tree) == tree_structure(tree_out)
+    tree_correct = [
+        {"a": np.array([], dtype=int), "b": np.arange(2), "c": np.arange(1, 3)},
+        [
+            {"a": np.arange(1)},
+            [{"a": np.arange(1), "d": np.array([], dtype=int)}, {"a": np.arange(1)}],
+        ],
+    ]
+    for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
+        np.testing.assert_allclose(leaf, leaf_correct)
+
+    # broadcast from minor branches
+    tree_in = [
+        {"b": np.arange(2), "c": np.arange(1, 3)},
+        [{"a": np.arange(2)}, {"a": np.arange(1)}],
+    ]
+    tree = broadcast_tree(tree_in, tree_out)
+    assert tree_structure(tree) == tree_structure(tree_out)
+    tree_correct = [
+        {"a": np.array([], dtype=int), "b": np.arange(2), "c": np.arange(1, 3)},
+        [
+            {"a": np.arange(2)},
+            [{"a": np.arange(1), "d": np.array([], dtype=int)}, {"a": np.arange(1)}],
+        ],
+    ]
+    for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
+        np.testing.assert_allclose(leaf, leaf_correct)
+
+    # tree_in with empty dicts and arrays
+    tree_in = [
+        {},
+        [
+            {"a": np.array([], dtype=int)},
+            [{"a": np.arange(1), "d": np.array([0, 2], dtype=int)}, {}],
+        ],
+    ]
+    tree = broadcast_tree(tree_in, tree_out)
+    assert tree_structure(tree) == tree_structure(tree_out)
+    tree_correct = [
+        {
+            "a": np.array([], dtype=int),
+            "b": np.array([], dtype=int),
+            "c": np.array([], dtype=int),
+        },
+        [
+            {"a": np.array([], dtype=int)},
+            [
+                {"a": np.arange(1), "d": np.array([0, 2], dtype=int)},
+                {"a": np.array([], dtype=int)},
+            ],
+        ],
+    ]
+    for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
+        np.testing.assert_allclose(leaf, leaf_correct)
+
+    # tree_in with bool values
+    tree_in = [
+        {"a": False, "b": True, "c": np.array([0, 2], dtype=int)},
+        [
+            {"a": True},
+            [{"a": False, "d": np.arange(2)}, {"a": True}],
+        ],
+    ]
+    tree = broadcast_tree(tree_in, tree_out)
+    assert tree_structure(tree) == tree_structure(tree_out)
+    tree_correct = [
+        {
+            "a": np.array([], dtype=int),
+            "b": np.arange(2),
+            "c": np.array([0, 2], dtype=int),
+        },
+        [
+            {"a": np.arange(2)},
+            [{"a": np.array([], dtype=int), "d": np.arange(2)}, {"a": np.arange(2)}],
+        ],
+    ]
+    for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
+        np.testing.assert_allclose(leaf, leaf_correct)

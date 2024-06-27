@@ -1,6 +1,16 @@
 """Classes defining objectives for equilibrium and optimization."""
 
 from ._bootstrap import BootstrapRedlConsistency
+from ._coils import (
+    CoilCurrentLength,
+    CoilCurvature,
+    CoilLength,
+    CoilsetMinDistance,
+    CoilTorsion,
+    PlasmaCoilsetMinDistance,
+    QuadraticFlux,
+    ToroidalFlux,
+)
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -9,6 +19,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
+from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
@@ -20,13 +31,14 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
-from ._qs import (
+from ._omnigenity import (
     Isodynamicity,
+    Omnigenity,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
+from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,
@@ -46,7 +58,10 @@ from .linear_objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
     FixIonTemperature,
@@ -55,9 +70,13 @@ from .linear_objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
-    FixParameter,
+    FixOmniBmax,
+    FixOmniMap,
+    FixOmniWell,
+    FixParameters,
     FixPressure,
     FixPsi,
+    FixSheetCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,

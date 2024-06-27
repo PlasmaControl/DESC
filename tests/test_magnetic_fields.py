@@ -13,7 +13,10 @@ from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
+    DommaschkPotentialField,
     FourierCurrentPotentialField,
+    MagneticFieldFromUser,
+    OmnigenousField,
     PoloidalMagneticField,
     ScalarPotentialField,
     SplineMagneticField,
@@ -22,6 +25,7 @@ from desc.magnetic_fields import (
     field_line_integrate,
     read_BNORM_file,
 )
+from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 
 
 def phi_lm(R, phi, Z, a, m):
@@ -59,6 +63,28 @@ class TestMagneticFields:
         np.testing.assert_allclose((tfield + vfield)([1, 0, 0]), [[0, 2, 1]])
         np.testing.assert_allclose(
             (tfield + vfield - pfield)([1, 0, 0.1]), [[0.4, 2, 1]]
+        )
+
+    @pytest.mark.unit
+    def test_field_from_user(self):
+        """Test for MagneticFieldFromUser."""
+        tfield = ToroidalMagneticField(2, 1)
+
+        def fun(coords, params):
+            R0, B0 = params
+            coords = jnp.atleast_2d(jnp.asarray(coords))
+            bp = B0 * R0 / coords[:, 0]
+            brz = jnp.zeros_like(bp)
+            B = jnp.array([brz, bp, brz]).T
+            return B
+
+        ufield = MagneticFieldFromUser(fun, [tfield.R0, tfield.B0])
+        np.testing.assert_allclose(
+            tfield([1, 0, 0]), ufield([1, 0, 0], params=[tfield.R0, tfield.B0])
+        )
+        np.testing.assert_allclose(
+            tfield([1, 1, 0], basis="xyz"),
+            ufield([1, 1, 0], params=[tfield.R0, tfield.B0], basis="xyz"),
         )
 
     @pytest.mark.unit
@@ -255,7 +281,8 @@ class TestMagneticFields:
 
         np.testing.assert_allclose(
             sumfield.compute_magnetic_field(
-                [10.0, 0, 0], grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)]
+                [10.0, 0, 0],
+                source_grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)],
             ),
             correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
             atol=1e-16,
@@ -297,6 +324,7 @@ class TestMagneticFields:
             modes_Phi=basis.modes[:, 1:],
             I=0,
             G=-G,
+            sym_Phi="sin",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -313,13 +341,15 @@ class TestMagneticFields:
         field.change_Phi_resolution(2, 2)
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
+            field.compute_magnetic_field(
+                [10.0, np.pi / 4, 0], source_grid=surface_grid
+            ),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
@@ -329,14 +359,14 @@ class TestMagneticFields:
         field.I = 0
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0) * 2,
             atol=1e-16,
             rtol=1e-8,
         )
         # use default grid
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=None),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], source_grid=None),
             correct_field(10.0, np.pi / 4, 0) * 2,
             atol=1e-12,
             rtol=1e-8,
@@ -351,13 +381,15 @@ class TestMagneticFields:
         )
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
+            field.compute_magnetic_field(
+                [10.0, np.pi / 4, 0], source_grid=surface_grid
+            ),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
@@ -391,6 +423,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
+            sym_Phi="cos",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -417,7 +450,8 @@ class TestMagneticFields:
         with pytest.raises(ValueError):
             field.Phi_mn = np.ones((basis.num_modes + 1,))
 
-    def test_io_fourier_current_field(self):
+    @pytest.mark.unit
+    def test_io_fourier_current_field(self, tmpdir_factory):
         """Test that i/o works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
             R_lmn=jnp.array([10, 1]),
@@ -439,9 +473,10 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=10,
         )
-        field.save("test_field.h5")
-        field2 = load("test_field.h5")
-        assert field.eq(field2)
+        tmpdir = tmpdir_factory.mktemp("test_io_fourier_current_field")
+        field.save(tmpdir.join("test_field.h5"))
+        field2 = load(tmpdir.join("test_field.h5"))
+        assert field.equiv(field2)
 
     @pytest.mark.unit
     def test_fourier_current_potential_field_asserts(self):
@@ -488,9 +523,9 @@ class TestMagneticFields:
         np.testing.assert_allclose(field.G, 2)
 
         # check that we can't set it with a size>1 array
-        with pytest.raises(AssertionError):
+        with pytest.raises(TypeError):
             field.I = np.array([1, 2])
-        with pytest.raises(AssertionError):
+        with pytest.raises(TypeError):
             field.G = np.array([1, 2])
 
         # check that we cant initialize with different size
@@ -508,6 +543,7 @@ class TestMagneticFields:
                 NFP=10,
             )
 
+    @pytest.mark.unit
     def test_change_Phi_basis_fourier_current_field(self):
         """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -524,6 +560,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
+            sym_Phi="cos",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -563,6 +600,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
         assert field.Phi_basis.sym == "sin"
 
+    @pytest.mark.unit
     def test_init_Phi_mn_fourier_current_field(self):
         """Test initial Phi_mn size is correct for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -672,13 +710,33 @@ class TestMagneticFields:
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
     @pytest.mark.unit
+    def test_field_line_integrate_bounds(self):
+        """Test field line integration with bounding box."""
+        # q=4, field line should rotate 1/4 turn after 1 toroidal transit
+        # from outboard midplane to top center
+        field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
+        # test that bounds work correctly, and stop integration when trajectory
+        # hits the bounds
+        r0 = [10.1]
+        z0 = [0.0]
+        phis = [0, 2 * np.pi]
+        # this will hit the R bound
+        # (there is no Z bound, and R would go to 10.0 if not bounded)
+        r, z = field_line_integrate(r0, z0, phis, field, bounds_R=(10.05, np.inf))
+        np.testing.assert_allclose(r[-1], 10.05, rtol=3e-4)
+        # this will hit the Z bound
+        # (there is no R bound, and Z would go to 0.1 if not bounded)
+        r, z = field_line_integrate(r0, z0, phis, field, bounds_Z=(-np.inf, 0.05))
+        np.testing.assert_allclose(z[-1], 0.05, atol=3e-3)
+
+    @pytest.mark.unit
     def test_Bnormal_calculation(self):
         """Tests Bnormal calculation for simple toroidal field."""
         tfield = ToroidalMagneticField(2, 1)
         surface = get("DSHAPE").surface
         Bnorm, _ = tfield.compute_Bnormal(surface)
         # should have 0 Bnormal because surface is axisymmetric
-        np.testing.assert_allclose(Bnorm, 0, atol=3e-15)
+        np.testing.assert_allclose(Bnorm, 0, atol=1e-14)
 
     @pytest.mark.unit
     def test_Bnormal_save_and_load_DSHAPE(self, tmpdir_factory):
@@ -719,7 +777,7 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):
         """Tests Bnormal save/load for simple toroidal field with HELIOTRON."""
-        ### test on simple field with stellarator
+        # test on simple field with stellarator
         tmpdir = tmpdir_factory.mktemp("BNORM_files")
         path = tmpdir.join("BNORM_desc_heliotron.txt")
         tfield = ToroidalMagneticField(2, 1)
@@ -757,3 +815,203 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             foo(field, x), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
         )
+
+    @pytest.mark.unit
+    def test_mgrid_io(self, tmpdir_factory):
+        """Test saving to and loading from an mgrid file."""
+        tmpdir = tmpdir_factory.mktemp("mgrid_dir")
+        path = tmpdir.join("mgrid.nc")
+
+        # field to test on
+        toroidal_field = ToroidalMagneticField(B0=1, R0=5)
+        poloidal_field = PoloidalMagneticField(B0=1, R0=5, iota=2 / np.pi)
+        vertical_field = VerticalMagneticField(B0=0.2)
+        save_field = toroidal_field + poloidal_field + vertical_field
+
+        # save and load mgrid file
+        Rmin = 3
+        Rmax = 7
+        Zmin = -2
+        Zmax = 2
+        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
+        load_field = SplineMagneticField.from_mgrid(path)
+
+        # check that the fields are the same
+        num_nodes = 50
+        grid = np.array(
+            [
+                np.linspace(Rmin, Rmax, num_nodes),
+                np.linspace(0, 2 * np.pi, num_nodes, endpoint=False),
+                np.linspace(Zmin, Zmax, num_nodes),
+            ]
+        ).T
+        B_saved = save_field.compute_magnetic_field(grid)
+        B_loaded = load_field.compute_magnetic_field(grid)
+        np.testing.assert_allclose(B_loaded, B_saved, rtol=1e-6)
+
+    @pytest.mark.unit
+    def test_omnigenous_field_change_resolution_B(self):
+        """Test OmnigenousField.change_resolution() of the B_lm parameters."""
+        L_B_old = 1
+        L_B_new = 2
+        M_B_old = 3
+        M_B_new = 6
+        NFP = 4
+        field = OmnigenousField(
+            L_B=L_B_old,
+            M_B=M_B_old,
+            L_x=0,
+            M_x=0,
+            N_x=0,
+            NFP=NFP,
+            helicity=(0, NFP),
+            B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
+        )
+        grid_axis = LinearGrid(rho=[0.0], M=50)
+        grid_half = LinearGrid(rho=[0.5], M=50)
+        grid_lcfs = LinearGrid(rho=[1.0], M=50)
+        B_axis_lowres = field.compute("|B|", grid=grid_axis)["|B|"]
+        B_half_lowres = field.compute("|B|", grid=grid_half)["|B|"]
+        B_lcfs_lowres = field.compute("|B|", grid=grid_lcfs)["|B|"]
+        field.change_resolution(L_B=L_B_new, M_B=M_B_new)
+        B_axis_highres = field.compute("|B|", grid=grid_axis)["|B|"]
+        B_half_highres = field.compute("|B|", grid=grid_half)["|B|"]
+        B_lcfs_highres = field.compute("|B|", grid=grid_lcfs)["|B|"]
+        np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
+        np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
+        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+
+
+@pytest.mark.unit
+def test_dommaschk_CN_CD_m_0():
+    """Test of CD_m_k and CN_m_k when k=0."""
+    # based off eqn 8 and 9 of Dommaschk paper
+    # https://doi.org/10.1016/0010-4655(86)90109-8
+    for m in range(1, 6):
+        # test of CD_m_k based off eqn 8
+        R = np.linspace(0.1, 1, 100)
+        res1 = CD_m_k(R, m, 0)
+        res2 = 0.5 * (R**m + R ** (-m))
+        np.testing.assert_allclose(res1, res2)
+
+        # test of CN_m_k based off eqn 9
+        res1 = CN_m_k(R, m, 0)
+        res2 = 0.5 * (R**m - R ** (-m)) / m
+        np.testing.assert_allclose(res1, res2, atol=1e-15)
+
+
+@pytest.mark.unit
+def test_dommaschk_field_errors():
+    """Test the assert statements of the DommaschkField function."""
+    ms = [1]
+    ls = [1]
+    a_arr = [1]
+    b_arr = [1]
+    c_arr = [1]
+    d_arr = [1, 1]  # length is not equal to the rest
+    with pytest.raises(AssertionError):
+        DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
+    d_arr = [1]
+    ms = [-1]  # negative mode number
+    with pytest.raises(AssertionError):
+        DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
+
+
+@pytest.mark.unit
+def test_dommaschk_radial_field():
+    """Test the Dommaschk potential for a pure toroidal (Bphi~1/R) field."""
+    phi = np.linspace(0, 2 * np.pi, 10)
+    R = np.linspace(0.1, 1.5, 50)
+    Z = np.linspace(-0.05, 0.5, 50)
+    R, phi, Z = np.meshgrid(R, phi, Z)
+    coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
+
+    ms = [0]
+    ls = [0]
+    a_arr = [0]
+    b_arr = [0]
+    c_arr = [0]
+    d_arr = [0]
+    B = DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
+    B_dom = B.compute_magnetic_field(coords)
+    np.testing.assert_allclose(B_dom[:, 0], 0)
+    np.testing.assert_array_equal(B_dom[:, 1], 1 / R.flatten())
+    np.testing.assert_allclose(B_dom[:, 2], 0)
+
+
+@pytest.mark.unit
+def test_dommaschk_vertical_field():
+    """Test the Dommaschk potential for a 1/R toroidal + pure vertical field."""
+    phi = jnp.linspace(0, 2 * jnp.pi, 10)
+    R = jnp.linspace(0.1, 1.5, 50)
+    Z = jnp.linspace(-0.5, 0.5, 50)
+    R, phi, Z = jnp.meshgrid(R, phi, Z)
+    coords = jnp.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
+
+    ms = [0]
+    ls = [1]
+    a_arr = [1]
+    b_arr = [0]
+    c_arr = [0]
+    d_arr = [0]
+    B = DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
+    B_dom = B.compute_magnetic_field(coords)
+    ones = jnp.ones_like(B_dom[:, 0])
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten(), atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 2], ones, atol=5e-15)
+
+
+@pytest.mark.unit
+def test_dommaschk_fit_vertical_and_toroidal_field():
+    """Test the Dommaschk potential fit for a toroidal and a vertical field."""
+    phi = np.linspace(0, 2 * np.pi, 3)
+    R = np.linspace(0.1, 1.5, 3)
+    Z = np.linspace(-0.5, 0.5, 3)
+    R, phi, Z = np.meshgrid(R, phi, Z)
+    coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
+
+    max_l = 1
+    max_m = 1
+    B0 = 2  # scale strength for to 1/R field to fit
+    B0_Z = 1  # scale strength for to uniform vertical field to fit
+    field = ToroidalMagneticField(B0=B0, R0=1) + VerticalMagneticField(B0=B0_Z)
+
+    B = DommaschkPotentialField.fit_magnetic_field(
+        field, coords, max_m, max_l, sym=True, NFP=2
+    )
+
+    B_dom = B.compute_magnetic_field(coords)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-13)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-13)
+    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-13)
+
+    np.testing.assert_allclose(B._params["B0"], B0)
+
+    # only nonzero coefficient of the field should be the B0 and a_ml = a_01
+    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-13)
+    for coef, m, l in zip(B._params["a_arr"], B._params["ms"], B._params["ls"]):
+        if m == 0 and l == 1:
+            np.testing.assert_allclose(coef, B0_Z)
+        else:
+            np.testing.assert_allclose(coef, 0, atol=1e-13)
+    for name in ["b_arr", "c_arr", "d_arr"]:
+        np.testing.assert_allclose(B._params[name], 0, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_domm_field_is_nonzero_and_continuous_across_Z_0():
+    """Test that at Z=0 the Bphi of domm field is not discontinuous."""
+    # following field should, at constant R and Z, have Bphi
+    # be nonzero everywhere.
+    # related to issue noted in PRs #966 and #961, where
+    # before the fix in #966 was implemented the field Bphi
+    # would drop to 0 discontinuously at Z=0.
+    new_field = DommaschkPotentialField(1, 1, 10, 0, 0, 9, B0=0)
+    Zs = np.linspace(-0.05, 0.05, 101)
+    Rs = 1.1 * np.ones_like(Zs)
+    phis = 0 * np.ones_like(Zs)
+
+    Bnew = new_field.compute_magnetic_field(np.vstack([Rs, phis, Zs]).T)
+
+    assert not np.any(np.isclose(Bnew[:, 1], 0))

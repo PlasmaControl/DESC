@@ -3,6 +3,8 @@
 import numpy as np
 from scipy.constants import elementary_charge, mu_0
 
+from desc.geometry import Curve
+
 
 def compute_scaling_factors(thing):
     """Compute dimensional quantities for normalizations."""
@@ -64,6 +66,9 @@ def compute_scaling_factors(thing):
         scales["a"] = np.sqrt(np.abs(R10 * Z10))
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
+
+    elif isinstance(thing, Curve):
+        scales["a"] = thing.compute("length")["length"] / (2 * np.pi)
 
     # replace 0 scales to avoid normalizing by zero
     for scale in scales.keys():

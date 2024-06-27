@@ -28,9 +28,9 @@ else:
             import jax
             import jax.numpy as jnp
             import jaxlib
-            from jax.config import config as jax_config
-            if desc_config.get("device") != "METAL":
-                jax_config.update("jax_enable_x64", True)
+            from jax import config as jax_config
+
+            jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "
@@ -77,7 +77,15 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
-    from jax.tree_util import register_pytree_node
+    from jax.tree_util import (
+        register_pytree_node,
+        tree_flatten,
+        tree_leaves,
+        tree_map,
+        tree_structure,
+        tree_unflatten,
+        treedef_is_leaf,
+    )
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -118,7 +126,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             1 where x>=0, -1 where x<0
 
         """
-        x = jnp.atleast_1d(x)
+        x = jnp.asarray(x)
         y = jnp.where(x == 0, 1, jnp.sign(x))
         return y
 
@@ -344,7 +352,11 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
                 xk1, fk1 = backtrack(xk1, fk1, d)
                 return xk1, fk1, k1 + 1
 
-            state = jnp.atleast_1d(guess), jnp.atleast_1d(resfun(guess)), 0
+            state = (
+                jnp.atleast_1d(jnp.asarray(guess)),
+                jnp.atleast_1d(resfun(guess)),
+                0,
+            )
             state = jax.lax.while_loop(condfun, bodyfun, state)
             return state[0], state[1:]
 
@@ -379,6 +391,30 @@ else:  # pragma: no cover
 
     def tree_unstack(*args, **kwargs):
         """Unstack pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_flatten(*args, **kwargs):
+        """Flatten pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_unflatten(*args, **kwargs):
+        """Unflatten pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_map(*args, **kwargs):
+        """Map pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_structure(*args, **kwargs):
+        """Get structure of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_leaves(*args, **kwargs):
+        """Get leaves of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def treedef_is_leaf(*args, **kwargs):
+        """Check is leaf of pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

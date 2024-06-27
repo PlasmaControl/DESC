@@ -852,7 +852,7 @@ class TestSplineXYZCurve:
         def test(method, data_key, compare_breaks=True):
             R = 2
             phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
-
+            grid = LinearGrid(N=1000)
             discontinuous = SplineXYZCurve(
                 X=R * np.cos(phi),
                 Y=R * np.sin(phi),
@@ -874,9 +874,9 @@ class TestSplineXYZCurve:
             assert discontinuous.method == method
             assert continuous.method == method
 
-            discont_data = discontinuous.compute([data_key])
+            discont_data = discontinuous.compute([data_key], grid=grid)
             discont_quantity = discont_data[data_key]
-            cont_quantity = continuous.compute(data_key)[data_key]
+            cont_quantity = continuous.compute(data_key, grid=grid)[data_key]
 
             if compare_breaks:
                 np.testing.assert_allclose(discont_quantity, cont_quantity, rtol=1e-3)
@@ -891,10 +891,8 @@ class TestSplineXYZCurve:
                     cont_quantity[~is_break_point],
                     rtol=1e-3,
                 )
-                # we know there is 1 break point in s
+                # we know there is 1 break point in s (0th index)
                 assert len(discont_quantity[~is_break_point]) != len(discont_quantity)
-
-            return discont_quantity, cont_quantity
 
         test("linear", "length")
         test("linear", "curvature")

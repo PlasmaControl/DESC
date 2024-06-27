@@ -1,6 +1,6 @@
 from interpax import interp1d
 
-from desc.backend import fori_loop, jnp
+from desc.backend import fori_loop, jnp, vmap
 
 from .data_index import register_compute_fun
 from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
@@ -660,6 +660,7 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
     coords : ndarray
         Interpolated XYZ coords with shape (3, len(s_query_pts))
     """
+    f = jnp.asarray(f)
     method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
     has_break_points = len(transforms["intervals"][0])
@@ -667,19 +668,18 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
 
     def inner_body(f, knots, period=None):
         """Interpolation for spline curves."""
-        fq = [
-            interp1d(
+        fq = vmap(
+            lambda dummy_f: interp1d(
                 s_query_pts,
                 knots,
-                f[i],
+                dummy_f,
                 method=method,
                 derivative=derivative,
                 period=period,
             )
-            for i in range(n_dim)
-        ]
+        )(f)
 
-        return fq
+        return jnp.asarray(fq)
 
     def get_interval(arr, knots, istart, istop):
         arr_temp = jnp.where(knots > knots[istop], arr[istop], arr)
@@ -693,14 +693,13 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
         # catch end-point
         istop = jnp.where(istop == 0, -1, istop)
 
-        f_in_interval = [get_interval(f, full_knots, istart, istop) for f in full_f]
+        f_in_interval = get_interval(full_f, full_knots, istart, istop)
         fq_temp = inner_body(f_in_interval, full_knots, period=None)
 
         s_in_interval = (s_query_pts >= full_knots[istart]) & (
             s_query_pts <= full_knots[istop]
         )
-        for i in range(n_dim):
-            fq = fq.at[i].set(jnp.where(s_in_interval, fq_temp[i], fq[i]))
+        fq = jnp.where(s_in_interval, fq_temp, fq)
 
         return fq
 
@@ -709,7 +708,7 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
         full_knots = jnp.append(
             transforms["knots"], transforms["knots"][0] + 2 * jnp.pi
         )
-        full_f = [jnp.append(f[i], f[i][0]) for i in range(3)]
+        full_f = jnp.append(f, f[:, 0][..., None], axis=1)
         xyz_query_pts = jnp.zeros((n_dim, len(s_query_pts)))
         xyz_query_pts = fori_loop(0, len(transforms["intervals"]), body, xyz_query_pts)
     else:

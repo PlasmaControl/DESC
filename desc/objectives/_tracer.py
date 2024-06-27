@@ -112,93 +112,37 @@ class ParticleTracer(_Objective):
         self.Energy = 3.52e6*self.charge 
         eq = eq or self._things[0]
 
-        if self.compute_option == "optimization" or self.compute_option == "optimization-debug":
+        if self.compute_option == "optimization":
             self._dim_f = 1
         elif self.compute_option == "tracer":
             self._dim_f = [len(self.output_time), 4]
-        elif self.compute_option == "average psi":
+        elif self.compute_option.startswith("average "):
             self._dim_f = 1
-        elif self.compute_option == "average theta":
-            self._dim_f = 1
-        elif self.compute_option == "average zeta":
-            self._dim_f = 1
-        elif self.compute_option == "average vpar":
-           self._dim_f = 1
 
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
 
-        if constants is None:
-            constants = self.constants
+        constants = constants or self.constants
 
         def system(initial_conditions = self.initial_conditions, t = self.output_time, initial_parameters = self.initial_parameters):
-            #initial conditions
             psi, theta, zeta, vpar = initial_conditions
-
-            grid = Grid(jnp.array([jnp.sqrt(psi), theta, zeta]).T, jitable=True, sort=False)
+            grid = Grid(jnp.array([jnp.sqrt(psi), theta, zeta]).T, spacing=jnp.zeros((3,)).T, jitable=True, sort=False)
             transforms = get_transforms(self._data_keys, self._things[0], grid, jitable=True)
             profiles = get_profiles(self._data_keys, self._things[0], grid, jitable=True)
-            
-            data = compute_fun("desc.equilibrium.equilibrium.Equilibrium", self._data_keys, params, transforms, profiles, mu=initial_parameters[0], m_q=initial_parameters[1], vpar=vpar)
-            
-            psidot = data["psidot"]
-            thetadot = data["thetadot"]
-            zetadot = data["zetadot"]
-            vpardot = data["vpardot"]
+            data = compute_fun("desc.equilibrium.equilibrium.Equilibrium", self._data_keys, params, transforms, profiles, 
+                               mu=initial_parameters[0], m_q=initial_parameters[1], vpar=vpar)
 
-            return jnp.array([psidot, thetadot, zetadot, vpardot])
-        
+            return jnp.array([data[f"{key}dot"] for key in ['psi', 'theta', 'zeta', 'vpar']])
+
         initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
-        t_jax = self.output_time
         system_jit = jit(system)
-
-        # DIFFRAX
-        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax, rtol = self.tolerance)
+        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, self.output_time, rtol=self.tolerance)
 
         if self.compute_option == "optimization":
-            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)
-        
-        elif self.compute_option == "optimization-debug":
-            import matplotlib.pyplot as plt
-            import time as timet
-            def Trajectory_Plot(solution=solution, save_name=f"Trajectory_Plot_{timet.time()}.png"):
-                fig, ax = plt.subplots()
-                ax.plot(jnp.sqrt(solution[:, 0]) * jnp.cos(solution[:, 1]), jnp.sqrt(solution[:, 0]) * jnp.sin(solution[:, 1]))
-                ax.set_aspect("equal", adjustable='box')
-                plt.xlabel(r'$\sqrt{\psi}cos(\theta)$')
-                plt.ylabel(r'$\sqrt{\psi}sin(\theta)$')
-                fig.savefig(save_name, bbox_inches="tight", dpi=300)
-                print(f"Trajectory Plot Saved: {save_name}")
-                plt.close()
-
-            def Quantity_Plot(solution=solution, save_name=f"Quantity_Plot_{timet.time()}.png"):
-                fig, axs = plt.subplots(2, 2)
-                axs[0, 1].plot(self.output_time, solution[:, 0], 'tab:orange')
-                axs[0, 1].set_title(r'$\psi$ (t)')
-                axs[1, 0].plot(self.output_time, solution[:, 1], 'tab:green')
-                axs[1, 0].set_title(r'$\theta$ (t)')
-                axs[1, 1].plot(self.output_time, solution[:, 2], 'tab:red')
-                axs[1, 1].set_title(r'$\zeta$ (t)')
-                axs[0, 0].plot(self.output_time, solution[:, 3], 'tab:blue')
-                axs[0, 0].set_title(r"$v_{\parallel}$ (t)")
-                fig = plt.gcf()
-                fig.set_size_inches(10.5, 10.5)
-                fig.savefig(save_name, bbox_inches="tight", dpi=300)
-                print(f"Quantity Plot Saved: {save_name}")
-                plt.close()
-
-            Trajectory_Plot()
-            Quantity_Plot()
-
-            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)
+            return jnp.sum((solution[:, 0] - solution[0, 0]) ** 2, axis=-1)
         elif self.compute_option == "tracer":
             return solution
-        elif self.compute_option == "average psi":
-            return jnp.mean(solution[:, 0])
-        elif self.compute_option == "average theta":
-            return jnp.mean(solution[:, 1])
-        elif self.compute_option == "average zeta":
-            return jnp.mean(solution[:, 2])
-        elif self.compute_option == "average vpar":
-            return jnp.mean(solution[:, 3])
+        elif self.compute_option.startswith("average "):
+            index = ["psi", "theta", "zeta", "vpar"].index(self.compute_option.split()[-1])
+            return jnp.mean(solution[:, index])

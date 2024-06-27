@@ -874,15 +874,8 @@ class Equilibrium(IOAble, Optimizable):
             data = {}
 
         p = "desc.equilibrium.equilibrium.Equilibrium"
-        # TODO:
-        #  If the user wants to compute x which depends on y which in turn depends on z,
-        #  and they pass in y already in data, then we shouldn't need to compute z at
-        #  all. To resolve this we need to compute dependencies recursively, so that
-        #  priming data with just the first order dependencies will avoid computing
-        #  unnecessary dependencies. For now just subtract out y.
-        deps = (
-            set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names)
-            - data.keys()
+        deps = set(
+            get_data_deps(names, obj=p, has_axis=grid.axis.size, data=data) + names
         )
 
         def need_src(name):
@@ -892,7 +885,7 @@ class Equilibrium(IOAble, Optimizable):
             # use to compute those dependencies are coordinate-blind.
             return bool(data_index[p][name]["source_grid_requirement"])
 
-        need_src_deps = _grow_seeds(set(filter(need_src, deps)), deps)
+        need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
 
         dep0d = {dep for dep in deps if is_0d(dep) and dep not in need_src_deps}
         # Unless user asks, don't try to recompute stuff which are only dependencies
@@ -907,7 +900,9 @@ class Equilibrium(IOAble, Optimizable):
         # a linear grid with cross-sections at all the unique zeta values in the
         # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
         # attribute, so this would cause an error.
-        dep0d_deps = set(get_data_deps(dep0d, obj=p, has_axis=grid.axis.size))
+        dep0d_deps = set(
+            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        )
         # This filter is stronger than the name implies, but the false positives
         # that are filtered out will still get computed with the logic in
         # compute.utils.compute.
@@ -953,7 +948,7 @@ class Equilibrium(IOAble, Optimizable):
                 warnif(
                     # if need more radial resolution
                     "r" in req and grid.L < self.L_grid
-                    # and won't ovverride grid to one with more radial resolution
+                    # and won't override grid to one with more radial resolution
                     and not (override_grid and coords in {"z", ""}),
                     ResolutionWarning,
                     msg("radial"),
@@ -961,7 +956,7 @@ class Equilibrium(IOAble, Optimizable):
                 warnif(
                     # if need more poloidal resolution
                     "t" in req and grid.M < self.M_grid
-                    # and won't ovverride grid to one with more poloidal resolution
+                    # and won't override grid to one with more poloidal resolution
                     and not (override_grid and coords in {"r", "z", ""}),
                     ResolutionWarning,
                     msg("poloidal"),
@@ -969,7 +964,7 @@ class Equilibrium(IOAble, Optimizable):
                 warnif(
                     # if need more toroidal resolution
                     "z" in req and grid.N < self.N_grid
-                    # and won't ovverride grid to one with more toroidal resolution
+                    # and won't override grid to one with more toroidal resolution
                     and not (override_grid and coords in {"r", ""}),
                     ResolutionWarning,
                     msg("toroidal"),

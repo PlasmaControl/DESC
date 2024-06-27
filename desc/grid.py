@@ -389,7 +389,27 @@ class _Grid(IOAble, ABC):
 
     @property
     def spacing(self):
-        """ndarray: Node spacing, in (rho,theta,zeta)."""
+        """Quadrature weights for integration over surfaces.
+
+        This is typically the distance between nodes when ``NFP=1``, as the quadrature
+        weight is by default a midpoint rule. The returned matrix has three columns,
+        corresponding to the radial, poloidal, and toroidal coordinate, respectively.
+        Each element of the matrix specifies the quadrature area associated with a
+        particular node for each coordinate. I.e. on a grid with coordinates
+        of "rtz", the columns specify dρ, dθ, dζ, respectively. An integration
+        over a ρ flux surface will assign quadrature weight dθ*dζ to each node.
+        Note that dζ is the distance between toroidal surfaces multiplied by ``NFP``.
+
+        On a LinearGrid with duplicate nodes, the columns of spacing no longer
+        specify dρ, dθ, dζ. Rather, the product of each adjacent column specifies
+        dρ*dθ, dθ*dζ, dζ*dρ, respectively.
+
+        Returns
+        -------
+        spacing : ndarray
+            Quadrature weights for integration over surface.
+
+        """
         errorif(
             not hasattr(self, "_spacing"),
             AttributeError,
@@ -594,6 +614,8 @@ class Grid(_Grid):
     period : tuple of float
         Assumed periodicity for each coordinate.
         Use np.inf to denote no periodicity.
+    NFP : int
+        Number of field periods (Default = 1).
     source_grid : Grid
         Grid from which coordinates were mapped from.
     sort : bool
@@ -617,6 +639,7 @@ class Grid(_Grid):
         weights=None,
         coordinates="rtz",
         period=(np.inf, 2 * np.pi, 2 * np.pi),
+        NFP=1,
         source_grid=None,
         sort=False,
         is_meshgrid=False,
@@ -626,7 +649,7 @@ class Grid(_Grid):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
-        self._NFP = 1
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "custom"
         self._coordinates = coordinates
@@ -695,6 +718,7 @@ class Grid(_Grid):
         spacing=None,
         coordinates="rtz",
         period=(np.inf, 2 * np.pi, 2 * np.pi),
+        NFP=1,
         **kwargs,
     ):
         """Create a tensor-product grid from the given coordinates in a jitable manner.
@@ -716,6 +740,9 @@ class Grid(_Grid):
         period : tuple of float
             Assumed periodicity for each coordinate.
             Use np.inf to denote no periodicity.
+        NFP : int
+            Number of field periods (Default = 1).
+            Only makes sense to change from 1 if ``period[2]==2π``.
 
         Returns
         -------
@@ -723,12 +750,13 @@ class Grid(_Grid):
             Meshgrid.
 
         """
+        NFP = check_posint(NFP, "NFP", False)
         a, b, c = jnp.atleast_1d(*nodes)
         if spacing is None:
             errorif(coordinates[0] != "r", NotImplementedError)
             da = _midpoint_spacing(a)
             db = _periodic_spacing(b, period[1])[1]
-            dc = _periodic_spacing(c, period[2])[1]
+            dc = _periodic_spacing(c, period[2])[1] * NFP
         else:
             da, db, dc = spacing
         nodes = jnp.column_stack(
@@ -737,10 +765,12 @@ class Grid(_Grid):
         spacing = jnp.column_stack(
             list(map(jnp.ravel, jnp.meshgrid(da, db, dc, indexing="ij")))
         )
-        # Doesn't make sense to assign weights if the coordinates aren't periodic
-        # since it's not clear how to form a surface and  hence it's enclosed volume.
         weights = (
-            spacing.prod(axis=1) if (period[1] * period[2]) == 4 * jnp.pi**2 else None
+            spacing.prod(axis=1)
+            if period[1] * period[2] == 4 * np.pi**2 / NFP
+            # Doesn't make sense to assign weights if the coordinates aren't periodic
+            # since it's not clear how to form a surface and hence its enclosed volume.
+            else None
         )
 
         unique_a_idx = jnp.arange(a.size) * b.size * c.size
@@ -762,6 +792,7 @@ class Grid(_Grid):
             weights=weights,
             coordinates=coordinates,
             period=period,
+            NFP=NFP,
             sort=False,
             is_meshgrid=True,
             jitable=True,

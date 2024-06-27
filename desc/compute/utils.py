@@ -91,6 +91,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         data=data,
         **kwargs,
     )
+
     # By default each compute function will return in rpz basis. If the user
     # wants the data in xyz basis, we will convert it here.
     parameterization = _parse_parameterization(parameterization)
@@ -107,7 +108,6 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
                 # TODO: check if phi in data?
                 data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
 
-            data[name] = rpz2xyz(data[name])
     return data
 
 

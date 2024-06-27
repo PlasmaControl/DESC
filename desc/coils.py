@@ -6,9 +6,19 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import fori_loop, jit, jnp, scan, tree_stack, tree_unstack, vmap
+from desc.backend import (
+    fori_loop,
+    jit,
+    jnp,
+    scan,
+    tree_leaves,
+    tree_stack,
+    tree_unstack,
+    vmap,
+)
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
+from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -147,6 +157,30 @@ class _Coil(_MagneticField, Optimizable, ABC):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
 
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        x = self.compute("x", grid=grid, params=params, **kwargs)["x"]
+        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
+        basis = kwargs.pop("basis", "xyz")
+        if basis.lower() == "rpz":
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        return x
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -193,13 +227,24 @@ class _Coil(_MagneticField, Optimizable, ABC):
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(
-            ["x", "x_s", "ds"],
-            grid=source_grid,
-            params=params,
-            transforms=transforms,
-            basis="xyz",
-        )
+        if not params or not transforms:
+            data = self.compute(
+                ["x", "x_s", "ds"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
+        else:
+            data = compute_fun(
+                self,
+                name=["x", "x_s", "ds"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+                basis="xyz",
+            )
+
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )
@@ -757,14 +802,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
-        self._NFP = NFP
-        self._sym = sym
+        self._NFP = int(NFP)
+        self._sym = bool(sym)
         self._name = str(name)
 
     @property
     def name(self):
         """str: Name of the curve."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
@@ -774,6 +819,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def coils(self):
         """list: coils in the coilset."""
         return self._coils
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return len(self) * (int(self.sym) + 1) * self.NFP
 
     @property
     def NFP(self):
@@ -846,13 +896,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(names, coil) for coil in self]
         if data is None:
             data = [{}] * len(self)
+
         # if user supplied initial data for each coil we also need to vmap over that.
         data = vmap(
             lambda d, x: self[0].compute(
                 names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
             )
         )(tree_stack(data), tree_stack(params))
-
         return tree_unstack(data)
 
     def translate(self, *args, **kwargs):
@@ -866,6 +916,64 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def flip(self, *args, **kwargs):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
+
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        if params is None:
+            params = [get_params("x", coil) for coil in self]
+        basis = kwargs.pop("basis", "xyz")
+        data = self.compute("x", grid=grid, params=params, basis=basis, **kwargs)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+        if basis.lower() == "rpz":
+            xyz = rpz2xyz(x)
+        else:
+            xyz = x
+
+        # if stellarator symmetric, add reflected coils from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
+
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        rpz = xyz2rpz(xyz)
+
+        # if field period symmetry, add rotated coils from other field periods
+        if self.NFP > 1:
+            rpz0 = rpz
+            for k in range(1, self.NFP):
+                rpz = jnp.vstack(
+                    (rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0]))
+                )
+
+        # ensure phi in [0, 2pi)
+        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
+
+        if basis.lower() == "xyz":
+            x = rpz2xyz(rpz)
+        else:
+            x = rpz
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1431,6 +1539,8 @@ class MixedCoilSet(CoilSet):
 
     """
 
+    _io_attrs_ = CoilSet._io_attrs_
+
     def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
@@ -1438,6 +1548,11 @@ class MixedCoilSet(CoilSet):
         self._NFP = 1
         self._sym = False
         self._name = str(name)
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return sum([c.num_coils if hasattr(c, "num_coils") else 1 for c in self])
 
     def compute(
         self,
@@ -1488,6 +1603,40 @@ class MixedCoilSet(CoilSet):
                 self.coils, grid, params, transforms, data
             )
         ]
+
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int or array-like, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+            If array-like, should be 1 value per coil.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        errorif(
+            grid is None,
+            ValueError,
+            "grid must be supplied to MixedCoilSet._compute_position, since the "
+            + "default grid for each coil could have a different number of nodes.",
+        )
+        params = self._make_arraylike(params)
+        grid = self._make_arraylike(grid)
+        x = jnp.vstack(
+            [
+                coil._compute_position(par, grd, **kwargs)
+                for coil, par, grd in zip(self.coils, params, grid)
+            ]
+        )
+        return x
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None

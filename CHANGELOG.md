@@ -5,6 +5,10 @@ New Features
 
 - Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
 to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
+- Adds the objective `CoilsetMinDistance`, which returns the minimum distance to another
+coil for each coil in a coilset.
+- Adds the objective `PlasmaCoilsetMinDistance`, which returns the minimum distance to the
+plasma surface for each coil in a coilset.
 - Adds method ``run_regcoil`` to ``FourierCurrentPotentialField`` that implements the
 REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
     * Can specify ``current_helicity`` to determine if resulting contours correspond to
@@ -13,12 +17,10 @@ REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimizat
 - Adds method ``.to_CoilSet`` to ``FourierCurrentPotentialField``
 which implements a coil cutting algorithm to discretize the surface current into coils
     * works for both modular and helical coils
-- Adds two new objectives, ``QuadraticFlux`` (which minimizes Bn on plasma surface due to
-a magnetic field) and ``SurfaceCurrentRegularization`` (which minimizes ``alpha*|K|``, the
+- Adds a new objectives,``SurfaceCurrentRegularization`` (which minimizes ``alpha*|K|``, the
 regularization term from surface current in the REGCOIL algorithm)
-    * use of both of these functions allows for REGCOIL solutions to be obtained through
+    * use of this objective with ``QuadraticFlux`` allows for REGCOIL solutions to be obtained through
     the optimization framework, and combined with other objectives as well.
-- Adds functionality to optimize for omnigenity. This includes the ``OmnigenousField`` magnetic field class, the ``Omnigenity`` objective function, and an accompanying tutorial.
 
 v0.11.1
 -------

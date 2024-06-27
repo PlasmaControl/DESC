@@ -124,7 +124,7 @@ class FourierRZToroidalSurface(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
-        self._sym = sym
+        self._sym = bool(sym)
         self._rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
@@ -245,7 +245,7 @@ class FourierRZToroidalSurface(Surface):
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
+                + f"basis with {self.Z_basis.num_modes} modes."
             )
 
     def get_coeffs(self, m, n=0):
@@ -301,7 +301,9 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
-        inputs = InputReader().parse_inputs(path)[-1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
                 "boundary_ratio = {} != 1, surface may not be as expected".format(
@@ -870,8 +872,8 @@ class ZernikeRZToroidalSection(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._zeta = zeta
 

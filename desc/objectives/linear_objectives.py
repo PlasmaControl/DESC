@@ -3003,15 +3003,15 @@ class FixNearAxisR(_FixedObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : Qsc, optional
-        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
-        near-axis behavior to. If None, will fix the equilibrium's current near
-        axis behavior.
     order : {0,1,2}
         order (in rho) of near-axis behavior to constrain
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -3148,15 +3148,15 @@ class FixNearAxisZ(_FixedObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : Qsc, optional
-        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
-        near-axis behavior to. If None, will fix the equilibrium's current near
-        axis behavior.
     order : {0,1,2}
         order (in rho) of near-axis behavior to constrain
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -3307,15 +3307,15 @@ class FixNearAxisLambda(_FixedObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : Qsc, optional
-        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
-        near-axis behavior to. If None, will fix the equilibrium's current near
-        axis behavior.
     order : int
         order (in rho) of near-axis lambda behavior to constrain
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f

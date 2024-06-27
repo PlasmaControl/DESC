@@ -2435,9 +2435,9 @@ class TestObjectiveNaNGrad:
         field = OmnigenousField(
             L_B=0,
             M_B=2,
-            L_x=0,
-            M_x=0,
-            N_x=0,
+            L_x=1,
+            M_x=1,
+            N_x=1,
             NFP=eq.NFP,
             helicity=helicity,
             B_lm=np.array([0.8, 1.2]),

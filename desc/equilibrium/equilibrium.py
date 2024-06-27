@@ -42,6 +42,7 @@ from desc.utils import (
     errorif,
     only1,
     setdefault,
+    warnif,
 )
 
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
@@ -557,6 +558,12 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
+        warnif(
+            L is not None and L < self.L,
+            UserWarning,
+            "Reducing radial (L) resolution can make plasma boundary inconsistent. "
+            + "Recommend calling `eq.surface = eq.get_surface_at(rho=1.0)`",
+        )
         self._L = int(setdefault(L, self.L))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))

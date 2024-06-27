@@ -69,8 +69,8 @@ print(
 )
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
-    # --no-verify jit = jax.jit
-    jit = lambda func, *args, **kwargs: func
+    jit = jax.jit
+    # --no-verify jit = lambda func, *args, **kwargs: func
     fori_loop = jax.lax.fori_loop
     cond = jax.lax.cond
     switch = jax.lax.switch

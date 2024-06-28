@@ -176,7 +176,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     label="A(\\zeta)",
     units="m^{2}",
     units_long="square meters",
-    description="Cross-sectional area as function of zeta",
+    description="Enclosed cross-sectional area as function of zeta",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -196,7 +196,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
             transforms["grid"],
             data["Z"] * n[:, 2] * jnp.sqrt(data["g_tt"]),
             line_label="theta",
-            fix_surface=("rho", 1.0),
+            fix_surface=("rho", jnp.max(transforms["grid"].nodes[:, 0])),
             expand_out=True,
         )
     )

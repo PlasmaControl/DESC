@@ -203,7 +203,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
             transforms["grid"],
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
             # FIXME: Works currently for omega = zero, but for nonzero omega
-            #  we need to integrate over theta at constant zeta.
+            #  we need to integrate over theta at constant phi.
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
             line_label="theta",

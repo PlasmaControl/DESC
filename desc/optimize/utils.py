@@ -1,10 +1,11 @@
 """Utility functions used in optimization problems."""
 
 import copy
+import functools
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp, put
+from desc.backend import cond, jit, jnp, put, solve_triangular
 from desc.utils import Index
 
 
@@ -533,3 +534,20 @@ def f_where_x(x, xs, fs, dim=0):
     if dim == 2:
         f = np.atleast_2d(f).reshape((-1, x.size))
     return f
+
+
+@functools.partial(jit, static_argnames="lower")
+def solve_triangular_regularized(R, b, lower=False):
+    """Solve Rx=b for triangular, possibly rank deficient R.
+
+    for rank deficient triangular matrix, we basically set the 0 diagonal
+    elements to 1, and then zero out the corresponding component of the output
+    not exactly the same as truncated SVD but gives reasonable results and is usually
+    only needed to get something in roughly the right direction for future refinement.
+    """
+    dr = jnp.diag(R)
+    denom = jnp.where(dr == 0, 1, dr)
+    dri = jnp.where(dr == 0, 0, 1 / denom)
+    Rs = R * dri[:, None]
+    b = dri * b
+    return solve_triangular(Rs, b, unit_diagonal=True, lower=lower)

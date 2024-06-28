@@ -118,7 +118,8 @@ class TestComputeUtils:
             )
 
         eq = get("W7-X")
-        eq.change_resolution(3, 3, 3, 6, 6, 6)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         lg = LinearGrid(L=L, M=M, N=N, NFP=eq.NFP, endpoint=False)
         lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=eq.NFP, endpoint=True)
         cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=True)
@@ -332,7 +333,8 @@ class TestComputeUtils:
     def test_surface_averages_identity_op(self):
         """Test flux surface averages of surface functions are identity operations."""
         eq = get("W7-X")
-        eq.change_resolution(3, 3, 3, 6, 6, 6)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["p", "sqrt(g)"], grid=grid)
         pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
@@ -345,7 +347,8 @@ class TestComputeUtils:
         Meaning average(a + b) = average(a) + average(b).
         """
         eq = get("W7-X")
-        eq.change_resolution(3, 3, 3, 6, 6, 6)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["|B|", "|B|_t", "sqrt(g)"], grid=grid)
         a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
@@ -401,7 +404,8 @@ class TestComputeUtils:
 
         # test on grids with a single rho surface
         eq = get("W7-X")
-        eq.change_resolution(3, 3, 3, 6, 6, 6)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         rho = np.array((1 - 1e-4) * np.random.default_rng().random() + 1e-4)
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["|B|", "sqrt(g)"], grid=grid)

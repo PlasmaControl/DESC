@@ -515,7 +515,7 @@ def to_sfl(
     return eq_sfl
 
 
-def rtz_grid(
+def get_rtz_grid(
     eq, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
 ):
     """Return DESC coordinate grid from given coordinates.
@@ -536,7 +536,7 @@ def rtz_grid(
     coordinates : str
         Input coordinates that are specified by the arguments, respectively.
         raz : rho, alpha, zeta
-        rpz : rho, theta_PEST, zeta
+        rvz : rho, theta_PEST, zeta
         rtz : rho, theta, zeta
     period : tuple of float
         Assumed periodicity for each quantity in inbasis.
@@ -557,7 +557,7 @@ def rtz_grid(
     inbasis = {
         "r": "rho",
         "t": "theta",
-        "p": "theta_PEST",
+        "v": "theta_PEST",
         "a": "alpha",
         "z": "zeta",
     }

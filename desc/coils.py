@@ -224,7 +224,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = params.pop("current", self.current)
 
         data = self.compute(
-            ["x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
+            ["phi", "x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
         )
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current

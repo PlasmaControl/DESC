@@ -79,27 +79,27 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
             name, transforms, p
         ), f"Don't have transforms to compute {name}"
 
-        if "grid" in transforms:
+    if "grid" in transforms:
 
-            def check_fun(name):
-                reqs = data_index[p][name]["source_grid_requirement"]
-                errorif(
-                    reqs and not hasattr(transforms["grid"], "source_grid"),
-                    AttributeError,
-                    f"Expected grid with attribute 'source_grid' to compute {name}. "
-                    f"Source grid should have coordinates: {reqs.get('coordinates')}.",
-                )
-                for req in reqs:
-                    errorif(
-                        not hasattr(transforms["grid"].source_grid, req)
-                        or reqs[req] != getattr(transforms["grid"].source_grid, req),
-                        AttributeError,
-                        f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
-                    )
-
-            _ = _get_deps(
-                p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
+        def check_fun(name):
+            reqs = data_index[p][name]["source_grid_requirement"]
+            errorif(
+                reqs and not hasattr(transforms["grid"], "source_grid"),
+                AttributeError,
+                f"Expected grid with attribute 'source_grid' to compute {name}. "
+                f"Source grid should have coordinates: {reqs.get('coordinates')}.",
             )
+            for req in reqs:
+                errorif(
+                    not hasattr(transforms["grid"].source_grid, req)
+                    or reqs[req] != getattr(transforms["grid"].source_grid, req),
+                    AttributeError,
+                    f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
+                )
+
+        _ = _get_deps(
+            p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
+        )
 
     if data is None:
         data = {}

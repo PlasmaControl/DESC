@@ -332,8 +332,9 @@ class CoilLength(_CoilObjective):
 class CoilCurvature(_CoilObjective):
     """Coil curvature.
 
-    Targets the local curvature value per grid node for each coil. A smaller curvature
-    value indicates straighter coils. All curvature values are positive.
+    Targets the local curvature at each grid node for each coil. Positive curvature
+    corresponds to "concave" curves, while negative curvature corresponds to "convex"
+    curves. Curvature values closer to 0 indicate straighter coils.
 
     Parameters
     ----------
@@ -392,7 +393,7 @@ class CoilCurvature(_CoilObjective):
         name="coil curvature",
     ):
         if target is None and bounds is None:
-            bounds = (0, 1)
+            bounds = (-1, 0)
 
         super().__init__(
             coil,
@@ -450,9 +451,8 @@ class CoilCurvature(_CoilObjective):
 class CoilTorsion(_CoilObjective):
     """Coil torsion.
 
-    Targets the local torsion value per grid node for each coil. Indicative
-    of how much the coil goes out of the poloidal plane. e.g. a torsion
-    value of 0 means the coil is completely planar.
+    Targets the local torsion value at each grid node for each coil. Indicative of how
+    non-planar the coil is (a torsion value of 0 means the coil is perfectly planar).
 
     Parameters
     ----------

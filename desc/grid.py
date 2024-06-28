@@ -262,7 +262,7 @@ class _Grid(IOAble, ABC):
     @property
     def num_theta_PEST(self):
         """ndarray: Number of unique straight field line poloidal angles."""
-        errorif(self.coordinates[1] != "p", AttributeError)
+        errorif(self.coordinates[1] != "v", AttributeError)
         return self.num_poloidal
 
     @property
@@ -307,7 +307,7 @@ class _Grid(IOAble, ABC):
     @property
     def unique_theta_PEST_idx(self):
         """ndarray: Indices of unique straight field line poloidal angles."""
-        errorif(self.coordinates[1] != "p", AttributeError)
+        errorif(self.coordinates[1] != "v", AttributeError)
         return self.unique_poloidal_idx
 
     @property
@@ -358,7 +358,7 @@ class _Grid(IOAble, ABC):
     @property
     def inverse_theta_PEST_idx(self):
         """ndarray: Indices that recover unique straight field line poloidal angles."""
-        errorif(self.coordinates[1] != "p", AttributeError)
+        errorif(self.coordinates[1] != "v", AttributeError)
         return self.inverse_poloidal_idx
 
     @property

@@ -9,6 +9,7 @@ from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.utils import errorif
 
 from .data_index import allowed_kwargs, data_index
 
@@ -105,7 +106,12 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
             if name == "x":
                 data[name] = rpz2xyz(data[name])
             else:
-                # TODO: check if phi in data?
+                errorif(
+                    "phi" not in data.keys(),
+                    ValueError,
+                    "'phi' must be included in the compute data "
+                    + "to convert to 'xyz' basis.",
+                )
                 data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
 
     return data

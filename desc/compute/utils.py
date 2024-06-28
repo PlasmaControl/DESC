@@ -9,6 +9,7 @@ from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.utils import errorif
 
 from .data_index import allowed_kwargs, data_index
 
@@ -91,6 +92,27 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         data=data,
         **kwargs,
     )
+
+    # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
+    parameterization = _parse_parameterization(parameterization)
+    for name in data.keys():
+        if (
+            data_index[parameterization][name]["dim"] == 3  # vector quantity
+            and kwargs.get("basis", "rpz").lower() == "xyz"  # xyz basis requested
+        ):
+            from .geom_utils import rpz2xyz, rpz2xyz_vec
+
+            if name == "x":
+                data[name] = rpz2xyz(data[name])
+            else:
+                errorif(
+                    "phi" not in data.keys(),
+                    ValueError,
+                    "'phi' must be included in the compute data "
+                    + "to convert to 'xyz' basis.",
+                )
+                data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+
     return data
 
 
@@ -100,7 +122,14 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
 def _compute(
     parameterization, names, params, transforms, profiles, data=None, **kwargs
 ):
-    """Same as above but without checking inputs for faster recursion."""
+    """Same as above but without checking inputs for faster recursion.
+
+    We need to directly call this function in objectives, since the checks in above
+    function are not compatible with JIT. This function computes given names while
+    using recursion to compute dependencies. If you want to call this function, you
+    cannot give the argument basis='xyz' since that will break the recursion. In that
+    case, either call above function or manually convert the output to xyz basis.
+    """
     parameterization = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
@@ -140,7 +169,6 @@ def _compute(
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
-
     return data
 
 

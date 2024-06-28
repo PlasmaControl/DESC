@@ -93,8 +93,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         **kwargs,
     )
 
-    # By default each compute function will return in rpz basis. If the user
-    # wants the data in xyz basis, we will convert it here.
+    # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     parameterization = _parse_parameterization(parameterization)
     for name in data.keys():
         if (

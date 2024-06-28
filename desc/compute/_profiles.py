@@ -562,6 +562,7 @@ def _gradp_mag(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|grad(p)|", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
 )
 def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     data["<|grad(p)|>_vol"] = (
@@ -890,6 +891,7 @@ def _iota_num_current(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)"],
     axis_limit_data=["g_tz_r", "sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _iota_num_vacuum(params, transforms, profiles, data, **kwargs):
     """Vacuum contribution to the numerator of rotational transform formula."""
@@ -971,6 +973,7 @@ def _iota_num_r_current(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_r",
     ],
     axis_limit_data=["g_tt_rr", "g_tz_rr", "sqrt(g)_rr"],
+    resolution_requirement="tz",
 )
 def _iota_num_r_vacuum(params, transforms, profiles, data, **kwargs):
     iota_num_vacuum = safediv(
@@ -1084,6 +1087,7 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
         "psi_rrr",
     ],
     axis_limit_data=["sqrt(g)_rrr", "g_tt_rrr", "g_tz_rrr"],
+    resolution_requirement="tz",
 )
 def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     """Numerator of rotational transform formula, second radial derivative.
@@ -1212,6 +1216,7 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
         "psi_rr",
         "psi_rrr",
     ],
+    resolution_requirement="tz",
 )
 def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     """Numerator of rotational transform formula, third radial derivative.
@@ -1332,6 +1337,7 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["g_tt", "g_tz", "sqrt(g)", "omega_t", "omega_z"],
+    resolution_requirement="tz",
 )
 def _iota_den(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula.
@@ -1376,6 +1382,7 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
         "omega_rz",
     ],
     axis_limit_data=["sqrt(g)_rr", "g_tt_rr", "g_tz_rr"],
+    resolution_requirement="tz",
 )
 def _iota_den_r(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, first radial derivative.
@@ -1442,6 +1449,7 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
         "omega_rrz",
     ],
     axis_limit_data=["sqrt(g)_rrr", "g_tt_rrr", "g_tz_rrr"],
+    resolution_requirement="tz",
 )
 def _iota_den_rr(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, second radial derivative.
@@ -1536,6 +1544,7 @@ def _iota_den_rr(params, transforms, profiles, data, **kwargs):
         "omega_rrz",
         "omega_rrrz",
     ],
+    resolution_requirement="tz",
 )
 def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, third radial derivative.
@@ -1649,6 +1658,7 @@ def _q(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B_theta"],
+    resolution_requirement="tz",
 )
 def _I(params, transforms, profiles, data, **kwargs):
     data["I"] = surface_averages(transforms["grid"], data["B_theta"])
@@ -1668,6 +1678,7 @@ def _I(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B_theta_r"],
+    resolution_requirement="tz",
 )
 def _I_r(params, transforms, profiles, data, **kwargs):
     data["I_r"] = surface_averages(transforms["grid"], data["B_theta_r"])
@@ -1687,6 +1698,7 @@ def _I_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B_theta_rr"],
+    resolution_requirement="tz",
 )
 def _I_rr(params, transforms, profiles, data, **kwargs):
     data["I_rr"] = surface_averages(transforms["grid"], data["B_theta_rr"])
@@ -1706,6 +1718,7 @@ def _I_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B_zeta"],
+    resolution_requirement="tz",
 )
 def _G(params, transforms, profiles, data, **kwargs):
     data["G"] = surface_averages(transforms["grid"], data["B_zeta"])
@@ -1725,6 +1738,7 @@ def _G(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B_zeta_r"],
+    resolution_requirement="tz",
 )
 def _G_r(params, transforms, profiles, data, **kwargs):
     data["G_r"] = surface_averages(transforms["grid"], data["B_zeta_r"])
@@ -1744,6 +1758,7 @@ def _G_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B_zeta_rr"],
+    resolution_requirement="tz",
 )
 def _G_rr(params, transforms, profiles, data, **kwargs):
     data["G_rr"] = surface_averages(transforms["grid"], data["B_zeta_rr"])

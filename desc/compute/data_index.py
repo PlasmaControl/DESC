@@ -8,8 +8,7 @@ import numpy as np
 
 def find_permutations(primary, separator="_"):
     """Finds permutations of quantity names for aliases."""
-    split_name = primary.split(separator)
-    primary_permutation = split_name[-1]
+    prefix, primary_permutation = primary.rsplit(separator, 1)
     primary_permutation = deque(primary_permutation)
 
     new_permutations = []
@@ -18,10 +17,7 @@ def find_permutations(primary, separator="_"):
         new_permutations.append(list(primary_permutation))
 
     # join new permutation to form alias keys
-    aliases = [
-        "".join(split_name[:-1]) + separator + "".join(perm)
-        for perm in new_permutations
-    ]
+    aliases = [prefix + separator + "".join(perm) for perm in new_permutations]
     aliases = np.unique(aliases)
     aliases = np.delete(aliases, np.where(aliases == primary))
 
@@ -51,7 +47,7 @@ def assign_alias_data(
     return data
 
 
-def register_compute_fun(
+def register_compute_fun(  # noqa: C901
     name,
     label,
     units,
@@ -63,11 +59,11 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
+    axis_limit_data=None,
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
     resolution_requirement="",
     source_grid_requirement=None,
-    axis_limit_data=None,
     **kwargs,
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
@@ -99,7 +95,9 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
-    aliases : list
+    axis_limit_data : list of str
+        Names of other items in the data index needed to compute axis limit of qty.
+    aliases : list of str
         Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
         data.
     parameterization : str or list of str
@@ -107,12 +105,17 @@ def register_compute_fun(
         or `'desc.equilibrium.Equilibrium'`.
     resolution_requirement : str
         Resolution requirements in coordinates. I.e. "r" expects radial resolution
-        in the grid, "rtz" expects grid to radial, poloidal, and toroidal resolution.
+        in the grid, "rtz" expects a grid with radial, poloidal, and toroidal resolution.
     source_grid_requirement : dict
         Attributes of the source grid that the compute function requires.
         Also assumes dependencies were computed on such a grid.
-    axis_limit_data : list of str
-        Names of other items in the data index needed to compute axis limit of qty.
+        By default, the source grid is assumed to be ``transforms["grid"]`` and
+        no requirements are expected of it. As an example, quantities that require
+        integration along field lines may specify
+        ``source_grid_requirement={"coordinates": "raz"}``.
+        which will allow accessing the Clebsch-Type rho, alpha, zeta coordinates in
+        ``transforms["grid"].source_grid``` that correspond to the DESC rho, theta,
+        zeta coordinates in ``transforms["grid"]``.
 
     Notes
     -----
@@ -136,9 +139,16 @@ def register_compute_fun(
     }
     for kw in kwargs:
         allowed_kwargs.add(kw)
-    permutable_names = ["R_", "Z_", "phi_", "lambda_", "omega_"]
-    if not aliases and "".join(name.split("_")[:-1]) + "_" in permutable_names:
-        aliases = find_permutations(name)
+    splits = name.rsplit("_", 1)
+    if (
+        len(splits) > 1
+        # Only look for permutations of partial derivatives of same coordinate system.
+        and {"r", "t", "z"}.issuperset(splits[-1])
+    ):
+        aliases_temp = np.append(np.array(aliases), find_permutations(name))
+        for alias in aliases:
+            aliases_temp = np.append(aliases_temp, find_permutations(alias))
+        aliases = np.unique(aliases_temp)
 
     def _decorator(func):
         d = {
@@ -251,3 +261,29 @@ _class_inheritance = {
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
 allowed_kwargs = set()
+
+
+def is_0d_vol_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant throughout plasma volume and needs full volume to compute?."""
+    # Should compute on a grid that samples entire plasma volume.
+    # In particular, a QuadratureGrid for accurate radial integration.
+    return (
+        data_index[p][name]["coordinates"] == ""
+        and data_index[p][name]["resolution_requirement"] != ""
+    )
+
+
+def is_1dr_rad_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant over radial surfaces and needs full surface to compute?."""
+    return (
+        data_index[p][name]["coordinates"] == "r"
+        and data_index[p][name]["resolution_requirement"] == "tz"
+    )
+
+
+def is_1dz_tor_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant over toroidal surfaces and needs full surface to compute?."""
+    return (
+        data_index[p][name]["coordinates"] == "z"
+        and data_index[p][name]["resolution_requirement"] == "rt"
+    )

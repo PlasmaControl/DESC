@@ -36,7 +36,7 @@ from desc.compute.bounce_integral import (
     tanh_sinh,
 )
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import rtz_grid
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.utils import only1
@@ -473,7 +473,7 @@ def test_bounce_integral_checks():
     rho = np.linspace(0.1, 1, 6)
     alpha = np.array([0])
     knots = np.linspace(-2 * np.pi, 2 * np.pi, 200)
-    grid = rtz_grid(
+    grid = get_rtz_grid(
         eq, rho, alpha, knots, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )
     data = eq.compute(
@@ -615,7 +615,7 @@ def test_drift():
     iota = grid_fsa.compress(data["iota"]).item()
     alpha = 0
     zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-    grid = rtz_grid(
+    grid = get_rtz_grid(
         eq, rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )
 

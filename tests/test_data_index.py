@@ -8,6 +8,7 @@ import pytest
 import desc.compute
 from desc.compute import data_index
 from desc.compute.data_index import _class_inheritance
+from desc.utils import errorif
 
 
 class TestDataIndex:
@@ -38,6 +39,11 @@ class TestDataIndex:
         matches = {s.strip().strip('"') for sublist in matches for s in sublist}
         matches.discard("")
         return matches if matches else {default}
+
+    @staticmethod
+    def _is_function(func):
+        # JITed functions are not functions according to inspect.
+        return inspect.isfunction(func) or callable(func)
 
     @pytest.mark.unit
     def test_data_index_deps(self):
@@ -74,7 +80,7 @@ class TestDataIndex:
         pattern_params = re.compile(r"params\[(.*?)]")
         for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
             if module_name[0] == "_":
-                for _, fun in inspect.getmembers(module, inspect.isfunction):
+                for _, fun in inspect.getmembers(module, self._is_function):
                     # quantities that this function computes
                     names = self.get_matches(fun, pattern_names)
                     # dependencies queried in source code of this function
@@ -97,7 +103,6 @@ class TestDataIndex:
 
         for p in data_index:
             for name, val in data_index[p].items():
-                print(name)
                 err_msg = f"Parameterization: {p}. Name: {name}."
                 deps = val["dependencies"]
                 data = set(deps["data"])
@@ -111,6 +116,12 @@ class TestDataIndex:
                 assert len(profiles) == len(deps["profiles"]), err_msg
                 assert len(params) == len(deps["params"]), err_msg
                 # assert correct dependencies are queried
+                errorif(
+                    name not in queried_deps[p],
+                    AssertionError,
+                    "Did you reuse the function name (i.e. def_...) for"
+                    f" '{name}' for some other quantity?",
+                )
                 assert queried_deps[p][name]["data"] == data | axis_limit_data, err_msg
                 assert queried_deps[p][name]["profiles"] == profiles, err_msg
                 assert queried_deps[p][name]["params"] == params, err_msg

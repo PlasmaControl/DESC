@@ -3523,3 +3523,25 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
         ).T,
     )
     return data
+
+
+@register_compute_fun(
+    name="e_theta|r,p",
+    label="\\mathbf{e}_{\\theta} |_{\\rho, \\phi}",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along boundary of constant phi toroidal surface",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_phi", "phi_t"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+)
+def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):
+    data["e_theta|r,p"] = data["e_theta"] - (data["e_phi"].T * data["phi_t"]).T
+    return data

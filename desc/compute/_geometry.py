@@ -12,7 +12,7 @@ expensive computations.
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, dot, line_integrals, surface_integrals
+from .utils import cross, dot, line_integrals, safenorm, surface_integrals
 
 
 @register_compute_fun(
@@ -176,25 +176,36 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     label="A(\\zeta)",
     units="m^{2}",
     units_long="square meters",
-    description="Enclosed cross-sectional area as function of zeta",
+    description="Enclosed cross-sectional (constant phi surface) area, "
+    "as function of zeta",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["Z", "n_rho", "g_tt"],
+    data=["Z", "n_rho", "e_theta|r,p"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    # FIXME: Add source grid requirement once omega is nonzero.
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # divergence theorem: integral(dA div [0, 0, Z]) = integral(ds n dot [0, 0, Z])
-    # but we need only the part of n in the R,Z plane
+    # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
+    # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
+    # Denote the divergence operator div by [∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1].
+    # ∫ dS div (v ⊗ [1, 0, 1]) = ∫ dℓ n dot (v ⊗ [1, 0, 1])
+    # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
+    # where the labels following | denote those coordinates are fixed.
+    # Now choose v = [0, 0, Z] and n in the direction (e_θ|ρ,ζ × e_ζ|ρ,θ) ⊗ [1, 0, 1].
     n = data["n_rho"]
     n = n.at[:, 1].set(0)
     n = n / jnp.linalg.norm(n, axis=-1)[:, None]
     data["A(z)"] = jnp.abs(
         line_integrals(
             transforms["grid"],
-            data["Z"] * n[:, 2] * jnp.sqrt(data["g_tt"]),
+            data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
+            # FIXME: Works currently for omega = zero, but for nonzero omega
+            #  we need to integrate over theta at constant zeta.
+            #  Should be simple once we have coordinate mapping and source grid
+            #  logic from GitHub pull request #1024.
             line_label="theta",
             fix_surface=("rho", jnp.max(transforms["grid"].nodes[:, 0])),
             expand_out=True,

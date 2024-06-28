@@ -31,6 +31,7 @@ from .utils import surface_averages_map
     coordinates="r",
     data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
     axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
+    resolution_requirement="tz",
     n_gauss="int: Number of quadrature points to use for estimating trapped fraction. "
     + "Default 20.",
 )

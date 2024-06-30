@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import cond, fori_loop, jnp, put
+from desc.backend import cond, fori_loop, jnp, put, set_default_cpu
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from .data_index import allowed_kwargs, data_index
@@ -144,6 +144,7 @@ def _compute(
     return data
 
 
+@set_default_cpu
 def get_data_deps(keys, obj, has_axis=False):
     """Get list of data keys needed to compute a given quantity.
 
@@ -189,6 +190,7 @@ def get_data_deps(keys, obj, has_axis=False):
     return sorted(list(set(out)))
 
 
+@set_default_cpu
 def get_derivs(keys, obj, has_axis=False):
     """Get dict of derivative orders needed to compute a given quantity.
 
@@ -274,6 +276,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
     return profiles
 
 
+@set_default_cpu
 def get_params(keys, obj, has_axis=False, **kwargs):
     """Get parameters needed to compute a given quantity.
 
@@ -311,6 +314,7 @@ def get_params(keys, obj, has_axis=False, **kwargs):
     return temp_params
 
 
+@set_default_cpu
 def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     """Get transforms needed to compute a given quantity on a given grid.
 

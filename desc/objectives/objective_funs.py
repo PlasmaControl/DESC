@@ -5,7 +5,14 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
+from desc.backend import (
+    jit,
+    jnp,
+    set_default_cpu,
+    tree_flatten,
+    tree_unflatten,
+    use_jax,
+)
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -148,6 +155,7 @@ class ObjectiveFunction(IOAble):
             if obj._use_jit:
                 obj.jit()
 
+    @set_default_cpu
     def build(self, use_jit=None, verbose=1):
         """Build the objective.
 

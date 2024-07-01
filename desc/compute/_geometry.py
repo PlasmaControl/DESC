@@ -183,15 +183,16 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["Z", "n_rho", "e_theta|r,p"],
+    data=["Z", "n_rho", "e_theta|r,p", "rho"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     # FIXME: Add source grid requirement once omega is nonzero.
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
     # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
-    # Denote the divergence operator div by ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
-    # Then ∫ dA div v = ∫ dℓ n dot v
+    # In this geometry, the divergence operator on a polar basis vector is
+    # div = ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
+    # ∫ dA div v = ∫ dℓ n dot v
     # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
     # and the labels following | denote those coordinates are fixed.
     # Now choose v = [0, 0, Z], and n in the direction (e_θ|ρ,ζ × e_ζ|ρ,θ) ⊗ [1, 0, 1].
@@ -207,7 +208,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
             line_label="theta",
-            fix_surface=("rho", jnp.max(transforms["grid"].nodes[:, 0])),
+            fix_surface=("rho", jnp.max(data["rho"])),
             expand_out=True,
         )
     )

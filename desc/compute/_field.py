@@ -13,6 +13,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
+from ..utils import errorif
 from .data_index import register_compute_fun
 from .utils import (
     cross,
@@ -140,6 +141,7 @@ def _B(params, transforms, profiles, data, **kwargs):
     data=["B"],
 )
 def _B_R(params, transforms, profiles, data, **kwargs):
+    errorif(kwargs.get("basis", "rpz").lower() != "rpz", NotImplementedError)
     data["B_R"] = data["B"][:, 0]
     return data
 
@@ -158,6 +160,7 @@ def _B_R(params, transforms, profiles, data, **kwargs):
     data=["B"],
 )
 def _B_phi(params, transforms, profiles, data, **kwargs):
+    errorif(kwargs.get("basis", "rpz").lower() != "rpz", NotImplementedError)
     data["B_phi"] = data["B"][:, 1]
     return data
 
@@ -176,6 +179,7 @@ def _B_phi(params, transforms, profiles, data, **kwargs):
     data=["B"],
 )
 def _B_Z(params, transforms, profiles, data, **kwargs):
+    errorif(kwargs.get("basis", "rpz").lower()[-1] != "z", NotImplementedError)
     data["B_Z"] = data["B"][:, 2]
     return data
 

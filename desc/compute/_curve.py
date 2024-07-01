@@ -2,6 +2,7 @@ from interpax import interp1d
 
 from desc.backend import jnp
 
+from ..utils import errorif
 from .data_index import register_compute_fun
 from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from .utils import cross, dot, safenormalize
@@ -156,6 +157,7 @@ def _phi_Curve(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.core.Curve",
 )
 def _Z_Curve(params, transforms, profiles, data, **kwargs):
+    errorif(kwargs.get("basis", "rpz").lower()[-1] != "z", NotImplementedError)
     data["Z"] = data["x"][:, 2]
     return data
 

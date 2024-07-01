@@ -1404,6 +1404,7 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
 def _e_sub_phi(params, transforms, profiles, data, **kwargs):
     # dX/dphi at const r,t = dX/dz * dz/dphi = dX/dz / (dphi/dz)
     data["e_phi"] = (data["e_zeta"].T / data["phi_z"]).T
+    return data
 
 
 @register_compute_fun(
@@ -2485,14 +2486,11 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "theta_PEST_t", "phi"],
-    basis="basis",
+    data=["e_theta", "theta_PEST_t"],
 )
 def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
     # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
     data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_PEST"] = rpz2xyz_vec(data["e_theta_PEST"], phi=data["phi"])
     return data
 
 

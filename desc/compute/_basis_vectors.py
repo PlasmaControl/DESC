@@ -1402,7 +1402,7 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     ],
     aliases=["e_phi"],
     # Our usual notation implies e_phi = (∂X/∂Φ)|R,Z, but we need to alias e_phi to
-    # e_phi|r,t = (∂X/∂Φ)|R,Z for compatibility with older versions of the code.
+    # e_phi|r,t = (∂X/∂Φ)|ρ,θ for compatibility with older versions of the code.
     # To instead compute (∂X/∂Φ)|R,Z, look at the quantity "e_phi|R,Z".
 )
 def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):

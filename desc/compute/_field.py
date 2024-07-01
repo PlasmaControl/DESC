@@ -87,24 +87,6 @@ def _B_sup_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B^theta_PEST",
-    label="B^{\\theta}",
-    units="T \\cdot m^{-1}",
-    units_long="Tesla / meter",
-    description="Contravariant straight field line (PEST) component of magnetic field",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["B", "e^theta_PEST"],
-)
-def _B_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
-    data["B^theta_PEST"] = dot(data["B"], data["e^theta_PEST"])
-    return data
-
-
-@register_compute_fun(
     name="B^zeta",
     label="B^{\\zeta}",
     units="T \\cdot m^{-1}",

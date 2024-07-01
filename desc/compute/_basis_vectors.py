@@ -548,26 +548,6 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^theta_PEST",
-    label="\\mathbf{e}^{\\theta_{PEST}}",
-    units="m^{-1}",
-    units_long="inverse meters",
-    description="Contravariant straight field line (PEST) poloidal basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho", "e_phi", "sqrt(g)_PEST"],
-)
-def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
-    data["e^theta_PEST"] = (
-        cross(data["e_phi"], data["e_rho"]).T / data["sqrt(g)_PEST"]
-    ).T
-    return data
-
-
-@register_compute_fun(
     name="e^theta*sqrt(g)",
     label="\\mathbf{e}^{\\theta} \\sqrt{g}",
     units="m^{2}",

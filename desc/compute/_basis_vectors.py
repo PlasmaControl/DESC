@@ -1427,7 +1427,6 @@ def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    basis="basis",
 )
 def _e_sub_phi_RZ(params, transforms, profiles, data, **kwargs):
     data["e_phi|R,Z"] = jnp.column_stack([data["0"], data["R"], data["0"]])

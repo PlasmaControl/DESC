@@ -1500,11 +1500,11 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e_phi",
-    label="\\mathbf{e}_{\\phi}",
+    name="e_phi|r,t",
+    label="\\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
     units="m",
     units_long="meters",
-    description="Covariant cylindrical toroidal basis vector",
+    description="Covariant toroidal basis vector in (ρ,θ,Φ) coordinates",
     dim=3,
     params=[],
     transforms={},
@@ -1516,12 +1516,41 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
     basis="basis",
+    aliases=["e_phi"],
+    # Our usual notation implies e_phi = (∂X/∂Φ)|R,Z, but we need to alias e_phi to
+    # e_phi|r,t = (∂X/∂Φ)|R,Z for compatibility with older versions of the code.
+    # To instead compute (∂X/∂Φ)|R,Z, look at the quantity "e_phi|R,Z".
 )
-def _e_sub_phi(params, transforms, profiles, data, **kwargs):
-    # dX/dphi at const r,t = dX/dz * dz/dphi = dX/dz / (dphi/dz)
-    data["e_phi"] = (data["e_zeta"].T / data["phi_z"]).T
+def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):
+    # (∂X/∂Φ)|ρ,θ = (∂X/∂ζ)|ρ,θ / (∂Φ/∂ζ)|ρ,θ
+    data["e_phi|r,t"] = (data["e_zeta"].T / data["phi_z"]).T
     if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_phi"] = rpz2xyz_vec(data["e_phi"], phi=data["phi"])
+        data["e_phi|r,t"] = rpz2xyz_vec(data["e_phi|r,t"], phi=data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="e_phi|R,Z",
+    label="\\mathbf{e}_{\\phi} |_{R, Z}",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along increasing cylindrical toroidal angle phi",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R", "0", "phi"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    basis="basis",
+)
+def _e_sub_phi_RZ(params, transforms, profiles, data, **kwargs):
+    data["e_phi|R,Z"] = jnp.column_stack([data["0"], data["R"], data["0"]])
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e_phi|R,Z"] = rpz2xyz_vec(data["e_phi|R,Z"], phi=data["phi"])
     return data
 
 
@@ -2598,23 +2627,76 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_PEST",
-    label="\\mathbf{e}_{\\theta_{PEST}}",
+    label="\\mathbf{e}_{\\vartheta} |_{\\rho, \\phi} = \\mathbf{e}_{\\theta_{PEST}}",
     units="m",
     units_long="meters",
-    description="Covariant straight field line (PEST) poloidal basis vector",
+    description="Covariant poloidal basis vector in (ρ,ϑ,Φ) coordinates"
+    " (Straight field line PEST coordinates. Φ increases counterclockwise"
+    " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "theta_PEST_t", "phi"],
-    basis="basis",
+    data=["e_theta", "theta_PEST_t", "e_zeta", "theta_PEST_z", "phi_t", "phi_z"],
+    aliases=["e_vartheta"],
 )
-def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
-    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
-    data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_PEST"] = rpz2xyz_vec(data["e_theta_PEST"], phi=data["phi"])
+def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
+    # constant ρ and Φ
+    e_vartheta = (
+        data["e_theta"].T * data["phi_z"] - data["e_zeta"].T * data["phi_t"]
+    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    data["e_theta_PEST"] = e_vartheta.T
+    return data
+
+
+@register_compute_fun(
+    name="e_phi|r,v",
+    label="\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta}",
+    units="m",
+    units_long="meters",
+    description="Covariant toroidal basis vector in (ρ,ϑ,Φ) coordinates"
+    " (Straight field line PEST coordinates. Φ increases counterclockwise"
+    " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "theta_PEST_t", "e_zeta", "theta_PEST_z", "phi_t", "phi_z"],
+)
+def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ϑ
+    e_phi = (
+        data["e_zeta"].T * data["theta_PEST_t"]
+        - data["e_theta"].T * data["theta_PEST_z"]
+    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    data["e_phi|r,v"] = e_phi.T
+    return data
+
+
+@register_compute_fun(
+    name="e_rho|v,p",
+    label="\\mathbf{e}_{\\rho} |_{\\vartheta, \\phi}",
+    units="m",
+    units_long="meters",
+    description="Covariant radial basis vector in (ρ,ϑ,Φ) coordinates"
+    " (Straight field line PEST coordinates. Φ increases counterclockwise"
+    " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_vartheta", "e_phi|r,v", "theta_PEST_r", "phi_r"],
+)
+def _e_sub_rho_vp(params, transforms, profiles, data, **kwargs):
+    # constant ϑ and Φ
+    data["e_rho|v,p"] = (
+        data["e_rho"].T
+        - data["e_vartheta"].T * data["theta_PEST_r"]
+        - data["e_phi|r,v"].T * data["phi_r"]
+    ).T
     return data
 
 

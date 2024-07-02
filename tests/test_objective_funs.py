@@ -2449,6 +2449,35 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(objective)
 
+    @pytest.mark.unit
+    @pytest.mark.parametrize("helicity", [(1, 0), (1, 1), (0, 1)])
+    def test_objective_no_nangrad_omnigenity(self, helicity):
+        """Omnigenity."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+        field = OmnigenousField(
+            L_B=0,
+            M_B=2,
+            L_x=1,
+            M_x=1,
+            N_x=1,
+            NFP=eq.NFP,
+            helicity=helicity,
+            B_lm=np.array([0.8, 1.2]),
+        )
+        obj = ObjectiveFunction(Omnigenity(eq=eq, field=field))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), str(helicity)
+
 
 @pytest.mark.unit
 def test_asymmetric_normalization():

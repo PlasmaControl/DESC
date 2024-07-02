@@ -1181,7 +1181,7 @@ def bounce_integral(
     The quantities ``B_sup_z``, ``B``, ``B_z_ra``, and those in ``f`` supplied to the
     returned method must be separable into data evaluated along particular field lines
     via ``.reshape(S,knots.size)``. One way to satisfy this is to compute stuff on the
-    grid returned from the method ``desc.equilibrium.coords.rtz_grid``. See
+    grid returned from the method ``desc.equilibrium.coords.get_rtz_grid``. See
     ``tests.test_bounce_integral.test_bounce_integral_checks`` for example use.
 
     Parameters
@@ -1255,11 +1255,9 @@ def bounce_integral(
     )
     # Strictly increasing zeta knots enforces dζ > 0.
     # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require B^ζ = B⋅∇ζ > 0.
-    # This is equivalent to changing the sign of ∇ζ (or [∂/∂ζ]|ρ,a).
+    # This is equivalent to changing the sign of ∇ζ (or [∂ℓ/∂ζ]|ρ,a).
     # Recall dζ = ∇ζ⋅dR, implying 1 = ∇ζ⋅(e_ζ|ρ,a). Hence, a sign change in ∇ζ
-    # requires the same sign change in e_ζ|ρ,a to retain the metric identity. For any
-    # quantity f, we may write df = ∇f⋅dR, implying ∂f/∂ζ|ρ,α = ∇f ⋅ e_ζ|ρ,a. Hence,
-    # a sign change in e_ζ|ρ,a requires the same sign change in ∂f/∂ζ|ρ,α.
+    # requires the same sign change in e_ζ|ρ,a to retain the metric identity.
     B_sup_z = jnp.abs(B_sup_z) * L_ref / B_ref
     B = B / B_ref
     B_z_ra = B_z_ra / B_ref  # This is already the correct sign.

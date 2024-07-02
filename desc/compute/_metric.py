@@ -60,7 +60,8 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_{\\text{Clebsch}}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant of Clebsch field line coordinate system",
+    description="Jacobian determinant of Clebsch field line coordinate system (ρ,α,ζ)"
+    " where ζ is the DESC toroidal coordinate.",
     dim=1,
     params=[],
     transforms={},
@@ -251,7 +252,7 @@ def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant zeta surface in Clebsch "
-    "field line coordinates",
+    "field line coordinates (ρ,α,ζ) where ζ is the DESC toroidal coordinate.",
     dim=1,
     params=[],
     transforms={},
@@ -261,7 +262,7 @@ def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
 )
 def _e_rho_x_e_alpha(params, transforms, profiles, data, **kwargs):
     # Same as safenorm(cross(data["e_rho|a,z"], data["e_alpha"]), axis=-1), but more
-    # efficient as it avoids computing radial derivative of alpha and hence iota.
+    # efficient as it avoids computing radial derivative of iota and stream functions.
     data["|e_rho x e_alpha|"] = data["|e_rho x e_theta|"] / jnp.abs(data["alpha_t"])
     return data
 
@@ -1833,6 +1834,7 @@ def _gradrho(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["|grad(rho)|", "sqrt(g)"],
     axis_limit_data=["sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _gradrho_norm_fsa(params, transforms, profiles, data, **kwargs):
     data["<|grad(rho)|>"] = surface_averages(
@@ -1978,7 +1980,7 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     units="1 / Wb",
     units_long="Inverse webers",
     description="Radial component of the geometric part of the curvature drift"
-    + " used for local stability analyses for Gamma_c.",
+    + " used for local stability analyses, gyrokinetics, Gamma_c.",
     dim=1,
     params=[],
     transforms={},

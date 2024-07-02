@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid
 from desc.utils import Timer
 
 from ..backend import jnp
@@ -16,10 +16,20 @@ from .utils import _parse_callable_target_bounds
 class EffectiveRipple(_Objective):
     """The effective ripple is a proxy for neoclassical transport.
 
+    The 3D geometry of the magnetic field in stellarators produces local magnetic
+    wells that lead to bad confinement properties with enhanced radial drift,
+    especially for trapped particles. Neoclassical (thermal) transport can become the
+    dominant transport channel in stellarators which are not optimized to reduce it.
+    The effective ripple is a proxy, measuring the effective modulation amplitude of the
+    magnetic field averaged along a magnetic surface, which can be used to optimize for
+    stellarators with improved confinement.
+
+    References
+    ----------
+    https://doi.org/10.1063/1.873749.
     Evaluation of 1/ν neoclassical transport in stellarators.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-    https://doi.org/10.1063/1.873749.
 
     Parameters
     ----------
@@ -28,14 +38,13 @@ class EffectiveRipple(_Objective):
     target : {float, ndarray, callable}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``bounds=(0,np.inf)``
+        single argument ``rho`` and return the desired value of the profile at those
+        locations. Defaults to 0.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
+        If a callable, each should take a single argument ``rho`` and return the
         desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``bounds=(0, np.inf)``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to Objective.dim_f
@@ -43,7 +52,7 @@ class EffectiveRipple(_Objective):
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
+        values. If `normalize` is ``True`` and the target is in physical units,
         this should also be set to True.
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
@@ -86,7 +95,7 @@ class EffectiveRipple(_Objective):
     def __init__(
         self,
         eq,
-        target=None,
+        target=0,
         bounds=None,
         weight=1,
         normalize=True,
@@ -101,21 +110,27 @@ class EffectiveRipple(_Objective):
         batch=True,
         name="Effective ripple",
     ):
-        if target is None and bounds is None:
-            bounds = (0, np.inf)
+        if bounds is not None:
+            target = None
 
         # Assign in build.
         self._grid_1dr = grid
-        # TODO: Do we need a 0d grid, just to compute R0 accurately?
-        self._grid_0d = grid if isinstance(grid, QuadratureGrid) else None
         self._constants = {"quad_weights": 1}
         self._dim_f = 1
         self._rho = np.array([1.0])
         # Assign here.
         self._alpha = alpha
         self._zeta = zeta
-        self._keys_1dr = ["iota", "iota_r", "<|grad(rho)|>", "min_tz |B|", "max_tz |B|"]
-        self._keys_0d = ["R0"]
+        # R0 should be evaluated on Quadrature grid, but it's just a constant
+        # factor, so it's not worth the memory of building the transforms.
+        self._keys_1dr = [
+            "iota",
+            "iota_r",
+            "<|grad(rho)|>",
+            "min_tz |B|",
+            "max_tz |B|",
+            "R0",
+        ]
         self._keys = ["effective ripple"]
         self._hyperparameters = {
             "num_quad": num_quad,
@@ -147,14 +162,14 @@ class EffectiveRipple(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid_0d is None:
-            self._grid_0d = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
         if self._grid_1dr is None:
-            self._grid_1dr = self._grid_0d
-        self._dim_f = self._grid_1dr.num_rho
-        self._rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
+            self._rho = np.linspace(0.1, 1, 5)
+            self._grid_1dr = LinearGrid(
+                rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            )
+        else:
+            self._rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
+        self._dim_f = self._rho.size
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._rho
         )
@@ -164,28 +179,12 @@ class EffectiveRipple(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if self._grid_1dr == self._grid_0d:
-            self._constants["transforms_0d"] = get_transforms(
-                self._keys_0d + self._keys_1dr, eq, self._grid_0d, use_jit
-            )
-            self._constants["profiles_0d"] = get_profiles(
-                self._keys_0d + self._keys_1dr, eq, self._grid_0d, use_jit
-            )
-            self._constants["transforms_1dr"] = self._constants["transforms_0d"]
-            self._constants["profiles_1dr"] = self._constants["profiles_0d"]
-        else:
-            self._constants["transforms_0d"] = get_transforms(
-                self._keys_0d, eq, self._grid_0d, use_jit
-            )
-            self._constants["profiles_0d"] = get_profiles(
-                self._keys_0d, eq, self._grid_0d, use_jit
-            )
-            self._constants["transforms_1dr"] = get_transforms(
-                self._keys_1dr, eq, self._grid_1dr, use_jit
-            )
-            self._constants["profiles_1dr"] = get_profiles(
-                self._keys_1dr, eq, self._grid_1dr, use_jit
-            )
+        self._constants["transforms_1dr"] = get_transforms(
+            self._keys_1dr, eq, self._grid_1dr
+        )
+        self._constants["profiles_1dr"] = get_profiles(
+            self._keys_1dr, eq, self._grid_1dr
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -214,31 +213,28 @@ class EffectiveRipple(_Objective):
         eq = self.things[0]
         data = compute_fun(
             eq,
-            self._keys_0d,
-            params,
-            constants["transforms_0d"],
-            constants["profiles_0d"],
-        )
-        data = compute_fun(
-            eq,
             self._keys_1dr,
             params,
             constants["transforms_1dr"],
             constants["profiles_1dr"],
-            data={key: data[key] for key in data if eq.is_0d(key)},
         )
         iota = self._grid_1dr.compress(data["iota"])
         iota_r = self._grid_1dr.compress(data["iota_r"])
-        grid = eq.rtz_grid(
+        grid = eq.get_rtz_grid(
             self._rho,
             self._alpha,
             self._zeta,
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
             iota=SplineProfile(iota, df=iota_r, knots=self._rho, name="iota", jnp=jnp),
+            params=params,
         )
-        data = {key: data[key] for key in self._keys_0d} | {
-            key: grid.copy_data_from_other(data[key], self._grid_1dr)
+        data = {
+            key: (
+                grid.copy_data_from_other(data[key], self._grid_1dr)
+                if key != "R0"
+                else data[key]
+            )
             for key in self._keys_1dr
         }
         data = compute_fun(
@@ -256,10 +252,12 @@ class EffectiveRipple(_Objective):
 class GammaC(_Objective):
     """Γ_c is a proxy for measuring energetic ion confinement.
 
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    References
+    ----------
     https://doi.org/10.1088/1741-4326/ac2994.
     Equation 16.
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
 
     Parameters
     ----------
@@ -268,14 +266,13 @@ class GammaC(_Objective):
     target : {float, ndarray, callable}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``bounds=(0,np.inf)``
+        single argument ``rho`` and return the desired value of the profile at those
+        locations. Defaults to 0.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
+        If a callable, each should take a single argument ``rho`` and return the
         desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``bounds=(0, np.inf)``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to Objective.dim_f
@@ -323,7 +320,7 @@ class GammaC(_Objective):
     def __init__(
         self,
         eq,
-        target=None,
+        target=0,
         bounds=None,
         weight=1,
         normalize=True,
@@ -338,8 +335,8 @@ class GammaC(_Objective):
         batch=True,
         name="Gamma_c",
     ):
-        if target is None and bounds is None:
-            bounds = (0, np.inf)
+        if bounds is not None:
+            target = None
 
         # Assign in build.
         self._grid_1dr = grid
@@ -382,16 +379,13 @@ class GammaC(_Objective):
         """
         eq = self.things[0]
         if self._grid_1dr is None:
+            self._rho = np.linspace(0.1, 1, 5)
             self._grid_1dr = LinearGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
+                rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
             )
-        self._dim_f = self._grid_1dr.num_rho
-        self._rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
+        else:
+            self._rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
+        self._dim_f = self._rho.size
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._rho
         )
@@ -402,10 +396,10 @@ class GammaC(_Objective):
         timer.start("Precomputing transforms")
 
         self._constants["transforms_1dr"] = get_transforms(
-            self._keys_1dr, eq, self._grid_1dr, use_jit
+            self._keys_1dr, eq, self._grid_1dr
         )
         self._constants["profiles_1dr"] = get_profiles(
-            self._keys_1dr, eq, self._grid_1dr, use_jit
+            self._keys_1dr, eq, self._grid_1dr
         )
 
         timer.stop("Precomputing transforms")
@@ -442,13 +436,14 @@ class GammaC(_Objective):
         )
         iota = self._grid_1dr.compress(data["iota"])
         iota_r = self._grid_1dr.compress(data["iota_r"])
-        grid = eq.rtz_grid(
+        grid = eq.get_rtz_grid(
             self._rho,
             self._alpha,
             self._zeta,
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
             iota=SplineProfile(iota, df=iota_r, knots=self._rho, name="iota", jnp=jnp),
+            params=params,
         )
         data = {
             key: grid.copy_data_from_other(data[key], self._grid_1dr)

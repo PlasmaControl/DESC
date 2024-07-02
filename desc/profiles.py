@@ -42,11 +42,11 @@ class _Profile(IOAble, ABC):
     @property
     def name(self):
         """str: Name of the profile."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
-        self._name = new
+        self._name = str(new)
 
     @property
     @abstractmethod
@@ -197,13 +197,13 @@ class _Profile(IOAble, ABC):
             **kwargs,
         )
 
-    def __call__(self, grid, params=None, dr=0, dt=0, dz=0, jitable=False):
+    def __call__(self, grid, params=None, dr=0, dt=0, dz=0):
         """Evaluate the profile at a given set of points."""
         if not isinstance(grid, _Grid):
             grid = jnp.atleast_1d(jnp.asarray(grid))
             if grid.ndim == 1:
                 grid = jnp.array([grid, jnp.zeros_like(grid), jnp.zeros_like(grid)]).T
-            grid = Grid(grid, sort=False, jitable=jitable)
+            grid = Grid(grid, sort=False)
         return self.compute(grid, params, dr, dt, dz)
 
     def __repr__(self):
@@ -536,6 +536,7 @@ class PowerSeriesProfile(_Profile):
         Whether the basis should only contain even powers (True) or all powers (False).
     name : str
         Name of the profile.
+
     """
 
     _io_attrs_ = _Profile._io_attrs_ + ["_basis"]
@@ -1190,8 +1191,7 @@ class FourierZernikeProfile(_Profile):
             else:
                 sym = False
 
-        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=NFP, sym=sym)
-
+        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=int(NFP), sym=sym)
         self._params = copy_coeffs(params, modes, self.basis.modes)
 
     def __repr__(self):

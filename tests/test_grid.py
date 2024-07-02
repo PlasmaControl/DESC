@@ -784,7 +784,8 @@ def test_find_least_rational_surfaces():
 def test_custom_jitable_grid_indexing():
     """Test that unique/inverse indices are set correctly when jitable=True."""
     eq = get("NCSX")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     # field lines on two surfaces
     rho = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
     theta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi

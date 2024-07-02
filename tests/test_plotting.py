@@ -998,7 +998,8 @@ def test_2d_plot_Bn():
 def test_3d_plot_Bn():
     """Test 3d plotting of Bn on equilibrium surface."""
     eq = get("precise_QA")
-    eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
+    with pytest.warns(UserWarning):
+        eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
     fig = plot_3d(
         eq,
         "B*n",

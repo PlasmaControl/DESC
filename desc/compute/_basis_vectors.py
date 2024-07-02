@@ -1427,6 +1427,7 @@ def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
+    basis="basis",
 )
 def _e_sub_phi_RZ(params, transforms, profiles, data, **kwargs):
     data["e_phi|R,Z"] = jnp.column_stack([data["0"], data["R"], data["0"]])
@@ -2508,8 +2509,8 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\vartheta} |_{\\rho, \\phi} = \\mathbf{e}_{\\theta_{PEST}}",
     units="m",
     units_long="meters",
-    description="Covariant poloidal basis vector in (ρ,ϑ,Φ) coordinates"
-    " (Straight field line PEST coordinates. Φ increases counterclockwise"
+    description="Covariant poloidal basis vector in (ρ,ϑ,Φ) coordinates or"
+    " straight field line PEST coordinates. Φ increases counterclockwise"
     " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
     dim=3,
     params=[],
@@ -2533,8 +2534,8 @@ def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta}",
     units="m",
     units_long="meters",
-    description="Covariant toroidal basis vector in (ρ,ϑ,Φ) coordinates"
-    " (Straight field line PEST coordinates. Φ increases counterclockwise"
+    description="Covariant toroidal basis vector in (ρ,ϑ,Φ) coordinates or"
+    " straight field line PEST coordinates. Φ increases counterclockwise"
     " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
     dim=3,
     params=[],
@@ -2558,8 +2559,8 @@ def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\rho} |_{\\vartheta, \\phi}",
     units="m",
     units_long="meters",
-    description="Covariant radial basis vector in (ρ,ϑ,Φ) coordinates"
-    " (Straight field line PEST coordinates. Φ increases counterclockwise"
+    description="Covariant radial basis vector in (ρ,ϑ,Φ) coordinates or"
+    " straight field line PEST coordinates. Φ increases counterclockwise"
     " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
     dim=3,
     params=[],

@@ -136,6 +136,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
           (generally 2-3), while ``"svd"`` uses one singular value decomposition.
           ``"cho"`` is generally faster for large systems, especially on GPU, but may
           be less accurate for badly scaled systems. Default ``"svd"``
+        - ``"scaled_termination"`` : Whether to evaluate termination criteria for
+          ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
     Returns
     -------
@@ -180,6 +182,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     maxiter = setdefault(maxiter, n * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
     max_dx = options.pop("max_dx", jnp.inf)
+    scaled_termination = options.pop("scaled_termination", True)
 
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
     if jac_scale:
@@ -195,7 +198,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     g_h = g * d
     J_h = J * d
-    g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+    g_norm = jnp.linalg.norm((g_h if scaled_termination else g * v), ord=jnp.inf)
 
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
@@ -236,7 +239,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     callback = setdefault(callback, lambda *args: False)
 
-    x_norm = jnp.linalg.norm(x, ord=2)
+    x_norm = jnp.linalg.norm(((x * scale_inv) if scaled_termination else x), ord=2)
     success = None
     message = None
     step_norm = jnp.inf
@@ -332,7 +335,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             success, message = check_termination(
                 actual_reduction,
                 cost,
-                step_norm,
+                (step_h_norm if scaled_termination else step_norm),
                 x_norm,
                 g_norm,
                 reduction_ratio,
@@ -370,8 +373,12 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
             g_h = g * d
             J_h = J * d
-            x_norm = jnp.linalg.norm(x, ord=2)
-            g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+            x_norm = jnp.linalg.norm(
+                ((x * scale_inv) if scaled_termination else x), ord=2
+            )
+            g_norm = jnp.linalg.norm(
+                (g_h if scaled_termination else g * v), ord=jnp.inf
+            )
 
             if g_norm < gtol:
                 success, message = True, STATUS_MESSAGES["gtol"]
@@ -380,7 +387,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 success, message = False, STATUS_MESSAGES["callback"]
 
         else:
-            step_norm = actual_reduction = 0
+            step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
         if verbose > 1:

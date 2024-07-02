@@ -2297,7 +2297,7 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|B|_a",
-    label="\\partial_{\\alpha} |\\mathbf{B}|",
+    label="\\partial_{\\alpha} (|\\mathbf{B}|) |_{\\rho, \\zeta}",
     units="T",
     units_long="Tesla",
     description="Magnitude of magnetic field, derivative wrt field line angle",
@@ -2316,7 +2316,7 @@ def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|B|_z|r,a",
-    label="\\(partial_{\\zeta} (|\\mathbf{B}|) |_{\\rho, \\alpha}",
+    label="\\partial_{\\zeta} (|\\mathbf{B}|) |_{\\rho, \\alpha}",
     units="T",
     units_long="Tesla",
     description="Magnitude of magnetic field, derivative along field line",

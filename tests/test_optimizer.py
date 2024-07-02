@@ -1329,8 +1329,7 @@ def test_quad_flux_with_surface_current_field():
     # this happens because in QuadraticFlux.compute, field.compute_magnetic_field
     # is called. If the field needs transforms to evaluate, then these transforms
     # will be created on the fly if they are not provided, resulting in an error
-    # This tests the fix where the transforms are precomputed and passed in
-    # for the FourierCurrentPotentialField class specifically.
+    # unless jitable=True is passed
     eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
     field = FourierCurrentPotentialField.from_surface(
         eq.surface, Phi_mn=[1, 0], modes_Phi=[[0, 0], [1, 1]], M_Phi=1, N_Phi=1

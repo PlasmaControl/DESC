@@ -18,6 +18,7 @@ from desc.backend import (
 )
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
+from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -181,7 +182,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         return x
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -199,6 +200,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+
 
         Returns
         -------
@@ -223,9 +227,24 @@ class _Coil(_MagneticField, Optimizable, ABC):
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(
-            ["x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
-        )
+        if not params or not transforms:
+            data = self.compute(
+                ["x", "x_s", "ds"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
+        else:
+            data = compute_fun(
+                self,
+                name=["x", "x_s", "ds"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+                basis="xyz",
+            )
+
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )
@@ -605,7 +624,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -623,6 +642,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -955,7 +976,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return x
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -970,6 +991,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid : Grid, int or None, optional
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -1616,7 +1639,7 @@ class MixedCoilSet(CoilSet):
         return x
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1633,6 +1656,8 @@ class MixedCoilSet(CoilSet):
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
             If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -1642,10 +1667,11 @@ class MixedCoilSet(CoilSet):
         """
         params = self._make_arraylike(params)
         source_grid = self._make_arraylike(source_grid)
+        transforms = self._make_arraylike(transforms)
 
         B = 0
-        for coil, par, grd in zip(self.coils, params, source_grid):
-            B += coil.compute_magnetic_field(coords, par, basis, grd)
+        for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
+            B += coil.compute_magnetic_field(coords, par, basis, grd, transforms=tr)
 
         return B
 

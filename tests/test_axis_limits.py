@@ -42,7 +42,6 @@ not_finite_limits = {
     "curvature_k2_zeta",
     "e^helical",
     "e^theta",
-    "e^theta_PEST",
     "e^theta_r",
     "e^theta_t",
     "e^theta_z",
@@ -67,7 +66,6 @@ not_finite_limits = {
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
-    "B^theta_PEST",
     "D_current",
     "n_rho_z",
     "|e_theta x e_zeta|_z",

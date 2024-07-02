@@ -40,7 +40,6 @@ from desc.objectives import (
     PlasmaVesselDistance,
     QuadraticFlux,
     QuasisymmetryTripleProduct,
-    ToroidalFlux,
     Volume,
     get_fixed_boundary_constraints,
 )
@@ -1330,8 +1329,7 @@ def test_quad_flux_with_surface_current_field():
     # this happens because in QuadraticFlux.compute, field.compute_magnetic_field
     # is called. If the field needs transforms to evaluate, then these transforms
     # will be created on the fly if they are not provided, resulting in an error
-    # This tests the fix where the transforms are precomputed and passed in
-    # for the FourierCurrentPotentialField class specifically.
+    # unless jitable=True is passed
     eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
     field = FourierCurrentPotentialField.from_surface(
         eq.surface, Phi_mn=[1, 0], modes_Phi=[[0, 0], [1, 1]], M_Phi=1, N_Phi=1
@@ -1347,29 +1345,6 @@ def test_quad_flux_with_surface_current_field():
     )
     constraints = FixParameters(field, {"I": True, "G": True})
     opt = Optimizer("lsq-exact")
-    # this should run without an error
-    (field_modular_opt,), result = opt.optimize(
-        field, objective=obj, constraints=constraints, maxiter=1, copy=True
-    )
-
-
-@pytest.mark.unit
-def test_tor_flux_with_surface_current_field():
-    """Test that ToroidalFlux does not throw an error when field has transforms."""
-    eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
-    field = FourierCurrentPotentialField.from_surface(
-        eq.surface, Phi_mn=[1, 0], modes_Phi=[[0, 0], [1, 1]], M_Phi=1, N_Phi=1
-    )
-    obj = ObjectiveFunction(
-        ToroidalFlux(
-            eq=eq,
-            field=field,
-            eval_grid=LinearGrid(L=2, M=2, sym=True),
-            field_grid=LinearGrid(M=2, N=2),
-        ),
-    )
-    constraints = FixParameters(field, {"I": True, "G": True})
-    opt = Optimizer("fmintr")
     # this should run without an error
     (field_modular_opt,), result = opt.optimize(
         field, objective=obj, constraints=constraints, maxiter=1, copy=True

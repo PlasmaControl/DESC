@@ -996,6 +996,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
             basis="xyz",
             params=params,
             transforms=transforms,
+            jitable=True,
         )
     else:
         data = compute_fun(

@@ -240,9 +240,6 @@ class VacuumBoundaryError(_Objective):
         x = jnp.array([data["R"], data["phi"], data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
-        # FIXME: need to add case for CurrentPotentialField as well,
-        # if external field is a CurrentPotentialField then transforms
-        # must be built in build then passed in here
         Bext = constants["field"].compute_magnetic_field(
             x, source_grid=self._field_grid, basis="rpz", params=field_params
         )
@@ -689,9 +686,6 @@ class BoundaryError(_Objective):
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
-        # FIXME: need to add case for CurrentPotentialField as well,
-        # if external field is a CurrentPotentialField then transforms
-        # must be built in build then passed in here
         Bext = constants["field"].compute_magnetic_field(
             x, source_grid=self._field_grid, basis="rpz", params=field_params
         )

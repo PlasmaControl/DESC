@@ -197,13 +197,13 @@ class _Profile(IOAble, ABC):
             **kwargs,
         )
 
-    def __call__(self, grid, params=None, dr=0, dt=0, dz=0, jitable=False):
+    def __call__(self, grid, params=None, dr=0, dt=0, dz=0):
         """Evaluate the profile at a given set of points."""
         if not isinstance(grid, _Grid):
             grid = jnp.atleast_1d(jnp.asarray(grid))
             if grid.ndim == 1:
                 grid = jnp.array([grid, jnp.zeros_like(grid), jnp.zeros_like(grid)]).T
-            grid = Grid(grid, sort=False, jitable=jitable)
+            grid = Grid(grid, sort=False)
         return self.compute(grid, params, dr, dt, dz)
 
     def __repr__(self):

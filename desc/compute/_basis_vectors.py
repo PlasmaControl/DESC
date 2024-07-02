@@ -3527,7 +3527,7 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho|a,z",
-    label="\\mathbf{e}_{\\rho}_{\\alpha, \\zeta}",
+    label="\\mathbf{e}_{\\rho} |_{\\alpha, \\zeta}",
     units="m",
     units_long="meters",
     description="Tangent vector along radial field line label",
@@ -3608,7 +3608,7 @@ def _e_alpha_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta|r,a",  # Same as B/(B⋅∇ζ).
-    label="(\\mathbf{e}_{\\zeta})_{\\rho, \\alpha} "
+    label="\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha} "
     "= \\frac{\\mathbf{B}}{\\mathbf{B} \\cdot \\nabla \\zeta}",
     units="m",
     units_long="meters",
@@ -3629,7 +3629,7 @@ def _e_zeta_ra(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="(e_zeta|r,a)_t",
-    label="\\partial_{\\theta} [(\\mathbf{e}_{\\zeta})_{\\rho, \\alpha}]",
+    label="\\partial_{\\theta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
     units="m",
     units_long="meters",
     description="Tangent vector along (collinear to) field line, poloidal derivative",
@@ -3652,11 +3652,11 @@ def _e_zeta_ra_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="(e_zeta|r,a)_a",
-    label="\\partial_{\\alpha} [(\\mathbf{e}_{\\zeta})_{\\rho, \\alpha}]",
+    label="\\partial_{\\alpha} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
     units="m",
     units_long="meters",
     description="Tangent vector along (collinear to) field line, derivative "
-    "wrt field line angle",
+    "wrt field line poloidal label",
     dim=3,
     params=[],
     transforms={},
@@ -3671,7 +3671,7 @@ def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="(e_zeta|r,a)_z",
-    label="\\partial_{\\zeta} [(\\mathbf{e}_{\\zeta})_{\\rho, \\alpha}]",
+    label="\\partial_{\\zeta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
     units="m",
     units_long="meters",
     description="Tangent vector along (collinear to) field line, toroidal derivative",
@@ -3694,7 +3694,8 @@ def _e_zeta_ra_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="(e_zeta_z)|r,a",
-    label="(\\partial_{\\zeta} \\mathbf{e}_{\\zeta})_{\\rho, \\alpha}",
+    label="\\partial_{\\zeta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}) "
+    "|_{\\rho, \\alpha}",
     units="m",
     units_long="meters",
     description="Curvature vector along field line",
@@ -3713,12 +3714,12 @@ def _e_zeta_z_ra(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|e_zeta|r,a|",  # Often written as dℓ/dζ = |B/(B⋅∇ζ)|.
-    label="|(\\mathbf{e}_{\\zeta})_{\\rho, \\alpha}| "
-    "= \\frac{|\\mathbf{B}|}{|\\mathbf{B} \\cdot \\nabla \\zeta|}",
+    name="|e_zeta|r,a|",  # Often written as |dℓ/dζ| = |B/(B⋅∇ζ)|.
+    label="|\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}|"
+    " = \\frac{|\\mathbf{B}|}{|\\mathbf{B} \\cdot \\nabla \\zeta|}",
     units="m",
     units_long="meters",
-    description="Length along field line",
+    description="Differential length along field line",
     dim=3,
     params=[],
     transforms={},
@@ -3733,10 +3734,11 @@ def _d_ell_d_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="(|e_zeta|_z)|r,a",
-    label="(\\partial_{\\zeta} |\\mathbf{e}_{\\zeta}|)_{\\rho, \\alpha}|",
+    label="\\partial_{\\zeta} |\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}| "
+    "|_{\\rho, \\alpha}",
     units="m",
     units_long="meters",
-    description="Length along field line, derivative along field line",
+    description="Differential length along field line, derivative along field line",
     dim=3,
     params=[],
     transforms={},

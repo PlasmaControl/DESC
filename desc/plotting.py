@@ -1118,8 +1118,9 @@ def plot_fsa(  # noqa: C901
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-    grid : Grid
-        Grid to compute name on.
+    grid : _Grid
+        Grid to compute name on. If provided, the parameters
+        ``rho``, ``M``, and ``N`` are ignored.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 

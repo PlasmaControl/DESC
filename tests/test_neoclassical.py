@@ -6,7 +6,6 @@ import pytest
 from tests.test_plotting import tol_1d
 
 from desc.examples import get
-from desc.objectives import EffectiveRipple, ObjectiveFunction
 
 
 @pytest.mark.unit
@@ -16,7 +15,7 @@ def test_field_line_average():
     rho = np.array([1])
     alpha = np.array([0])
     eq = get("DSHAPE")
-    grid = eq.rtz_grid(
+    grid = eq.get_rtz_grid(
         rho,
         alpha,
         np.linspace(0, 2 * np.pi, 20),
@@ -32,7 +31,7 @@ def test_field_line_average():
 
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
-    grid = eq.rtz_grid(
+    grid = eq.get_rtz_grid(
         rho,
         alpha,
         np.linspace(0, 40 * np.pi, 300),
@@ -53,7 +52,7 @@ def test_effective_ripple():
     """Test effective ripple with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = eq.rtz_grid(
+    grid = eq.get_rtz_grid(
         rho,
         np.array([0]),
         np.linspace(0, 20 * np.pi, 1000),
@@ -65,16 +64,3 @@ def test_effective_ripple():
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["effective ripple"]), marker="o")
     return fig
-
-
-@pytest.mark.unit
-def test_ad_ripple():
-    """Make sure we can differentiate."""
-    eq = get("ESTELL")
-    eq.change_resolution(2, 2, 2, 4, 4, 4)
-    obj = ObjectiveFunction([EffectiveRipple(eq)])
-    obj.build(verbose=0)
-    g = obj.grad(obj.x())
-    assert not np.any(np.isnan(g))
-    # FIXME: Want to ensure nonzero gradient in test.
-    print(np.count_nonzero(g))

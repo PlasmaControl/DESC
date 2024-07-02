@@ -105,6 +105,7 @@ def _poloidal_mean(grid, f):
     profiles=[],
     coordinates="r",
     data=["B^zeta"],
+    resolution_requirement="z",  # and poloidal if near rational surfaces
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _L_ra_fsa(data, transforms, profiles, **kwargs):
@@ -132,6 +133,7 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B^zeta", "sqrt(g)"],
+    resolution_requirement="z",  # and poloidal if near rational surfaces
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _G_ra_fsa(data, transforms, profiles, **kwargs):
@@ -148,7 +150,13 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 
 @register_compute_fun(
     name="effective ripple",  # this is ε¹ᐧ⁵
-    label="ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉",
+    label=(
+        # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\epsilon^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
+        "(\\frac{R_0}{\\langle \\vert\\nabla \\psi\\vert \\rangle})^2 "
+        "\\int d\\lambda \\lambda^{-2}B_0^{-1} "
+        "\\langle \\sum_j \\frac{H_j^2}{I_j} \\rangle"
+    ),
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude",
@@ -169,6 +177,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "R0",
         "<|grad(rho)|>",
     ],
+    resolution_requirement="z",  # and poloidal if near rational surfaces
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     num_quad=(
         "int : Resolution for quadrature of bounce integrals. Default is 31, "

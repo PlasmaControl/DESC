@@ -490,7 +490,7 @@ def _B_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     units_long="Tesla / meter",
     description=(
         "Contravariant toroidal component of magnetic field, derivative wrt field"
-        " line angle"
+        " line poloidal label"
     ),
     dim=1,
     params=[],
@@ -507,7 +507,7 @@ def _B_sup_zeta_a(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B^zeta_z|r,a",
-    label="(\\partial_{\\zeta} B^{\\zeta})_{\\rho, \\alpha}",
+    label="\\partial_{\\zeta} B^{\\zeta} |_{\\rho, \\alpha}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description=(

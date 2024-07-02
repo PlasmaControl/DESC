@@ -42,6 +42,7 @@ not_finite_limits = {
     "curvature_k2_zeta",
     "e^helical",
     "e^theta",
+    "e^theta_PEST",
     "e^theta_r",
     "e^theta_t",
     "e^theta_z",
@@ -60,13 +61,13 @@ not_finite_limits = {
     "gbdrift",
     "cvdrift",
     "grad(alpha)",
-    "cvdrift0",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
+    "B^theta_PEST",
     "D_current",
     "n_rho_z",
     "|e_theta x e_zeta|_z",
@@ -91,7 +92,7 @@ not_implemented_limits = {
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
-    "cvdrift0",
+    "g^pa",  # will need to refactor dependencies to avoid nan in AD
 }
 
 
@@ -131,6 +132,14 @@ def _skip_this(eq, name):
         or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
         or (eq.current is None and "iota_num" in name)
+        # These quantities require a coordinate mapping to compute and special grids, so
+        # it's not economical to test their axis limits here. Instead, a grid that
+        # includes the axis should be used in existing unit tests for these quantities.
+        or bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "source_grid_requirement"
+            ]
+        )
     )
 
 
@@ -384,3 +393,4 @@ def test_reverse_mode_ad_axis(name):
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))
+    print(np.count_nonzero(g), name)

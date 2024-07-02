@@ -2296,6 +2296,45 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|B|_a",
+    label="\\partial_{\\alpha} (|\\mathbf{B}|) |_{\\rho, \\zeta}",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative wrt field line angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_t", "alpha_t"],
+)
+def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ζ
+    data["|B|_a"] = data["|B|_t"] / data["alpha_t"]
+    return data
+
+
+@register_compute_fun(
+    name="|B|_z|r,a",
+    label="\\partial_{\\zeta} (|\\mathbf{B}|) |_{\\rho, \\alpha}",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative along field line",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_z", "|B|_a", "alpha_z"],
+)
+def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
+    # ∂|B|/∂ζ (constant ρ and α) = ∂|B|/∂ζ (constant ρ and θ)
+    #                            - ∂|B|/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
+    data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_a"] * data["alpha_z"]
+    return data
+
+
+@register_compute_fun(
     name="|B|_rr",
     label="\\partial_{\\rho\\rho} |\\mathbf{B}|",
     units="T",

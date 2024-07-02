@@ -71,10 +71,12 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
+    imap = jax.lax.map
+    scan = jax.lax.scan
     bincount = jnp.bincount
     repeat = jnp.repeat
+    flatnonzero = jnp.flatnonzero
     take = jnp.take
-    scan = jax.lax.scan
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -305,6 +307,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         This routine may be used on over or under-determined systems, in which case it
         will solve it in a least squares / least norm sense.
         """
+        from desc.compute.utils import safenorm
+
         if fixup is None:
             fixup = lambda x, *args: x
         if jac is None:
@@ -369,7 +373,15 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         x, (res, niter) = jax.lax.custom_root(
             res, x0, solve, tangent_solve, has_aux=True
         )
-        return x, (jnp.linalg.norm(res), niter)
+        return x, (safenorm(res), niter)
+
+    def trapezoid(y, x=None, dx=1.0, axis=-1):
+        """Integrate along the given axis using the composite trapezoidal rule."""
+        if hasattr(jnp, "trapezoid"):
+            # https://github.com/google/jax/issues/20410
+            return jnp.trapezoid(y, x, dx, axis)
+        else:
+            return jax.scipy.integrate.trapezoid(y, x, dx, axis)
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
@@ -386,6 +398,39 @@ else:  # pragma: no cover
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
+
+    def imap(f, xs, in_axes=0, out_axes=0):
+        """Generalizes jax.lax.map; uses numpy."""
+        if not isinstance(xs, np.ndarray):
+            raise NotImplementedError(
+                "Require numpy array input, or install jax to support pytrees."
+            )
+        xs = np.moveaxis(xs, source=in_axes, destination=0)
+        return np.stack([f(x) for x in xs], axis=out_axes)
+
+    def vmap(fun, in_axes=0, out_axes=0):
+        """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
+
+        Like Python's builtin map,
+        except inputs and outputs are in the form of stacked arrays,
+        and the returned object is a vectorized version of the input function.
+
+        Parameters
+        ----------
+        fun: callable
+            Function (A -> B)
+        in_axes: int
+            Axis to map over.
+        out_axes: int
+            An integer indicating where the mapped axis should appear in the output.
+
+        Returns
+        -------
+        fun_vmap: callable
+            Vectorized version of fun.
+
+        """
+        return lambda xs: imap(fun, xs, in_axes, out_axes)
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
@@ -568,32 +613,6 @@ else:  # pragma: no cover
             val = body_fun(val)
         return val
 
-    def vmap(fun, out_axes=0):
-        """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
-
-        Like Python's builtin map,
-        except inputs and outputs are in the form of stacked arrays,
-        and the returned object is a vectorized version of the input function.
-
-        Parameters
-        ----------
-        fun: callable
-            Function (A -> B)
-        out_axes: int
-            An integer indicating where the mapped axis should appear in the output.
-
-        Returns
-        -------
-        fun_vmap: callable
-            Vectorized version of fun.
-
-        """
-
-        def fun_vmap(fun_inputs):
-            return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
-
-        return fun_vmap
-
     def scan(f, init, xs, length=None, reverse=False, unroll=1):
         """Scan a function over leading array axes while carrying along state.
 
@@ -633,9 +652,14 @@ else:  # pragma: no cover
             ys.append(y)
         return carry, np.stack(ys)
 
-    def bincount(x, weights=None, minlength=None, length=None):
-        """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
-        return np.bincount(x, weights, minlength)
+    def bincount(x, weights=None, minlength=0, length=None):
+        """A numpy implementation of jnp.bincount."""
+        x = np.clip(x, 0, None)
+        if length is None:
+            length = max(minlength, x.max() + 1)
+        else:
+            minlength = max(minlength, length)
+        return np.bincount(x, weights, minlength)[:length]
 
     def repeat(a, repeats, axis=None, total_repeat_length=None):
         """A numpy implementation of jnp.repeat."""
@@ -753,6 +777,21 @@ else:  # pragma: no cover
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
+
+    def trapezoid(y, x=None, dx=1.0, axis=-1):
+        """Integrate along the given axis using the composite trapezoidal rule."""
+        if hasattr(np, "trapezoid"):
+            # https://github.com/numpy/numpy/issues/25586
+            return np.trapezoid(y, x, dx, axis)
+        else:
+            return np.trapz(y, x, dx, axis)
+
+    def flatnonzero(a, size=None, fill_value=0):
+        """A numpy implementation of jnp.flatnonzero."""
+        nz = np.flatnonzero(a)
+        if size is not None:
+            nz = np.pad(nz, (0, max(size - nz.size, 0)), constant_values=fill_value)
+        return nz
 
     def take(
         a,

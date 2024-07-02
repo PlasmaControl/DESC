@@ -1225,23 +1225,6 @@ class QuadraticFlux(_Objective):
             Bplasma = compute_B_plasma(
                 eq, eval_grid, self._source_grid, normal_only=True
             )
-        field = self._field
-        # FIXME: need to add case for CurrentPotentialField as well
-        # FIXME: This will fail if we have a SumMagneticField where
-        # one of the constituents is a (Fourier)CurrentPotentialField
-        if hasattr(field, "Phi_mn"):
-            # make the transform for the CurrentPotentialField
-            if self._field_grid is None:
-                self._field_grid = LinearGrid(
-                    M=30 + 2 * max(field.M, field.M_Phi),
-                    N=30 + 2 * max(field.N, field.N_Phi),
-                    NFP=field.NFP,
-                )
-            field_transforms = get_transforms(
-                ["K", "x"], obj=field, grid=self._field_grid
-            )
-        else:
-            field_transforms = None
 
         self._constants = {
             "field": self._field,
@@ -1249,7 +1232,6 @@ class QuadraticFlux(_Objective):
             "quad_weights": w,
             "eval_data": eval_data,
             "B_plasma": Bplasma,
-            "field_transforms": field_transforms,
         }
 
         timer.stop("Precomputing transforms")
@@ -1294,7 +1276,6 @@ class QuadraticFlux(_Objective):
             source_grid=constants["field_grid"],
             basis="rpz",
             params=field_params,
-            transforms=constants["field_transforms"],
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
         f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]
@@ -1450,22 +1431,6 @@ class ToroidalFlux(_Objective):
 
         plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
-        field = self._field
-        # FIXME: need to add case for CurrentPotentialField as well
-        if hasattr(field, "Phi_mn"):
-            # make the transform for the CurrentPotentialField
-            if self._field_grid is None:
-                self._field_grid = LinearGrid(
-                    M=30 + 2 * max(field.M, field.M_Phi),
-                    N=30 + 2 * max(field.N, field.N_Phi),
-                    NFP=field.NFP,
-                )
-            field_transforms = get_transforms(
-                ["K", "x"], obj=field, grid=self._field_grid
-            )
-        else:
-            field_transforms = None
-
         self._constants = {
             "plasma_coords": plasma_coords,
             "equil_data": data,
@@ -1473,7 +1438,6 @@ class ToroidalFlux(_Objective):
             "field": self._field,
             "field_grid": self._field_grid,
             "eval_grid": eval_grid,
-            "field_transforms": field_transforms,
         }
 
         timer.stop("Precomputing transforms")
@@ -1511,7 +1475,6 @@ class ToroidalFlux(_Objective):
             basis="rpz",
             source_grid=constants["field_grid"],
             params=field_params,
-            transforms=constants["field_transforms"],
         )
         grid = constants["eval_grid"]
 

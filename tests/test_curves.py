@@ -847,7 +847,6 @@ class TestSplineXYZCurve:
     @pytest.mark.unit
     def test_discontinuous_splines(self):
         """Test splines that have break points."""
-        # TODO: why doesn't this work for break_indices = [0, 10, 500]
         break_indices = [0, 10]
 
         def test(method, data_key, compare_breaks=True):
@@ -874,9 +873,11 @@ class TestSplineXYZCurve:
             assert discontinuous.method == method
             assert continuous.method == method
 
-            discont_data = discontinuous.compute([data_key])
+            grid = LinearGrid(N=100)
+
+            discont_data = discontinuous.compute([data_key], grid=grid)
             discont_quantity = discont_data[data_key]
-            cont_quantity = continuous.compute(data_key)[data_key]
+            cont_quantity = continuous.compute(data_key, grid=grid)[data_key]
 
             if compare_breaks:
                 np.testing.assert_allclose(discont_quantity, cont_quantity, rtol=1e-3)
@@ -895,12 +896,13 @@ class TestSplineXYZCurve:
                 assert len(discont_quantity[~is_break_point]) != len(discont_quantity)
 
         test("linear", "length")
-        # TODO: not sure about this one, first index is nan for discontinuous
+        # TODO: not sure why this one doesn't pass, first index is nan for discont
         test("linear", "curvature", compare_breaks=False)
         # torsion = 0 for breakpoints, but otherwise torsion = NaN, so can't compare
         test("linear", "torsion", compare_breaks=False)
 
         test("cubic", "length")
+        # TODO: test doesn't pass for break_indices = [0, 500]
         # don't include break points because of interpolator BCs
         test("cubic", "curvature", compare_breaks=False)
         test("cubic", "torsion")

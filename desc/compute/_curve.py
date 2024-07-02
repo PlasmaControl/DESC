@@ -692,7 +692,7 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
         )
         fq_temp = inner_body(f_in_interval, full_knots, period=None)
 
-        # replace values outside of interval with 0
+        # replace values outside of interval with 0 so they don't contribute to the sum
         fq_temp = jnp.where(s_query_pts >= full_knots[istop], 0, fq_temp)
         fq_temp = jnp.where(s_query_pts <= full_knots[istart], 0, fq_temp)
 

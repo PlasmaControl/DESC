@@ -1926,8 +1926,8 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
     # https://tinyurl.com/54udvaa4
     label="\\mathrm{gbdrift} = 1/B^{2} (\\mathbf{b}\\times\\nabla B) \\cdot"
     + "\\nabla \\alpha",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
+    units="1 / Wb",
+    units_long="Inverse webers",
     description="Binormal component of the geometric part of the gradB drift"
     + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
@@ -1953,8 +1953,8 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     # https://tinyurl.com/54udvaa4
     label="\\mathrm{cvdrift} = 1/B^{3} (\\mathbf{b}\\times\\nabla(p + B^2/2))"
     + "\\cdot \\nabla \\alpha",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
+    units="1 / Wb",
+    units_long="Inverse webers",
     description="Binormal component of the geometric part of the curvature drift"
     + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
     dim=1,
@@ -1976,9 +1976,9 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
     label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla B)"
-    + "\\cdot \\nabla \\rho",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
+    + "\\cdot (2 \\rho \\nabla \\rho)",
+    units="1 / Wb",
+    units_long="Inverse webers",
     description="Radial component of the geometric part of the curvature drift"
     + " used for local stability analyses, gyrokinetics, Gamma_c.",
     dim=1,
@@ -1986,10 +1986,13 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "e^rho", "grad(|B|)"],
+    data=["|B|^2", "b", "e^rho", "grad(|B|)", "rho"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (
-        1 / data["|B|^2"] * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
+        2
+        * data["rho"]
+        / data["|B|^2"]
+        * dot(data["b"], cross(data["grad(|B|)"], data["e^rho"]))
     )
     return data

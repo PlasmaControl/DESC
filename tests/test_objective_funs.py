@@ -49,6 +49,7 @@ from desc.objectives import (
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
+    GammaC,
     GenericObjective,
     Isodynamicity,
     LinearObjectiveFromUser,
@@ -2455,6 +2456,19 @@ class TestObjectiveNaNGrad:
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
         obj = ObjectiveFunction([EffectiveRipple(eq)])
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+        # FIXME: Want to ensure nonzero gradient in test.
+        print(np.count_nonzero(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_Gamma_c(self):
+        """Make sure we can differentiate."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction([GammaC(eq)])
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

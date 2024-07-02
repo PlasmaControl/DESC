@@ -12,9 +12,9 @@ expensive computations.
 from functools import partial
 
 from orthax.legendre import leggauss
-from quadax import simpson
+from quadax import romberg, simpson
 
-from desc.backend import imap, jit, jnp
+from desc.backend import imap, jit, jnp, trapezoid
 
 from .bounce_integral import bounce_integral, get_pitch
 from .data_index import register_compute_fun
@@ -154,7 +154,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
         "\\epsilon^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
         "(\\frac{R_0}{\\langle \\vert\\nabla \\psi\\vert \\rangle})^2 "
-        "\\int d\\lambda \\lambda^{-2}B_0^{-1} "
+        "\\int d\\lambda \\lambda^{-2} B_0^{-1} "
         "\\langle \\sum_j \\frac{H_j^2}{I_j} \\rangle"
     ),
     units="~",
@@ -267,4 +267,145 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         * g.expand(ripple)
         / data["<L|r,a>"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="Gamma_c",
+    label=(
+        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
+        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
+    ),
+    units="~",
+    units_long="None",
+    description="Energetic ion confinement proxy",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "B^zeta",
+        "|B|",
+        "|B|_z|r,a",
+        "cvdrift0",
+        "gbdrift",
+        "<L|r,a>",
+    ],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    num_quad=(
+        "int : Resolution for quadrature of bounce integrals. Default is 31, "
+        "which gets sufficient convergence, so higher values are likely unnecessary."
+    ),
+    num_pitch=(
+        "int : Resolution for quadrature over velocity coordinate. Default is 125."
+    ),
+    adaptive=(
+        "bool : Whether to adaptively integrate over the velocity coordinate. "
+        "If true, then num_pitch specifies an upper bound on the maximum number "
+        "of function evaluations."
+    ),
+    batch="bool : Whether to vectorize part of the computation. Default is true.",
+)
+@partial(jit, static_argnames=["num_quad", "num_pitch", "adaptive", "batch"])
+def _Gamma_c(params, transforms, profiles, data, **kwargs):
+    """Energetic ion confinement proxy.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
+
+    Poloidal motion of trapped particle orbits in real-space coordinates.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+    Phys. Plasmas 1 May 2008; 15 (5): 052501.
+    https://doi.org/10.1063/1.2912456.
+    Equation 61, using Velasco's γ_c from equation 15 of the above paper.
+    """
+    batch = kwargs.get("batch", True)
+    g = transforms["grid"].source_grid
+    knots = g.compress(g.nodes[:, 2], surface_label="zeta")
+    quad = leggauss(kwargs.get("num_quad", 31))
+    num_pitch = kwargs.get("num_pitch", 125)
+    adaptive = kwargs.get("adaptive", False)
+    pitch = _get_pitch(g, data["min_tz |B|"], data["max_tz |B|"], num_pitch, adaptive)
+
+    def d_v_tau(B, pitch):
+        return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    def d_gamma_c(f, B, pitch):
+        return safediv(f * (1 - pitch * B / 2), jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    if not adaptive:
+        bounce_integrate, _ = bounce_integral(
+            data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, quad
+        )
+
+        def d_Gamma_c(pitch):
+            # Return ∑ⱼ [v τ γ_c²]ⱼ evaluated at λ = pitch.
+            # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
+            # τ is the bounce time, and I is defined in Nemov eq. 36.
+            v_tau = bounce_integrate(d_v_tau, [], pitch, batch=batch)
+            gamma_c = (
+                2
+                / jnp.pi
+                * jnp.arctan(
+                    safediv(
+                        bounce_integrate(
+                            d_gamma_c, data["cvdrift0"], pitch, batch=batch
+                        ),
+                        bounce_integrate(
+                            d_gamma_c, data["gbdrift"], pitch, batch=batch
+                        ),
+                    )
+                )
+            )
+            return jnp.sum(v_tau * gamma_c**2, axis=-1)
+
+        # The integrand is piecewise continuous and likely poorly approximated by a
+        # polynomial. Composite quadrature should perform better than higher order
+        # methods.
+        Gamma_c = trapezoid(
+            _poloidal_mean(
+                g, imap(d_Gamma_c, pitch).reshape(-1, g.num_rho, g.num_alpha)
+            ),
+            pitch,
+            axis=0,
+        )
+    else:
+
+        def d_Gamma_c(pitch, B_sup_z, B, B_z_ra, cvdrift0, gbdrift):
+            bounce_integrate, _ = bounce_integral(B_sup_z, B, B_z_ra, knots, quad)
+            v_tau = bounce_integrate(d_v_tau, [], pitch, batch=batch)
+            gamma_c = (
+                2
+                / jnp.pi
+                * jnp.arctan(
+                    safediv(
+                        bounce_integrate(d_gamma_c, cvdrift0, pitch, batch=batch),
+                        bounce_integrate(d_gamma_c, gbdrift, pitch, batch=batch),
+                    )
+                )
+            )
+            return jnp.squeeze(jnp.sum(v_tau * gamma_c**2, axis=-1))
+
+        args = [
+            f.reshape(g.num_rho, g.num_alpha, g.num_zeta)
+            for f in [
+                data["B^zeta"],
+                data["|B|"],
+                data["|B|_z|r,a"],
+                data["cvdrift0"],
+                data["gbdrift"],
+            ]
+        ]
+        Gamma_c = _vec_quadax(romberg, divmax=jnp.log2(num_pitch + 1))(
+            d_Gamma_c, pitch, *args
+        )
+        Gamma_c = _poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha))
+
+    data["Gamma_c"] = jnp.pi / (8 * 2**0.5) * g.expand(Gamma_c) / data["<L|r,a>"]
     return data

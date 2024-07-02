@@ -45,7 +45,6 @@ class _Basis(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
-        self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
         self._modes = self._modes.astype(int)
 
     def _set_up(self):
@@ -60,10 +59,6 @@ class _Basis(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
-        if hasattr(self, "_NFP_umbilic_factor"):
-            self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
-        else:
-            self._NFP_umbilic_factor = int(1)
         self._modes = self._modes.astype(int)
 
     def _enforce_symmetry(self):
@@ -500,9 +495,6 @@ class DoubleFourierSeries(_Basis):
         Maximum toroidal resolution.
     NFP : int
         Number of field periods.
-    NFP_umbilic_factor : float
-        Prefactor of the form 1/NFP_umbilic_factor.
-        This is needed for the umbilic torus design.
     sym : {``'cos'``, ``'sin'``, ``False``}
         * ``'cos'`` for cos(m*t-n*z) symmetry
         * ``'sin'`` for sin(m*t-n*z) symmetry
@@ -515,7 +507,6 @@ class DoubleFourierSeries(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._NFP_umbilic_factor = check_posint(NFP_umbilic_factor, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
@@ -602,14 +593,11 @@ class DoubleFourierSeries(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        poloidal = fourier(
-            t[:, np.newaxis], m, NFP=1, NFP_umbilic_factor=1, dt=derivatives[1]
-        )
+        poloidal = fourier(t[:, np.newaxis], m, NFP=1, dt=derivatives[1])
         toroidal = fourier(
             z[:, np.newaxis],
             n,
             NFP=self.NFP,
-            NFP_umbilic_factor=self.NFP_umbilic_factor,
             dt=derivatives[2],
         )
         if unique:
@@ -618,7 +606,7 @@ class DoubleFourierSeries(_Basis):
 
         return poloidal * toroidal
 
-    def change_resolution(self, M, N, NFP=None, NFP_umbilic_factor=None, sym=None):
+    def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -629,9 +617,6 @@ class DoubleFourierSeries(_Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
-        NFP_umbilic_factor : float
-            Prefactor of the form 1/NFP_umbilic_factor.
-            This is needed for the umbilic torus design.
         sym : bool
             Whether to enforce stellarator symmetry.
 
@@ -642,11 +627,6 @@ class DoubleFourierSeries(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        self._NFP_umbilic_factor = (
-            NFP_umbilic_factor
-            if NFP_umbilic_factor is not None
-            else self.NFP_umbilic_factor
-        )
         if M != self.M or N != self.N or sym != self.sym:
             self._M = check_nonnegint(M, "M", False)
             self._N = check_nonnegint(N, "N", False)

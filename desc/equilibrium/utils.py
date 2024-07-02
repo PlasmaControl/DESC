@@ -59,9 +59,7 @@ def parse_profile(prof, name="", **kwargs):
     raise TypeError(f"Got unknown {name} profile {prof}")
 
 
-def parse_surface(
-    surface, NFP=1, NFP_umbilic_factor=1, sym=True, spectral_indexing="ansi"
-):
+def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     """Parse surface input into Surface object.
 
     Parameters
@@ -86,9 +84,7 @@ def parse_surface(
     if isinstance(surface, Surface):
         surface = surface
     elif surface is None:
-        surface = FourierRZToroidalSurface(
-            NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, sym=sym
-        )
+        surface = FourierRZToroidalSurface(NFP=NFP, sym=sym)
     elif isinstance(surface, (np.ndarray, jnp.ndarray)):
         if np.all(surface[:, 0] == 0):
             surface = FourierRZToroidalSurface(
@@ -97,7 +93,6 @@ def parse_surface(
                 surface[:, 1:3].astype(int),
                 surface[:, 1:3].astype(int),
                 NFP,
-                NFP_umbilic_factor,
                 sym,
                 check_orientation=False,
             )
@@ -122,7 +117,7 @@ def parse_surface(
     return surface, bdry_mode
 
 
-def parse_axis(axis, NFP=1, NFP_umbilic_factor=1, sym=True, surface=None):
+def parse_axis(axis, NFP=1, sym=True, surface=None):
     """Parse axis input into Curve object.
 
     Parameters
@@ -147,7 +142,6 @@ def parse_axis(axis, NFP=1, NFP_umbilic_factor=1, sym=True, surface=None):
             axis[:, 2],
             axis[:, 0].astype(int),
             NFP=NFP,
-            NFP_umbilic_factor=NFP_umbilic_factor,
             sym=sym,
             name="axis",
         )
@@ -164,7 +158,6 @@ def parse_axis(axis, NFP=1, NFP_umbilic_factor=1, sym=True, surface=None):
                     np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
                 ],
                 NFP=NFP,
-                NFP_umbilic_factor=NFP_umbilic_factor,
             )
         elif isinstance(surface, ZernikeRZToroidalSection):
             # FIXME: include m=0 l!=0 modes
@@ -184,7 +177,6 @@ def parse_axis(axis, NFP=1, NFP_umbilic_factor=1, sym=True, surface=None):
                 modes_R=[0],
                 modes_Z=[0],
                 NFP=NFP,
-                NFP_umbilic_factor=NFP_umbilic_factor,
             )
     else:
         raise TypeError("Got unknown axis type {}".format(axis))

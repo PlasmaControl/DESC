@@ -174,9 +174,7 @@ def _desc_modes_from_vmec_modes(vmec_modes):
     return desc_modes
 
 
-def ptolemy_linear_transform(
-    desc_modes, vmec_modes=None, helicity=None, NFP=None, NFP_umbilic_factor=None
-):
+def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=None):
     """Compute linear transformation matrix equivalent to reverse Ptolemy's identity.
 
     Parameters
@@ -259,11 +257,9 @@ def ptolemy_linear_transform(
     # indices of non-quasi-symmetric modes
     if helicity is not None:
         assert NFP is not None, "NFP must be supplied when specifying helicity"
-        if NFP_umbilic_factor is not None:
-            NFP_umbilic_factor = int(1)
         assert isinstance(helicity, tuple) and len(helicity) == 2
         M = np.abs(helicity[0])
-        N = np.abs(helicity[1]) / NFP * NFP_umbilic_factor * sign(np.prod(helicity))
+        N = (np.abs(helicity[1]) * sign(np.prod(helicity))) / NFP
         idx = np.ones((vmec_modes.shape[0],), bool)
         idx[0] = False  # m=0,n=0 mode
         if N == 0:

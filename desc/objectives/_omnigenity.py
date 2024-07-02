@@ -124,7 +124,6 @@ class QuasisymmetryBoozer(_Objective):
                 M=2 * M_booz,
                 N=2 * N_booz,
                 NFP=eq.NFP,
-                NFP_umbilic_factor=eq.NFP_umbilic_factor,
                 sym=False,
             )
         else:
@@ -169,7 +168,6 @@ class QuasisymmetryBoozer(_Objective):
             transforms["B"].basis.modes,
             helicity=self.helicity,
             NFP=transforms["B"].basis.NFP,
-            NFP_umbilic_factor=transforms["B"].basis.NFP_umbilic_factor,
         )
 
         self._constants = {
@@ -347,7 +345,6 @@ class QuasisymmetryTwoTerm(_Objective):
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
-                NFP_umbilic_factor=eq.NFP_umbilic_factor,
                 sym=eq.sym,
             )
         else:
@@ -536,7 +533,6 @@ class QuasisymmetryTripleProduct(_Objective):
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
-                NFP_umbilic_factor=eq.NFP_umbilic_factor,
                 sym=eq.sym,
             )
         else:
@@ -1055,7 +1051,6 @@ class Isodynamicity(_Objective):
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
-                NFP_umbilic_factor=eq.NFP_umbilic_factor,
                 sym=eq.sym,
             )
         else:

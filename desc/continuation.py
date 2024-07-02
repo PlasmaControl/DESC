@@ -58,7 +58,6 @@ def _solve_axisym(
     eqi = Equilibrium(
         Psi=eq.Psi,
         NFP=eq.NFP,
-        NFP_umbilic_factor=eq.NFP_umbilic_factor,
         L=Li,
         M=Mi,
         N=Ni,

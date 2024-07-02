@@ -41,18 +41,31 @@ class VMECIO:
     def load(
         cls, path, L=None, M=None, N=None, spectral_indexing="ansi", profile="iota"
     ):
-        """Load a VMEC netCDF file as an Equilibrium.
+        """Load a VMEC netCDF file as an Equilibrium by fitting with Fourier-Zernike.
+
+        Loads in the VMEC netCDF file and loads the R, Z and Lambda Fourier
+        coefficients, which from VMEC are given on each discrete flux surface
+        in the VMEC solution. A Fourier-Zernike basis is then fit to these
+        R, Z and Lambda Fourier coefficients to yield the DESC representation
+        that most closely resembles the VMEC solution. Finally, the VMEC
+        boundary is loaded and the DESC Equilibrium R,Z are constrained to
+        match the given VMEC boundary.
+
+        NOTE: This is only a fit, so the DESC Equilibrium returned is not
+        expected to be in force balance. It is recommended to solve the
+        Equilibrium once loaded before using the Equilibrium for any
+        analysis.
 
         Parameters
         ----------
         path : str
             File path of input data.
         L : int, optional
-            Radial resolution. Default determined by index.
+            Radial resolution of the fit. Default determined by index.
         M : int, optional
-            Poloidal resolution. Default = MPOL-1 from VMEC solution.
+            Poloidal resolution of the fit. Default = MPOL-1 from VMEC solution.
         N : int, optional
-            Toroidal resolution. Default = NTOR from VMEC solution.
+            Toroidal resolution of the fit. Default = NTOR from VMEC solution.
         spectral_indexing : str, optional
             Type of Zernike indexing scheme to use. (Default = ``'ansi'``)
         profile : {"iota", "current"}
@@ -61,7 +74,7 @@ class VMECIO:
         Returns
         -------
         eq: Equilibrium
-            Equilibrium that resembles the VMEC data.
+            Equilibrium fit that resembles the VMEC data.
 
         Notes
         -----

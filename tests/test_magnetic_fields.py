@@ -633,6 +633,27 @@ class TestMagneticFields:
         # ensure can compute field at a point without incompatible size error
         field.compute_magnetic_field([10.0, 0, 0])
 
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_coil_cut_warnings(self):
+        """Test Fourier current potential coil cut method warning."""
+        curr = 1e4
+        # with this choice of Phi_mn, the constant Phi contours
+        # move so much that they intersect the boundaries of where we
+        # plot them, that should return a warning
+        # TODO: When we switch from the visual coil cutting method, remove this
+        field = FourierCurrentPotentialField(
+            I=curr,
+            G=curr,
+            Phi_mn=np.array([-4 * curr / 13]),
+            modes_Phi=np.array([[-1, 0]]),
+        )
+
+        with pytest.warns(
+            UserWarning,
+            match="Detected",
+        ):
+            field.to_CoilSet(1)
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_spline_field(self):

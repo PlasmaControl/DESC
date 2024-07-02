@@ -9,6 +9,18 @@ to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` c
 coil for each coil in a coilset.
 - Adds the objective `PlasmaCoilsetMinDistance`, which returns the minimum distance to the
 plasma surface for each coil in a coilset.
+- Adds method ``run_regcoil`` to ``FourierCurrentPotentialField`` that implements the
+REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
+    * Can specify ``current_helicity`` to determine if resulting contours correspond to
+    helical topology (``current_helicity`` not equal to 0) or
+    modular (``current_helicity``equal to 0)
+- Adds method ``.to_CoilSet`` to ``FourierCurrentPotentialField``
+which implements a coil cutting algorithm to discretize the surface current into coils
+    * works for both modular and helical coils
+- Adds a new objectives,``SurfaceCurrentRegularization`` (which minimizes ``alpha*|K|``, the
+regularization term from surface current in the REGCOIL algorithm)
+    * use of this objective with ``QuadraticFlux`` allows for REGCOIL solutions to be obtained through
+    the optimization framework, and combined with other objectives as well.
 
 v0.11.1
 -------

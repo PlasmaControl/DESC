@@ -11,6 +11,7 @@ expensive computations.
 
 from desc.backend import jnp
 
+from ..grid import QuadratureGrid
 from .data_index import register_compute_fun
 from .utils import cross, dot, line_integrals, safenorm, surface_integrals
 
@@ -26,10 +27,15 @@ from .utils import cross, dot, line_integrals, safenorm, surface_integrals
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["sqrt(g)"],
+    data=["sqrt(g)", "V(r)"],
+    resolution_requirement="rtz",  # If grid has LCFS then don't need radial resolution.
 )
 def _V(params, transforms, profiles, data, **kwargs):
-    data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
+    if isinstance(transforms["grid"], QuadratureGrid):
+        data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
+    else:
+        # Use divergence theorem to compute on LCFS.
+        data["V"] = jnp.max(data["V(r)"])
     return data
 
 
@@ -46,6 +52,7 @@ def _V(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["e_theta", "e_zeta", "x"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    resolution_requirement="tz",
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
@@ -73,6 +80,7 @@ def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["e_theta", "e_zeta", "Z"],
+    resolution_requirement="tz",
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
@@ -97,6 +105,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)"],
+    resolution_requirement="tz",
 )
 def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
@@ -117,6 +126,7 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     # The sign of sqrt(g) is enforced to be non-negative.
@@ -137,37 +147,11 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)_rr"],
+    resolution_requirement="tz",
 )
 def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     # The sign of sqrt(g) is enforced to be non-negative.
     data["V_rrr(r)"] = surface_integrals(transforms["grid"], data["sqrt(g)_rr"])
-    return data
-
-
-@register_compute_fun(
-    name="A(z)",
-    label="A(\\zeta)",
-    units="m^{2}",
-    units_long="square meters",
-    description="Cross-sectional area as function of zeta",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="z",
-    data=["|e_rho x e_theta|"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
-    ],
-)
-def _A_of_z(params, transforms, profiles, data, **kwargs):
-    data["A(z)"] = surface_integrals(
-        transforms["grid"],
-        data["|e_rho x e_theta|"],
-        surface_label="zeta",
-        expand_out=True,
-    )
     return data
 
 
@@ -184,8 +168,13 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["Z", "n_rho", "e_theta|r,p", "rho"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
     # FIXME: Add source grid requirement once omega is nonzero.
+    resolution_requirement="rt",  # If grid has LCFS then don't need radial resolution.
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
@@ -231,6 +220,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
+    resolution_requirement="z",
 )
 def _A(params, transforms, profiles, data, **kwargs):
     data["A"] = jnp.mean(
@@ -273,13 +263,12 @@ def _A_of_r(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
+    resolution_requirement="tz",
 )
 def _S(params, transforms, profiles, data, **kwargs):
     data["S"] = jnp.max(
         surface_integrals(
-            transforms["grid"],
-            data["|e_theta x e_zeta|"],
-            expand_out=False,
+            transforms["grid"], data["|e_theta x e_zeta|"], expand_out=False
         )
     )
     return data
@@ -297,6 +286,7 @@ def _S(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|"],
+    resolution_requirement="tz",
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
     data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
@@ -315,6 +305,7 @@ def _S_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|_r"],
+    resolution_requirement="tz",
 )
 def _S_r_of_r(params, transforms, profiles, data, **kwargs):
     data["S_r(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|_r"])
@@ -334,6 +325,7 @@ def _S_r_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|_rr"],
+    resolution_requirement="tz",
 )
 def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
     data["S_rr(r)"] = surface_integrals(
@@ -424,6 +416,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
+    resolution_requirement="rt",  # just need r near lcfs
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     max_rho = jnp.max(data["rho"])

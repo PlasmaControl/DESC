@@ -1352,8 +1352,6 @@ def test_regcoil_modular_coils_check_coils(regcoil_modular_coils):
     assert np.min(fieldZ) > -0.5
 
 
-# FIXME: see why does this test not
-# perfectly recreate the field from the other way of running REGCOIL
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow

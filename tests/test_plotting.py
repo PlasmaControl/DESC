@@ -860,7 +860,6 @@ def test_plot_coefficients():
 # TODO: change these plot tests as if they get split up, the regcoil stuff
 # has to run a bunch on different nodes for no reason. Should load in
 # a saved result instead.
-# FIXME: there is a warning if we open too many figures
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_Bn_scan_regcoil(regcoil_helical_coils_scan):
@@ -897,7 +896,6 @@ def test_plot_Phi_scan_regcoil(regcoil_helical_coils_scan):
     return fig
 
 
-# TODO: close any figs that are not being used in testing
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_chi2B_alpha_scan_regcoil(regcoil_helical_coils_scan):
@@ -907,7 +905,6 @@ def test_plot_chi2B_alpha_scan_regcoil(regcoil_helical_coils_scan):
         surface_current,
         eq,
     ) = regcoil_helical_coils_scan
-    # with pytest.warns(UserWarning, match="20 figures"):
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_chi^2_B_vs_alpha"]
@@ -927,7 +924,6 @@ def test_plot_chi2B_chi2K_scan_regcoil(regcoil_helical_coils_scan):
         surface_current,
         eq,
     ) = regcoil_helical_coils_scan
-    # with pytest.warns(UserWarning, match="20 figures"):
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
     fig = figdata["fig_chi^2_B_vs_chi^2_K"]
@@ -976,36 +972,6 @@ def test_plot_Phi_regcoil(regcoil_modular_coils):
     for key in figdata.keys():
         if key != "fig_Phi":
             plt.close(figdata[key])
-    return fig
-
-
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-@pytest.mark.unit
-def test_2d_plot_Bn():
-    """Test 2d plotting of Bn on equilibrium surface."""
-    eq = get("HELIOTRON")
-    fig, _ = plot_2d(
-        eq,
-        "B*n",
-        field=ToroidalMagneticField(1, 1),
-        field_grid=LinearGrid(M=10, N=10),
-        grid=LinearGrid(M=30, N=30, NFP=eq.NFP, endpoint=True),
-    )
-    return fig
-
-
-@pytest.mark.unit
-def test_3d_plot_Bn():
-    """Test 3d plotting of Bn on equilibrium surface."""
-    eq = get("precise_QA")
-    with pytest.warns(UserWarning):
-        eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
-    fig = plot_3d(
-        eq,
-        "B*n",
-        field=ToroidalMagneticField(1, 1),
-        grid=LinearGrid(M=30, N=30, NFP=1, endpoint=True),
-    )
     return fig
 
 

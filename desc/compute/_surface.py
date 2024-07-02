@@ -1,7 +1,10 @@
 from desc.backend import jnp
 
+from ..utils import errorif
 from .data_index import register_compute_fun
 from .geom_utils import rpz2xyz, xyz2rpz, xyz2rpz_vec
+
+# TODO: review when zeta no longer equals phi
 
 
 @register_compute_fun(
@@ -26,6 +29,7 @@ from .geom_utils import rpz2xyz, xyz2rpz, xyz2rpz_vec
 def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
     Z = transforms["Z"].transform(params["Z_lmn"])
+    # TODO: change when zeta no longer equals phi
     phi = transforms["grid"].nodes[:, 2]
     coords = jnp.stack([R, phi, Z], axis=1)
     if kwargs.get("basis", "rpz").lower() == "xyz":
@@ -217,6 +221,7 @@ def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.core.Surface",
 )
 def _Z_Surface(params, transforms, profiles, data, **kwargs):
+    errorif(kwargs.get("basis", "rpz").lower()[-1] != "z", NotImplementedError)
     data["Z"] = data["x"][:, 2]
     return data
 

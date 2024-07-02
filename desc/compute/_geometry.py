@@ -11,6 +11,7 @@ expensive computations.
 
 from desc.backend import jnp
 
+from ..utils import errorif
 from .data_index import register_compute_fun
 from .utils import cross, dot, line_integrals, surface_integrals
 
@@ -48,6 +49,7 @@ def _V(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    errorif(kwargs.get("basis", "rpz").lower()[-1] != "z", NotImplementedError)
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
     data["V"] = jnp.max(  # take max in case there are multiple surfaces for some reason
         jnp.abs(
@@ -75,6 +77,7 @@ def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     data=["e_theta", "e_zeta", "Z"],
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
+    errorif(kwargs.get("basis", "rpz").lower()[-1] != "z", NotImplementedError)
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
     data["V(r)"] = jnp.abs(
         surface_integrals(
@@ -186,6 +189,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    errorif(kwargs.get("basis", "rpz").lower() != "rpz", NotImplementedError)
     # divergence theorem: integral(dA div [0, 0, Z]) = integral(ds n dot [0, 0, Z])
     # but we need only the part of n in the R,Z plane
     n = data["n_rho"]

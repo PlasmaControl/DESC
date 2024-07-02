@@ -61,9 +61,10 @@ def get_equilibrium_objective(eq, mode="force", normalize=True, **kwargs):
         An objective function with default force balance objectives.
 
     """
-    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}.update(
-        kwargs
-    )
+    kwargs = {
+        **{"eq": eq, "normalize": normalize, "normalize_target": normalize},
+        **kwargs,
+    }
     if mode == "energy":
         objectives = Energy(**kwargs)
     elif mode == "force":

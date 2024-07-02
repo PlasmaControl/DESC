@@ -1,4 +1,4 @@
-"""Compute functions for Mercier stability objectives.
+"""Compute functions for stability objectives.
 
 Notes
 -----

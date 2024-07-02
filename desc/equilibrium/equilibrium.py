@@ -42,6 +42,7 @@ from desc.utils import (
     errorif,
     only1,
     setdefault,
+    warnif,
 )
 
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
@@ -219,7 +220,7 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"sym should be one of True, False, None, got {sym}",
         )
-        self._sym = setdefault(sym, getattr(surface, "sym", False))
+        self._sym = bool(setdefault(sym, getattr(surface, "sym", False)))
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
 
@@ -557,6 +558,12 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
+        warnif(
+            L is not None and L < self.L,
+            UserWarning,
+            "Reducing radial (L) resolution can make plasma boundary inconsistent. "
+            + "Recommend calling `eq.surface = eq.get_surface_at(rho=1.0)`",
+        )
         self._L = int(setdefault(L, self.L))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))
@@ -564,7 +571,7 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
         self._NFP = int(setdefault(NFP, self.NFP))
-        self._sym = setdefault(sym, self.sym)
+        self._sym = bool(setdefault(sym, self.sym))
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes

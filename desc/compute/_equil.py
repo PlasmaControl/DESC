@@ -270,7 +270,9 @@ def _J_phi(params, transforms, profiles, data, **kwargs):
     data=["J"],
 )
 def _J_Z(params, transforms, profiles, data, **kwargs):
-    errorif(kwargs.get("basis", "rpz").lower()[-1] != "z", NotImplementedError)
+    errorif(
+        kwargs.get("basis", "rpz").lower() not in {"rpz", "xyz"}, NotImplementedError
+    )
     data["J_Z"] = data["J"][:, 2]
     return data
 

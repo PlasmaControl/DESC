@@ -179,7 +179,9 @@ def _B_phi(params, transforms, profiles, data, **kwargs):
     data=["B"],
 )
 def _B_Z(params, transforms, profiles, data, **kwargs):
-    errorif(kwargs.get("basis", "rpz").lower()[-1] != "z", NotImplementedError)
+    errorif(
+        kwargs.get("basis", "rpz").lower() not in {"rpz", "xyz"}, NotImplementedError
+    )
     data["B_Z"] = data["B"][:, 2]
     return data
 

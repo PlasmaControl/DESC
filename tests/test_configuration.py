@@ -415,9 +415,8 @@ class TestInitialGuess:
         """Test setting initial guess from saved equilibrium file."""
         path = "tests//inputs//iotest_HELIOTRON.h5"
         eq1 = Equilibrium(L=9, M=14, N=3, sym=True, spectral_indexing="ansi")
-        with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
-            eq1.set_initial_guess(path)
-            eq2 = EquilibriaFamily.load(path)[-1]
+        eq1.set_initial_guess(path)
+        eq2 = EquilibriaFamily.load(path)[-1]
 
         np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
         np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
@@ -468,7 +467,7 @@ class TestGetSurfaces:
     @pytest.mark.unit
     def test_get_zeta_surface(self):
         """Test getting a constant zeta surface."""
-        eq = Equilibrium(NFP_umbilic_factor=1)
+        eq = Equilibrium()
         surf = eq.get_surface_at(zeta=np.pi)
         assert surf.zeta == np.pi
         rho = 1
@@ -494,8 +493,7 @@ class TestGetSurfaces:
 @pytest.mark.unit
 def test_magnetic_axis():
     """Test that Configuration.axis returns the true axis location."""
-    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
-        eq = desc.examples.get("HELIOTRON")
+    eq = desc.examples.get("HELIOTRON")
     axis = eq.axis
     grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
 
@@ -549,8 +547,7 @@ def test_is_nested_theta():
 @pytest.mark.unit
 def test_get_profile():
     """Test getting/setting iota and current profiles."""
-    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
-        eq = desc.examples.get("DSHAPE_CURRENT")
+    eq = desc.examples.get("DSHAPE_CURRENT")
     current0 = eq.current
     current1 = eq.get_profile("current", kind="power_series")
     current2 = eq.get_profile("current", kind="spline")

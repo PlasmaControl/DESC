@@ -175,7 +175,6 @@ def rescale(
         M=eq.M_grid,
         N=eq.N_grid,
         NFP=eq.NFP,
-        NFP_umbilic_factor=eq.NFP_umbilic_factor,
     )
     data_L = eq.compute(L_keys, grid=grid_L)
     L_old = data_L[L_key]
@@ -185,9 +184,7 @@ def rescale(
 
     # field scaling
     if B_key == "B0":
-        grid_B = LinearGrid(
-            N=eq.N_grid, NFP=eq.NFP, NFP_umbilic_factor=eq.NFP_umbilic_factor, rho=0
-        )
+        grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
         data_B = eq.compute("|B|", grid=grid_B)
         B_old = np.mean(data_B["|B|"])
     elif B_key == "<B>":
@@ -199,7 +196,6 @@ def rescale(
             M=eq.M_grid,
             N=eq.N_grid,
             NFP=eq.NFP,
-            NFP_umbilic_factor=eq.NFP_umbilic_factor,
             rho=1,
         )
         data_B = eq.compute("|B|", grid=grid_B)

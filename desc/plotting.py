@@ -1819,7 +1819,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
         grid.nodes,
         ["rho", "theta", "phi"],
         ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 2 * np.pi * eq.NFP_umbilic_factor),
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
         guess=grid.nodes,
     )
 

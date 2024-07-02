@@ -11,8 +11,7 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid
 @pytest.mark.unit
 def test_flip_helicity_axisym():
     """Test flip_helicity on an axisymmetric Equilibrium."""
-    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
-        eq = get("DSHAPE")
+    eq = get("DSHAPE")
 
     grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data_keys = ["current", "|F|", "D_Mercier"]
@@ -51,8 +50,7 @@ def test_flip_helicity_axisym():
 @pytest.mark.solve
 def test_flip_helicity_iota():
     """Test flip_helicity on an Equilibrium with an iota profile."""
-    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
-        eq = get("HELIOTRON")
+    eq = get("HELIOTRON")
 
     grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     nodes = grid.nodes.copy()
@@ -95,8 +93,7 @@ def test_flip_helicity_iota():
 @pytest.mark.solve
 def test_flip_helicity_current():
     """Test flip_helicity on an Equilibrium with a current profile."""
-    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
-        eq = get("HSX")
+    eq = get("HSX")
 
     grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     nodes = grid.nodes.copy()
@@ -164,8 +161,7 @@ def test_rescale():
             "err": data_quad["|F|"] / data_quad["|grad(|B|^2)|/2mu0"],
         }
 
-    with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
-        eq0 = get("DSHAPE")
+    eq0 = get("DSHAPE")
     old_vals = fun(eq0)
     # original values: R0=3.5, a=1.2, V=100, B0=0.2, <|B|>_vol=0.22, B_max=0.3
 

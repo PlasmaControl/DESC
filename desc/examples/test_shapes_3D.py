@@ -13,12 +13,13 @@ from desc.basis import (
 from pyevtk.hl import pointsToVTK, gridToVTK, unstructuredGridToVTK
 from pyevtk.vtk import VtkTetra
 from desc.geometry import convert_spectral_to_FE
+from mpl_toolkits import mplot3d as p3
 
 np.random.seed(1)
 L = 2
 M = 5
 N = 2
-K = 2
+K = 1
 
 # Make a surface in (R, phi=0, Z), (R, phi=pi / N, Z), ...
 nt = 100
@@ -56,7 +57,7 @@ Z_lmn = np.zeros(num_modes * (2 * N + 1))
 Z_lmn[num_modes * N] = 2.0
 Z_lmn[num_modes * N + 1] = 5.0
 L_lmn = np.zeros(R_lmn.shape)
-amp = 0.1 
+amp = 0
 R_lmn[np.isclose(R_lmn, 0.0)] = (
     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
     * amp
@@ -75,7 +76,9 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-M_FE = 20
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+M_FE = 10
 L_FE = 2
 rho = np.linspace(0.1, 1, L_FE, endpoint=True)
 nodes = (
@@ -85,21 +88,43 @@ nodes = (
 )
 R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
+X = R * np.cos(nodes[:, -1])
+Y = R * np.sin(nodes[:, -1])
+X = X.reshape(1, 1, X.shape[0])
+Y = Y.reshape(1, 1, Y.shape[0])
+Z = Z.reshape(1, 1, Z.shape[0])
+#plt.figure(10) 
+#ax = p3.Axes3D(fig)
 plt.figure(10)
-plt.plot(R, Z, "ro", label="DESC rep")
+ax.scatter(np.ravel(X),np.ravel(Y),np.ravel(Z))
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+fig.add_axes(ax)
+#ax.scatter(R,nodes[:,-1], Z, label="DESC rep")
+plt.legend()
+plt.grid()
+plt.show()
 
 nodes = (
     np.array(np.meshgrid(rho, theta, np.ones(1) * np.pi, indexing="ij"))
     .reshape(3, len(theta) * len(rho))
     .T
 )
-R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
-Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
-plt.figure(11)
-plt.plot(R, Z, "ro", label="DESC rep")
+# R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
+# Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
+# X = R * np.cos(nodes[:, -1])
+# Y = R * np.sin(nodes[:, -1])
+# X = X.reshape(1, 1, X.shape[0])
+# Y = Y.reshape(1, 1, Y.shape[0])
+# Z = Z.reshape(1, 1, Z.shape[0])
+# plt.figure(11)
+# plt.plot(X, Y, Z, label="DESC rep")
+#"ro"
 
-# 3D plot not working yet, need to plot 3D points in cylindrical coords
-from mpl_toolkits import mplot3d
+# Going to attempt to do 3d plot in rho,theta,zeta space.
+
+
 nodes = (
     np.array(np.meshgrid(rho, theta, zeta, indexing="ij"))
     .reshape(3, len(rho) * nt ** 2)
@@ -107,8 +132,10 @@ nodes = (
 )
 R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
-fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-ax.scatter(R, nodes[:, -1], Z, label="DESC rep")
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+#Gonna pause this for now so I can find problem with finite element plot
+#ax.scatter(R, nodes[:, -1], Z, label="DESC rep")
 contig = np.ascontiguousarray
 X = R * np.cos(nodes[:, -1])
 Y = R * np.sin(nodes[:, -1])
@@ -123,9 +150,9 @@ for ll in range(L_FE):
     gridToVTK('RZ_Fourier_basis_surf' + str(ll), contig(XX), contig(YY), contig(ZZ), pointData=pointData)
 # pointsToVTK('RZ_Fourier_basis', X, Y, contig(Z))
 
-Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
-Zprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
-Lprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K)
+Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K,rho_range=rho)
+Zprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K,rho_range=rho)
+Lprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K,rho_range=rho)
 
 # Convert to the finite element basis
 Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
@@ -150,6 +177,7 @@ zeta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
 
 # Replot the surface in the finite element basis
 nmodes = len(Rprime_basis.modes)
+fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
 X = R * np.cos(nodes[:, -1])
@@ -165,11 +193,19 @@ for ll in range(L_FE):
     gridToVTK('RZ_FE_basis_surf' + str(ll), contig(XX), contig(YY), contig(ZZ), pointData=pointData)
 # pointsToVTK('RZ_FE_basis', X, Y, contig(Z))
 
+
+
 t2 = time.time()
-print(R.shape, Z.shape)
-print('Time for R, Z conversion = ', t2 - t1)
-# plt.figure(10)
-ax.scatter(R, nodes[:, -1], Z, label="DESC rep")
+#print(R.shape, Z.shape)
+#print('Time for R, Z conversion = ', t2 - t1)
+#plt.figure(11) 
+#ax = p3.Axes3D(fig)
+ax.scatter(np.ravel(X),np.ravel(Y),np.ravel(Z))
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+fig.add_axes(ax)
+#ax.scatter(R,nodes[:,-1], Z, label="DESC rep")
 plt.legend()
 plt.grid()
 plt.show()

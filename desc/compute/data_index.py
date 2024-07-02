@@ -47,7 +47,7 @@ def assign_alias_data(
     return data
 
 
-def register_compute_fun(
+def register_compute_fun(  # noqa: C901
     name,
     label,
     units,
@@ -61,7 +61,8 @@ def register_compute_fun(
     data,
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
-    grid_type=None,
+    resolution_requirement="",
+    source_grid_requirement=None,
     axis_limit_data=None,
     **kwargs,
 ):
@@ -100,8 +101,12 @@ def register_compute_fun(
     parameterization : str or list of str
         Name of desc types the method is valid for. eg `'desc.geometry.FourierXYZCurve'`
         or `'desc.equilibrium.Equilibrium'`.
-    grid_type : str
-        Name of grid type the quantity must be computed with. eg `'quad'`.
+    resolution_requirement : str
+        Resolution requirements in coordinates. I.e. "r" expects radial resolution
+        in the grid, "rtz" expects grid to radial, poloidal, and toroidal resolution.
+    source_grid_requirement : dict
+        Attributes of the source grid that the compute function requires.
+        Also assumes dependencies were computed on such a grid.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
 
@@ -112,6 +117,8 @@ def register_compute_fun(
     """
     if aliases is None:
         aliases = []
+    if source_grid_requirement is None:
+        source_grid_requirement = {}
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
 
@@ -147,7 +154,8 @@ def register_compute_fun(
             "coordinates": coordinates,
             "dependencies": deps,
             "aliases": aliases,
-            "grid_type": grid_type,
+            "resolution_requirement": resolution_requirement,
+            "source_grid_requirement": source_grid_requirement,
         }
         for p in parameterization:
             flag = False

@@ -58,11 +58,14 @@ else:
                 desc.__version__, np.__version__, y.dtype
             )
         )
+
+
 print(
     "Using device: {}, with {:.2f} GB available memory".format(
         desc_config.get("device"), desc_config.get("avail_mem")
     )
 )
+
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     jit = jax.jit
@@ -71,8 +74,17 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
-    scan = jax.lax.scan
     bincount = jnp.bincount
+    from functools import partial
+
+    import jax
+    import jax.numpy as jnp
+    import jaxlib
+    from jax import config as jax_config
+
+    repeat = jnp.repeat
+    take = jnp.take
+    scan = jax.lax.scan
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -158,6 +170,94 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 
         leaves, treedef = jtu.tree_flatten(tree)
         return [treedef.unflatten(leaf) for leaf in zip(*leaves)]
+
+    _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
+
+    @jax.custom_jvp
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        eigvals only run on CPUs
+        """
+        u = jax.pure_callback(
+            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
+        )
+        return u
+
+    @eigvals.defjvp
+    def _eigvals_jvp(primals, tangents):
+
+        u = eigvals(primals[0])
+
+        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
+        def jvpfun(primals, tangents):
+            u, du = jax.jvp(_eigvals_cpu, (primals,), (tangents,))
+            return du.squeeze()
+
+        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
+        return u, du
+
+    _gen_eigval_cpu = jax.jit(jax.scipy.linalg.eigh, device=jax.devices("cpu")[0])
+
+    @jax.custom_jvp
+    def gen_eigval(A):
+        """
+        Generalize eigenvalue solver.
+
+        Returns the top n eigenvalues of the square matrix A. Calculation is
+        being performed on a CPU. If the CPU version can provide the top eigenvalue,
+        the calculation should be faster on a CPU.
+        Currently doesn't work because of the limitations of the jax functionality.
+        """
+        neigs, N, _ = jnp.shape(A)
+        u = jnp.zeros((N,))
+        i = jnp.arange(N)
+
+        u = u.at[i].set(
+            jax.pure_callback(
+                _gen_eigval_cpu,
+                jnp.zeros_like(A[i, :, :]),
+                A[i, :, :],
+                k=1,
+                sigma=0.42,
+                vectorized=True,
+            )
+        )
+        return u
+
+    @gen_eigval.defjvp
+    def _gen_eigval_jvp(primals, tangents):
+
+        u = gen_eigval(primals[0])
+
+        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
+        def jvpfun(primals, tangents):
+            u, du = jax.jvp(_gen_eigval_cpu, (primals,), (tangents,))
+            return du.squeeze()
+
+        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
+        return u, du
+
+    @jit
+    def simspson_integrator(y, dx):
+        """Simpsons integrations scheme for high-order accurate integrals."""
+        if len(y[..., :]) % 2 == 1:
+            raise ValueError("n must be even")
+
+        S = (
+            dx
+            / 3
+            * (
+                y[..., 0]
+                + y[..., -1]
+                + 4 * jnp.sum(y[..., 1:-1:2], axis=-1)
+                + 2 * jnp.sum(y[..., 2:-2:2], axis=-1)
+            )
+        )
+
+        return S
 
     def root_scalar(
         fun,
@@ -374,6 +474,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
+    import numpy as np
     import scipy.optimize
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
@@ -635,11 +736,27 @@ else:  # pragma: no cover
         """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
         return np.bincount(x, weights, minlength)
 
+    def repeat(a, repeats, axis=None, total_repeat_length=None):
+        """A numpy implementation of jnp.repeat."""
+        out = np.repeat(a, repeats, axis)
+        if total_repeat_length is not None:
+            out = out[:total_repeat_length]
+        return out
+
     def custom_jvp(fun, *args, **kwargs):
         """Dummy function for custom_jvp without JAX."""
         fun.defjvp = lambda *args, **kwargs: None
         fun.defjvps = lambda *args, **kwargs: None
         return fun
+
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        """
+        u = np.linalg.eigvals(A)
+        return u
 
     def root_scalar(
         fun,
@@ -744,3 +861,37 @@ else:  # pragma: no cover
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
+
+    def take(
+        a,
+        indices,
+        axis=None,
+        out=None,
+        mode="fill",
+        unique_indices=False,
+        indices_are_sorted=False,
+        fill_value=None,
+    ):
+        """A numpy implementation of jnp.take."""
+        if mode == "fill":
+            if fill_value is None:
+                # copy jax logic
+                # https://jax.readthedocs.io/en/latest/_modules/jax/_src/lax/slicing.html#gather
+                if np.issubdtype(a.dtype, np.inexact):
+                    fill_value = np.nan
+                elif np.issubdtype(a.dtype, np.signedinteger):
+                    fill_value = np.iinfo(a.dtype).min
+                elif np.issubdtype(a.dtype, np.unsignedinteger):
+                    fill_value = np.iinfo(a.dtype).max
+                elif a.dtype == np.bool_:
+                    fill_value = True
+                else:
+                    raise ValueError(f"Unsupported dtype {a.dtype}.")
+            out = np.where(
+                (-a.size <= indices) & (indices < a.size),
+                np.take(a, indices, axis, out, mode="wrap"),
+                fill_value,
+            )
+        else:
+            out = np.take(a, indices, axis, out, mode)
+        return out

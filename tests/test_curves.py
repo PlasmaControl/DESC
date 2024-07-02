@@ -886,7 +886,7 @@ class TestSplineXYZCurve:
                 is_break_point = np.isin(
                     discont_data["s"], discontinuous.knots[break_indices]
                 )
-                # don't include break points
+                # don't include break points because sometimes they are not comparable
                 np.testing.assert_allclose(
                     discont_quantity[~is_break_point],
                     cont_quantity[~is_break_point],

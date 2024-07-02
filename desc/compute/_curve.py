@@ -690,13 +690,13 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
         f_in_interval = jnp.where(
             full_knots < full_knots[istart], full_f[istart], f_in_interval
         )
-        fq_temp = inner_body(f_in_interval, full_knots, period=None)
+        f_interp = inner_body(f_in_interval, full_knots, period=None)
 
         # replace values outside of interval with 0 so they don't contribute to the sum
-        fq_temp = jnp.where(s_query_pts >= full_knots[istop], 0, fq_temp)
-        fq_temp = jnp.where(s_query_pts <= full_knots[istart], 0, fq_temp)
+        f_interp = jnp.where(s_query_pts >= full_knots[istop], 0, f_interp)
+        f_interp = jnp.where(s_query_pts <= full_knots[istart], 0, f_interp)
 
-        return fq_temp
+        return f_interp
 
     if has_break_points:
         # manually add endpoint for broken splines so that it is closed
@@ -704,13 +704,13 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
             transforms["knots"], transforms["knots"][0] + 2 * jnp.pi
         )
         full_f = jnp.append(f, f[:, 0][..., None], axis=1)
-        xyz_query_pts = vmap(lambda interval: body(interval, full_f, full_knots))
-        xyz_query_pts = xyz_query_pts(transforms["intervals"]).sum(axis=0)
+        f_interp = vmap(lambda interval: body(interval, full_f, full_knots))
+        f_interp = f_interp(transforms["intervals"]).sum(axis=0)
     else:
         # regular interpolation where the period for interp is 2pi
-        xyz_query_pts = inner_body(f, transforms["knots"], period=2 * jnp.pi)
+        f_interp = inner_body(f, transforms["knots"], period=2 * jnp.pi)
 
-    coords = jnp.stack(xyz_query_pts, axis=1)
+    coords = jnp.stack(f_interp, axis=1)
 
     return coords
 

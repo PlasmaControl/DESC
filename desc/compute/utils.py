@@ -343,16 +343,25 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
         if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
             basis = getattr(obj, c + "_basis")
             # first check if we already have a transform with a compatible basis
-            for transform in transforms.values():
-                if basis.equiv(getattr(transform, "basis", None)):
-                    ders = np.unique(
-                        np.vstack([derivs[c], transform.derivatives]), axis=0
-                    ).astype(int)
-                    # don't build until we know all the derivs we need
-                    transform.change_derivatives(ders, build=False)
-                    c_transform = transform
-                    break
-            else:  # if we didn't exit the loop early
+            if not jitable:
+                for transform in transforms.values():
+                    if basis.equiv(getattr(transform, "basis", None)):
+                        ders = np.unique(
+                            np.vstack([derivs[c], transform.derivatives]), axis=0
+                        ).astype(int)
+                        # don't build until we know all the derivs we need
+                        transform.change_derivatives(ders, build=False)
+                        c_transform = transform
+                        break
+                else:  # if we didn't exit the loop early
+                    c_transform = Transform(
+                        grid,
+                        basis,
+                        derivs=derivs[c],
+                        build=False,
+                        method=method,
+                    )
+            else:  # don't perform checks if jitable=True as they are not jit-safe
                 c_transform = Transform(
                     grid,
                     basis,

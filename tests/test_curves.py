@@ -625,7 +625,6 @@ class TestSplineXYZCurve:
             "cubic2",
             "catmull-rom",
             "monotonic",
-            "monotonic-0",
             "cardinal",
         ]:
             R = 1

@@ -331,7 +331,7 @@ def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     data=[],
     parameterization=[
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     aliases=["e_zeta_r"],
@@ -384,7 +384,7 @@ def _e_theta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **k
     data=[],
     parameterization=[
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.PoincareRZLSection",
     ],
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     aliases=["e_rho_rz"],

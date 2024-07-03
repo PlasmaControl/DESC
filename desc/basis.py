@@ -594,11 +594,14 @@ class DoubleFourierSeries(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        poloidal = fourier(t[:, np.newaxis], m, NFP=1, dt=derivatives[1])
+        poloidal = fourier(
+            t[:, np.newaxis], m, NFP=1, NFP_umbilic_factor=1, dt=derivatives[1]
+        )
         toroidal = fourier(
             z[:, np.newaxis],
             n,
             NFP=self.NFP,
+            NFP_umbilic_factor=1,
             dt=derivatives[2],
         )
         if unique:
@@ -808,7 +811,7 @@ class ZernikePolynomial(_Basis):
             m = m[midx]
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        poloidal = fourier(t[:, np.newaxis], m, 1, 1, derivatives[1])
 
         if unique:
             radial = radial[routidx][:, lmoutidx]
@@ -1175,6 +1178,7 @@ class FourierZernikeBasis(_Basis):
             z[:, np.newaxis],
             n,
             NFP=self.NFP,
+            NFP_umbilic_factor=1,
             dt=derivatives[2],
         )
         if unique:

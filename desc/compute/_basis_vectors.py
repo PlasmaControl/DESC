@@ -3532,7 +3532,7 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
     units="m",
     units_long="meters",
     description=(
-        "Covariant poloidal basis vector in (R,ϕ,Z) coordinates. "
+        "Covariant poloidal basis vector in (ρ,θ,ϕ) coordinates. "
         "ϕ increases counterclockwise when viewed from above "
         "(cylindrical R,ϕ plane with Z out of page)."
     ),

@@ -135,7 +135,10 @@ class FourierRZCurve(Curve):
     @property
     def NFP_umbilic_factor(self):
         """Field period umbilic factor."""
-        return self._NFP_umbilic_factor
+        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+
+    def _set_up(self):
+        self._NFP_umbilic_factor = self.NFP_umbilic_factor
 
     @property
     def N(self):

@@ -691,7 +691,7 @@ class ObjectiveFunction(IOAble):
     @property
     def name(self):
         """Name of objective function (str)."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @property
     def target_scaled(self):
@@ -1250,7 +1250,7 @@ class _Objective(IOAble, ABC):
     @property
     def name(self):
         """Name of objective (str)."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @property
     def things(self):

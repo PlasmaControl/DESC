@@ -36,13 +36,13 @@ from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
-    Timer,
     check_nonnegint,
     check_posint,
     copy_coeffs,
     errorif,
     only1,
     setdefault,
+    warnif,
 )
 
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
@@ -220,7 +220,7 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"sym should be one of True, False, None, got {sym}",
         )
-        self._sym = setdefault(sym, getattr(surface, "sym", False))
+        self._sym = bool(setdefault(sym, getattr(surface, "sym", False)))
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
 
@@ -558,6 +558,12 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
+        warnif(
+            L is not None and L < self.L,
+            UserWarning,
+            "Reducing radial (L) resolution can make plasma boundary inconsistent. "
+            + "Recommend calling `eq.surface = eq.get_surface_at(rho=1.0)`",
+        )
         self._L = int(setdefault(L, self.L))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))
@@ -565,7 +571,7 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
         self._NFP = int(setdefault(NFP, self.NFP))
-        self._sym = setdefault(sym, self.sym)
+        self._sym = bool(setdefault(sym, self.sym))
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
@@ -1989,163 +1995,6 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         return things[0], result
-
-    def _optimize(  # noqa: C901
-        self,
-        objective,
-        constraint=None,
-        ftol=1e-6,
-        xtol=1e-6,
-        maxiter=50,
-        verbose=1,
-        copy=False,
-        solve_options=None,
-        perturb_options=None,
-    ):
-        """Optimize an equilibrium for an objective.
-
-        Parameters
-        ----------
-        objective : ObjectiveFunction
-            Objective function to optimize.
-        constraint : ObjectiveFunction
-            Objective function to satisfy. Default = fixed-boundary force balance.
-        ftol : float
-            Relative stopping tolerance on objective function value.
-        xtol : float
-            Stopping tolerance on optimization step size.
-        maxiter : int
-            Maximum number of optimization steps.
-        verbose : int
-            Level of output.
-        copy : bool, optional
-            Whether to update the existing equilibrium or make a copy (Default).
-        solve_options : dict
-            Dictionary of additional options used in Equilibrium.solve().
-        perturb_options : dict
-            Dictionary of additional options used in Equilibrium.perturb().
-
-        Returns
-        -------
-        eq_new : Equilibrium
-            Optimized equilibrium.
-
-        """
-        import inspect
-        from copy import deepcopy
-
-        from desc.optimize.tr_subproblems import update_tr_radius
-        from desc.optimize.utils import check_termination
-        from desc.perturbations import optimal_perturb
-
-        solve_options = {} if solve_options is None else solve_options
-        perturb_options = {} if perturb_options is None else perturb_options
-
-        if constraint is None:
-            constraint = get_equilibrium_objective(eq=self)
-
-        timer = Timer()
-        timer.start("Total time")
-
-        if not objective.built:
-            objective.build()
-        if not constraint.built:
-            constraint.build()
-
-        cost = objective.compute_scalar(objective.x(self))
-        perturb_options = deepcopy(perturb_options)
-        tr_ratio = perturb_options.get(
-            "tr_ratio",
-            inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
-        )
-
-        if verbose > 0:
-            objective.print_value(objective.x(self))
-
-        params = orig_params = self.params_dict.copy()
-
-        iteration = 1
-        success = None
-        while success is None:
-            timer.start("Step {} time".format(iteration))
-            if verbose > 0:
-                print("====================")
-                print("Optimization Step {}".format(iteration))
-                print("====================")
-                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
-
-            # perturb + solve
-            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit) = optimal_perturb(
-                self,
-                constraint,
-                objective,
-                copy=False,
-                **perturb_options,
-            )
-            self.solve(objective=constraint, **solve_options)
-
-            # update trust region radius
-            cost_new = objective.compute_scalar(objective.x(self))
-            actual_reduction = cost - cost_new
-            trust_radius, ratio = update_tr_radius(
-                tr_ratio[0] * c_norm,
-                actual_reduction,
-                predicted_reduction,
-                np.linalg.norm(dc_opt),
-                bound_hit,
-            )
-            tr_ratio[0] = trust_radius / c_norm
-            perturb_options["tr_ratio"] = tr_ratio
-
-            timer.stop("Step {} time".format(iteration))
-            if verbose > 0:
-                objective.print_value(objective.x(self))
-                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-                print("Reduction Ratio = {:+.3f}".format(ratio))
-            if verbose > 1:
-                timer.disp("Step {} time".format(iteration))
-
-            # stopping criteria
-            success, message = check_termination(
-                actual_reduction,
-                cost,
-                np.linalg.norm(dc),
-                c_norm,
-                np.inf,  # TODO: add g_norm
-                ratio,
-                ftol,
-                xtol,
-                0,  # TODO: add gtol
-                iteration,
-                maxiter,
-                0,
-                np.inf,
-            )
-            if actual_reduction > 0:
-                params = self.params_dict.copy()
-                cost = cost_new
-            else:
-                # reset equilibrium to last good params
-                self.params_dict = params
-            if success is not None:
-                break
-
-            iteration += 1
-
-        timer.stop("Total time")
-        print("====================")
-        print("Done")
-        if verbose > 0:
-            print(message)
-        if verbose > 1:
-            timer.disp("Total time")
-
-        if copy:
-            eq = self.copy()
-            self.params = orig_params
-        else:
-            eq = self
-        return eq
 
     def perturb(
         self,

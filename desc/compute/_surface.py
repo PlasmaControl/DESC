@@ -614,29 +614,6 @@ def _e_zeta_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e_rho_z",
-    label="\\partial_{\\zeta} \\mathbf{e}_{\\rho}",
-    units="m",
-    units_long="meters",
-    description="Covariant radial basis vector, derivative wrt toroidal angle",
-    dim=3,
-    params=[],
-    transforms={
-        "grid": [],
-    },
-    profiles=[],
-    coordinates="rt",
-    data=[],
-    parameterization="desc.geometry.surface.PoincareRZLSection",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
-)
-def _e_rho_z_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
-    coords = jnp.zeros((transforms["grid"].num_nodes, 3))
-    data["e_rho_z"] = coords
-    return data
-
-
-@register_compute_fun(
     name="e_theta_z",
     label="\\partial_{\\zeta} \\mathbf{e}_{\\theta}",
     units="m",

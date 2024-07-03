@@ -177,7 +177,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Area of enclosed cross-section (enclosed constant phi surface), "
-    "scaled by ρ⁻², as function of zeta",
+    "scaled by max(ρ)⁻², as function of zeta",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -418,7 +418,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     units="m",
     units_long="meters",
     description="Perimeter of enclosed cross-section (enclosed constant phi surface), "
-    "scaled by ρ⁻¹, as function of zeta",
+    "scaled by max(ρ)⁻¹, as function of zeta",
     dim=1,
     params=[],
     transforms={"grid": []},

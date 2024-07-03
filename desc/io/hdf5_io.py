@@ -127,13 +127,13 @@ class hdf5Reader(hdf5IO, Reader):
                 warnings.warn(
                     colored(
                         "\n"
-                        f"The object attribute '{attr}' was not loaded from the input "
-                        "file.\nThis is likely because the input file containing "
+                        f"The object attribute '{attr}' was not loaded from the file.\n"
+                        "This is likely because the file containing "
                         f"'{obj.__class__.__name__}' was created before '{attr}' "
                         f"became an attribute of objects of class '{obj.__class__}'.\n"
                         "The user may verify that a default value has been set.\n"
-                        "This warning will persist until the input file is saved with "
-                        "the new object.\n"
+                        "This warning will persist until the file is saved with the "
+                        "new object.\n"
                         "\n"
                         "Note to developers: Add 'def _set_up(self)' as a method to "
                         f"class '{obj.__class__}'\n"
@@ -141,7 +141,7 @@ class hdf5Reader(hdf5IO, Reader):
                         f"assigns a value to '{attr}'.\n"
                         "This method is called automatically when a file is loaded.\n"
                         "Recall that the testing suite will fail on warnings.",
-                        "blue",
+                        "yellow",
                     ),
                     RuntimeWarning,
                 )

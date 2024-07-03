@@ -176,8 +176,8 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     label="A(\\zeta)",
     units="m^{2}",
     units_long="square meters",
-    description="Enclosed cross-sectional (constant phi surface) area, "
-    "as function of zeta",
+    description="Area of enclosed cross-section (enclosed constant phi surface), "
+    "scaled by ρ⁻², as function of zeta",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -198,7 +198,8 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
     # Now choose v = [0, 0, Z], and n in the direction (e_θ|ρ,ζ × e_ζ|ρ,θ) ⊗ [1, 0, 1].
     n = data["n_rho"]
     n = n.at[:, 1].set(0)
-    n = n / jnp.linalg.norm(n, axis=-1)[:, None]
+    n = n / jnp.linalg.norm(n, axis=-1)[:, jnp.newaxis]
+    max_rho = jnp.max(data["rho"])
     data["A(z)"] = jnp.abs(
         line_integrals(
             transforms["grid"],
@@ -208,9 +209,12 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
             line_label="theta",
-            fix_surface=("rho", jnp.max(data["rho"])),
+            fix_surface=("rho", max_rho),
             expand_out=True,
         )
+        # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
+        # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
+        / max_rho**2
     )
     return data
 
@@ -413,13 +417,14 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     label="P(\\zeta)",
     units="m",
     units_long="meters",
-    description="Perimeter of cross section as function of zeta",
+    description="Perimeter of enclosed cross-section (enclosed constant phi surface), "
+    "scaled by ρ⁻¹, as function of zeta",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["rho", "g_tt"],
+    data=["rho", "e_theta|r,p"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
@@ -427,15 +432,21 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     max_rho = jnp.max(data["rho"])
-    data["perimeter(z)"] = (  # perimeter at rho ~ 1
+    data["perimeter(z)"] = (
         line_integrals(
             transforms["grid"],
-            jnp.sqrt(data["g_tt"]),
+            safenorm(data["e_theta|r,p"], axis=-1),
+            # FIXME: Works currently for omega = zero, but for nonzero omega
+            #  we need to integrate over theta at constant phi.
+            #  Should be simple once we have coordinate mapping and source grid
+            #  logic from GitHub pull request #1024.
             line_label="theta",
             fix_surface=("rho", max_rho),
             expand_out=True,
         )
-        / max_rho  # to account for quadrature grid not having nodes out to rho=1
+        # To approximate perimeter at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
+        # varies little from ρ = max_rho to ρ = 1.
+        / max_rho
     )
     return data
 

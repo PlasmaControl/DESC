@@ -1514,6 +1514,7 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
     ],
     basis="basis",
 )
@@ -3530,7 +3531,11 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\theta} |_{\\rho, \\phi}",
     units="m",
     units_long="meters",
-    description="Tangent vector along boundary of constant phi toroidal surface",
+    description=(
+        "Covariant poloidal basis vector in (R,ϕ,Z) coordinates. "
+        "ϕ increases counterclockwise when viewed from above "
+        "(cylindrical R,ϕ plane with Z out of page)."
+    ),
     dim=3,
     params=[],
     transforms={},
@@ -3540,6 +3545,7 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
     ],
 )
 def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):

@@ -6,6 +6,7 @@ import warnings
 
 import h5py
 import numpy as np
+from termcolor import colored
 
 from .core_io import IO, Reader, Writer
 
@@ -124,23 +125,24 @@ class hdf5Reader(hdf5IO, Reader):
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
                 warnings.warn(
-                    f"Save attribute '{attr}' was not loaded from the input file.\n"
-                    "This is likely because the file from which you are loading the "
-                    f"Python object '{obj.__class__.__name__}' was created "
-                    f"prior to the time '{attr}' "
-                    f"became an attribute of objects of the class '{obj.__class__}'.\n"
-                    "\n"
-                    "Note to developers: Add 'def _set_up(self)' as a method to class "
-                    f"{obj.__class__}\n"
-                    "(or the superclass where this new attribute is assigned) that "
-                    f"assigns some default value to '{attr}' for old objects.\n"
-                    "This method will be called automatically when a file is loaded.\n"
-                    "\n"
-                    "This warning will continue to be raised until the file is saved "
-                    "with an updated object, even if the _set_up method assigns "
-                    "the missing attribute correctly.\n"
-                    "Our testing suite will fail on warnings, so developers may want "
-                    "to comment out this warning until the input files are updated.\n",
+                    colored(
+                        "\n"
+                        f"The object attribute '{attr}' was not loaded from the input "
+                        "file.\nThis is likely because the input file containing "
+                        f"'{obj.__class__.__name__}' was created before '{attr}' "
+                        f"became an attribute of objects of class '{obj.__class__}'.\n"
+                        "The user may verify that a default value has been set.\n"
+                        "This warning will persist until the input file is saved with "
+                        "the new object.\n"
+                        "\n"
+                        "Note to developers: Add 'def _set_up(self)' as a method to "
+                        f"class '{obj.__class__}'\n"
+                        "(or the superclass where this new attribute is assigned) that "
+                        f"assigns a value to '{attr}'.\n"
+                        "This method is called automatically when a file is loaded.\n"
+                        "Recall that the testing suite will fail on warnings.",
+                        "blue",
+                    ),
                     RuntimeWarning,
                 )
                 continue

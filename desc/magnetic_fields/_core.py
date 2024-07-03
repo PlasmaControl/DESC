@@ -50,7 +50,7 @@ def biot_savart_general(re, rs, J, dV):
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     assert J.shape == rs.shape
     JdV = J * dV[:, None]
-    B = jnp.zeros_like(re, dtype=jnp.float32)
+    B = jnp.zeros_like(re)
 
     def body(i, B):
         r = re - rs[i, :]
@@ -107,7 +107,12 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
         )
 
     curpol = (
-        (2 * jnp.pi / eq.NFP * eq.compute("G", grid=LinearGrid(rho=jnp.array(1, dtype=jnp.float32)))["G"])
+        (
+            2
+            * jnp.pi
+            / eq.NFP
+            * eq.compute("G", grid=LinearGrid(rho=jnp.array([1.0])))["G"]
+        )
         if scale_by_curpol
         else 1
     )
@@ -130,7 +135,7 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
 
     if eval_grid is None:
         eval_grid = LinearGrid(
-            rho=jnp.array(1.0, dtype=jnp.float32), M=surface.M_grid, N=surface.N_grid, NFP=surface.NFP
+            rho=jnp.array(1.0), M=surface.M_grid, N=surface.N_grid, NFP=surface.NFP
         )
     trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
@@ -261,7 +266,7 @@ class _MagneticField(IOAble, ABC):
             surface = eq.surface
         if eval_grid is None:
             eval_grid = LinearGrid(
-                rho=jnp.array(1.0, dtype=jnp.float32), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
+                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
 
         data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="rpz")
@@ -355,7 +360,7 @@ class _MagneticField(IOAble, ABC):
             )
         if eval_grid is None:
             eval_grid = LinearGrid(
-                rho=jnp.array(1.0, dtype=jnp.float32), M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
+                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
             )
 
         basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
@@ -388,7 +393,7 @@ class _MagneticField(IOAble, ABC):
                 2
                 * jnp.pi
                 / surface.NFP
-                * eq.compute("G", grid=LinearGrid(rho=jnp.array(1, dtype=jnp.float32)))["G"]
+                * eq.compute("G", grid=LinearGrid(rho=jnp.array(1)))["G"]
             )
             if scale_by_curpol
             else 1
@@ -562,7 +567,7 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
 
     def __init__(self, fun, params=None):
         errorif(not callable(fun), ValueError, "fun must be callable")
-        self._params = jnp.asarray(setdefault(params, jnp.array([], dtype=jnp.float32)))
+        self._params = jnp.asarray(setdefault(params, jnp.array([])))
 
         import jax
 
@@ -863,7 +868,10 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         if basis == "xyz":
             coords = xyz2rpz(coords)
         bp = B0 * R0 / coords[:, 0]
-        brz = jnp.zeros_like(bp, dtype=jnp.float32)
+        import pdb
+
+        pdb.set_trace()
+        brz = jnp.zeros_like(bp, dtype=B0.dtype)
         B = jnp.array([brz, bp, brz]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])

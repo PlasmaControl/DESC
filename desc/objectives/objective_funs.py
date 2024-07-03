@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import _as64bit, jit, jnp, tree_flatten, tree_unflatten, use_jax
+from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -47,7 +47,7 @@ class ObjectiveFunction(IOAble):
         objectives,
         use_jit=True,
         deriv_mode="auto",
-        jac_precision="float64",
+        jac_precision="float32",
         name="ObjectiveFunction",
     ):
         if not isinstance(objectives, (tuple, list)):
@@ -457,6 +457,8 @@ class ObjectiveFunction(IOAble):
         v = v if isinstance(v, (tuple, list)) else (v,)
         fun = lambda x: getattr(self, op)(x, constants)
         if len(v) == 1:
+            # --no-verify jvpfun = lambda dx:
+            # --no-verify Derivative.compute_jvp(fun, 0, _as32bit(dx), _as32bit(x))
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return jnp.vectorize(jvpfun, signature="(n)->(k)")(v[0])
         elif len(v) == 2:
@@ -797,7 +799,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
-        jac_precision="float64",
+        jac_precision="float32",
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -941,7 +943,6 @@ class _Objective(IOAble, ABC):
     def _maybe_array_to_params(self, *args):
         argsout = tuple()
         for arg, thing in zip(args, self.things):
-            arg = _as64bit(arg)
             if isinstance(arg, (np.ndarray, jnp.ndarray)):
                 argsout += (thing.unpack_params(arg),)
             else:
@@ -958,12 +959,14 @@ class _Objective(IOAble, ABC):
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
-        # , dtype=self._jac_precision)
         args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(self._scale(f, **kwargs))
+
+        out = jnp.atleast_1d(self._scale(f, **kwargs)).astype(self._jac_precision)
+        # --no-verify print("out data type = ", jnp.dtype(out))
+        return out
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
@@ -971,7 +974,12 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
+        out = jnp.atleast_1d(self._scale(self._shift(f), **kwargs)).astype(
+            self._jac_precision
+        )
+        print("out data type = ", jnp.dtype(out))
+        # --no-verify return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
+        return out
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""

@@ -163,8 +163,12 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     @jit
     def recover(x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
-        dx = put(jnp.zeros(objective.dim_x, dtype=jnp.float32), unfixed_idx, jnp.astype(Z, jnp.float32) @ jnp.astype(x_reduced, jnp.float32))
-        return jnp.atleast_1d(jnp.squeeze(jnp.astype(xp, jnp.float32) + dx))
+        dx = put(
+            jnp.zeros(objective.dim_x, dtype=x_reduced.dtype),
+            unfixed_idx,
+            jnp.astype(Z, x_reduced.dtype) @ jnp.astype(x_reduced, x_reduced.dtype),
+        )
+        return jnp.atleast_1d(jnp.squeeze(jnp.astype(xp, x_reduced.dtype) + dx))
 
     # check that all constraints are actually satisfiable
     params = objective.unpack_state(xp, False)

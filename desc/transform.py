@@ -490,8 +490,7 @@ class Transform(IOAble):
             A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
             if isinstance(A, dict):
                 A = {
-                    key: jnp.asarray(value, dtype=jnp.float32)
-                    for key, value in A.items()
+                    key: jnp.asarray(value, dtype=jacdtype) for key, value in A.items()
                 }
             else:
                 A = jnp.asarray(A, dtype=jacdtype)
@@ -504,9 +503,9 @@ class Transform(IOAble):
 
         elif self.method == "direct2":
             A = jnp.asarray(
-                self.matrices["fft"].get(dr, {}).get(dt, {}), dtype=jnp.float32
+                self.matrices["fft"].get(dr, {}).get(dt, {}), dtype=jacdtype
             )
-            B = jnp.asarray(self.matrices["direct2"].get(dz, {}), dtype=jnp.float32)
+            B = jnp.asarray(self.matrices["direct2"].get(dz, {}), dtype=jacdtype)
             if isinstance(A, dict) or isinstance(B, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")

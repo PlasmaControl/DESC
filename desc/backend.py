@@ -69,8 +69,9 @@ print(
 )
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
-    jit = jax.jit
+    # --no-verify jit = jax.jit
     # --no-verify jit = lambda func, *args, **kwargs: func
+    jit = lambda func, *args, **kwargs: func
     fori_loop = jax.lax.fori_loop
     cond = jax.lax.cond
     switch = jax.lax.switch
@@ -110,7 +111,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 
     def _print_type(x):
         print(x.dtype)
-        return None
 
     def in32bit(fun, *args, **kwargs):
         """Perform a function call in 32 bit and cast back to 64."""

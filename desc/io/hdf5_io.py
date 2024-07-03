@@ -124,22 +124,22 @@ class hdf5Reader(hdf5IO, Reader):
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
                 warnings.warn(
-                    f"Save attribute '{attr}' was not loaded from the input file. "
+                    f"Save attribute '{attr}' was not loaded from the input file.\n"
                     "This is likely because the file from which you are loading the "
-                    f"Python object {obj} was created prior to the time {attr} became "
-                    f"an attribute of objects of the class {type(obj)}. "
+                    f"Python object '{obj}' was created prior to the time '{attr}' "
+                    f"became an attribute of objects of the class '{type(obj)}'.\n"
                     "\n"
-                    "Note to developers: Add 'def _set_up(self)' as a method to the "
-                    f"class in which the new attribute {attr} is assigned "
-                    f"(try {type(obj)}), so that old objects can be assigned some "
-                    f"default value for this attribute. This method will be called "
-                    f"automatically when a file is loaded."
+                    "Note to developers: Add 'def _set_up(self)' as a method to class "
+                    f"{type(obj)}\n"
+                    "(or the superclass where this new attribute is assigned) that "
+                    f"assigns some default value to '{attr}' for old objects.\n"
+                    "This method will be called automatically when a file is loaded.\n"
                     "\n"
-                    "Note this warning will continue to be raised until the file "
-                    "is saved with an updated object, even if the _set_up method "
-                    "assigns the missing attribute correctly later. "
+                    "This warning will continue to be raised until the file is saved "
+                    "with an updated object, even if the _set_up method assigns "
+                    "the missing attribute correctly.\n"
                     "Our testing suite will fail on warnings, so developers may want "
-                    "to comment out this warning until the input files are updated.",
+                    "to comment out this warning until the input files are updated.\n",
                     RuntimeWarning,
                 )
                 continue

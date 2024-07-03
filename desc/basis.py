@@ -368,6 +368,9 @@ class FourierSeries(_Basis):
         self._M = 0
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
+        self._NFP_umbilic_factor = check_posint(
+            NFP_umbilic_factor, "NFP_umbilic_factor", False
+        )
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
@@ -442,7 +445,7 @@ class FourierSeries(_Basis):
             z[:, np.newaxis],
             n,
             self.NFP,
-            # self.NFP_umbilic_factor,
+            self.NFP_umbilic_factor,
             derivatives[2],
         )
         if unique:
@@ -450,7 +453,7 @@ class FourierSeries(_Basis):
 
         return toroidal
 
-    def change_resolution(self, N, NFP=None, sym=None):
+    def change_resolution(self, N, NFP=None, NFP_umbilic_factor=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -468,6 +471,11 @@ class FourierSeries(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
+        self._NFP_umbilic_factor = (
+            NFP_umbilic_factor
+            if NFP_umbilic_factor is not None
+            else self.NFP_umbilic_factor
+        )
         if N != self.N:
             self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym

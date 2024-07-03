@@ -69,6 +69,10 @@ from desc.objectives import (
     Shear,
     ToroidalCurrent,
     ToroidalFlux,
+    UmbilicDistance,
+    UmbilicDistance2,
+    UmbilicHighCurvature2,
+    UmbilicLowCurvature2,
     VacuumBoundaryError,
     Volume,
 )
@@ -1946,6 +1950,10 @@ class TestComputeScalarResolution:
         # don't test these since they depend on what user wants
         LinearObjectiveFromUser,
         ObjectiveFromUser,
+        UmbilicHighCurvature2,
+        UmbilicLowCurvature2,
+        UmbilicDistance2,
+        UmbilicDistance,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -2274,6 +2282,10 @@ class TestObjectiveNaNGrad:
         ObjectiveFromUser,
         # TODO: add Omnigenity objective (see GH issue #943)
         Omnigenity,
+        UmbilicHighCurvature2,
+        UmbilicLowCurvature2,
+        UmbilicDistance2,
+        UmbilicDistance,
     ]
     other_objectives = list(set(objectives) - set(specials))
 

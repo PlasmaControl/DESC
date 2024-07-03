@@ -98,31 +98,30 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
 
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     parameterization = _parse_parameterization(parameterization)
-    for name in data.keys():
-        if (
-            data_index[parameterization][name]["dim"] == 3  # vector quantity
-            and kwargs.get("basis", "rpz").lower() == "xyz"  # xyz basis requested
-        ):
-            from .geom_utils import rpz2xyz, rpz2xyz_vec
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        from .geom_utils import rpz2xyz, rpz2xyz_vec
 
-            if name == "x":
-                data[name] = rpz2xyz(data[name])
-            else:
-                if "phi" in data:
-                    data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+        for name in data.keys():
+            # Only convert vector data
+            if data_index[parameterization][name]["dim"] == 3:
+                if name == "x":
+                    data[name] = rpz2xyz(data[name])
                 else:
-                    # compute phi if it's not already in data. Adding phi
-                    # to data at the beginning cause matrix dimension problems
-                    # TODO: Maybe look into that later (why error?)
-                    data_phi = _compute(
-                        p,
-                        "phi",
-                        params=params,
-                        transforms=transforms,
-                        profiles=profiles,
-                        **kwargs,
-                    )["phi"]
-                    data[name] = rpz2xyz_vec(data[name], phi=data_phi)
+                    if "phi" in data:
+                        data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+                    else:
+                        # compute phi if it's not already in data. Adding phi
+                        # to data at the beginning cause matrix dimension problems
+                        # TODO: Maybe look into that later (why error?)
+                        data_phi = _compute(
+                            p,
+                            "phi",
+                            params=params,
+                            transforms=transforms,
+                            profiles=profiles,
+                            **kwargs,
+                        )["phi"]
+                        data[name] = rpz2xyz_vec(data[name], phi=data_phi)
 
     return data
 

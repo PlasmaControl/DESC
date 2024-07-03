@@ -126,7 +126,23 @@ class hdf5Reader(hdf5IO, Reader):
                 # --no-verify pdb.set_trace()
                 # --no-verify print(loc.keys(), obj._io_attrs_)
                 warnings.warn(
-                    "Save attribute '{}' was not loaded.".format(attr), RuntimeWarning
+                    f"Save attribute '{attr}' was not loaded from the input file. "
+                    "This is likely because the file from which you are loading the "
+                    f"Python object {obj} was created prior to the time {attr} became "
+                    f"an attribute of objects of the class {type(obj)}. "
+                    "\n"
+                    "Note to developers: Add 'def _set_up(self)' as a method to the "
+                    f"class in which the new attribute {attr} is assigned "
+                    f"(try {type(obj)}), so that old objects can be assigned some "
+                    f"default value for this attribute. This method will be called "
+                    f"automatically when a file is loaded."
+                    "\n"
+                    "Note this warning will continue to be raised until the file "
+                    "is saved with an updated object, even if the _set_up method "
+                    "assigns the missing attribute correctly later. "
+                    "Our testing suite will fail on warnings, so developers may want "
+                    "to comment out this warning until the input files are updated.",
+                    RuntimeWarning,
                 )
                 continue
             if isinstance(loc[attr], h5py.Dataset):

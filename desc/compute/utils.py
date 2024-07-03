@@ -74,6 +74,9 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 
+    if kwargs.get("basis", "rpz").lower() == "xyz" and "phi" not in names:
+        names.append("phi")
+
     for name in names:
         assert _has_params(name, params, p), f"Don't have params to compute {name}"
         assert _has_profiles(
@@ -108,12 +111,6 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
             if name == "x":
                 data[name] = rpz2xyz(data[name])
             else:
-                errorif(
-                    "phi" not in data.keys(),
-                    ValueError,
-                    "'phi' must be included in the compute data "
-                    + "to convert to 'xyz' basis.",
-                )
                 data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
 
     return data

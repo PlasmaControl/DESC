@@ -34,8 +34,6 @@ def load(load_from, file_format=None):
         The object saved in the file
 
     """
-    import pdb
-
     if file_format is None and isinstance(load_from, (str, os.PathLike)):
         name = str(load_from)
         if name.endswith(".h5") or name.endswith(".hdf5"):
@@ -63,7 +61,7 @@ def load(load_from, file_format=None):
                 cls = pydoc.locate(cls_name)
                 obj = cls.__new__(cls)
                 reader = reader_factory(load_from, file_format)
-                pdb.set_trace()
+                # --no-verify pdb.set_trace()
                 reader.read_obj(obj)
                 reader.close()
             else:

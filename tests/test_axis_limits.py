@@ -361,9 +361,7 @@ class TestAxisLimits:
 
 def _reverse_mode_unsafe_names():
     names = data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
-    import pdb
 
-    pdb.set_trace()
     eq = get("ESTELL")
 
     def isalias(name):

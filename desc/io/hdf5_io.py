@@ -1,7 +1,6 @@
 """Classes for reading and writing HDF5 files."""
 
 import numbers
-import pdb
 import pydoc
 import warnings
 
@@ -124,7 +123,7 @@ class hdf5Reader(hdf5IO, Reader):
         loc = self.resolve_where(where)
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
-                pdb.set_trace()
+                # --no-verify pdb.set_trace()
                 # --no-verify print(loc.keys(), obj._io_attrs_)
                 warnings.warn(
                     "Save attribute '{}' was not loaded.".format(attr), RuntimeWarning

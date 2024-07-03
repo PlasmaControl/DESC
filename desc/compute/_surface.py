@@ -221,7 +221,9 @@ def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.core.Surface",
 )
 def _Z_Surface(params, transforms, profiles, data, **kwargs):
-    errorif(kwargs.get("basis", "rpz").lower()[-1] != "z", NotImplementedError)
+    errorif(
+        kwargs.get("basis", "rpz").lower() not in {"rpz", "xyz"}, NotImplementedError
+    )
     data["Z"] = data["x"][:, 2]
     return data
 

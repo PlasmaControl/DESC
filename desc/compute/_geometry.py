@@ -164,7 +164,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
 def _A_of_z(params, transforms, profiles, data, **kwargs):
     data["A(z)"] = surface_integrals(
         transforms["grid"],
-        jnp.abs(data["|e_rho x e_theta|"]),
+        data["|e_rho x e_theta|"],
         surface_label="zeta",
         expand_out=True,
     )

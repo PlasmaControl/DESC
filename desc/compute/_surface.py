@@ -307,6 +307,7 @@ def _e_rho_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     data=[],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    aliases=["e_theta_r"],
 )
 def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -328,35 +329,16 @@ def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    aliases=["e_zeta_r"],
 )
 def _e_rho_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_rho_z"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_theta_r",
-    label="\\partial_{\\rho} \\mathbf{e}_{\\theta}",
-    units="m",
-    units_long="meters",
-    description="Covariant poloidal basis vector, derivative wrt radial coordinate",
-    dim=3,
-    params=[],
-    transforms={
-        "grid": [],
-    },
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
-)
-def _e_theta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    coords = jnp.zeros((transforms["grid"].num_nodes, 3))
-    data["e_theta_r"] = coords
     return data
 
 
@@ -377,33 +359,11 @@ def _e_theta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     data=[],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    aliases=["e_rho_rt"],
 )
 def _e_theta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_theta_rr"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_zeta_r",
-    label="\\partial_{\\rho} \\mathbf{e}_{\\zeta}",
-    units="m",
-    units_long="meters",
-    description="Covariant toroidal basis vector, derivative wrt radial coordinate",
-    dim=3,
-    params=[],
-    transforms={
-        "grid": [],
-    },
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
-)
-def _e_zeta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    coords = jnp.zeros((transforms["grid"].num_nodes, 3))
-    data["e_zeta_r"] = coords
     return data
 
 
@@ -422,8 +382,12 @@ def _e_zeta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    aliases=["e_rho_rz"],
 )
 def _e_zeta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -688,6 +652,7 @@ def _e_rho_z_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.surface.PoincareRZLSection",
     basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    aliases=["e_zeta_t"],
 )
 def _e_theta_z_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))

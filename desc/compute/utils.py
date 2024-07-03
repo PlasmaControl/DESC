@@ -74,9 +74,6 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 
-    if kwargs.get("basis", "rpz").lower() == "xyz" and "phi" not in names:
-        names.append("phi")
-
     for name in names:
         assert _has_params(name, params, p), f"Don't have params to compute {name}"
         assert _has_profiles(
@@ -111,7 +108,21 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
             if name == "x":
                 data[name] = rpz2xyz(data[name])
             else:
-                data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+                if "phi" in data:
+                    data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+                else:
+                    # compute phi if it's not already in data. Adding phi
+                    # to data at the beginning cause matrix dimension problems
+                    # TODO: Maybe look into that later (why error?)
+                    data_phi = _compute(
+                        p,
+                        "phi",
+                        params=params,
+                        transforms=transforms,
+                        profiles=profiles,
+                        **kwargs,
+                    )["phi"]
+                    data[name] = rpz2xyz_vec(data[name], phi=data_phi)
 
     return data
 

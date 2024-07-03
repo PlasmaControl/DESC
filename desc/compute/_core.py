@@ -24,7 +24,10 @@ from .data_index import register_compute_fun
     ],
 )
 def _0(params, transforms, profiles, data, **kwargs):
-    data["0"] = jnp.zeros(transforms["grid"].num_nodes, dtype=params["R_lmn"].dtype)
+    try:
+        data["0"] = jnp.zeros(transforms["grid"].num_nodes, dtype=params["R_lmn"].dtype)
+    except KeyError:
+        data["0"] = jnp.zeros(transforms["grid"].num_nodes)
     # --no-verify data["0"] = jnp.zeros(transforms["grid"].num_nodes, dtype=jnp.float64)
     return data
 

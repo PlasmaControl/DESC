@@ -1,6 +1,7 @@
 """Module for getting precomputed example equilibria."""
 
 import os
+import pdb
 
 import desc.io
 
@@ -42,6 +43,7 @@ def get(name, data=None):
     h5s = [f for f in os.listdir(here) if f.endswith(".h5")]
     h5s_lower = [f.lower() for f in h5s]
     filename = name.lower() + "_output.h5"
+    # --no-verify pdb.set_trace()
     try:
         idx = h5s_lower.index(filename)
     except ValueError as e:

@@ -10,7 +10,7 @@ from desc.backend import jnp, put
 from desc.io import IOAble
 from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
 
-jac32 = True
+jac32 = False
 
 jacdtype = jnp.float32 if jac32 else jnp.float64
 

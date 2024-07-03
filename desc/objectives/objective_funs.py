@@ -47,7 +47,7 @@ class ObjectiveFunction(IOAble):
         objectives,
         use_jit=True,
         deriv_mode="auto",
-        jac_precision="float32",
+        jac_precision="float64",
         name="ObjectiveFunction",
     ):
         if not isinstance(objectives, (tuple, list)):
@@ -799,7 +799,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
-        jac_precision="float32",
+        jac_precision="float64",
     ):
         if self._scalar:
             assert self._coordinates == ""

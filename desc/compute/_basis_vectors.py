@@ -1401,39 +1401,12 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
     aliases=["e_phi"],
-    # Our usual notation implies e_phi = (∂X/∂ϕ)|R,Z, but we need to alias e_phi to
-    # e_phi|r,t = (∂X/∂ϕ)|ρ,θ for compatibility with older versions of the code.
-    # To instead compute (∂X/∂ϕ)|R,Z, look at the quantity "e_phi|R,Z".
+    # Our usual notation implies e_phi = (∂X/∂ϕ)|R,Z = R ϕ̂, but we need to alias e_phi
+    # to e_phi|r,t = (∂X/∂ϕ)|ρ,θ for compatibility with older versions of the code.
 )
 def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):
     # (∂X/∂ϕ)|ρ,θ = (∂X/∂ζ)|ρ,θ / (∂ϕ/∂ζ)|ρ,θ
     data["e_phi|r,t"] = (data["e_zeta"].T / data["phi_z"]).T
-    return data
-
-
-@register_compute_fun(
-    name="e_phi|R,Z",
-    label="\\mathbf{e}_{\\phi} |_{R, Z}",
-    units="m",
-    units_long="meters",
-    description="Tangent vector along increasing cylindrical toroidal angle phi. "
-    "(Points in the direction of ϕ̂).",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["R", "0", "phi"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
-    ],
-    basis="basis",
-)
-def _e_sub_phi_RZ(params, transforms, profiles, data, **kwargs):
-    data["e_phi|R,Z"] = jnp.column_stack([data["0"], data["R"], data["0"]])
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_phi|R,Z"] = rpz2xyz_vec(data["e_phi|R,Z"], phi=data["phi"])
     return data
 
 

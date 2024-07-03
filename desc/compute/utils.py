@@ -9,6 +9,7 @@ from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.utils import errorif
 
 from .data_index import allowed_kwargs, data_index
 
@@ -91,29 +92,27 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         data=data,
         **kwargs,
     )
-    # By default each compute function will return in rpz basis. If the user
-    # wants the data in xyz basis, we will convert it here.
-    # TODO: think about compute functions for _curve
+
+    # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     parameterization = _parse_parameterization(parameterization)
     for name in data.keys():
         if (
-            data_index[parameterization][name]["dim"] == 3  # it should be 3D
-            and kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
-            and data_index[parameterization][name]["coordinates"] != "s"
-            and ("phi" in data)  # phi is needed for conversion
-            and name != "x"  # x is not a vector, it is coordinates
+            data_index[parameterization][name]["dim"] == 3  # vector quantity
+            and kwargs.get("basis", "rpz").lower() == "xyz"  # xyz basis requested
         ):
-            from .geom_utils import rpz2xyz_vec
+            from .geom_utils import rpz2xyz, rpz2xyz_vec
 
-            data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
-        elif (
-            kwargs.get("basis", "rpz").lower() == "xyz"  # user should ask in xyz
-            and data_index[parameterization][name]["coordinates"] != "s"
-            and name == "x"  # x is the only coordinate value
-        ):
-            from .geom_utils import rpz2xyz
+            if name == "x":
+                data[name] = rpz2xyz(data[name])
+            else:
+                errorif(
+                    "phi" not in data.keys(),
+                    ValueError,
+                    "'phi' must be included in the compute data "
+                    + "to convert to 'xyz' basis.",
+                )
+                data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
 
-            data[name] = rpz2xyz(data[name])
     return data
 
 
@@ -372,16 +371,25 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
         if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
             basis = getattr(obj, c + "_basis")
             # first check if we already have a transform with a compatible basis
-            for transform in transforms.values():
-                if basis.equiv(getattr(transform, "basis", None)):
-                    ders = np.unique(
-                        np.vstack([derivs[c], transform.derivatives]), axis=0
-                    ).astype(int)
-                    # don't build until we know all the derivs we need
-                    transform.change_derivatives(ders, build=False)
-                    c_transform = transform
-                    break
-            else:  # if we didn't exit the loop early
+            if not jitable:
+                for transform in transforms.values():
+                    if basis.equiv(getattr(transform, "basis", None)):
+                        ders = np.unique(
+                            np.vstack([derivs[c], transform.derivatives]), axis=0
+                        ).astype(int)
+                        # don't build until we know all the derivs we need
+                        transform.change_derivatives(ders, build=False)
+                        c_transform = transform
+                        break
+                else:  # if we didn't exit the loop early
+                    c_transform = Transform(
+                        grid,
+                        basis,
+                        derivs=derivs[c],
+                        build=False,
+                        method=method,
+                    )
+            else:  # don't perform checks if jitable=True as they are not jit-safe
                 c_transform = Transform(
                     grid,
                     basis,

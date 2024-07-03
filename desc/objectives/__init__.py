@@ -29,7 +29,6 @@ from ._geometry import (
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
-    UmbilicCurvature,
     UmbilicDistance,
     UmbilicDistance2,
     UmbilicHighCurvature2,

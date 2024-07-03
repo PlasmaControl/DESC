@@ -40,9 +40,9 @@ def _sqrtg(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_{PEST}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant of (ρ,ϑ,Φ) coordinate system or"
-    " straight field line PEST coordinates. Φ increases counterclockwise"
-    " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
+    description="Jacobian determinant of (ρ,ϑ,ϕ) coordinate system or"
+    " straight field line PEST coordinates. ϕ increases counterclockwise"
+    " when viewed from above (cylindrical R,ϕ plane with Z out of page).",
     dim=1,
     params=[],
     transforms={},

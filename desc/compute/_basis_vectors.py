@@ -1389,7 +1389,7 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
     units="m",
     units_long="meters",
-    description="Covariant toroidal basis vector in (ρ,θ,Φ) coordinates",
+    description="Covariant toroidal basis vector in (ρ,θ,ϕ) coordinates",
     dim=3,
     params=[],
     transforms={},
@@ -1401,12 +1401,12 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
     aliases=["e_phi"],
-    # Our usual notation implies e_phi = (∂X/∂Φ)|R,Z, but we need to alias e_phi to
-    # e_phi|r,t = (∂X/∂Φ)|ρ,θ for compatibility with older versions of the code.
-    # To instead compute (∂X/∂Φ)|R,Z, look at the quantity "e_phi|R,Z".
+    # Our usual notation implies e_phi = (∂X/∂ϕ)|R,Z, but we need to alias e_phi to
+    # e_phi|r,t = (∂X/∂ϕ)|ρ,θ for compatibility with older versions of the code.
+    # To instead compute (∂X/∂ϕ)|R,Z, look at the quantity "e_phi|R,Z".
 )
 def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):
-    # (∂X/∂Φ)|ρ,θ = (∂X/∂ζ)|ρ,θ / (∂Φ/∂ζ)|ρ,θ
+    # (∂X/∂ϕ)|ρ,θ = (∂X/∂ζ)|ρ,θ / (∂ϕ/∂ζ)|ρ,θ
     data["e_phi|r,t"] = (data["e_zeta"].T / data["phi_z"]).T
     return data
 
@@ -1416,7 +1416,8 @@ def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\phi} |_{R, Z}",
     units="m",
     units_long="meters",
-    description="Tangent vector along increasing cylindrical toroidal angle phi",
+    description="Tangent vector along increasing cylindrical toroidal angle phi. "
+    "(Points in the direction of ϕ̂).",
     dim=3,
     params=[],
     transforms={},
@@ -2509,9 +2510,9 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\vartheta} |_{\\rho, \\phi} = \\mathbf{e}_{\\theta_{PEST}}",
     units="m",
     units_long="meters",
-    description="Covariant poloidal basis vector in (ρ,ϑ,Φ) coordinates or"
-    " straight field line PEST coordinates. Φ increases counterclockwise"
-    " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
+    description="Covariant poloidal basis vector in (ρ,ϑ,ϕ) coordinates or"
+    " straight field line PEST coordinates. ϕ increases counterclockwise"
+    " when viewed from above (cylindrical R,ϕ plane with Z out of page).",
     dim=3,
     params=[],
     transforms={},
@@ -2521,7 +2522,7 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     aliases=["e_vartheta"],
 )
 def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
-    # constant ρ and Φ
+    # constant ρ and ϕ
     e_vartheta = (
         data["e_theta"].T * data["phi_z"] - data["e_zeta"].T * data["phi_t"]
     ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
@@ -2534,9 +2535,9 @@ def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta}",
     units="m",
     units_long="meters",
-    description="Covariant toroidal basis vector in (ρ,ϑ,Φ) coordinates or"
-    " straight field line PEST coordinates. Φ increases counterclockwise"
-    " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
+    description="Covariant toroidal basis vector in (ρ,ϑ,ϕ) coordinates or"
+    " straight field line PEST coordinates. ϕ increases counterclockwise"
+    " when viewed from above (cylindrical R,ϕ plane with Z out of page).",
     dim=3,
     params=[],
     transforms={},
@@ -2559,9 +2560,9 @@ def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\rho} |_{\\vartheta, \\phi}",
     units="m",
     units_long="meters",
-    description="Covariant radial basis vector in (ρ,ϑ,Φ) coordinates or"
-    " straight field line PEST coordinates. Φ increases counterclockwise"
-    " when viewed from above (cylindrical R,Φ plane with Z out of page.)",
+    description="Covariant radial basis vector in (ρ,ϑ,ϕ) coordinates or"
+    " straight field line PEST coordinates. ϕ increases counterclockwise"
+    " when viewed from above (cylindrical R,ϕ plane with Z out of page).",
     dim=3,
     params=[],
     transforms={},
@@ -2570,7 +2571,7 @@ def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     data=["e_rho", "e_vartheta", "e_phi|r,v", "theta_PEST_r", "phi_r"],
 )
 def _e_sub_rho_vp(params, transforms, profiles, data, **kwargs):
-    # constant ϑ and Φ
+    # constant ϑ and ϕ
     data["e_rho|v,p"] = (
         data["e_rho"].T
         - data["e_vartheta"].T * data["theta_PEST_r"]

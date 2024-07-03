@@ -941,7 +941,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, 1, derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP, 1, derivatives[2])
 
         return radial * poloidal * toroidal
 

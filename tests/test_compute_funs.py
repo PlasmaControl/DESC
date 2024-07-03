@@ -1152,7 +1152,7 @@ def test_compute_everything():
     """Test that the computations on this branch agree with those on master.
 
     Also make sure we can compute everything without errors. Computed quantities
-    are in "rpz" basis.
+    are both in "rpz" and "xyz" basis.
     """
     elliptic_cross_section_with_torsion = {
         "R_lmn": [10, 1, 0.2],
@@ -1258,198 +1258,77 @@ def test_compute_everything():
     }
 
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:
-        master_data = pickle.load(file)
-    this_branch_data = {}
-    update_master_data = False
-    error = False
-
-    for p in things:
-        this_branch_data[p] = things[p].compute(
-            list(data_index[p].keys()), **grid.get(p, {})
-        )
-        # make sure we can compute everything
-        assert this_branch_data[p].keys() == data_index[p].keys(), (
-            f"Parameterization: {p}."
-            f" Can't compute {data_index[p].keys() - this_branch_data[p].keys()}."
-        )
-        # compare against master branch
-        for name in this_branch_data[p]:
-            if p in master_data and name in master_data[p]:
-                try:
-                    np.testing.assert_allclose(
-                        actual=this_branch_data[p][name],
-                        desired=master_data[p][name],
-                        atol=1e-10,
-                        rtol=1e-10,
-                        err_msg=f"Parameterization: {p}. Name: {name}.",
-                    )
-                except AssertionError as e:
-                    error = True
-                    print(e)
-            else:
-                # We can compute a new quantity now, so we should update the
-                # master compute data.
-                update_master_data = True
-
-    if not error and update_master_data:
-        # then update the master compute data
-        with open("tests/inputs/master_compute_data.pkl", "wb") as file:
-            # remember to git commit this file
-            pickle.dump(this_branch_data, file)
-    assert not error
-
-
-@pytest.mark.unit
-def test_compute_everything_xyz():
-    """Test that the computations on this branch agree with those on master.
-
-    This is the same test as test_compute_everything but computes quantities in
-    cartesian "xyz" basis.
-    """
-    elliptic_cross_section_with_torsion = {
-        "R_lmn": [10, 1, 0.2],
-        "Z_lmn": [-2, -0.2],
-        "modes_R": [[0, 0], [1, 0], [0, 1]],
-        "modes_Z": [[-1, 0], [0, -1]],
-    }
-    things = {
-        # equilibria
-        "desc.equilibrium.equilibrium.Equilibrium": get("W7-X"),
-        # curves
-        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ),
-        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(
-            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
-        ),
-        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
-            center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
-        ),
-        "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ).to_SplineXYZ(grid=LinearGrid(N=50)),
-        # surfaces
-        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
-            **elliptic_cross_section_with_torsion
-        ),
-        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
-            **elliptic_cross_section_with_torsion
-        ),
-        # magnetic fields
-        "desc.magnetic_fields._current_potential.CurrentPotentialField": CurrentPotentialField(  # noqa:E501
-            **elliptic_cross_section_with_torsion,
-            potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
-            potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
-            potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
-            params={"G": 1e7},
-        ),
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": (
-            FourierCurrentPotentialField(
-                **elliptic_cross_section_with_torsion, I=0, G=1e7
-            )
-        ),
-        "desc.magnetic_fields._core.OmnigenousField": OmnigenousField(
-            L_B=0,
-            M_B=4,
-            L_x=0,
-            M_x=1,
-            N_x=1,
-            NFP=2,
-            helicity=(0, 2),
-            B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
-            x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
-        ),
-        # coils
-        "desc.coils.FourierRZCoil": FourierRZCoil(
-            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
-        ),
-        "desc.coils.FourierXYZCoil": FourierXYZCoil(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ),
-        "desc.coils.FourierPlanarCoil": FourierPlanarCoil(
-            current=5,
-            center=[10, 1, 3],
-            normal=[1, 2, 3],
-            r_n=[1, 2, 3],
-            modes=[0, 1, 2],
-        ),
-        "desc.coils.SplineXYZCoil": SplineXYZCoil(
-            current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
-        ),
-    }
-    assert things.keys() == data_index.keys(), (
-        f"Missing the parameterization {data_index.keys() - things.keys()}"
-        f" to test against master."
-    )
-    # use this low resolution grid for equilibria to reduce file size
-    eqgrid = LinearGrid(
-        L=9,
-        M=5,
-        N=5,
-        NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
-        sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
-        axis=True,
-    )
-    curvegrid1 = LinearGrid(N=10)
-    curvegrid2 = LinearGrid(N=10, NFP=2)
-    fieldgrid = LinearGrid(
-        L=2,
-        M=4,
-        N=5,
-        NFP=things["desc.magnetic_fields._core.OmnigenousField"].NFP,
-        sym=False,
-        axis=True,
-    )
-    grid = {
-        "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
-        "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
-        "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
-        "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
-        "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
-        "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
-    }
-
+        master_data_rpz = pickle.load(file)
     with open("tests/inputs/master_compute_data_xyz.pkl", "rb") as file:
-        master_data = pickle.load(file)
-    this_branch_data = {}
-    update_master_data = False
-    error = False
+        master_data_xyz = pickle.load(file)
+    this_branch_data_rpz = {}
+    this_branch_data_xyz = {}
+    update_master_data_rpz = False
+    update_master_data_xyz = False
+    error_rpz = False
+    error_xyz = False
 
     for p in things:
-        this_branch_data[p] = things[p].compute(
+        this_branch_data_rpz[p] = things[p].compute(
+            list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
+        )
+        this_branch_data_xyz[p] = things[p].compute(
             list(data_index[p].keys()), **grid.get(p, {}), basis="xyz"
         )
         # make sure we can compute everything
-        assert this_branch_data[p].keys() == data_index[p].keys(), (
+        assert this_branch_data_rpz[p].keys() == data_index[p].keys(), (
             f"Parameterization: {p}."
-            f" Can't compute {data_index[p].keys() - this_branch_data[p].keys()}."
+            f" Can't compute {data_index[p].keys() - this_branch_data_rpz[p].keys()}."
         )
-        # compare against master branch
-        for name in this_branch_data[p]:
-            if p in master_data and name in master_data[p]:
+        assert this_branch_data_xyz[p].keys() == data_index[p].keys(), (
+            f"Parameterization: {p}."
+            f" Can't compute {data_index[p].keys() - this_branch_data_xyz[p].keys()}."
+        )
+        # compare RPZ data against master branch
+        for name in this_branch_data_rpz[p]:
+            if p in master_data_rpz and name in master_data_rpz[p]:
                 try:
                     np.testing.assert_allclose(
-                        actual=this_branch_data[p][name],
-                        desired=master_data[p][name],
+                        actual=this_branch_data_rpz[p][name],
+                        desired=master_data_rpz[p][name],
                         atol=1e-10,
                         rtol=1e-10,
                         err_msg=f"Parameterization: {p}. Name: {name}.",
                     )
                 except AssertionError as e:
-                    error = False
-                    update_master_data = True
+                    error_rpz = True
                     print(e)
             else:
                 # We can compute a new quantity now, so we should update the
                 # master compute data.
-                update_master_data = True
+                update_master_data_rpz = True
+        # compare XYZ data against master branch
+        for name in this_branch_data_xyz[p]:
+            if p in master_data_xyz and name in master_data_xyz[p]:
+                try:
+                    np.testing.assert_allclose(
+                        actual=this_branch_data_xyz[p][name],
+                        desired=master_data_xyz[p][name],
+                        atol=1e-10,
+                        rtol=1e-10,
+                        err_msg=f"Parameterization: {p}. Name: {name}.",
+                    )
+                except AssertionError as e:
+                    error_xyz = True
+                    print(e)
+            else:
+                update_master_data_xyz = True
 
-    if not error and update_master_data:
+    if not error_rpz and update_master_data_rpz:
         # then update the master compute data
-        with open("tests/inputs/master_compute_data_xyz.pkl", "wb") as file:
+        with open("tests/inputs/master_compute_data.pkl", "wb") as file:
             # remember to git commit this file
-            pickle.dump(this_branch_data, file)
-    assert not error
+            pickle.dump(this_branch_data_rpz, file)
+    if not error_xyz and update_master_data_xyz:
+        with open("tests/inputs/master_compute_data_xyz.pkl", "wb") as file:
+            pickle.dump(this_branch_data_xyz, file)
+    assert not error_rpz
+    assert not error_xyz
 
 
 @pytest.mark.unit

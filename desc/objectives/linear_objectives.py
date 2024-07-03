@@ -3012,11 +3012,6 @@ class FixNearAxisR(_FixedObjective):
         pyQSC Qsc object describing the NAE solution to fix the equilibrium's
         near-axis behavior to. If None, will fix the equilibrium's current near
         axis behavior.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        Unused for this objective, as target will be automatically
-        set according to the ``nae_eq``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -3044,7 +3039,6 @@ class FixNearAxisR(_FixedObjective):
         order=1,
         N=None,
         target=None,
-        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -3054,11 +3048,9 @@ class FixNearAxisR(_FixedObjective):
         self._eq = eq
         self._order = order
         self._N = N
-        self._target_from_user = setdefault(bounds, None)
         super().__init__(
             things=eq,
             target=None,
-            bounds=bounds,
             weight=weight,
             name=name,
             normalize=normalize,
@@ -3156,11 +3148,6 @@ class FixNearAxisZ(_FixedObjective):
         pyQSC Qsc object describing the NAE solution to fix the equilibrium's
         near-axis behavior to. If None, will fix the equilibrium's current near
         axis behavior.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        Unused for this objective, as target will be automatically
-        set according to the ``nae_eq``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -3188,7 +3175,6 @@ class FixNearAxisZ(_FixedObjective):
         order=1,
         N=None,
         target=None,
-        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -3198,11 +3184,9 @@ class FixNearAxisZ(_FixedObjective):
         self._eq = eq
         self._order = order
         self._N = N
-        self._target_from_user = setdefault(bounds, None)
         super().__init__(
             things=eq,
             target=None,
-            bounds=bounds,
             weight=weight,
             name=name,
             normalize=normalize,

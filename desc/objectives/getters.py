@@ -228,6 +228,9 @@ def _get_NAE_constraints(
     used by the user. Instead, call the ``get_NAE_constraints`` function, or use the
     FixNearAxis{R,Z,Lambda} objectives along with the FixAxis{R,Z} objectives. This
     instead is a helper function to get the needed constraints for the
+    FixNearAxis{R,Z,Lambda} objectives, which use those constraints to form
+    the full constraint matrices to properly constrain the behavior of that
+    part of the equilibrium.
 
     Parameters
     ----------

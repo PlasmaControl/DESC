@@ -126,7 +126,7 @@ def _phi_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "phi"],
+    data=["e_rho"],
     parameterization="desc.geometry.core.Surface",
 )
 def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
@@ -146,7 +146,7 @@ def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "phi"],
+    data=["e_theta"],
     parameterization="desc.geometry.core.Surface",
 )
 def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
@@ -166,7 +166,7 @@ def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_zeta", "phi"],
+    data=["e_zeta"],
     parameterization="desc.geometry.core.Surface",
 )
 def _phi_z_Surface(params, transforms, profiles, data, **kwargs):

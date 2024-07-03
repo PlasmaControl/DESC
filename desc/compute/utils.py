@@ -61,6 +61,9 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         Computed quantity and intermediate variables.
 
     """
+    errorif(
+        kwargs.get("basis", "rpz").lower() not in {"rpz", "xyz"}, NotImplementedError
+    )
     p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
@@ -93,8 +96,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         **kwargs,
     )
 
-    # By default each compute function will return in rpz basis. If the user
-    # wants the data in xyz basis, we will convert it here.
+    # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     parameterization = _parse_parameterization(parameterization)
     for name in data.keys():
         if (
@@ -106,13 +108,21 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
             if name == "x":
                 data[name] = rpz2xyz(data[name])
             else:
-                errorif(
-                    "phi" not in data.keys(),
-                    ValueError,
-                    "'phi' must be included in the compute data "
-                    + "to convert to 'xyz' basis.",
-                )
-                data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+                if "phi" in data:
+                    data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+                else:
+                    # compute phi if it's not already in data. Adding phi
+                    # to data at the beginning cause matrix dimension problems
+                    # TODO: Maybe look into that later (why error?)
+                    data_phi = _compute(
+                        p,
+                        "phi",
+                        params=params,
+                        transforms=transforms,
+                        profiles=profiles,
+                        **kwargs,
+                    )["phi"]
+                    data[name] = rpz2xyz_vec(data[name], phi=data_phi)
 
     return data
 

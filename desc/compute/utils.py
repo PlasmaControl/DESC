@@ -61,6 +61,9 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         Computed quantity and intermediate variables.
 
     """
+    errorif(
+        kwargs.get("basis", "rpz").lower() not in {"rpz", "xyz"}, NotImplementedError
+    )
     p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]

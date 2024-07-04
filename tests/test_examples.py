@@ -1351,7 +1351,10 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
 
     def test(c, method):
         target = 11
-        obj = ObjectiveFunction(CoilLength(c, target=target))
+        obj = ObjectiveFunction(
+            CoilLength(c, target=target),
+            QuadraticFlux(eq=Equilibrium(), field=c, vacuum=True),
+        )
         optimizer = Optimizer(method)
         (c,), _ = optimizer.optimize(c, obj, maxiter=200, ftol=0, xtol=1e-15)
         flattened_coils = tree_leaves(

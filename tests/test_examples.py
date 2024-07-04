@@ -1340,15 +1340,14 @@ def test_second_stage_optimization_CoilSet():
 @pytest.mark.unit
 def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     """Test optimizing for every type of coil and dummy coil sets."""
-    sym_coilset = load(
-        load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5"
-    )
-    asym_coilset = load(
+    sym_coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+    asym_coils = load(
         load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
     )
-    mixed_coilset = load(
+    mixed_coils = load(
         load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
     )
+    nested_coils = MixedCoilSet(sym_coils, mixed_coils)
 
     def test(c, method):
         target = 11
@@ -1363,7 +1362,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
         assert obj.dim_f == len(flattened_coils)
         np.testing.assert_allclose(lengths, target, atol=1e-3)
 
-    spline_coil = mixed_coilset.coils[-1].copy()
+    spline_coil = mixed_coils.coils[-1].copy()
 
     # single coil
     test(FourierPlanarCoil(), "fmintr")
@@ -1372,11 +1371,12 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     test(spline_coil, "fmintr")
 
     # CoilSet
-    test(sym_coilset, "lsq-exact")
-    test(asym_coilset, "lsq-exact")
+    test(sym_coils, "lsq-exact")
+    test(asym_coils, "lsq-exact")
 
     # MixedCoilSet
-    test(mixed_coilset, "lsq-exact")
+    test(mixed_coils, "lsq-exact")
+    test(nested_coils, "lsq-exact")
 
 
 @pytest.mark.unit

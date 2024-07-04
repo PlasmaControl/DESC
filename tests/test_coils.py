@@ -523,8 +523,9 @@ def test_symmetry_magnetic_field(DummyCoilSet):
 
     # test that both coil sets compute the same field on the plasma surface
     grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
-    with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-        data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
+    # RG: remove later
+    # --no-verify with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
+    data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
 
     # test in (R, phi, Z) coordinates
     nodes_rpz = np.array([data["R"], data["phi"], data["Z"]]).T

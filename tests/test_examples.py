@@ -9,7 +9,7 @@ import pytest
 from qic import Qic
 from qsc import Qsc
 
-from desc.backend import jnp
+from desc.backend import jnp, tree_leaves
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
@@ -1336,30 +1336,52 @@ def test_second_stage_optimization_CoilSet():
     np.testing.assert_allclose(field[0].current, 0, atol=1e-12)
 
 
-# TODO: replace this with the solution to Issue #1021
 @pytest.mark.unit
-def test_optimize_with_fourier_planar_coil():
-    """Test optimizing a FourierPlanarCoil."""
+def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
+    """Test optimizing for every type of coil and dummy coil sets."""
+    sym_coilset = load(
+        load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5"
+    )
+    asym_coilset = load(
+        load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
+    )
+    mixed_coilset = load(
+        load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
+    )
+
+    def test(c, maxiter=200, constraints=()):
+        obj = ObjectiveFunction(CoilLength(c, target=11))
+        optimizer = Optimizer("fmintr")
+        (c,), _ = optimizer.optimize(
+            c, obj, constraints, maxiter=maxiter, ftol=1e-15, xtol=1e-15
+        )
+        flattened_coils = tree_leaves(c, is_leaf=lambda x: not hasattr(x, "__len__"))
+        lengths = [coil.compute("length")["length"] for coil in flattened_coils]
+
+        assert obj.dim_f == len(flattened_coils)
+        np.testing.assert_allclose(lengths, 11, atol=1e-3)
+
+    spline_coil = mixed_coilset.coils[-1].copy()
+
     # single coil
-    c = FourierPlanarCoil()
-    objective = ObjectiveFunction(CoilLength(c, target=11))
-    optimizer = Optimizer("fmintr")
-    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
-    np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
+    test(FourierPlanarCoil())
+    test(FourierRZCoil())
+    test(FourierXYZCoil())
+    test(spline_coil, constraints=(FixParameters(spline_coil, {"knots": True}),))
 
-    # in MixedCoilSet
-    c = MixedCoilSet(FourierRZCoil(), FourierPlanarCoil())
-    objective = ObjectiveFunction(CoilLength(c, target=11))
-    optimizer = Optimizer("fmintr")
-    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
-    np.testing.assert_allclose(c.compute("length")[1]["length"], 11, atol=1e-3)
+    # CoilSet
+    test(sym_coilset, maxiter=500)
+    test(asym_coilset, maxiter=500)
 
-    # in CoilSet
-    c = CoilSet(FourierPlanarCoil(), sym=True, NFP=2)
-    objective = ObjectiveFunction(CoilLength(c, target=11))
-    optimizer = Optimizer("fmintr")
-    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
-    np.testing.assert_allclose(c.compute("length")[0]["length"], 11, atol=1e-3)
+    # MixedCoilSet
+    params = [
+        {"center": True, "normal": True},
+        {"R_n": True, "Z_n": True},
+        {},
+        {"knots": True},
+    ]
+    constraints = (FixParameters(mixed_coilset, params),)
+    test(mixed_coilset, constraints=constraints, maxiter=400)
 
 
 @pytest.mark.unit

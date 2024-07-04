@@ -1187,14 +1187,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         [_check_type(coil, coils[0]) for coil in coils]
 
         # check toroidal extent of coils to be repeated
-        maxphi = 2 * np.pi / NFP / (sym + 1)
         data = coils.compute("phi")
         for i, cdata in enumerate(data):
-            errorif(
-                np.any(cdata["phi"] > maxphi),
-                ValueError,
-                f"coil {i} exceeds the toroidal extent for NFP={NFP} and sym={sym}",
-            )
             warnif(
                 sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
                 UserWarning,

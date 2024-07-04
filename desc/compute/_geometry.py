@@ -293,6 +293,10 @@ def _S(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
     resolution_requirement="tz",
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):

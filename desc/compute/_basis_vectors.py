@@ -1515,7 +1515,6 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
-        "desc.geometry.core.Surface",
     ],
     basis="basis",
 )
@@ -3547,7 +3546,6 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
-        "desc.geometry.core.Surface",
     ],
 )
 def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):

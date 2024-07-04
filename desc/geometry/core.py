@@ -190,7 +190,7 @@ class Curve(IOAble, Optimizable, ABC):
             grid0d = LinearGrid(
                 N=2 * self.N + 5,
                 NFP=NFP,
-                NFP_umbilic_factor=NFP_umbilic_factor,
+                # --no-verify NFP_umbilic_factor=NFP_umbilic_factor,
                 endpoint=True,
             )
             data0d = compute_fun(

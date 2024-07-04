@@ -549,7 +549,8 @@ def test_save_none(tmpdir_factory):
 def test_load_eq_without_current():
     """Test that loading an eq from DESC < 0.6.0 works correctly."""
     desc_no_current_path = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
-    eq = load(desc_no_current_path)[-1]
+    with pytest.warns(RuntimeWarning):
+        eq = load(desc_no_current_path)[-1]
     assert eq.current is None
 
 

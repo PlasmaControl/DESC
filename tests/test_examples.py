@@ -1352,8 +1352,10 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     def test(c, method):
         target = 11
         obj = ObjectiveFunction(
-            CoilLength(c, target=target),
-            QuadraticFlux(eq=Equilibrium(), field=c, vacuum=True),
+            (
+                CoilLength(c, target=target),
+                QuadraticFlux(eq=Equilibrium(), field=c, vacuum=True),
+            ),
         )
         optimizer = Optimizer(method)
         (c,), _ = optimizer.optimize(c, obj, maxiter=200, ftol=0, xtol=1e-15)
@@ -1361,8 +1363,6 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
             c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
         )
         lengths = [coil.compute("length")["length"] for coil in flattened_coils]
-
-        assert obj.dim_f == len(flattened_coils)
         np.testing.assert_allclose(lengths, target, atol=1e-3)
 
     spline_coil = mixed_coils.coils[-1].copy()

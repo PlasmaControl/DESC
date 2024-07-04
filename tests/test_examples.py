@@ -16,6 +16,7 @@ from desc.coils import (
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
+    _Coil,
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -1349,39 +1350,33 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
         load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
     )
 
-    def test(c, maxiter=200, constraints=()):
-        obj = ObjectiveFunction(CoilLength(c, target=11))
-        optimizer = Optimizer("fmintr")
-        (c,), _ = optimizer.optimize(
-            c, obj, constraints, maxiter=maxiter, ftol=1e-15, xtol=1e-15
+    def test(c, method):
+        target = 11
+        obj = ObjectiveFunction(CoilLength(c, target=target))
+        optimizer = Optimizer(method)
+        (c,), _ = optimizer.optimize(c, obj, maxiter=200, ftol=0, xtol=1e-15)
+        flattened_coils = tree_leaves(
+            c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
         )
-        flattened_coils = tree_leaves(c, is_leaf=lambda x: not hasattr(x, "__len__"))
         lengths = [coil.compute("length")["length"] for coil in flattened_coils]
 
         assert obj.dim_f == len(flattened_coils)
-        np.testing.assert_allclose(lengths, 11, atol=1e-3)
+        np.testing.assert_allclose(lengths, target, atol=1e-3)
 
     spline_coil = mixed_coilset.coils[-1].copy()
 
     # single coil
-    test(FourierPlanarCoil())
-    test(FourierRZCoil())
-    test(FourierXYZCoil())
-    test(spline_coil, constraints=(FixParameters(spline_coil, {"knots": True}),))
+    test(FourierPlanarCoil(), "fmintr")
+    test(FourierRZCoil(), "fmintr")
+    test(FourierXYZCoil(), "fmintr")
+    test(spline_coil, "fmintr")
 
     # CoilSet
-    test(sym_coilset, maxiter=500)
-    test(asym_coilset, maxiter=500)
+    test(sym_coilset, "lsq-exact")
+    test(asym_coilset, "lsq-exact")
 
     # MixedCoilSet
-    params = [
-        {"center": True, "normal": True},
-        {"R_n": True, "Z_n": True},
-        {},
-        {"knots": True},
-    ]
-    constraints = (FixParameters(mixed_coilset, params),)
-    test(mixed_coilset, constraints=constraints, maxiter=400)
+    test(mixed_coilset, "lsq-exact")
 
 
 @pytest.mark.unit

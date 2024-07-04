@@ -289,7 +289,7 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
 
 
 def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
-    """Traverse the dependency DAG for keys in search space dependent on seeds.
+    """Return ``seeds`` plus keys in ``search_space`` with dependency in ``seeds``.
 
     Parameters
     ----------
@@ -298,14 +298,15 @@ def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
     seeds : set[str]
         Keys to find paths toward.
     search_space : iterable of str
-        Additional keys to consider returning.
+        Additional keys besides ``seeds`` to consider returning.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
     out : set[str]
-        All keys in search space with any path in the dependency DAG to any seed.
+        All keys in ``search_space`` that have a dependency in ``seeds``
+        plus ``seeds``.
 
     """
     p = _parse_parameterization(parameterization)

@@ -1320,7 +1320,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     def test(c, method):
         target = 11
         rtol = 1e-3
-        # first just check that it quad flux works for a couple iterations
+        # first just check that quad flux works for a couple iterations
         # as this is an expensive objective to compute
         obj = ObjectiveFunction(
             QuadraticFlux(

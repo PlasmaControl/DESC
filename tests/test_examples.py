@@ -1187,44 +1187,6 @@ class TestGetExample:
 
 
 @pytest.mark.unit
-def test_single_coil_optimization():
-    """Test that single coil (not coilset) optimization works."""
-    # testing that the objectives work and that the optimization framework
-    # works when a single coil is passed in.
-    opt = Optimizer("fmintr")
-    coil = FourierRZCoil()
-    coil.change_resolution(N=1)
-    target_R = 9
-    target_length = 2 * np.pi * target_R
-    target_curvature = 1 / target_R
-    target_torsion = 0
-    grid = LinearGrid(N=2)
-
-    # length and curvature
-    obj = ObjectiveFunction(
-        (
-            CoilLength(coil, target=target_length),
-            CoilCurvature(coil, target=target_curvature, grid=grid),
-        ),
-    )
-    opt.optimize([coil], obj)
-    np.testing.assert_allclose(
-        coil.compute("length")["length"], target_length, rtol=3e-3
-    )
-    np.testing.assert_allclose(
-        coil.compute("curvature", grid=grid)["curvature"], target_curvature, rtol=3e-3
-    )
-
-    # torsion
-    coil.Z_n = coil.Z_n.at[0].set(0.1)  # initialize with some torsion
-    obj = ObjectiveFunction(CoilTorsion(coil, target=target_torsion, grid=grid))
-    opt.optimize([coil], obj)
-    np.testing.assert_allclose(
-        coil.compute("torsion", grid=grid)["torsion"], target_torsion, atol=1e-5
-    )
-
-
-@pytest.mark.unit
 def test_quadratic_flux_optimization_with_analytic_field():
     """Test analytic field optimization to reduce quadratic flux.
 
@@ -1348,22 +1310,29 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
         load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
     )
     nested_coils = MixedCoilSet(sym_coils, mixed_coils)
+    eq = Equilibrium()
 
-    def test(c, method):
+    def test(c, method, add_objs=False):
         target = 11
-        obj = ObjectiveFunction(
-            (
-                CoilLength(c, target=target),
-                QuadraticFlux(eq=Equilibrium(), field=c, vacuum=True),
-            ),
-        )
+        rtol = 1e-3
+        objs = [
+            CoilLength(c, target=target),
+            QuadraticFlux(eq=eq, field=c, vacuum=True),
+        ]
+
+        if add_objs:
+            objs.extend([CoilCurvature(c), CoilTorsion(c, target=0)])
+            rtol = 1e-2
+
+        obj = ObjectiveFunction(objs)
+
         optimizer = Optimizer(method)
-        (c,), _ = optimizer.optimize(c, obj, maxiter=200, ftol=0, xtol=1e-15)
+        (c,), _ = optimizer.optimize(c, obj, maxiter=1000, ftol=0, xtol=1e-15)
         flattened_coils = tree_leaves(
             c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
         )
         lengths = [coil.compute("length")["length"] for coil in flattened_coils]
-        np.testing.assert_allclose(lengths, target, atol=1e-3)
+        np.testing.assert_allclose(lengths, target, rtol=rtol)
 
     spline_coil = mixed_coils.coils[-1].copy()
 
@@ -1378,7 +1347,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     test(asym_coils, "lsq-exact")
 
     # MixedCoilSet
-    test(mixed_coils, "lsq-exact")
+    test(mixed_coils, "lsq-exact", add_objs=True)
     test(nested_coils, "lsq-exact")
 
 

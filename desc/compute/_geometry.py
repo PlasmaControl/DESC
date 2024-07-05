@@ -53,7 +53,6 @@ def _V(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["V(r)", "rho"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    resolution_requirement="r",
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
@@ -190,6 +189,8 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     data["A(z)"] = jnp.abs(
         line_integrals(
             transforms["grid"],
+            # FIXME: Integrand is not symmetric function, so this will fail
+            #   on symmetric grids.
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
             # FIXME: Works currently for omega = zero, but for nonzero omega
             #  we need to integrate over theta at constant phi.
@@ -265,7 +266,6 @@ def _A_of_r(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    resolution_requirement="r",
 )
 def _S(params, transforms, profiles, data, **kwargs):
     # To approximate surface are at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand

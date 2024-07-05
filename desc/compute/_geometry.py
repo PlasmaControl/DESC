@@ -51,25 +51,14 @@ def _V(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["e_theta", "e_zeta", "x", "rho"],
+    data=["V(r)", "rho"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    resolution_requirement="rtz",
+    resolution_requirement="r",
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
-    data["V"] = (
-        jnp.max(
-            jnp.abs(
-                surface_integrals(
-                    transforms["grid"],
-                    cross(data["e_theta"], data["e_zeta"])[:, 2] * data["x"][:, 2],
-                )
-            )
-        )
-        # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
-        # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
-        / jnp.max(data["rho"]) ** 2
-    )
+    # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
+    # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
+    data["V"] = jnp.max(data["V(r)"]) / jnp.max(data["rho"]) ** 2
     return data
 
 
@@ -85,6 +74,10 @@ def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["e_theta", "e_zeta", "Z"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
     resolution_requirement="tz",
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
@@ -178,7 +171,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.ZernikeRZToroidalSection",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    resolution_requirement="rt",
+    resolution_requirement="t",
     # FIXME: Add source grid requirement once omega is nonzero.
 )
 def _A_of_z(params, transforms, profiles, data, **kwargs):
@@ -428,7 +421,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
-    resolution_requirement="rt",
+    resolution_requirement="t",
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     max_rho = jnp.max(data["rho"])

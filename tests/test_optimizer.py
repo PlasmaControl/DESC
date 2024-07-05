@@ -20,6 +20,8 @@ from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
+from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
     AspectRatio,
     Energy,
@@ -36,6 +38,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    QuadraticFlux,
     QuasisymmetryTripleProduct,
     Volume,
     get_fixed_boundary_constraints,
@@ -351,7 +354,8 @@ def test_overstepping():
             return x
 
     eq = desc.examples.get("DSHAPE")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
 
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
@@ -413,7 +417,8 @@ def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
     eq = desc.examples.get("SOLOVEV")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
     constraints = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -492,7 +497,8 @@ def test_not_implemented_error():
 def test_wrappers():
     """Tests for using wrapped objectives."""
     eq = desc.examples.get("SOLOVEV")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
     con = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -566,7 +572,8 @@ class TestAllOptimizers:
     """Tests all optimizers run without error, eg tests for wrappers."""
 
     eqf = desc.examples.get("SOLOVEV")
-    eqf.change_resolution(3, 3, 0, 6, 6, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eqf.change_resolution(3, 3, 0, 6, 6, 0)
     eqe = eqf.copy()
     fobj = ObjectiveFunction(ForceBalance(eq=eqf))
     eobj = ObjectiveFunction(Energy(eq=eqe))
@@ -1110,7 +1117,8 @@ def test_optimize_with_single_constraint():
 def test_proximal_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
-    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
@@ -1226,7 +1234,8 @@ def test_proximal_jacobian():
 def test_LinearConstraint_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
-    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
@@ -1312,3 +1321,32 @@ def test_LinearConstraint_jacobian():
     np.testing.assert_allclose(vjp_unscaled, vjp1, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(vjp_unscaled, vjp2, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(vjp_unscaled, vjp3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_quad_flux_with_surface_current_field():
+    """Test that QuadraticFlux does not throw an error when field has transforms."""
+    # this happens because in QuadraticFlux.compute, field.compute_magnetic_field
+    # is called. If the field needs transforms to evaluate, then these transforms
+    # will be created on the fly if they are not provided, resulting in an error
+    # unless jitable=True is passed
+    # related to GH issue #1079
+    eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+    field = FourierCurrentPotentialField.from_surface(
+        eq.surface, Phi_mn=[1, 0], modes_Phi=[[0, 0], [1, 1]], M_Phi=1, N_Phi=1
+    )
+    obj = ObjectiveFunction(
+        QuadraticFlux(
+            eq=eq,
+            field=field,
+            vacuum=True,
+            eval_grid=LinearGrid(M=2, N=2, sym=True),
+            field_grid=LinearGrid(M=2, N=2),
+        ),
+    )
+    constraints = FixParameters(field, {"I": True, "G": True})
+    opt = Optimizer("lsq-exact")
+    # this should run without an error
+    (field_modular_opt,), result = opt.optimize(
+        field, objective=obj, constraints=constraints, maxiter=1, copy=True
+    )

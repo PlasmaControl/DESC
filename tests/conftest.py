@@ -276,8 +276,8 @@ def DummyMixedCoilSet(tmpdir_factory):
     output_path = output_dir.join("DummyMixedCoilSet.h5")
 
     tf_coil = FourierPlanarCoil(current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
-    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
-    tf_coilset = CoilSet(tf_coilset.coils, NFP=tf_coilset.NFP, sym=True)
+    tf_coil.rotate(angle=np.pi / 4)
+    tf_coilset = CoilSet(tf_coil, NFP=2, sym=True)
 
     vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
     vf_coilset = CoilSet.linspaced_linear(

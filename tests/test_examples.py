@@ -1309,10 +1309,10 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     mixed_coils = load(
         load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
     )
-    nested_coils = MixedCoilSet(sym_coils, mixed_coils)
+    nested_coils = MixedCoilSet(sym_coils, asym_coils)
     eq = Equilibrium()
 
-    def test(c, method, add_objs=False):
+    def test(c, method):
         target = 11
         rtol = 1e-3
         objs = [
@@ -1320,7 +1320,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
             QuadraticFlux(eq=eq, field=c, vacuum=True),
         ]
 
-        if add_objs:
+        if isinstance(c, MixedCoilSet):
             objs.extend([CoilCurvature(c), CoilTorsion(c, target=0)])
             rtol = 1e-2
 
@@ -1347,7 +1347,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     test(asym_coils, "lsq-exact")
 
     # MixedCoilSet
-    test(mixed_coils, "lsq-exact", add_objs=True)
+    test(mixed_coils, "lsq-exact")
     test(nested_coils, "lsq-exact")
 
 

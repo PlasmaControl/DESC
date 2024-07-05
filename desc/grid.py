@@ -222,7 +222,14 @@ class _Grid(IOAble, ABC):
 
     @property
     def coordinates(self):
-        """Coordinates specified by the nodes."""
+        """Coordinates specified by the nodes.
+
+        Examples
+        --------
+        raz : rho, alpha, zeta
+        rvp : rho, theta_PEST, phi
+        rtz : rho, theta, zeta
+        """
         return self.__dict__.setdefault("_coordinates", "rtz")
 
     @property
@@ -609,7 +616,7 @@ class Grid(_Grid):
     coordinates : str
         Coordinates that are specified by the nodes.
         raz : rho, alpha, zeta
-        rvz : rho, theta_PEST, zeta
+        rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
     period : tuple of float
         Assumed periodicity for each coordinate.
@@ -735,7 +742,7 @@ class Grid(_Grid):
             Coordinates that are specified by the ``nodes[0]``, ``nodes[1]``,
             and ``nodes[2]``, respectively.
             raz : rho, alpha, zeta
-            rvz : rho, theta_PEST, zeta
+            rvp : rho, theta_PEST, phi
             rtz : rho, theta, zeta
         period : tuple of float
             Assumed periodicity for each coordinate.

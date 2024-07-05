@@ -13,7 +13,7 @@ from desc.backend import jnp
 
 from .data_index import register_compute_fun
 from .geom_utils import rpz2xyz_vec
-from .utils import cross, safediv
+from .utils import cross, dot, safediv
 
 
 @register_compute_fun(
@@ -38,7 +38,7 @@ def _b(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^rho",
+    name="e^rho",  # ∇ρ is the same in DESC and field line coordinates.
     label="\\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -1007,7 +1007,7 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^zeta",
+    name="e^zeta",  # ∇ζ is the same in DESC and field line coordinates.
     label="\\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -2612,7 +2612,7 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     basis="basis",
 )
 def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
-    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    # dX/dv at const r,z = dX/dt * dt/dv = dX/dt / dv/dt
     data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
     if kwargs.get("basis", "rpz").lower() == "xyz":
         data["e_theta_PEST"] = rpz2xyz_vec(data["e_theta_PEST"], phi=data["phi"])
@@ -3550,4 +3550,232 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
 )
 def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):
     data["e_theta|r,p"] = data["e_theta"] - (data["e_phi"].T * data["phi_t"]).T
+    return data
+
+
+@register_compute_fun(
+    name="e_rho|a,z",
+    label="\\mathbf{e}_{\\rho} |_{\\alpha, \\zeta}",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along radial field line label",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_alpha", "alpha_r"],
+)
+def _e_rho_az(params, transforms, profiles, data, **kwargs):
+    # constant α and ζ
+    data["e_rho|a,z"] = data["e_rho"] - (data["e_alpha"].T * data["alpha_r"]).T
+    return data
+
+
+@register_compute_fun(
+    name="e_alpha",
+    label="\\mathbf{e}_{\\alpha}",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along poloidal field line label",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "alpha_t"],
+)
+def _e_alpha(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ζ
+    data["e_alpha"] = (data["e_theta"].T / data["alpha_t"]).T
+    return data
+
+
+@register_compute_fun(
+    name="e_alpha_t",
+    label="\\partial_{\\theta} \\mathbf{e}_{\\alpha}",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along poloidal field line label, derivative wrt"
+    " DESC poloidal angle",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "alpha_t", "e_theta_t", "alpha_tt"],
+)
+def _e_alpha_t(params, transforms, profiles, data, **kwargs):
+    data["e_alpha_t"] = (
+        (data["e_theta_t"].T * data["alpha_t"] + data["e_theta"].T * data["alpha_tt"])
+        / data["alpha_t"] ** 2
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e_alpha_z",
+    label="\\partial_{\\zeta} \\mathbf{e}_{\\alpha}",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along poloidal field line label, toroidal derivative",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "alpha_t", "e_theta_z", "alpha_tz"],
+)
+def _e_alpha_z(params, transforms, profiles, data, **kwargs):
+    data["e_alpha_z"] = (
+        (data["e_theta_z"].T * data["alpha_t"] - data["e_theta"].T * data["alpha_tz"])
+        / data["alpha_t"] ** 2
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e_zeta|r,a",  # Same as B/(B⋅∇ζ).
+    label="\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha} "
+    "= \\frac{\\mathbf{B}}{\\mathbf{B} \\cdot \\nabla \\zeta}",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along (collinear to) field line",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "e_alpha", "alpha_z"],
+)
+def _e_zeta_ra(params, transforms, profiles, data, **kwargs):
+    # ∂ℓ/∂ζ (constant ρ and α) = ∂ℓ/∂ζ (constant ρ and θ)
+    #                          - ∂ℓ/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
+    data["e_zeta|r,a"] = data["e_zeta"] - (data["e_alpha"].T * data["alpha_z"]).T
+    return data
+
+
+@register_compute_fun(
+    name="(e_zeta|r,a)_t",
+    label="\\partial_{\\theta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along (collinear to) field line, poloidal derivative",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta_t", "e_alpha", "alpha_z", "e_alpha_t", "alpha_tz"],
+)
+def _e_zeta_ra_t(params, transforms, profiles, data, **kwargs):
+    data["(e_zeta|r,a)_t"] = (
+        data["e_zeta_t"]
+        - (
+            data["e_alpha_t"].T * data["alpha_z"] + data["e_alpha"].T * data["alpha_tz"]
+        ).T
+    )
+    return data
+
+
+@register_compute_fun(
+    name="(e_zeta|r,a)_a",
+    label="\\partial_{\\alpha} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along (collinear to) field line, derivative "
+    "wrt field line poloidal label",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["(e_zeta|r,a)_t", "alpha_t"],
+)
+def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
+    data["(e_zeta|r,a)_a"] = (data["(e_zeta|r,a)_t"].T / data["alpha_t"]).T
+    return data
+
+
+@register_compute_fun(
+    name="(e_zeta|r,a)_z",
+    label="\\partial_{\\zeta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
+    units="m",
+    units_long="meters",
+    description="Tangent vector along (collinear to) field line, toroidal derivative",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta_z", "e_alpha", "alpha_z", "e_alpha_z", "alpha_zz"],
+)
+def _e_zeta_ra_z(params, transforms, profiles, data, **kwargs):
+    data["(e_zeta|r,a)_z"] = (
+        data["e_zeta_z"]
+        - (
+            data["e_alpha_z"].T * data["alpha_z"] + data["e_alpha"].T * data["alpha_zz"]
+        ).T
+    )
+    return data
+
+
+@register_compute_fun(
+    name="(e_zeta_z)|r,a",
+    label="\\partial_{\\zeta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}) "
+    "|_{\\rho, \\alpha}",
+    units="m",
+    units_long="meters",
+    description="Curvature vector along field line",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["(e_zeta|r,a)_z", "(e_zeta|r,a)_a", "alpha_z"],
+)
+def _e_zeta_z_ra(params, transforms, profiles, data, **kwargs):
+    data["(e_zeta_z)|r,a"] = (
+        data["(e_zeta|r,a)_z"] - (data["(e_zeta|r,a)_a"].T * data["alpha_z"]).T
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|e_zeta|r,a|",  # Often written as |dℓ/dζ| = |B/(B⋅∇ζ)|.
+    label="|\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}|"
+    " = \\frac{|\\mathbf{B}|}{|\\mathbf{B} \\cdot \\nabla \\zeta|}",
+    units="m",
+    units_long="meters",
+    description="Differential length along field line",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta|r,a"],
+)
+def _d_ell_d_zeta(params, transforms, profiles, data, **kwargs):
+    data["|e_zeta|r,a|"] = jnp.linalg.norm(data["e_zeta|r,a"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="(|e_zeta|_z)|r,a",
+    label="\\partial_{\\zeta} |\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}| "
+    "|_{\\rho, \\alpha}",
+    units="m",
+    units_long="meters",
+    description="Differential length along field line, derivative along field line",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|e_zeta|r,a|", "(e_zeta_z)|r,a", "e_zeta|r,a"],
+)
+def _d_ell_d_zeta_z(params, transforms, profiles, data, **kwargs):
+    data["(|e_zeta|_z)|r,a"] = (
+        dot(data["(e_zeta_z)|r,a"], data["e_zeta|r,a"]) / data["|e_zeta|r,a|"]
+    )
     return data

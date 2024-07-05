@@ -40,11 +40,6 @@ class TestDataIndex:
         matches.discard("")
         return matches if matches else {default}
 
-    @staticmethod
-    def _is_function(func):
-        # JITed functions are not functions according to inspect.
-        return inspect.isfunction(func) or callable(func)
-
     @pytest.mark.unit
     def test_data_index_deps(self):
         """Ensure developers do not add extra (or forget needed) dependencies.

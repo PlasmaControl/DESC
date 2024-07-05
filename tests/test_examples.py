@@ -1310,14 +1310,14 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     mixed_coils = load(
         load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
     )
-    nested_coils = MixedCoilSet(sym_coils, mixed_coils)
+    nested_coils = MixedCoilSet(sym_coils, asym_coils)
     eq = Equilibrium()
     # not attempting to accurately calc B for this test,
     # so make the grids very coarse
     quad_eval_grid = LinearGrid(M=2, sym=True)
     quad_field_grid = LinearGrid(N=2)
 
-    def test(c, method, add_objs=False):
+    def test(c, method):
         target = 11
         rtol = 1e-3
         # first just check that it quad flux works for a couple iterations
@@ -1340,7 +1340,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
             CoilLength(c, target=target),
         ]
         extra_msg = ""
-        if add_objs:
+        if isinstance(c, MixedCoilSet):
             # just to check they work without error
             objs.extend(
                 [
@@ -1375,7 +1375,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     test(asym_coils, "lsq-exact")
 
     # MixedCoilSet
-    test(mixed_coils, "lsq-exact", add_objs=True)
+    test(mixed_coils, "lsq-exact")
     test(nested_coils, "lsq-exact")
 
 

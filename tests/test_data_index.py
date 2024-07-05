@@ -40,11 +40,6 @@ class TestDataIndex:
         matches.discard("")
         return matches if matches else {default}
 
-    @staticmethod
-    def _is_function(func):
-        # JITed functions are not functions according to inspect.
-        return inspect.isfunction(func) or callable(func)
-
     @pytest.mark.unit
     def test_data_index_deps(self):
         """Ensure developers do not add extra (or forget needed) dependencies.
@@ -80,7 +75,9 @@ class TestDataIndex:
         pattern_params = re.compile(r"params\[(.*?)]")
         for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
             if module_name[0] == "_":
-                for _, fun in inspect.getmembers(module, self._is_function):
+                # JITed functions are not functions according to inspect,
+                # so just check if callable.
+                for _, fun in inspect.getmembers(module, callable):
                     # quantities that this function computes
                     names = self.get_matches(fun, pattern_names)
                     # dependencies queried in source code of this function

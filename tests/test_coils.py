@@ -13,7 +13,7 @@ from desc.coils import (
     MixedCoilSet,
     SplineXYZCoil,
 )
-from desc.compute import xyz2rpz, xyz2rpz_vec
+from desc.compute import get_transforms, xyz2rpz, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -44,8 +44,9 @@ class TestCoil:
 
         # FourierXYZCoil
         coil = FourierXYZCoil(I)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, coil_grid)
         B_xyz = coil.compute_magnetic_field(
-            grid_xyz, basis="xyz", source_grid=coil_grid
+            grid_xyz, basis="xyz", source_grid=coil_grid, transforms=transforms
         )
         B_rpz = coil.compute_magnetic_field(
             grid_rpz, basis="rpz", source_grid=coil_grid
@@ -245,8 +246,10 @@ class TestCoilSet:
         coil = FourierPlanarCoil()
         coil.current = I
         coils = CoilSet.linspaced_angular(coil, n=N)
+        grid = LinearGrid(N=32, endpoint=False)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
         B_approx = coils.compute_magnetic_field(
-            [10, 0, 0], basis="rpz", source_grid=32
+            [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
@@ -271,8 +274,10 @@ class TestCoilSet:
         coil = FourierPlanarCoil(I)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)
         coils = MixedCoilSet.from_symmetry(coils, NFP=4)
+        grid = LinearGrid(N=32, endpoint=False)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
         B_approx = coils.compute_magnetic_field(
-            [10, 0, 0], basis="rpz", source_grid=32
+            [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 

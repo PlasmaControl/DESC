@@ -35,6 +35,7 @@ from desc.compute.bounce_integral import (
     plot_field_line,
     tanh_sinh,
 )
+from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -626,7 +627,8 @@ def test_drift():
             "|B|_z|r,a",
             "cvdrift",
             "gbdrift",
-            "g^pa",
+            "grad(psi)",
+            "grad(alpha)",
             "shear",
             "iota",
             "psi",
@@ -678,7 +680,12 @@ def test_drift():
     gbdrift = data["gbdrift"] * normalization
     dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * data["|B|"] ** 2)
     alpha_MHD = -0.5 * dPdrho / data["iota"] ** 2
-    gds21 = -np.sign(data["iota"]) * data["shear"] * data["g^pa"] / B_ref
+    gds21 = (
+        -np.sign(data["iota"])
+        * data["shear"]
+        * dot(data["grad(psi)"], data["grad(alpha)"])
+        / B_ref
+    )
     gds21_analytic = -data["shear"] * (
         data["shear"] * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
     )

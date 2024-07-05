@@ -1383,30 +1383,6 @@ def _g_sup_rt(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g^pa",
-    label="g^{\\psi\\alpha}",
-    units="Wb \\cdot m^{-2}",
-    units_long="Webers per square meters",
-    description="Radial/Poloidal (ψ, α) element of contravariant metric tensor",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="rtz",
-    data=["grad(psi)", "grad(alpha)"],
-    axis_limit_data=["e^rho", "alpha_t", "e^theta*sqrt(g)", "B0"],
-)
-def _g_sup_pa(params, transforms, profiles, data, **kwargs):
-    data["g^pa"] = transforms["grid"].replace_at_axis(
-        dot(data["grad(psi)"], data["grad(alpha)"]),
-        lambda: dot(
-            data["e^rho"], (data["alpha_t"] * data["e^theta*sqrt(g)"].T * data["B0"]).T
-        ),
-    )
-    return data
-
-
-@register_compute_fun(
     name="g^rz",
     label="g^{\\rho\\zeta}",
     units="m^{-2}",

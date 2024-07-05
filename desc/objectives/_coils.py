@@ -1272,7 +1272,10 @@ class QuadraticFlux(_Objective):
 
         # B_ext is not pre-computed because field is not fixed
         B_ext = constants["field"].compute_magnetic_field(
-            x, source_grid=constants["field_grid"], basis="rpz", params=field_params
+            x,
+            source_grid=constants["field_grid"],
+            basis="rpz",
+            params=field_params,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
         f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]

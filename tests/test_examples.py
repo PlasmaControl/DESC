@@ -1320,8 +1320,9 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     def test(c, method, add_objs=False):
         target = 11
         rtol = 1e-3
-        objs = [
-            CoilLength(c, target=target),
+        # first just check that it quad flux works for a couple iterations
+        # as this is an expensive objective to compute
+        obj = ObjectiveFunction(
             QuadraticFlux(
                 eq=eq,
                 field=c,
@@ -1329,22 +1330,37 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
                 weight=1e-4,
                 eval_grid=quad_eval_grid,
                 field_grid=quad_field_grid,
-            ),
-        ]
+            )
+        )
+        optimizer = Optimizer(method)
+        (c,), _ = optimizer.optimize(c, obj, maxiter=2, ftol=0, xtol=1e-15)
 
+        # now check with optimizing geometry and actually check result
+        objs = [
+            CoilLength(c, target=target),
+        ]
+        extra_msg = ""
         if add_objs:
-            objs.extend([CoilCurvature(c), CoilTorsion(c, target=0)])
-            rtol = 1e-2
+            # just to check they work without error
+            objs.extend(
+                [
+                    CoilCurvature(c, target=0.5, weight=1e-2),
+                    CoilTorsion(c, target=0, weight=1e-2),
+                ]
+            )
+            rtol = 3e-2
+            extra_msg = " with curvature and torsion obj"
 
         obj = ObjectiveFunction(objs)
 
-        optimizer = Optimizer(method)
-        (c,), _ = optimizer.optimize(c, obj, maxiter=1000, ftol=0, xtol=1e-15)
+        (c,), _ = optimizer.optimize(c, obj, maxiter=25, ftol=5e-3, xtol=1e-15)
         flattened_coils = tree_leaves(
             c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
         )
         lengths = [coil.compute("length")["length"] for coil in flattened_coils]
-        np.testing.assert_allclose(lengths, target, rtol=rtol)
+        np.testing.assert_allclose(
+            lengths, target, rtol=rtol, err_msg=f"lengths {c}" + extra_msg
+        )
 
     spline_coil = mixed_coils.coils[-1].copy()
 

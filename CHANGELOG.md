@@ -5,6 +5,10 @@ New Features
 
 - Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
 to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
+- Adds the objective `CoilsetMinDistance`, which returns the minimum distance to another
+coil for each coil in a coilset.
+- Adds the objective `PlasmaCoilsetMinDistance`, which returns the minimum distance to the
+plasma surface for each coil in a coilset.
 - Add ``use_signed_distance`` flag to ``PlasmaVesselDistance`` which will use a signed distance as the target, which is positive when the plasma is inside of the vessel surface and negative if the plasma is outside of the vessel surface, to allow optimizer to distinguish if the equilbrium surface exits the vessel surface and guard against it by targeting a positive signed distance.
 
 v0.11.1

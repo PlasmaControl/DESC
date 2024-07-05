@@ -1,7 +1,5 @@
 """Objectives for targeting geometrical quantities."""
 
-import warnings
-
 import numpy as np
 
 from desc.backend import jnp, vmap
@@ -9,7 +7,7 @@ from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer, errorif, parse_argname_change
+from desc.utils import Timer, errorif, parse_argname_change, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -514,7 +512,7 @@ class PlasmaVesselDistance(_Objective):
     at every iteration, for example if the winding surface you compare to is part of the
     optimization and thus changing.
     If the bounding surface is fixed, set surface_fixed=True to precompute the surface
-    coordinates and improve the efficiency of the calculation
+    coordinates and improve the efficiency of the calculation.
 
     NOTE: for best results, use this objective in combination with either MeanCurvature
     or PrincipalCurvature, to penalize the tendency for the optimizer to only move the
@@ -530,7 +528,7 @@ class PlasmaVesselDistance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.
@@ -665,10 +663,16 @@ class PlasmaVesselDistance(_Objective):
             plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
-        if not np.allclose(surface_grid.nodes[:, 0], 1):
-            warnings.warn("Surface grid includes off-surface pts, should be rho=1")
-        if not np.allclose(plasma_grid.nodes[:, 0], 1):
-            warnings.warn("Plasma grid includes interior points, should be rho=1")
+        warnif(
+            not np.allclose(surface_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Surface grid includes off-surface pts, should be rho=1.",
+        )
+        warnif(
+            not np.allclose(plasma_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Plasma grid includes interior points, should be rho=1.",
+        )
 
         # TODO: How to use with generalized toroidal angle?
         errorif(

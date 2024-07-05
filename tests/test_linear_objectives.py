@@ -60,7 +60,8 @@ def test_LambdaGauge_sym(DummyStellarator):
     """Test that lambda is fixed correctly for symmetric equilibrium."""
     # symmetric cases automatically satisfy gauge freedom, no constraint needed.
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
-    eq.change_resolution(L=2, M=1, N=1)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=2, M=1, N=1)
     correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
     lam_con.build()
@@ -410,7 +411,8 @@ def test_correct_indexing_passed_modes():
     """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
@@ -463,7 +465,8 @@ def test_correct_indexing_passed_modes_and_passed_target():
     """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
@@ -525,7 +528,8 @@ def test_correct_indexing_passed_modes_axis():
     """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
     eq.axis = eq.get_axis()
 
@@ -585,7 +589,8 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     n = 1
 
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(4, 4, 4, 8, 8, 8)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
     eq.surface = eq.get_surface_at(1.0)
     eq.axis = eq.get_axis()
 

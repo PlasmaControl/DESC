@@ -94,7 +94,7 @@ def _poloidal_mean(grid, f):
 
 @register_compute_fun(
     name="<L|r,a>",
-    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
+    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
     " \\frac{d\\zeta}{|B^{\\zeta}|}",
     units="m / T",
     units_long="Meter / tesla",
@@ -122,7 +122,7 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
 
 @register_compute_fun(
     name="<G|r,a>",
-    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}"
+    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
     " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
     units="1 / Wb",
     units_long="Inverse webers",
@@ -153,9 +153,9 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     label=(
         # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
         "\\epsilon^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
-        "(\\frac{R_0}{\\langle \\vert\\nabla \\psi\\vert \\rangle})^2 "
-        "\\int d\\lambda \\lambda^{-2}B_0^{-1} "
-        "\\langle \\sum_j \\frac{H_j^2}{I_j} \\rangle"
+        "(R_0 / \\langle \\vert\\nabla \\psi\\vert \\rangle)^2 "
+        "\\int d\\lambda \\lambda^{-2} B_0^{-1} "
+        "\\langle \\sum_j H_j^2 / I_j \\rangle"
     ),
     units="~",
     units_long="None",

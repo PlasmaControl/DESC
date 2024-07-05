@@ -1299,6 +1299,7 @@ def test_second_stage_optimization_CoilSet():
     np.testing.assert_allclose(field[0].current, 0, atol=1e-12)
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     """Test optimizing for every type of coil and dummy coil sets."""
@@ -1311,13 +1312,24 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     )
     nested_coils = MixedCoilSet(sym_coils, asym_coils)
     eq = Equilibrium()
+    # not attempting to accurately calc B for this test,
+    # so make the grids very coarse
+    quad_eval_grid = LinearGrid(M=2, sym=True)
+    quad_field_grid = LinearGrid(N=2)
 
     def test(c, method):
         target = 11
         rtol = 1e-3
         objs = [
             CoilLength(c, target=target),
-            QuadraticFlux(eq=eq, field=c, vacuum=True),
+            QuadraticFlux(
+                eq=eq,
+                field=c,
+                vacuum=True,
+                weight=1e-4,
+                eval_grid=quad_eval_grid,
+                field_grid=quad_field_grid,
+            ),
         ]
 
         if isinstance(c, MixedCoilSet):

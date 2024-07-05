@@ -804,6 +804,9 @@ class Equilibrium(IOAble, Optimizable):
     ):
         """Compute the quantity given by name on grid.
 
+        If ``grid.coordinates!="rtz"`` then this method may take longer to run
+        than usual as a coordinate mapping subproblem will need to be solved.
+
         Parameters
         ----------
         names : str or array-like of str
@@ -890,6 +893,8 @@ class Equilibrium(IOAble, Optimizable):
         # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
         # which does not need a source grid to evaluate, does not compute <L|r,a> on a
         # grid that does not follow field lines.
+        # Maybe this can help explain:
+        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1664918897.
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
 
         dep0d = {
@@ -912,7 +917,8 @@ class Equilibrium(IOAble, Optimizable):
         )
         # This filter is stronger than the name implies, but the false positives
         # that are filtered out will still get computed with the logic in
-        # compute.utils.compute.
+        # compute.utils.compute
+        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
         just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
         dep1dr = {
             dep

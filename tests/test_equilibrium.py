@@ -419,10 +419,22 @@ def test_scale_profile():
     eq = get("SOLOVEV")
     p = eq.pressure
     p_spline = p.to_spline(method="cubic2")
+    p_zern = p.to_fourierzernike()
+    p_mtanh = p.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
     inner_rho = 0.5
-    p_scaled_spline = scale_profile(p_spline, inner_rho=inner_rho)
-    p_scaled_power = scale_profile(p, inner_rho=inner_rho)
+    p_scaled_spline = scale_profile(p_spline, inner_rho=inner_rho, eq=eq)
+    p_scaled_power = scale_profile(p, inner_rho=inner_rho, eq=eq)
+    p_scaled_zern = scale_profile(p_zern, inner_rho=inner_rho, eq=eq)
+    p_scaled_mtanh = scale_profile(p_mtanh, inner_rho=inner_rho, eq=eq)
 
     rho = np.linspace(0, 1, 10, endpoint=True)
+
     np.testing.assert_allclose(p_scaled_power(rho), p_scaled_spline(rho))
+    np.testing.assert_allclose(p_scaled_zern(rho), p_scaled_spline(rho))
+    # test for mtanh not near edge bc is not a good fit there
+    rho_not_at_edge = np.linspace(0, 0.8, 10, endpoint=True)
+    np.testing.assert_allclose(
+        p_scaled_mtanh(rho_not_at_edge), p_scaled_spline(rho_not_at_edge), rtol=1e-3
+    )
+
     np.testing.assert_allclose(p(rho / 2), p_scaled_power(rho))

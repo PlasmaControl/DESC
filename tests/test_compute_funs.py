@@ -1691,7 +1691,8 @@ def test_surface_equilibrium_geometry():
 def test_parallel_grad():
     """Test geometric and physical methods of computing parallel gradients agree."""
     eq = get("W7-X")
-    eq.change_resolution(2, 2, 2, 4, 4, 4)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 2, 4, 4, 4)
     data = eq.compute(
         [
             "e_zeta|r,a",
@@ -1702,7 +1703,7 @@ def test_parallel_grad():
             "(|e_zeta|_z)|r,a",
             "B^zeta_z|r,a",
             "|B|",
-        ]
+        ],
     )
     np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
     np.testing.assert_allclose(

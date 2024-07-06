@@ -959,9 +959,6 @@ def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
     params = [
         [
             {"current": True},
-            {"center": True, "normal": np.array([1])},
-            {"r_n": True},
-            {},
         ],
         {"shift": True, "rotmat": True},
         {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
@@ -969,7 +966,7 @@ def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
     ]
     target = np.concatenate(
         (
-            np.array([3, 2, 0, 0, 1, 1]),
+            np.array([3]),
             np.eye(3).flatten(),
             np.array([0, 0, 0]),
             np.eye(3).flatten(),

@@ -1157,9 +1157,10 @@ class TestObjectiveFunction:
         _ = obj.compute_scaled(*obj.xs(eq, surface))
 
         # For plasma outside surface, should get signed distance
+        a_s = 0.5 * a_p
         surface = FourierRZToroidalSurface(
-            R_lmn=[R0, a_p * 0.5],
-            Z_lmn=[-a_p * 0.5],
+            R_lmn=[R0, a_s],
+            Z_lmn=[-a_s],
             modes_R=[[0, 0], [1, 0]],
             modes_Z=[[-1, 0]],
         )
@@ -1174,7 +1175,7 @@ class TestObjectiveFunction:
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
-        np.testing.assert_allclose(d, -0.5 * a_p)
+        np.testing.assert_allclose(d, a_s - a_p)
 
         # ensure it works with different sized grids (poloidal resolution different)
         grid = LinearGrid(M=5, N=6)
@@ -1188,8 +1189,8 @@ class TestObjectiveFunction:
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
-        assert abs(d.max() - (-0.5 * a_p)) < 1e-14
-        assert abs(d.min() - (-0.5 * a_p)) < grid.spacing[0, 1] * a_p * 0.5
+        assert abs(d.max() - (-a_s)) < 1e-14
+        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
         # ensure it works with different sized grids (poloidal resolution different)
         # and using softmin (with deprecated name alpha)
@@ -1207,8 +1208,8 @@ class TestObjectiveFunction:
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
-        assert abs(d.max() - (-0.5 * a_p)) < 1e-14
-        assert abs(d.min() - (-0.5 * a_p)) < grid.spacing[0, 1] * a_p * 0.5
+        assert abs(d.max() - (-a_s)) < 1e-14
+        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
 
 @pytest.mark.regression

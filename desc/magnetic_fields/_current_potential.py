@@ -722,7 +722,7 @@ class FourierCurrentPotentialField(
             contours = jnp.linspace(
                 0, jnp.abs(net_poloidal_current), desirednumcoils + 1, endpoint=True
             ) * jnp.sign(net_poloidal_current)
-            contours = jnp.sort(jnp.asarray(contours))
+            contours = jnp.sort(contours)
             coil_current = net_poloidal_current / desirednumcoils
 
         # TODO: change this so that  this we only need Ncoils length array

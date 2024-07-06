@@ -647,7 +647,7 @@ class FourierCurrentPotentialField(
             if the coils are modular (i.e. helicity=0), then this is the number of
             coils per field period. If the coils are stellarator-symmetric, then this
             is the number of coils per half field-period
-            #FIXME implement the above statements
+            #FIXME fix stell_sym implementation
         step : int, optional
             Amount of points to skip by when saving the coil geometry spline
             by default 1, meaning that every point will be saved
@@ -730,8 +730,9 @@ class FourierCurrentPotentialField(
             # we start below 0 for zeta to allow for contours which may go in/out of
             # the zeta=0 plane
             zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1) * jnp.pi / nfp, dz)
-            # TODO: make this also go to only 2pi/NFP, and make it so that
-            # the number of coils means coils per field period
+            # FIXME: our CoilSet does not allow any coils that cross either
+            # symmetry plane... so have to pick coils which do not cross
+            # either plane in order for the coilset to be correctly made
 
         ################################################################
         # find contours of constant phi
@@ -1344,7 +1345,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     # G needed by surface current is the total G minus the external contribution
     G = G_tot - G_ext
-    # calclulate I, net toroidal current on winding surface
+    # calculate I, net toroidal current on winding surface
     if current_helicity == 0:  # modular coils
         I = 0
     else:  # helical coils

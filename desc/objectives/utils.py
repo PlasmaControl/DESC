@@ -342,12 +342,12 @@ def check_if_points_are_inside_perimeter(R, Z, Rcheck, Zcheck):
 
     """
     # R Z are the perimeter points
-    # Rcheck Zcheck are the surface points being checked for whether
-    # or not they are inside the plasma
+    # Rcheck Zcheck are the points being checked for whether
+    # or not they are inside the check
 
     Rbool = R[:, None] > Rcheck
     Zbool = Z[:, None] > Zcheck
-    # these are now size (Nplasma, Nsurf)
+    # these are now size (Ncheck, Nperimeter)
     quadrants = jnp.zeros_like(Rbool)
     quadrants = jnp.where(jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quadrants)
     quadrants = jnp.where(
@@ -369,11 +369,11 @@ def check_if_points_are_inside_perimeter(R, Z, Rcheck, Zcheck):
         deltas,
     )
     pt_sign = jnp.sum(deltas, axis=0)
-    # positive distance if the plasma pt is inside the surface, else
+    # positive distance if the check pt is inside the perimeter, else
     # negative distance is assigned
-    # pt_sign = 0 : Means SURFACE is OUTSIDE of the PLASMA,
+    # pt_sign = 0 : Means point is OUTSIDE of the perimeter,
     #               assign positive distance
-    # pt_sign = +/-4: Means SURFACE is INSIDE PLASMA, so
+    # pt_sign = +/-4: Means point is INSIDE perimeter, so
     #                 assign negative distance
     pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
     return pt_sign

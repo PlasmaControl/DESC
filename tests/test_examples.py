@@ -1210,9 +1210,8 @@ def test_regcoil_axisymmetric():
         EquilibriaFamily(eq),  # just to test that it works with a family passed in
         alpha=0,
         normalize=False,
-        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
-        source_grid=LinearGrid(M=42, N=42, NFP=surface_current_field.NFP),
         vacuum=True,
+        verbose=2,
     )
     chi_B = data["chi^2_B"]
     phi_mn_opt = surface_current_field.Phi_mn

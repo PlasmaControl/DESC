@@ -571,13 +571,13 @@ class PlasmaVesselDistance(_Objective):
         negative if outside of the bounding surface.
         NOTE: ``plasma_grid`` and ``surface_grid`` must have the same
         toroidal angle values for signed distance to be used.
-    surface_fixed: bool, optional
-        Whether the surface the distance from the plasma is computed to
-        is fixed or not. If True, the surface is fixed and its coordinates are
-        precomputed, which saves on computation time during optimization, and
-        self.things = [eq] only.
-        If False, the surface coordinates are computed at every iteration.
+    eq_fixed, surface_fixed: bool, optional
+        Whether the eq/surface is fixed or not. If True, the eq/surface is fixed
+        and its coordinates are precomputed, which saves on computation time during
+        optimization, and self.things = [surface]/[eq] only.
+        If False, the eq/surface coordinates are computed at every iteration.
         False by default, so that self.things = [eq, surface]
+        Both cannot be True.
     softmin_alpha: float, optional
         Parameter used for softmin. The larger softmin_alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as softmin_alpha -> infinity.
@@ -607,6 +607,7 @@ class PlasmaVesselDistance(_Objective):
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
+        eq_fixed=False,
         surface_fixed=False,
         softmin_alpha=1.0,
         name="plasma-vessel distance",
@@ -621,14 +622,27 @@ class PlasmaVesselDistance(_Objective):
         self._use_softmin = use_softmin
         self._use_signed_distance = use_signed_distance
         self._surface_fixed = surface_fixed
+        self._eq_fixed = eq_fixed
+        self._eq = eq
+        errorif(
+            eq_fixed and surface_fixed, ValueError, "Cannot fix both eq and surface"
+        )
+
         self._softmin_alpha = parse_argname_change(
             softmin_alpha, kwargs, "alpha", "softmin_alpha"
         )
-        assert (
-            len(kwargs) == 0
-        ), f"PlasmaVesselDistance got unexpected keyword argument: {kwargs.keys()}"
+        errorif(
+            len(kwargs) != 0,
+            AssertionError,
+            f"PlasmaVesselDistance got unexpected keyword argument: {kwargs.keys()}",
+        )
+        things = []
+        if not eq_fixed:
+            things.append(eq)
+        if not surface_fixed:
+            things.append(surface)
         super().__init__(
-            things=[eq, self._surface] if not surface_fixed else [eq],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -650,11 +664,15 @@ class PlasmaVesselDistance(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
-        surface = self._surface if self._surface_fixed else self.things[1]
-        # if things[1] is different than self._surface, update self._surface
-        if surface != self._surface:
-            self._surface = surface
+        if self._eq_fixed:
+            eq = self._eq
+            surface = self.things[0]
+        elif self._surface_fixed:
+            eq = self.things[0]
+            surface = self._surface
+        else:
+            eq = self.things[0]
+            surface = self.things[1]
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -740,7 +758,15 @@ class PlasmaVesselDistance(_Objective):
                 basis="xyz",
             )
             self._constants["data_surf"] = data_surf
-
+        elif self._eq_fixed:
+            data_eq = compute_fun(
+                self._eq,
+                self._equil_data_keys,
+                params=self._eq.params_dict,
+                transforms=equil_transforms,
+                profiles=equil_profiles,
+            )
+            self._constants["data_equil"] = data_eq
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -751,14 +777,15 @@ class PlasmaVesselDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, equil_params, surface_params=None, constants=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
         ----------
-        equil_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        surface_params : dict
+        params_1 : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict,
+            if eq_fixed is False, else the surface degrees of freedom
+        params_2 : dict
             Dictionary of surface degrees of freedom, eg Surface.params_dict
             Only needed if self._surface_fixed = False
         constants : dict
@@ -773,13 +800,23 @@ class PlasmaVesselDistance(_Objective):
         """
         if constants is None:
             constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._equil_data_keys,
-            params=equil_params,
-            transforms=constants["equil_transforms"],
-            profiles=constants["equil_profiles"],
-        )
+        if self._eq_fixed:
+            surface_params = params_1
+        elif self._surface_fixed:
+            equil_params = params_1
+        else:
+            equil_params = params_1
+            surface_params = params_2
+        if not self._eq_fixed:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._equil_data_keys,
+                params=equil_params,
+                transforms=constants["equil_transforms"],
+                profiles=constants["equil_profiles"],
+            )
+        else:
+            data = constants["data_equil"]
         plasma_coords_rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
         plasma_coords = rpz2xyz(plasma_coords_rpz)
         if self._surface_fixed:

@@ -11,7 +11,7 @@ from desc.utils import Timer, errorif, parse_argname_change, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from .utils import softmin
+from .utils import check_if_points_are_inside_perimeter, softmin
 
 
 class AspectRatio(_Objective):
@@ -802,51 +802,6 @@ class PlasmaVesselDistance(_Objective):
         if self._use_signed_distance:
             surface_coords_rpz = xyz2rpz(surface_coords)
 
-            def _find_angle_vec(R, Z, Rsurf, Zsurf):
-                # R Z are plasma points,
-                # Rsurf Zsurf are the surface points being checked for whether
-                # or not they are inside the plasma
-
-                # algorithm based off of "An Incremental Angle Point in Polygon Test",
-                # K. Weiler, https://doi.org/10.1016/B978-0-12-336156-1.50012-4
-
-                Rbool = R[:, None] > Rsurf
-                Zbool = Z[:, None] > Zsurf
-                # these are now size (Nplasma, Nsurf)
-                quadrants = jnp.zeros_like(Rbool)
-                quadrants = jnp.where(
-                    jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quadrants
-                )
-                quadrants = jnp.where(
-                    jnp.logical_and(jnp.logical_not(Rbool), jnp.logical_not(Zbool)),
-                    2,
-                    quadrants,
-                )
-                quadrants = jnp.where(
-                    jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quadrants
-                )
-                deltas = quadrants[1:, :] - quadrants[0:-1, :]
-                deltas = jnp.where(deltas == 3, -1, deltas)
-                deltas = jnp.where(deltas == -3, 1, deltas)
-                # then flip sign if the R intercept is > Rsurf and the
-                # quadrant flipped over a diagonal
-                b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
-                Rint = Rsurf[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
-                deltas = jnp.where(
-                    jnp.logical_and(jnp.abs(deltas) == 2, Rint.T > Rsurf),
-                    -deltas,
-                    deltas,
-                )
-                pt_sign = jnp.sum(deltas, axis=0)
-                # positive distance if the plasma pt is inside the surface, else
-                # negative distance is assigned
-                # pt_sign = 0 : Means SURFACE is OUTSIDE of the PLASMA,
-                #               assign positive distance
-                # pt_sign = +/-4: Means SURFACE is INSIDE PLASMA, so
-                #                 assign negative distance
-                pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
-                return pt_sign
-
             plasma_coords_rpz = plasma_coords_rpz.reshape(
                 constants["equil_transforms"]["grid"].num_zeta,
                 constants["equil_transforms"]["grid"].num_theta,
@@ -865,7 +820,7 @@ class PlasmaVesselDistance(_Objective):
                 )
 
                 surface_pts_at_zeta_plane
-                pt_sign = _find_angle_vec(
+                pt_sign = check_if_points_are_inside_perimeter(
                     plasma_pts_at_zeta_plane[:, 0],
                     plasma_pts_at_zeta_plane[:, 2],
                     surface_pts_at_zeta_plane[:, 0],

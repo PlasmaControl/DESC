@@ -307,3 +307,73 @@ def _parse_callable_target_bounds(target, bounds, x):
     if bounds is not None and callable(bounds[1]):
         bounds = (bounds[0], bounds[1](x))
     return target, bounds
+
+
+# TODO: dont need to be R,Z, can by x1, x2 or something
+def check_if_points_are_inside_perimeter(R, Z, Rcheck, Zcheck):
+    """Function to check if the given points is inside the given polyognal perimeter.
+
+    Rcheck, Zcheck are the points to check, and R, Z define the perimeter
+    in which to check. This function assumes that all points are in the same
+    plane. Function will return an array pf signs (+/- 1), with positive sign meaning
+    the point is inside of the given perimeter, and a negative sign meaning the point
+    is outside of the given perimeter.
+
+    Algorithm based off of "An Incremental Angle Point in Polygon Test",
+    K. Weiler, https://doi.org/10.1016/B978-0-12-336156-1.50012-4
+
+    Parameters
+    ----------
+    R,Z : ndarray
+        1-D arrays of coordinates of the points defining the polygonal
+        perimeter. The function will determine if the check point is inside
+        or outside of this perimeter.
+    Rcheck, Zcheck : ndarray
+        coordinates of the points being checked if they are inside or outside of the
+        given perimeter.
+
+    Returns
+    -------
+    pt_sign : ndarray of {-1,1}
+        Integers corresponding to if the given point is inside or outside of the given
+        perimeter, with pt_sign[i]>0 meaning the point given by Rcheck[i], Zcheck[i] is
+        inside of the given perimeter, and a negative sign meaning the point is outside
+        of the given perimeter.
+
+    """
+    # R Z are the perimeter points
+    # Rcheck Zcheck are the surface points being checked for whether
+    # or not they are inside the plasma
+
+    Rbool = R[:, None] > Rcheck
+    Zbool = Z[:, None] > Zcheck
+    # these are now size (Nplasma, Nsurf)
+    quadrants = jnp.zeros_like(Rbool)
+    quadrants = jnp.where(jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quadrants)
+    quadrants = jnp.where(
+        jnp.logical_and(jnp.logical_not(Rbool), jnp.logical_not(Zbool)),
+        2,
+        quadrants,
+    )
+    quadrants = jnp.where(jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quadrants)
+    deltas = quadrants[1:, :] - quadrants[0:-1, :]
+    deltas = jnp.where(deltas == 3, -1, deltas)
+    deltas = jnp.where(deltas == -3, 1, deltas)
+    # then flip sign if the R intercept is > Rcheck and the
+    # quadrant flipped over a diagonal
+    b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
+    Rint = Rcheck[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
+    deltas = jnp.where(
+        jnp.logical_and(jnp.abs(deltas) == 2, Rint.T > Rcheck),
+        -deltas,
+        deltas,
+    )
+    pt_sign = jnp.sum(deltas, axis=0)
+    # positive distance if the plasma pt is inside the surface, else
+    # negative distance is assigned
+    # pt_sign = 0 : Means SURFACE is OUTSIDE of the PLASMA,
+    #               assign positive distance
+    # pt_sign = +/-4: Means SURFACE is INSIDE PLASMA, so
+    #                 assign negative distance
+    pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
+    return pt_sign

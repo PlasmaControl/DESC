@@ -16,7 +16,15 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.singularities import compute_B_plasma
-from desc.utils import Timer, copy_coeffs, errorif, setdefault, svd_inv_null, warnif
+from desc.utils import (
+    Timer,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    setdefault,
+    svd_inv_null,
+    warnif,
+)
 
 from ._core import _MagneticField, biot_savart_general
 
@@ -626,13 +634,20 @@ class FourierCurrentPotentialField(
         spline_method="cubic",
         show_plots=False,
         npts=128,
+        stell_sym=False,
+        use_FourierXYZ=False,
+        N=50,
     ):
         """Find helical or modular coils from this surface current potential.
 
         Parameters
         ----------
         desirednumcoils : int, optional
-            Total number of coils to discretize the surface current with, by default 10
+            Total number of coils to discretize the surface current with, by default 10.
+            if the coils are modular (i.e. helicity=0), then this is the number of
+            coils per field period. If the coils are stellarator-symmetric, then this
+            is the number of coils per half field-period
+            #FIXME implement the above statements
         step : int, optional
             Amount of points to skip by when saving the coil geometry spline
             by default 1, meaning that every point will be saved
@@ -645,6 +660,18 @@ class FourierCurrentPotentialField(
         npts : int, optional
             Number of zeta points over one field period to use to discretize the surface
             when finding constant current potential contours.
+        stell_sym : bool
+            whether the coils are stellarator-symmetric or not. Defaults to False. Only
+            matters for modular coils (currently)
+            #TODO: once winding surface curve is implemented, enforce for
+            # helical as well
+        use_FourierXYZ : bool
+            whether to fit with ``FourierXYZCoils`` or not. If False, ``SplineXYZCoils``
+            will be returned. If True, the Fourier fits of those ``SplineXYZCoils``
+            with the specified Fourier resolution ``N`` will be returned.
+        N : int
+            Fourier resolution to use in ``FourierXYZCoils``, only used if
+            ``use_FourierXYZ`` is True.
 
         Returns
         -------
@@ -664,6 +691,10 @@ class FourierCurrentPotentialField(
             "Detected both net toroidal and poloidal current are both zero, "
             "this function cannot find windowpane coils"
         )
+        check_posint(desirednumcoils, "desirednumcoils", False)
+        check_posint(N, "N", False)
+        check_posint(step, "step", False)
+        check_posint(npts, "npts", False)
 
         ################################################################
         # find current helicity
@@ -698,7 +729,7 @@ class FourierCurrentPotentialField(
             theta_full = jnp.linspace(0, 2 * jnp.pi, npts + 1)
             # we start below 0 for zeta to allow for contours which may go in/out of
             # the zeta=0 plane
-            zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1 / nfp) * jnp.pi, dz)
+            zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1) * jnp.pi / nfp, dz)
             # TODO: make this also go to only 2pi/NFP, and make it so that
             # the number of coils means coils per field period
 
@@ -718,12 +749,23 @@ class FourierCurrentPotentialField(
 
         else:
             # modular coils
-            # go from zero to G
+            # go from zero to G/nfp
+            max_curr = (
+                jnp.abs(net_poloidal_current) / nfp / 2
+                if stell_sym
+                else jnp.abs(net_poloidal_current) / nfp
+            )
             contours = jnp.linspace(
-                0, jnp.abs(net_poloidal_current), desirednumcoils + 1, endpoint=True
+                0,
+                max_curr,
+                desirednumcoils + 1,
+                endpoint=True,
             ) * jnp.sign(net_poloidal_current)
             contours = jnp.sort(contours)
-            coil_current = net_poloidal_current / desirednumcoils
+            coil_current = net_poloidal_current / desirednumcoils / nfp
+            if stell_sym:  # desirednumcoils is num coils per half period, so
+                # need to account for the extra factor of 2
+                coil_current = coil_current / 2
 
         # TODO: change this so that  this we only need Ncoils length array
         theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
@@ -851,12 +893,6 @@ class FourierCurrentPotentialField(
                 contour_zeta[i_contour] = jnp.append(
                     contour_zeta[i_contour], 2 * jnp.pi
                 )
-
-        else:
-            # TODO: this should be able to easily be used to
-            # find only N contours in one FP then rotate them in zeta
-            # to get the full coilset.
-            pass
         if not show_plots:
             plt.close("all")
 
@@ -941,17 +977,21 @@ class FourierCurrentPotentialField(
                 # in positive poloidal direction creates a positive toroidal B)
                 current_sign = -sign_of_theta_contours * jnp.sign(net_poloidal_current)
                 thisCurrent = jnp.abs(coil_current) * current_sign
-            coils.append(
-                SplineXYZCoil(
-                    thisCurrent,
-                    jnp.append(contour_X[j][0::step], contour_X[j][0]),
-                    jnp.append(contour_Y[j][0::step], contour_Y[j][0]),
-                    jnp.append(contour_Z[j][0::step], contour_Z[j][0]),
-                    method=spline_method,
-                )
+            coil = SplineXYZCoil(
+                thisCurrent,
+                jnp.append(contour_X[j][0::step], contour_X[j][0]),
+                jnp.append(contour_Y[j][0::step], contour_Y[j][0]),
+                jnp.append(contour_Z[j][0::step], contour_Z[j][0]),
+                method=spline_method,
             )
+            if use_FourierXYZ:
+                coil = coil.to_FourierXYZ(N)
+            coils.append(coil)
         try:
-            final_coilset = CoilSet(*coils)
+            if jnp.isclose(helicity, 0):
+                final_coilset = CoilSet(*coils, NFP=nfp, sym=stell_sym)
+            else:
+                final_coilset = CoilSet(*coils)
         except ValueError:
             # can't make a CoilSet so make a MixedCoilSet instead
             final_coilset = MixedCoilSet(*coils)

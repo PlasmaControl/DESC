@@ -1322,13 +1322,12 @@ def test_regcoil_modular_coils_check_coils(regcoil_modular_coils):
     surface_current_field = initial_surface_current_field.copy()
 
     # test finding coils
-
-    numCoils = 40
+    ## 20 coils per FP
+    numCoils = 20
 
     coilset2 = surface_current_field.to_CoilSet(
-        desirednumcoils=numCoils,
+        desirednumcoils=numCoils, stell_sym=False, use_FourierXYZ=True, N=150
     )
-    coilset2 = coilset2.to_FourierXYZ(N=150)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T

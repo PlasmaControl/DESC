@@ -1540,11 +1540,13 @@ def test_signed_PlasmaVesselDistance():
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
 
+    target_dist = -0.25
+
     grid = LinearGrid(M=10, N=4, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
-        target=-0.25,
+        target=target_dist,
         surface_grid=grid,
         plasma_grid=grid,
         use_signed_distance=True,
@@ -1558,7 +1560,7 @@ def test_signed_PlasmaVesselDistance():
     )
 
     np.testing.assert_allclose(
-        obj.compute(*obj.xs(surf)), -0.25, atol=1e-2, err_msg="Using hardmin"
+        obj.compute(*obj.xs(surf)), target_dist, atol=1e-2, err_msg="Using hardmin"
     )
 
     # with softmin
@@ -1567,7 +1569,7 @@ def test_signed_PlasmaVesselDistance():
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
-        target=-0.25,
+        target=target_dist,
         surface_grid=grid,
         plasma_grid=grid,
         use_signed_distance=True,
@@ -1588,7 +1590,7 @@ def test_signed_PlasmaVesselDistance():
     )
 
     np.testing.assert_allclose(
-        obj.compute(*obj.xs(surf)), -0.25, atol=1e-2, err_msg="Using softmin"
+        obj.compute(*obj.xs(surf)), target_dist, atol=1e-2, err_msg="Using softmin"
     )
 
     # with changing eq
@@ -1600,7 +1602,7 @@ def test_signed_PlasmaVesselDistance():
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
-        target=-0.25,
+        target=target_dist,
         surface_grid=grid,
         plasma_grid=grid,
         use_signed_distance=True,
@@ -1618,4 +1620,4 @@ def test_signed_PlasmaVesselDistance():
         xtol=1e-9,
     )
 
-    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), -0.25, atol=1e-2)
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), target_dist, atol=1e-2)

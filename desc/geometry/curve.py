@@ -949,6 +949,7 @@ class SplineXYZCurve(Curve):
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+
         Returns
         -------
         data : dict of ndarray

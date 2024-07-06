@@ -622,9 +622,10 @@ class FourierCurrentPotentialField(
     def to_CoilSet(  # noqa: C901 - FIXME: simplify this
         self,
         desirednumcoils=10,  # TODO: make this coils_per_NFP for modular...
-        step=2,
+        step=1,
         spline_method="cubic",
         show_plots=False,
+        npts=128,
     ):
         """Find helical or modular coils from this surface current potential.
 
@@ -634,13 +635,16 @@ class FourierCurrentPotentialField(
             Total number of coils to discretize the surface current with, by default 10
         step : int, optional
             Amount of points to skip by when saving the coil geometry spline
-            by default 2, meaning that every other point will be saved
+            by default 1, meaning that every point will be saved
             if higher, less points will be saved e.g. 3 saves every 3rd point
         spline_method : str, optional
             method of fitting to use for the spline, by default ``"cubic"``
             see ``SplineXYZCoil`` for more info
         show_plots : bool, optional,
             whether to show plots of the contours chosen for coils, by default False
+        npts : int, optional
+            Number of zeta points over one field period to use to discretize the surface
+            when finding constant current potential contours.
 
         Returns
         -------
@@ -670,7 +674,6 @@ class FourierCurrentPotentialField(
         helicity = safediv(
             net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8
         )
-        npts = 128  # number of points in the zeta direction
         dz = 2 * np.pi / nfp / npts
         if not jnp.isclose(helicity, 0):
             # helical coils

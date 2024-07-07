@@ -686,6 +686,18 @@ class FourierCurrentPotentialField(
 
         net_toroidal_current = self.I
         net_poloidal_current = self.G
+        helicity = safediv(
+            net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8
+        )
+        # determine current per coil
+        if not jnp.isclose(helicity, 0):
+            # helical coils
+            coil_current = jnp.abs(net_toroidal_current) / desirednumcoils
+        else:  # modular coils
+            coil_current = net_poloidal_current / desirednumcoils / nfp
+            if stell_sym:  # desirednumcoils is num coils per half period, so
+                # need to account for the extra factor of 2
+                coil_current = coil_current / 2
         assert not jnp.isclose(net_toroidal_current, 0) or not jnp.isclose(
             net_poloidal_current, 0
         ), (
@@ -697,211 +709,9 @@ class FourierCurrentPotentialField(
         check_posint(step, "step", False)
         check_posint(npts, "npts", False)
 
-        ################################################################
-        # find current helicity
-        ################################################################
-        # we know that I = -(G - G_ext) / (helicity * NFP)
-        # if net_toroidal_current is zero, then we have modular coils,
-        # and just make helicity zero
-        helicity = safediv(
-            net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8
+        contour_theta, contour_zeta = _find_current_potential_contours(
+            self, desirednumcoils, npts, show_plots, stell_sym
         )
-        dz = 2 * np.pi / nfp / npts
-        if not jnp.isclose(helicity, 0):
-            # helical coils
-            zeta_full = jnp.arange(
-                0,
-                2 * jnp.pi / nfp + 1e-6,
-                dz,
-            )
-            # ensure we have always have points at least from -2pi, 2pi as depending
-            # on sign of I, the contours from Phi = [0, abs(I)] may have their starting
-            # points (the theta value at zeta=0) be positive or negative theta values,
-            # and we want to ensure we catch the start and end of the contours
-            theta_full = jnp.arange(
-                jnp.sign(helicity) * 2 * jnp.pi,
-                -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1) + 1e-6),
-                -jnp.sign(helicity) * 2 * np.pi / npts / nfp,
-            )
-
-            theta_full = jnp.sort(theta_full)
-        else:
-            # modular coils
-            theta_full = jnp.linspace(0, 2 * jnp.pi, npts + 1)
-            # we start below 0 for zeta to allow for contours which may go in/out of
-            # the zeta=0 plane
-            zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1) * jnp.pi / nfp, dz)
-
-        ################################################################
-        # find contours of constant phi
-        ################################################################
-        # make linspace contours
-        if not jnp.isclose(helicity, 0):
-            # helical coils
-            # we start them on zeta=0 plane, so we will find contours
-            # going from 0 to I (corresponding to zeta=0, and theta*sign(I) increasing)
-            contours = jnp.linspace(
-                0, jnp.abs(net_toroidal_current), desirednumcoils + 1, endpoint=True
-            )
-            contours = jnp.sort(contours)
-            coil_current = jnp.abs(net_toroidal_current) / desirednumcoils
-
-        else:
-            # modular coils
-            # go from zero to G/nfp
-            # or G/nfp/2 if stell_sym is True
-            max_curr = (
-                jnp.abs(net_poloidal_current) / nfp / 2
-                if stell_sym
-                else jnp.abs(net_poloidal_current) / nfp
-            )
-            # TODO: for stell_sym, must pick these carefully
-            # so that tha coilset has coils that are in order
-            # of ascending phi, otherwise we may get the
-            # problem that the first coil is over the zeta=0 sym line
-            # and the last coil is on the zeta=pi/NFP sym line
-            offset = -max_curr / desirednumcoils if stell_sym else 0
-            contours = jnp.linspace(
-                offset,
-                max_curr + offset,
-                desirednumcoils + 1,
-                endpoint=True,
-            ) * jnp.sign(net_poloidal_current)
-            contours = jnp.sort(contours)
-            coil_current = net_poloidal_current / desirednumcoils / nfp
-            if stell_sym:  # desirednumcoils is num coils per half period, so
-                # need to account for the extra factor of 2
-                coil_current = coil_current / 2
-
-        # TODO: change this so that  this we only need Ncoils length array
-        theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
-
-        grid = Grid(
-            jnp.vstack(
-                (
-                    jnp.zeros_like(theta_full_2D.flatten(order="F")),
-                    theta_full_2D.flatten(order="F"),
-                    zeta_full_2D.flatten(order="F"),
-                )
-            ).T,
-            sort=False,
-        )
-        phi_total_full = self.compute("Phi", grid=grid)["Phi"].reshape(
-            theta_full.size, zeta_full.size, order="F"
-        )
-
-        N_trial_contours = len(contours) - 1
-        contour_zeta = []
-        contour_theta = []
-        plt.figure(figsize=(18, 10))
-        cdata = plt.contour(
-            zeta_full_2D.T, theta_full_2D.T, jnp.transpose(phi_total_full), contours
-        )
-
-        numCoils = 0
-        plt.xlabel(r"$\zeta$")
-        plt.ylabel(r"$\theta$")
-
-        for j in range(N_trial_contours):
-            try:
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=DeprecationWarning)
-                    p = cdata.collections[j].get_paths()[0]
-            except Exception as e:
-                print("failed to find a contour with error:")
-                print(e)
-
-            v = p.vertices
-
-            contour_zeta.append(v[:, 0])
-            contour_theta.append(v[:, 1])
-
-            # check if closed and if not throw warning
-            ## closure condition in zeta for modular is returns to same zeta,
-            ## while for helical is that the contour dzeta = 2pi/NFP
-            zeta_diff = 2 * jnp.pi / nfp if not jnp.isclose(helicity, 0) else 0.0
-            ## closure condition in theta for modular is that dtheta = 2pi,
-            ## while for helical the dtheta = 2pi*abs(helicity)
-            theta_diff = (
-                2 * jnp.pi * jnp.abs(helicity)
-                if not jnp.isclose(helicity, 0)
-                else 2 * jnp.pi
-            )
-            if not jnp.isclose(
-                jnp.abs(v[-1, 0] - v[0, 0]), zeta_diff
-            ) or not jnp.isclose(jnp.abs(v[-1, 1] - v[0, 1]), theta_diff):
-                warnings.warn(
-                    f"Detected a coil contour (coil index {j}) that may not be "
-                    "closed, this may lead to incorrect coils, "
-                    "check that the surface current potential contours do not contain "
-                    "any local maxima or window-pane-like structures,"
-                    " and that the current potential contours do not go across "
-                    "The edges of the zeta extent used for the plotting:"
-                    "the zeta=0 or zeta=2pi/NFP planes for helical coils or the"
-                    " zeta=-pi/NFP and zeta=2pi+pi/NFP planes, for modular coils. "
-                    "Use `show_plots=True` to visualize the contours.",
-                    UserWarning,
-                )
-
-            numCoils += 1
-            if show_plots:
-                plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
-                plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
-        if not jnp.isclose(helicity, 0):
-            # right now these are only over 1 FP
-            # so must tile them s.t. they are full coils, by repeating them
-            #  with a 2pi/NFP shift in zeta
-            # and a -2pi*helicity shift in theta
-            # we could alternatively wait until we are in real space and then
-            # rotate the coils there, but this also works
-
-            for i_contour in range(len(contour_theta)):
-                # check if the contour is arranged with zeta=0 at the start
-                # or at the end, easiest to do this tiling if we assume
-                # the first index is at zeta=0
-                zeta_starts_at_zero = (
-                    contour_zeta[i_contour][-1] > contour_zeta[i_contour][0]
-                )
-                orig_theta = contour_theta[i_contour]
-                orig_zeta = contour_zeta[i_contour]
-                if not zeta_starts_at_zero:
-                    # flip so that the contour starts at zeta=0
-                    orig_theta = jnp.flip(orig_theta)
-                    orig_zeta = jnp.flip(orig_zeta)
-                orig_endpoint_theta = orig_theta[-1]
-
-                # dont need last points here since we will shift the whole
-                # curve over, and we know the last point must be
-                # (zeta0+2pi/NFP, theta0+2pi*abs(helicity)),
-                # so easiest to just not include them initially and shift whole curve
-                orig_theta = jnp.atleast_1d(orig_theta[:-1])
-                orig_zeta = jnp.atleast_1d(orig_zeta[:-1])
-
-                contour_theta[i_contour] = jnp.atleast_1d(orig_theta)
-                contour_zeta[i_contour] = jnp.atleast_1d(orig_zeta)
-
-                theta_shift = -2 * np.pi * helicity
-
-                zeta_shift = 2 * jnp.pi / nfp - orig_zeta[0]
-
-                for i in range(1, nfp):
-                    contour_theta[i_contour] = jnp.concatenate(
-                        [contour_theta[i_contour], orig_theta + theta_shift * i]
-                    )
-                    contour_zeta[i_contour] = jnp.concatenate(
-                        [contour_zeta[i_contour], orig_zeta + zeta_shift * i]
-                    )
-                contour_theta[i_contour] = jnp.append(
-                    contour_theta[i_contour],
-                    nfp * (orig_endpoint_theta - contour_theta[i_contour][0])
-                    + contour_theta[i_contour][0],
-                )
-                contour_zeta[i_contour] = jnp.append(
-                    contour_zeta[i_contour], 2 * jnp.pi
-                )
-        if not show_plots:
-            plt.close("all")
-
         # for modular coils, easiest way to check contour direction is to see
         # direction of the contour thetas
         sign_of_theta_contours = jnp.sign(contour_theta[0][-1] - contour_theta[0][0])
@@ -1479,3 +1289,211 @@ def run_regcoil(  # noqa: C901 fxn too complex
     if len(fields) == 1:
         fields = fields[0]
     return fields, data
+
+
+# TODO: replace matplotlib with scikit contour call
+# TODO: replace using contour finding with optimizing Winding surface curves
+# once that is implemented
+def _find_current_potential_contours(
+    surface_current_field, desirednumcoils, npts, show_plots=False, stell_sym=False
+):
+
+    ################################################################
+    # find current helicity
+    ################################################################
+    # we know that I = -(G - G_ext) / (helicity * NFP)
+    # if net_toroidal_current is zero, then we have modular coils,
+    # and just make helicity zero
+    net_poloidal_current = surface_current_field.G
+    net_toroidal_current = surface_current_field.I
+    nfp = surface_current_field.NFP
+    helicity = safediv(net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8)
+    dz = 2 * np.pi / nfp / npts
+    if not jnp.isclose(helicity, 0):
+        # helical coils
+        zeta_full = jnp.arange(
+            0,
+            2 * jnp.pi / nfp + 1e-6,
+            dz,
+        )
+        # ensure we have always have points at least from -2pi, 2pi as depending
+        # on sign of I, the contours from Phi = [0, abs(I)] may have their starting
+        # points (the theta value at zeta=0) be positive or negative theta values,
+        # and we want to ensure we catch the start and end of the contours
+        theta_full = jnp.arange(
+            jnp.sign(helicity) * 2 * jnp.pi,
+            -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1) + 1e-6),
+            -jnp.sign(helicity) * 2 * np.pi / npts / nfp,
+        )
+
+        theta_full = jnp.sort(theta_full)
+    else:
+        # modular coils
+        theta_full = jnp.linspace(0, 2 * jnp.pi, npts + 1)
+        # we start below 0 for zeta to allow for contours which may go in/out of
+        # the zeta=0 plane
+        zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1) * jnp.pi / nfp, dz)
+
+    ################################################################
+    # find contours of constant phi
+    ################################################################
+    # make linspace contours
+    if not jnp.isclose(helicity, 0):
+        # helical coils
+        # we start them on zeta=0 plane, so we will find contours
+        # going from 0 to I (corresponding to zeta=0, and theta*sign(I) increasing)
+        contours = jnp.linspace(
+            0, jnp.abs(net_toroidal_current), desirednumcoils + 1, endpoint=True
+        )
+        contours = jnp.sort(contours)
+    else:
+        # modular coils
+        # go from zero to G/nfp
+        # or G/nfp/2 if stell_sym is True
+        max_curr = (
+            jnp.abs(net_poloidal_current) / nfp / 2
+            if stell_sym
+            else jnp.abs(net_poloidal_current) / nfp
+        )
+        # TODO: for stell_sym, must pick these carefully
+        # so that tha coilset has coils that are in order
+        # of ascending phi, otherwise we may get the
+        # problem that the first coil is over the zeta=0 sym line
+        # and the last coil is on the zeta=pi/NFP sym line
+        offset = -max_curr / desirednumcoils if stell_sym else 0
+        contours = jnp.linspace(
+            offset,
+            max_curr + offset,
+            desirednumcoils + 1,
+            endpoint=True,
+        ) * jnp.sign(net_poloidal_current)
+        contours = jnp.sort(contours)
+
+    # TODO: change this so that  this we only need Ncoils length array
+    theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
+
+    grid = Grid(
+        jnp.vstack(
+            (
+                jnp.zeros_like(theta_full_2D.flatten(order="F")),
+                theta_full_2D.flatten(order="F"),
+                zeta_full_2D.flatten(order="F"),
+            )
+        ).T,
+        sort=False,
+    )
+    phi_total_full = surface_current_field.compute("Phi", grid=grid)["Phi"].reshape(
+        theta_full.size, zeta_full.size, order="F"
+    )
+
+    N_trial_contours = len(contours) - 1
+    contour_zeta = []
+    contour_theta = []
+    plt.figure(figsize=(18, 10))
+    cdata = plt.contour(
+        zeta_full_2D.T, theta_full_2D.T, jnp.transpose(phi_total_full), contours
+    )
+
+    numCoils = 0
+    plt.xlabel(r"$\zeta$")
+    plt.ylabel(r"$\theta$")
+
+    for j in range(N_trial_contours):
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
+                p = cdata.collections[j].get_paths()[0]
+        except Exception as e:
+            print("failed to find a contour with error:")
+            print(e)
+
+        v = p.vertices
+
+        contour_zeta.append(v[:, 0])
+        contour_theta.append(v[:, 1])
+
+        # check if closed and if not throw warning
+        ## closure condition in zeta for modular is returns to same zeta,
+        ## while for helical is that the contour dzeta = 2pi/NFP
+        zeta_diff = 2 * jnp.pi / nfp if not jnp.isclose(helicity, 0) else 0.0
+        ## closure condition in theta for modular is that dtheta = 2pi,
+        ## while for helical the dtheta = 2pi*abs(helicity)
+        theta_diff = (
+            2 * jnp.pi * jnp.abs(helicity)
+            if not jnp.isclose(helicity, 0)
+            else 2 * jnp.pi
+        )
+        if not jnp.isclose(jnp.abs(v[-1, 0] - v[0, 0]), zeta_diff) or not jnp.isclose(
+            jnp.abs(v[-1, 1] - v[0, 1]), theta_diff
+        ):
+            warnings.warn(
+                f"Detected a coil contour (coil index {j}) that may not be "
+                "closed, this may lead to incorrect coils, "
+                "check that the surface current potential contours do not contain "
+                "any local maxima or window-pane-like structures,"
+                " and that the current potential contours do not go across "
+                "The edges of the zeta extent used for the plotting:"
+                "the zeta=0 or zeta=2pi/NFP planes for helical coils or the"
+                " zeta=-pi/NFP and zeta=2pi+pi/NFP planes, for modular coils. "
+                "Use `show_plots=True` to visualize the contours.",
+                UserWarning,
+            )
+
+        numCoils += 1
+        if show_plots:
+            plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
+            plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
+    if not jnp.isclose(helicity, 0):
+        # right now these are only over 1 FP
+        # so must tile them s.t. they are full coils, by repeating them
+        #  with a 2pi/NFP shift in zeta
+        # and a -2pi*helicity shift in theta
+        # we could alternatively wait until we are in real space and then
+        # rotate the coils there, but this also works
+
+        for i_contour in range(len(contour_theta)):
+            # check if the contour is arranged with zeta=0 at the start
+            # or at the end, easiest to do this tiling if we assume
+            # the first index is at zeta=0
+            zeta_starts_at_zero = (
+                contour_zeta[i_contour][-1] > contour_zeta[i_contour][0]
+            )
+            orig_theta = contour_theta[i_contour]
+            orig_zeta = contour_zeta[i_contour]
+            if not zeta_starts_at_zero:
+                # flip so that the contour starts at zeta=0
+                orig_theta = jnp.flip(orig_theta)
+                orig_zeta = jnp.flip(orig_zeta)
+            orig_endpoint_theta = orig_theta[-1]
+
+            # dont need last points here since we will shift the whole
+            # curve over, and we know the last point must be
+            # (zeta0+2pi/NFP, theta0+2pi*abs(helicity)),
+            # so easiest to just not include them initially and shift whole curve
+            orig_theta = jnp.atleast_1d(orig_theta[:-1])
+            orig_zeta = jnp.atleast_1d(orig_zeta[:-1])
+
+            contour_theta[i_contour] = jnp.atleast_1d(orig_theta)
+            contour_zeta[i_contour] = jnp.atleast_1d(orig_zeta)
+
+            theta_shift = -2 * np.pi * helicity
+
+            zeta_shift = 2 * jnp.pi / nfp - orig_zeta[0]
+
+            for i in range(1, nfp):
+                contour_theta[i_contour] = jnp.concatenate(
+                    [contour_theta[i_contour], orig_theta + theta_shift * i]
+                )
+                contour_zeta[i_contour] = jnp.concatenate(
+                    [contour_zeta[i_contour], orig_zeta + zeta_shift * i]
+                )
+            contour_theta[i_contour] = jnp.append(
+                contour_theta[i_contour],
+                nfp * (orig_endpoint_theta - contour_theta[i_contour][0])
+                + contour_theta[i_contour][0],
+            )
+            contour_zeta[i_contour] = jnp.append(contour_zeta[i_contour], 2 * jnp.pi)
+    if not show_plots:
+        plt.close("all")
+
+    return contour_theta, contour_zeta

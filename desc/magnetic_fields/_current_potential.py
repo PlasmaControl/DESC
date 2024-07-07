@@ -1000,7 +1000,11 @@ class FourierCurrentPotentialField(
                 final_coilset = CoilSet(*coils)
         except ValueError:
             # can't make a CoilSet so make a MixedCoilSet instead
-            final_coilset = MixedCoilSet(*coils)
+            final_coilset = (
+                MixedCoilSet(*coils)
+                if not jnp.isclose(helicity, 0)
+                else MixedCoilSet.from_symmetry(coils, NFP=nfp, sym=stell_sym)
+            )
         return final_coilset
 
 

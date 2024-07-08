@@ -102,6 +102,11 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         from .geom_utils import rpz2xyz, rpz2xyz_vec
 
         for name in data.keys():
+            errorif(
+                data_index[p][name]["dim"] == (3, 3),
+                NotImplementedError,
+                "Tensor quantities cannot be converted to Cartesian coordinates.",
+            )
             if data_index[p][name]["dim"] == 3:  # only convert vector data
                 if name == "x":
                     data[name] = rpz2xyz(data[name])

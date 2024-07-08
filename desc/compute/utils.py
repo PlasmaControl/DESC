@@ -116,9 +116,6 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     return data
 
 
-# TODO: can we do the basis change here possibly? instead of repeating it everywhere?
-#  Maybe give an "inherent basis" parameter to the compute decorator
-#  so we check what the natural basis is versus what the desired is?
 def _compute(
     parameterization, names, params, transforms, profiles, data=None, **kwargs
 ):

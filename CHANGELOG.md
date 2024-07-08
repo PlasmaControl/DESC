@@ -9,18 +9,14 @@ to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` c
 coil for each coil in a coilset.
 - Adds the objective `PlasmaCoilsetMinDistance`, which returns the minimum distance to the
 plasma surface for each coil in a coilset.
-- Adds method ``run_regcoil`` to ``FourierCurrentPotentialField`` that implements the
-REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
-    * Can specify ``current_helicity`` to determine if resulting contours correspond to
-    helical topology (``current_helicity`` not equal to 0) or
-    modular (``current_helicity``equal to 0)
-- Adds method ``.to_CoilSet`` to ``FourierCurrentPotentialField``
-which implements a coil cutting algorithm to discretize the surface current into coils
+- Adds function ``run_regcoil`` to ``_current_potential.py`` that implements the REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
+    * Can specify ``current_helicity`` to determine if resulting contours correspond to  helical topology (``current_helicity`` not equal to 0) or modular (``current_helicity``equal to 0)
+    * if multiple values of the regularization parameter are input, will return a family of surface current fields (as a list) corresponding to the solution at each regularization value
+- Adds method ``To_CoilSet`` to ``FourierCurrentPotentialField`` which implements a coil cutting algorithm to discretize the surface current into coils
     * works for both modular and helical coils
-- Adds a new objectives,``SurfaceCurrentRegularization`` (which minimizes ``alpha*|K|``, the
-regularization term from surface current in the REGCOIL algorithm)
-    * use of this objective with ``QuadraticFlux`` allows for REGCOIL solutions to be obtained through
-    the optimization framework, and combined with other objectives as well.
+- Adds a new objective ``SurfaceCurrentRegularization`` (which minimizes ``w*|K|``, the regularization term from surface current in the REGCOIL algorithm, with `w` being the objective weight which act as the regularization parameter)
+    * use of both this and the ``QuadraticFlux`` objective allows for REGCOIL solutions to be obtained through  the optimization framework, and combined with other objectives as well.
+- Adds a new tutorial showing how to use``REGCOIL`` features.
 
 v0.11.1
 -------

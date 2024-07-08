@@ -1496,6 +1496,27 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
+    def calculate_minimum_intercoil_distances(self, grid=None):
+        """Calculate the minimum intercoil distance for each coil in the CoilSet.
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            Collocation grid containing the nodes to evaluate the coil positions at.
+            If a list, must have the same structure as the coilset.
+
+        Returns
+        -------
+        min_dists : array of floats
+            Minimum distance to another coil for each coil in the coilset.
+
+        """
+        from desc.objectives._coils import CoilsetMinDistance
+
+        obj = CoilsetMinDistance(self, grid=grid)
+        obj.build(verbose=0)
+        return obj.compute(self.params_dict)
+
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
             return CoilSet(*self.coils, *other.coils)

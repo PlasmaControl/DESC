@@ -1686,7 +1686,6 @@ def test_surface_equilibrium_geometry():
             )
 
 
-@pytest.mark.xfail(reason="Cause of bug not yet known.")
 @pytest.mark.unit
 def test_parallel_grad():
     """Test geometric and physical methods of computing parallel gradients agree."""
@@ -1700,7 +1699,7 @@ def test_parallel_grad():
             "B^zeta",
             "|B|_z|r,a",
             "grad(|B|)",
-            "(|e_zeta|_z)|r,a",
+            "|e_zeta|r,a|_z|r,a",
             "B^zeta_z|r,a",
             "|B|",
         ],
@@ -1709,9 +1708,8 @@ def test_parallel_grad():
     np.testing.assert_allclose(
         data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
     )
-    # FIXME: Don't know why below test fails.
     np.testing.assert_allclose(
-        data["(|e_zeta|_z)|r,a"],
+        data["|e_zeta|r,a|_z|r,a"],
         data["|B|_z|r,a"] / np.abs(data["B^zeta"])
         - data["|B|"]
         * data["B^zeta_z|r,a"]

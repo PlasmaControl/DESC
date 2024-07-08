@@ -38,7 +38,7 @@ def _b(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^rho",  # ∇ρ is the same in DESC and field line coordinates.
+    name="e^rho",  # ∇ρ is the same in (ρ,θ,ζ) and (ρ,α,ζ) coordinates.
     label="\\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -1007,7 +1007,7 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^zeta",  # ∇ζ is the same in DESC and field line coordinates.
+    name="e^zeta",  # ∇ζ is the same in (ρ,θ,ζ) and (ρ,α,ζ) coordinates.
     label="\\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -3568,7 +3568,9 @@ def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):
 )
 def _e_rho_az(params, transforms, profiles, data, **kwargs):
     # constant α and ζ
-    data["e_rho|a,z"] = data["e_rho"] - (data["e_alpha"].T * data["alpha_r"]).T
+    data["e_rho|a,z"] = (
+        data["e_rho"] - data["e_alpha"] * data["alpha_r"][:, jnp.newaxis]
+    )
     return data
 
 
@@ -3587,7 +3589,7 @@ def _e_rho_az(params, transforms, profiles, data, **kwargs):
 )
 def _e_alpha(params, transforms, profiles, data, **kwargs):
     # constant ρ and ζ
-    data["e_alpha"] = (data["e_theta"].T / data["alpha_t"]).T
+    data["e_alpha"] = data["e_theta"] / data["alpha_t"][:, jnp.newaxis]
     return data
 
 
@@ -3607,9 +3609,9 @@ def _e_alpha(params, transforms, profiles, data, **kwargs):
 )
 def _e_alpha_t(params, transforms, profiles, data, **kwargs):
     data["e_alpha_t"] = (
-        (data["e_theta_t"].T * data["alpha_t"] + data["e_theta"].T * data["alpha_tt"])
-        / data["alpha_t"] ** 2
-    ).T
+        data["e_theta_t"] / data["alpha_t"][:, jnp.newaxis]
+        - data["e_theta"] * (data["alpha_tt"] / data["alpha_t"] ** 2)[:, jnp.newaxis]
+    )
     return data
 
 
@@ -3618,7 +3620,8 @@ def _e_alpha_t(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} \\mathbf{e}_{\\alpha}",
     units="m",
     units_long="meters",
-    description="Tangent vector along poloidal field line label, toroidal derivative",
+    description="Tangent vector along poloidal field line label, "
+    "derivative wrt DESC toroidal angle",
     dim=3,
     params=[],
     transforms={},
@@ -3628,9 +3631,9 @@ def _e_alpha_t(params, transforms, profiles, data, **kwargs):
 )
 def _e_alpha_z(params, transforms, profiles, data, **kwargs):
     data["e_alpha_z"] = (
-        (data["e_theta_z"].T * data["alpha_t"] - data["e_theta"].T * data["alpha_tz"])
-        / data["alpha_t"] ** 2
-    ).T
+        data["e_theta_z"] / data["alpha_t"][:, jnp.newaxis]
+        - data["e_theta"] * (data["alpha_tz"] / data["alpha_t"] ** 2)[:, jnp.newaxis]
+    )
     return data
 
 
@@ -3649,9 +3652,9 @@ def _e_alpha_z(params, transforms, profiles, data, **kwargs):
     data=["e_zeta", "e_alpha", "alpha_z"],
 )
 def _e_zeta_ra(params, transforms, profiles, data, **kwargs):
-    # ∂ℓ/∂ζ (constant ρ and α) = ∂ℓ/∂ζ (constant ρ and θ)
-    #                          - ∂ℓ/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
-    data["e_zeta|r,a"] = data["e_zeta"] - (data["e_alpha"].T * data["alpha_z"]).T
+    data["e_zeta|r,a"] = (
+        data["e_zeta"] - data["e_alpha"] * data["alpha_z"][:, jnp.newaxis]
+    )
     return data
 
 
@@ -3660,7 +3663,8 @@ def _e_zeta_ra(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
     units="m",
     units_long="meters",
-    description="Tangent vector along (collinear to) field line, poloidal derivative",
+    description="Tangent vector along (collinear to) field line, "
+    "derivative wrt DESC poloidal angle",
     dim=3,
     params=[],
     transforms={},
@@ -3669,11 +3673,9 @@ def _e_zeta_ra(params, transforms, profiles, data, **kwargs):
     data=["e_zeta_t", "e_alpha", "alpha_z", "e_alpha_t", "alpha_tz"],
 )
 def _e_zeta_ra_t(params, transforms, profiles, data, **kwargs):
-    data["(e_zeta|r,a)_t"] = (
-        data["e_zeta_t"]
-        - (
-            data["e_alpha_t"].T * data["alpha_z"] + data["e_alpha"].T * data["alpha_tz"]
-        ).T
+    data["(e_zeta|r,a)_t"] = data["e_zeta_t"] - (
+        data["e_alpha_t"] * data["alpha_z"][:, jnp.newaxis]
+        + data["e_alpha"] * data["alpha_tz"][:, jnp.newaxis]
     )
     return data
 
@@ -3693,7 +3695,7 @@ def _e_zeta_ra_t(params, transforms, profiles, data, **kwargs):
     data=["(e_zeta|r,a)_t", "alpha_t"],
 )
 def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
-    data["(e_zeta|r,a)_a"] = (data["(e_zeta|r,a)_t"].T / data["alpha_t"]).T
+    data["(e_zeta|r,a)_a"] = data["(e_zeta|r,a)_t"] / data["alpha_t"][:, jnp.newaxis]
     return data
 
 
@@ -3702,7 +3704,8 @@ def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
     units="m",
     units_long="meters",
-    description="Tangent vector along (collinear to) field line, toroidal derivative",
+    description="Tangent vector along (collinear to) field line, "
+    "derivative wrt DESC toroidal angle",
     dim=3,
     params=[],
     transforms={},
@@ -3711,17 +3714,15 @@ def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
     data=["e_zeta_z", "e_alpha", "alpha_z", "e_alpha_z", "alpha_zz"],
 )
 def _e_zeta_ra_z(params, transforms, profiles, data, **kwargs):
-    data["(e_zeta|r,a)_z"] = (
-        data["e_zeta_z"]
-        - (
-            data["e_alpha_z"].T * data["alpha_z"] + data["e_alpha"].T * data["alpha_zz"]
-        ).T
+    data["(e_zeta|r,a)_z"] = data["e_zeta_z"] - (
+        data["e_alpha_z"] * data["alpha_z"][:, jnp.newaxis]
+        + data["e_alpha"] * data["alpha_zz"][:, jnp.newaxis]
     )
     return data
 
 
 @register_compute_fun(
-    name="(e_zeta_z)|r,a",
+    name="(e_zeta|r,a)_z|r,a",
     label="\\partial_{\\zeta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}) "
     "|_{\\rho, \\alpha}",
     units="m",
@@ -3735,8 +3736,9 @@ def _e_zeta_ra_z(params, transforms, profiles, data, **kwargs):
     data=["(e_zeta|r,a)_z", "(e_zeta|r,a)_a", "alpha_z"],
 )
 def _e_zeta_z_ra(params, transforms, profiles, data, **kwargs):
-    data["(e_zeta_z)|r,a"] = (
-        data["(e_zeta|r,a)_z"] - (data["(e_zeta|r,a)_a"].T * data["alpha_z"]).T
+    data["(e_zeta|r,a)_z|r,a"] = (
+        data["(e_zeta|r,a)_z"]
+        - data["(e_zeta|r,a)_a"] * data["alpha_z"][:, jnp.newaxis]
     )
     return data
 
@@ -3761,7 +3763,7 @@ def _d_ell_d_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="(|e_zeta|_z)|r,a",
+    name="|e_zeta|r,a|_z|r,a",
     label="\\partial_{\\zeta} |\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}| "
     "|_{\\rho, \\alpha}",
     units="m",
@@ -3772,10 +3774,10 @@ def _d_ell_d_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|e_zeta|r,a|", "(e_zeta_z)|r,a", "e_zeta|r,a"],
+    data=["|e_zeta|r,a|", "(e_zeta|r,a)_z|r,a", "e_zeta|r,a"],
 )
 def _d_ell_d_zeta_z(params, transforms, profiles, data, **kwargs):
-    data["(|e_zeta|_z)|r,a"] = (
-        dot(data["(e_zeta_z)|r,a"], data["e_zeta|r,a"]) / data["|e_zeta|r,a|"]
+    data["|e_zeta|r,a|_z|r,a"] = (
+        dot(data["(e_zeta|r,a)_z|r,a"], data["e_zeta|r,a"]) / data["|e_zeta|r,a|"]
     )
     return data

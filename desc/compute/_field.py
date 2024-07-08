@@ -2371,8 +2371,6 @@ def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
     data=["|B|_z", "|B|_a", "alpha_z"],
 )
 def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
-    # ∂|B|/∂ζ (constant ρ and α) = ∂|B|/∂ζ (constant ρ and θ)
-    #                            - ∂|B|/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
     data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_a"] * data["alpha_z"]
     return data
 

@@ -1000,7 +1000,9 @@ def test_fix_coil_current(DummyMixedCoilSet):
     np.testing.assert_allclose(obj.target, [3, -1, -1, -1, 2, 1])
 
     # only fix currents of some coils in the coil set
-    obj = FixCoilCurrent(coil=coilset, indices=[[True], False, True, True])
+    obj = FixCoilCurrent(
+        coil=coilset, indices=[[True], [True, False, True], True, False]
+    )
     obj.build()
-    assert obj.dim_f == 3
-    np.testing.assert_allclose(obj.target, [3, 2, 1])
+    assert obj.dim_f == 4
+    np.testing.assert_allclose(obj.target, [3, -1, -1, 2])

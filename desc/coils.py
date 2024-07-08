@@ -229,7 +229,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         if not params or not transforms:
             data = self.compute(
-                ["x", "x_s", "ds", "phi"],
+                ["x", "x_s", "ds"],
                 grid=source_grid,
                 params=params,
                 transforms=transforms,
@@ -238,7 +238,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         else:
             data = compute_fun(
                 self,
-                name=["x", "x_s", "ds", "phi"],
+                name=["x", "x_s", "ds"],
                 params=params,
                 transforms=transforms,
                 profiles={},

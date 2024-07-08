@@ -129,6 +129,7 @@ class Curve(IOAble, Optimizable, ABC):
 
         if params is None:
             params = get_params(names, obj=self)
+            print(params)
         if transforms is None:
             transforms = get_transforms(
                 names, obj=self, grid=grid, jitable=True, **kwargs

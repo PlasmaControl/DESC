@@ -893,7 +893,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if params is None:
-            params = [get_params(names, coil) for coil in self]
+            params = [
+                get_params(names, coil, basis=kwargs.get("basis", "rpz"))
+                for coil in self
+            ]
         if data is None:
             data = [{}] * len(self)
 
@@ -934,9 +937,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        if params is None:
-            params = [get_params("x", coil) for coil in self]
         basis = kwargs.pop("basis", "xyz")
+        if params is None:
+            params = [get_params("x", coil, basis=basis) for coil in self]
         data = self.compute("x", grid=grid, params=params, basis=basis, **kwargs)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
@@ -1003,7 +1006,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
-            params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
+            params = [
+                get_params(["x_s", "x", "s", "ds"], coil, basis=basis) for coil in self
+            ]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
 

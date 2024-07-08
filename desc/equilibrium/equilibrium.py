@@ -835,11 +835,20 @@ class Equilibrium(IOAble, Optimizable):
             )
 
         if params is None:
-            params = get_params(names, obj=self, has_axis=grid.axis.size)
+            params = get_params(
+                names,
+                obj=self,
+                has_axis=grid.axis.size,
+                basis=kwargs.get("basis", "rpz"),
+            )
         if profiles is None:
-            profiles = get_profiles(names, obj=self, grid=grid)
+            profiles = get_profiles(
+                names, obj=self, grid=grid, basis=kwargs.get("basis", "rpz")
+            )
         if transforms is None:
-            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+            transforms = get_transforms(
+                names, obj=self, grid=grid, basis=kwargs.get("basis", "rpz"), **kwargs
+            )
         if data is None:
             data = {}
 

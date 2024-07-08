@@ -55,7 +55,9 @@ class TestRZCurve:
     def test_frenet(self):
         """Test frenet-serret frame of circular curve."""
         c = FourierRZCurve()
-        data = c.compute(["frenet_tangent", "frenet_normal", "frenet_binormal"], grid=0)
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="rpz", grid=0
+        )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
@@ -63,7 +65,9 @@ class TestRZCurve:
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        data = c.compute(["frenet_tangent", "frenet_normal", "frenet_binormal"], grid=0)
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+        )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)

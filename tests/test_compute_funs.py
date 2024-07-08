@@ -11,7 +11,7 @@ from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineX
 from desc.compute import data_index, rpz2xyz_vec
 from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import rtz_grid
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
@@ -1271,13 +1271,17 @@ def test_compute_everything():
             # Max resolution of master_compute_data.pkl limited by GitHub file
             # size cap at 100 mb, so can't hit suggested resolution for some things.
             warnings.filterwarnings("ignore", category=ResolutionWarning)
-            this_branch_data[p] = things[p].compute(
-                list(data_index[p].keys()), **grid.get(p, {})
-            )
+            names = {
+                name
+                for name in data_index[p]
+                # Skip these quantities as they should be covered in other tests.
+                if not data_index[p][name]["source_grid_requirement"]
+            }
+            this_branch_data[p] = things[p].compute(list(names), **grid.get(p, {}))
         # make sure we can compute everything
-        assert this_branch_data[p].keys() == data_index[p].keys(), (
+        assert this_branch_data[p].keys() == names, (
             f"Parameterization: {p}."
-            f" Can't compute {data_index[p].keys() - this_branch_data[p].keys()}."
+            f" Can't compute {names - this_branch_data[p].keys()}."
         )
         # compare against master branch
         for name in this_branch_data[p]:
@@ -1693,12 +1697,12 @@ def test_surface_equilibrium_geometry():
             )
 
 
-@pytest.mark.xfail(reason="Cause of bug not yet known.")
 @pytest.mark.unit
 def test_parallel_grad():
     """Test geometric and physical methods of computing parallel gradients agree."""
     eq = get("W7-X")
-    eq.change_resolution(2, 2, 2, 4, 4, 4)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 2, 4, 4, 4)
     data = eq.compute(
         [
             "e_zeta|r,a",
@@ -1706,18 +1710,17 @@ def test_parallel_grad():
             "B^zeta",
             "|B|_z|r,a",
             "grad(|B|)",
-            "(|e_zeta|_z)|r,a",
+            "|e_zeta|r,a|_z|r,a",
             "B^zeta_z|r,a",
             "|B|",
-        ]
+        ],
     )
     np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
     np.testing.assert_allclose(
         data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
     )
-    # FIXME: Don't know why below test fails.
     np.testing.assert_allclose(
-        data["(|e_zeta|_z)|r,a"],
+        data["|e_zeta|r,a|_z|r,a"],
         data["|B|_z|r,a"] / np.abs(data["B^zeta"])
         - data["|B|"]
         * data["B^zeta_z|r,a"]
@@ -1730,7 +1733,7 @@ def test_parallel_grad():
 def test_parallel_grad_fd(DummyStellarator):
     """Test that the parallel gradients match with numerical gradients."""
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
-    grid = rtz_grid(
+    grid = get_rtz_grid(
         eq,
         0.5,
         0,
@@ -1743,7 +1746,7 @@ def test_parallel_grad_fd(DummyStellarator):
             "|B|",
             "|B|_z|r,a",
             "|e_zeta|r,a|",
-            "(|e_zeta|_z)|r,a",
+            "|e_zeta|r,a|_z|r,a",
             "B^zeta",
             "B^zeta_z|r,a",
         ],
@@ -1759,10 +1762,10 @@ def test_parallel_grad_fd(DummyStellarator):
     )
     fd = np.convolve(data["|e_zeta|r,a|"], FD_COEF_1_4, "same") / dz
     np.testing.assert_allclose(
-        data["(|e_zeta|_z)|r,a"][2:-2],
+        data["|e_zeta|r,a|_z|r,a"][2:-2],
         fd[2:-2],
         rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["(|e_zeta|_z)|r,a"])),
+        atol=1e-2 * np.mean(np.abs(data["|e_zeta|r,a|_z|r,a"])),
     )
     fd = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dz
     np.testing.assert_allclose(

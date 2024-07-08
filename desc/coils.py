@@ -1236,7 +1236,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 + " in the full coilset, it is recommended to check coils closely.",
             )
 
-        return cls(*coilset)
+        return coilset_to_return
 
     @classmethod
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):

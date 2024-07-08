@@ -9,6 +9,8 @@ to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` c
 coil for each coil in a coilset.
 - Adds the objective `PlasmaCoilsetMinDistance`, which returns the minimum distance to the
 plasma surface for each coil in a coilset.
+- Add method ``calculate_minimum_intercoil_distances`` to ``CoilSet``, which returns the minimum distance to the
+plasma surface for each coil in a coilset.
 
 v0.11.1
 -------

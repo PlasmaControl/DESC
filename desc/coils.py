@@ -1166,22 +1166,32 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)
         data = coils.compute("phi")
+        check_coil_dists = False
         for i, cdata in enumerate(data):
             warnif(
                 np.any(cdata["phi"] > maxphi),
                 UserWarning,
-                f"coil {i} crosses the symmetry plane for NFP={NFP} and sym={sym},"
+                f"coil {i} crosses the phi=2pi/{NFP*(sym+1)} symmetry plane"
+                + f" for NFP={NFP} and sym={sym},"
                 + "it is recommended to check the coil-coil separation with method"
-                + "``calculate_minimum_intercoil_distance`` to ensure the"
+                + "``compute_minimum_intercoil_distance`` to ensure the "
                 + "coils do not overlap after rotation.",
             )
             warnif(
                 sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
                 UserWarning,
-                f"coil {i} crosses the symmetry plane phi=0"
+                f"coil {i} crosses the symmetry plane phi=0, "
                 + "it is recommended to check the coil-coil separation with method"
-                + "``calculate_minimum_intercoil_distance`` to ensure the"
+                + "``compute_minimum_intercoil_distance`` to ensure the "
                 + "coils do not overlap after rotation and reflection.",
+            )
+            # check the intercoil distances before returning coilset if any lie on
+            # symmetry planes
+            check_coil_coil_dists = (
+                True
+                if np.any(cdata["phi"] > maxphi)
+                or (sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps))
+                else check_coil_dists
             )
 
         coilset = []
@@ -1204,6 +1214,27 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             rotated_coils = coils.copy()
             rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
             coilset += rotated_coils
+        coilset_to_return = cls(*coilset)
+        if check_coil_coil_dists:
+            grid = LinearGrid(N=100)
+            min_dists = coilset_to_return.compute_minimum_intercoil_distances(grid=grid)
+            intersection = np.any(min_dists < np.finfo(min_dists.dtype).eps)
+            near_intersection = np.any(min_dists < 1e-2)
+            warnif(
+                intersection,
+                UserWarning,
+                "``compute_minimum_intercoil_distances`` finds coils which are "
+                + "intersecting in the full coilset, it is recommended"
+                + " to check coils closely.",
+            )
+            warnif(
+                near_intersection and not intersection,
+                UserWarning,
+                "``compute_minimum_intercoil_distances`` finds coils which are "
+                + "nearly intersecting "
+                + f"(min coil-coil distance = {np.min(min_dists)*100:1.3e} cm < 1cm)"
+                + " in the full coilset, it is recommended to check coils closely.",
+            )
 
         return cls(*coilset)
 
@@ -1498,7 +1529,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
-    def calculate_minimum_intercoil_distances(self, grid=None):
+    def compute_minimum_intercoil_distances(self, grid=None):
         """Calculate the minimum inter-coil distance for each coil in the CoilSet.
 
         Parameters

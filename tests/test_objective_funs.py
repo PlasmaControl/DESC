@@ -875,7 +875,7 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f, mindist)
             if test_method:  # also test the coilset method
                 np.testing.assert_allclose(
-                    coils.calculate_minimum_intercoil_distances(grid=grid), mindist
+                    coils.compute_minimum_intercoil_distances(grid=grid), mindist
                 )
 
         # linearly spaced planar coils, all coils are min distance from their neighbors

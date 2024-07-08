@@ -1310,7 +1310,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     mixed_coils = load(
         load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
     )
-    nested_coils = MixedCoilSet(sym_coils, asym_coils)
+    nested_coils = MixedCoilSet(sym_coils, mixed_coils)
     eq = Equilibrium()
     # not attempting to accurately calc B for this test,
     # so make the grids very coarse

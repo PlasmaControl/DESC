@@ -182,7 +182,7 @@ def _compute(
     return data
 
 
-def get_data_deps(keys, obj, has_axis=False):
+def get_data_deps(keys, obj, has_axis=False, basis="rpz"):
     """Get list of data keys needed to compute a given quantity.
 
     Parameters
@@ -193,14 +193,19 @@ def get_data_deps(keys, obj, has_axis=False):
         Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
+    basis : {"rpz", "xyz"}
+        Basis of computed quantities.
 
     Returns
     -------
     deps : list of str
-        Names of quantities needed to compute key
+        Names of quantities needed to compute key.
+
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
+    if basis == "xyz" and "phi" not in keys:
+        keys.append("phi")
 
     def _get_deps_1_key(key):
         if has_axis:
@@ -227,7 +232,7 @@ def get_data_deps(keys, obj, has_axis=False):
     return sorted(list(set(out)))
 
 
-def get_derivs(keys, obj, has_axis=False):
+def get_derivs(keys, obj, has_axis=False, basis="rpz"):
     """Get dict of derivative orders needed to compute a given quantity.
 
     Parameters
@@ -238,12 +243,15 @@ def get_derivs(keys, obj, has_axis=False):
         Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
+    basis : {"rpz", "xyz"}
+        Basis of computed quantities.
 
     Returns
     -------
     derivs : dict of list of int
         Orders of derivatives needed to compute key.
         Keys for R, Z, L, etc
+
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
@@ -254,7 +262,7 @@ def get_derivs(keys, obj, has_axis=False):
                 return data_index[p][key]["full_with_axis_dependencies"]["transforms"]
         elif "full_dependencies" in data_index[p][key]:
             return data_index[p][key]["full_dependencies"]["transforms"]
-        deps = [key] + get_data_deps(key, p, has_axis=has_axis)
+        deps = [key] + get_data_deps(key, p, has_axis=has_axis, basis=basis)
         derivs = {}
         for dep in deps:
             for key, val in data_index[p][dep]["dependencies"]["transforms"].items():
@@ -273,7 +281,7 @@ def get_derivs(keys, obj, has_axis=False):
     return {key: np.unique(val, axis=0).tolist() for key, val in derivs.items()}
 
 
-def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
+def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     """Get profiles needed to compute a given quantity on a given grid.
 
     Parameters
@@ -286,8 +294,8 @@ def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
         Grid to compute quantity on.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
-    jitable: bool
-        Whether to skip certain checks so that this operation works under JIT
+    basis : {"rpz", "xyz"}
+        Basis of computed quantities.
 
     Returns
     -------
@@ -296,11 +304,12 @@ def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
         if eq is None, returns a list of the names of profiles needed
         otherwise, returns a dict of Profiles
         Keys for pressure, iota, etc.
+
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
-    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis)
+    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
     profs = []
     for key in deps:
         profs += data_index[p][key]["dependencies"]["profiles"]
@@ -312,7 +321,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
     return profiles
 
 
-def get_params(keys, obj, has_axis=False, **kwargs):
+def get_params(keys, obj, has_axis=False, basis="rpz"):
     """Get parameters needed to compute a given quantity.
 
     Parameters
@@ -323,6 +332,8 @@ def get_params(keys, obj, has_axis=False, **kwargs):
         Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
+    basis : {"rpz", "xyz"}
+        Basis of computed quantities.
 
     Returns
     -------
@@ -330,10 +341,11 @@ def get_params(keys, obj, has_axis=False, **kwargs):
         Parameters needed to compute key.
         If eq is None, returns a list of the names of params needed
         otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
+
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis)
+    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
     params = []
     for key in deps:
         params += data_index[p][key]["dependencies"]["params"]
@@ -349,7 +361,9 @@ def get_params(keys, obj, has_axis=False, **kwargs):
     return temp_params
 
 
-def get_transforms(keys, obj, grid, jitable=False, **kwargs):
+def get_transforms(
+    keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
+):
     """Get transforms needed to compute a given quantity on a given grid.
 
     Parameters
@@ -362,6 +376,10 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
         Grid to compute quantity on
     jitable: bool
         Whether to skip certain checks so that this operation works under JIT
+    has_axis : bool
+        Whether the grid to compute on has a node on the magnetic axis.
+    basis : {"rpz", "xyz"}
+        Basis of computed quantities.
 
     Returns
     -------
@@ -375,7 +393,8 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
 
     method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
     keys = [keys] if isinstance(keys, str) else keys
-    derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
+    has_axis = has_axis or (grid is not None and grid.axis.size)
+    derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}
     for c in derivs.keys():
         if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.

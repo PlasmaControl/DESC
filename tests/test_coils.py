@@ -294,6 +294,19 @@ class TestCoilSet:
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
+        # With a MixedCoilSet as the base coils and only rotation
+        coil = FourierPlanarCoil(I)
+        coils = [coil] + [FourierXYZCoil(I) for i in range(N // 4 - 1)]
+        for i, c in enumerate(coils[1:]):
+            c.rotate(angle=2 * np.pi / N * (i + 1))
+        coils = MixedCoilSet.from_symmetry(coils, NFP=4)
+        grid = LinearGrid(N=32, endpoint=False)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
+        B_approx = coils.compute_magnetic_field(
+            [10, 0, 0], basis="rpz", source_grid=grid
+        )[0]
+        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+
     @pytest.mark.unit
     def test_properties(self):
         """Test getting/setting of CoilSet attributes."""

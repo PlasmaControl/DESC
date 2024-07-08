@@ -1153,9 +1153,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if not isinstance(coils, CoilSet):
-            coils = CoilSet(coils)
-
-        [_check_type(coil, coils[0]) for coil in coils]
+            try:
+                coils = CoilSet(coils)
+            except (TypeError, ValueError):
+                # likely there are multiple coil types,
+                # so make a MixedCoilSet
+                coils = MixedCoilSet(coils)
+        if not isinstance(coils, MixedCoilSet):
+            # only need to check this for a CoilSet, not MixedCoilSet
+            [_check_type(coil, coils[0]) for coil in coils]
 
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)

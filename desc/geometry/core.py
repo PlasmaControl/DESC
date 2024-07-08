@@ -130,7 +130,6 @@ class Curve(IOAble, Optimizable, ABC):
         method = kwargs.pop("method", "auto")
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
-            print(params)
         if transforms is None:
             transforms = get_transforms(
                 names,

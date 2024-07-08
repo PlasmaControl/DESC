@@ -729,7 +729,8 @@ class CoilsetMinDistance(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid used to discritize each coil. Default = LinearGrid(N=16)
+        Collocation grid used to discretize each coil. Defaults to the default grid
+        for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
     name : str, optional
         Name of the objective function.
 
@@ -779,7 +780,7 @@ class CoilsetMinDistance(_Objective):
 
         """
         coilset = self.things[0]
-        grid = self._grid or LinearGrid(N=16)
+        grid = self._grid or None
 
         self._dim_f = coilset.num_coils
         self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}

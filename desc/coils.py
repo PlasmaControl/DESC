@@ -1167,15 +1167,19 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         maxphi = 2 * np.pi / NFP / (sym + 1)
         data = coils.compute("phi")
         for i, cdata in enumerate(data):
-            errorif(
+            warnif(
                 np.any(cdata["phi"] > maxphi),
-                ValueError,
-                f"coil {i} exceeds the toroidal extent for NFP={NFP} and sym={sym}",
+                UserWarning,
+                f"coil {i} crosses the symmetry plane for NFP={NFP} and sym={sym},"
+                + "it is recommended to check the coil-coil separation to ensure the"
+                + "coils do not overlap after rotation.",
             )
             warnif(
                 sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
                 UserWarning,
-                f"coil {i} is on the symmetry plane phi=0",
+                f"coil {i} crosses the symmetry plane phi=0"
+                + "it is recommended to check the coil-coil separation to ensure the"
+                + "coils do not overlap after rotation.",
             )
 
         coilset = []

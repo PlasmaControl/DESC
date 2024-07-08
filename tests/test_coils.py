@@ -307,6 +307,7 @@ class TestCoilSet:
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
+    @pytest.mark.unit
     def test_from_symmetry_warnings(self):
         """Test warning in from_symmetry for symmetry plane and self-intersection."""
         N = 40
@@ -328,7 +329,7 @@ class TestCoilSet:
             _ = CoilSet.from_symmetry(coils_list, NFP=4)
 
         # test the warning for crossing phi=0 plane and for
-        # self-intersecting coils, as two of the coils lie nearly
+        # self-intersecting coils, as two of the coils in each field period lie nearly
         # in the same physical space (intersecting at 2 points) after reflection
         with pytest.warns(UserWarning) as warninfo:
             _ = CoilSet.from_symmetry(coils_list_sym, NFP=4, sym=True)

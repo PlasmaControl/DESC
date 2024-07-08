@@ -614,8 +614,8 @@ def test_ballooning_eigenvalue():
     except TypeError:
         eq = desc.examples.get("W7-X")
 
-    lam2 = _stability._gamma_ideal_ballooning_FD2(eq)
-    lam3 = _stability._gamma_ideal_ballooning_Fourier(eq)
+    lam2 = _stability._ideal_ballooning_gamma1(eq)
+    lam3 = _stability._ideal_ballooning_gamma2(eq)
 
     lam2 = lam2 * (lam2 > 0)
     lam3 = lam3 * (lam3 > 0)

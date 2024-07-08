@@ -914,7 +914,6 @@ class BoundaryErrorNESTOR(_Objective):
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
             has_axis=False,
-            basis="rpz",
         )
 
         timer = Timer()

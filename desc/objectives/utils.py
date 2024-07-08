@@ -309,15 +309,20 @@ def _parse_callable_target_bounds(target, bounds, x):
     return target, bounds
 
 
-# TODO: dont need to be R,Z, can by x1, x2 or something
 def check_if_points_are_inside_perimeter(R, Z, Rcheck, Zcheck):
     """Function to check if the given points is inside the given polyognal perimeter.
 
     Rcheck, Zcheck are the points to check, and R, Z define the perimeter
     in which to check. This function assumes that all points are in the same
-    plane. Function will return an array pf signs (+/- 1), with positive sign meaning
+    plane. Function will return an array of signs (+/- 1), with positive sign meaning
     the point is inside of the given perimeter, and a negative sign meaning the point
     is outside of the given perimeter.
+
+    NOTE: it does not matter if the input coordinates are cylindrical (R,Z) or
+    cartesian (X,Y), these are equivalent as long as they are in the same phi plane.
+    This function will work even if points are not in the same phi plane, but the
+    input coordinates must then be the equivalent of cartesian coordinates for whatever
+    plane the points lie in.
 
     Algorithm based off of "An Incremental Angle Point in Polygon Test",
     K. Weiler, https://doi.org/10.1016/B978-0-12-336156-1.50012-4

@@ -200,6 +200,7 @@ class TestGrid:
         """Test surface spacing on grids with sym=False."""
         self._test_node_spacing_non_sym(False, 8, 13, 3)
         self._test_node_spacing_non_sym(True, 8, 13, 3)
+        self._test_node_spacing_non_sym(False, 1, 1, 3)
 
     @staticmethod
     def _test_node_spacing_non_sym(
@@ -732,6 +733,26 @@ class TestGrid:
         test("theta", cg_sym)
         test("zeta", cg_sym)
 
+    @pytest.mark.unit
+    def test_meshgrid(self):
+        """Test meshgrid constructor."""
+        R = np.linspace(0, 1, 4)
+        A = np.linspace(0, 2 * np.pi, 2)
+        Z = np.linspace(0, 10 * np.pi, 3)
+        grid = Grid.create_meshgrid(
+            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+        )
+        r, a, z = grid.nodes.T
+        _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(grid.unique_rho_idx, unique)
+        np.testing.assert_allclose(grid.inverse_rho_idx, inverse)
+        _, unique, inverse = np.unique(a, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(grid.unique_alpha_idx, unique)
+        np.testing.assert_allclose(grid.inverse_alpha_idx, inverse)
+        _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
+        np.testing.assert_allclose(grid.unique_zeta_idx, unique)
+        np.testing.assert_allclose(grid.inverse_zeta_idx, inverse)
+
 
 @pytest.mark.unit
 def test_find_most_rational_surfaces():
@@ -763,7 +784,8 @@ def test_find_least_rational_surfaces():
 def test_custom_jitable_grid_indexing():
     """Test that unique/inverse indices are set correctly when jitable=True."""
     eq = get("NCSX")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     # field lines on two surfaces
     rho = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
     theta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
@@ -796,6 +818,10 @@ def test_custom_jitable_grid_indexing():
         _ = grid2.inverse_theta_idx
     with pytest.raises(AttributeError):
         _ = grid2.inverse_zeta_idx
+
+    assert not hasattr(grid2, "num_rho")
+    assert not hasattr(grid2, "num_theta")
+    assert not hasattr(grid2, "num_zeta")
 
     y1 = grid1.copy_data_from_other(x, grid2, "rho")
     y2 = grid2.copy_data_from_other(x, grid1, "rho")

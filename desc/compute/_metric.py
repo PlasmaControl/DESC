@@ -1327,7 +1327,7 @@ def _g_sup_zz(params, transforms, profiles, data, **kwargs):
     label="g^{\\rho\\theta}",
     units="m^{-2}",
     units_long="inverse square meters",
-    description="Radial/Poloidal element of contravariant metric tensor",
+    description="Radial/Poloidal (ρ, θ) element of contravariant metric tensor",
     dim=1,
     params=[],
     transforms={},
@@ -1337,6 +1337,30 @@ def _g_sup_zz(params, transforms, profiles, data, **kwargs):
 )
 def _g_sup_rt(params, transforms, profiles, data, **kwargs):
     data["g^rt"] = dot(data["e^rho"], data["e^theta"])
+    return data
+
+
+@register_compute_fun(
+    name="g^pa",
+    label="g^{\\psi\\alpha}",
+    units="Wb \\cdot m^{-2}",
+    units_long="Webers per square meters",
+    description="Radial/Poloidal (ψ, α) element of contravariant metric tensor",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(psi)", "grad(alpha)"],
+    axis_limit_data=["e^rho", "alpha_t", "e^theta*sqrt(g)", "B0"],
+)
+def _g_sup_pa(params, transforms, profiles, data, **kwargs):
+    data["g^pa"] = transforms["grid"].replace_at_axis(
+        dot(data["grad(psi)"], data["grad(alpha)"]),
+        lambda: dot(
+            data["e^rho"], (data["alpha_t"] * data["e^theta*sqrt(g)"].T * data["B0"]).T
+        ),
+    )
     return data
 
 

@@ -1,6 +1,7 @@
 """Tests for compute functions."""
 
 import pickle
+import warnings
 
 import numpy as np
 import pytest
@@ -24,6 +25,7 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
 )
+from desc.utils import ResolutionWarning
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -68,8 +70,9 @@ def test_aliases():
 
     # manual case
     primary_data = eq.compute("e_rho_rt")
-    alias_data = eq.compute("x_rrt")
+    alias_data = eq.compute(["x_rrt", "e_theta_rr"])
     np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["x_rrt"])
+    np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["e_theta_rr"])
 
 
 @pytest.mark.unit
@@ -1262,9 +1265,13 @@ def test_compute_everything():
     error = False
 
     for p in things:
-        this_branch_data[p] = things[p].compute(
-            list(data_index[p].keys()), **grid.get(p, {})
-        )
+        with warnings.catch_warnings():
+            # Max resolution of master_compute_data.pkl limited by GitHub file
+            # size cap at 100 mb, so can't hit suggested resolution for some things.
+            warnings.filterwarnings("ignore", category=ResolutionWarning)
+            this_branch_data[p] = things[p].compute(
+                list(data_index[p].keys()), **grid.get(p, {})
+            )
         # make sure we can compute everything
         assert this_branch_data[p].keys() == data_index[p].keys(), (
             f"Parameterization: {p}."

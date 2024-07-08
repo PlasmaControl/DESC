@@ -2296,6 +2296,45 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|B|_a",
+    label="\\partial_{\\alpha} (|\\mathbf{B}|) |_{\\rho, \\zeta}",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative wrt field line angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_t", "alpha_t"],
+)
+def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ζ
+    data["|B|_a"] = data["|B|_t"] / data["alpha_t"]
+    return data
+
+
+@register_compute_fun(
+    name="|B|_z|r,a",
+    label="\\partial_{\\zeta} (|\\mathbf{B}|) |_{\\rho, \\alpha}",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative along field line",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_z", "|B|_a", "alpha_z"],
+)
+def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
+    # ∂|B|/∂ζ (constant ρ and α) = ∂|B|/∂ζ (constant ρ and θ)
+    #                            - ∂|B|/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
+    data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_a"] * data["alpha_z"]
+    return data
+
+
+@register_compute_fun(
     name="|B|_rr",
     label="\\partial_{\\rho\\rho} |\\mathbf{B}|",
     units="T",
@@ -2598,6 +2637,7 @@ def _grad_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["sqrt(g)", "|B|", "V"],
+    resolution_requirement="rtz",
 )
 def _B_vol(params, transforms, profiles, data, **kwargs):
     data["<|B|>_vol"] = (
@@ -2617,11 +2657,12 @@ def _B_vol(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["sqrt(g)", "|B|", "V"],
+    data=["sqrt(g)", "|B|^2", "V"],
+    resolution_requirement="rtz",
 )
 def _B_rms(params, transforms, profiles, data, **kwargs):
     data["<|B|>_rms"] = jnp.sqrt(
-        jnp.sum(data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights)
+        jnp.sum(data["|B|^2"] * data["sqrt(g)"] * transforms["grid"].weights)
         / data["V"]
     )
     return data
@@ -2640,6 +2681,7 @@ def _B_rms(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["sqrt(g)", "|B|"],
     axis_limit_data=["sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _B_fsa(params, transforms, profiles, data, **kwargs):
     data["<|B|>"] = surface_averages(
@@ -2665,6 +2707,7 @@ def _B_fsa(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["sqrt(g)", "|B|^2"],
     axis_limit_data=["sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _B2_fsa(params, transforms, profiles, data, **kwargs):
     data["<|B|^2>"] = surface_averages(
@@ -2690,6 +2733,7 @@ def _B2_fsa(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["sqrt(g)", "|B|"],
     axis_limit_data=["sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
     data["<1/|B|>"] = surface_averages(
@@ -2715,6 +2759,7 @@ def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["sqrt(g)", "sqrt(g)_r", "B", "B_r", "|B|^2", "V_r(r)", "V_rr(r)"],
     axis_limit_data=["sqrt(g)_rr", "V_rrr(r)"],
+    resolution_requirement="tz",
 )
 def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
     integrate = surface_integrals_map(transforms["grid"])
@@ -2877,6 +2922,7 @@ def _gradB2mag(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|grad(|B|^2)|/2mu0", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
 )
 def _gradB2mag_vol(params, transforms, profiles, data, **kwargs):
     data["<|grad(|B|^2)|/2mu0>_vol"] = (
@@ -3077,6 +3123,7 @@ def _B_dot_grad_B_mag(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|(B*grad)B|", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
 )
 def _B_dot_grad_B_mag_vol(params, transforms, profiles, data, **kwargs):
     data["<|(B*grad)B|>_vol"] = (
@@ -3214,6 +3261,7 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|B|"],
+    resolution_requirement="tz",
 )
 def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
@@ -3232,6 +3280,7 @@ def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|B|"],
+    resolution_requirement="tz",
 )
 def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     data["max_tz |B|"] = surface_max(transforms["grid"], data["|B|"])

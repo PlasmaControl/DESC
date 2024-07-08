@@ -15,13 +15,19 @@ from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
+from desc.compute.utils import (
+    _grow_seeds,
+    get_data_deps,
+    get_params,
+    get_profiles,
+    get_transforms,
+)
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid, _Grid
+from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -36,15 +42,17 @@ from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
-    Timer,
+    ResolutionWarning,
     check_nonnegint,
     check_posint,
     copy_coeffs,
     errorif,
     only1,
     setdefault,
+    warnif,
 )
 
+from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
@@ -220,7 +228,7 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"sym should be one of True, False, None, got {sym}",
         )
-        self._sym = setdefault(sym, getattr(surface, "sym", False))
+        self._sym = bool(setdefault(sym, getattr(surface, "sym", False)))
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
 
@@ -558,6 +566,12 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
+        warnif(
+            L is not None and L < self.L,
+            UserWarning,
+            "Reducing radial (L) resolution can make plasma boundary inconsistent. "
+            + "Recommend calling `eq.surface = eq.get_surface_at(rho=1.0)`",
+        )
         self._L = int(setdefault(L, self.L))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))
@@ -565,7 +579,7 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
         self._NFP = int(setdefault(NFP, self.NFP))
-        self._sym = setdefault(sym, self.sym)
+        self._sym = bool(setdefault(sym, self.sym))
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
@@ -777,7 +791,7 @@ class Equilibrium(IOAble, Optimizable):
         axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
         return axis
 
-    def compute(
+    def compute(  # noqa: C901
         self,
         names,
         grid=None,
@@ -822,10 +836,32 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        elif not isinstance(grid, _Grid):
-            raise TypeError(
-                "must pass in a Grid object for argument grid!"
-                f" instead got type {type(grid)}"
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            msg="must pass in a Grid object for argument grid!"
+            f" instead got type {type(grid)}",
+        )
+        if grid.coordinates != "rtz":
+            inbasis = {
+                "r": "rho",
+                "t": "theta",
+                "v": "theta_PEST",
+                "a": "alpha",
+                "z": "zeta",
+            }
+            rtz_nodes = self.map_coordinates(
+                grid.nodes,
+                inbasis=[inbasis[char] for char in grid.coordinates],
+                outbasis=("rho", "theta", "zeta"),
+                period=grid.period,
+            )
+            grid = Grid(
+                nodes=rtz_nodes,
+                coordinates="rtz",
+                source_grid=grid,
+                sort=False,
+                jitable=False,
             )
 
         if params is None:
@@ -837,60 +873,128 @@ class Equilibrium(IOAble, Optimizable):
         if data is None:
             data = {}
 
-        # To avoid the issue of using the wrong grid for surface and volume averages,
-        # we first figure out what needed qtys are flux functions or volume integrals
-        # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
-        # If the user wants to compute x which depends on y which in turn depends on z,
-        # and they pass in y already computed in data, then we shouldn't need to compute
-        # z at all.
-        deps = list(
-            set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names)
-            - data.keys()  # subtract out y if already computed
+        deps = set(
+            get_data_deps(names, obj=p, has_axis=grid.axis.size, data=data) + names
         )
-        # TODO: replace this logic with `grid_type` from data_index
-        dep0d = [
-            dep
-            for dep in deps
-            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
-        ]
-        dep1dr = [
-            dep
-            for dep in deps
-            if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
-        ]
-        dep1dz = [
-            dep
-            for dep in deps
-            if (data_index[p][dep]["coordinates"] == "z")
-            and (dep not in data)
-            and dep not in ["phi", "zeta"]  # these don't need a special grid
-        ]
 
-        # whether we need to calculate 0d or 1d quantities on a special grid
-        calc0d = bool(len(dep0d))
-        calc1dr = bool(len(dep1dr))
-        calc1dz = bool(len(dep1dz))
-        if (  # see if the grid we're already using will work for desired qtys
-            (grid.L >= self.L_grid)
-            and (grid.M >= self.M_grid)
-            and (grid.N >= self.N_grid)
-        ):
+        def need_src(name):
+            # Need to compute these on grid that is paired to the source grid, since
+            # the compute logic assume input data is evaluated on those coordinates.
+            # We exclude these from the depXdx sets below since the grids we will
+            # use to compute those dependencies are coordinate-blind.
+            # Example, "<L|r,a>" has coordinates="r", but requires computing on
+            # field line following source grid.
+            return bool(data_index[p][name]["source_grid_requirement"])
+
+        # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
+        # which does not need a source grid to evaluate, does not compute <L|r,a> on a
+        # grid that does not follow field lines.
+        need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
+
+        dep0d = {
+            dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
+        }
+        # Unless user asks, don't try to recompute stuff which are only dependencies
+        # of dep0d. Example, suppose the user supplied grid is a field-line following
+        # grid, and the user would like to compute the effective ripple, which requires
+        # the scalar R0 as a dependency. The scalar R0 has the following dependencies:
+        # R0 <- A <- A(z). Each of these are computable on the quadrature grid, and
+        # since R0 is a scalar we can trivially interpolate it back to the user-supplied
+        # grid. We don't need to additionally compute A(z) and interpolate it back;
+        # it was only needed to compute R0, so we should remove it from the dep1dz list.
+        # If we don't remove it from the dep1dz list, then the code would try to create
+        # a linear grid with cross-sections at all the unique zeta values in the
+        # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
+        # attribute, so this would cause an error.
+        dep0d_deps = set(
+            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        )
+        # This filter is stronger than the name implies, but the false positives
+        # that are filtered out will still get computed with the logic in
+        # compute.utils.compute.
+        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
+        dep1dr = {
+            dep
+            for dep in deps
+            if is_1dr_rad_grid(dep)
+            and not just_dep0d_dep(dep)
+            and dep not in need_src_deps
+        }
+        dep1dz = {
+            dep
+            for dep in deps
+            # By including the additional requirement that dep is not just a dependency
+            # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
+            # compute things like A(z) when it was only needed to compute R0, as in the
+            # example above.
+            if is_1dz_tor_grid(dep)
+            and not just_dep0d_dep(dep)
+            and dep not in need_src_deps
+            # These don't need a special grid, since the transforms are always
+            # built on the (rho, theta, zeta) coordinate grid.
+            and dep not in ["phi", "zeta"]
+        }
+
+        # Whether we need to calculate any dependencies on a special grid.
+        calc0d = bool(dep0d)
+        calc1dr = bool(dep1dr)
+        calc1dz = bool(dep1dz)
+        # If the grid samples the full volume, then it is sufficient.
+        if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
             if isinstance(grid, QuadratureGrid):
                 calc0d = calc1dr = calc1dz = False
             if isinstance(grid, LinearGrid):
                 calc1dr = calc1dz = False
+        else:
+            # Warn if best way to compute accurately is increasing resolution.
+            for dep in deps:
+                req = data_index[p][dep]["resolution_requirement"]
+                coords = data_index[p][dep]["coordinates"]
+                msg = lambda direction: colored(
+                    f"Dependency {dep} may require more {direction}"
+                    " resolution to compute accurately.",
+                    "yellow",
+                )
+                warnif(
+                    # if need more radial resolution
+                    "r" in req and grid.L < self.L_grid
+                    # and won't override grid to one with more radial resolution
+                    and not (override_grid and coords in {"z", ""}),
+                    ResolutionWarning,
+                    msg("radial"),
+                )
+                warnif(
+                    # if need more poloidal resolution
+                    "t" in req and grid.M < self.M_grid
+                    # and won't override grid to one with more poloidal resolution
+                    and not (override_grid and coords in {"r", "z", ""}),
+                    ResolutionWarning,
+                    msg("poloidal"),
+                )
+                warnif(
+                    # if need more toroidal resolution
+                    "z" in req and grid.N < self.N_grid
+                    # and won't override grid to one with more toroidal resolution
+                    and not (override_grid and coords in {"r", ""}),
+                    ResolutionWarning,
+                    msg("toroidal"),
+                )
+
+        # Now compute dependencies on the proper grids, passing in any available
+        # seed data which is already computed and interpolatable.
+        # There isn't a single non-repeating order for computing that ensures the
+        # dependencies of the dependencies are computed on the proper grid. However,
+        # 0d -> 1dr -> 1dz -> rest covers most cases. In cases where it
+        # doesn't, the expectation is that developer registers the compute function
+        # with a resolution requirement or the user precomputes it.
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-            data0d_seed = {
-                key: data[key]
-                for key in data
-                if data_index[p][key]["coordinates"] == ""
-            }
+            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
             data0d = compute_fun(
                 self,
-                dep0d,
+                list(dep0d),
                 params=params,
                 transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
                 profiles=get_profiles(dep0d, obj=self, grid=grid0d),
@@ -899,18 +1003,19 @@ class Equilibrium(IOAble, Optimizable):
                 data=data0d_seed,
                 **kwargs,
             )
-            # these should all be 0d quantities so don't need to compress/expand
-            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            # These should all be 0d quantities so don't need to compress/expand.
+            data0d = {
+                key: data0d[key] for key in data0d if key in dep0d and key not in data
+            }
             data.update(data0d)
 
-        data0d_seed = (
-            {key: data[key] for key in data if data_index[p][key]["coordinates"] == ""}
-            if ((calc1dr or calc1dz) and override_grid)
-            else {}
-        )
+        if (calc1dr or calc1dz) and override_grid:
+            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
+        else:
+            data0d_seed = {}
         if calc1dr and override_grid:
             grid1dr = LinearGrid(
-                rho=grid.nodes[grid.unique_rho_idx, 0],
+                rho=grid.compress(grid.nodes[:, 0], surface_label="rho"),
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
@@ -919,11 +1024,11 @@ class Equilibrium(IOAble, Optimizable):
             data1dr_seed = {
                 key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
                 for key in data
-                if data_index[p][key]["coordinates"] == "r"
+                if is_1dr_rad_grid(key)
             }
             data1dr = compute_fun(
                 self,
-                dep1dr,
+                list(dep1dr),
                 params=params,
                 transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
                 profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
@@ -932,17 +1037,19 @@ class Equilibrium(IOAble, Optimizable):
                 data=data1dr_seed | data0d_seed,
                 **kwargs,
             )
-            # need to make this data broadcast with the data on the original grid
+            # Need to make this data broadcast with the data on the original grid.
             data1dr = {
-                key: grid.copy_data_from_other(val, grid1dr, surface_label="rho")
-                for key, val in data1dr.items()
-                if key in dep1dr
+                key: grid.copy_data_from_other(
+                    data1dr[key], grid1dr, surface_label="rho"
+                )
+                for key in data1dr
+                if key in dep1dr and key not in data
             }
             data.update(data1dr)
 
         if calc1dz and override_grid:
             grid1dz = LinearGrid(
-                zeta=grid.nodes[grid.unique_zeta_idx, 2],
+                zeta=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
@@ -951,11 +1058,11 @@ class Equilibrium(IOAble, Optimizable):
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
                 for key in data
-                if data_index[p][key]["coordinates"] == "z"
+                if is_1dz_tor_grid(key)
             }
             data1dz = compute_fun(
                 self,
-                dep1dz,
+                list(dep1dz),
                 params=params,
                 transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
                 profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
@@ -964,17 +1071,16 @@ class Equilibrium(IOAble, Optimizable):
                 data=data1dz_seed | data0d_seed,
                 **kwargs,
             )
-            # need to make this data broadcast with the data on the original grid
+            # Need to make this data broadcast with the data on the original grid.
             data1dz = {
-                key: grid.copy_data_from_other(val, grid1dz, surface_label="zeta")
-                for key, val in data1dz.items()
-                if key in dep1dz
+                key: grid.copy_data_from_other(
+                    data1dz[key], grid1dz, surface_label="zeta"
+                )
+                for key in data1dz
+                if key in dep1dz and key not in data
             }
             data.update(data1dz)
 
-        # TODO: we can probably reduce the number of deps computed here if some are only
-        #   needed as inputs for 0d and 1d qtys, unless the user asks for them
-        #   specifically?
         data = compute_fun(
             self,
             names,
@@ -1989,163 +2095,6 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         return things[0], result
-
-    def _optimize(  # noqa: C901
-        self,
-        objective,
-        constraint=None,
-        ftol=1e-6,
-        xtol=1e-6,
-        maxiter=50,
-        verbose=1,
-        copy=False,
-        solve_options=None,
-        perturb_options=None,
-    ):
-        """Optimize an equilibrium for an objective.
-
-        Parameters
-        ----------
-        objective : ObjectiveFunction
-            Objective function to optimize.
-        constraint : ObjectiveFunction
-            Objective function to satisfy. Default = fixed-boundary force balance.
-        ftol : float
-            Relative stopping tolerance on objective function value.
-        xtol : float
-            Stopping tolerance on optimization step size.
-        maxiter : int
-            Maximum number of optimization steps.
-        verbose : int
-            Level of output.
-        copy : bool, optional
-            Whether to update the existing equilibrium or make a copy (Default).
-        solve_options : dict
-            Dictionary of additional options used in Equilibrium.solve().
-        perturb_options : dict
-            Dictionary of additional options used in Equilibrium.perturb().
-
-        Returns
-        -------
-        eq_new : Equilibrium
-            Optimized equilibrium.
-
-        """
-        import inspect
-        from copy import deepcopy
-
-        from desc.optimize.tr_subproblems import update_tr_radius
-        from desc.optimize.utils import check_termination
-        from desc.perturbations import optimal_perturb
-
-        solve_options = {} if solve_options is None else solve_options
-        perturb_options = {} if perturb_options is None else perturb_options
-
-        if constraint is None:
-            constraint = get_equilibrium_objective(eq=self)
-
-        timer = Timer()
-        timer.start("Total time")
-
-        if not objective.built:
-            objective.build()
-        if not constraint.built:
-            constraint.build()
-
-        cost = objective.compute_scalar(objective.x(self))
-        perturb_options = deepcopy(perturb_options)
-        tr_ratio = perturb_options.get(
-            "tr_ratio",
-            inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
-        )
-
-        if verbose > 0:
-            objective.print_value(objective.x(self))
-
-        params = orig_params = self.params_dict.copy()
-
-        iteration = 1
-        success = None
-        while success is None:
-            timer.start("Step {} time".format(iteration))
-            if verbose > 0:
-                print("====================")
-                print("Optimization Step {}".format(iteration))
-                print("====================")
-                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
-
-            # perturb + solve
-            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit) = optimal_perturb(
-                self,
-                constraint,
-                objective,
-                copy=False,
-                **perturb_options,
-            )
-            self.solve(objective=constraint, **solve_options)
-
-            # update trust region radius
-            cost_new = objective.compute_scalar(objective.x(self))
-            actual_reduction = cost - cost_new
-            trust_radius, ratio = update_tr_radius(
-                tr_ratio[0] * c_norm,
-                actual_reduction,
-                predicted_reduction,
-                np.linalg.norm(dc_opt),
-                bound_hit,
-            )
-            tr_ratio[0] = trust_radius / c_norm
-            perturb_options["tr_ratio"] = tr_ratio
-
-            timer.stop("Step {} time".format(iteration))
-            if verbose > 0:
-                objective.print_value(objective.x(self))
-                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-                print("Reduction Ratio = {:+.3f}".format(ratio))
-            if verbose > 1:
-                timer.disp("Step {} time".format(iteration))
-
-            # stopping criteria
-            success, message = check_termination(
-                actual_reduction,
-                cost,
-                np.linalg.norm(dc),
-                c_norm,
-                np.inf,  # TODO: add g_norm
-                ratio,
-                ftol,
-                xtol,
-                0,  # TODO: add gtol
-                iteration,
-                maxiter,
-                0,
-                np.inf,
-            )
-            if actual_reduction > 0:
-                params = self.params_dict.copy()
-                cost = cost_new
-            else:
-                # reset equilibrium to last good params
-                self.params_dict = params
-            if success is not None:
-                break
-
-            iteration += 1
-
-        timer.stop("Total time")
-        print("====================")
-        print("Done")
-        if verbose > 0:
-            print(message)
-        if verbose > 1:
-            timer.disp("Total time")
-
-        if copy:
-            eq = self.copy()
-            self.params = orig_params
-        else:
-            eq = self
-        return eq
 
     def perturb(
         self,

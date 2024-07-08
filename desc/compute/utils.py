@@ -79,6 +79,28 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
             name, transforms, p
         ), f"Don't have transforms to compute {name}"
 
+    if "grid" in transforms:
+
+        def check_fun(name):
+            reqs = data_index[p][name]["source_grid_requirement"]
+            errorif(
+                reqs and not hasattr(transforms["grid"], "source_grid"),
+                AttributeError,
+                f"Expected grid with attribute 'source_grid' to compute {name}. "
+                f"Source grid should have coordinates: {reqs.get('coordinates')}.",
+            )
+            for req in reqs:
+                errorif(
+                    not hasattr(transforms["grid"].source_grid, req)
+                    or reqs[req] != getattr(transforms["grid"].source_grid, req),
+                    AttributeError,
+                    f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
+                )
+
+        _ = _get_deps(
+            p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
+        )
+
     if data is None:
         data = {}
 
@@ -136,18 +158,6 @@ def _compute(
                     data=data,
                     **kwargs,
                 )
-        if "grid" in transforms:
-            reqs = data_index[parameterization][name]["source_grid_requirement"]
-            errorif(
-                reqs and not hasattr(transforms["grid"], "source_grid"),
-                msg=f"Expected grid with attribute 'source_grid' to compute {name}.",
-            )
-            for req in reqs:
-                errorif(
-                    not hasattr(transforms["grid"].source_grid, req)
-                    or reqs[req] != getattr(transforms["grid"].source_grid, req),
-                    msg=f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
-                )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
@@ -156,8 +166,8 @@ def _compute(
     return data
 
 
-def get_data_deps(keys, obj, has_axis=False):
-    """Get list of data keys needed to compute a given quantity.
+def get_data_deps(keys, obj, has_axis=False, data=None):
+    """Get list of keys needed to compute ``keys`` given already computed data.
 
     Parameters
     ----------
@@ -167,6 +177,8 @@ def get_data_deps(keys, obj, has_axis=False):
         Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
+    data : dict of ndarray
+        Data computed so far, generally output from other compute functions
 
     Returns
     -------
@@ -175,13 +187,36 @@ def get_data_deps(keys, obj, has_axis=False):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    out = []
-    for key in keys:
-        out += _get_deps_1_key(key, p, has_axis)
-    return sorted(set(out))
+    if not data:
+        out = []
+        for key in keys:
+            out += _get_deps_1_key(p, key, has_axis)
+        out = set(out)
+    else:
+        out = _get_deps(p, keys, deps=set(), data=data, has_axis=has_axis)
+        out.difference_update(keys)
+    return sorted(out)
 
 
-def _get_deps_1_key(key, p, has_axis):
+def _get_deps_1_key(p, key, has_axis):
+    """Gather all quantities required to compute ``key``.
+
+    Parameters
+    ----------
+    p : str
+        Type of object to compute for, eg Equilibrium, Curve, etc.
+    key : str
+        Name of the quantity to compute.
+    has_axis : bool
+        Whether the grid to compute on has a node on the magnetic axis.
+
+    Returns
+    -------
+    deps_1_key : list of str
+        Dependencies required to compute ``key``.
+
+
+    """
     if has_axis:
         if "full_with_axis_dependencies" in data_index[p][key]:
             return data_index[p][key]["full_with_axis_dependencies"]["data"]
@@ -193,39 +228,88 @@ def _get_deps_1_key(key, p, has_axis):
         return deps
     out = deps.copy()  # to avoid modifying the data_index
     for dep in deps:
-        out += _get_deps_1_key(dep, p, has_axis)
+        out += _get_deps_1_key(p, dep, has_axis)
     if has_axis:
         axis_limit_deps = data_index[p][key]["dependencies"]["axis_limit_data"]
         out += axis_limit_deps.copy()  # to be safe
         for dep in axis_limit_deps:
-            out += _get_deps_1_key(dep, p, has_axis)
+            out += _get_deps_1_key(p, dep, has_axis)
 
     return sorted(set(out))
 
 
-def _grow_seeds(
-    seeds, search_space, p="desc.equilibrium.equilibrium.Equilibrium", has_axis=False
-):
-    """Traverse the dependency DAG for keys in search space dependent on seeds.
+def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fun=None):
+    """Gather all quantities required to compute ``names`` given already computed data.
 
     Parameters
     ----------
-    seeds : Set
+    parameterization : str, class, or instance
+        Type of object to compute for, eg Equilibrium, Curve, etc.
+    names : str or array-like of str
+        Name(s) of the quantity(s) to compute.
+    deps : set[str]
+        Dependencies gathered so far.
+    data : dict of ndarray or None
+        Data computed so far, generally output from other compute functions.
+    has_axis : bool
+        Whether the grid to compute on has a node on the magnetic axis.
+    check_fun : callable
+        If provided, ``check_fun(name)`` is called before adding name to ``deps``.
+
+    Returns
+    -------
+    deps : set[str]
+        All additional quantities required to compute ``names``.
+
+    """
+    p = _parse_parameterization(parameterization)
+    for name in names:
+        if name not in deps and (data is None or name not in data):
+            if check_fun is not None:
+                check_fun(name)
+            deps.add(name)
+            deps = _get_deps(
+                p,
+                data_index[p][name]["dependencies"]["data"],
+                deps,
+                data,
+                has_axis,
+                check_fun,
+            )
+            if has_axis:
+                deps = _get_deps(
+                    p,
+                    data_index[p][name]["dependencies"]["axis_limit_data"],
+                    deps,
+                    data,
+                    has_axis,
+                    check_fun,
+                )
+    return deps
+
+
+def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
+    """Return ``seeds`` plus keys in ``search_space`` with dependency in ``seeds``.
+
+    Parameters
+    ----------
+    parameterization : str, class, or instance
+        Type of object to compute for, eg Equilibrium, Curve, etc.
+    seeds : set[str]
         Keys to find paths toward.
-    search_space : iterable
-        Additional keys to consider returning.
-    p: str
-        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
-        or `desc.equilibrium.Equilibrium`.
+    search_space : iterable of str
+        Additional keys besides ``seeds`` to consider returning.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
-    out : Set
-        All keys in search space with any path in the dependency DAG to any seed.
+    out : set[str]
+        All keys in ``search_space`` that have a dependency in ``seeds``
+        plus ``seeds``.
 
     """
+    p = _parse_parameterization(parameterization)
     out = seeds.copy()
     for key in search_space:
         deps = data_index[p][key][
@@ -390,16 +474,25 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
         if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
             basis = getattr(obj, c + "_basis")
             # first check if we already have a transform with a compatible basis
-            for transform in transforms.values():
-                if basis.equiv(getattr(transform, "basis", None)):
-                    ders = np.unique(
-                        np.vstack([derivs[c], transform.derivatives]), axis=0
-                    ).astype(int)
-                    # don't build until we know all the derivs we need
-                    transform.change_derivatives(ders, build=False)
-                    c_transform = transform
-                    break
-            else:  # if we didn't exit the loop early
+            if not jitable:
+                for transform in transforms.values():
+                    if basis.equiv(getattr(transform, "basis", None)):
+                        ders = np.unique(
+                            np.vstack([derivs[c], transform.derivatives]), axis=0
+                        ).astype(int)
+                        # don't build until we know all the derivs we need
+                        transform.change_derivatives(ders, build=False)
+                        c_transform = transform
+                        break
+                else:  # if we didn't exit the loop early
+                    c_transform = Transform(
+                        grid,
+                        basis,
+                        derivs=derivs[c],
+                        build=False,
+                        method=method,
+                    )
+            else:  # don't perform checks if jitable=True as they are not jit-safe
                 c_transform = Transform(
                     grid,
                     basis,
@@ -788,6 +881,8 @@ def line_integrals(
         label is rho and length 2π when the line label is theta or zeta.
         You may want to multiply the input by the line length Jacobian.
 
+        The grid must have nodes on the specified surface in ``fix_surface``.
+
         Correctness is not guaranteed on grids with duplicate nodes.
         An attempt to print a warning is made if the given grid has duplicate
         nodes and is one of the predefined grid types
@@ -968,7 +1063,15 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
             operand=None,
         )
     else:
-        expand_out = False
+        # If we don't have the idx attributes, we are forced to expand out.
+        errorif(
+            not has_idx and not expand_out,
+            msg=f"Grid lacks attributes 'num_{surface_label}' and "
+            f"'inverse_{surface_label}_idx', so this method "
+            f"can't satisfy the request expand_out={expand_out}.",
+        )
+        # don't try to expand if already expanded
+        expand_out = expand_out and has_idx
         axis = {"rho": 0, "poloidal": 1, "zeta": 2}[surface_label]
         # Converting nodes from numpy.ndarray to jaxlib.xla_extension.ArrayImpl
         # reduces memory usage by > 400% for the forward computation and Jacobian.
@@ -1096,13 +1199,21 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
 
     """
     surface_label = grid.get_label(surface_label)
-    expand_out = (
-        expand_out
-        # don't try to expand already expanded output
-        and hasattr(grid, f"num_{surface_label}")
-        and hasattr(grid, f"_inverse_{surface_label}_idx")
+    has_idx = hasattr(grid, f"num_{surface_label}") and hasattr(
+        grid, f"_inverse_{surface_label}_idx"
     )
-    integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
+    # If we don't have the idx attributes, we are forced to expand out.
+    errorif(
+        not has_idx and not expand_out,
+        msg=f"Grid lacks attributes 'num_{surface_label}' and "
+        f"'inverse_{surface_label}_idx', so this method "
+        f"can't satisfy the request expand_out={expand_out}.",
+    )
+    integrate = surface_integrals_map(
+        grid, surface_label, expand_out=not has_idx, tol=tol
+    )
+    # don't try to expand if already expanded
+    expand_out = expand_out and has_idx
 
     def _surface_averages(q, sqrt_g=jnp.array([1.0]), denominator=None):
         """Compute a surface average for each surface in the grid.
@@ -1229,9 +1340,13 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
     surface_label = grid.get_label(surface_label)
+    has_idx = hasattr(grid, f"num_{surface_label}") and hasattr(
+        grid, f"_inverse_{surface_label}_idx"
+    )
     errorif(
-        not hasattr(grid, f"num_{surface_label}")
-        or not hasattr(grid, f"_inverse_{surface_label}_idx")
+        not has_idx,
+        msg=f"Grid lacks attributes 'num_{surface_label}' and "
+        f"'inverse_{surface_label}_idx', which are required for this function.",
     )
     return surface_integrals_map(grid, surface_label, expand_out=False)
 
@@ -1318,7 +1433,16 @@ def surface_variance(
     """
     surface_label = grid.get_label(surface_label)
     _, _, spacing, _, has_idx = _get_grid_surface(grid, surface_label)
-    integrate = surface_integrals_map(grid, surface_label, expand_out=False, tol=tol)
+    # If we don't have the idx attributes, we are forced to expand out.
+    errorif(
+        not has_idx and not expand_out,
+        msg=f"Grid lacks attributes 'num_{surface_label}' and "
+        f"'inverse_{surface_label}_idx', so this method "
+        f"can't satisfy the request expand_out={expand_out}.",
+    )
+    integrate = surface_integrals_map(
+        grid, surface_label, expand_out=not has_idx, tol=tol
+    )
 
     v1 = integrate(weights)
     v2 = integrate(weights**2 * jnp.prod(spacing, axis=-1))
@@ -1330,10 +1454,10 @@ def surface_variance(
     q = jnp.atleast_1d(q)
     # compute variance in two passes to avoid catastrophic round off error
     mean = (integrate((weights * q.T).T).T / v1).T
-    if has_idx:
+    if has_idx:  # guard so that we don't try to expand when already expanded
         mean = grid.expand(mean, surface_label)
     variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T
-    if has_idx and expand_out:
+    if expand_out and has_idx:
         return grid.expand(variance, surface_label)
     else:
         return variance
@@ -1384,7 +1508,12 @@ def surface_min(grid, x, surface_label="rho"):
     """
     surface_label = grid.get_label(surface_label)
     unique_size, inverse_idx, _, _, has_idx = _get_grid_surface(grid, surface_label)
-    errorif(not has_idx, NotImplementedError, msg="Missing unique and inverse idx.")
+    errorif(
+        not has_idx,
+        NotImplementedError,
+        msg=f"Grid lacks attributes 'num_{surface_label}' and "
+        f"'inverse_{surface_label}_idx', which are required for this function.",
+    )
     inverse_idx = jnp.asarray(inverse_idx)
     x = jnp.asarray(x)
     mins = jnp.full(unique_size, jnp.inf)

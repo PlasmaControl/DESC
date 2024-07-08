@@ -508,11 +508,11 @@ def to_sfl(
     return eq_sfl
 
 
-def rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
-    """Return DESC coordinate grid from given coordinates.
+def get_rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
+    """Return DESC grid in rtz (rho, theta, zeta) coordinates from given coordinates.
 
-    Create a meshgrid from the given coordinates, and return the
-    paired DESC coordinate grid.
+    Create a tensor-product grid from the given coordinates, and return the same grid
+    in DESC coordinates.
 
     Parameters
     ----------
@@ -527,7 +527,7 @@ def rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
     coordinates : str
         Input coordinates that are specified by the arguments, respectively.
         raz : rho, alpha, zeta
-        rpz : rho, theta_PEST, zeta
+        rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
     period : tuple of float
         Assumed periodicity for each quantity in inbasis.
@@ -548,7 +548,7 @@ def rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
     inbasis = {
         "r": "rho",
         "t": "theta",
-        "p": "theta_PEST",
+        "v": "theta_PEST",
         "a": "alpha",
         "z": "zeta",
     }

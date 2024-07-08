@@ -1514,6 +1514,7 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
     ],
     basis="basis",
 )
@@ -3749,4 +3750,31 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
             cross(data["e_rho"], data["e_theta_r"]).T, data["|e_rho x e_theta|_r"]
         ).T,
     )
+    return data
+
+
+@register_compute_fun(
+    name="e_theta|r,p",
+    label="\\mathbf{e}_{\\theta} |_{\\rho, \\phi}",
+    units="m",
+    units_long="meters",
+    description=(
+        "Covariant poloidal basis vector in (ρ,θ,ϕ) coordinates. "
+        "ϕ increases counterclockwise when viewed from above "
+        "(cylindrical R,ϕ plane with Z out of page)."
+    ),
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_phi", "phi_t"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):
+    data["e_theta|r,p"] = data["e_theta"] - (data["e_phi"].T * data["phi_t"]).T
     return data

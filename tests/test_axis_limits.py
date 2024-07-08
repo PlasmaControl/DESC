@@ -141,6 +141,7 @@ zero_limits = add_all_aliases(zero_limits)
 not_finite_limits = add_all_aliases(not_finite_limits)
 not_implemented_limits = add_all_aliases(not_implemented_limits)
 not_implemented_limits = _grow_seeds(
+    "desc.equilibrium.equilibrium.Equilibrium",
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
     has_axis=True,
@@ -233,11 +234,14 @@ def assert_is_continuous(
         else:
             assert np.isfinite(data[name]).all(), name
 
-        if eq.is_0d(name) or eq.is_1dz(name):
-            # can't check continuity of global scalar or function of toroidal angle
+        if (
+            data_index[p][name]["coordinates"] == ""
+            or data_index[p][name]["coordinates"] == "z"
+        ):
+            # can't check radial continuity of scalar or function of toroidal angle
             continue
         # make single variable function of rho
-        if eq.is_1dr(name):
+        if data_index[p][name]["coordinates"] == "r":
             # already single variable function of rho
             profile = grid.compress(data[name])
         else:
@@ -306,11 +310,13 @@ class TestAxisLimits:
         kwargs = weaker_tolerance | zero_map
         # fixed iota
         eq = get("W7-X")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
         eq = get("NCSX")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
@@ -345,10 +351,12 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
         eq = get("W7-X")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         test(eq)
         eq = get("NCSX")
-        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
         test(eq)
 
 
@@ -399,7 +407,8 @@ def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""
     eq = get("ESTELL")
     grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
-    eq.change_resolution(2, 2, 2, 4, 4, 4)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 2, 4, 4, 4)
 
     obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), use_jit=False)
     obj.build(verbose=0)

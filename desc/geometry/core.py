@@ -136,7 +136,6 @@ class Curve(IOAble, Optimizable, ABC):
                 obj=self,
                 grid=grid,
                 jitable=True,
-                basis=kwargs.get("basis", "rpz"),
                 method=method,
             )
         if data is None:
@@ -166,7 +165,6 @@ class Curve(IOAble, Optimizable, ABC):
                     obj=self,
                     grid=grid0d,
                     jitable=True,
-                    basis=kwargs.get("basis", "rpz"),
                     method=method,
                     **kwargs,
                 ),
@@ -463,7 +461,6 @@ class Surface(IOAble, Optimizable, ABC):
                 obj=self,
                 grid=grid,
                 jitable=kwargs.pop("jitable", False),
-                basis=kwargs.get("basis", "rpz"),
                 method=method,
                 **kwargs,
             )
@@ -517,7 +514,6 @@ class Surface(IOAble, Optimizable, ABC):
                     obj=self,
                     grid=grid0d,
                     jitable=kwargs.pop("jitable", False),
-                    basis=kwargs.get("basis", "rpz"),
                     method=method,
                     **kwargs,
                 ),

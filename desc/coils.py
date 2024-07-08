@@ -1171,15 +1171,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 np.any(cdata["phi"] > maxphi),
                 UserWarning,
                 f"coil {i} crosses the symmetry plane for NFP={NFP} and sym={sym},"
-                + "it is recommended to check the coil-coil separation to ensure the"
+                + "it is recommended to check the coil-coil separation with method"
+                + "``calculate_minimum_intercoil_distance`` to ensure the"
                 + "coils do not overlap after rotation.",
             )
             warnif(
                 sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
                 UserWarning,
                 f"coil {i} crosses the symmetry plane phi=0"
-                + "it is recommended to check the coil-coil separation to ensure the"
-                + "coils do not overlap after rotation.",
+                + "it is recommended to check the coil-coil separation with method"
+                + "``calculate_minimum_intercoil_distance`` to ensure the"
+                + "coils do not overlap after rotation and reflection.",
             )
 
         coilset = []
@@ -1497,7 +1499,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def calculate_minimum_intercoil_distances(self, grid=None):
-        """Calculate the minimum intercoil distance for each coil in the CoilSet.
+        """Calculate the minimum inter-coil distance for each coil in the CoilSet.
 
         Parameters
         ----------

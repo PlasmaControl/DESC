@@ -652,7 +652,7 @@ class TestMagneticFields:
             UserWarning,
             match="Detected",
         ):
-            field.to_CoilSet(1)
+            field.to_CoilSet(2)
 
     @pytest.mark.slow
     @pytest.mark.unit

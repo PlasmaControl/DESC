@@ -1423,12 +1423,12 @@ def _find_current_potential_contours(
         this_contour = skimage.measure.find_contours(
             np.asarray(jnp.transpose(phi_total_full)), level=contour
         )
-        errorif(
+        warnif(
             len(this_contour) > 1,
-            ValueError,
-            "Found multiple current potential contours for the same value,"
-            + " indicates there are window-pane-like structures for"
-            " which coil-cutting is not currently supported",
+            UserWarning,
+            "Detected multiple current potential contours for the same value,"
+            + " indicates there may be unclosed coils or window-pane-like structures"
+            " for which coil-cutting is not currently supported",
         )
         contours_indices.append(this_contour[0])
     # from the indices, calculate the actual zeta and theta values of the contours
@@ -1441,6 +1441,8 @@ def _find_current_potential_contours(
         ).T
         for contour in contours_indices
     ]
+    # reverse so that our coils start at zeta=0, this is just a choice
+    contours_theta_zeta.reverse()
 
     numCoils = 0
     # to be used to check closure conditions on the coils

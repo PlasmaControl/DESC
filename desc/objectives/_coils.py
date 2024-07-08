@@ -128,6 +128,7 @@ class _CoilObjective(_Objective):
 
         # map grid to list of length coils
         if grid is None:
+            grid = []
             for c in coils:
                 NFP = c.NFP if hasattr(c, "NFP") else 1
                 # NFP=1 to ensure we have points along whole grid

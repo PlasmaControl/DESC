@@ -61,12 +61,13 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         Computed quantity and intermediate variables.
 
     """
-    errorif(
-        kwargs.get("basis", "rpz").lower() not in {"rpz", "xyz"}, NotImplementedError
-    )
+    basis = kwargs.pop("basis", "rpz").lower()
+    errorif(basis not in {"rpz", "xyz"}, NotImplementedError)
     p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
+    if basis == "xyz" and "phi" not in names:
+        names.append("phi")
     for name in names:
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
@@ -97,31 +98,15 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     )
 
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
-    parameterization = _parse_parameterization(parameterization)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
+    if basis == "xyz":
         from .geom_utils import rpz2xyz, rpz2xyz_vec
 
         for name in data.keys():
-            # Only convert vector data
-            if data_index[parameterization][name]["dim"] == 3:
+            if data_index[p][name]["dim"] == 3:  # only convert vector data
                 if name == "x":
                     data[name] = rpz2xyz(data[name])
                 else:
-                    if "phi" in data:
-                        data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
-                    else:
-                        # compute phi if it's not already in data. Adding phi
-                        # to data at the beginning cause matrix dimension problems
-                        # TODO: Maybe look into that later (why error?)
-                        data_phi = _compute(
-                            p,
-                            "phi",
-                            params=params,
-                            transforms=transforms,
-                            profiles=profiles,
-                            **kwargs,
-                        )["phi"]
-                        data[name] = rpz2xyz_vec(data[name], phi=data_phi)
+                    data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
 
     return data
 

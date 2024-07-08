@@ -1838,7 +1838,12 @@ class OmnigenousField(Optimizable, IOAble):
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
             transforms = get_transforms(
-                names, obj=self, grid=grid, basis=kwargs.get("basis", "rpz"), **kwargs
+                names,
+                obj=self,
+                grid=grid,
+                basis=kwargs.get("basis", "rpz"),
+                method=kwargs.pop("method", "auto"),
+                **kwargs,
             )
         if data is None:
             data = {}

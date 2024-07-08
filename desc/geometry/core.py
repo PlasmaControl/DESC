@@ -127,12 +127,18 @@ class Curve(IOAble, Optimizable, ABC):
                 f" instead got type {type(grid)}"
             )
 
+        method = kwargs.pop("method", "auto")
         if params is None:
-            params = get_params(names, obj=self)
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
             print(params)
         if transforms is None:
             transforms = get_transforms(
-                names, obj=self, grid=grid, jitable=True, **kwargs
+                names,
+                obj=self,
+                grid=grid,
+                jitable=True,
+                basis=kwargs.get("basis", "rpz"),
+                method=method,
             )
         if data is None:
             data = {}
@@ -157,7 +163,13 @@ class Curve(IOAble, Optimizable, ABC):
                 dep0d,
                 params=params,
                 transforms=get_transforms(
-                    dep0d, obj=self, grid=grid0d, jitable=True, **kwargs
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    jitable=True,
+                    basis=kwargs.get("basis", "rpz"),
+                    method=method,
+                    **kwargs,
                 ),
                 profiles={},
                 data=None,
@@ -442,14 +454,18 @@ class Surface(IOAble, Optimizable, ABC):
                 "must pass in a Grid object or an integer for argument grid!"
                 f" instead got type {type(grid)}"
             )
+
+        method = kwargs.pop("method", "auto")
         if params is None:
-            params = get_params(names, obj=self)
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
             transforms = get_transforms(
                 names,
                 obj=self,
                 grid=grid,
                 jitable=kwargs.pop("jitable", False),
+                basis=kwargs.get("basis", "rpz"),
+                method=method,
                 **kwargs,
             )
         if data is None:
@@ -502,6 +518,8 @@ class Surface(IOAble, Optimizable, ABC):
                     obj=self,
                     grid=grid0d,
                     jitable=kwargs.pop("jitable", False),
+                    basis=kwargs.get("basis", "rpz"),
+                    method=method,
                     **kwargs,
                 ),
                 profiles={},

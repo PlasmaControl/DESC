@@ -834,6 +834,7 @@ class Equilibrium(IOAble, Optimizable):
                 f" instead got type {type(grid)}"
             )
 
+        method = kwargs.pop("method", "auto")
         if params is None:
             params = get_params(
                 names,
@@ -847,7 +848,12 @@ class Equilibrium(IOAble, Optimizable):
             )
         if transforms is None:
             transforms = get_transforms(
-                names, obj=self, grid=grid, basis=kwargs.get("basis", "rpz"), **kwargs
+                names,
+                obj=self,
+                grid=grid,
+                basis=kwargs.get("basis", "rpz"),
+                method=method,
+                **kwargs,
             )
         if data is None:
             data = {}
@@ -907,8 +913,17 @@ class Equilibrium(IOAble, Optimizable):
                 self,
                 dep0d,
                 params=params,
-                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
-                profiles=get_profiles(dep0d, obj=self, grid=grid0d),
+                transforms=get_transforms(
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    basis=kwargs.get("basis", "rpz"),
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep0d, obj=self, grid=grid0d, basis=kwargs.get("basis", "rpz")
+                ),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
                 data=data0d_seed,
@@ -940,8 +955,17 @@ class Equilibrium(IOAble, Optimizable):
                 self,
                 dep1dr,
                 params=params,
-                transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
-                profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
+                transforms=get_transforms(
+                    dep1dr,
+                    obj=self,
+                    grid=grid1dr,
+                    basis=kwargs.get("basis", "rpz"),
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep1dr, obj=self, grid=grid1dr, basis=kwargs.get("basis", "rpz")
+                ),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
                 data=data1dr_seed | data0d_seed,
@@ -972,8 +996,17 @@ class Equilibrium(IOAble, Optimizable):
                 self,
                 dep1dz,
                 params=params,
-                transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
-                profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
+                transforms=get_transforms(
+                    dep1dz,
+                    obj=self,
+                    grid=grid1dz,
+                    basis=kwargs.get("basis", "rpz"),
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep1dz, obj=self, grid=grid1dz, basis=kwargs.get("basis", "rpz")
+                ),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
                 data=data1dz_seed | data0d_seed,

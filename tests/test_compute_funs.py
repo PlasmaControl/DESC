@@ -1,5 +1,6 @@
 """Tests for compute functions."""
 
+import copy
 import pickle
 
 import numpy as np
@@ -1268,23 +1269,20 @@ def test_compute_everything():
     error_rpz = False
     error_xyz = False
 
+    # some things can't compute "phi" and therefore can't convert to XYZ basis
+    no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
+
     for p in things:
+        # test compute in RPZ basis
         this_branch_data_rpz[p] = things[p].compute(
             list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
         )
-        this_branch_data_xyz[p] = things[p].compute(
-            list(data_index[p].keys()), **grid.get(p, {}), basis="xyz"
-        )
         # make sure we can compute everything
         assert this_branch_data_rpz[p].keys() == data_index[p].keys(), (
-            f"Parameterization: {p}."
-            f" Can't compute {data_index[p].keys() - this_branch_data_rpz[p].keys()}."
+            f"Parameterization: {p}. Can't compute "
+            + f"{data_index[p].keys() - this_branch_data_rpz[p].keys()}."
         )
-        assert this_branch_data_xyz[p].keys() == data_index[p].keys(), (
-            f"Parameterization: {p}."
-            f" Can't compute {data_index[p].keys() - this_branch_data_xyz[p].keys()}."
-        )
-        # compare RPZ data against master branch
+        # compare data against master branch
         for name in this_branch_data_rpz[p]:
             if p in master_data_rpz and name in master_data_rpz[p]:
                 try:
@@ -1298,26 +1296,41 @@ def test_compute_everything():
                 except AssertionError as e:
                     error_rpz = True
                     print(e)
-            else:
-                # We can compute a new quantity now, so we should update the
-                # master compute data.
+            else:  # update master data with new compute quantity
                 update_master_data_rpz = True
-        # compare XYZ data against master branch
-        for name in this_branch_data_xyz[p]:
-            if p in master_data_xyz and name in master_data_xyz[p]:
-                try:
-                    np.testing.assert_allclose(
-                        actual=this_branch_data_xyz[p][name],
-                        desired=master_data_xyz[p][name],
-                        atol=1e-10,
-                        rtol=1e-10,
-                        err_msg=f"Parameterization: {p}. Name: {name}.",
-                    )
-                except AssertionError as e:
-                    error_xyz = True
-                    print(e)
-            else:
-                update_master_data_xyz = True
+
+        # test compute in XYZ basis
+        if p not in no_xyz_things:
+            # remove quantities that are not implemented in the XYZ basis
+            # TODO: generalize this instead of hard-coding for "grad(B)" & dependencies
+            data_index_xyz = copy.deepcopy(data_index)
+            if "grad(B)" in list(data_index[p].keys()):
+                del data_index_xyz[p]["grad(B)"]
+                del data_index_xyz[p]["|grad(B)|"]
+                del data_index_xyz[p]["L_grad(B)"]
+            this_branch_data_xyz[p] = things[p].compute(
+                list(data_index_xyz[p].keys()), **grid.get(p, {}), basis="xyz"
+            )
+            assert this_branch_data_xyz[p].keys() == data_index_xyz[p].keys(), (
+                f"Parameterization: {p}. Can't compute "
+                + f"{data_index_xyz[p].keys() - this_branch_data_xyz[p].keys()}."
+            )
+            # compare data against master branch
+            for name in this_branch_data_xyz[p]:
+                if p in master_data_xyz and name in master_data_xyz[p]:
+                    try:
+                        np.testing.assert_allclose(
+                            actual=this_branch_data_xyz[p][name],
+                            desired=master_data_xyz[p][name],
+                            atol=1e-10,
+                            rtol=1e-10,
+                            err_msg=f"Parameterization: {p}. Name: {name}.",
+                        )
+                    except AssertionError as e:
+                        error_xyz = True
+                        print(e)
+                else:  # update master data with new compute quantity
+                    update_master_data_xyz = True
 
     if not error_rpz and update_master_data_rpz:
         # then update the master compute data

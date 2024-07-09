@@ -67,7 +67,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     if isinstance(names, str):
         names = [names]
     if basis == "xyz" and "phi" not in names:
-        names.append("phi")
+        names = names + ["phi"]
     for name in names:
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")

@@ -1841,7 +1841,6 @@ class OmnigenousField(Optimizable, IOAble):
                 names,
                 obj=self,
                 grid=grid,
-                basis=kwargs.get("basis", "rpz"),
                 method=kwargs.pop("method", "auto"),
                 **kwargs,
             )

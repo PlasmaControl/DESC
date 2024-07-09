@@ -1551,6 +1551,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     j
                 ] = np.inf  # Set the dist from the pt to itself to inf to ignore it
                 ind_min = np.argmin(dists_for_this_pt)
+                # check if the index returned corresponds to a point on the same coil
+                # if it does not, then this jth pt on the kth coil is closer to a point
+                # on another coil than it is to pts on its own coil, which means it may
+                # be intersecting it.
                 if ind_min not in np.arange((num_nodes) * k, (num_nodes) * (k + 1)):
                     bad_coil_inds.append(k)
         is_nearly_intersecting = True if bad_coil_inds else False

@@ -867,7 +867,7 @@ class TestObjectiveFunction:
     def test_coil_min_distance(self):
         """Tests minimum distance between coils in a coilset."""
 
-        def test(coils, mindist, grid=None, test_method=False, expect_intersect=False):
+        def test(coils, mindist, grid=None, expect_intersect=False):
             obj = CoilsetMinDistance(coils, grid=grid)
             obj.build()
             f = obj.compute(params=coils.params_dict)
@@ -922,7 +922,6 @@ class TestObjectiveFunction:
                 coils_mixed,
                 [0, 0, 0, 0, 1, 0, 1, 2],
                 grid=LinearGrid(zeta=4),
-                test_method=True,
                 expect_intersect=True,
             )
         # TODO: move this coil set to conftest?

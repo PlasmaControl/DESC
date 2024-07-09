@@ -245,7 +245,7 @@ class FourierRZToroidalSurface(Surface):
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
+                + f"basis with {self.Z_basis.num_modes} modes."
             )
 
     def get_coeffs(self, m, n=0):
@@ -301,7 +301,9 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
-        inputs = InputReader().parse_inputs(path)[-1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
                 "boundary_ratio = {} != 1, surface may not be as expected".format(

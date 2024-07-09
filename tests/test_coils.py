@@ -13,10 +13,11 @@ from desc.coils import (
     MixedCoilSet,
     SplineXYZCoil,
 )
-from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute import get_transforms, xyz2rpz, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 
 
@@ -43,8 +44,9 @@ class TestCoil:
 
         # FourierXYZCoil
         coil = FourierXYZCoil(I)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, coil_grid)
         B_xyz = coil.compute_magnetic_field(
-            grid_xyz, basis="xyz", source_grid=coil_grid
+            grid_xyz, basis="xyz", source_grid=coil_grid, transforms=transforms
         )
         B_rpz = coil.compute_magnetic_field(
             grid_rpz, basis="rpz", source_grid=coil_grid
@@ -244,8 +246,10 @@ class TestCoilSet:
         coil = FourierPlanarCoil()
         coil.current = I
         coils = CoilSet.linspaced_angular(coil, n=N)
+        grid = LinearGrid(N=32, endpoint=False)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
         B_approx = coils.compute_magnetic_field(
-            [10, 0, 0], basis="rpz", source_grid=32
+            [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
@@ -270,8 +274,10 @@ class TestCoilSet:
         coil = FourierPlanarCoil(I)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)
         coils = MixedCoilSet.from_symmetry(coils, NFP=4)
+        grid = LinearGrid(N=32, endpoint=False)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
         B_approx = coils.compute_magnetic_field(
-            [10, 0, 0], basis="rpz", source_grid=32
+            [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
@@ -288,50 +294,18 @@ class TestCoilSet:
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
-    @pytest.mark.unit
-    def test_symmetry_magnetic_field(self):
-        """Tests that compute magnetic field is correct from symmetry."""
-        eq = get("precise_QH")
-        minor_radius = eq.compute("a")["a"]
-
-        # initialize CoilSet with symmetry
-        num_coils = 3  # number of unique coils per half field period
-        grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
-        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-            data_center = eq.axis.compute("x", grid=grid, basis="xyz")
-            data_normal = eq.compute("e^zeta", grid=grid)
-        centers = data_center["x"]
-        normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
-        coils = []
-        for k in range(1, 2 * num_coils + 1, 2):
-            coil = FourierPlanarCoil(
-                current=1e6,
-                center=centers[k, :],
-                normal=normals[k, :],
-                r_n=[0, minor_radius + 0.5, 0],
-            )
-            coils.append(coil)
-        sym_coilset = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
-
-        # equivalent CoilSet without symmetry
-        asym_coilset = CoilSet.from_symmetry(sym_coilset, NFP=eq.NFP, sym=eq.sym)
-
-        # test that both coil sets compute the same field on the plasma surface
-        grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
-        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-            data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
-
-        # test in (R, phi, Z) coordinates
-        nodes_rpz = np.array([data["R"], data["phi"], data["Z"]]).T
-        B_sym_rpz = sym_coilset.compute_magnetic_field(nodes_rpz, basis="rpz")
-        B_asym_rpz = asym_coilset.compute_magnetic_field(nodes_rpz, basis="rpz")
-        np.testing.assert_allclose(B_sym_rpz, B_asym_rpz, atol=1e-14)
-
-        # test in (X, Y, Z) coordinates
-        nodes_xyz = np.array([data["X"], data["Y"], data["Z"]]).T
-        B_sym_xyz = sym_coilset.compute_magnetic_field(nodes_xyz, basis="xyz")
-        B_asym_xyz = asym_coilset.compute_magnetic_field(nodes_xyz, basis="xyz")
-        np.testing.assert_allclose(B_sym_xyz, B_asym_xyz, atol=1e-14)
+        # With a MixedCoilSet as the base coils and only rotation
+        coil = FourierPlanarCoil(I)
+        coils = [coil] + [FourierXYZCoil(I) for i in range(N // 4 - 1)]
+        for i, c in enumerate(coils[1:]):
+            c.rotate(angle=2 * np.pi / N * (i + 1))
+        coils = MixedCoilSet.from_symmetry(coils, NFP=4)
+        grid = LinearGrid(N=32, endpoint=False)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
+        B_approx = coils.compute_magnetic_field(
+            [10, 0, 0], basis="rpz", source_grid=grid
+        )[0]
+        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
     def test_properties(self):
@@ -531,6 +505,66 @@ class TestCoilSet:
         B3 = coils3.compute_magnetic_field(np.array([[10, 2, 1]]), source_grid=grid)
         B4 = coils4.compute_magnetic_field(np.array([[10, 2, 1]]), source_grid=grid)
         np.testing.assert_allclose(B3, B4, rtol=1e-2)
+
+
+@pytest.mark.unit
+def test_symmetry_position(DummyCoilSet):
+    """Tests that compute position is correct from symmetry."""
+    # same coil sets with vs without symmetry
+    coilset_sym = load(
+        load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5"
+    )
+    coilset_asym = load(
+        load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
+    )
+    coilset_mixed = MixedCoilSet(*coilset_asym)
+    grid = LinearGrid(N=30)
+
+    # check that positions of CoilSets are the same with xyz basis
+    x_sym = coilset_sym._compute_position(basis="xyz", grid=grid)
+    x_asym = coilset_asym._compute_position(basis="xyz", grid=grid)
+    x_mixed = coilset_mixed._compute_position(basis="xyz", grid=grid)
+
+    np.testing.assert_allclose(x_sym, x_asym)
+    np.testing.assert_allclose(x_sym, x_mixed)
+
+    # check that positions of CoilSets are the same with rpz basis
+    x_sym = coilset_sym._compute_position(basis="rpz", grid=grid)
+    x_asym = coilset_asym._compute_position(basis="rpz", grid=grid)
+    x_mixed = coilset_mixed._compute_position(basis="rpz", grid=grid)
+
+    np.testing.assert_allclose(x_sym, x_asym)
+    np.testing.assert_allclose(x_sym, x_mixed)
+
+
+@pytest.mark.unit
+def test_symmetry_magnetic_field(DummyCoilSet):
+    """Tests that compute magnetic field is correct from symmetry."""
+    # same coil sets with vs without symmetry
+    eq = get("precise_QH")
+    coilset_sym = load(
+        load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5"
+    )
+    coilset_asym = load(
+        load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
+    )
+
+    # test that both coil sets compute the same field on the plasma surface
+    grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
+    with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
+        data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
+
+    # test in (R, phi, Z) coordinates
+    nodes_rpz = np.array([data["R"], data["phi"], data["Z"]]).T
+    B_sym_rpz = coilset_sym.compute_magnetic_field(nodes_rpz, basis="rpz")
+    B_asym_rpz = coilset_asym.compute_magnetic_field(nodes_rpz, basis="rpz")
+    np.testing.assert_allclose(B_sym_rpz, B_asym_rpz, atol=1e-14)
+
+    # test in (X, Y, Z) coordinates
+    nodes_xyz = np.array([data["X"], data["Y"], data["Z"]]).T
+    B_sym_xyz = coilset_sym.compute_magnetic_field(nodes_xyz, basis="xyz")
+    B_asym_xyz = coilset_asym.compute_magnetic_field(nodes_xyz, basis="xyz")
+    np.testing.assert_allclose(B_sym_xyz, B_asym_xyz, atol=1e-14)
 
 
 @pytest.mark.unit

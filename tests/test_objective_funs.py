@@ -867,13 +867,13 @@ class TestObjectiveFunction:
     def test_coil_min_distance(self):
         """Tests minimum distance between coils in a coilset."""
 
-        def test(coils, mindist, grid=None, expect_intersect=False):
+        def test(coils, mindist, grid=None, expect_intersect=False, tol=None):
             obj = CoilsetMinDistance(coils, grid=grid)
             obj.build()
             f = obj.compute(params=coils.params_dict)
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
-            assert coils.is_self_intersecting(grid=grid) == expect_intersect
+            assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
@@ -890,9 +890,7 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
         coils_angular = CoilSet.linspaced_angular(coil, n=4)
         test(
-            coils_angular,
-            np.sqrt(2) * (center - r),
-            grid=LinearGrid(zeta=4),
+            coils_angular, np.sqrt(2) * (center - r), grid=LinearGrid(zeta=4), tol=1e-5
         )
 
         # planar toroidal coils, with symmetry

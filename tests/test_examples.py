@@ -10,13 +10,14 @@ from qic import Qic
 from qsc import Qsc
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, tree_leaves
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
+    _Coil,
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -1509,44 +1510,6 @@ def test_regcoil_helical_coils_check_coils_pos_helicity(
 
 
 @pytest.mark.unit
-def test_single_coil_optimization():
-    """Test that single coil (not coilset) optimization works."""
-    # testing that the objectives work and that the optimization framework
-    # works when a single coil is passed in.
-    opt = Optimizer("fmintr")
-    coil = FourierRZCoil()
-    coil.change_resolution(N=1)
-    target_R = 9
-    target_length = 2 * np.pi * target_R
-    target_curvature = 1 / target_R
-    target_torsion = 0
-    grid = LinearGrid(N=2)
-
-    # length and curvature
-    obj = ObjectiveFunction(
-        (
-            CoilLength(coil, target=target_length),
-            CoilCurvature(coil, target=target_curvature, grid=grid),
-        ),
-    )
-    opt.optimize([coil], obj)
-    np.testing.assert_allclose(
-        coil.compute("length")["length"], target_length, rtol=3e-3
-    )
-    np.testing.assert_allclose(
-        coil.compute("curvature", grid=grid)["curvature"], target_curvature, rtol=3e-3
-    )
-
-    # torsion
-    coil.Z_n = coil.Z_n.at[0].set(0.1)  # initialize with some torsion
-    obj = ObjectiveFunction(CoilTorsion(coil, target=target_torsion, grid=grid))
-    opt.optimize([coil], obj)
-    np.testing.assert_allclose(
-        coil.compute("torsion", grid=grid)["torsion"], target_torsion, atol=1e-5
-    )
-
-
-@pytest.mark.unit
 def test_quadratic_flux_optimization_with_analytic_field():
     """Test analytic field optimization to reduce quadratic flux.
 
@@ -1659,30 +1622,84 @@ def test_second_stage_optimization_CoilSet():
     np.testing.assert_allclose(field[0].current, 0, atol=1e-12)
 
 
-# TODO: replace this with the solution to Issue #1021
+@pytest.mark.slow
 @pytest.mark.unit
-def test_optimize_with_fourier_planar_coil():
-    """Test optimizing a FourierPlanarCoil."""
+def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
+    """Test optimizing for every type of coil and dummy coil sets."""
+    sym_coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+    asym_coils = load(
+        load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
+    )
+    mixed_coils = load(
+        load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
+    )
+    nested_coils = MixedCoilSet(sym_coils, mixed_coils)
+    eq = Equilibrium()
+    # not attempting to accurately calc B for this test,
+    # so make the grids very coarse
+    quad_eval_grid = LinearGrid(M=2, sym=True)
+    quad_field_grid = LinearGrid(N=2)
+
+    def test(c, method):
+        target = 11
+        rtol = 1e-3
+        # first just check that quad flux works for a couple iterations
+        # as this is an expensive objective to compute
+        obj = ObjectiveFunction(
+            QuadraticFlux(
+                eq=eq,
+                field=c,
+                vacuum=True,
+                weight=1e-4,
+                eval_grid=quad_eval_grid,
+                field_grid=quad_field_grid,
+            )
+        )
+        optimizer = Optimizer(method)
+        (c,), _ = optimizer.optimize(c, obj, maxiter=2, ftol=0, xtol=1e-15)
+
+        # now check with optimizing geometry and actually check result
+        objs = [
+            CoilLength(c, target=target),
+        ]
+        extra_msg = ""
+        if isinstance(c, MixedCoilSet):
+            # just to check they work without error
+            objs.extend(
+                [
+                    CoilCurvature(c, target=0.5, weight=1e-2),
+                    CoilTorsion(c, target=0, weight=1e-2),
+                ]
+            )
+            rtol = 3e-2
+            extra_msg = " with curvature and torsion obj"
+
+        obj = ObjectiveFunction(objs)
+
+        (c,), _ = optimizer.optimize(c, obj, maxiter=25, ftol=5e-3, xtol=1e-15)
+        flattened_coils = tree_leaves(
+            c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
+        )
+        lengths = [coil.compute("length")["length"] for coil in flattened_coils]
+        np.testing.assert_allclose(
+            lengths, target, rtol=rtol, err_msg=f"lengths {c}" + extra_msg
+        )
+
+    spline_coil = mixed_coils.coils[-1].copy()
+
     # single coil
-    c = FourierPlanarCoil()
-    objective = ObjectiveFunction(CoilLength(c, target=11))
-    optimizer = Optimizer("fmintr")
-    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
-    np.testing.assert_allclose(c.compute("length")["length"], 11, atol=1e-3)
+    test(FourierPlanarCoil(), "fmintr")
+    test(FourierRZCoil(), "fmintr")
+    test(FourierXYZCoil(), "fmintr")
+    test(spline_coil, "fmintr")
 
-    # in MixedCoilSet
-    c = MixedCoilSet(FourierRZCoil(), FourierPlanarCoil())
-    objective = ObjectiveFunction(CoilLength(c, target=11))
-    optimizer = Optimizer("fmintr")
-    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
-    np.testing.assert_allclose(c.compute("length")[1]["length"], 11, atol=1e-3)
+    # CoilSet
+    test(sym_coils, "lsq-exact")
+    test(asym_coils, "lsq-exact")
 
-    # in CoilSet
-    c = CoilSet(FourierPlanarCoil(), sym=True, NFP=2)
-    objective = ObjectiveFunction(CoilLength(c, target=11))
-    optimizer = Optimizer("fmintr")
-    (c,), _ = optimizer.optimize(c, objective=objective, maxiter=200, ftol=0, xtol=0)
-    np.testing.assert_allclose(c.compute("length")[0]["length"], 11, atol=1e-3)
+    # MixedCoilSet
+    test(mixed_coils, "lsq-exact")
+    test(nested_coils, "lsq-exact")
 
 
 @pytest.mark.unit

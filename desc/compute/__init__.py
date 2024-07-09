@@ -37,6 +37,7 @@ from . import (
     _field,
     _geometry,
     _metric,
+    _neoclassical,
     _omnigenity,
     _profiles,
     _stability,

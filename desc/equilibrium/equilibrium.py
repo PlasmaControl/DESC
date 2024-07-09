@@ -53,7 +53,13 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
+from .coords import (
+    compute_theta_coords,
+    get_rtz_grid,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -804,6 +810,9 @@ class Equilibrium(IOAble, Optimizable):
     ):
         """Compute the quantity given by name on grid.
 
+        If ``grid.coordinates!="rtz"`` then this method may take longer to run
+        than usual as a coordinate mapping subproblem will need to be solved.
+
         Parameters
         ----------
         names : str or array-like of str
@@ -890,6 +899,8 @@ class Equilibrium(IOAble, Optimizable):
         # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
         # which does not need a source grid to evaluate, does not compute <L|r,a> on a
         # grid that does not follow field lines.
+        # Maybe this can help explain:
+        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1664918897.
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
 
         dep0d = {
@@ -912,7 +923,8 @@ class Equilibrium(IOAble, Optimizable):
         )
         # This filter is stronger than the name implies, but the false positives
         # that are filtered out will still get computed with the logic in
-        # compute.utils.compute.
+        # compute.utils.compute
+        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
         just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
         dep1dr = {
             dep
@@ -1164,6 +1176,44 @@ class Equilibrium(IOAble, Optimizable):
             maxiter,
             full_output,
             **kwargs,
+        )
+
+    def get_rtz_grid(
+        self, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+    ):
+        """Return DESC coordinate grid from given coordinates.
+
+        Create a meshgrid from the given coordinates, and return the
+        paired DESC coordinate grid.
+
+        Parameters
+        ----------
+        radial : ndarray
+            Sorted unique radial coordinates.
+        poloidal : ndarray
+            Sorted unique poloidal coordinates.
+        toroidal : ndarray
+            Sorted unique toroidal coordinates.
+        coordinates : str
+            Input coordinates that are specified by the arguments, respectively.
+            raz : rho, alpha, zeta
+            rpz : rho, theta_PEST, zeta
+            rtz : rho, theta, zeta
+        period : tuple of float
+            Assumed periodicity for each quantity in inbasis.
+            Use np.inf to denote no periodicity.
+        jitable : bool, optional
+            If false the returned grid has additional attributes.
+            Required to be false to retain nodes at magnetic axis.
+
+        Returns
+        -------
+        desc_grid : Grid
+            DESC coordinate grid for the given coordinates.
+
+        """
+        return get_rtz_grid(
+            self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
     def compute_theta_coords(

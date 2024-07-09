@@ -289,7 +289,7 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
 
 
 def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
-    """Traverse the dependency DAG for keys in search space dependent on seeds.
+    """Return ``seeds`` plus keys in ``search_space`` with dependency in ``seeds``.
 
     Parameters
     ----------
@@ -298,14 +298,15 @@ def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
     seeds : set[str]
         Keys to find paths toward.
     search_space : iterable of str
-        Additional keys to consider returning.
+        Additional keys besides ``seeds`` to consider returning.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
     out : set[str]
-        All keys in search space with any path in the dependency DAG to any seed.
+        All keys in ``search_space`` that have a dependency in ``seeds``
+        plus ``seeds``.
 
     """
     p = _parse_parameterization(parameterization)
@@ -738,82 +739,6 @@ def safediv(a, b, fill=0, threshold=0):
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
-
-
-def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
-    """Cumulatively integrate y(x) using the composite trapezoidal rule.
-
-    Taken from SciPy, but changed NumPy references to JAX.NumPy:
-        https://github.com/scipy/scipy/blob/v1.10.1/scipy/integrate/_quadrature.py
-
-    Parameters
-    ----------
-    y : array_like
-        Values to integrate.
-    x : array_like, optional
-        The coordinate to integrate along. If None (default), use spacing `dx`
-        between consecutive elements in `y`.
-    dx : float, optional
-        Spacing between elements of `y`. Only used if `x` is None.
-    axis : int, optional
-        Specifies the axis to cumulate. Default is -1 (last axis).
-    initial : scalar, optional
-        If given, insert this value at the beginning of the returned result.
-        Typically, this value should be 0. Default is None, which means no
-        value at ``x[0]`` is returned and `res` has one element less than `y`
-        along the axis of integration.
-
-    Returns
-    -------
-    res : ndarray
-        The result of cumulative integration of `y` along `axis`.
-        If `initial` is None, the shape is such that the axis of integration
-        has one less value than `y`. If `initial` is given, the shape is equal
-        to that of `y`.
-
-    """
-    y = jnp.asarray(y)
-    if x is None:
-        d = dx
-    else:
-        x = jnp.asarray(x)
-        if x.ndim == 1:
-            d = jnp.diff(x)
-            # reshape to correct shape
-            shape = [1] * y.ndim
-            shape[axis] = -1
-            d = d.reshape(shape)
-        elif len(x.shape) != len(y.shape):
-            raise ValueError("If given, shape of x must be 1-D or the " "same as y.")
-        else:
-            d = jnp.diff(x, axis=axis)
-
-        if d.shape[axis] != y.shape[axis] - 1:
-            raise ValueError(
-                "If given, length of x along axis must be the " "same as y."
-            )
-
-    def tupleset(t, i, value):
-        l = list(t)
-        l[i] = value
-        return tuple(l)
-
-    nd = len(y.shape)
-    slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))
-    slice2 = tupleset((slice(None),) * nd, axis, slice(None, -1))
-    res = jnp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
-
-    if initial is not None:
-        if not jnp.isscalar(initial):
-            raise ValueError("`initial` parameter should be a scalar.")
-
-        shape = list(res.shape)
-        shape[axis] = 1
-        res = jnp.concatenate(
-            [jnp.full(shape, initial, dtype=res.dtype), res], axis=axis
-        )
-
-    return res
 
 
 def _get_grid_surface(grid, surface_label):

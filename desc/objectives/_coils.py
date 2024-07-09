@@ -695,7 +695,7 @@ class CoilCurrentLength(CoilLength):
 class CoilsetMinDistance(_Objective):
     """Target the minimum distance between coils in a coilset.
 
-    Will yield one value per coil in the coilset, which is the minimumm distance to
+    Will yield one value per coil in the coilset, which is the minimum distance to
     another coil in that coilset.
 
     Parameters

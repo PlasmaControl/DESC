@@ -2363,6 +2363,10 @@ class UmbilicHighCurvature3(_Objective):
         else:
             curve_grid = self._curve_grid
 
+        assert (
+            curve.NFP_umbilic_factor == 3
+        ), "objective not gneralized for the right umbilic factor"
+
         if eq != self._eq:
             self._eq = eq
 
@@ -2435,7 +2439,8 @@ class UmbilicHighCurvature3(_Objective):
         theta_points = (curve_phi + curve_R) / 3
 
         umbilic_edge_grid = Grid(
-            jnp.array([jnp.ones([1.0]), theta_points, curve_phi]).T, jitable=True
+            jnp.array([jnp.ones_like(theta_points), theta_points, curve_phi]).T,
+            jitable=True,
         )
 
         equil_profiles = get_profiles(

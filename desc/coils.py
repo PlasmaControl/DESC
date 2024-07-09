@@ -1166,19 +1166,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)
         data = coils.compute("phi")
-        check_for_intersection = False
-        maybe_bad_coil_inds = []
         for i, cdata in enumerate(data):
-            # check if any coils lie on symmetry planes, these may cause
-            # self-intersection after reflection/rotation
-            maybe_bad_bool = np.any(cdata["phi"] > maxphi) or (
-                sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps)
+            errorif(
+                np.any(cdata["phi"] > maxphi),
+                ValueError,
+                f"coil {i} exceeds the toroidal extent for NFP={NFP} and sym={sym}",
             )
-            if maybe_bad_bool:
-                maybe_bad_coil_inds.append(i)
-                # check the coilset for self-intersection before returning coilset
-                # if any lie on symmetry planes
-                check_for_intersection = True
+            warnif(
+                sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
+                UserWarning,
+                f"coil {i} is on the symmetry plane phi=0",
+            )
 
         coilset = []
         if sym:
@@ -1200,17 +1198,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             rotated_coils = coils.copy()
             rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
             coilset += rotated_coils
-        coilset_to_return = cls(*coilset)
-        if check_for_intersection:
-            grid = LinearGrid(N=100)
-            coilset_to_return.is_self_intersecting(
-                grid=grid,
-                tol=1e-2,
-                extra_msg="Indices of coils which lie on symmetry planes, "
-                + f"which are likely culprits: {maybe_bad_coil_inds}",
-            )
 
-        return coilset_to_return
+        return cls(*coilset)
 
     @classmethod
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):
@@ -1502,50 +1491,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
-
-    def is_self_intersecting(self, grid=None, tol=1e-3, extra_msg=""):
-        """Check if any coils in the CoilSet intersect.
-
-        NOTE: If grid resolution used is too low, or the tolerance given
-        is too large, this function may fail to return the correct answer.
-
-        Parameters
-        ----------
-        grid : Grid, optional
-            Collocation grid containing the nodes to evaluate the coil positions at.
-            If a list, must have the same structure as the coilset. Defaults to the
-            default grid for each coil type, check the docstrings and ``curve.py``
-            for more details.
-        tol : float, optional
-            the tolerance (in meters) to check the intersections to, if points on any
-            two coils are closer than this tolerance, then the function will return
-            True and a warning will be raised. Defaults to 1e-3 m.
-        extra_msg : str
-            extra message to be output with the warning if the coilset is found to be
-            self intersecting.
-
-        Returns
-        -------
-        is_self_intersecting : bool
-            Whether or not any coils in the CoilSet come close enough to eachother to
-            possibly be intersecting.
-
-        """
-        from desc.objectives._coils import CoilsetMinDistance
-
-        obj = CoilsetMinDistance(self, grid=grid)
-        obj.build(verbose=0)
-        min_dists = obj.compute(self.params_dict)
-        is_nearly_intersecting = np.any(min_dists < tol)
-        warnif(
-            is_nearly_intersecting,
-            UserWarning,
-            "Found coils which are nearly intersecting according to the given tol "
-            + f"(min coil-coil distance = {np.min(min_dists):1.3e} m < {tol:1.3e} m)"
-            + " in the coilset, it is recommended to check coils closely."
-            + extra_msg,
-        )
-        return is_nearly_intersecting
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):

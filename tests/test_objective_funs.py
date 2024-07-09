@@ -867,16 +867,13 @@ class TestObjectiveFunction:
     def test_coil_min_distance(self):
         """Tests minimum distance between coils in a coilset."""
 
-        def test(coils, mindist, grid=None, test_method=False):
+        def test(coils, mindist, grid=None, test_method=False, expect_intersect=False):
             obj = CoilsetMinDistance(coils, grid=grid)
             obj.build()
             f = obj.compute(params=coils.params_dict)
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
-            if test_method:  # also test the coilset method
-                np.testing.assert_allclose(
-                    coils.compute_minimum_intercoil_distances(grid=grid), mindist
-                )
+            assert coils.is_self_intersecting(grid=grid, tol=1e-3) == expect_intersect
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
@@ -920,12 +917,14 @@ class TestObjectiveFunction:
         )
         xyz_coil = FourierXYZCoil(X_n=[0, 6, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0])
         coils_mixed = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
-        test(
-            coils_mixed,
-            [0, 0, 0, 0, 1, 0, 1, 2],
-            grid=LinearGrid(zeta=4),
-            test_method=True,
-        )
+        with pytest.warns(UserWarning, match="nearly intersecting"):
+            test(
+                coils_mixed,
+                [0, 0, 0, 0, 1, 0, 1, 2],
+                grid=LinearGrid(zeta=4),
+                test_method=True,
+                expect_intersect=True,
+            )
         # TODO: move this coil set to conftest?
 
     @pytest.mark.unit

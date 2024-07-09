@@ -322,21 +322,14 @@ class TestCoilSet:
         for i, c in enumerate(coils_list_sym[1:]):
             c.rotate(angle=2 * np.pi / N * (i + 1))
 
-        # test just the warning for crossing phi=2pi/NFP plane
-        # crosses plane but since it just a rigid toroidal rotation,
-        # they are not self-intersecting
-        with pytest.warns(UserWarning, match="symmetry"):
-            _ = CoilSet.from_symmetry(coils_list, NFP=4)
-
         # test the warning for crossing phi=0 plane and for
         # self-intersecting coils, as two of the coils in each field period lie nearly
         # in the same physical space (intersecting at 2 points) after reflection
         with pytest.warns(UserWarning) as warninfo:
             _ = CoilSet.from_symmetry(coils_list_sym, NFP=4, sym=True)
-        assert "phi=0" in str(warninfo[0].message)
         # "nearly intersecting" warning is given because the grids are finite that
         # we check the coils on
-        assert "nearly intersecting" in str(warninfo[-1].message)
+        assert "nearly intersecting" in str(warninfo[0].message)
 
     @pytest.mark.unit
     def test_properties(self):

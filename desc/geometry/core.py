@@ -115,9 +115,7 @@ class Curve(IOAble, Optimizable, ABC):
             names = [names]
         if grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            # NFP=1 and multiply N by NFP in case the coil has NFP>1 to ensure
-            # sufficient resolution across the whole coil
-            grid = LinearGrid(N=2 * self.N * NFP + 5, NFP=1, endpoint=False)
+            grid = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=False)
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
             grid = LinearGrid(N=grid, NFP=NFP, endpoint=False)

@@ -1166,33 +1166,19 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)
         data = coils.compute("phi")
-        check_coil_dists = False
+        check_coil_coil_dists = False
+        maybe_bad_coil_inds = []
         for i, cdata in enumerate(data):
-            warnif(
-                np.any(cdata["phi"] > maxphi),
-                UserWarning,
-                f"coil {i} crosses the phi=2pi/{NFP*(sym+1)} symmetry plane"
-                + f" for NFP={NFP} and sym={sym},"
-                + "it is recommended to check the coil-coil separation with method"
-                + "``compute_minimum_intercoil_distance`` to ensure the "
-                + "coils do not overlap after rotation.",
+            # check if any coils lie on symmetry planes, these may cause
+            # self-intersection after reflection/rotation
+            maybe_bad_bool = np.any(cdata["phi"] > maxphi) or (
+                sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps)
             )
-            warnif(
-                sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
-                UserWarning,
-                f"coil {i} crosses the symmetry plane phi=0, "
-                + "it is recommended to check the coil-coil separation with method"
-                + "``compute_minimum_intercoil_distance`` to ensure the "
-                + "coils do not overlap after rotation and reflection.",
-            )
-            # check the intercoil distances before returning coilset if any lie on
-            # symmetry planes
-            check_coil_coil_dists = (
-                True
-                if np.any(cdata["phi"] > maxphi)
-                or (sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps))
-                else check_coil_dists
-            )
+            if maybe_bad_bool:
+                maybe_bad_coil_inds.append(i)
+                # check the intercoil distances before returning coilset if any lie on
+                # symmetry planes
+                check_coil_coil_dists = True
 
         coilset = []
         if sym:
@@ -1220,13 +1206,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             min_dists = coilset_to_return.compute_minimum_intercoil_distances(grid=grid)
             intersection = np.any(min_dists < np.finfo(min_dists.dtype).eps)
             near_intersection = np.any(min_dists < 1e-2)
-            warnif(
-                intersection,
-                UserWarning,
-                "``compute_minimum_intercoil_distances`` finds coils which are "
-                + "intersecting in the full coilset, it is recommended"
-                + " to check coils closely.",
-            )
             warnif(
                 near_intersection and not intersection,
                 UserWarning,

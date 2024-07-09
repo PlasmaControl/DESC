@@ -128,7 +128,10 @@ class _CoilObjective(_Objective):
 
         # map grid to list of length coils
         if grid is None:
-            grid = [LinearGrid(N=2 * c.N + 5, endpoint=False) for c in coils]
+            grid = []
+            for c in coils:
+                NFP = c.NFP if hasattr(c, "NFP") else 1
+                grid.append(LinearGrid(N=2 * c.N + 5, NFP=NFP, endpoint=False))
         if isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=self._grid, endpoint=False)
         if isinstance(grid, _Grid):

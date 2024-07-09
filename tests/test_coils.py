@@ -130,6 +130,20 @@ class TestCoil:
             B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
         )
 
+        # FourierRZCoil with NFP>1
+        coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]), NFP=2)
+        B_xyz = coil.compute_magnetic_field(grid_xyz, basis="xyz", source_grid=None)
+        B_rpz = coil.compute_magnetic_field(grid_rpz, basis="rpz", source_grid=None)
+        np.testing.assert_allclose(
+            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+
     @pytest.mark.unit
     def test_SumMagneticField_with_Coil(self):
         """Test SumMagneticField working with Coil and MagneticField objects."""

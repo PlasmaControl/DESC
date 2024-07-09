@@ -893,7 +893,6 @@ class TestObjectiveFunction:
             coils_angular,
             np.sqrt(2) * (center - r),
             grid=LinearGrid(zeta=4),
-            test_method=True,
         )
 
         # planar toroidal coils, with symmetry

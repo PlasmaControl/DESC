@@ -68,11 +68,11 @@ class Curve(IOAble, Optimizable, ABC):
     @property
     def name(self):
         """Name of the curve."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
-        self._name = new
+        self._name = str(new)
 
     def compute(
         self,
@@ -323,11 +323,11 @@ class Surface(IOAble, Optimizable, ABC):
     @property
     def name(self):
         """str: Name of the surface."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
-        self._name = new
+        self._name = str(new)
 
     @property
     def L(self):
@@ -444,7 +444,13 @@ class Surface(IOAble, Optimizable, ABC):
         if params is None:
             params = get_params(names, obj=self)
         if transforms is None:
-            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+            transforms = get_transforms(
+                names,
+                obj=self,
+                grid=grid,
+                jitable=kwargs.pop("jitable", False),
+                **kwargs,
+            )
         if data is None:
             data = {}
         profiles = {}
@@ -490,7 +496,13 @@ class Surface(IOAble, Optimizable, ABC):
                 self,
                 dep0d,
                 params=params,
-                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                transforms=get_transforms(
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    jitable=kwargs.pop("jitable", False),
+                    **kwargs,
+                ),
                 profiles={},
                 data=None,
                 **kwargs,

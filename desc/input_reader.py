@@ -851,7 +851,7 @@ class InputReader:
             Fourier coefficients below this value will be set to 0.
         """
         from desc.grid import LinearGrid
-        from desc.io.equilibrium_io import load
+        from desc.io.optimizable_io import load
         from desc.profiles import PowerSeriesProfile
         from desc.utils import copy_coeffs
 

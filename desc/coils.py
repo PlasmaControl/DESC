@@ -405,7 +405,17 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         )
 
     @classmethod
-    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+    def from_values(
+        cls,
+        current,
+        coords,
+        N=10,
+        NFP=1,
+        NFP_umbilic_factor=1,
+        basis="rpz",
+        name="",
+        sym=False,
+    ):
         """Fit coordinates to FourierRZCoil representation.
 
         Parameters
@@ -420,6 +430,9 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
+        NFP_umbilic_factor : int
+            Umbilic factor to fit curves that go around multiple times toroidally before
+            closing on themselves.
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "rpz"
 
@@ -429,13 +442,22 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             New representation of the coil parameterized by Fourier series for R,Z.
 
         """
-        curve = super().from_values(coords, N=N, NFP=NFP, basis=basis, sym=sym)
+        curve = super().from_values(
+            coords,
+            N=N,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            basis=basis,
+            sym=sym,
+        )
         return cls(
             current,
             R_n=curve.R_n,
             Z_n=curve.Z_n,
             modes_R=curve.R_basis.modes[:, 2],
             modes_Z=curve.Z_basis.modes[:, 2],
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
             name=name,
         )
 

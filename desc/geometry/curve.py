@@ -230,7 +230,7 @@ class FourierRZCurve(Curve):
         return curve
 
     @classmethod
-    def from_values(cls, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+    def from_values(cls, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
         """Fit coordinates to FourierRZCurve representation.
 
         Parameters
@@ -245,6 +245,10 @@ class FourierRZCurve(Curve):
             according to NFP.
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "rpz"
+        sym : bool
+            Whether to enforce stellarator symmetry.
+        name : str
+            Name for this curve.
 
         Returns
         -------

@@ -402,7 +402,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
     @classmethod
-    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
         """Fit coordinates to FourierRZCoil representation.
 
         Parameters
@@ -419,10 +419,15 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             according to NFP.
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "rpz"
+        sym : bool
+            Whether to enforce stellarator symmetry.
+        name : str
+            name for this coil
+
 
         Returns
         -------
-        coili : FourierRZCoil
+        coil : FourierRZCoil
             New representation of the coil parameterized by Fourier series for R,Z.
 
         """

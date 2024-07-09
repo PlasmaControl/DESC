@@ -404,6 +404,41 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             current, R_n, Z_n, modes_R, modes_Z, NFP, NFP_umbilic_factor, sym, name
         )
 
+    @classmethod
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+        """Fit coordinates to FourierRZCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amps.
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierRZCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new R,Z representation.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "rpz"
+
+        Returns
+        -------
+        coili : FourierRZCoil
+            New representation of the coil parameterized by Fourier series for R,Z.
+
+        """
+        curve = super().from_values(coords, N=N, NFP=NFP, basis=basis, sym=sym)
+        return cls(
+            current,
+            R_n=curve.R_n,
+            Z_n=curve.Z_n,
+            modes_R=curve.R_basis.modes[:, 2],
+            modes_Z=curve.Z_basis.modes[:, 2],
+            name=name,
+        )
+
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
     """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle s.
@@ -1156,9 +1191,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if not isinstance(coils, CoilSet):
-            coils = CoilSet(coils)
-
-        [_check_type(coil, coils[0]) for coil in coils]
+            try:
+                coils = CoilSet(coils)
+            except (TypeError, ValueError):
+                # likely there are multiple coil types,
+                # so make a MixedCoilSet
+                coils = MixedCoilSet(coils)
+        if not isinstance(coils, MixedCoilSet):
+            # only need to check this for a CoilSet, not MixedCoilSet
+            [_check_type(coil, coils[0]) for coil in coils]
 
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)

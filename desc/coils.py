@@ -1212,7 +1212,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 "``compute_minimum_intercoil_distances`` finds coils which are "
                 + "nearly intersecting "
                 + f"(min coil-coil distance = {np.min(min_dists)*100:1.3e} cm < 1cm)"
-                + " in the full coilset, it is recommended to check coils closely.",
+                + " in the full coilset, it is recommended to check coils closely."
+                + "Indices of coils which lie on symmetry planes, which are likely"
+                + f" culprits: {maybe_bad_coil_inds}",
             )
 
         return coilset_to_return

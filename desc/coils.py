@@ -401,6 +401,41 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     ):
         super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
+    @classmethod
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+        """Fit coordinates to FourierRZCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amps.
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierRZCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new R,Z representation.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "rpz"
+
+        Returns
+        -------
+        coili : FourierRZCoil
+            New representation of the coil parameterized by Fourier series for R,Z.
+
+        """
+        curve = super().from_values(coords, N=N, NFP=NFP, basis=basis, sym=sym)
+        return cls(
+            current,
+            R_n=curve.R_n,
+            Z_n=curve.Z_n,
+            modes_R=curve.R_basis.modes[:, 2],
+            modes_Z=curve.Z_basis.modes[:, 2],
+            name=name,
+        )
+
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
     """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle s.

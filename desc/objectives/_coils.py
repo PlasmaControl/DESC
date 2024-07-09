@@ -818,6 +818,8 @@ class CoilsetMinDistance(_Objective):
 
         def body(k):
             # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
+            # dist[i,j,n] is the distance from the jth point on the kth coil
+            # to the nth point on the ith coil
             dist = safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
             # exclude distances between points on the same coil
             mask = jnp.ones(self.dim_f).at[k].set(0)[:, None, None]

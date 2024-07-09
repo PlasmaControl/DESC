@@ -19,6 +19,7 @@ from desc.backend import (
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import safenorm
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -1205,9 +1206,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             grid = LinearGrid(N=100)
             coilset_to_return.is_self_intersecting(
                 grid=grid,
-                tol=1e-2,
-                extra_msg="Indices of coils which lie on symmetry planes, "
-                + f"which are likely culprits: {maybe_bad_coil_inds}",
             )
 
         return coilset_to_return
@@ -1503,11 +1501,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
-    def is_self_intersecting(self, grid=None, tol=1e-3, extra_msg=""):
+    def is_self_intersecting(self, grid=None):
         """Check if any coils in the CoilSet intersect.
 
-        NOTE: If grid resolution used is too low, or the tolerance given
-        is too large, this function may fail to return the correct answer.
+        Checks intersection by checking that for each point on a given coil, the
+        closest point in the coilset is on that same coil. If the closest point is
+        on another coil, that indicates that the coils may be close to intersecting.
+
+        NOTE: If grid resolution used is too low, this function may fail to return
+        the correct answer.
 
         Parameters
         ----------
@@ -1516,13 +1518,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             If a list, must have the same structure as the coilset. Defaults to the
             default grid for each coil type, check the docstrings and ``curve.py``
             for more details.
-        tol : float, optional
-            the tolerance (in meters) to check the intersections to, if points on any
-            two coils are closer than this tolerance, then the function will return
-            True and a warning will be raised. Defaults to 1e-3 m.
-        extra_msg : str
-            extra message to be output with the warning if the coilset is found to be
-            self intersecting.
 
         Returns
         -------
@@ -1535,15 +1530,37 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         obj = CoilsetMinDistance(self, grid=grid)
         obj.build(verbose=0)
-        min_dists = obj.compute(self.params_dict)
-        is_nearly_intersecting = np.any(min_dists < tol)
+        pts = obj._constants["coilset"]._compute_position(
+            params=self.params_dict, grid=obj._constants["grid"]
+        )
+        pts = np.array(pts)
+        num_nodes = pts.shape[1]
+        bad_coil_inds = []
+        # We will raise the warning if the jth point on the
+        # kth coil is closer to a point on a different coil than
+        # it is to the neighboring points on itself
+        for k in range(self.num_coils):
+            # dist[i,j,n] is the distance from the jth point on the kth coil
+            # to the nth point on the ith coil
+            dist = np.asarray(
+                safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
+            )
+            for j in range(num_nodes):
+                dists_for_this_pt = dist[:, j, :].copy()
+                dists_for_this_pt[k][
+                    j
+                ] = np.inf  # Set the dist from the pt to itself to inf to ignore it
+                ind_min = np.argmin(dists_for_this_pt)
+                if ind_min not in np.arange((num_nodes) * k, (num_nodes) * (k + 1)):
+                    bad_coil_inds.append(k)
+        is_nearly_intersecting = True if bad_coil_inds else False
         warnif(
             is_nearly_intersecting,
             UserWarning,
-            "Found coils which are nearly intersecting according to the given tol "
-            + f"(min coil-coil distance = {np.min(min_dists):1.3e} m < {tol:1.3e} m)"
-            + " in the coilset, it is recommended to check coils closely."
-            + extra_msg,
+            "Found coils which are nearly intersecting according to the given grid "
+            + " it is recommended to check coils closely or run function again with ."
+            + " a higher resolution grid."
+            + f" Offending coil indices are {bad_coil_inds}.",
         )
         return is_nearly_intersecting
 

@@ -313,18 +313,6 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     y, mu, c = jnp.broadcast_arrays(y, mu, c)
 
-    # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
-    omega = options.pop("omega", 1.0)
-    eta = options.pop("eta", 1.0)
-    alpha_omega = options.pop("alpha_omega", 1.0)
-    beta_omega = options.pop("beta_omega", 1.0)
-    alpha_eta = options.pop("alpha_eta", 0.1)
-    beta_eta = options.pop("beta_eta", 0.9)
-    tau = options.pop("tau", 10)
-
-    gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
-    ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
-
     L = lagfun(f, c, y, mu)
     g = laggrad(z, y, mu, *args)
     ngev += 1
@@ -415,6 +403,18 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     alltr = [trust_radius]
     if g_norm < gtol and constr_violation < ctol:
         success, message = True, STATUS_MESSAGES["gtol"]
+
+    # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
+    omega = options.pop("omega", g_norm if scaled_termination else 1.0)
+    eta = options.pop("eta", constr_violation if scaled_termination else 1.0)
+    alpha_omega = options.pop("alpha_omega", 1.0)
+    beta_omega = options.pop("beta_omega", 1.0)
+    alpha_eta = options.pop("alpha_eta", 1.0 if scaled_termination else 0.1)
+    beta_eta = options.pop("beta_eta", 1.0 if scaled_termination else 0.9)
+    tau = options.pop("tau", 10)
+
+    gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
+    ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
 
     if verbose > 1:
         print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")

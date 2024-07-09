@@ -291,7 +291,9 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
 
     g_h = g * d
     J_h = J * d
-    g_norm = jnp.linalg.norm((g_h if scaled_termination else g * v), ord=jnp.inf)
+    g_norm = jnp.linalg.norm(
+        (g * v * scale if scaled_termination else g * v), ord=jnp.inf
+    )
 
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
@@ -474,7 +476,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             v, dv = cl_scaling_vector(z, g, lb, ub)
             v = jnp.where(dv != 0, v * scale_inv, v)
             g_norm = jnp.linalg.norm(
-                (g_h if scaled_termination else g * v), ord=jnp.inf
+                (g * v * scale if scaled_termination else g * v), ord=jnp.inf
             )
 
             # updating augmented lagrangian params
@@ -500,7 +502,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 v, dv = cl_scaling_vector(z, g, lb, ub)
                 v = jnp.where(dv != 0, v * scale_inv, v)
                 g_norm = jnp.linalg.norm(
-                    (g_h if scaled_termination else g * v), ord=jnp.inf
+                    (g * v * scale if scaled_termination else g * v), ord=jnp.inf
                 )
 
             z_norm = jnp.linalg.norm(

@@ -1225,7 +1225,7 @@ class FiniteElementBasis(_FE_Basis):
 
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
-        print(basis_functions[:, inds])
+        print(basis_functions[:, inds].shape)
         
         return basis_functions[:, inds]
 
@@ -2056,7 +2056,6 @@ class FiniteElementMesh3D:
 
         if K == 1:
             element = fem.ElementTetP1()
-
         else:
             element = fem.ElementTetP2()
 
@@ -2075,6 +2074,7 @@ class FiniteElementMesh3D:
         # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
         tetrahedra = []
         vertices_final = []
+        volume6s = []
         # Pick four points of tetrahedral elements:
 
         for i in range(L - 1):
@@ -2417,6 +2417,12 @@ class FiniteElementMesh3D:
                     tetrahedron4 = TetrahedronFiniteElement(tetrahedron_4_vertices, K=K)
                     tetrahedron5 = TetrahedronFiniteElement(tetrahedron_5_vertices, K=K)
                     tetrahedron6 = TetrahedronFiniteElement(tetrahedron_6_vertices, K=K)
+                    volume6s.append(tetrahedron1.volume6)
+                    volume6s.append(tetrahedron2.volume6)
+                    volume6s.append(tetrahedron3.volume6)
+                    volume6s.append(tetrahedron4.volume6)
+                    volume6s.append(tetrahedron5.volume6)
+                    volume6s.append(tetrahedron6.volume6)
                     tetrahedra.append(tetrahedron1)
                     tetrahedra.append(tetrahedron2)
                     tetrahedra.append(tetrahedron3)
@@ -2439,7 +2445,7 @@ class FiniteElementMesh3D:
 
         [integration_points, weights] = fem.quadrature.get_quadrature(element, K * 3)  # * 5
 
-        weights = 6 * weights
+        weights = weights
 
         integration_points = integration_points.T
 
@@ -2464,6 +2470,7 @@ class FiniteElementMesh3D:
         # Integration points, weights, and number of integration points
         self.integration_points = np.array(integration_points)
         self.weights = np.array(weights)
+        self.weighted_volumes = np.ravel(np.outer(np.abs(np.array(volume6s)), self.weights))
         self.nquad = self.integration_points.shape[0]
         # self.plot_tetrahedra() #plot_quadrature_points=True)
 
@@ -2484,8 +2491,6 @@ class FiniteElementMesh3D:
                                quadpoints[i * nquad: (i + 1) * nquad, 2], 
                                c='k', marker="x", s=100)
         plt.show()
-
-    
 
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
@@ -2573,17 +2578,19 @@ class FiniteElementMesh3D:
         integral: 1D ndarray, shape (num_functions)
             Value of the integral over the mesh for each component of f
         """
-        nquad = self.nquad
-        if f.shape[1] > 1:
-            integral = np.zeros(f.shape[1])
-        else:
-            integral = 0.0
-        for i, tetrahedron in enumerate(self.tetrahedra):
-            integral += np.dot(
-                abs(tetrahedron.volume6) * self.weights,
-                f[i * nquad : (i + 1) * nquad, :],
-            )
-        return integral / 6.0
+        # nquad = self.nquad
+        # if f.shape[1] > 1:
+        #     integral = np.zeros(f.shape[1])
+        # else:
+        #     integral = 0.0
+        # for i, tetrahedron in enumerate(self.tetrahedra):
+        #     print(i)
+        #     integral += np.dot(
+        #         abs(tetrahedron.volume6) * self.weights,
+        #         f[i * nquad : (i + 1) * nquad, :],
+        #     )
+        # integral = 
+        return self.weighted_volumes @ f
 
     def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta):
         """Given a point on the mesh, find which tetrahedron it lies inside.
@@ -2606,6 +2613,8 @@ class FiniteElementMesh3D:
         tetrahedra_indices = np.zeros(rho_theta_zeta.shape[0])
 
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.I_LMN * self.Q))
+        print(self.vertices_final.shape)
+        exit()
         for i in range(rho_theta_zeta.shape[0]):
             P = rho_theta_zeta[i, :]
 
@@ -2679,8 +2688,6 @@ class FiniteElementMesh3D:
                     basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
                         tetrahedron.get_basis_functions(P.reshape(1, 3))
                     )
-
-                    
         
         return tetrahedra_indices, basis_functions
 
@@ -2757,11 +2764,13 @@ class FiniteElementMesh2D:
 
         self.assembly_matrix = assembly.assemble(basis).todense()
         
-        print('Assembly matrix = ', self.assembly_matrix)
+        print('Assembly matrix shape = ', self.assembly_matrix.shape)
 
         # Will fix this next section later
         # Compute the triangle elements for all 2(M - 1)(L - 1) triangles
         triangles = []
+        area2s = []
+        vertices_all = []
         for i in range(L - 1):
             for j in range(M - 1):
 
@@ -2796,12 +2805,17 @@ class FiniteElementMesh2D:
 
                 triangle_2_vertices[2, 0] = vertices[t_r - 1, 0]
                 triangle_2_vertices[2, 1] = vertices[t_r - 1, 1]
+                vertices_all.append(triangle_1_vertices)
+                vertices_all.append(triangle_2_vertices)
 
                 # Grabbing the two triangles in each quadrilateral:
                 triangle1 = TriangleFiniteElement(triangle_1_vertices, K=K)
                 triangle2 = TriangleFiniteElement(triangle_2_vertices, K=K)
                 triangles.append(triangle1)
                 triangles.append(triangle2)
+                area2s.append(triangle1.area2)
+                area2s.append(triangle2.area2)
+        self.vertices_all = np.array(vertices_all)
         self.vertices = vertices
         self.triangles = triangles
 
@@ -2813,7 +2827,7 @@ class FiniteElementMesh2D:
         [integration_points, weights] = fem.quadrature.get_quadrature(
             element, 3 * K + 1
         )
-        weights = 2 * weights
+        weights = weights
 
         integration_points = integration_points.T
 
@@ -2833,9 +2847,7 @@ class FiniteElementMesh2D:
         self.integration_points = np.array(integration_points)
         self.weights = np.array(weights)
         self.nquad = self.integration_points.shape[0]
-
-    #### Comment from Alan -- Don't think this function is ever used
-   
+        self.weighted_areas = np.ravel(np.outer(np.abs(area2s), self.weights))   
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""
@@ -2867,57 +2879,133 @@ class FiniteElementMesh2D:
             triangle_indices.
         """
         # print('rho_theta = ', rho_theta)
-        triangle_indices = np.zeros(rho_theta.shape[0])
+        # triangle_indices = np.zeros(rho_theta.shape[0])
         basis_functions = np.zeros((rho_theta.shape[0], self.I_LMN * self.Q))
-        for i in range(rho_theta.shape[0]):
-            v = rho_theta[i, :]
-            for j, triangle in enumerate(self.triangles):
-                v1 = triangle.vertices[0, :]
-                v2 = triangle.vertices[1, :] - triangle.vertices[0, :]
-                v3 = triangle.vertices[2, :] - triangle.vertices[0, :]
-                a = (np.cross(v, v3) - np.cross(v1, v3)) / np.cross(v2, v3)
-                b = -(np.cross(v, v2) - np.cross(v1, v2)) / np.cross(v2, v3)
-                if a >= 0 and b >= 0 and (a + b) <= 1:
-                    # print(i, j, v, a, b, a + b, triangle.get_basis_functions(v.reshape(1, 2))[0])
-                    # triangle.plot_triangle()
-                    # plt.scatter(v[0], v[1])
-                    # plt.show()
+        # for i in range(rho_theta.shape[0]):
+        #     v = rho_theta[i, :]
+        #     for j, triangle in enumerate(self.triangles):
+        #         v1 = triangle.vertices[0, :]
+        #         v2 = triangle.vertices[1, :] - triangle.vertices[0, :]
+        #         v3 = triangle.vertices[2, :] - triangle.vertices[0, :]
+        #         a = (np.cross(v, v3) - np.cross(v1, v3)) / np.cross(v2, v3)
+        #         b = -(np.cross(v, v2) - np.cross(v1, v2)) / np.cross(v2, v3)
+        #         if a >= 0 and b >= 0 and (a + b) <= 1:
+        #             print(i, j, v, a, b, a + b, self.vertices_all[j, :, :])
+        #             # print(i, j, v, a, b, a + b, triangle.get_basis_functions(v.reshape(1, 2))[0])
+        #             # triangle.plot_triangle()
+        #             # plt.scatter(v[0], v[1])
+        #             # plt.show()
                     
-                    # Special case handling for theta = 0 points
-                    if np.isclose(v[1], 0.0) and j == 0:
-                        if np.isclose(a, 0.0) and np.isclose(b, 0.0):
-                            triangle_indices[i] = j
-                            basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
-                                triangle.get_basis_functions(v.reshape(1, 2))
-                            )
-                            break
-                    else:
-                        triangle_indices[i] = j
-                        basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
-                            triangle.get_basis_functions(v.reshape(1, 2))
-                        )
-                        break  # found the right triangle, so break out of j loop
+        #             # Special case handling for theta = 0 points
+        #             if np.isclose(v[1], 0.0) and j == 0:
+        #                 if np.isclose(a, 0.0) and np.isclose(b, 0.0):
+        #                     triangle_indices[i] = j
+        #                     basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
+        #                         triangle.get_basis_functions(v.reshape(1, 2))
+        #                     )
+        #                     break
+        #             else:
+        #                 triangle_indices[i] = j
+        #                 basis_functions[i, j * self.Q : (j + 1) * self.Q], _ = (
+        #                     triangle.get_basis_functions(v.reshape(1, 2))
+        #                 )
+        #                 break  # found the right triangle, so break out of j loop
                            
         # Some possible code to vectorize this function in future
-        # v = rho_theta
-        # v1 = self.vertices[0, :, :]  # shape (num_triangles, 2)
-        # v2 = self.vertices[1, :, :]
-        # v3 = self.vertices[2, :, :]
-        # v_v2_cross = np.outer(v[:, 0], v2[:, 1])
-        # v_v3_cross = np.outer(v[:, 0], v3[:, 1])
-        # v_v1_cross = np.outer(v[:, 0], v1[:, 1])
-        # v1_v2_cross = v1[:, 0] * v2[:, 1]
-        # v1_v3_cross = v1[:, 0] * v3[:, 1]
-        # v2_v3_cross = v2[:, 0] * v3[:, 1]
+        v = rho_theta
+        # print(v.shape, self.vertices_all.shape)
+        # v1 = triangle.vertices[0, :]
+        #         v2 = triangle.vertices[1, :] - triangle.vertices[0, :]
+        #         v3 = triangle.vertices[2, :] - triangle.vertices[0, :]
+    #     var s = (p0.X - p2.X) * (p.Y - p2.Y) - (p0.Y - p2.Y) * (p.X - p2.X);
+    # var t = (p1.X - p0.X) * (p.Y - p0.Y) - (p1.Y - p0.Y) * (p.X - p0.X);
+
+    # if ((s < 0) != (t < 0) && s != 0 && t != 0)
+    #     return false;
+
+    # var d = (p2.X - p1.X) * (p.Y - p1.Y) - (p2.Y - p1.Y) * (p.X - p1.X);
+    # return d == 0 || (d < 0) == (s + t <= 0);
+
+        v1 = self.vertices_all[:, 0, :]  # shape (num_triangles, 2)
+        v2 = self.vertices_all[:, 1, :]  #- self.vertices_all[:, 0, :]
+        v3 = self.vertices_all[:, 2, :]  #- self.vertices_all[:, 0, :]
+        v1x = np.outer(np.ones(v.shape[0]), v1[:, 0])
+        v1y = np.outer(np.ones(v.shape[0]), v1[:, 1])
+        v2x = np.outer(np.ones(v.shape[0]), v2[:, 0])
+        v2y = np.outer(np.ones(v.shape[0]), v2[:, 1])
+        v3x = np.outer(np.ones(v.shape[0]), v3[:, 0])
+        v3y = np.outer(np.ones(v.shape[0]), v3[:, 1])
+        v_v1x = v[:, None, 0] - v1x
+        v_v1y = v[:, None, 1] - v1y
+        v_v2x = v[:, None, 0] - v2x
+        v_v2y = v[:, None, 1] - v2y
+        v_v3x = v[:, None, 0] - v3x
+        v_v3y = v[:, None, 1] - v3y
+        # print(v_v1.shape)
+        
+        s = (v1[:, 0] - v3[:, 0])[None, :] * v_v3y - (v1[:, 1] - v3[:, 1])[None, :] * v_v3x
+        t = (v2[:, 0] - v1[:, 0])[None, :] * v_v1y - (v2[:, 1] - v1[:, 1])[None, :] * v_v1x
+        d = (v3[:, 0] - v2[:, 0])[None, :] * v_v2y - (v3[:, 1] - v2[:, 1])[None, :] * v_v2x
+        
+        # print(v.shape, v2.shape)
+        # v_v2_cross = np.outer(v[:, 0], v2[:, 1]) - np.outer(v[:, 1], v2[:, 0])
+        # v_v3_cross = np.outer(v[:, 0], v3[:, 1]) - np.outer(v[:, 1], v3[:, 0])
+        # v_v1_cross = np.outer(v[:, 0], v1[:, 1]) - np.outer(v[:, 1], v1[:, 0])
+        # v1_v2_cross = np.cross(v1, v2)
+        # v1_v3_cross = np.cross(v1, v3)
+        # v2_v3_cross = np.cross(v2, v3)
+        # print(v_v2_cross.shape, np.max(v_v2_cross), v_v1_cross.shape, v1_v2_cross.shape)
         # a = (v_v3_cross - v1_v3_cross) / v2_v3_cross
         # b = -(v_v2_cross - v1_v2_cross) / v2_v3_cross
-        # triangle_indices = np.where(np.logical_and(np.logical_and(
-        #     a >= 0, b >= 0), (a + b) <= 1))
-        # basis_functions, _ = (
-        #         self.get_basis_functions(v)
-        #     )
+        # print(a, b)
+        # exit()
+        print(s.shape, d.shape)
+        triangle_indices = ~np.logical_and(~np.isclose(np.sign(s), np.sign(t)), 
+                np.logical_and(~np.isclose(s, 0.0), ~np.isclose(t, 0.0))
+        )
+        # print(triangle_indices)
+
+        triangle_indices = np.logical_and(triangle_indices, np.logical_or( 
+            np.isclose(d, 0.0), np.isclose((d < 0), (s + t <= 0)))
+        )
+        # print(triangle_indices, np.logical_or( 
+        #     np.isclose(d, 0.0), (d < 0) == (s + t <= 0))
+        # )
+        # exit()
+                                          
+        # print('here = ', np.min(np.count_nonzero(triangle_indices, axis=-1))) # v[0, :], v1[triangle_indices[0, :], :],
+        #       v2[triangle_indices[0, :], :], v3[triangle_indices[0, :], :],
+        #       d[0, triangle_indices[0, :]], s[0, triangle_indices[0, :]], t[0, triangle_indices[0, :]],
+        #       ((d < 0) == (s + t <= 0))[0, triangle_indices[0, :]])
+        # print('here = ', np.count_nonzero(triangle_indices[1, :]))
         
-        print(basis_functions)
+        # Indices here are not correct
+        # triangle_indices = np.logical_and(np.logical_and(np.logical_and(
+        #     a >= 0, b >= 0), (a + b) <= 1), ~np.isclose(v[:, 1], 0.0))
+        
+        true_rows, true_cols = np.where(triangle_indices)
+        print(true_rows, true_cols, triangle_indices, triangle_indices.shape, true_rows[true_cols == 1])
+        # exit()
+        # print(np.shape(triangle_indices), np.shape(np.logical_and(
+        #     a >= 0, b >= 0)), a.shape, b.shape, v.shape, len(self.triangles))
+        # print(v[triangle_indices[:, 0], :].shape)
+        
+        # Notably, basis functions in every triangle are the same
+        for i in np.unique(true_cols):
+            # print(i, true_rows[i], (
+            #         self.triangles[i].get_basis_functions(v[true_rows[i], :].reshape(-1, 2))
+            #     )[0])
+            row_i = true_rows[true_cols == i]
+            # if np.allclose(v[row_i, :], self.vertices_all[i, 0, :]):
+            #     print('Here = ', i, row_i, v[row_i, :], self.vertices_all[i, 0, :])
+            #     exit()
+            # print(i, row_i, v[row_i, :], i * self.Q, (i + 1) * self.Q, self.triangles[i].vertices, v1[i, :], v2[i, :], v3[i, :])
+            # print(basis_functions[row_i, i * self.Q: (i + 1) * self.Q].shape, v[row_i, :].shape)
+            basis_functions[row_i, i * self.Q: (i + 1) * self.Q], _ = (
+                    self.triangles[i].get_basis_functions(v[row_i, :].reshape(-1, 2))
+                )
+        
+        # print(basis_functions)
         return triangle_indices, basis_functions
 
 
@@ -3039,17 +3127,20 @@ class FiniteElementMesh2D:
             Value of the integral over the mesh for each component of f.
 
         """
-        nquad = self.nquad
-        if f.shape[1] > 1:
-            integral = np.zeros(f.shape[1])
-        else:
-            integral = 0.0
-        for i, triangle in enumerate(self.triangles):
-            integral += np.dot(
-                abs(triangle.area2) * self.weights,
-                f[i * nquad : (i + 1) * nquad, :],
-            )
-        return integral / 2.0
+        # nquad = self.nquad
+        # if f.shape[1] > 1:
+        #     integral = np.zeros(f.shape[1])
+        # else:
+        #     integral = 0.0
+        # for i, triangle in enumerate(self.triangles):
+        #     print(i)
+        #     integral += np.dot(
+        #         abs(triangle.area2) * self.weights,
+        #         f[i * nquad : (i + 1) * nquad, :],
+        #     )
+        # return integral / 2.0
+        # print(self.weighted_areas.shape, self.nquad, f.shape)
+        return self.weighted_areas @ f
 
 
 class TetrahedronFiniteElement:

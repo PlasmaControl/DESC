@@ -16,13 +16,14 @@ from desc.geometry import convert_spectral_to_FE
 np.random.seed(1)
 L = 2
 M = 5
-N = 2
+N = 4
 K = 1
 
 # Make a surface in (R, phi=0, Z), (R, phi=pi / N, Z), ...
-nt = 100
-theta = np.linspace(0, 2 * np.pi, nt, endpoint=False)
-zeta = np.linspace(0, 2 * np.pi, nt, endpoint=False)
+nt = 40
+delta = 1.0 / nt
+theta = np.linspace(delta / 2.0, 2 * np.pi - delta / 2.0, nt)  #, endpoint=False)
+zeta = np.linspace(delta / 2.0, 2 * np.pi - delta / 2.0, nt)  #, endpoint=False)
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -55,7 +56,7 @@ Z_lmn = np.zeros(num_modes * (2 * N + 1))
 Z_lmn[num_modes * N] = 2.0
 Z_lmn[num_modes * N + 1] = 5.0
 L_lmn = np.zeros(R_lmn.shape)
-amp = 0
+amp = 0.5
 R_lmn[np.isclose(R_lmn, 0.0)] = (
     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
     * amp
@@ -75,45 +76,10 @@ L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
 
-
-M_FE = 5
+M_FE = 12
 L_FE = 2
+N_FE = 12
 rho = np.linspace(0.1, 1, L_FE, endpoint=True)
-nodes = (
-    np.array(np.meshgrid(rho, theta, np.zeros(1), indexing="ij"))
-    .reshape(3, len(theta) * len(rho))
-    .T
-)
-R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
-Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
-plt.figure(10)
-plt.plot(R, Z, "ro", label="DESC rep")
-plt.legend()
-plt.grid()
-plt.show()
-
-
-nodes = (
-    np.array(np.meshgrid(rho, theta, np.ones(1) * np.pi, indexing="ij"))
-    .reshape(3, len(theta) * len(rho))
-    .T
-)
-R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
-Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
-plt.figure(11)
-plt.plot(R, Z, "ro", label="DESC rep")
-
-plt.legend()
-plt.grid()
-plt.show()
-
-# Done with the two cross-sections. Now need to move on to 3D case.
-
-# Going to attempt to do 3D plot in rho,theta,zeta space.
-
-
-# Plot
-
 
 # Set nodes
 nodes = (
@@ -141,31 +107,28 @@ for ll in range(L_FE):
         contig(XX),
         contig(YY),
         contig(ZZ),
-        pointData=pointData,
+        pointData=pointData
     )
-# pointsToVTK('RZ_Fourier_basis', X, Y, contig(Z))
-
+pointsToVTK('RZ_Fourier_basis', contig(X), contig(Y), contig(Z))
+gridToVTK('RZ_Fourier_basis', contig(X), contig(Y), contig(Z), pointData=pointData)
 
 # Plot the DESC 3D case
-ax.scatter(np.ravel(X), np.ravel(Y), np.ravel(Z),label="DESC rep")
-ax.set_xlabel(r'$\rho$')
-ax.set_ylabel(r'$\theta$')
-ax.set_zlabel(r'$\zeta$')
+ax.scatter(np.ravel(X), np.ravel(Y), np.ravel(Z), label="DESC rep")
+# ax.set_xlabel(r'$\rho$')
+# ax.set_ylabel(r'$\theta$')
+# ax.set_zlabel(r'$\zeta$')
 
-ax.set(xticklabels=[],
-       yticklabels=[],
-       zticklabels=[])
-plt.legend()
-plt.grid()
-plt.show()
-
-
-
+# ax.set(xticklabels=[],
+#        yticklabels=[],
+#        zticklabels=[])
+# plt.legend()
+# plt.grid()
+# plt.show()
 
 # Next, move on to FE 3D case
-Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K, rho_range=rho)
-Zprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K, rho_range=rho)
-Lprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N, K=K, rho_range=rho)
+Rprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N_FE, K=K, rho_range=rho)
+Zprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N_FE, K=K, rho_range=rho)
+Lprime_basis = FiniteElementBasis(L=L_FE, M=M_FE, N=N_FE, K=K, rho_range=rho)
 
 # Convert to the finite element basis
 Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
@@ -184,15 +147,15 @@ t1 = time.time()
 Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
 
-nt = 100
-theta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
-zeta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
+# nt = 100
+# theta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
+# zeta = np.linspace(0, 2 * np.pi, nt, endpoint=True)
 
 # Replot the surface in the finite element basis
 nmodes = len(Rprime_basis.modes)
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
-fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+# fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 contig = np.ascontiguousarray
 X = R * np.cos(nodes[:, -1])
 Y = R * np.sin(nodes[:, -1])
@@ -209,25 +172,22 @@ for ll in range(L_FE):
         contig(XX),
         contig(YY),
         contig(ZZ),
-        pointData=pointData,
+        pointData=pointData
     )
-# pointsToVTK('RZ_FE_basis', X, Y, contig(Z))
+pointsToVTK('RZ_FE_basis', contig(X), contig(Y), contig(Z))
+gridToVTK('RZ_FE_basis', contig(X), contig(Y), contig(Z), pointData=pointData)
 
 
 t2 = time.time()
 # print(R.shape, Z.shape)
 # print('Time for R, Z conversion = ', t2 - t1)
-
-ax.scatter(np.ravel(X), np.ravel(Y), np.ravel(Z),label="FE rep")
-
-ax.set_xlabel(r'$\rho$')
-ax.set_ylabel(r'$\theta$')
-ax.set_zlabel(r'$\zeta$')
-
-ax.set(xticklabels=[],
-       yticklabels=[],
-       zticklabels=[])
-
+ax.scatter(np.ravel(X), np.ravel(Y), np.ravel(Z), marker='x', label="FE rep")
+ax.set_xlabel(r'$X$')
+ax.set_ylabel(r'$Y$')
+ax.set_zlabel(r'$Z$')
+# ax.set(xticklabels=[],
+#        yticklabels=[],
+#        zticklabels=[])
 plt.legend()
 plt.grid()
 plt.show()
@@ -304,8 +264,19 @@ def _tetrahedra_to_vtk(
 
 # First plot FE basis in the (rho, theta, zeta) space
 nodes = np.array(Rprime_basis.mesh.vertices_final)
-print(nodes.shape)
 _tetrahedra_to_vtk("finite_element_mesh", nodes)
+
+mesh = Rprime_basis.mesh
+quadpoints = np.array(mesh.return_quadrature_points())
+fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+nodes = nodes.reshape(-1, 3)
+ax.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], marker='x')
+ax.scatter(quadpoints[:, 0], quadpoints[:, 1], quadpoints[:, 2], marker='o')
+plt.grid()
+ax.set_xlabel(r'$\rho$')
+ax.set_ylabel(r'$\theta$')
+ax.set_zlabel(r'$\zeta$')
+plt.show()
 # print(nodes)
 # nodes_xyz = np.zeros(nodes.shape)
 # nodes_xyz[:, 0] = nodes[:, 0] * np.cos(nodes[:, -1])

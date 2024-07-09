@@ -101,6 +101,8 @@ def convert_spectral_to_FE(
         # quadpoints_mesh = np.vstack((quadpoints_mesh, quadpoints_mesh[:nquad, :]))
         quadpoints = quadpoints_mesh  # transpose here?
 
+    # print(quadpoints, mesh.get_barycentric_coordinates(quadpoints))
+    # exit()
     # Compute the A matrix in Ax = b, should be exactly the same
     # as in the 2D case.
     # Actually only need to do this once since assembly matrix is the
@@ -124,7 +126,9 @@ def convert_spectral_to_FE(
     ).reshape(IQ, IQ)
     
     # Add row
-    print('A = ', FE_assembly_matrix, np.linalg.eigvals(FE_assembly_matrix))
+    print('A = ', FE_assembly_matrix[:Q, :Q], 
+          FE_assembly_matrix[-Q:, -Q:], 
+          np.linalg.cond(FE_assembly_matrix))
     
     # print(FE_basis_pre_evaluated)
     t2 = time.time()
@@ -191,17 +195,21 @@ def convert_spectral_to_FE(
     # print('b = ', Aj_R)
     # print('b_z = ', Aj_Z)
     
+    # FE_inv = np.linalg.inv(FE_assembly_matrix)
+    # Rprime = FE_inv @ Aj_R
     Rprime = np.linalg.lstsq(FE_assembly_matrix, Aj_R)[0]
     # print('x = ', Rprime)
 
     Rprime_lmn = Rprime.reshape(nmodes)
     
+    # Zprime = FE_inv @ Aj_Z
     Zprime = np.linalg.lstsq(FE_assembly_matrix, Aj_Z)[0]
     # print('x_z = ', Zprime)
     
     # print('modes = ', Rprime_basis._get_modes())
     Zprime_lmn = Zprime.reshape(nmodes)
     
+    # Lprime = FE_inv @ Aj_L
     Lprime = np.linalg.lstsq(FE_assembly_matrix, Aj_L)[0]
 
     Lprime_lmn = Lprime.reshape(nmodes)

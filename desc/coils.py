@@ -433,6 +433,8 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             Z_n=curve.Z_n,
             modes_R=curve.R_basis.modes[:, 2],
             modes_Z=curve.Z_basis.modes[:, 2],
+            NFP=NFP,
+            sym=curve.sym,
             name=name,
         )
 

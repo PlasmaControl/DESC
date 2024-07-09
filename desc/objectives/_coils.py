@@ -728,8 +728,10 @@ class CoilsetMinDistance(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
-        Collocation grid used to discritize each coil. Default = LinearGrid(N=16)
+    grid : Grid, list, optional
+        Collocation grid used to discretize each coil. Defaults to the default grid
+        for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
+        If a list, must have the same structure as coils.
     name : str, optional
         Name of the objective function.
 
@@ -779,7 +781,7 @@ class CoilsetMinDistance(_Objective):
 
         """
         coilset = self.things[0]
-        grid = self._grid or LinearGrid(N=16)
+        grid = self._grid or None
 
         self._dim_f = coilset.num_coils
         self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}
@@ -878,9 +880,11 @@ class PlasmaCoilsetMinDistance(_Objective):
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    coil_grid : Grid, optional
+    coil_grid : Grid, list, optional
         Collocation grid containing the nodes to evaluate coilset geometry at.
-        Defaults to ``LinearGrid(N=16)``.
+        Defaults to the default grid for the given coil-type, see ``coils.py``
+        and ``curve.py`` for more details.
+        If a list, must have the same structure as coils.
     eq_fixed: bool, optional
         Whether the equilibrium is fixed or not. If True, the last closed flux surface
         is fixed and its coordinates are precomputed, which saves on computation time
@@ -966,7 +970,7 @@ class PlasmaCoilsetMinDistance(_Objective):
             eq = self.things[0]
             coils = self.things[1]
         plasma_grid = self._plasma_grid or LinearGrid(M=eq.M_grid, N=eq.N_grid)
-        coil_grid = self._coil_grid or LinearGrid(N=16)
+        coil_grid = self._coil_grid or None
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
             UserWarning,

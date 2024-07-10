@@ -1511,7 +1511,6 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
-
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box.
         If supplied, the RHS of the field line equations will be

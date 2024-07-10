@@ -308,7 +308,7 @@ class FourierCurrentPotentialField(
           and is given as a secular linear term in theta/zeta and a double Fourier
           series in theta/zeta.
 
-    This function then uses biot-savart to find the B field from this current
+    This class then uses biot-savart to find the B field from this current
     density K on the surface.
 
     Parameters
@@ -630,7 +630,7 @@ class FourierCurrentPotentialField(
 
     def to_CoilSet(  # noqa: C901 - FIXME: simplify this
         self,
-        desirednumcoils=10,  # TODO: make this coils_per_NFP for modular...
+        num_coils=10,  # TODO: make this coils_per_NFP for modular...
         step=1,
         spline_method="cubic",
         show_plots=False,
@@ -641,11 +641,24 @@ class FourierCurrentPotentialField(
     ):
         """Find helical or modular coils from this surface current potential.
 
+        Surface current K is assumed given by
+
+        K = n x ∇ Φ
+
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+        where:
+
+            - n is the winding surface unit normal.
+            - Φ is the current potential function, which is a function of theta and
+            zeta, and is given as a secular linear term in theta (I)  and zeta (G) and
+            a double Fourier series in theta/zeta.
+
         Parameters
         ----------
-        desirednumcoils : int, optional
+        num_coils : int, optional
             Total number of coils to discretize the surface current with, by default 10.
-            if the coils are modular (i.e. helicity=0), then this is the number of
+            if the coils are modular (i.e. I=0), then this is the number of
             coils per field period. If the coils are stellarator-symmetric, then this
             is the number of coils per half field-period
             #FIXME fix stell_sym implementation or add warning when it will fail
@@ -683,6 +696,10 @@ class FourierCurrentPotentialField(
             A `MixedCoilSet` is returned if the number of spline points per
             coil are not uniform across the coils.
         """
+        check_posint(num_coils, "num_coils", False)
+        check_posint(N, "N", False)
+        check_posint(step, "step", False)
+        check_posint(npts, "npts", False)
         nfp = self.Phi_basis.NFP
 
         net_toroidal_current = self.I
@@ -693,10 +710,10 @@ class FourierCurrentPotentialField(
         # determine current per coil
         if not jnp.isclose(helicity, 0):
             # helical coils
-            coil_current = jnp.abs(net_toroidal_current) / desirednumcoils
+            coil_current = jnp.abs(net_toroidal_current) / num_coils
         else:  # modular coils
-            coil_current = net_poloidal_current / desirednumcoils / nfp
-            if stell_sym:  # desirednumcoils is num coils per half period, so
+            coil_current = net_poloidal_current / num_coils / nfp
+            if stell_sym:  # num_coils is num coils per half period, so
                 # need to account for the extra factor of 2
                 coil_current = coil_current / 2
         assert not jnp.isclose(net_toroidal_current, 0) or not jnp.isclose(
@@ -705,13 +722,9 @@ class FourierCurrentPotentialField(
             "Detected both net toroidal and poloidal current are both zero, "
             "this function cannot find windowpane coils"
         )
-        check_posint(desirednumcoils, "desirednumcoils", False)
-        check_posint(N, "N", False)
-        check_posint(step, "step", False)
-        check_posint(npts, "npts", False)
 
         contour_theta, contour_zeta = _find_current_potential_contours(
-            self, desirednumcoils, npts, show_plots, stell_sym
+            self, num_coils, npts, show_plots, stell_sym
         )
         # for modular coils, easiest way to check contour direction is to see
         # direction of the contour thetas
@@ -1295,15 +1308,28 @@ def run_regcoil(  # noqa: C901 fxn too complex
 # TODO: replace contour finding with optimizing Winding surface curves
 # once that is implemented
 def _find_current_potential_contours(
-    surface_current_field, desirednumcoils, npts=128, show_plots=False, stell_sym=False
+    surface_current_field, num_coils, npts=128, show_plots=False, stell_sym=False
 ):
     """Find contours of constant current potential (i.e. coils).
+
+    Surface current K is assumed given by
+
+    K = n x ∇ Φ
+
+    Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    where:
+
+        - n is the winding surface unit normal.
+        - Φ is the current potential function, which is a function of theta and zeta,
+          and is given as a secular linear term in theta (I)  and zeta (G) and a double
+          Fourier series in theta/zeta.
 
     Parameters
     ----------
     surface_current_field : FourierCurrentPotentialField
         Surface current potential to find contours of
-    desirednumcoils : int
+    num_coils : int
         number of contours desired
     npts : int
         number of points to discretize the current potential with in the
@@ -1320,7 +1346,7 @@ def _find_current_potential_contours(
     Returns
     -------
     contour_theta, contour_zeta: list of 1D arrays
-        list of length desirednumcoils containing arrays of the theta
+        list of length num_coils containing arrays of the theta
         and zeta values describing each contour found.
     """
     ################################################################
@@ -1368,7 +1394,7 @@ def _find_current_potential_contours(
         # we start them on zeta=0 plane, so we will find contours
         # going from 0 to I (corresponding to zeta=0, and theta*sign(I) increasing)
         contours = jnp.linspace(
-            0, jnp.abs(net_toroidal_current), desirednumcoils + 1, endpoint=True
+            0, jnp.abs(net_toroidal_current), num_coils + 1, endpoint=True
         )
         contours = jnp.sort(contours)
     else:
@@ -1385,11 +1411,11 @@ def _find_current_potential_contours(
         # of ascending phi, otherwise we may get the
         # problem that the first coil is over the zeta=0 sym line
         # and the last coil is on the zeta=pi/NFP sym line
-        offset = -max_curr / desirednumcoils if stell_sym else 0
+        offset = -max_curr / num_coils if stell_sym else 0
         contours = jnp.linspace(
             offset,
             max_curr + offset,
-            desirednumcoils + 1,
+            num_coils + 1,
             endpoint=True,
         ) * jnp.sign(net_poloidal_current)
         contours = jnp.sort(contours)

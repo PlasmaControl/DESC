@@ -17,10 +17,10 @@ np.random.seed(1)
 L = 2
 M = 5
 N = 4
-K = 1
+K = 2
 
 # Make a surface in (R, phi=0, Z), (R, phi=pi / N, Z), ...
-nt = 30
+nt = 100
 delta = 1.0 / nt
 theta = np.linspace(delta / 2.0, 2 * np.pi - delta / 2.0, nt)  #, endpoint=False)
 zeta = np.linspace(delta / 2.0, 2 * np.pi - delta / 2.0, nt)  #, endpoint=False)
@@ -76,9 +76,9 @@ L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
 
-M_FE = 6
+M_FE = 2
 L_FE = 2
-N_FE = 6
+N_FE = 2
 rho = np.linspace(0.1, 1, L_FE, endpoint=True)
 
 # Set nodes
@@ -150,8 +150,11 @@ Zprime_basis.Z_lmn = Zprime_lmn
 # Replot the surface in the finite element basis
 nmodes = len(Rprime_basis.modes)
 t1 = time.time()
+# print(nodes)
+# print(Rprime_lmn, Zprime_lmn)
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+# print(R, Z)
 t2 = time.time()
 print('Time to compute R and Z (evaluate the basis functions at the nodes) = ',
       t2 - t1)

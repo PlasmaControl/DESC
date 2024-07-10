@@ -15,9 +15,9 @@ import numpy as np
 from desc.basis import FiniteElementMesh3D
 
 # Try triangulating whole mesh
-M = 5
+M = 4
 L = 3
-N = 5
+N = 4
 K = 2
 mesh = FiniteElementMesh3D(L, M, N, K=K)
 # mesh.plot_tetrahedra()  # plot_quadrature_points=True)

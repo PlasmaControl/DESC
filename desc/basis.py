@@ -343,7 +343,7 @@ class _FE_Basis(IOAble, ABC):
 
     @property
     def Q(self):
-        """int: Maximum basis function index = (K + 1)(K + 2) / 2."""
+        """int: Maximum basis function index, e.g. for triangles Q = (K + 1)(K + 2) / 2."""
         return self.__dict__.setdefault("_Q", 0)
 
     @Q.setter
@@ -363,8 +363,8 @@ class _FE_Basis(IOAble, ABC):
 
     @property
     def modes(self):
-        """ndarray: Mode numbers [l,i,j]."""
-        return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
+        """ndarray: Mode numbers [i,q]."""
+        return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 2)))
 
     @modes.setter
     def modes(self, modes):
@@ -381,8 +381,10 @@ class _FE_Basis(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={})".format(
+            + " (L={}, M={}, N={}, I={}, Q={}, NFP={}, sym={})".format(
                 self.L,
+                self.M,
+                self.N,
                 self.I_LMN,
                 self.Q,
                 self.NFP,
@@ -1219,8 +1221,6 @@ class FiniteElementBasis(_FE_Basis):
 
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
-        # print(basis_functions[:, inds].shape)
-        
         return basis_functions[:, inds]
 
     def change_resolution(self, L, M, N):
@@ -2048,7 +2048,6 @@ class FiniteElementMesh3D:
         ).to_meshtet()
 
         vertices = mesh.doflocs
-
         vertices = vertices.T
 
         # Plotting the 3D Mesh
@@ -2063,6 +2062,8 @@ class FiniteElementMesh3D:
             element = fem.ElementTetP1()
         else:
             element = fem.ElementTetP2()
+        # else:
+        #     raise ValueError("Only K <= 2 supported right now.")
 
         basis = fem.CellBasis(mesh, element)
 
@@ -2087,7 +2088,7 @@ class FiniteElementMesh3D:
                 for k in range(N - 1):
 
                     # We know that each rectangular prism in the mesh has
-                    # five tetrahedra lying in it
+                    # six tetrahedra lying in it
 
                     # There are MNL rectangular prisms in the grid.
                     # Each quad corresponds to ijk
@@ -2475,7 +2476,7 @@ class FiniteElementMesh3D:
         self.volume6s = np.array(volume6s)
         self.weighted_volumes = np.ravel(np.outer(np.abs(np.array(volume6s)), self.weights))
         self.nquad = self.integration_points.shape[0]
-        # self.plot_tetrahedra() #plot_quadrature_points=True)
+        # self.plot_tetrahedra()  #plot_quadrature_points=True)
 
     def plot_tetrahedra(self, plot_quadrature_points=False):
         """Plot all the tetrahedra in the 2D mesh tessellation."""
@@ -2551,9 +2552,7 @@ class FiniteElementMesh3D:
                     np.dot(A, np.transpose(qp_r[i, :])) + np.transpose(v[0, :])
                 )
             # Now have a matrix for single tetrahedron
-
             for j in range(nquad):
-
                 quadrature_points[q * nquad + j, :] = single_tet_quad[j, :]
 
             q = q + 1
@@ -2672,21 +2671,28 @@ class FiniteElementMesh3D:
             np.logical_or(Det3 > 0.0, np.isclose(Det3, 0.0))), 
             np.logical_or(Det4 > 0.0, np.isclose(Det4, 0.0)))
         cols = np.arange(good_inds.shape[-1])
+        print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
+
         # print(good_inds, good_inds.shape, v.shape, v1.shape)
         
         # Still need to deal with case when points lie exactly along the edge 
+        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 3))
+        for i in duplicates:
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+        
         duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 2))
         for i in duplicates:
             max_col = np.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
         
         # Still need to deal with case when points lie exactly on a vertex
-        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 3))
-        for i in duplicates:
-            max_col = np.argmax(good_inds[i, :])
-            good_inds[i, max_col] = False
-            max_col = np.argmax(good_inds[i, np.ravel(np.where(cols != max_col))])
-            good_inds[i, max_col + 1] = False
+        # duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 3))
+        # for i in duplicates:
+        #     max_col = np.argmax(good_inds[i, :])
+        #     good_inds[i, max_col] = False
+        #     max_col = np.argmax(good_inds[i, np.ravel(np.where(cols != max_col))])
+        #     good_inds[i, max_col + 1] = False
         
         true_rows, true_cols = np.where(good_inds)   
         # print(good_inds.shape)
@@ -2700,7 +2706,7 @@ class FiniteElementMesh3D:
             basis_functions[row_i, i * Q: (i + 1) * Q], _ = (
                     self.tetrahedra[i].get_basis_functions(v[row_i, :])  #.reshape(-1, 3))
                 )
-        # print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
+        print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
         # print(true_rows, true_cols)
         
         return basis_functions
@@ -3459,6 +3465,7 @@ class TetrahedronFiniteElement:
                     basis_functions[i, j] = eta[i, j] * (2 * eta[i, j] - 1)
 
             for i in range(rho_theta_zeta.shape[0]):
+                # Node numbers labeled according to Zienkiewicz textbook Fig. 6.12
                 basis_functions[i, 4] = 4 * eta[i, 1] * eta[i, 0]  #L1L2  # node 5
                 basis_functions[i, 5] = 4 * eta[i, 1] * eta[i, 2]  #L3L2  # node 8
                 basis_functions[i, 6] = 4 * eta[i, 0] * eta[i, 2]  #L3L1  # node 6

@@ -25,11 +25,11 @@ np.random.seed(1)
 L = 2
 M = 5
 N = 0
-K = 2
+K = 3
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
-theta = np.linspace(0.1, 2 * np.pi - 0.1, 100, endpoint=True)
+theta = np.linspace(0.01, 2 * np.pi - 0.01, 200, endpoint=True)
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -55,7 +55,6 @@ for lmode in range(1, M + 1):
 
 # Set the R_lmn and Z_lmn modes to reproduce the desired cross section
 L_indexing = M + 1
-print(R_basis._get_modes(L, M, N))
 R_lmn = np.zeros((num_modes, 2 * N + 1))
 R_lmn[0, 0] = 2.0
 R_lmn[2, 0] = 1.0
@@ -65,7 +64,7 @@ Z_lmn[0, 0] = 2.0
 Z_lmn[1, 0] = 5.0
 Z_lmn = Z_lmn.reshape(-1)  # num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
-amp = 1
+amp = 5
 R_lmn[np.isclose(R_lmn, 0.0)] = (
     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
     * amp
@@ -83,9 +82,9 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-M_FE = 10
-L_FE = 3
-rho = np.linspace(0.5, 1, L_FE, endpoint=True)
+M_FE = 60
+L_FE = 20
+rho = np.linspace(0.0, 1, L_FE, endpoint=True)
 nodes = (
     np.array(np.meshgrid(rho, theta, np.zeros(1), indexing="ij"))
     .reshape(3, len(theta) * len(rho))
@@ -122,7 +121,7 @@ nmodes = len(Rprime_basis.modes)
 # print('node_evaluate = ', Rprime_basis.evaluate(nodes=nodes))
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
-print('R, Z = ', R, Z)
+# print('R, Z = ', R, Z)
 t2 = time.time()
 print('Time for R, Z conversion = ', t2 - t1)
 plt.figure(10)
@@ -130,5 +129,5 @@ plt.plot(R, Z, "ko", label="FE rep")
 # plt.scatter(R, Z, s=np.arange(len(R)), marker="o", label="FE rep")
 plt.legend()
 plt.grid()
-Rprime_basis.mesh.plot_triangles(True)
+# Rprime_basis.mesh.plot_triangles(True)
 plt.show()

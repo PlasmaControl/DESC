@@ -130,6 +130,20 @@ class TestCoil:
             B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
         )
 
+        # FourierRZCoil with NFP>1
+        coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]), NFP=2)
+        B_xyz = coil.compute_magnetic_field(grid_xyz, basis="xyz", source_grid=None)
+        B_rpz = coil.compute_magnetic_field(grid_rpz, basis="rpz", source_grid=None)
+        np.testing.assert_allclose(
+            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+
     @pytest.mark.unit
     def test_properties(self):
         """Test getting/setting attributes for Coil class."""
@@ -291,6 +305,19 @@ class TestCoilSet:
         coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
         B_approx = coils2.compute_magnetic_field(
             [10, 0, 0], basis="rpz", source_grid=32
+        )[0]
+        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+
+        # With a MixedCoilSet as the base coils and only rotation
+        coil = FourierPlanarCoil(I)
+        coils = [coil] + [FourierXYZCoil(I) for i in range(N // 4 - 1)]
+        for i, c in enumerate(coils[1:]):
+            c.rotate(angle=2 * np.pi / N * (i + 1))
+        coils = MixedCoilSet.from_symmetry(coils, NFP=4)
+        grid = LinearGrid(N=32, endpoint=False)
+        transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
+        B_approx = coils.compute_magnetic_field(
+            [10, 0, 0], basis="rpz", source_grid=grid
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 

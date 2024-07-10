@@ -328,21 +328,16 @@ class TestCoilSet:
         # test warning after crossing symmetry plane
         # tilt coils so they cross the symmetry plane
         coil = FourierPlanarCoil(normal=[1e-4, 1, 3])
-        coils_list = [coil] + [coil.copy() for i in range(N // 4 - 1)]
         coils_list_sym = [coil.copy()] + [coil.copy() for i in range(N // 8 - 1)]
 
-        for i, c in enumerate(coils_list[1:]):
-            c.rotate(angle=2 * np.pi / N * (i + 1))
         for i, c in enumerate(coils_list_sym[1:]):
             c.rotate(angle=2 * np.pi / N * (i + 1))
 
-        # test the warning for crossing phi=0 plane and for
-        # self-intersecting coils, as two of the coils in each field period lie nearly
+        # test the warning for self-intersecting coils, as two
+        #  of the coils in each field period lie nearly
         # in the same physical space (intersecting at 2 points) after reflection
         with pytest.warns(UserWarning) as warninfo:
             _ = CoilSet.from_symmetry(coils_list_sym, NFP=4, sym=True)
-        # "nearly intersecting" warning is given because the grids are finite that
-        # we check the coils on
         assert "nearly intersecting" in str(warninfo[0].message)
 
     @pytest.mark.unit

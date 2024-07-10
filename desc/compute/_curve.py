@@ -153,25 +153,6 @@ def _Z_Curve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Centroid of the curve",
     dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="s",
-    data=["x"],
-    parameterization="desc.geometry.core.Curve",
-)
-def _center_Curve(params, transforms, profiles, data, **kwargs):
-    data["center"] = jnp.mean(data["x"], axis=0) * jnp.ones_like(data["x"])
-    return data
-
-
-@register_compute_fun(
-    name="center",
-    label="\\langle\\mathbf{x}\\rangle",
-    units="m",
-    units_long="meters",
-    description="Centroid of the curve",
-    dim=3,
     params=["center", "shift"],
     transforms={},
     profiles=[],
@@ -181,12 +162,12 @@ def _center_Curve(params, transforms, profiles, data, **kwargs):
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
-    # convert to rpz
+    # convert to xyz
     if kwargs.get("basis_in", "xyz").lower() == "rpz":
-        center = params["center"]
+        center = rpz2xyz(params["center"])
     else:
-        center = xyz2rpz(params["center"])
-    data["center"] = (center + xyz2rpz(params["shift"])) * jnp.ones_like(data["x"])
+        center = params["center"]
+    data["center"] = xyz2rpz(center + params["shift"]) * jnp.ones_like(data["x"])
     return data
 
 
@@ -370,6 +351,32 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="center",
+    label="\\langle\\mathbf{x}\\rangle",
+    units="m",
+    units_long="meters",
+    description="Centroid of the curve",
+    dim=3,
+    params=["R_n", "Z_n", "shift"],
+    transforms={"R": [[0, 0, 0]], "Z": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.curve.FourierRZCurve",
+)
+def _center_FourierRZCurve(params, transforms, profiles, data, **kwargs):
+    idx_Rc = transforms["R"].basis.get_idx(N=1, error=False)
+    idx_Rs = transforms["R"].basis.get_idx(N=-1, error=False)
+    idx_Z = transforms["Z"].basis.get_idx(error=False)
+    X0 = params["R_n"][idx_Rc] / 2 if isinstance(idx_Rc, int) else 0
+    Y0 = params["R_n"][idx_Rs] / 2 if isinstance(idx_Rs, int) else 0
+    Z0 = params["Z_n"][idx_Z] if isinstance(idx_Z, int) else 0
+    center = jnp.array([X0, Y0, Z0])
+    data["center"] = xyz2rpz(center + params["shift"]) * jnp.ones_like(data["x"])
+    return data
+
+
+@register_compute_fun(
     name="x",
     label="\\mathbf{x}",
     units="m",
@@ -499,6 +506,32 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="center",
+    label="\\langle\\mathbf{x}\\rangle",
+    units="m",
+    units_long="meters",
+    description="Centroid of the curve",
+    dim=3,
+    params=["X_n", "Y_n", "Z_n", "shift"],
+    transforms={"X": [[0, 0, 0]], "Y": [[0, 0, 0]], "Z": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.curve.FourierXYZCurve",
+)
+def _center_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
+    idx_X = transforms["X"].basis.get_idx(error=False)
+    idx_Y = transforms["Y"].basis.get_idx(error=False)
+    idx_Z = transforms["Z"].basis.get_idx(error=False)
+    X0 = params["X_n"][idx_X] if isinstance(idx_X, int) else 0
+    Y0 = params["Y_n"][idx_Y] if isinstance(idx_Y, int) else 0
+    Z0 = params["Z_n"][idx_Z] if isinstance(idx_Z, int) else 0
+    center = jnp.array([X0, Y0, Z0])
+    data["center"] = xyz2rpz(center + params["shift"]) * jnp.ones_like(data["x"])
+    return data
+
+
+@register_compute_fun(
     name="x",
     label="\\mathbf{x}",
     units="m",
@@ -609,6 +642,28 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     coords = coords @ params["rotmat"].reshape((3, 3)).T
     coords = xyz2rpz_vec(coords, phi=data["phi"])
     data["x_sss"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="center",
+    label="\\langle\\mathbf{x}\\rangle",
+    units="m",
+    units_long="meters",
+    description="Centroid of the curve",
+    dim=3,
+    params=["X", "Y", "Z", "shift"],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+)
+def _center_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    # center is average of xyz knots
+    xyz = jnp.stack([params["X"], params["Y"], params["Z"]], axis=1)
+    center = jnp.mean(xyz, axis=0)
+    data["center"] = xyz2rpz(center + params["shift"]) * jnp.ones_like(data["x"])
     return data
 
 

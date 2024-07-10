@@ -1174,17 +1174,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         maxphi = 2 * np.pi / NFP / (sym + 1)
         data = coils.compute("phi")
         check_for_intersection = False
-        for i, cdata in enumerate(data):
+        for cdata in data:
             # check if any coils lie on symmetry planes, these may cause
             # self-intersection after reflection/rotation
-            maybe_bad_bool = np.any(cdata["phi"] > maxphi) or (
-                sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps)
-            )
-            if maybe_bad_bool:
-                # check the coilset for self-intersection before returning coilset
-                # if any lie on symmetry planes
-                check_for_intersection = True
-
+            check_for_intersection = (
+                np.any(cdata["phi"] > maxphi)
+                or (sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps))
+            ) or check_for_intersection
         coilset = []
         if sym:
             # first reflect/flip original coilset

@@ -1841,7 +1841,7 @@ class OmnigenousField(Optimizable, IOAble):
                 names,
                 obj=self,
                 grid=grid,
-                method=kwargs.pop("method", "auto"),
+                jitable=kwargs.pop("jitable", False),
                 **kwargs,
             )
         if data is None:

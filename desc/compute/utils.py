@@ -127,6 +127,7 @@ def _compute(
     cannot give the argument basis='xyz' since that will break the recursion. In that
     case, either call above function or manually convert the output to xyz basis.
     """
+    assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
     parameterization = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]

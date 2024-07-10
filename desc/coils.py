@@ -798,13 +798,27 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assuming 'virtual' coils from the other half field period. Default = False.
     name : str
         Name of this CoilSet.
-
+    check_intersection: bool
+        Whether or not to check the coils in the coilset for intersections.
+    check_grid: Grid, optional
+        Grid to use in the self-intersection check of the coilset
+        if ``check_intersection=True``.
+        By default None, which will use the default grid for the specific
+        CoilSet parameterization.
     """
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
 
-    def __init__(self, *coils, NFP=1, sym=False, name=""):
+    def __init__(
+        self,
+        *coils,
+        NFP=1,
+        sym=False,
+        name="",
+        check_intersection=True,
+        check_grid=None,
+    ):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -812,6 +826,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         self._NFP = int(NFP)
         self._sym = bool(sym)
         self._name = str(name)
+
+        if check_intersection:
+            grid = LinearGrid(N=100) if not check_grid else check_grid
+            self.is_self_intersecting(grid=grid)
 
     @property
     def name(self):
@@ -1201,14 +1219,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             rotated_coils = coils.copy()
             rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
             coilset += rotated_coils
-        coilset_to_return = cls(*coilset)
-        if check_for_intersection:
-            grid = LinearGrid(N=100)
-            coilset_to_return.is_self_intersecting(
-                grid=grid,
-            )
+        grid = LinearGrid(N=100)
 
-        return coilset_to_return
+        return cls(*coilset, check_intersection=True, check_grid=grid)
 
     @classmethod
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):
@@ -1540,6 +1553,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """
         from desc.objectives._coils import CoilsetMinDistance
 
+        errorif(grid is None and isinstance(self, MixedCoilSet))
         obj = CoilsetMinDistance(self, grid=grid)
         obj.build(verbose=0)
         if tol:
@@ -1583,6 +1597,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     # which means it may be intersecting it.
                     if ind_min not in np.arange((num_nodes) * k, (num_nodes) * (k + 1)):
                         bad_coil_inds.append(k)
+            bad_coil_inds = set(bad_coil_inds)
             is_nearly_intersecting = True if bad_coil_inds else False
             warnif(
                 is_nearly_intersecting,
@@ -1644,18 +1659,27 @@ class MixedCoilSet(CoilSet):
         Collection of coils.
     name : str
         Name of this CoilSet.
+    check_intersection: bool
+        Whether or not to check the coils in the coilset for intersections.
+    check_grid: Grid, optional
+        Grid to use in the self-intersection check of the coilset
+        if ``check_intersection=True``.
+        Defaults to ``LinearGrid(N=100)``.
 
     """
 
     _io_attrs_ = CoilSet._io_attrs_
 
-    def __init__(self, *coils, name=""):
+    def __init__(self, *coils, name="", check_intersection=True, check_grid=None):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         self._coils = list(coils)
         self._NFP = 1
         self._sym = False
         self._name = str(name)
+        if check_intersection:
+            grid = LinearGrid(N=100) if check_grid is None else check_grid
+            self.is_self_intersecting(grid=grid)
 
     @property
     def num_coils(self):

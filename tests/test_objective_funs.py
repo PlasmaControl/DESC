@@ -913,7 +913,9 @@ class TestObjectiveFunction:
             vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
         )
         xyz_coil = FourierXYZCoil(X_n=[0, 6, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0])
-        coils_mixed = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+        coils_mixed = MixedCoilSet(
+            (tf_coilset, vf_coilset, xyz_coil), check_intersection=False
+        )
         with pytest.warns(UserWarning, match="nearly intersecting"):
             test(
                 coils_mixed,

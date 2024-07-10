@@ -344,7 +344,7 @@ class TestCoilSet:
     def test_properties(self):
         """Test getting/setting of CoilSet attributes."""
         coil = FourierPlanarCoil()
-        coils = CoilSet.linspaced_linear(coil, n=4)
+        coils = CoilSet.linspaced_linear(coil, n=4, displacement=[0, 2, 0])
         data = coils.compute(
             [
                 "x",
@@ -362,9 +362,9 @@ class TestCoilSet:
             np.array(
                 [
                     [12, 0, 0],
-                    [12.5, 0, 0],
-                    [13, 0, 0],
-                    [13.5, 0, 0],
+                    [12, 0.5, 0],
+                    [12, 1, 0],
+                    [12, 1.5, 0],
                 ]
             ).reshape((4, 1, 3)),
         )
@@ -465,10 +465,10 @@ class TestCoilSet:
         """Test methods for combining and calling CoilSet objects."""
         coil1 = FourierXYZCoil()
         coils1 = MixedCoilSet.from_symmetry(coil1, NFP=4)
-        coil2 = FourierPlanarCoil()
+        coil2 = FourierPlanarCoil(center=[100, 0, 0])
         coils2 = coils1 + [coil2]
         assert coils2[-1] is coil2
-        coils2 = coils1 + MixedCoilSet([coil2, coil2])
+        coils2 = coils1 + MixedCoilSet([coil2, coil2], check_intersection=False)
         assert coils2[-1] is coil2
 
         with pytest.raises(TypeError):
@@ -1001,8 +1001,8 @@ def test_load_makegrid_coils_header_asserts(tmpdir_factory):
 @pytest.mark.unit
 def test_repr():
     """Test string representation of Coil objects."""
-    coil = FourierRZCoil()
-    assert "FourierRZCoil" in str(coil)
+    coil = FourierPlanarCoil()
+    assert "FourierPlanarCoil" in str(coil)
     assert "current=1" in str(coil)
 
     coils = CoilSet.linspaced_angular(coil, n=4)

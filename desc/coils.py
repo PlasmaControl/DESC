@@ -1534,7 +1534,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Returns
         -------
         is_self_intersecting : bool
-            Whether or not any coils in the CoilSet come close enough to eachother to
+            Whether or not any coils in the CoilSet come close enough to each other to
             possibly be intersecting.
 
         """

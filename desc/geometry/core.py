@@ -127,7 +127,6 @@ class Curve(IOAble, Optimizable, ABC):
                 f" instead got type {type(grid)}"
             )
 
-        method = kwargs.pop("method", "auto")
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
@@ -136,7 +135,6 @@ class Curve(IOAble, Optimizable, ABC):
                 obj=self,
                 grid=grid,
                 jitable=True,
-                method=method,
             )
         if data is None:
             data = {}
@@ -165,7 +163,6 @@ class Curve(IOAble, Optimizable, ABC):
                     obj=self,
                     grid=grid0d,
                     jitable=True,
-                    method=method,
                     **kwargs,
                 ),
                 profiles={},
@@ -452,7 +449,6 @@ class Surface(IOAble, Optimizable, ABC):
                 f" instead got type {type(grid)}"
             )
 
-        method = kwargs.pop("method", "auto")
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
@@ -461,7 +457,6 @@ class Surface(IOAble, Optimizable, ABC):
                 obj=self,
                 grid=grid,
                 jitable=kwargs.pop("jitable", False),
-                method=method,
                 **kwargs,
             )
         if data is None:
@@ -514,7 +509,6 @@ class Surface(IOAble, Optimizable, ABC):
                     obj=self,
                     grid=grid0d,
                     jitable=kwargs.pop("jitable", False),
-                    method=method,
                     **kwargs,
                 ),
                 profiles={},

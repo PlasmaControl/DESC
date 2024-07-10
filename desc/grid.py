@@ -418,7 +418,7 @@ class _Grid(IOAble, ABC):
 
         """
         errorif(
-            not hasattr(self, "_spacing"),
+            self._spacing is None,
             AttributeError,
             "Custom grids must have spacing specified by user.",
         )
@@ -428,7 +428,7 @@ class _Grid(IOAble, ABC):
     def weights(self):
         """ndarray: Weight for each node, either exact quadrature or volume based."""
         errorif(
-            not hasattr(self, "_weights"),
+            self._weights is None,
             AttributeError,
             "Custom grids must have weights specified by user.",
         )
@@ -661,24 +661,21 @@ class Grid(_Grid):
         self._node_pattern = "custom"
         self._coordinates = coordinates
         self._period = period
-        if source_grid is not None:
-            self._source_grid = source_grid
+        self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
         self._nodes = self._create_nodes(nodes)
-        if spacing is not None:
-            spacing = (
-                jnp.atleast_2d(jnp.asarray(spacing))
-                .reshape(self.nodes.shape)
-                .astype(float)
-            )
-            self._spacing = spacing
-        if weights is not None:
-            weights = (
-                jnp.atleast_1d(jnp.asarray(weights))
-                .reshape(self.nodes.shape[0])
-                .astype(float)
-            )
-            self._weights = weights
+        self._spacing = (
+            jnp.atleast_2d(jnp.asarray(spacing)).reshape(self.nodes.shape).astype(float)
+            if spacing is not None
+            else None
+        )
+        self._weights = (
+            jnp.atleast_1d(jnp.asarray(weights))
+            .reshape(self.nodes.shape[0])
+            .astype(float)
+            if weights is not None
+            else None
+        )
         if sort:
             self._sort_nodes()
         setable_attr = [
@@ -847,6 +844,7 @@ class Grid(_Grid):
     @property
     def source_grid(self):
         """Coordinates from which this grid was mapped from."""
+        errorif(self._source_grid is None, AttributeError)
         return self._source_grid
 
 

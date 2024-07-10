@@ -18,6 +18,7 @@ from desc.backend import (
 )
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
+from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -181,7 +182,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         return x
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -199,6 +200,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+
 
         Returns
         -------
@@ -222,10 +226,31 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
+        if source_grid is None and hasattr(self, "NFP"):
+            # NFP=1 to ensure we have points along whole grid
+            # multiply by NFP in case the coil has NFP>1
+            # to ensure whole coil gets counted for the
+            # biot savart integration
+            source_grid = LinearGrid(N=2 * self.N * self.NFP + 5, NFP=1, endpoint=False)
 
-        data = self.compute(
-            ["phi", "x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
-        )
+        if not params or not transforms:
+            data = self.compute(
+                ["x", "x_s", "ds"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
+        else:
+            data = compute_fun(
+                self,
+                name=["x", "x_s", "ds"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+                basis="xyz",
+            )
+
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )
@@ -605,7 +630,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -623,6 +648,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -872,7 +899,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if params is None:
-            params = [get_params(names, coil) for coil in self]
+            params = [
+                get_params(names, coil, basis=kwargs.get("basis", "rpz"))
+                for coil in self
+            ]
         if data is None:
             data = [{}] * len(self)
 
@@ -913,9 +943,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        if params is None:
-            params = [get_params("x", coil) for coil in self]
         basis = kwargs.pop("basis", "xyz")
+        if params is None:
+            params = [get_params("x", coil, basis=basis) for coil in self]
         data = self.compute("x", grid=grid, params=params, basis=basis, **kwargs)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
@@ -955,7 +985,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return x
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -970,6 +1000,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid : Grid, int or None, optional
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -980,7 +1012,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
-            params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
+            params = [
+                get_params(["x_s", "x", "s", "ds"], coil, basis=basis) for coil in self
+            ]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
 
@@ -1130,9 +1164,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if not isinstance(coils, CoilSet):
-            coils = CoilSet(coils)
-
-        [_check_type(coil, coils[0]) for coil in coils]
+            try:
+                coils = CoilSet(coils)
+            except (TypeError, ValueError):
+                # likely there are multiple coil types,
+                # so make a MixedCoilSet
+                coils = MixedCoilSet(coils)
+        if not isinstance(coils, MixedCoilSet):
+            # only need to check this for a CoilSet, not MixedCoilSet
+            [_check_type(coil, coils[0]) for coil in coils]
 
         # check toroidal extent of coils to be repeated
         maxphi = 2 * np.pi / NFP / (sym + 1)
@@ -1616,7 +1656,7 @@ class MixedCoilSet(CoilSet):
         return x
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1633,6 +1673,8 @@ class MixedCoilSet(CoilSet):
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
             If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -1642,10 +1684,11 @@ class MixedCoilSet(CoilSet):
         """
         params = self._make_arraylike(params)
         source_grid = self._make_arraylike(source_grid)
+        transforms = self._make_arraylike(transforms)
 
         B = 0
-        for coil, par, grd in zip(self.coils, params, source_grid):
-            B += coil.compute_magnetic_field(coords, par, basis, grd)
+        for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
+            B += coil.compute_magnetic_field(coords, par, basis, grd, transforms=tr)
 
         return B
 

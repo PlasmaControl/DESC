@@ -128,7 +128,10 @@ class _CoilObjective(_Objective):
 
         # map grid to list of length coils
         if grid is None:
-            grid = [LinearGrid(N=2 * c.N + 5, endpoint=False) for c in coils]
+            grid = []
+            for c in coils:
+                NFP = c.NFP if hasattr(c, "NFP") else 1
+                grid.append(LinearGrid(N=2 * c.N + 5, NFP=NFP, endpoint=False))
         if isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=self._grid, endpoint=False)
         if isinstance(grid, _Grid):
@@ -1272,7 +1275,10 @@ class QuadraticFlux(_Objective):
 
         # B_ext is not pre-computed because field is not fixed
         B_ext = constants["field"].compute_magnetic_field(
-            x, source_grid=constants["field_grid"], basis="rpz", params=field_params
+            x,
+            source_grid=constants["field_grid"],
+            basis="rpz",
+            params=field_params,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
         f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]

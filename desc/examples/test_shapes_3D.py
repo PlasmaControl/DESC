@@ -17,7 +17,7 @@ np.random.seed(1)
 L = 2
 M = 5
 N = 4
-K = 2
+K = 1
 
 # Make a surface in (R, phi=0, Z), (R, phi=pi / N, Z), ...
 nt = 100
@@ -76,9 +76,9 @@ L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
 
-M_FE = 2
+M_FE = 20
 L_FE = 2
-N_FE = 2
+N_FE = 20
 rho = np.linspace(0.1, 1, L_FE, endpoint=True)
 
 # Set nodes

@@ -458,7 +458,7 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(self._L_grid)
         self._M_grid = int(self._M_grid)
         self._N_grid = int(self._N_grid)
-        # self._K_FE = int(self._K_FE)
+        self._K_FE = int(self._K_FE)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -627,7 +627,7 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(setdefault(L_grid, self.L_grid))
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
-        # self._K_FE = int(setdefault(K_FE, self.K_FE))
+        self._K_FE = int(setdefault(K_FE, self.K_FE))
         self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = bool(setdefault(sym, self.sym))
 

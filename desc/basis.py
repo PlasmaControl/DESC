@@ -2662,7 +2662,7 @@ class FiniteElementMesh3D:
         Det2 = np.linalg.det(np.transpose(D2, axes=([2, 3, 0, 1])))
         Det3 = np.linalg.det(np.transpose(D3, axes=([2, 3, 0, 1])))
         Det4 = np.linalg.det(np.transpose(D4, axes=([2, 3, 0, 1])))
-        
+                
         # numpy isclose is required to catch the tricky points at the 
         # edges or vertices of the tetrahedra
         good_inds = np.logical_and(np.logical_and(np.logical_and(

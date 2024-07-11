@@ -11,7 +11,7 @@ M_pol  =  6, 10, 13
 N_tor  =  0
 M_grid = 12, 20, 26
 N_grid =  0
-K = 1
+K_FE = 1
 
 # continuation parameters
 bdry_ratio = 1
@@ -25,7 +25,7 @@ gtol = 1e-6
 maxiter = 100
 
 # solver methods
-basis             = FiniteElements
+basis             = FiniteElementBasis
 optimizer         = lsq-exact
 objective         = force
 spectral_indexing = fringe

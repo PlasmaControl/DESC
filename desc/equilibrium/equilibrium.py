@@ -402,19 +402,19 @@ class Equilibrium(IOAble, Optimizable):
                 L=self.L_grid,
                 M=self.M_grid,
                 N=self.N_grid,
-                K=self.K_FE
+                K=self._K_FE
             )
             Zprime_basis = FiniteElementBasis(
                 L=self.L_grid,
                 M=self.M_grid,
                 N=self.N_grid,
-                K=self.K_FE
+                K=self._K_FE
             )
             Lprime_basis = FiniteElementBasis(
                 L=self.L_grid,
                 M=self.M_grid,
                 N=self.N_grid,
-                K=self.K_FE
+                K=self._K_FE
             )
             Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
                 self.R_lmn,

@@ -11,7 +11,7 @@ M_pol  =  6, 10, 13
 N_tor  =  0
 M_grid = 12, 20, 26
 N_grid =  0
-K_FE = 1
+K_FE = 2
 
 # continuation parameters
 bdry_ratio = 1

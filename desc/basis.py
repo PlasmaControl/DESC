@@ -1412,7 +1412,7 @@ class FourierZernikeBasis(_Basis):
         l, m, n = modes.T
         lm = modes[:, :2]
 
-        if False:
+        if unique:
             # TODO: can avoid this here by using grid.unique_idx etc
             # and adding unique_modes attributes to basis
             _, ridx, routidx = np.unique(

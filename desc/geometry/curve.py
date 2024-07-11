@@ -656,9 +656,9 @@ class FourierPlanarCurve(Curve):
         self._r_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
+        self._basis = basis
         self.normal = normal
         self.center = center
-        self._basis = basis
 
     @property
     def r_basis(self):

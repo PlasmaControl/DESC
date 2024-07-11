@@ -165,10 +165,13 @@ class Curve(IOAble, Optimizable, ABC):
             )
 
         if params is None:
-            params = get_params(names, obj=self)
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
             transforms = get_transforms(
-                names, obj=self, grid=grid, jitable=True, **kwargs
+                names,
+                obj=self,
+                grid=grid,
+                jitable=True,
             )
         if data is None:
             data = {}
@@ -198,7 +201,11 @@ class Curve(IOAble, Optimizable, ABC):
                 dep0d,
                 params=params,
                 transforms=get_transforms(
-                    dep0d, obj=self, grid=grid0d, jitable=True, **kwargs
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    jitable=True,
+                    **kwargs,
                 ),
                 profiles={},
                 data=None,
@@ -483,8 +490,9 @@ class Surface(IOAble, Optimizable, ABC):
                 "must pass in a Grid object or an integer for argument grid!"
                 f" instead got type {type(grid)}"
             )
+
         if params is None:
-            params = get_params(names, obj=self)
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
             transforms = get_transforms(
                 names,

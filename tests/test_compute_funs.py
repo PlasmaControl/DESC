@@ -1,5 +1,6 @@
 """Tests for compute functions."""
 
+import copy
 import pickle
 
 import numpy as np
@@ -1151,7 +1152,8 @@ def test_boozer_transform():
 def test_compute_everything():
     """Test that the computations on this branch agree with those on master.
 
-    Also make sure we can compute everything without errors.
+    Also make sure we can compute everything without errors. Computed quantities
+    are both in "rpz" and "xyz" basis.
     """
     elliptic_cross_section_with_torsion = {
         "R_lmn": [10, 1, 0.2],
@@ -1257,45 +1259,89 @@ def test_compute_everything():
     }
 
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:
-        master_data = pickle.load(file)
-    this_branch_data = {}
-    update_master_data = False
-    error = False
+        master_data_rpz = pickle.load(file)
+    with open("tests/inputs/master_compute_data_xyz.pkl", "rb") as file:
+        master_data_xyz = pickle.load(file)
+    this_branch_data_rpz = {}
+    this_branch_data_xyz = {}
+    update_master_data_rpz = False
+    update_master_data_xyz = False
+    error_rpz = False
+    error_xyz = False
+
+    # some things can't compute "phi" and therefore can't convert to XYZ basis
+    no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
 
     for p in things:
-        this_branch_data[p] = things[p].compute(
-            list(data_index[p].keys()), **grid.get(p, {})
+        # test compute in RPZ basis
+        this_branch_data_rpz[p] = things[p].compute(
+            list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
         )
         # make sure we can compute everything
-        assert this_branch_data[p].keys() == data_index[p].keys(), (
-            f"Parameterization: {p}."
-            f" Can't compute {data_index[p].keys() - this_branch_data[p].keys()}."
+        assert this_branch_data_rpz[p].keys() == data_index[p].keys(), (
+            f"Parameterization: {p}. Can't compute "
+            + f"{data_index[p].keys() - this_branch_data_rpz[p].keys()}."
         )
-        # compare against master branch
-        for name in this_branch_data[p]:
-            if p in master_data and name in master_data[p]:
+        # compare data against master branch
+        for name in this_branch_data_rpz[p]:
+            if p in master_data_rpz and name in master_data_rpz[p]:
                 try:
                     np.testing.assert_allclose(
-                        actual=this_branch_data[p][name],
-                        desired=master_data[p][name],
+                        actual=this_branch_data_rpz[p][name],
+                        desired=master_data_rpz[p][name],
                         atol=1e-10,
                         rtol=1e-10,
                         err_msg=f"Parameterization: {p}. Name: {name}.",
                     )
                 except AssertionError as e:
-                    error = True
+                    error_rpz = True
                     print(e)
-            else:
-                # We can compute a new quantity now, so we should update the
-                # master compute data.
-                update_master_data = True
+            else:  # update master data with new compute quantity
+                update_master_data_rpz = True
 
-    if not error and update_master_data:
+        # test compute in XYZ basis
+        if p not in no_xyz_things:
+            # remove quantities that are not implemented in the XYZ basis
+            # TODO: generalize this instead of hard-coding for "grad(B)" & dependencies
+            data_index_xyz = copy.deepcopy(data_index)
+            if "grad(B)" in list(data_index[p].keys()):
+                del data_index_xyz[p]["grad(B)"]
+                del data_index_xyz[p]["|grad(B)|"]
+                del data_index_xyz[p]["L_grad(B)"]
+            this_branch_data_xyz[p] = things[p].compute(
+                list(data_index_xyz[p].keys()), **grid.get(p, {}), basis="xyz"
+            )
+            assert this_branch_data_xyz[p].keys() == data_index_xyz[p].keys(), (
+                f"Parameterization: {p}. Can't compute "
+                + f"{data_index_xyz[p].keys() - this_branch_data_xyz[p].keys()}."
+            )
+            # compare data against master branch
+            for name in this_branch_data_xyz[p]:
+                if p in master_data_xyz and name in master_data_xyz[p]:
+                    try:
+                        np.testing.assert_allclose(
+                            actual=this_branch_data_xyz[p][name],
+                            desired=master_data_xyz[p][name],
+                            atol=1e-10,
+                            rtol=1e-10,
+                            err_msg=f"Parameterization: {p}. Name: {name}.",
+                        )
+                    except AssertionError as e:
+                        error_xyz = True
+                        print(e)
+                else:  # update master data with new compute quantity
+                    update_master_data_xyz = True
+
+    if not error_rpz and update_master_data_rpz:
         # then update the master compute data
         with open("tests/inputs/master_compute_data.pkl", "wb") as file:
             # remember to git commit this file
-            pickle.dump(this_branch_data, file)
-    assert not error
+            pickle.dump(this_branch_data_rpz, file)
+    if not error_xyz and update_master_data_xyz:
+        with open("tests/inputs/master_compute_data_xyz.pkl", "wb") as file:
+            pickle.dump(this_branch_data_xyz, file)
+    assert not error_rpz
+    assert not error_xyz
 
 
 @pytest.mark.unit

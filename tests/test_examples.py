@@ -1268,7 +1268,9 @@ def test_second_stage_optimization_CoilSet():
             ),
             NFP=4,
             sym=True,
+            check_intersection=False,
         ),
+        check_intersection=False,
     )
     grid = LinearGrid(M=5)
     objective = ObjectiveFunction(
@@ -1310,7 +1312,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     mixed_coils = load(
         load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
     )
-    nested_coils = MixedCoilSet(sym_coils, mixed_coils)
+    nested_coils = MixedCoilSet(sym_coils, mixed_coils, check_intersection=False)
     eq = Equilibrium()
     # not attempting to accurately calc B for this test,
     # so make the grids very coarse

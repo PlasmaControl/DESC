@@ -800,11 +800,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Name of this CoilSet.
     check_intersection: bool
         Whether or not to check the coils in the coilset for intersections.
-    check_grid: Grid, optional
-        Grid to use in the self-intersection check of the coilset
-        if ``check_intersection=True``.
-        By default None, which will use the default grid for the specific
-        CoilSet parameterization.
+
     """
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
@@ -817,7 +813,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         sym=False,
         name="",
         check_intersection=True,
-        check_grid=None,
     ):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
@@ -828,8 +823,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         self._name = str(name)
 
         if check_intersection:
-            grid = LinearGrid(N=100) if not check_grid else check_grid
-            self.is_self_intersecting(grid=grid)
+            self.is_self_intersecting()
 
     @property
     def name(self):
@@ -1219,9 +1213,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             rotated_coils = coils.copy()
             rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
             coilset += rotated_coils
-        grid = LinearGrid(N=100)
 
-        return cls(*coilset, check_intersection=True, check_grid=grid)
+        return cls(*coilset, check_intersection=True)
 
     @classmethod
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):
@@ -1533,9 +1526,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         ----------
         grid : Grid, optional
             Collocation grid containing the nodes to evaluate the coil positions at.
-            If a list, must have the same structure as the coilset. Defaults to the
-            default grid for each coil type, check the docstrings and ``curve.py``
-            for more details.
+            If a list, must have the same structure as the coilset. Defaults to a
+            LinearGrid(N=100)
         tol : float, optional
             the tolerance (in meters) to check the intersections to, if points on any
             two coils are closer than this tolerance, then the function will return
@@ -1553,7 +1545,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """
         from desc.objectives._coils import CoilsetMinDistance
 
-        errorif(grid is None and isinstance(self, MixedCoilSet))
+        grid = grid if grid else LinearGrid(N=100)
         obj = CoilsetMinDistance(self, grid=grid)
         obj.build(verbose=0)
         if tol:
@@ -1571,7 +1563,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         else:
 
             pts = obj._constants["coilset"]._compute_position(
-                params=self.params_dict, grid=obj._constants["grid"]
+                params=self.params_dict, grid=obj._constants["grid"], basis="xyz"
             )
             pts = np.array(pts)
             num_nodes = pts.shape[1]
@@ -1661,16 +1653,12 @@ class MixedCoilSet(CoilSet):
         Name of this CoilSet.
     check_intersection: bool
         Whether or not to check the coils in the coilset for intersections.
-    check_grid: Grid, optional
-        Grid to use in the self-intersection check of the coilset
-        if ``check_intersection=True``.
-        Defaults to ``LinearGrid(N=100)``.
 
     """
 
     _io_attrs_ = CoilSet._io_attrs_
 
-    def __init__(self, *coils, name="", check_intersection=True, check_grid=None):
+    def __init__(self, *coils, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         self._coils = list(coils)
@@ -1678,8 +1666,7 @@ class MixedCoilSet(CoilSet):
         self._sym = False
         self._name = str(name)
         if check_intersection:
-            grid = LinearGrid(N=100) if check_grid is None else check_grid
-            self.is_self_intersecting(grid=grid)
+            self.is_self_intersecting()
 
     @property
     def num_coils(self):

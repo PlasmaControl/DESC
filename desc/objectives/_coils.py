@@ -816,7 +816,7 @@ class CoilsetMinDistance(_Objective):
         if constants is None:
             constants = self.constants
         pts = constants["coilset"]._compute_position(
-            params=params, grid=constants["grid"]
+            params=params, grid=constants["grid"], basis="xyz"
         )
 
         def body(k):

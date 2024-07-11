@@ -1182,17 +1182,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             # only need to check this for a CoilSet, not MixedCoilSet
             [_check_type(coil, coils[0]) for coil in coils]
 
-        # check toroidal extent of coils to be repeated
-        maxphi = 2 * np.pi / NFP / (sym + 1)
-        data = coils.compute("phi")
-        check_for_intersection = False
-        for cdata in data:
-            # check if any coils lie on symmetry planes, these may cause
-            # self-intersection after reflection/rotation
-            check_for_intersection = (
-                np.any(cdata["phi"] > maxphi)
-                or (sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps))
-            ) or check_for_intersection
         coilset = []
         if sym:
             # first reflect/flip original coilset
@@ -1214,7 +1203,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
             coilset += rotated_coils
 
-        return cls(*coilset, check_intersection=True)
+        return cls(*coilset)
 
     @classmethod
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):

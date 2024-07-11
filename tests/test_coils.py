@@ -322,11 +322,11 @@ class TestCoilSet:
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
-    def test_from_symmetry_warnings(self):
-        """Test warning in from_symmetry for symmetry plane and self-intersection."""
+    def test_is_self_intersecting_warnings(self):
+        """Test warning in from_symmetry for self-intersection."""
         N = 40
-        # test warning after crossing symmetry plane
         # tilt coils so they cross the symmetry plane
+        # and the resulting coils are self-intersecting
         coil = FourierPlanarCoil(normal=[1e-4, 1, 3])
         coils_list_sym = [coil.copy()] + [coil.copy() for i in range(N // 8 - 1)]
 

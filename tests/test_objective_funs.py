@@ -828,10 +828,10 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)
             assert len(f) == obj.dim_f
 
-        coil = FourierPlanarCoil(r_n=2)
-        coils = CoilSet.linspaced_linear(coil, n=3)
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
-        nested_coils = MixedCoilSet(coils, mixed_coils)
+        coil = FourierPlanarCoil(r_n=2, basis="rpz")
+        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = [LinearGrid(N=5)] * 5  # single list of grids
 

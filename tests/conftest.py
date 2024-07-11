@@ -292,7 +292,9 @@ def DummyMixedCoilSet(tmpdir_factory):
         Z=np.zeros_like(phi),
         knots=np.linspace(0, 2 * np.pi, len(phi)),
     )
-    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil, spline_coil))
+    full_coilset = MixedCoilSet(
+        (tf_coilset, vf_coilset, xyz_coil, spline_coil), check_intersection=False
+    )
 
     full_coilset.save(output_path)
     DummyMixedCoilSet_out = {"output_path": output_path}

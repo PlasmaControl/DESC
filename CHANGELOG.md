@@ -3,6 +3,8 @@ Changelog
 
 New Features
 
+- All vector variables are now computed in toroidal (R,phi,Z) coordinates by default.
+  Cartesian (X,Y,Z) coordinates can be requested with the compute keyword ``basis='xyz'``.
 - Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
 to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
 - Adds the objective `CoilsetMinDistance`, which returns the minimum distance to another

@@ -155,6 +155,7 @@ class Equilibrium(IOAble, Optimizable):
         "_L_grid",
         "_M_grid",
         "_N_grid",
+        "_K_FE"
     ]
 
     def __init__(
@@ -168,6 +169,7 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        K_FE=None,
         pressure=None,
         iota=None,
         current=None,
@@ -241,6 +243,7 @@ class Equilibrium(IOAble, Optimizable):
         L_grid = check_nonnegint(L_grid, "L_grid")
         M_grid = check_nonnegint(M_grid, "M_grid")
         N_grid = check_nonnegint(N_grid, "N_grid")
+        K_FE = check_nonnegint(K_FE, "K_FE")
 
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, self.surface.M))
@@ -256,6 +259,7 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = setdefault(L_grid, 2 * self.L)
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
+        self._K_FE = setdefault(K_FE, 1)
 
         # bases
         self.basis = basis
@@ -395,19 +399,22 @@ class Equilibrium(IOAble, Optimizable):
         # FE basis
         if basis != "FourierZernike":
             Rprime_basis = FiniteElementBasis(
-                L=self.L,
-                M=self.M,
-                N=self.N,
+                L=self.L_grid,
+                M=self.M_grid,
+                N=self.N_grid,
+                K=self.K_FE
             )
             Zprime_basis = FiniteElementBasis(
-                L=self.L,
-                M=self.M,
-                N=self.N,
+                L=self.L_grid,
+                M=self.M_grid,
+                N=self.N_grid,
+                K=self.K_FE
             )
             Lprime_basis = FiniteElementBasis(
-                L=self.L,
-                M=self.M,
-                N=self.N,
+                L=self.L_grid,
+                M=self.M_grid,
+                N=self.N_grid,
+                K=self.K_FE
             )
             Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
                 self.R_lmn,
@@ -451,6 +458,7 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(self._L_grid)
         self._M_grid = int(self._M_grid)
         self._N_grid = int(self._N_grid)
+        # self._K_FE = int(self._K_FE)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -489,9 +497,12 @@ class Equilibrium(IOAble, Optimizable):
             + " at "
             + str(hex(id(self)))
             + " ("
-            + "L={}, M={}, N={}, I={}, J={}, NFP={}, sym={}".format(
-                self.L, self.M, self.N, self.I, self.J, self.NFP, self.sym
+            + "L={}, M={}, N={}, NFP={}, sym={}".format(
+                self.L, self.M, self.N, self.NFP, self.sym
             )
+            # + "L={}, M={}, N={}, I={}, K={}, Q={}, NFP={}, sym={}".format(
+            #     self.L, self.M, self.N, self.I_LMN, self.K, self.Q, self.NFP, self.sym
+            # )
             + ", spectral_indexing={})".format(
                 self.spectral_indexing,
             )
@@ -578,6 +589,7 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        K_FE=None,
         NFP=None,
         sym=None,
     ):
@@ -615,6 +627,7 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(setdefault(L_grid, self.L_grid))
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
+        # self._K_FE = int(setdefault(K_FE, self.K_FE))
         self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = bool(setdefault(sym, self.sym))
 
@@ -622,7 +635,11 @@ class Equilibrium(IOAble, Optimizable):
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
 
-        if self.basis == "FourierZernike":
+        if self.basis == "FiniteElementBasis":
+            self.R_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self.K_FE)
+            self.Z_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self.K_FE)
+            self.L_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self.K_FE)
+        else:
             self.R_basis.change_resolution(
                 self.L,
                 self.M,
@@ -644,10 +661,6 @@ class Equilibrium(IOAble, Optimizable):
                 NFP=self.NFP,
                 sym="sin" if self.sym else self.sym,
             )
-        else:
-            self.R_basis.change_resolution(self.L, self.I, self.J)
-            self.Z_basis.change_resolution(self.L, self.I, self.J)
-            self.L_basis.change_resolution(self.L, self.I, self.J)
         for profile in [
             "pressure",
             "iota",

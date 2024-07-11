@@ -149,7 +149,7 @@ if ``False`` is printed, then the limit of the quantity does not evaluate as fin
 
 
 The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_everything.py`` file.
-This can be done with the command :console:`pytest -k test_compute_everything tests/test_compute_everything.py`.
+This can be done with the command :console:`pytest tests/test_compute_everything.py`.
 This test is a regression test to ensure that compute quantities in each new update of DESC do not differ significantly
 from previous versions of DESC.
 Since the new quantity did not exist in previous versions of DESC, one must run this test

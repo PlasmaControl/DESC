@@ -1268,7 +1268,9 @@ def test_second_stage_optimization_CoilSet():
             ),
             NFP=4,
             sym=True,
+            check_intersection=False,
         ),
+        check_intersection=False,
     )
     grid = LinearGrid(M=5)
     objective = ObjectiveFunction(

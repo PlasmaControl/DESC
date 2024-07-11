@@ -260,7 +260,7 @@ _class_inheritance = {
 }
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
-allowed_kwargs = set()
+allowed_kwargs = {"basis"}
 
 
 def is_0d_vol_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):

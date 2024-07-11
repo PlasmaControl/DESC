@@ -811,7 +811,9 @@ class Equilibrium(IOAble, Optimizable):
             Profile objects for pressure, iota, current, etc. Defaults to attributes
             of self
         data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+            Data computed so far, generally output from other compute functions.
+            All vectors v = [vᴿ, v^ϕ, vᶻ] should be given in contravariant components
+            of the cylindrical basis coordinates R,ϕ,Z (shorthand is ``rpz``).
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested

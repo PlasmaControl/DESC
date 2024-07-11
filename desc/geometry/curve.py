@@ -717,7 +717,9 @@ class FourierPlanarCurve(Curve):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+            Data computed so far, generally output from other compute functions.
+            All vectors v = [vᴿ, v^ϕ, vᶻ] should be given in contravariant components
+            of the cylindrical basis coordinates R,ϕ,Z (shorthand is ``rpz``).
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested

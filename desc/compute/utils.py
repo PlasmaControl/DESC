@@ -53,7 +53,9 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         Profile objects for pressure, iota, current, etc. Defaults to attributes
         of self
     data : dict of ndarray
-        Data computed so far, generally output from other compute functions
+        Data computed so far, generally output from other compute functions.
+        All vectors v = [vᴿ, v^ϕ, vᶻ] should be given in contravariant components
+        of the cylindrical basis coordinates R,ϕ,Z (shorthand is ``rpz``).
 
     Returns
     -------
@@ -120,6 +122,9 @@ def _compute(
     parameterization, names, params, transforms, profiles, data=None, **kwargs
 ):
     """Same as above but without checking inputs for faster recursion.
+
+    All vectors v = [vᴿ, v^ϕ, vᶻ] in ``data`` should be given in contravariant
+    components of the cylindrical basis coordinates R,ϕ,Z (shorthand is ``rpz``).
 
     We need to directly call this function in objectives, since the checks in above
     function are not compatible with JIT. This function computes given names while

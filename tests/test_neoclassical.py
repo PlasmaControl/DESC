@@ -84,3 +84,4 @@ def test_Gamma_c():
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")
     return fig
+

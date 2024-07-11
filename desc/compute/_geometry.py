@@ -9,10 +9,11 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from desc.backend import jnp
+from desc.backend import jnp, trapezoid
 
 from ..grid import QuadratureGrid
 from .data_index import register_compute_fun
+from .geom_utils import warnif_sym
 from .utils import cross, dot, line_integrals, safenorm, surface_integrals
 
 
@@ -171,9 +172,8 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
     resolution_requirement="t",
-    # FIXME: Add source grid requirement once omega is nonzero.
 )
-def _A_of_z(params, transforms, profiles, data, **kwargs):
+def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
     # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
     # In this geometry, the divergence operator on a polar basis vector is
@@ -182,6 +182,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
     # and the labels following | denote those coordinates are fixed.
     # Now choose v = [0, 0, Z], and n in the direction (e_θ|ρ,ζ × e_ζ|ρ,θ) ⊗ [1, 0, 1].
+    warnif_sym(transforms["grid"], "A(z)")
     n = data["n_rho"]
     n = n.at[:, 1].set(0)
     n = n / jnp.linalg.norm(n, axis=-1)[:, jnp.newaxis]
@@ -189,8 +190,6 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     data["A(z)"] = jnp.abs(
         line_integrals(
             transforms["grid"],
-            # FIXME: Integrand is not symmetric function, so this will fail
-            #   on symmetric grids.
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
             # FIXME: Works currently for omega = zero, but for nonzero omega
             #  we need to integrate over theta at constant phi.
@@ -218,17 +217,40 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["A(z)"],
+    data=["Z", "n_rho", "e_theta|r,p", "rho", "phi"],
     parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
+        "desc.equilibrium.equilibrium.Equilibrium",
     ],
-    resolution_requirement="z",
+    resolution_requirement="tz",
 )
 def _A(params, transforms, profiles, data, **kwargs):
-    data["A"] = jnp.mean(
-        transforms["grid"].compress(data["A(z)"], surface_label="zeta")
+    # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
+    # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
+    # In this geometry, the divergence operator on a polar basis vector is
+    # div = ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
+    # ∫ dA div v = ∫ dℓ n dot v
+    # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
+    # and the labels following | denote those coordinates are fixed.
+    # Now choose v = [0, 0, Z], and n in the direction (e_θ|ρ,ζ × e_ζ|ρ,θ) ⊗ [1, 0, 1].
+    n = data["n_rho"]
+    n = n.at[:, 1].set(0)
+    n = n / jnp.linalg.norm(n, axis=-1)[:, jnp.newaxis]
+    max_rho = jnp.max(data["rho"])
+    A = jnp.abs(
+        line_integrals(
+            transforms["grid"],
+            data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
+            line_label="theta",
+            fix_surface=("rho", max_rho),
+            expand_out=False,
+        )
+        # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
+        # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
+        / max_rho**2
     )
+    phi = transforms["grid"].compress(data["phi"], "zeta")
+    data["A"] = jnp.squeeze(trapezoid(A, phi) / jnp.ptp(phi) if A.size > 1 else A)
     return data
 
 
@@ -424,6 +446,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     resolution_requirement="t",
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
+    warnif_sym(transforms["grid"], "perimeter(z)")
     max_rho = jnp.max(data["rho"])
     data["perimeter(z)"] = (
         line_integrals(

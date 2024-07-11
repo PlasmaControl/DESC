@@ -903,7 +903,7 @@ def line_integrals(
         The coordinate curve to compute the integration over.
         To clarify, a theta (poloidal) curve is the intersection of a
         rho surface (flux surface) and zeta (toroidal) surface.
-    fix_surface : str, float
+    fix_surface : (str, float)
         A tuple of the form: label, value.
         ``fix_surface`` label should differ from ``line_label``.
         By default, ``fix_surface`` is chosen to be the flux surface at rho=1.

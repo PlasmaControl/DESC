@@ -194,14 +194,15 @@ def test_elongation():
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
-    grid = LinearGrid(rho=1, M=2 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=surf3.sym)
-    data1 = surf1.compute(["a_major/a_minor", "A"], grid=grid)
-    data2 = surf2.compute(["a_major/a_minor", "A"], grid=grid)
-    data3 = surf3.compute(["a_major/a_minor", "A"], grid=grid)
+    assert surf3.sym
+    grid = LinearGrid(rho=1, M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
+    data1 = surf1.compute(["a_major/a_minor"], grid=grid)
+    data2 = surf2.compute(["a_major/a_minor"], grid=grid)
+    data3 = surf3.compute(["a_major/a_minor"], grid=grid)
     # elongation approximation is less accurate as elongation increases
     np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-3)
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-2)
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-3)
 
 
 @pytest.mark.slow
@@ -1657,11 +1658,13 @@ def test_surface_equilibrium_geometry():
         for key in data:
             x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
             y = eq.surface.compute(key)[key].max()
-            if key == "a_major/a_minor":
-                rtol, atol = 1e-2, 0  # need looser tol here bc of different grids
+            if key in ("A", "a", "R0", "R0/a", "a_major/a_minor"):
+                rtol, atol = 1e-3, 0  # need looser tol here bc of different grids
             else:
                 rtol, atol = 1e-8, 0
-            np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)
+            np.testing.assert_allclose(
+                x, y, rtol=rtol, atol=atol, err_msg=name + " " + key
+            )
         # compare at rho=1, where we expect the eq.compute and the
         # surface.compute to agree for these surface basis vectors
         grid = LinearGrid(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)

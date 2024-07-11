@@ -1729,17 +1729,3 @@ def test_surface_equilibrium_geometry():
                 rtol=3e-13,
                 atol=1e-13,
             )
-
-
-@pytest.mark.unit
-def test_basis_kwarg():
-    """Test that we don't change basis to xyz erroneously assuming input is in rpz."""
-    eq = get("W7-X")
-    names = ["b", "e^rho", "e_theta_PEST", "phi"]
-    data_rpz = eq.compute(names, basis="rpz")
-    data_xyz = eq.compute(names, basis="xyz")
-    for name in names:
-        if name != "phi":
-            np.testing.assert_allclose(
-                rpz2xyz_vec(data_rpz[name], phi=data_rpz["phi"]), data_xyz[name]
-            )

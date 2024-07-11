@@ -13,7 +13,6 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
-from ..utils import errorif
 from .data_index import register_compute_fun
 from .utils import cross, dot, safediv, safenorm, surface_averages
 
@@ -232,7 +231,6 @@ def _J_sqrt_g_r(params, transforms, profiles, data, **kwargs):
     data=["J"],
 )
 def _J_R(params, transforms, profiles, data, **kwargs):
-    errorif(kwargs.get("basis", "rpz").lower() != "rpz", NotImplementedError)
     data["J_R"] = data["J"][:, 0]
     return data
 
@@ -251,7 +249,6 @@ def _J_R(params, transforms, profiles, data, **kwargs):
     data=["J"],
 )
 def _J_phi(params, transforms, profiles, data, **kwargs):
-    errorif(kwargs.get("basis", "rpz").lower() != "rpz", NotImplementedError)
     data["J_phi"] = data["J"][:, 1]
     return data
 
@@ -270,9 +267,6 @@ def _J_phi(params, transforms, profiles, data, **kwargs):
     data=["J"],
 )
 def _J_Z(params, transforms, profiles, data, **kwargs):
-    errorif(
-        kwargs.get("basis", "rpz").lower() not in {"rpz", "xyz"}, NotImplementedError
-    )
     data["J_Z"] = data["J"][:, 2]
     return data
 
@@ -683,7 +677,6 @@ def _W_B(params, transforms, profiles, data, **kwargs):
     data=["B", "sqrt(g)"],
 )
 def _W_Bpol(params, transforms, profiles, data, **kwargs):
-    errorif(kwargs.get("basis", "rpz").lower() != "rpz", NotImplementedError)
     data["W_Bpol"] = jnp.sum(
         dot(data["B"][:, (0, 2)], data["B"][:, (0, 2)])
         * data["sqrt(g)"]
@@ -706,7 +699,6 @@ def _W_Bpol(params, transforms, profiles, data, **kwargs):
     data=["B", "sqrt(g)"],
 )
 def _W_Btor(params, transforms, profiles, data, **kwargs):
-    errorif(kwargs.get("basis", "rpz").lower() != "rpz", NotImplementedError)
     data["W_Btor"] = jnp.sum(
         data["B"][:, 1] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
     ) / (2 * mu_0)

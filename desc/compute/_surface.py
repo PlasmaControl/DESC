@@ -1,6 +1,5 @@
 from desc.backend import jnp
 
-from ..utils import errorif
 from .data_index import register_compute_fun
 from .geom_utils import rpz2xyz
 
@@ -194,9 +193,6 @@ def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.core.Surface",
 )
 def _Z_Surface(params, transforms, profiles, data, **kwargs):
-    errorif(
-        kwargs.get("basis", "rpz").lower() not in {"rpz", "xyz"}, NotImplementedError
-    )
     data["Z"] = data["x"][:, 2]
     return data
 

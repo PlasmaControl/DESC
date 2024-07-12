@@ -25,8 +25,10 @@ class TestRZCurve:
             c.compute("center", basis="xyz")["center"][0, :], [2, -1, 3]
         )
         c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [3, 0, 4]
+            c.compute("center", basis="xyz")["center"][0, :], [-3, 0, 4], atol=1e-15
         )
 
     @pytest.mark.unit
@@ -340,8 +342,10 @@ class TestFourierXYZCurve:
             c.compute("center", basis="xyz")["center"][0, :], [10, -3, 2]
         )
         c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [11, -2, 3]
+            c.compute("center", basis="xyz")["center"][0, :], [-11, -2, 3]
         )
 
     @pytest.mark.unit
@@ -497,8 +501,10 @@ class TestPlanarCurve:
             c.compute("center", basis="xyz")["center"][0, :], [5, 4, 3]
         )
         c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [6, 5, 4]
+            c.compute("center", basis="xyz")["center"][0, :], [-6, 5, 4]
         )
         c = FourierPlanarCurve(center=[5, 1, -2], r_n=[1, 2, 0.5], basis="rpz")
         np.testing.assert_allclose(
@@ -671,8 +677,10 @@ class TestSplineXYZCurve:
             c.compute("center", basis="xyz")["center"][0, :], [6.5, 2.5, -0.5]
         )
         c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [7.5, 3.5, 0.5]
+            c.compute("center", basis="xyz")["center"][0, :], [-7.5, 3.5, 0.5]
         )
 
     @pytest.mark.unit

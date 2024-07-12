@@ -25,11 +25,11 @@ np.random.seed(1)
 L = 2
 M = 5
 N = 0
-K = 3
+K = 2
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
-theta = np.linspace(0.01, 2 * np.pi - 0.01, 200, endpoint=True)
+theta = np.linspace(0.0, 2 * np.pi, 200, endpoint=True)
 
 # Define the bases
 R_basis = FourierZernikeBasis(

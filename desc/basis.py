@@ -2058,10 +2058,10 @@ class FiniteElementMesh3D:
         p.show
         # plt.show()
 
-        if K == 1:
-            element = fem.ElementTetP1()
-        else:
-            element = fem.ElementTetP2()
+        # if K == 1:
+        element = fem.ElementTetP1()
+        # else:
+        #     element = fem.ElementTetP2()
         # else:
         #     raise ValueError("Only K <= 2 supported right now.")
 
@@ -2451,7 +2451,7 @@ class FiniteElementMesh3D:
 
         # Increase integration order to avoid singularities coming from
         # numerical discretization
-        [integration_points, weights] = fem.quadrature.get_quadrature(element, K + 1) 
+        [integration_points, weights] = fem.quadrature.get_quadrature(element, 2 * K + 3) 
         integration_points = integration_points.T
 
         # We want to add a 4th column to the transpose of the
@@ -2674,13 +2674,40 @@ class FiniteElementMesh3D:
         print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
 
         # print(good_inds, good_inds.shape, v.shape, v1.shape)
+
+        # Deal with points right at a vertex
+        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 8))
+        for i in duplicates:
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+
+        # Deal with points right at a vertex
+        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 6))
+        for i in duplicates:
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+
+        # Deal with points shared on an edge by 4 tets
+        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 4))
+        for i in duplicates:
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
         
-        # Still need to deal with case when points lie exactly along the edge 
+        # Deal with points shared on an edge by 3 tets
         duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 3))
         for i in duplicates:
             max_col = np.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
         
+        # Deal with points shared on an edge by 2 tets (+ finish the vertex case)
         duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 2))
         for i in duplicates:
             max_col = np.argmax(good_inds[i, :])
@@ -2928,9 +2955,15 @@ class FiniteElementMesh2D:
         triangle_indices = np.logical_and(triangle_indices, np.logical_or( 
             np.isclose(d, 0.0), np.isclose((d < 0), (s + t <= 0)))
         )
+
+        # Deal with points at a triangle vertex
+        duplicates = np.ravel(np.where(np.count_nonzero(triangle_indices, axis=-1) == 3))
+        for i in duplicates:
+            max_col = np.argmax(triangle_indices[i, :])
+            triangle_indices[i, max_col] = False
         
         # Still need to deal with case when points lie exactly along the edge 
-        # between two triangles A and B
+        # between two triangles A and B (and finish off the vertex case)
         # in which case triangle_indices will say that the point lies in
         # both triangle A and triangle B, leading to incorrect results.
         duplicates = np.ravel(np.where(np.count_nonzero(triangle_indices, axis=-1) == 2))
@@ -2947,7 +2980,7 @@ class FiniteElementMesh2D:
                     self.triangles[i].get_basis_functions(v[row_i, :])  #.reshape(-1, 2))
                 )
             
-        # print(np.min(np.count_nonzero(triangle_indices, axis=-1)), np.max(np.count_nonzero(triangle_indices, axis=-1)))
+        print(np.min(np.count_nonzero(triangle_indices, axis=-1)), np.max(np.count_nonzero(triangle_indices, axis=-1)))
         # Finally, rescale the basis functions at theta = 0 or theta = 2 * pi by 1/2pi
         # zero_inds = np.ravel(np.where(np.isclose(v[:, 1], 0.0, rtol=1e-7)))
         # basis_functions[zero_inds, :] *= np.sqrt(1.0 / (2 * np.pi))

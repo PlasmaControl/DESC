@@ -179,6 +179,9 @@ def convert_spectral_to_FE(
     Aj_R = np.array(Aj_R)
     Aj_Z = np.array(Aj_Z)
     Aj_L = np.array(Aj_L)
+    cond = np.linalg.cond(FE_assembly_matrix)
+    if cond > 1e5:
+        warnings.warn('condition number of assembly matrix = ', cond)
     FE_inv = np.linalg.inv(FE_assembly_matrix)
     Rprime_lmn = np.zeros(nmodes)
     Zprime_lmn = np.zeros(nmodes)

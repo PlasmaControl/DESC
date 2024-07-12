@@ -54,8 +54,9 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         of self
     data : dict of ndarray
         Data computed so far, generally output from other compute functions.
-        All vectors v = [vᴿ, v^ϕ, vᶻ] should be given in contravariant components
-        of the cylindrical basis coordinates R,ϕ,Z (shorthand is ``rpz``).
+        Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+        v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+        of the cylindrical coordinates R, ϕ, Z.
 
     Returns
     -------

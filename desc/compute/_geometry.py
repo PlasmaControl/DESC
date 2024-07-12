@@ -174,9 +174,10 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     resolution_requirement="t",
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
+    # Denote any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where R̂, ϕ̂, Ẑ
+    # are the normalized basis vectors of the cylindrical coordinates R, ϕ, Z.
     # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
-    # In this geometry, the divergence operator on a polar basis vector is
+    # In this geometry, the divergence operator in this coordinate system is
     # div = ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
     # ∫ dA div v = ∫ dℓ n dot v
     # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
@@ -225,9 +226,10 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
     resolution_requirement="tz",
 )
 def _A(params, transforms, profiles, data, **kwargs):
-    # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
+    # Denote any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where R̂, ϕ̂, Ẑ
+    # are the normalized basis vectors of the cylindrical coordinates R, ϕ, Z.
     # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
-    # In this geometry, the divergence operator on a polar basis vector is
+    # In this geometry, the divergence operator in this coordinate system is
     # div = ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
     # ∫ dA div v = ∫ dℓ n dot v
     # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
@@ -240,6 +242,7 @@ def _A(params, transforms, profiles, data, **kwargs):
     A = jnp.abs(
         line_integrals(
             transforms["grid"],
+            # FIXME: integrate over constant phi when omega is nonzero.
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
             line_label="theta",
             fix_surface=("rho", max_rho),

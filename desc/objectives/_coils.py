@@ -695,7 +695,7 @@ class CoilCurrentLength(CoilLength):
         return out
 
 
-class CoilsetMinDistance(_Objective):
+class CoilSetMinDistance(_Objective):
     """Target the minimum distance between coils in a coilset.
 
     Will yield one value per coil in the coilset, which is the minimum distance to
@@ -837,7 +837,7 @@ class CoilsetMinDistance(_Objective):
         return min_dist_per_coil
 
 
-class PlasmaCoilsetMinDistance(_Objective):
+class PlasmaCoilSetMinDistance(_Objective):
     """Target the minimum distance between the plasma and coilset.
 
     Will yield one value per coil in the coilset, which is the minimumm distance from

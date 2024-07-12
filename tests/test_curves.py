@@ -47,11 +47,15 @@ class TestRZCurve:
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierRZCurve()
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 10)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], -1 / 10
+        )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 10)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], -1 / 10
+        )
 
     @pytest.mark.unit
     def test_torsion(self):
@@ -358,11 +362,11 @@ class TestFourierXYZCurve:
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierXYZCurve()
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], -1 / 2)
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], -1 / 2)
 
     @pytest.mark.unit
     def test_torsion(self):
@@ -532,11 +536,11 @@ class TestPlanarCurve:
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierPlanarCurve()
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], -1 / 2)
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], -1 / 2)
 
     @pytest.mark.unit
     def test_torsion(self):
@@ -798,13 +802,13 @@ class TestSplineXYZCurve:
         phi = np.linspace(0, 2 * np.pi, 100, endpoint=True)
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         np.testing.assert_allclose(
-            c.compute("curvature", grid=10)["curvature"][1:-1], 1 / 10, atol=1e-3
+            c.compute("curvature", grid=10)["curvature"][1:-1], -1 / 10, atol=1e-3
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("curvature", grid=10)["curvature"][1:-1], 1 / 10, atol=1e-3
+            c.compute("curvature", grid=10)["curvature"][1:-1], -1 / 10, atol=1e-3
         )
 
     @pytest.mark.unit

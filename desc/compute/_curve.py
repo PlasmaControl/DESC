@@ -427,9 +427,11 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     dphi = R0
     coords = jnp.stack([dR, dphi, dZ], axis=1)
     # convert to xyz for displacement and rotation
+    # FIXME: phi is not grid zeta if curve is shifted!
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     coords = coords @ params["rotmat"].reshape((3, 3)).T
     # convert back to rpz
+    # FIXME: phi is not grid zeta if curve is shifted!
     coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_s"] = coords
     return data
@@ -460,9 +462,11 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     phi = 2 * dR
     coords = jnp.stack([R, phi, Z], axis=1)
     # convert to xyz for displacement and rotation
+    # FIXME: phi is not grid zeta if curve is shifted!
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     coords = coords @ params["rotmat"].reshape((3, 3)).T
     # convert back to rpz
+    # FIXME: phi is not grid zeta if curve is shifted!
     coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_ss"] = coords
     return data
@@ -497,9 +501,11 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     phi = 3 * d2R - R0
     coords = jnp.stack([R, phi, Z], axis=1)
     # convert to xyz for displacement and rotation
+    # FIXME: phi is not grid zeta if curve is shifted!
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     coords = coords @ params["rotmat"].reshape((3, 3)).T
     # convert back to rpz
+    # FIXME: phi is not grid zeta if curve is shifted!
     coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_sss"] = coords
     return data

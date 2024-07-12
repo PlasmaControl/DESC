@@ -1229,7 +1229,6 @@ class QuadraticFlux(_Objective):
         # pre-compute B_plasma because we are assuming eq is fixed
         if self._vacuum:
             Bplasma = jnp.zeros(eval_grid.num_nodes)
-
         else:
             Bplasma = compute_B_plasma(
                 eq, eval_grid, self._source_grid, normal_only=True

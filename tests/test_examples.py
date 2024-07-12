@@ -1346,7 +1346,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
             # just to check they work without error
             objs.extend(
                 [
-                    CoilCurvature(c, target=0.5, weight=1e-2),
+                    CoilCurvature(c, target=-0.5, weight=1e-2),
                     CoilTorsion(c, target=0, weight=1e-2),
                 ]
             )

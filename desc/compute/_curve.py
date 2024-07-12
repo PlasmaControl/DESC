@@ -370,7 +370,7 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 def _center_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     idx_Rc = transforms["R"].basis.get_idx(N=1, error=False)
     idx_Rs = transforms["R"].basis.get_idx(N=-1, error=False)
-    idx_Z = transforms["Z"].basis.get_idx(error=False)
+    idx_Z = transforms["Z"].basis.get_idx(N=0, error=False)
     X0 = params["R_n"][idx_Rc] / 2 if isinstance(idx_Rc, int) else 0
     Y0 = params["R_n"][idx_Rs] / 2 if isinstance(idx_Rs, int) else 0
     Z0 = params["Z_n"][idx_Z] if isinstance(idx_Z, int) else 0
@@ -518,9 +518,9 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.curve.FourierXYZCurve",
 )
 def _center_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
-    idx_X = transforms["X"].basis.get_idx(error=False)
-    idx_Y = transforms["Y"].basis.get_idx(error=False)
-    idx_Z = transforms["Z"].basis.get_idx(error=False)
+    idx_X = transforms["X"].basis.get_idx(N=0, error=False)
+    idx_Y = transforms["Y"].basis.get_idx(N=0, error=False)
+    idx_Z = transforms["Z"].basis.get_idx(N=0, error=False)
     X0 = params["X_n"][idx_X] if isinstance(idx_X, int) else 0
     Y0 = params["Y_n"][idx_Y] if isinstance(idx_Y, int) else 0
     Z0 = params["Z_n"][idx_Z] if isinstance(idx_Z, int) else 0
@@ -653,7 +653,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Centroid of the curve",
     dim=3,
-    params=["X", "Y", "Z", "shift"],
+    params=["X", "Y", "Z", "rotmat", "shift"],
     transforms={},
     profiles=[],
     coordinates="s",
@@ -897,7 +897,7 @@ def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["x_s", "x_ss", "frenet_tangent"],
+    data=["x_s", "x_ss"],
     parameterization="desc.geometry.core.Curve",
 )
 def _frenet_normal(params, transforms, profiles, data, **kwargs):
@@ -932,7 +932,8 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     label="\\kappa",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Scalar curvature of the curve, positive/negative = concave/convex",
+    description="Scalar curvature of the curve, with the sign denoting the concavity/"
+    + "convexity relative to the center of the curve: *center )-curvature (+curvature",
     dim=1,
     params=[],
     transforms={},

@@ -124,8 +124,9 @@ def _compute(
 ):
     """Same as above but without checking inputs for faster recursion.
 
-    All vectors v = [vᴿ, v^ϕ, vᶻ] in ``data`` should be given in contravariant
-    components of the cylindrical basis coordinates R,ϕ,Z (shorthand is ``rpz``).
+    Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+    v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+    of the cylindrical coordinates R, ϕ, Z.
 
     We need to directly call this function in objectives, since the checks in above
     function are not compatible with JIT. This function computes given names while

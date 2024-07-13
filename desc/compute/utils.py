@@ -678,7 +678,10 @@ def _has_transforms(qty, transforms, parameterization):
 
 
 def dot(a, b, axis=-1):
-    """Batched vector dot product.
+    """Batched coordinate dot product.
+
+    This returns the dot product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal.
 
     Parameters
     ----------
@@ -695,11 +698,15 @@ def dot(a, b, axis=-1):
         y = sum(a*b, axis=axis)
 
     """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
+    return jnp.sum(a * b, axis=axis)
 
 
 def cross(a, b, axis=-1):
-    """Batched vector cross product.
+    """Batched coordinate cross product.
+
+    This returns the cross product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal,
+    and the coordinate system is right-handed.
 
     Parameters
     ----------

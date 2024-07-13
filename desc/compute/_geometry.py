@@ -173,7 +173,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     ],
     resolution_requirement="t",
 )
-def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+def _A_of_z(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where R̂, ϕ̂, Ẑ
     # are the normalized basis vectors of the cylindrical coordinates R, ϕ, Z.
     # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
@@ -213,6 +213,8 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
     units="m^{2}",
     units_long="square meters",
     description="Average enclosed cross-sectional area, scaled by max(ρ)⁻²",
+    # Simple toroidal average A₀ = ∫ A(ζ) dζ / (2π) matches the convention for the
+    # average major radius R₀ = ∫ R(ρ=0) dζ / (2π).
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -365,10 +367,12 @@ def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="R0",
-    label="R_{0}",
+    label="R_{0} = V / (2\\pi A) = \\int R(\\rho=0) d\\zeta / (2\\pi)",
     units="m",
     units_long="meters",
     description="Average major radius",
+    # This differs from the average value of R on the magnetic axis.
+    # R₀ ≠ 〈 R(ρ=0) 〉 =  ∫ (R ‖e_ζ‖)(ρ=0) dζ / ∫ ‖e_ζ‖(ρ=0) dζ.
     dim=0,
     params=[],
     transforms={},

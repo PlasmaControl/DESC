@@ -119,15 +119,59 @@ Zprime_basis.Z_lmn = Zprime_lmn
 # Replot the surface in the finite element basis
 nmodes = len(Rprime_basis.modes)
 # print('node_evaluate = ', Rprime_basis.evaluate(nodes=nodes))
-R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
-Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+RR = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
+ZZ = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
 # print('R, Z = ', R, Z)
 t2 = time.time()
 print('Time for R, Z conversion = ', t2 - t1)
 plt.figure(10)
-plt.plot(R, Z, "ko", label="FE rep")
+plt.plot(RR, ZZ, "ko", label="FE rep")
 # plt.scatter(R, Z, s=np.arange(len(R)), marker="o", label="FE rep")
 plt.legend()
 plt.grid()
 # Rprime_basis.mesh.plot_triangles(True)
+# plt.show()
+points_fourier = np.array([R, Z]).T
+
+Ks = np.arange(1, 4)
+# Ls = np.arange(2, 8, 2)
+Ms = np.arange(2, 60, 4)
+errors = np.zeros((len(Ks), len(Ms)))
+q = 0 
+for k in Ks:
+    qq = 0
+    for m in Ms:
+        Rprime_basis = FiniteElementBasis(L=L_FE, M=m, N=N, K=k, rho_range=rho)
+        Zprime_basis = FiniteElementBasis(L=L_FE, M=m, N=N, K=k, rho_range=rho)
+        Lprime_basis = FiniteElementBasis(L=L_FE, M=m, N=N, K=k, rho_range=rho)
+
+        # Convert to the finite element basis
+        Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            R_basis,
+            Z_basis,
+            L_basis,
+            Rprime_basis,
+            Zprime_basis,
+            Lprime_basis,
+        )
+        Rprime_basis.R_lmn = Rprime_lmn
+        Zprime_basis.Z_lmn = Zprime_lmn
+        RR = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
+        ZZ = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+        points_FE = np.array([RR, ZZ]).T
+        E = np.linalg.norm(points_fourier - points_FE, 2) / np.linalg.norm(points_fourier, 2)
+        errors[q, qq] = E 
+        print(q, qq, E, np.log10(errors[q, qq]))
+        qq += 1
+    q += 1
+
+plt.figure()
+plt.contourf(Ks, Ms, np.log10(errors).T)
+plt.xlabel('K')
+plt.ylabel('M')
+plt.title(r'$\log_{10}(E)$')
+plt.colorbar()
 plt.show()

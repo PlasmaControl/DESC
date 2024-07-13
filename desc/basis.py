@@ -1216,8 +1216,8 @@ class FiniteElementBasis(_FE_Basis):
             basis_functions = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
             # print(Rho_Theta, intervals, basis_functions)
         else:
-            Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
-            basis_functions = self.mesh.find_tetrahedra_corresponding_to_points(Rho_Theta_Zeta)
+            # Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
+            basis_functions = self.mesh.find_tetrahedra_corresponding_to_points(nodes)
 
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
@@ -2051,12 +2051,11 @@ class FiniteElementMesh3D:
         vertices = vertices.T
 
         # Plotting the 3D Mesh
-        from skfem.visuals.matplotlib import draw, draw_mesh3d
+        # from skfem.visuals.matplotlib import draw, draw_mesh3d
 
-        ax = draw(mesh)
-        p = draw_mesh3d(mesh, ax=ax)
-        p.show
-        # plt.show()
+        # ax = draw(mesh)
+        # p = draw_mesh3d(mesh, ax=ax)
+        # p.show
 
         # if K == 1:
         element = fem.ElementTetP1()
@@ -2670,12 +2669,21 @@ class FiniteElementMesh3D:
             np.logical_or(Det2 > 0.0, np.isclose(Det2, 0.0))), 
             np.logical_or(Det3 > 0.0, np.isclose(Det3, 0.0))), 
             np.logical_or(Det4 > 0.0, np.isclose(Det4, 0.0)))
-        cols = np.arange(good_inds.shape[-1])
-        print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
+        # print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
 
-        # print(good_inds, good_inds.shape, v.shape, v1.shape)
+        # Deal with points right at a vertex between four quadrilaterals (12 tets)
+        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 12))
+        for i in duplicates:
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
+            max_col = np.argmax(good_inds[i, :])
+            good_inds[i, max_col] = False
 
-        # Deal with points right at a vertex
+        # Deal with points right at a vertex between two quadrilaterals (8 tets)
         duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 8))
         for i in duplicates:
             max_col = np.argmax(good_inds[i, :])
@@ -2713,29 +2721,14 @@ class FiniteElementMesh3D:
             max_col = np.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
         
-        # Still need to deal with case when points lie exactly on a vertex
-        # duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 3))
-        # for i in duplicates:
-        #     max_col = np.argmax(good_inds[i, :])
-        #     good_inds[i, max_col] = False
-        #     max_col = np.argmax(good_inds[i, np.ravel(np.where(cols != max_col))])
-        #     good_inds[i, max_col + 1] = False
-        
         true_rows, true_cols = np.where(good_inds)   
-        # print(good_inds.shape)
-        # print(good_inds, true_rows, true_cols, np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
-        # exit()
-        # print(true_rows, true_cols)
         for i in np.unique(true_cols):
             row_i = true_rows[true_cols == i]
-            # print(self.tetrahedra[i].det)
             # print(i, row_i, i * Q, (i + 1) * Q, v[row_i, :], v1[i, :], v2[i, :], v3[i, :], v4[i, :], self.tetrahedra[i].det)
             basis_functions[row_i, i * Q: (i + 1) * Q], _ = (
-                    self.tetrahedra[i].get_basis_functions(v[row_i, :])  #.reshape(-1, 3))
+                    self.tetrahedra[i].get_basis_functions(v[row_i, :])
                 )
-        print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
-        # print(true_rows, true_cols)
-        
+        print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))        
         return basis_functions
 
 
@@ -2789,11 +2782,11 @@ class FiniteElementMesh2D:
         # starting at the bottom again and repeating this process.
 
         # Plotting the 2D Mesh
-        from skfem.visuals.matplotlib import draw, draw_mesh2d
+        # from skfem.visuals.matplotlib import draw, draw_mesh2d
 
-        ax = draw(mesh)
-        p = draw_mesh2d(mesh, ax=ax)
-        p.show
+        # ax = draw(mesh)
+        # p = draw_mesh2d(mesh, ax=ax)
+        # p.show
 
         if K == 1:
             element = fem.ElementTriP1()

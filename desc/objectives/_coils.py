@@ -695,7 +695,7 @@ class CoilCurrentLength(CoilLength):
         return out
 
 
-class CoilsetMinDistance(_Objective):
+class CoilSetMinDistance(_Objective):
     """Target the minimum distance between coils in a coilset.
 
     Will yield one value per coil in the coilset, which is the minimum distance to
@@ -837,7 +837,7 @@ class CoilsetMinDistance(_Objective):
         return min_dist_per_coil
 
 
-class PlasmaCoilsetMinDistance(_Objective):
+class PlasmaCoilSetMinDistance(_Objective):
     """Target the minimum distance between the plasma and coilset.
 
     Will yield one value per coil in the coilset, which is the minimumm distance from
@@ -1125,8 +1125,8 @@ class QuadraticFlux(_Objective):
     eval_grid : Grid, optional
         Collocation grid containing the nodes on the plasma surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
-        Default grid is: LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
-            NFP=int(eq.NFP), sym=False)
+        Default grid is: ``LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
+        NFP=int(eq.NFP), sym=False)``
     field_grid : Grid, optional
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils). Default grid is determined by the specific MagneticField object, see

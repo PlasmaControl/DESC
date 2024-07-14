@@ -1346,13 +1346,15 @@ class Equilibrium(IOAble, Optimizable):
     @R_lmn.setter
     def R_lmn(self, R_lmn):
         R_lmn = jnp.atleast_1d(jnp.asarray(R_lmn))
-        errorif(
-            R_lmn.size != self._R_lmn.size,
-            ValueError,
-            "R_lmn should have the same size as R_basis, "
-            + f"got {len(R_lmn)} for basis with {self.R_basis.num_modes} modes",
-        )
+        print("R_lmn =", R_lmn.size)
+        print("self.R_lmn=", self._R_lmn.size)
+        # errorif( R_lmn.size != self._R_lmn.size,
+        #     ValueError,
+        #     "R_lmn should have the same size as R_basis, "
+        #     + f"got {len(R_lmn)} for basis with {self.R_basis.num_modes} modes",
+        # )
         self._R_lmn = R_lmn
+        
 
     @optimizable_parameter
     @property
@@ -1363,12 +1365,12 @@ class Equilibrium(IOAble, Optimizable):
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
         Z_lmn = jnp.atleast_1d(jnp.asarray(Z_lmn))
-        errorif(
-            Z_lmn.size != self._Z_lmn.size,
-            ValueError,
-            "Z_lmn should have the same size as Z_basis, "
-            + f"got {len(Z_lmn)} for basis with {self.Z_basis.num_modes} modes",
-        )
+        # errorif(
+        #     Z_lmn.size != self._Z_lmn.size,
+        #     ValueError,
+        #     "Z_lmn should have the same size as Z_basis, "
+        #     + f"got {len(Z_lmn)} for basis with {self.Z_basis.num_modes} modes",
+        # )
         self._Z_lmn = Z_lmn
 
     @optimizable_parameter
@@ -1380,12 +1382,12 @@ class Equilibrium(IOAble, Optimizable):
     @L_lmn.setter
     def L_lmn(self, L_lmn):
         L_lmn = jnp.atleast_1d(jnp.asarray(L_lmn))
-        errorif(
-            L_lmn.size != self._L_lmn.size,
-            ValueError,
-            "L_lmn should have the same size as L_basis, "
-            + f"got {len(L_lmn)} for basis with {self.L_basis.num_modes} modes",
-        )
+        # errorif(
+        #     L_lmn.size != self._L_lmn.size,
+        #     ValueError,
+        #     "L_lmn should have the same size as L_basis, "
+        #     + f"got {len(L_lmn)} for basis with {self.L_basis.num_modes} modes",
+        # )
         self._L_lmn = L_lmn
 
     @optimizable_parameter

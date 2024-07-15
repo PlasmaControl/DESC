@@ -790,8 +790,8 @@ class SplineXYZCurve(Curve):
         If None (the default), the spline will be the usual periodic continuous spline.
     """
 
-    attributes = ["_X", "_Y", "_Z", "_knots", "_intervals", "_method"]
-    _io_attrs_ = Curve._io_attrs_ + attributes
+    _attributes = ["_X", "_Y", "_Z", "_knots", "_intervals", "_method"]
+    _io_attrs_ = Curve._io_attrs_ + _attributes
 
     def __init__(
         self,
@@ -850,10 +850,12 @@ class SplineXYZCurve(Curve):
                 ValueError,
                 "break_indices must be monotonic",
             )
-            intervals = [
-                [break_indices[i - 1], break_indices[i]]
-                for i in range(len(break_indices))
-            ]
+            intervals = np.array(
+                [
+                    [break_indices[i - 1], break_indices[i]]
+                    for i in range(len(break_indices))
+                ]
+            )
 
         self._knots = knots
         self._method = method

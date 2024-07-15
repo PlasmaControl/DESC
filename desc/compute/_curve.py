@@ -568,7 +568,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
+def _splinexyz_helper(f, transforms, s_query_pts, method, derivative):
     """Used to compute XYZ coordinates for the SplineXYZCurve compute functions.
 
     Parameters
@@ -590,7 +590,6 @@ def _splinexyz_helper(f, transforms, s_query_pts, kwargs, derivative):
         Interpolated XYZ coords with shape (3, len(s_query_pts))
     """
     f = jnp.asarray(f)
-    method = kwargs.get("method", "cubic")
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
     has_break_points = len(transforms["intervals"][0])
 
@@ -666,7 +665,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
     f = [params["X"], params["Y"], params["Z"]]
 
-    coords = _splinexyz_helper(f, transforms, xq, kwargs, derivative)
+    coords = _splinexyz_helper(f, transforms, xq, kwargs["method"], derivative)
 
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
@@ -697,7 +696,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
     f = [params["X"], params["Y"], params["Z"]]
 
-    coords_s = _splinexyz_helper(f, transforms, xq, kwargs, derivative)
+    coords_s = _splinexyz_helper(f, transforms, xq, kwargs["method"], derivative)
     coords_s = coords_s @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -728,7 +727,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
     f = [params["X"], params["Y"], params["Z"]]
 
-    coords_ss = _splinexyz_helper(f, transforms, xq, kwargs, derivative)
+    coords_ss = _splinexyz_helper(f, transforms, xq, kwargs["method"], derivative)
     coords_ss = coords_ss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -758,7 +757,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
     f = [params["X"], params["Y"], params["Z"]]
 
-    coords_sss = _splinexyz_helper(f, transforms, xq, kwargs, derivative)
+    coords_sss = _splinexyz_helper(f, transforms, xq, kwargs["method"], derivative)
     coords_sss = coords_sss @ params["rotmat"].reshape((3, 3)).T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -865,11 +864,7 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x_s", "x_ss", "x_sss"],
-    parameterization=[
-        "desc.geometry.curve.FourierRZCurve",
-        "desc.geometry.curve.FourierXYZCurve",
-        "desc.geometry.curve.FourierPlanarCurve",
-    ],
+    parameterization="desc.geometry.core.Curve",
 )
 def _torsion(params, transforms, profiles, data, **kwargs):
     dxd2x = cross(data["x_s"], data["x_ss"])

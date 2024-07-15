@@ -1,5 +1,7 @@
 """Classes for parameterized 3D space curves."""
 
+import warnings
+
 import numpy as np
 
 from desc.backend import jnp, put
@@ -214,7 +216,9 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
-        inputs = InputReader().parse_inputs(path)[-1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],
@@ -597,9 +601,9 @@ class FourierPlanarCurve(Curve):
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
+        self._basis = basis
         self.normal = normal
         self.center = center
-        self._basis = basis
 
     @property
     def r_basis(self):

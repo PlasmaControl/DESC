@@ -1579,13 +1579,19 @@ class SurfaceCurrentRegularization(_Objective):
         source_grid=None,
         name="surface-current-regularization",
     ):
-        from desc.magnetic_fields import CurrentPotentialField
+        from desc.magnetic_fields import (
+            CurrentPotentialField,
+            FourierCurrentPotentialField,
+        )
 
         if target is None and bounds is None:
             target = 0
         assert isinstance(
-            surface_current_field, CurrentPotentialField
-        ), "surface_current_field must be a CurrentPotentialField"
+            surface_current_field, (CurrentPotentialField, FourierCurrentPotentialField)
+        ), (
+            "surface_current_field must be a CurrentPotentialField or "
+            + f"FourierCurrentPotentialField, instead got {type(surface_current_field)}"
+        )
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
 

@@ -3561,7 +3561,36 @@ def plot_regcoil_outputs(
     vacuum=False,
     **kwargs,
 ):
-    """Plot the output of REGCOIL.
+    """Plot the outputs of REGCOIL.
+
+    Plots the following outputs if the input ``field`` is
+    a single ``FourierCurrentPotential`` object :
+
+    - Contour plot of the current potential on the winding surface.
+      Corresponds to the keys ``"fig_Phi", "ax_Phi"`` in the output
+      ``figdata, ax_data``
+    - Contour plot of the normal field error from that current potential
+      on the given equilibrium surface (including plasma contribution if
+      `vacuum=False`). Corresponds to the keys ``"fig_Bn", "ax_Bn"`` in the output
+      ``figdata, ax_data``
+
+    If the input ``field`` is instead a list of ``FourierCurrentPotentialField``
+    objects, this function plots :
+
+    - A scatter plot of the integrated squared quadratic flux on the plasma surface
+    versus the REGCOIL regularization parameter. Corresponds to the keys
+    ``"fig_chi^2_B_vs_alpha", "ax_chi^2_B_vs_alpha"`` in the output
+    ``figdata, ax_data``
+    - A scatter plot of the squared quadratic flux integrated over the plasma surface
+    versus the squared current density magnitude integrated over the winding surface.
+    Corresponds to the keys ``"fig_chi^2_B_vs_chi^2_K"", "ax_chi^2_B_vs_chi^2_K""``
+    in the output ``figdata, ax_data``
+    - A composite plot of contours of the current potential on the winding surface for
+    each regularization parameter contained inside ``data["alpha"]``. Corresponds to
+    the keys ``"fig_scan_Phi", "ax_scan_Phi"`` in the output ``figdata, ax_data``
+    - A composite plot of contours of the normal field error on the plasma surface for
+    each regularization parameter contained inside ``data["alpha"]``. Corresponds to
+    the keys ``"fig_scan_Bn", "ax_scan_Bn"`` in the output ``figdata, ax_data``
 
     Parameters
     ----------
@@ -3569,8 +3598,7 @@ def plot_regcoil_outputs(
         object(s) with which to plot the data from the REGCOIL output.
         should have the correct resolutions and NFP to match the REGCOIL output.
     data : dict
-        dictionary containing the output of a call to ``run_regcoil`` method
-        of ``FourierCurrentPotentiaField``
+        dictionary containing the output of a call to the ``run_regcoil`` function.
     eq : Equilibrium
         the equilibrium that the Bn error was evaluated on.
     eval_grid : Grid, optional
@@ -3593,16 +3621,25 @@ def plot_regcoil_outputs(
         Valid keyword arguments are:
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
-          matplotlib)
+          matplotlib).
+        * ``ncontours``: int, defaults to 20, the number of contours to show
+        in the contour plots.
+        * ``markersize``: int, defaults to 12, the size of the markers to use in
+        the scatter plots.
 
 
 
     Outputs
     -------
-    fig : list of matplotlib.figure.Figure
-        list of figure being plotted to
-    ax : list of matplotlib.axes.Axes or list of ndarray of Axes
-        list of axes being plotted to
+    figdata : dict of matplotlib.figure.Figure
+        Dictionary with the keys ``"fig_X"`` with values ``matplotlib.figure.Figure``,
+        with ``X`` corresponding to the different figure types described in the
+        docstring description, which are the figures being plotted to.
+    axdata : dict
+        Dictionary with the keys ``"ax_X"`` with values ``matplotlib.axes.Axes``
+        or ``ndarray`` of ``matplotlib.axes.Axes``, with ``X`` corresponding to the
+        different figure types described in the docstring description, which are
+        the axes being plotted to.
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
         This is the same as data_regcoil

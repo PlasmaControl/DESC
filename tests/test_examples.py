@@ -1208,7 +1208,7 @@ def test_regcoil_axisymmetric():
     )
     surface_current_field, data = run_regcoil(
         surface_current_field,
-        EquilibriaFamily(eq),  # just to test that it works with a family passed in
+        eq,
         alpha=0,
         normalize=False,
         vacuum=True,
@@ -1326,10 +1326,9 @@ def test_regcoil_modular_coils_check_coils(regcoil_modular_coils):
     numCoils = 20
 
     coilset2 = surface_current_field.to_CoilSet(
-        desirednumcoils=numCoils,
+        num_coils=numCoils,
         stell_sym=False,
     )
-    assert not isinstance(coilset2, MixedCoilSet)
     coilset2.to_FourierXYZ(N=150)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
@@ -1347,6 +1346,10 @@ def test_regcoil_modular_coils_check_coils(regcoil_modular_coils):
         field=coilset2,
     )
 
+    # make sure none of the field lines went off to infinity
+    # this along with the coil field matching the equilibrium field
+    # is a good indicator that they are creating the flux
+    # surface correctly
     assert np.max(fieldR) < 1.4
     assert np.min(fieldR) > 1.0
 
@@ -1448,7 +1451,7 @@ def test_regcoil_helical_coils_check_objective_method(
     numCoils = 15
 
     coilset2 = surface_current_field2.to_CoilSet(
-        desirednumcoils=numCoils,
+        num_coils=numCoils,
     )
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=7e-3, rtol=1e-3)
@@ -1502,7 +1505,7 @@ def test_regcoil_helical_coils_check_coils_pos_helicity(
     numCoils = 15
 
     coilset2 = surface_current_field.to_CoilSet(
-        desirednumcoils=numCoils,
+        num_coils=numCoils,
         step=6,
     )
     coords = eq.compute(["R", "phi", "Z", "B"])

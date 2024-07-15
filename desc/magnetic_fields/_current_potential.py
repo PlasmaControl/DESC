@@ -11,7 +11,7 @@ from desc.backend import fori_loop, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safediv
+from desc.compute.utils import dot, safediv
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
@@ -729,7 +729,6 @@ class FourierCurrentPotentialField(
             contour_X = []
             contour_Y = []
             contour_Z = []
-            coil_coords = []
 
             for thetas, zetas in zip(theta_pts, zeta_pts):
                 coords = surface.compute(
@@ -743,9 +742,6 @@ class FourierCurrentPotentialField(
                 contour_X.append(coords[:, 0])
                 contour_Y.append(coords[:, 1])
                 contour_Z.append(coords[:, 2])
-                coil_coords.append(
-                    jnp.vstack((coords[:, 0], coords[:, 1], coords[:, 2])).T
-                )
 
             return contour_X, contour_Y, contour_Z
 
@@ -919,12 +915,14 @@ def run_regcoil(  # noqa: C901 fxn too complex
     normalize=True,
     vacuum=False,
 ):
-    """Runs regcoil algorithm to find the current potential for the surface.
+    """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
     NOTE: will set the FourierCurrentPotentialField's Phi_mn to
     the lowest alpha value's solution, and will also set I and G
     to the values corresponding to the input equilibrium, external_field,
     and current_helicity.
+
+    NOTE: The function is not jit/AD compatible
 
     Follows algorithm of [1] to find the current potential Phi on the surface,
     given a surface current::
@@ -983,6 +981,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
         at which the normal field is minimized.
         Defaults to
         `LinearGrid(M= 30, N= 30, NFP=eq.NFP)`
+    current_helicity : int, optional
+        Ratio used to determine if coils are modular (0) or helical (!=0)
+        defined as (G - G_ext) / (I * NFP)  = current_helicity
+        positive current_helicity corresponds to coils which rotate in the negative
+        poloidal direction as they rotate toroidally
     external_field: _MagneticField,
         DESC `_MagneticField` object giving the magnetic field
         provided by any coils/fields external to the winding surface.
@@ -995,15 +998,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
         that requires a source, like a `CoilSet` or a `CurrentPotentialField`).
         By default None, which will use the default grid for the given
         external field type.
-    current_helicity : int, optional
-        Ratio of used to determine if coils are modular (0) or helical (!=0)
-        defined as (G - G_ext) / (I * NFP)  = current_helicity
-        positive current_helicity corresponds to coils which rotate in the negative
-        poloidal direction as they rotate toroidally
     verbose : int, optional
         level of verbosity, if 0 will print nothing.
-        1 will display jacobian timing info
-        2 will display Bn max,min,average and chi^2 values for each alpha.
+        1 will display Bn max,min,average and chi^2 values for each alpha.
+        2 will display jacobian timing info
     normalize : bool, optional
         whether or not to normalize Bn when printing the Bnormal errors. If true,
         will normalize by the average equilibrium field strength on the surface.
@@ -1039,12 +1037,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
             G : float, net poloidal current (in Amperes) on the winding surface.
                 Determined by the equilibrium toroidal magnetic field, as well as
                 the given external field.
-            chi^2_B : quadratic flux integrated over the plasma surface.
+            chi^2_B : quadratic flux squared, integrated over the plasma surface.
                 a float if `alpha` was a float, or list of float of length
                 `alpha.size` if `alpha` was an array, corresponding to the array
                 of `alpha` values.
-            chi^2_K : Current density magnitude integrated over winding surface.
-                a float if `alpha` was a float, or list of float of length
+            chi^2_K : Current density magnitude squared, integrated over winding
+                surface. a float if `alpha` was a float, or list of float of length
                 `alpha.size` if `alpha` was an array, corresponding to the array of
                 `alpha`.
             |K| : Current density magnitude on winding surface, evaluated at the
@@ -1061,8 +1059,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         int(current_helicity) == current_helicity
     ), "current_helicity must be an integer!"
     # maybe it is an EquilibriaFamily
-    if hasattr(eq, "__len__"):
-        eq = eq[-1]
+    errorif(hasattr(eq, "__len__"), ValueError, "Expected a single equilibrium")
 
     # check if vacuum flag should be True or not
     pres = np.max(np.abs(eq.compute("p")["p"]))
@@ -1125,7 +1122,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             G_ext = external_field.G
         except AttributeError:
             curve_grid = LinearGrid(
-                N=int(eq.NFP) * 1000,
+                N=int(eq.NFP) * 50,
                 theta=jnp.array(jnp.pi),
                 rho=jnp.array(1.0),
                 endpoint=True,
@@ -1147,9 +1144,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
                     curve_coords, basis="rpz", source_grid=external_field_grid
                 )
             # calculate covariant B_zeta = B dot e_zeta from external field
-            ext_field_B_zeta = jnp.sum(
-                ext_field_along_curve * curve_data["e_zeta"], axis=-1
-            )
+            ext_field_B_zeta = dot(ext_field_along_curve, curve_data["e_zeta"], axis=-1)
+
             # negative sign here because with REGCOIL convention, negative G makes
             # positive toroidal B
             G_ext = -(
@@ -1198,7 +1194,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     timer.start("Jacobian Calculation")
     A = Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn)
     timer.stop("Jacobian Calculation")
-    if verbose > 0:
+    if verbose > 1:
         timer.disp("Jacobian Calculation")
 
     current_potential_field.I = float(I)
@@ -1234,7 +1230,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # calculate the Phi_mn which minimizes (chi^2_B + alpha*chi^2_K) for each alpha
     for alpha in alphas:
         printstring = f"Calculating Phi_SV for alpha = {alpha:1.5e}"
-        if verbose > 1:
+        if verbose > 0:
             print(
                 "#" * len(printstring)
                 + "\n"
@@ -1264,7 +1260,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         K_mags.append(K_mag)
         Bn_print = Bn_tot / normalization_B
         Bn_arrs.append(Bn_tot)
-        if verbose > 1:
+        if verbose > 0:
             units = " (T)" if not normalize else " (unitless)"
             printstring = f"chi^2 B = {chi_B:1.5e}"
             print(printstring)

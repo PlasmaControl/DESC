@@ -19,3 +19,4 @@ dependencies:
     - nvgpu
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
+    - scikit-image

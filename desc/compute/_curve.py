@@ -853,6 +853,37 @@ def _curvature(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="curvature",
+    label="\\kappa",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Scalar curvature of the curve",
+    dim=1,
+    params=[],
+    transforms={"intervals": []},
+    profiles=[],
+    coordinates="s",
+    data=["x_s", "x_ss"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+)
+def _curvature_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    dxn = jnp.linalg.norm(data["x_s"], axis=-1)[:, jnp.newaxis]
+    data["curvature"] = jnp.linalg.norm(
+        cross(data["x_s"], data["x_ss"]) / dxn**3, axis=-1
+    )
+    if len(transforms["intervals"][0]):
+        is_break_point = (
+            data["s"] == transforms["knots"][transforms["intervals"]][:, 1:]
+        )
+        data["curvature"] = jnp.where(
+            is_break_point.any(axis=0),
+            0.0,
+            data["curvature"],
+        )
+    return data
+
+
+@register_compute_fun(
     name="torsion",
     label="\\tau",
     units="m^{-1}",

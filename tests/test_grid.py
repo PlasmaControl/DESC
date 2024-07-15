@@ -22,28 +22,6 @@ class TestGrid:
     """Test for Grid classes."""
 
     @pytest.mark.unit
-    def test_custom_grid(self):
-        """Test creating a grid with custom set of nodes."""
-        nodes = np.array(
-            [
-                [0, 0, 0],
-                [0.25, 0, 0],
-                [0.5, np.pi / 2, np.pi / 3],
-                [0.5, np.pi / 2, np.pi / 3],
-                [0.75, np.pi, np.pi],
-                [1, 2 * np.pi, 3 * np.pi / 2],
-            ]
-        )
-        grid = Grid(nodes)
-        weights = grid.weights
-
-        w = 4 * np.pi**2 / (grid.num_nodes - 1)
-        weights_ref = np.array([w, w, w / 2, w / 2, w, w])
-
-        np.testing.assert_allclose(weights, weights_ref)
-        np.testing.assert_allclose(grid.weights.sum(), (2 * np.pi) ** 2)
-
-    @pytest.mark.unit
     def test_linear_grid(self):
         """Test node placement in a LinearGrid."""
         L, M, N, NFP, axis, endpoint = 8, 5, 3, 2, True, False
@@ -785,7 +763,8 @@ def test_find_least_rational_surfaces():
 def test_custom_jitable_grid_indexing():
     """Test that unique/inverse indices are set correctly when jitable=True."""
     eq = get("NCSX")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     # field lines on two surfaces
     rho = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
     theta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
@@ -832,18 +811,3 @@ def test_custom_jitable_grid_indexing():
         _ = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
     b3 = eq.compute(["|B|"], grid=grid3, override_grid=True)["|B|"]
     np.testing.assert_allclose(b1, b3)
-
-
-@pytest.mark.unit
-def test_custom_jitable_grid_weights():
-    """Test that grid weights are set correctly when jitable=True."""
-    rho = np.random.random(100)
-    theta = np.random.random(100) * 2 * np.pi
-    zeta = np.random.random(100) * 2 * np.pi
-    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
-    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
-
-    np.testing.assert_allclose(grid1.spacing, grid2.spacing)
-    np.testing.assert_allclose(grid1.weights, grid2.weights)
-    np.testing.assert_allclose(grid1.weights.sum(), 4 * np.pi**2)
-    np.testing.assert_allclose(grid2.weights.sum(), 4 * np.pi**2)

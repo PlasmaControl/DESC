@@ -12,7 +12,13 @@ from desc.basis import FourierZernikeBasis, PowerSeries, polyder_vec, polyval_ve
 from desc.derivatives import Derivative
 from desc.grid import Grid, _Grid
 from desc.io import IOAble
-from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
+from desc.utils import (
+    combination_permutation,
+    copy_coeffs,
+    errorif,
+    multinomial_coefficients,
+    warnif,
+)
 
 
 class _Profile(IOAble, ABC):
@@ -36,11 +42,11 @@ class _Profile(IOAble, ABC):
     @property
     def name(self):
         """str: Name of the profile."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
-        self._name = new
+        self._name = str(new)
 
     @property
     @abstractmethod
@@ -530,6 +536,7 @@ class PowerSeriesProfile(_Profile):
         Whether the basis should only contain even powers (True) or all powers (False).
     name : str
         Name of the profile.
+
     """
 
     _io_attrs_ = _Profile._io_attrs_ + ["_basis"]
@@ -687,12 +694,110 @@ class PowerSeriesProfile(_Profile):
         return cls(params, sym=sym, name=name)
 
 
+class TwoPowerProfile(_Profile):
+    """Profile represented by two powers.
+
+    f(x) = a[0]*(1 - x**a[1])**a[2]
+
+    Notes
+    -----
+    df/dx = inf at x = 0 if a[1] < 1
+    df/dx = inf at x = 1 if a[2] < dr
+
+    Parameters
+    ----------
+    params: array-like
+        Coefficients of the two power formula. Must be an array of size 3.
+        Default if not specified is [0, 1, 1].
+    name : str
+        Name of the profile.
+
+    """
+
+    _io_attrs_ = _Profile._io_attrs_
+
+    def __init__(self, params=None, name=""):
+        super().__init__(name)
+
+        if params is None:
+            params = [0, 1, 1]
+        self._params = np.atleast_1d(params)
+
+        errorif(
+            self._params.size != 3, ValueError, "params must be an array of size 3."
+        )
+        warnif(
+            self._params[1] < 1,
+            UserWarning,
+            "Derivatives of this profile will be infinite at rho=0 "
+            + "because params[1] < 1.",
+        )
+        warnif(
+            self._params[2] < 1,
+            UserWarning,
+            "Derivatives of this profile will be infinite at rho=1 "
+            + "because params[2] < 1.",
+        )
+
+    @property
+    def params(self):
+        """ndarray: Parameter values."""
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        new = jnp.atleast_1d(jnp.asarray(new))
+        if new.size == 3:
+            self._params = jnp.asarray(new)
+        else:
+            raise ValueError(f"params should be an array of size 3, got {len(new)}.")
+
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid
+            Locations to compute values at.
+        params : array-like
+            Power law coefficients to use. Must be an array of size 3.
+            If not given, uses the values given by the params attribute.
+        dr, dt, dz : int
+            Derivative order in rho, theta, zeta.
+
+        Returns
+        -------
+        values : ndarray
+            Values of the profile or its derivative at the points specified.
+
+        """
+        if params is None:
+            params = self.params
+        if (dt != 0) or (dz != 0):
+            return jnp.zeros(grid.num_nodes)
+        a, b, c = params
+        r = grid.nodes[:, 0]
+        if dr == 0:
+            f = a * (1 - r**b) ** c
+        elif dr == 1:
+            f = r ** (b - 1) * self.compute(grid, params=[-a * b * c, b, c - 1])
+        elif dr == 2:
+            f = (
+                r ** (b - 2)
+                * ((b * c - 1) * r**b - b + 1)
+                * self.compute(grid, params=[a * b * c, b, c - 2])
+            )
+        else:
+            raise NotImplementedError("dr > 2 not implemented for TwoPowerProfile!")
+        return f
+
+
 class SplineProfile(_Profile):
     """Profile represented by a piecewise cubic spline.
 
     Parameters
     ----------
-    params: array-like
+    values: array-like
         Values of the function at knot locations.
     knots : int or ndarray
         x locations to use for spline. If an integer, uses that many points linearly
@@ -917,6 +1022,8 @@ class MTanhProfile(_Profile):
         """
         if params is None:
             params = self.params
+        if dr > 2:
+            raise NotImplementedError("dr > 2 not implemented for MTanhProfile!")
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
 
@@ -1070,8 +1177,7 @@ class FourierZernikeProfile(_Profile):
             else:
                 sym = False
 
-        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=NFP, sym=sym)
-
+        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=int(NFP), sym=sym)
         self._params = copy_coeffs(params, modes, self.basis.modes)
 
     def __repr__(self):

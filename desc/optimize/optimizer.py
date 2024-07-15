@@ -174,17 +174,23 @@ class Optimizer(IOAble):
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
-        from desc.objectives import QuadraticFlux
+        from desc.objectives import QuadraticFlux, ToroidalFlux
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
         if eq is not None:
             # check if stage 2 objectives are here:
+            all_objs = list(constraints) + list(objective.objectives)
             errorif(
-                is_any_instance(constraints, QuadraticFlux)
-                or is_any_instance(objective.objectives, QuadraticFlux),
+                is_any_instance(all_objs, QuadraticFlux),
                 ValueError,
                 "QuadraticFlux objective assumes Equilibrium is fixed but Equilibrium "
+                + "is in things to optimize.",
+            )
+            errorif(
+                is_any_instance(all_objs, ToroidalFlux),
+                ValueError,
+                "ToroidalFlux objective assumes Equilibrium is fixed but Equilibrium "
                 + "is in things to optimize.",
             )
             # save these for later
@@ -201,8 +207,9 @@ class Optimizer(IOAble):
         objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
             eq, objective, nonlinear_constraints, self.method, options
         )
-        if not isinstance(objective, ProximalProjection) and eq is not None:
-            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        if not isinstance(objective, ProximalProjection):
+            for t in things:
+                linear_constraints = maybe_add_self_consistency(t, linear_constraints)
         linear_constraint = _combine_constraints(linear_constraints)
         nonlinear_constraint = _combine_constraints(nonlinear_constraints)
 

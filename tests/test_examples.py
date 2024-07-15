@@ -9,8 +9,15 @@ import pytest
 from qic import Qic
 from qsc import Qsc
 
-from desc.backend import jnp
-from desc.coils import FourierRZCoil
+from desc.backend import jnp, tree_leaves
+from desc.coils import (
+    CoilSet,
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+    _Coil,
+)
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -21,21 +28,24 @@ from desc.magnetic_fields import (
     OmnigenousField,
     SplineMagneticField,
     ToroidalMagneticField,
+    VerticalMagneticField,
 )
 from desc.objectives import (
     AspectRatio,
     BoundaryError,
     CoilCurvature,
     CoilLength,
+    CoilSetMinDistance,
     CoilTorsion,
     CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
     FixIota,
     FixOmniBmax,
     FixOmniMap,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -46,6 +56,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
+    PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
     PrincipalCurvature,
     QuadraticFlux,
@@ -58,7 +69,6 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
 
@@ -143,7 +153,8 @@ def test_solve_bounds():
     """Tests optimizing with bounds=(lower bound, upper bound)."""
     # decrease resolution and double pressure so no longer in force balance
     eq = get("DSHAPE")
-    eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
     eq.p_l *= 2
 
     # target force balance residuals with |F| <= 1e3 N
@@ -176,25 +187,6 @@ def test_1d_optimization():
         eq.optimize(objective, constraints, optimizer="lsq-exact", options=options)
 
     np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
-
-
-@pytest.mark.regression
-@pytest.mark.optimize
-def test_1d_optimization_old():
-    """Tests 1D optimization for target aspect ratio."""
-    eq = get("SOLOVEV")
-    objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
-    eq._optimize(
-        objective,
-        copy=False,
-        solve_options={"verbose": 0},
-        perturb_options={
-            "dZb": True,
-            "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1]),
-        },
-    )
-
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=1e-3)
 
 
 def run_qh_step(n, eq):
@@ -504,7 +496,7 @@ def test_NAE_QSC_solve():
         np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
         np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
-        ### check lambda to match near axis
+        # check lambda to match near axis
         # Evaluate lambda near the axis
         data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
         lam_nae = data_nae["lambda"]
@@ -639,8 +631,8 @@ def test_multiobject_optimization_al():
     constraints = (
         ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
         FixPressure(eq=eq),
-        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
-        FixParameter(eq, ["Psi", "i_l"]),
+        FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
@@ -678,8 +670,8 @@ def test_multiobject_optimization_prox():
     constraints = (
         ForceBalance(eq=eq),
         FixPressure(eq=eq),
-        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
-        FixParameter(eq, ["Psi", "i_l"]),
+        FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
+        FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
     )
 
@@ -840,7 +832,7 @@ def test_omnigenity_optimization():
 
     objective = ObjectiveFunction(
         (
-            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
             Omnigenity(
                 eq=eq,
@@ -915,7 +907,7 @@ def test_omnigenity_proximal():
     # first, test optimizing the equilibrium with the field fixed
     objective = ObjectiveFunction(
         (
-            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
             Omnigenity(eq=eq, field=field, field_fixed=True),  # field is fixed
         )
@@ -927,12 +919,12 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
-    eq, _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
+    [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
 
     # second, test optimizing both the equilibrium and the field simultaneously
     objective = ObjectiveFunction(
         (
-            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
             Omnigenity(eq=eq, field=field),  # field is not fixed
         )
@@ -969,7 +961,7 @@ def test_non_eq_optimization():
 
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(eq),
+        FixParameters(eq),
         MeanCurvature(surf, bounds=(-8, 8)),
         PrincipalCurvature(surf, bounds=(0, 15)),
     )
@@ -998,17 +990,14 @@ def test_only_non_eq_optimization():
     """Test for optimizing only a non-eq object."""
     eq = get("DSHAPE")
     surf = eq.surface
-
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
-        FixParameter(surf, params="R_lmn", indices=surf.R_basis.get_idx(0, 0, 0)),
+        FixParameters(surf, {"R_lmn": np.array(surf.R_basis.get_idx(0, 0, 0))}),
     )
-
     obj = PrincipalCurvature(surf, target=1)
-
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-exact")
-    (surf), result = optimizer.optimize(
+    (surf), _ = optimizer.optimize(
         (surf), objective, constraints, verbose=3, maxiter=100
     )
     surf = surf[0]
@@ -1032,9 +1021,9 @@ def test_freeb_vacuum():
         modes_Z=[[-1, 0]],
         NFP=5,
     )
-
     eq = Equilibrium(M=6, N=6, Psi=-0.035, surface=surf)
     eq.solve()
+
     constraints = (
         ForceBalance(eq=eq),
         FixCurrent(eq=eq),
@@ -1044,15 +1033,15 @@ def test_freeb_vacuum():
     objective = ObjectiveFunction(
         VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
     )
-    eq, out = eq.optimize(
+    eq, _ = eq.optimize(
         objective,
         constraints,
         optimizer="proximal-lsq-exact",
         verbose=3,
         options={},
     )
-    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
 
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=4e-2)  # only check rho=1
 
 
@@ -1090,9 +1079,9 @@ def test_freeb_axisym():
         modes_Z=[[-1, 0]],
         NFP=1,
     )
-
     eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
     eq.solve()
+
     constraints = (
         ForceBalance(eq=eq),
         FixIota(eq=eq),
@@ -1104,27 +1093,26 @@ def test_freeb_axisym():
     )
 
     # we know this is a pretty simple shape so we'll only use |m| <= 2
-    R_modes = (
-        eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :],
-    )
-
+    R_modes = eq.surface.R_basis.modes[
+        np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :
+    ]
     Z_modes = eq.surface.Z_basis.modes[
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > 2, :
     ]
-
     bdry_constraints = (
         FixBoundaryR(eq=eq, modes=R_modes),
         FixBoundaryZ(eq=eq, modes=Z_modes),
     )
-    eq, out = eq.optimize(
+
+    eq, _ = eq.optimize(
         objective,
         constraints + bdry_constraints,
         optimizer="proximal-lsq-exact",
         verbose=3,
         options={},
     )
-    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
 
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=2e-2)  # only check rho=1
 
 
@@ -1199,45 +1187,6 @@ class TestGetExample:
 
 
 @pytest.mark.unit
-def test_single_coil_optimization():
-    """Test that single coil (not coilset) optimization works."""
-    # testing that the objectives work and that the optimization framework
-    # works when a single coil is passed in.
-
-    opt = Optimizer("fmintr")
-    coil = FourierRZCoil()
-    coil.change_resolution(N=1)
-    target_R = 9
-    # length and curvature
-    target_length = 2 * np.pi * target_R
-    target_curvature = 1 / target_R
-    grid = LinearGrid(N=2)
-    obj = ObjectiveFunction(
-        (
-            CoilLength(coil, target=target_length),
-            CoilCurvature(coil, target=target_curvature, grid=grid),
-        ),
-    )
-    opt.optimize([coil], obj, maxiter=200)
-    np.testing.assert_allclose(
-        coil.compute("length")["length"], target_length, rtol=1e-4
-    )
-    np.testing.assert_allclose(
-        coil.compute("curvature", grid=grid)["curvature"], target_curvature, rtol=1e-4
-    )
-
-    # torsion
-    # initialize with some torsion
-    coil.Z_n = coil.Z_n.at[0].set(0.1)
-    target = 0
-    obj = ObjectiveFunction(CoilTorsion(coil, target=target))
-    opt.optimize([coil], obj, maxiter=200, ftol=0)
-    np.testing.assert_allclose(
-        coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
-    )
-
-
-@pytest.mark.unit
 def test_quadratic_flux_optimization_with_analytic_field():
     """Test analytic field optimization to reduce quadratic flux.
 
@@ -1255,7 +1204,7 @@ def test_quadratic_flux_optimization_with_analytic_field():
 
     optimizer = Optimizer("lsq-exact")
 
-    constraints = (FixParameter(field, ["R0"]),)
+    constraints = (FixParameters(field, {"R0": True}),)
     quadflux_obj = QuadraticFlux(
         eq=eq,
         field=field,
@@ -1276,3 +1225,324 @@ def test_quadratic_flux_optimization_with_analytic_field():
     # optimizer should zero out field since that's the easiest way
     # to get to Bnorm = 0
     np.testing.assert_allclose(things[0].B0, 0, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_second_stage_optimization():
+    """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
+    eq = get("DSHAPE")
+    field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field, vacuum=True))
+    constraints = FixParameters(field, [{"R0": True}, {}])
+    optimizer = Optimizer("scipy-trf")
+    (field,), _ = optimizer.optimize(
+        things=field,
+        objective=objective,
+        constraints=constraints,
+        ftol=0,
+        xtol=0,
+        verbose=2,
+    )
+    np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
+    np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
+    np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
+
+
+@pytest.mark.unit
+def test_second_stage_optimization_CoilSet():
+    """Test optimizing CoilSet for a fixed axisymmetric equilibrium."""
+    eq = get("SOLOVEV")
+    R_coil = 3.5
+    I = 100
+    field = MixedCoilSet(
+        FourierXYZCoil(
+            current=I,
+            X_n=[0, R_coil, 0],
+            Y_n=[0, 0, R_coil],
+            Z_n=[3, 0, 0],
+            modes=[0, 1, -1],
+        ),
+        CoilSet(
+            FourierPlanarCoil(
+                current=I, center=[R_coil, 0, 0], normal=[0, 1, 0], r_n=2.5
+            ),
+            NFP=4,
+            sym=True,
+            check_intersection=False,
+        ),
+        check_intersection=False,
+    )
+    grid = LinearGrid(M=5)
+    objective = ObjectiveFunction(
+        QuadraticFlux(
+            eq=eq, field=field, vacuum=True, eval_grid=grid, field_grid=LinearGrid(N=15)
+        )
+    )
+    constraints = FixParameters(
+        field,
+        [
+            {"X_n": True, "Y_n": True, "Z_n": True},
+            {"r_n": True, "center": True, "normal": True, "current": True},
+        ],
+    )
+    optimizer = Optimizer("lsq-exact")
+    (field,), _ = optimizer.optimize(
+        things=field,
+        objective=objective,
+        constraints=constraints,
+        ftol=0,
+        xtol=1e-7,
+        gtol=0,
+        verbose=2,
+        maxiter=10,
+    )
+
+    # should be small current in the circular coil providing the vertical field
+    np.testing.assert_allclose(field[0].current, 0, atol=1e-12)
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
+    """Test optimizing for every type of coil and dummy coil sets."""
+    sym_coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+    asym_coils = load(
+        load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
+    )
+    mixed_coils = load(
+        load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
+    )
+    nested_coils = MixedCoilSet(sym_coils, mixed_coils, check_intersection=False)
+    eq = Equilibrium()
+    # not attempting to accurately calc B for this test,
+    # so make the grids very coarse
+    quad_eval_grid = LinearGrid(M=2, sym=True)
+    quad_field_grid = LinearGrid(N=2)
+
+    def test(c, method):
+        target = 11
+        rtol = 1e-3
+        # first just check that quad flux works for a couple iterations
+        # as this is an expensive objective to compute
+        obj = ObjectiveFunction(
+            QuadraticFlux(
+                eq=eq,
+                field=c,
+                vacuum=True,
+                weight=1e-4,
+                eval_grid=quad_eval_grid,
+                field_grid=quad_field_grid,
+            )
+        )
+        optimizer = Optimizer(method)
+        (c,), _ = optimizer.optimize(c, obj, maxiter=2, ftol=0, xtol=1e-15)
+
+        # now check with optimizing geometry and actually check result
+        objs = [
+            CoilLength(c, target=target),
+        ]
+        extra_msg = ""
+        if isinstance(c, MixedCoilSet):
+            # just to check they work without error
+            objs.extend(
+                [
+                    CoilCurvature(c, target=0.5, weight=1e-2),
+                    CoilTorsion(c, target=0, weight=1e-2),
+                ]
+            )
+            rtol = 3e-2
+            extra_msg = " with curvature and torsion obj"
+
+        obj = ObjectiveFunction(objs)
+
+        (c,), _ = optimizer.optimize(c, obj, maxiter=25, ftol=5e-3, xtol=1e-15)
+        flattened_coils = tree_leaves(
+            c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
+        )
+        lengths = [coil.compute("length")["length"] for coil in flattened_coils]
+        np.testing.assert_allclose(
+            lengths, target, rtol=rtol, err_msg=f"lengths {c}" + extra_msg
+        )
+
+    spline_coil = mixed_coils.coils[-1].copy()
+
+    # single coil
+    test(FourierPlanarCoil(), "fmintr")
+    test(FourierRZCoil(), "fmintr")
+    test(FourierXYZCoil(), "fmintr")
+    test(spline_coil, "fmintr")
+
+    # CoilSet
+    test(sym_coils, "lsq-exact")
+    test(asym_coils, "lsq-exact")
+
+    # MixedCoilSet
+    test(mixed_coils, "lsq-exact")
+    test(nested_coils, "lsq-exact")
+
+
+@pytest.mark.unit
+def test_coilset_geometry_optimization():
+    """Test optimizations with PlasmaCoilSetMinDistance and CoilSetMinDistance."""
+    R0 = 5  # major radius of plasma
+    a = 1.2  # minor radius of plasma
+    phi0 = np.pi / 12  # initial angle of coil
+    offset = 0.75  # target plasma-coil distance
+
+    # circular tokamak
+    surf = FourierRZToroidalSurface(
+        R_lmn=np.array([R0, a]),
+        Z_lmn=np.array([0, -a]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+    )
+    eq = Equilibrium(Psi=3, surface=surf, NFP=1, M=2, N=0, sym=True)
+
+    # symmetric coilset with 1 unique coil + 7 virtual coils
+    # initial radius is too large for target plasma-coil distance
+    # initial toroidal angle is too small for target coil-coil distance
+    coil = FourierPlanarCoil(
+        current=1e6,
+        center=[R0, phi0, 0],
+        normal=[0, 1, 0],
+        r_n=[a + 2 * offset],
+        basis="rpz",
+    )
+    coils = CoilSet(coil, NFP=4, sym=True)
+    assert len(coils) == 1
+    assert coils.num_coils == 8
+
+    # grids
+    plasma_grid = LinearGrid(M=8, zeta=64)
+    coil_grid = LinearGrid(N=8)
+
+    #### optimize coils with fixed equilibrium ####
+    # optimizing for target coil-plasma distance and maximum coil-coil distance
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilSetMinDistance(
+                eq=eq,
+                coils=coils,
+                target=offset,
+                weight=2,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=True,
+                coils_fixed=False,
+            ),
+            CoilSetMinDistance(
+                coils,
+                target=2 * np.pi * (R0 - offset) / coils.num_coils,
+                grid=coil_grid,
+            ),
+        )
+    )
+    # only 2 free optimization variables are coil center position phi and radius r_n
+    constraints = (
+        FixCoilCurrent(coils),
+        FixParameters(coils, {"center": np.array([0, 2]), "normal": True}),
+    )
+    optimizer = Optimizer("scipy-trf")
+    [coils_opt], _ = optimizer.optimize(
+        things=coils, objective=objective, constraints=constraints, verbose=2, copy=True
+    )
+
+    assert coils_opt[0].current == 1e6  # current was fixed
+    np.testing.assert_allclose(  # check coils are equally spaced in toroidal angle phi
+        coils_opt[0].center,
+        [R0, np.pi / coils_opt.num_coils, 0],
+        rtol=1e-5,
+    )
+    np.testing.assert_allclose(coils_opt[0].normal, [0, 1, 0])  # normal was fixed
+    np.testing.assert_allclose(
+        coils_opt[0].r_n, a + offset, rtol=1e-2
+    )  # check coil radius
+
+    #### optimize coils with fixed surface ####
+    # same optimization as above, but with a fixed surface instead of an equilibrium
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilSetMinDistance(
+                eq=surf,
+                coils=coils,
+                target=offset,
+                weight=2,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=True,
+                coils_fixed=False,
+            ),
+            CoilSetMinDistance(
+                coils,
+                target=2 * np.pi * (R0 - offset) / coils.num_coils,
+                grid=coil_grid,
+            ),
+        )
+    )
+    # only 2 free optimization variables are coil center position phi and radius r_n
+    constraints = (
+        FixCoilCurrent(coils),
+        FixParameters(coils, {"center": np.array([0, 2]), "normal": True}),
+    )
+    optimizer = Optimizer("scipy-trf")
+    [coils_opt], _ = optimizer.optimize(
+        things=coils, objective=objective, constraints=constraints, verbose=2, copy=True
+    )
+
+    assert coils_opt[0].current == 1e6  # current was fixed
+    np.testing.assert_allclose(  # check coils are equally spaced in toroidal angle phi
+        coils_opt[0].center,
+        [R0, np.pi / coils_opt.num_coils, 0],
+        rtol=1e-5,
+    )
+    np.testing.assert_allclose(coils_opt[0].normal, [0, 1, 0])  # normal was fixed
+    np.testing.assert_allclose(
+        coils_opt[0].r_n, a + offset, rtol=1e-2
+    )  # check coil radius
+
+    #### optimize surface with fixed coils ####
+    # optimizing for target coil-plasma distance only
+
+    def circle_constraint(params):
+        """Constrain cross section of surface to be a circle."""
+        return params["R_lmn"][1:] + jnp.flip(params["Z_lmn"])
+
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilSetMinDistance(
+                eq=surf,
+                coils=coils,
+                target=offset,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=False,
+                coils_fixed=True,
+            ),
+        )
+    )
+    # only 1 free optimization variable is surface minor radius
+    constraints = (
+        FixParameters(surf, {"R_lmn": np.array([0, 2])}),
+        LinearObjectiveFromUser(circle_constraint, surf),
+    )
+    optimizer = Optimizer("scipy-trf")
+    [surf_opt], _ = optimizer.optimize(
+        things=[surf],
+        objective=objective,
+        constraints=constraints,
+        verbose=2,
+        copy=True,
+    )
+
+    # the R & Z boundary surface m=+/-1 coefficients should be equal magnitude and
+    # have changed to match target offset
+    np.testing.assert_allclose(
+        coils[0].r_n,
+        abs(surf_opt.R_lmn[surf_opt.R_basis.get_idx(M=1, N=0)]) + offset,
+        rtol=2e-2,
+    )
+    np.testing.assert_allclose(
+        coils[0].r_n,
+        abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
+        rtol=2e-2,
+    )

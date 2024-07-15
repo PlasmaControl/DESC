@@ -41,18 +41,31 @@ class VMECIO:
     def load(
         cls, path, L=None, M=None, N=None, spectral_indexing="ansi", profile="iota"
     ):
-        """Load a VMEC netCDF file as an Equilibrium.
+        """Load a VMEC netCDF file as an Equilibrium by fitting with Fourier-Zernike.
+
+        Loads in the VMEC netCDF file and loads the R, Z and Lambda Fourier
+        coefficients, which from VMEC are given on each discrete flux surface
+        in the VMEC solution. A Fourier-Zernike basis is then fit to these
+        R, Z and Lambda Fourier coefficients to yield the DESC representation
+        that most closely resembles the VMEC solution. Finally, the VMEC
+        boundary is loaded and the DESC Equilibrium R,Z are constrained to
+        match the given VMEC boundary.
+
+        NOTE: This is only a fit, so the DESC Equilibrium returned is not
+        expected to be in force balance. It is recommended to solve the
+        Equilibrium once loaded before using the Equilibrium for any
+        analysis.
 
         Parameters
         ----------
         path : str
             File path of input data.
         L : int, optional
-            Radial resolution. Default determined by index.
+            Radial resolution of the fit. Default determined by index.
         M : int, optional
-            Poloidal resolution. Default = MPOL-1 from VMEC solution.
+            Poloidal resolution of the fit. Default = MPOL-1 from VMEC solution.
         N : int, optional
-            Toroidal resolution. Default = NTOR from VMEC solution.
+            Toroidal resolution of the fit. Default = NTOR from VMEC solution.
         spectral_indexing : str, optional
             Type of Zernike indexing scheme to use. (Default = ``'ansi'``)
         profile : {"iota", "current"}
@@ -61,7 +74,7 @@ class VMECIO:
         Returns
         -------
         eq: Equilibrium
-            Equilibrium that resembles the VMEC data.
+            Equilibrium fit that resembles the VMEC data.
 
         Notes
         -----
@@ -268,7 +281,7 @@ class VMECIO:
         data_quad = eq.compute(
             ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
         )
-        data_axis = eq.compute(["G", "p", "R", "<|B|^2>"], grid=grid_axis)
+        data_axis = eq.compute(["G", "p", "R", "<|B|^2>", "<|B|>"], grid=grid_axis)
         data_lcfs = eq.compute(["G", "I", "R", "Z"], grid=grid_lcfs)
         data_half = eq.compute(
             [
@@ -488,7 +501,7 @@ class VMECIO:
         b0 = file.createVariable("b0", np.float64)
         b0.long_name = "average B_tor on axis"
         b0.units = "T"
-        b0[:] = data_axis["G"][0] / data_axis["R"][0]
+        b0[:] = data_axis["<|B|>"][0]
 
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
@@ -1472,7 +1485,7 @@ class VMECIO:
         else:
             current = eq.current
             f.write("  NCURR = 1\n")  # current profile specified
-            f.write("  CURTOR = {:+14.8E}\n".format(float(current(1))))  # AC scale
+            f.write("  CURTOR = {:+14.8E}\n".format(float(current(1)[0])))  # AC scale
             if isinstance(current, PowerSeriesProfile) and current.sym:
                 f.write("  AC =")  # current power series coefficients
                 for ac in current.params:

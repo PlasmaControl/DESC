@@ -3,8 +3,8 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
 
@@ -33,10 +33,11 @@ class BootstrapRedlConsistency(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -57,6 +58,7 @@ class BootstrapRedlConsistency(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
         First entry must be M=1. Second entry is the toroidal mode number N,

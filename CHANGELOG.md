@@ -1,6 +1,21 @@
 Changelog
 =========
 
+New Features
+
+- All vector variables are now computed in toroidal (R,phi,Z) coordinates by default.
+  Cartesian (X,Y,Z) coordinates can be requested with the compute keyword ``basis='xyz'``.
+- Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
+to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
+- Adds the objective `CoilsetMinDistance`, which returns the minimum distance to another
+coil for each coil in a coilset.
+- Adds the objective `PlasmaCoilsetMinDistance`, which returns the minimum distance to the
+plasma surface for each coil in a coilset.
+- Add method ``is_self_intersecting`` to ``CoilSet``, which checks if any coils intersect eachother in the coilset.
+- Removes error in ``from_symmetry`` method of ``CoilSet`` when a coil crosses the symmetry plane,
+and instead adds a check for intersection, to allow for valid coilsets which may cross the
+symmetry plane but not be self-intersecting after rotation/reflection.
+
 v0.11.1
 -------
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.11.0...v0.11.1)

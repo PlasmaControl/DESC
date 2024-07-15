@@ -3,8 +3,8 @@
 import warnings
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
@@ -22,10 +22,11 @@ class QuasisymmetryBoozer(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -47,6 +48,7 @@ class QuasisymmetryBoozer(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Must be a LinearGrid with a single flux surface and sym=False.
+        Defaults to ``LinearGrid(M=M_booz, N=N_booz)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
     M_booz : int, optional
@@ -247,10 +249,11 @@ class QuasisymmetryTwoTerm(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -271,6 +274,7 @@ class QuasisymmetryTwoTerm(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N).
     name : str, optional
@@ -439,10 +443,11 @@ class QuasisymmetryTripleProduct(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -463,6 +468,7 @@ class QuasisymmetryTripleProduct(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
 
@@ -586,15 +592,16 @@ class Omnigenity(_Objective):
         Equilibrium to be optimized to satisfy the Objective.
     field : OmnigenousField
         Omnigenous magnetic field to be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        Must be broadcastable to to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -659,7 +666,7 @@ class Omnigenity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",  # FIXME: get it working with rev mode (see GH issue #943)
+        deriv_mode="auto",
         eq_grid=None,
         field_grid=None,
         M_booz=None,
@@ -884,20 +891,26 @@ class Omnigenity(_Objective):
             # update theta_B and zeta_B with new iota from the equilibrium
             M, N = constants["helicity"]
             iota = jnp.mean(eq_data["iota"])
+            # see comment in desc.compute._omnigenity for the explanation of these
+            # wheres
+            mat_OP = jnp.array(
+                [[N, iota / jnp.where(N == 0, 1, N)], [0, 1 / jnp.where(N == 0, 1, N)]]
+            )
+            mat_OT = jnp.array([[0, -1], [M, -1 / jnp.where(iota == 0, 1.0, iota)]])
+            den = jnp.where((N - M * iota) == 0, 1.0, (N - M * iota))
+            mat_OH = jnp.array([[N, M * iota / den], [M, M / den]])
             matrix = jnp.where(
                 M == 0,
-                jnp.array([N, iota / N, 0, 1 / N]),  # OP
+                mat_OP,
                 jnp.where(
                     N == 0,
-                    jnp.array([0, -1, M, -1 / iota]),  # OT
-                    jnp.array(
-                        [N, M * iota / (N - M * iota), M, M / (N - M * iota)]  # OH
-                    ),
+                    mat_OT,
+                    mat_OH,
                 ),
-            ).reshape((2, 2))
+            )
             booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
-            field_data["theta_B"] = booz[0, :]
-            field_data["zeta_B"] = booz[1, :]
+            theta_B = booz[0, :]
+            zeta_B = booz[1, :]
         else:
             field_data = compute_fun(
                 "desc.magnetic_fields._core.OmnigenousField",
@@ -908,13 +921,15 @@ class Omnigenity(_Objective):
                 helicity=constants["helicity"],
                 iota=jnp.mean(eq_data["iota"]),
             )
+            theta_B = field_data["theta_B"]
+            zeta_B = field_data["zeta_B"]
 
         # additional computations that cannot be part of the regular compute API
         nodes = jnp.vstack(
             (
-                jnp.zeros_like(field_data["theta_B"]),
-                field_data["theta_B"],
-                field_data["zeta_B"],
+                jnp.zeros_like(theta_B),
+                theta_B,
+                zeta_B,
             )
         ).T
         B_eta_alpha = jnp.matmul(
@@ -940,10 +955,11 @@ class Isodynamicity(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -965,6 +981,7 @@ class Isodynamicity(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
 

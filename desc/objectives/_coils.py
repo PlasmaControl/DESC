@@ -1499,7 +1499,7 @@ class SurfaceCurrentRegularization(_Objective):
 
     compute::
 
-        w*(|K|)^2
+        w*|K|
 
     where K is the winding surface current density, and w is the
     regularization parameter (the weight on this objective)
@@ -1507,24 +1507,25 @@ class SurfaceCurrentRegularization(_Objective):
     This is intended to be used with a surface current::
 
         K = n x ∇ Φ
-        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
-    i.e. a FourierCurrentPotentialField
+    i.e. a CurrentPotentialField
 
     Intended to be used with a QuadraticFlux objective, to form
-    the REGCOIL algorithm described in [1]_.
+    the REGCOIL algorithm described in [1]_ (if used with a
+    ``FourierCurrentPotentialField``).
 
     [1] Landreman, An improved current potential method for fast computation
         of stellarator coil shapes, Nuclear Fusion (2017)
 
     Parameters
     ----------
-    surface_current_field : FourierCurrentPotentialField
+    surface_current_field : CurrentPotentialField
         Surface current which is producing the magnetic field, the parameters
         of this will be optimized to minimize the objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
+        Defaults to zero.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -1546,7 +1547,7 @@ class SurfaceCurrentRegularization(_Objective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: has no effect for this objective
+        normalization.
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
@@ -1561,8 +1562,8 @@ class SurfaceCurrentRegularization(_Objective):
         Name of the objective function.
     """
 
-    _coordinates = ""
-    _units = ""
+    _coordinates = "tz"
+    _units = "A/m"
     _print_value_fmt = "Surface Current Regularization: {:10.3e} "
 
     def __init__(
@@ -1578,11 +1579,13 @@ class SurfaceCurrentRegularization(_Objective):
         source_grid=None,
         name="surface-current-regularization",
     ):
+        from desc.magnetic_fields import CurrentPotentialField
+
         if target is None and bounds is None:
             target = 0
-        assert hasattr(
-            surface_current_field, "Phi_mn"
-        ), "surface_current_field must be a FourierCurrentPotentialField"
+        assert isinstance(
+            surface_current_field, CurrentPotentialField
+        ), "surface_current_field must be a CurrentPotentialField"
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
 

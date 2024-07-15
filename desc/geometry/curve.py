@@ -605,9 +605,9 @@ class FourierPlanarCurve(Curve):
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
+        self._basis = basis
         self.normal = normal
         self.center = center
-        self._basis = basis
 
     @property
     def r_basis(self):
@@ -721,7 +721,10 @@ class FourierPlanarCurve(Curve):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested

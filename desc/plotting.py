@@ -3643,6 +3643,7 @@ def plot_regcoil_outputs(
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
         This is the same as data_regcoil
+
     """
     try:
         # if it is a list, just grab the first one

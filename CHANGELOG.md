@@ -3,12 +3,18 @@ Changelog
 
 New Features
 
+- All vector variables are now computed in toroidal (R,phi,Z) coordinates by default.
+  Cartesian (X,Y,Z) coordinates can be requested with the compute keyword ``basis='xyz'``.
 - Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
 to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
 - Adds the objective `CoilsetMinDistance`, which returns the minimum distance to another
 coil for each coil in a coilset.
 - Adds the objective `PlasmaCoilsetMinDistance`, which returns the minimum distance to the
 plasma surface for each coil in a coilset.
+- Add method ``is_self_intersecting`` to ``CoilSet``, which checks if any coils intersect eachother in the coilset.
+- Removes error in ``from_symmetry`` method of ``CoilSet`` when a coil crosses the symmetry plane,
+and instead adds a check for intersection, to allow for valid coilsets which may cross the
+symmetry plane but not be self-intersecting after rotation/reflection.
 - Adds function ``run_regcoil`` to ``_current_potential.py`` that implements the REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
     * Can specify ``current_helicity`` to determine if resulting contours correspond to  helical topology (``current_helicity`` not equal to 0) or modular (``current_helicity``equal to 0)
     * if multiple values of the regularization parameter are input, will return a family of surface current fields (as a list) corresponding to the solution at each regularization value

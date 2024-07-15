@@ -39,7 +39,7 @@ from desc.objectives import (
     BoundaryError,
     CoilCurvature,
     CoilLength,
-    CoilsetMinDistance,
+    CoilSetMinDistance,
     CoilTorsion,
     CurrentDensity,
     FixBoundaryR,
@@ -60,7 +60,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
-    PlasmaCoilsetMinDistance,
+    PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
     PrincipalCurvature,
     QuadraticFlux,
@@ -1597,7 +1597,9 @@ def test_second_stage_optimization_CoilSet():
             ),
             NFP=4,
             sym=True,
+            check_intersection=False,
         ),
+        check_intersection=False,
     )
     grid = LinearGrid(M=5)
     objective = ObjectiveFunction(
@@ -1639,7 +1641,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     mixed_coils = load(
         load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
     )
-    nested_coils = MixedCoilSet(sym_coils, mixed_coils)
+    nested_coils = MixedCoilSet(sym_coils, mixed_coils, check_intersection=False)
     eq = Equilibrium()
     # not attempting to accurately calc B for this test,
     # so make the grids very coarse
@@ -1710,7 +1712,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
 
 @pytest.mark.unit
 def test_coilset_geometry_optimization():
-    """Test optimizations with PlasmaCoilsetMinDistance and CoilsetMinDistance."""
+    """Test optimizations with PlasmaCoilSetMinDistance and CoilSetMinDistance."""
     R0 = 5  # major radius of plasma
     a = 1.2  # minor radius of plasma
     phi0 = np.pi / 12  # initial angle of coil
@@ -1747,7 +1749,7 @@ def test_coilset_geometry_optimization():
     # optimizing for target coil-plasma distance and maximum coil-coil distance
     objective = ObjectiveFunction(
         (
-            PlasmaCoilsetMinDistance(
+            PlasmaCoilSetMinDistance(
                 eq=eq,
                 coils=coils,
                 target=offset,
@@ -1757,7 +1759,7 @@ def test_coilset_geometry_optimization():
                 eq_fixed=True,
                 coils_fixed=False,
             ),
-            CoilsetMinDistance(
+            CoilSetMinDistance(
                 coils,
                 target=2 * np.pi * (R0 - offset) / coils.num_coils,
                 grid=coil_grid,
@@ -1789,7 +1791,7 @@ def test_coilset_geometry_optimization():
     # same optimization as above, but with a fixed surface instead of an equilibrium
     objective = ObjectiveFunction(
         (
-            PlasmaCoilsetMinDistance(
+            PlasmaCoilSetMinDistance(
                 eq=surf,
                 coils=coils,
                 target=offset,
@@ -1799,7 +1801,7 @@ def test_coilset_geometry_optimization():
                 eq_fixed=True,
                 coils_fixed=False,
             ),
-            CoilsetMinDistance(
+            CoilSetMinDistance(
                 coils,
                 target=2 * np.pi * (R0 - offset) / coils.num_coils,
                 grid=coil_grid,
@@ -1836,7 +1838,7 @@ def test_coilset_geometry_optimization():
 
     objective = ObjectiveFunction(
         (
-            PlasmaCoilsetMinDistance(
+            PlasmaCoilSetMinDistance(
                 eq=surf,
                 coils=coils,
                 target=offset,

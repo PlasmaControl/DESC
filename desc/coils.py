@@ -1210,7 +1210,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Parameters
         ----------
-        coils : Coil, CoilGroup, Coilset
+        coils : Coil, CoilSet
             Coil or collection of coils in one field period or half field period.
         NFP : int (optional)
             Number of field periods for enforcing field period symmetry.
@@ -1606,10 +1606,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             possibly be intersecting.
 
         """
-        from desc.objectives._coils import CoilsetMinDistance
+        from desc.objectives._coils import CoilSetMinDistance
 
         grid = grid if grid else LinearGrid(N=100)
-        obj = CoilsetMinDistance(self, grid=grid)
+        obj = CoilSetMinDistance(self, grid=grid)
         obj.build(verbose=0)
         if tol:
             min_dists = obj.compute(self.params_dict)

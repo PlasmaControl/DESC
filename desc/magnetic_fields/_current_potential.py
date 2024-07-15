@@ -636,8 +636,6 @@ class FourierCurrentPotentialField(
         show_plots=False,
         npts=128,
         stell_sym=False,
-        use_FourierXYZ=False,
-        N=50,
     ):
         """Find helical or modular coils from this surface current potential.
 
@@ -647,12 +645,10 @@ class FourierCurrentPotentialField(
 
         Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
-        where:
-
-            - n is the winding surface unit normal.
-            - Φ is the current potential function, which is a function of theta and
-            zeta, and is given as a secular linear term in theta (I)  and zeta (G) and
-            a double Fourier series in theta/zeta.
+        where n is the winding surface unit normal, Φ is the current potential
+        function, which is a function of theta and zeta, and is given as a
+        secular linear term in theta (I)  and zeta (G) and a double Fourier
+        series in theta/zeta.
 
         Parameters
         ----------
@@ -680,13 +676,6 @@ class FourierCurrentPotentialField(
             matters for modular coils (currently)
             #TODO: once winding surface curve is implemented, enforce sym for
             # helical as well
-        use_FourierXYZ : bool
-            whether to fit with ``FourierXYZCoils`` or not. If False, ``SplineXYZCoils``
-            will be returned. If True, the Fourier fits of those ``SplineXYZCoils``
-            with the specified Fourier resolution ``N`` will be returned.
-        N : int
-            Fourier resolution to use in ``FourierXYZCoils``, only used if
-            ``use_FourierXYZ`` is True.
 
         Returns
         -------
@@ -697,7 +686,6 @@ class FourierCurrentPotentialField(
             coil are not uniform across the coils.
         """
         check_posint(num_coils, "num_coils", False)
-        check_posint(N, "N", False)
         check_posint(step, "step", False)
         check_posint(npts, "npts", False)
         nfp = self.Phi_basis.NFP
@@ -814,8 +802,6 @@ class FourierCurrentPotentialField(
                 jnp.append(contour_Z[j][0::step], contour_Z[j][0]),
                 method=spline_method,
             )
-            if use_FourierXYZ:
-                coil = coil.to_FourierXYZ(N)
             coils.append(coil)
         try:
             if jnp.isclose(helicity, 0):

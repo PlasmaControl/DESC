@@ -1326,8 +1326,11 @@ def test_regcoil_modular_coils_check_coils(regcoil_modular_coils):
     numCoils = 20
 
     coilset2 = surface_current_field.to_CoilSet(
-        desirednumcoils=numCoils, stell_sym=False, use_FourierXYZ=True, N=150
+        desirednumcoils=numCoils,
+        stell_sym=False,
     )
+    assert not isinstance(coilset2, MixedCoilSet)
+    coilset2.to_FourierXYZ(N=150)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T

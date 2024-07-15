@@ -180,8 +180,6 @@ class _CoilObjective(_Objective):
         if self._normalize:
             self._scales = [compute_scaling_factors(coil) for coil in coils]
 
-        super().build(use_jit=use_jit, verbose=verbose)
-
     def compute(self, params, constants=None):
         """Compute data of coil for given data key.
 
@@ -308,6 +306,8 @@ class CoilLength(_CoilObjective):
         if self._normalize:
             self._normalization = np.mean([scale["a"] for scale in self._scales])
 
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
     def compute(self, params, constants=None):
         """Compute coil length.
 
@@ -427,6 +427,8 @@ class CoilCurvature(_CoilObjective):
         if self._normalize:
             self._normalization = 1 / np.mean([scale["a"] for scale in self._scales])
 
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
     def compute(self, params, constants=None):
         """Compute coil curvature.
 
@@ -544,6 +546,8 @@ class CoilTorsion(_CoilObjective):
 
         if self._normalize:
             self._normalization = 1 / np.mean([scale["a"] for scale in self._scales])
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute coil torsion.
@@ -670,6 +674,8 @@ class CoilCurrentLength(CoilLength):
             mean_current = np.mean([np.abs(param["current"]) for param in params])
             mean_current = np.max((mean_current, 1))
             self._normalization = mean_current * mean_length
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute coil current length (current * length).

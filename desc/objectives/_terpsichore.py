@@ -54,6 +54,7 @@ def terpsichore(
     # copy executable to temporary directory
     shutil.copy(os.path.join(path, exec), exec_path)
 
+    # write input files
     _write_wout(eq=eq, path=wout_path, surfs=surfs)
     _write_terps_input(
         path=input_path,
@@ -74,17 +75,20 @@ def terpsichore(
         nev=nev,
         al0=al0,
     )
-    _run_terps(
-        dir=pid_path,
-        exec=exec_path,
-        input=input_path,
-        wout=wout_path,
-        sleep_time=sleep_time,
-        stop_time=stop_time,
-    )
-    growth_rate = _read_terps_output(path=fort16_path)
 
-    # TODO: default value for when growth rate is not found (al0?)
+    # run TERPSICHORE
+    try:
+        _run_terps(
+            dir=pid_path,
+            exec=exec_path,
+            input=input_path,
+            wout=wout_path,
+            sleep_time=sleep_time,
+            stop_time=stop_time,
+        )
+        growth_rate = _read_terps_output(path=fort16_path)
+    except RuntimeError:
+        growth_rate = al0  # default growth rate if it was unable to find one
 
     # remove temporary directory
     shutil.rmtree(pid_path)

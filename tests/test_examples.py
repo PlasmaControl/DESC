@@ -1503,11 +1503,14 @@ def test_regcoil_helical_coils_check_coils_pos_helicity(
     # test finding coils
 
     numCoils = 15
-
-    coilset2 = surface_current_field.to_CoilSet(
-        num_coils=numCoils,
-        step=6,
-    )
+    with pytest.warns(UserWarning, match="intersecting"):
+        # the default grid for checking coil coil intersection
+        # is not good for long coils like these helical coils
+        coilset2 = surface_current_field.to_CoilSet(
+            num_coils=numCoils,
+            step=6,
+        )
+    assert not coilset2.is_self_intersecting(grid=LinearGrid(N=500))
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T

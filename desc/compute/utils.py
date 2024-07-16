@@ -111,7 +111,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
                 "Tensor quantities cannot be converted to Cartesian coordinates.",
             )
             if data_index[p][name]["dim"] == 3:  # only convert vector data
-                if name == "x":
+                if name in ["x", "center"]:
                     data[name] = rpz2xyz(data[name])
                 else:
                     data[name] = rpz2xyz_vec(data[name], phi=data["phi"])

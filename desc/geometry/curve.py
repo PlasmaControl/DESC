@@ -577,7 +577,7 @@ class FourierPlanarCurve(Curve):
     _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
-    # The curve is computed in this frame and then shifted/rotated to the correct frame.
+    # Curve is computed in reference frame, then displaced/rotated to the desired frame.
     def __init__(
         self,
         center=[10, 0, 0],

@@ -711,8 +711,8 @@ class PlasmaVesselDistance(_Objective):
                 params=self._surface.params_dict,
                 transforms=surface_transforms,
                 profiles={},
-                basis="xyz",
             )["x"]
+            surface_coords = rpz2xyz(surface_coords)
             self._constants["surface_coords"] = surface_coords
 
         timer.stop("Precomputing transforms")
@@ -764,8 +764,8 @@ class PlasmaVesselDistance(_Objective):
                 params=surface_params,
                 transforms=constants["surface_transforms"],
                 profiles={},
-                basis="xyz",
             )["x"]
+            surface_coords = rpz2xyz(surface_coords)
         d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
 
         if self._use_softmin:  # do softmin

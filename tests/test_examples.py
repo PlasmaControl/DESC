@@ -1066,9 +1066,12 @@ def test_freeb_axisym():
         -6.588300858364606e04,
         -3.560589388468855e05,
     ]
-    ext_field = SplineMagneticField.from_mgrid(
-        r"tests/inputs/mgrid_solovev.nc", extcur=extcur
-    )
+    with pytest.warns(UserWarning, match="Vector potential"):
+        # the mgrid file does not have the vector potential
+        # saved so we will ignore the thrown warning
+        ext_field = SplineMagneticField.from_mgrid(
+            r"tests/inputs/mgrid_solovev.nc", extcur=extcur
+        )
 
     pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
     iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])

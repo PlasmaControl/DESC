@@ -334,9 +334,10 @@ class CoilLength(_CoilObjective):
 class CoilCurvature(_CoilObjective):
     """Coil curvature.
 
-    Targets the local curvature at each grid node for each coil. Positive curvature
-    corresponds to "convex" curves, while negative curvature corresponds to "concave"
-    curves. Curvature values closer to 0 indicate straighter coils.
+    Targets the local curvature at each grid node for each coil.
+    Positive curvature corresponds to "convex" curves (a circle has positive curvature),
+    while negative curvature corresponds to "concave" curves.
+    Curvature values closer to 0 indicate straighter sections of coils.
 
     Parameters
     ----------

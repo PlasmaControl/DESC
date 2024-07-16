@@ -958,7 +958,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     Parameters
     ----------
     current_potential_field : FourierCurrentPotentialField
-        `FourierCurrentPotentialField` to run REGCOIL with.
+        ``FourierCurrentPotentialField`` to run REGCOIL with.
     eq : Equilibrium
         Equilibrium to minimize the quadratic flux (plus regularization) on.
     alpha : float or ndarray, optional
@@ -974,8 +974,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
         the normal field on the plasma surface. Also used to evaluate the
         virtual casing current, if the plasma has finite plasma currents.
         Defaults to
-        `LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
-         N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)`
+        LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
+        N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
     eval_grid : _type_, optional
         Grid upon which to evaluate the normal field on the plasma surface, and
         at which the normal field is minimized.

@@ -825,7 +825,7 @@ class TestObjectiveFunction:
             obj = CoilCurvature(coil, grid=grid)
             obj.build()
             f = obj.compute(params=coil.params_dict)
-            np.testing.assert_allclose(f, -1 / 2, rtol=1e-8)
+            np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")

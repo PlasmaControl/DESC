@@ -2782,12 +2782,14 @@ class FixSumCoilCurrent(FixCoilCurrent):
         # full coil set with TF coils, VF coils, and other single coil
         full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
 
-        # fix the sum of:
-        # the 1st & 3rd TF coil currents, none of the currents in the VF coil set,
-        # and the current of the other coil
-        obj = FixSumCoilCurrent(
-            full_coilset, indices=[[True, False, True, False], False, True]
-        )
+        # equilibrium G(rho=1) determines the necessary poloidal current through
+        # the coils (as dictated by Ampere's law)
+        grid_at_surf = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
+        G_tot = eq.compute("G", grid=grid_at_surf)["G"][0] / (mu_0 * 2 * jnp.pi)
+
+        # only coils that link the equilibrium poloidally should be included in the sum,
+        # which is the TF coil set and the FourierXYZ coil, but not the VF coil set
+        obj = FixSumCoilCurrent(full_coilset, indices=[True, False, True], target=G_tot)
 
     """
 

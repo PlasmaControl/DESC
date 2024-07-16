@@ -1027,6 +1027,8 @@ def test_fix_sum_coil_current(DummyMixedCoilSet):
     obj.build()
     params = coilset.params_dict
     np.testing.assert_allclose(obj.compute(params), 3)
+    # the default target should be the original sum
+    np.testing.assert_allclose(obj.compute_scaled_error(params), 0)
 
     # only sum currents of some coils in the coil set
     obj = FixSumCoilCurrent(

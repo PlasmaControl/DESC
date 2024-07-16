@@ -58,13 +58,10 @@ def _ds(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x"],
     parameterization="desc.geometry.core.Curve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _X_curve(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        # if basis is rpz, then "x" is rpz and we must convert to xyz
-        coords = rpz2xyz(coords)
+    coords = rpz2xyz(coords)
     data["X"] = coords[:, 0]
     return data
 
@@ -82,13 +79,10 @@ def _X_curve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x"],
     parameterization="desc.geometry.core.Curve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _Y_Curve(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        # if basis is rpz, then "x" is rpz and we must convert to xyz
-        coords = rpz2xyz(coords)
+    coords = rpz2xyz(coords)
     data["Y"] = coords[:, 1]
     return data
 
@@ -106,13 +100,9 @@ def _Y_Curve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x"],
     parameterization="desc.geometry.core.Curve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _R_Curve(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords = xyz2rpz(coords)
     data["R"] = coords[:, 0]
     return data
 
@@ -130,13 +120,9 @@ def _R_Curve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["x"],
     parameterization="desc.geometry.core.Curve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _phi_Curve(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords = xyz2rpz(coords)
     data["phi"] = coords[:, 1]
     return data
 
@@ -173,10 +159,10 @@ def _Z_Curve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    # convert to xyz for displacement and rotation
     if kwargs.get("basis_in", "xyz").lower() == "rpz":
         center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
@@ -196,8 +182,8 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz(coords)
+    # convert back to rpz
+    coords = xyz2rpz(coords)
     data["x"] = coords
     return data
 
@@ -209,21 +195,19 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["r_n", "center", "normal", "rotmat", "shift"],
+    params=["r_n", "center", "normal", "rotmat"],
     transforms={"r": [[0, 0, 0], [0, 0, 1]]},
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=["s", "phi"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    # convert to xyz for displacement and rotation
     if kwargs.get("basis_in", "xyz").lower() == "rpz":
-        center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:
-        center = params["center"]
         normal = params["normal"]
     r = transforms["r"].transform(params["r_n"], dz=0)
     dr = transforms["r"].transform(params["r_n"], dz=1)
@@ -238,17 +222,8 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        X = r * jnp.cos(data["s"])
-        Y = r * jnp.sin(data["s"])
-        Z = jnp.zeros_like(X)
-        xyzcoords = jnp.array([X, Y, Z]).T
-        xyzcoords = jnp.matmul(xyzcoords, A.T) + center
-        xyzcoords = (
-            jnp.matmul(xyzcoords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
-        )
-        x, y, z = xyzcoords.T
-        coords = xyz2rpz_vec(coords, x=x, y=y)
+    # convert back to rpz
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
     data["x_s"] = coords
     return data
 
@@ -260,21 +235,19 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["r_n", "center", "normal", "rotmat", "shift"],
+    params=["r_n", "center", "normal", "rotmat"],
     transforms={"r": [[0, 0, 0], [0, 0, 1], [0, 0, 2]]},
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=["s", "phi"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    # convert to xyz for displacement and rotation
     if kwargs.get("basis_in", "xyz").lower() == "rpz":
-        center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:
-        center = params["center"]
         normal = params["normal"]
     r = transforms["r"].transform(params["r_n"], dz=0)
     dr = transforms["r"].transform(params["r_n"], dz=1)
@@ -294,17 +267,8 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        X = r * jnp.cos(data["s"])
-        Y = r * jnp.sin(data["s"])
-        Z = jnp.zeros_like(X)
-        xyzcoords = jnp.array([X, Y, Z]).T
-        xyzcoords = jnp.matmul(xyzcoords, A.T) + center
-        xyzcoords = (
-            jnp.matmul(xyzcoords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
-        )
-        x, y, z = xyzcoords.T
-        coords = xyz2rpz_vec(coords, x=x, y=y)
+    # convert back to rpz
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
     data["x_ss"] = coords
     return data
 
@@ -316,21 +280,19 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["r_n", "center", "normal", "rotmat", "shift"],
+    params=["r_n", "center", "normal", "rotmat"],
     transforms={"r": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]},
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=["s", "phi"],
     parameterization="desc.geometry.curve.FourierPlanarCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    # convert to xyz for displacement and rotation
     if kwargs.get("basis_in", "xyz").lower() == "rpz":
-        center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:
-        center = params["center"]
         normal = params["normal"]
     r = transforms["r"].transform(params["r_n"], dz=0)
     dr = transforms["r"].transform(params["r_n"], dz=1)
@@ -357,17 +319,8 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        X = r * jnp.cos(data["s"])
-        Y = r * jnp.sin(data["s"])
-        Z = jnp.zeros_like(X)
-        xyzcoords = jnp.array([X, Y, Z]).T
-        xyzcoords = jnp.matmul(xyzcoords, A.T) + center
-        xyzcoords = (
-            jnp.matmul(xyzcoords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
-        )
-        x, y, z = xyzcoords.T
-        coords = xyz2rpz_vec(coords, x=x, y=y)
+    # convert back to rpz
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
     data["x_sss"] = coords
     return data
 
@@ -385,7 +338,6 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_n"], dz=0)
@@ -397,8 +349,8 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
     )
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz(coords)
+    # convert back to rpz
+    coords = xyz2rpz(coords)
     data["x"] = coords
     return data
 
@@ -416,7 +368,6 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
@@ -427,8 +378,8 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     coords = coords @ params["rotmat"].reshape((3, 3)).T
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    # convert back to rpz
+    coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_s"] = coords
     return data
 
@@ -446,7 +397,6 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
@@ -461,8 +411,8 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     coords = coords @ params["rotmat"].reshape((3, 3)).T
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    # convert back to rpz
+    coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_ss"] = coords
     return data
 
@@ -484,7 +434,6 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
@@ -499,8 +448,8 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     coords = coords @ params["rotmat"].reshape((3, 3)).T
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    # convert back to rpz
+    coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_sss"] = coords
     return data
 
@@ -518,7 +467,6 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     X = transforms["X"].transform(params["X_n"], dz=0)
@@ -528,8 +476,7 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
     )
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz(coords)
+    coords = xyz2rpz(coords)
     data["x"] = coords
     return data
 
@@ -541,7 +488,7 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
+    params=["X_n", "Y_n", "Z_n", "rotmat"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 1]],
         "Y": [[0, 0, 0], [0, 0, 1]],
@@ -549,9 +496,8 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     },
     profiles=[],
     coordinates="s",
-    data=[],
+    data=["phi"],
     parameterization="desc.geometry.curve.FourierXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     dX = transforms["X"].transform(params["X_n"], dz=1)
@@ -559,12 +505,7 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     dZ = transforms["Z"].transform(params["Z_n"], dz=1)
     coords = jnp.stack([dX, dY, dZ], axis=1)
     coords = coords @ params["rotmat"].reshape((3, 3)).T
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(
-            coords,
-            x=transforms["X"].transform(params["X_n"]) + params["shift"][0],
-            y=transforms["Y"].transform(params["Y_n"]) + params["shift"][1],
-        )
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
     data["x_s"] = coords
     return data
 
@@ -576,7 +517,7 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
+    params=["X_n", "Y_n", "Z_n", "rotmat"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 2]],
         "Y": [[0, 0, 0], [0, 0, 2]],
@@ -584,9 +525,8 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     },
     profiles=[],
     coordinates="s",
-    data=[],
+    data=["phi"],
     parameterization="desc.geometry.curve.FourierXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     d2X = transforms["X"].transform(params["X_n"], dz=2)
@@ -594,12 +534,7 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     d2Z = transforms["Z"].transform(params["Z_n"], dz=2)
     coords = jnp.stack([d2X, d2Y, d2Z], axis=1)
     coords = coords @ params["rotmat"].reshape((3, 3)).T
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(
-            coords,
-            x=transforms["X"].transform(params["X_n"]) + params["shift"][0],
-            y=transforms["Y"].transform(params["Y_n"]) + params["shift"][1],
-        )
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
     data["x_ss"] = coords
     return data
 
@@ -611,7 +546,7 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
+    params=["X_n", "Y_n", "Z_n", "rotmat"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 3]],
         "Y": [[0, 0, 0], [0, 0, 3]],
@@ -619,9 +554,8 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     },
     profiles=[],
     coordinates="s",
-    data=[],
+    data=["phi"],
     parameterization="desc.geometry.curve.FourierXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     d3X = transforms["X"].transform(params["X_n"], dz=3)
@@ -629,12 +563,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     d3Z = transforms["Z"].transform(params["Z_n"], dz=3)
     coords = jnp.stack([d3X, d3Y, d3Z], axis=1)
     coords = coords @ params["rotmat"].reshape((3, 3)).T
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(
-            coords,
-            x=transforms["X"].transform(params["X_n"]) + params["shift"][0],
-            y=transforms["Y"].transform(params["Y_n"]) + params["shift"][1],
-        )
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
     data["x_sss"] = coords
     return data
 
@@ -646,48 +575,45 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
-    transforms={"method": []},
+    params=["X", "Y", "Z", "rotmat", "shift"],
+    transforms={"knots": []},
     profiles=[],
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
-
     Xq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["X"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
     Yq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["Y"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
     Zq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["Z"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
-
     coords = jnp.stack([Xq, Yq, Zq], axis=1)
     coords = (
         coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
     )
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz(coords)
+    coords = xyz2rpz(coords)
     data["x"] = coords
     return data
 
@@ -699,80 +625,44 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
-    transforms={"method": []},
+    params=["X", "Y", "Z", "rotmat"],
+    transforms={"knots": []},
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=["s", "phi"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
-
     dXq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["X"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
     dYq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["Y"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
     dZq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["Z"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
-
-    coords_s = jnp.stack([dXq, dYq, dZq], axis=1)
-    coords_s = coords_s @ params["rotmat"].reshape((3, 3)).T
-
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        # calculate the xy coordinates to rotate to rpz
-        Xq = interp1d(
-            xq,
-            params["knots"],
-            params["X"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Yq = interp1d(
-            xq,
-            params["knots"],
-            params["Y"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Zq = interp1d(
-            xq,
-            params["knots"],
-            params["Z"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-
-        coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = (
-            coords @ params["rotmat"].reshape((3, 3)).T
-            + params["shift"][jnp.newaxis, :]
-        )
-
-        coords_s = xyz2rpz_vec(coords_s, x=coords[:, 0], y=coords[:, 1])
-    data["x_s"] = coords_s
+    coords = jnp.stack([dXq, dYq, dZq], axis=1)
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_s"] = coords
     return data
 
 
@@ -783,79 +673,44 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
-    transforms={"method": []},
+    params=["X", "Y", "Z", "rotmat"],
+    transforms={"knots": []},
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=["s", "phi"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
-
     d2Xq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["X"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
     d2Yq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["Y"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
     d2Zq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["Z"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
-
-    coords_ss = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
-    coords_ss = coords_ss @ params["rotmat"].reshape((3, 3)).T
-
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        # calculate the xy coordinates to rotate to rpz
-        Xq = interp1d(
-            xq,
-            params["knots"],
-            params["X"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Yq = interp1d(
-            xq,
-            params["knots"],
-            params["Y"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Zq = interp1d(
-            xq,
-            params["knots"],
-            params["Z"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = (
-            coords @ params["rotmat"].reshape((3, 3)).T
-            + params["shift"][jnp.newaxis, :]
-        )
-
-        coords_ss = xyz2rpz_vec(coords_ss, x=coords[:, 0], y=coords[:, 1])
-    data["x_ss"] = coords_ss
+    coords = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_ss"] = coords
     return data
 
 
@@ -866,80 +721,44 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
-    transforms={"method": []},
+    params=["X", "Y", "Z", "rotmat"],
+    transforms={"knots": []},
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=["s", "phi"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
-
     d3Xq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["X"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
     d3Yq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["Y"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
     d3Zq = interp1d(
         xq,
-        params["knots"],
+        transforms["knots"],
         params["Z"],
-        method=transforms["method"],
+        method=kwargs["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
-
-    coords_sss = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
-    coords_sss = coords_sss @ params["rotmat"].reshape((3, 3)).T
-
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        # calculate the xy coordinates to rotate to rpz
-        Xq = interp1d(
-            xq,
-            params["knots"],
-            params["X"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Yq = interp1d(
-            xq,
-            params["knots"],
-            params["Y"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        Zq = interp1d(
-            xq,
-            params["knots"],
-            params["Z"],
-            method=transforms["method"],
-            derivative=0,
-            period=2 * jnp.pi,
-        )
-        coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = (
-            coords @ params["rotmat"].reshape((3, 3)).T
-            + params["shift"][jnp.newaxis, :]
-        )
-
-        coords_sss = xyz2rpz_vec(coords_sss, x=coords[:, 0], y=coords[:, 1])
-    data["x_sss"] = coords_sss
-
+    coords = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_sss"] = coords
     return data
 
 
@@ -1060,16 +879,12 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["ds", "x_s"],
-    parameterization=[
-        "desc.geometry.curve.FourierRZCurve",
-        "desc.geometry.curve.FourierXYZCurve",
-        "desc.geometry.curve.FourierPlanarCurve",
-    ],
+    parameterization=["desc.geometry.core.Curve"],
 )
 def _length(params, transforms, profiles, data, **kwargs):
     T = jnp.linalg.norm(data["x_s"], axis=-1)
-    # this is equivalent to jnp.trapz(T, s) for a closed curve, but also works
-    # if grid.endpoint is False
+    # this is equivalent to jnp.trapz(T, s) for a closed curve,
+    # but also works if grid.endpoint is False
     data["length"] = jnp.sum(T * data["ds"])
     return data
 
@@ -1082,19 +897,20 @@ def _length(params, transforms, profiles, data, **kwargs):
     description="Length of the curve",
     dim=0,
     params=[],
-    transforms={"method": []},
+    transforms={},
     profiles=[],
     coordinates="",
     data=["ds", "x", "x_s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
+    method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
-    if transforms["method"] == "nearest":  # cannot use derivative method as deriv=0
+    if kwargs["method"] == "nearest":  # cannot use derivative method as deriv=0
         coords = data["x"]
         if kwargs.get("basis", "rpz").lower() == "rpz":
             coords = rpz2xyz(coords)
-        # ensure curve is closed. If it's already closed this doesn't add any length
-        # since ds will be zero
+        # ensure curve is closed
+        # if it's already closed this doesn't add any length since ds will be zero
         coords = jnp.concatenate([coords, coords[:1]])
         X = coords[:, 0]
         Y = coords[:, 1]
@@ -1103,7 +919,7 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         data["length"] = jnp.sum(lengths)
     else:
         T = jnp.linalg.norm(data["x_s"], axis=-1)
-        # this is equivalent to jnp.trapz(T, s) for a closed curve, but also works
-        # if grid.endpoint is False
+        # this is equivalent to jnp.trapz(T, s) for a closed curve
+        # but also works if grid.endpoint is False
         data["length"] = jnp.sum(T * data["ds"])
     return data

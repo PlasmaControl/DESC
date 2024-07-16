@@ -30,7 +30,9 @@ dependencies:
   - nbsphinx == 0.8.12
   - pandoc
   - sphinx > 3.0.0
-  - sphinx-argparse
+  # TODO: Remove sphinx-argparse <0.5.0 pin once upstream build issue is fixed
+  # <https://github.com/sphinx-doc/sphinx-argparse/issues/56>
+  - sphinx-argparse < 0.5.0
   - sphinx-copybutton
   - sphinx_rtd_theme >= 1.0, < 2.0
 

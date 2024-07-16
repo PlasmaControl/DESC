@@ -2735,11 +2735,12 @@ class FixSumCoilCurrent(FixCoilCurrent):
         Coil(s) that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is FIXME.
+        Must be broadcastable to Objective.dim_f. Defaults to the current
+        sum of currents in the coils indicated by indices.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Default is FIXME.
+        Default is to use target.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2781,11 +2782,16 @@ class FixSumCoilCurrent(FixCoilCurrent):
         # full coil set with TF coils, VF coils, and other single coil
         full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
 
-        # fix the current of the 1st & 3rd TF coil
-        # fix none of the currents in the VF coil set
-        # fix the current of the other coil
+        # equilibrium G(rho=1) determines the necessary poloidal current through
+        # the coils (as dictated by Ampere's law)
+        grid_at_surf = LinearGrid(rho=1.0)
+        G_tot = eq.compute("G", grid=grid_at_surf)["G"][0] / mu_0 * 2 * jnp.pi
+
+        # we want all coils that link the equilibrium poloidally to be included
+        # in the sum, so we include the current of the TF coilset and the xyz_coil
+        # and none of the vf_coilset
         obj = FixSumCoilCurrent(
-            full_coilset, indices=[[True, False, True, False], False, True]
+            full_coilset, indices=[[True, True, True, True], False, True]
         )
 
     """
@@ -2807,8 +2813,7 @@ class FixSumCoilCurrent(FixCoilCurrent):
         indices=True,
         name="summed coil current",
     ):
-        if target is None and bounds is None:
-            target = 0
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             coil=coil,
             target=target,
@@ -2833,6 +2838,21 @@ class FixSumCoilCurrent(FixCoilCurrent):
         """
         super().build(use_jit=use_jit, verbose=verbose)
         self._dim_f = 1
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user,
+            jnp.sum(
+                jnp.concatenate(
+                    [
+                        jnp.atleast_1d(param[idx])
+                        for param, idx in zip(
+                            tree_leaves(self.coil.params), self._indices
+                        )
+                    ]
+                )
+            ),
+            None,
+            np.array([0]),
+        )
 
     def compute(self, params, constants=None):
         """Compute sum of coil currents.

@@ -70,7 +70,7 @@ class TestMagneticFields:
 
         tfield_from_A = VectorPotentialField(tfield_A, params={"B0": 2, "R0": 1})
 
-        def vfield_A(R, phi, Z, B0):
+        def vfield_A(R, phi, Z, B0=None):
             coords_rpz = jnp.vstack([R, phi, Z]).T
             coords_xyz = rpz2xyz(coords_rpz)
             ax = B0 / 2 * coords_xyz[:, 1]
@@ -81,7 +81,8 @@ class TestMagneticFields:
             A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
             return A
 
-        vfield_from_A = VectorPotentialField(vfield_A, params={"B0": 1})
+        vfield_params = {"B0": 1}
+        vfield_from_A = VectorPotentialField(vfield_A, params=vfield_params)
 
         np.testing.assert_allclose(tfield([1, 0, 0]), [[0, 2, 0]])
         np.testing.assert_allclose((4 * tfield)([2, 0, 0]), [[0, 4, 0]])
@@ -91,7 +92,7 @@ class TestMagneticFields:
             tfield_from_A.compute_magnetic_vector_potential([1, 0, 0]).squeeze(),
         )
         np.testing.assert_allclose(
-            vfield_A(1, 0, 0),
+            vfield_A(1, 0, 0, **vfield_params),
             vfield_from_A.compute_magnetic_vector_potential([1, 0, 0]),
         )
 

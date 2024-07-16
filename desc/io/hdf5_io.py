@@ -6,6 +6,7 @@ import warnings
 
 import h5py
 import numpy as np
+from termcolor import colored
 
 from .core_io import IO, Reader, Writer
 
@@ -124,7 +125,25 @@ class hdf5Reader(hdf5IO, Reader):
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
                 warnings.warn(
-                    "Save attribute '{}' was not loaded.".format(attr), RuntimeWarning
+                    colored(
+                        "\n"
+                        f"The object attribute '{attr}' was not loaded from the file.\n"
+                        "This is likely because the file containing "
+                        f"'{obj.__class__.__name__}' was created before '{attr}' "
+                        f"became an attribute of objects of class '{obj.__class__}'.\n"
+                        "The user may verify that a default value has been set.\n"
+                        "This warning will persist until the file is saved with the "
+                        "new object.\n"
+                        "\n"
+                        "Note to developers: Add 'def _set_up(self)' as a method to "
+                        f"class '{obj.__class__}'\n"
+                        "(or the superclass where this new attribute is assigned) that "
+                        f"assigns a value to '{attr}'.\n"
+                        "This method is called automatically when a file is loaded.\n"
+                        "Recall that the testing suite will fail on warnings.",
+                        "yellow",
+                    ),
+                    RuntimeWarning,
                 )
                 continue
             if isinstance(loc[attr], h5py.Dataset):

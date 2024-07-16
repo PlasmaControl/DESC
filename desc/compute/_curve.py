@@ -932,8 +932,8 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     label="\\kappa",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Scalar curvature of the curve, with the sign denoting the concavity/"
-    + "convexity relative to the center of the curve: *center )-curvature (+curvature",
+    description="Scalar curvature of the curve, with the sign denoting the convexity/"
+    + "concavity relative to the center of the curve (a circle has positive curvature)",
     dim=1,
     params=[],
     transforms={},
@@ -946,8 +946,8 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     # magnitude of curvature
     dxn = jnp.linalg.norm(data["x_s"], axis=-1)[:, jnp.newaxis]
     curvature = jnp.linalg.norm(cross(data["x_s"], data["x_ss"]) / dxn**3, axis=-1)
-    # sign of curvature (positive = "concave", negative = "convex")
-    r = data["x"] - data["center"]
+    # sign of curvature (positive = "convex", negative = "concave")
+    r = data["center"] - data["x"]
     data["curvature"] = curvature * sign(dot(r, data["frenet_normal"]))
     return data
 

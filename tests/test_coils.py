@@ -368,7 +368,7 @@ class TestCoilSet:
                 ]
             ).reshape((4, 1, 3)),
         )
-        np.testing.assert_allclose([dat["curvature"] for dat in data], -1 / 2)
+        np.testing.assert_allclose([dat["curvature"] for dat in data], 1 / 2)
         np.testing.assert_allclose([dat["torsion"] for dat in data], 0)
         T = [dat["frenet_tangent"] for dat in data]
         N = [dat["frenet_normal"] for dat in data]

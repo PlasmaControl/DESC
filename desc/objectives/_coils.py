@@ -335,7 +335,7 @@ class CoilCurvature(_CoilObjective):
     """Coil curvature.
 
     Targets the local curvature at each grid node for each coil. Positive curvature
-    corresponds to "concave" curves, while negative curvature corresponds to "convex"
+    corresponds to "convex" curves, while negative curvature corresponds to "concave"
     curves. Curvature values closer to 0 indicate straighter coils.
 
     Parameters
@@ -395,7 +395,7 @@ class CoilCurvature(_CoilObjective):
         name="coil curvature",
     ):
         if target is None and bounds is None:
-            bounds = (-1, 0)
+            bounds = (0, 1)
 
         super().__init__(
             coil,
@@ -762,9 +762,16 @@ class CoilSetMinDistance(_Objective):
         grid=None,
         name="coil-coil minimum distance",
     ):
+        from desc.coils import CoilSet
+
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._grid = grid
+        errorif(
+            not isinstance(coil, CoilSet),
+            ValueError,
+            "coil must be of type CoilSet, not an individual Coil",
+        )
         super().__init__(
             things=coil,
             target=target,

@@ -968,16 +968,14 @@ def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
     params = [
         [
             {"current": True},
-            {"center": True, "normal": np.array([1])},
-            {"r_n": True},
-            {},
         ],
         {"shift": True, "rotmat": True},
         {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+        {},
     ]
     target = np.concatenate(
         (
-            np.array([3, 2, 0, 0, 1, 1]),
+            np.array([3]),
             np.eye(3).flatten(),
             np.array([0, 0, 0]),
             np.eye(3).flatten(),
@@ -1007,13 +1005,13 @@ def test_fix_coil_current(DummyMixedCoilSet):
     # fix all coil currents
     obj = FixCoilCurrent(coil=coilset)
     obj.build()
-    assert obj.dim_f == 8
-    np.testing.assert_allclose(obj.target, [3, 3, 3, 3, -1, -1, -1, 2])
+    assert obj.dim_f == 6
+    np.testing.assert_allclose(obj.target, [3, -1, -1, -1, 2, 1])
 
     # only fix currents of some coils in the coil set
     obj = FixCoilCurrent(
-        coil=coilset, indices=[[True, False, True, False], False, True]
+        coil=coilset, indices=[[True], [True, False, True], True, False]
     )
     obj.build()
-    assert obj.dim_f == 3
-    np.testing.assert_allclose(obj.target, [3, 3, 2])
+    assert obj.dim_f == 4
+    np.testing.assert_allclose(obj.target, [3, -1, -1, 2])

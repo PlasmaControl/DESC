@@ -130,6 +130,20 @@ class TestCoil:
             B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
         )
 
+        # FourierRZCoil with NFP>1
+        coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]), NFP=2)
+        B_xyz = coil.compute_magnetic_field(grid_xyz, basis="xyz", source_grid=None)
+        B_rpz = coil.compute_magnetic_field(grid_rpz, basis="rpz", source_grid=None)
+        np.testing.assert_allclose(
+            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
+
     @pytest.mark.unit
     def test_properties(self):
         """Test getting/setting attributes for Coil class."""
@@ -308,10 +322,29 @@ class TestCoilSet:
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
+    def test_is_self_intersecting_warnings(self):
+        """Test warning in from_symmetry for self-intersection."""
+        N = 40
+        # tilt coils so they cross the symmetry plane
+        # and the resulting coils are self-intersecting
+        coil = FourierPlanarCoil(normal=[1e-4, 1, 3])
+        coils_list_sym = [coil.copy()] + [coil.copy() for i in range(N // 8 - 1)]
+
+        for i, c in enumerate(coils_list_sym[1:]):
+            c.rotate(angle=2 * np.pi / N * (i + 1))
+
+        # test the warning for self-intersecting coils, as two
+        #  of the coils in each field period lie nearly
+        # in the same physical space (intersecting at 2 points) after reflection
+        with pytest.warns(UserWarning) as warninfo:
+            _ = CoilSet.from_symmetry(coils_list_sym, NFP=4, sym=True)
+        assert "nearly intersecting" in str(warninfo[0].message)
+
+    @pytest.mark.unit
     def test_properties(self):
         """Test getting/setting of CoilSet attributes."""
         coil = FourierPlanarCoil()
-        coils = CoilSet.linspaced_linear(coil, n=4)
+        coils = CoilSet.linspaced_linear(coil, n=4, displacement=[0, 2, 0])
         data = coils.compute(
             [
                 "x",
@@ -329,9 +362,9 @@ class TestCoilSet:
             np.array(
                 [
                     [12, 0, 0],
-                    [12.5, 0, 0],
-                    [13, 0, 0],
-                    [13.5, 0, 0],
+                    [12, 0.5, 0],
+                    [12, 1, 0],
+                    [12, 1.5, 0],
                 ]
             ).reshape((4, 1, 3)),
         )
@@ -432,10 +465,11 @@ class TestCoilSet:
         """Test methods for combining and calling CoilSet objects."""
         coil1 = FourierXYZCoil()
         coils1 = MixedCoilSet.from_symmetry(coil1, NFP=4)
-        coil2 = FourierPlanarCoil()
+        coil2 = FourierPlanarCoil(center=[100, 0, 0])
         coils2 = coils1 + [coil2]
         assert coils2[-1] is coil2
-        coils2 = coils1 + MixedCoilSet([coil2, coil2])
+        with pytest.warns(UserWarning, match="nearly intersecting"):
+            coils2 = coils1 + MixedCoilSet([coil2, coil2], check_intersection=False)
         assert coils2[-1] is coil2
 
         with pytest.raises(TypeError):
@@ -968,8 +1002,8 @@ def test_load_makegrid_coils_header_asserts(tmpdir_factory):
 @pytest.mark.unit
 def test_repr():
     """Test string representation of Coil objects."""
-    coil = FourierRZCoil()
-    assert "FourierRZCoil" in str(coil)
+    coil = FourierPlanarCoil()
+    assert "FourierPlanarCoil" in str(coil)
     assert "current=1" in str(coil)
 
     coils = CoilSet.linspaced_angular(coil, n=4)

@@ -1692,7 +1692,6 @@ class SurfaceCurrentRegularization(_Objective):
             params=surface_params,
             transforms=constants["surface_transforms"],
             profiles={},
-            basis="xyz",
         )
 
         K_mag = safenorm(surface_data["K"], axis=-1)

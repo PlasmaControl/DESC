@@ -1477,8 +1477,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         self._derivs["BR"] = self._approx_derivs(self._BR)
         self._derivs["Bphi"] = self._approx_derivs(self._Bphi)
         self._derivs["BZ"] = self._approx_derivs(self._BZ)
-
-        if np.any(AR) and np.any(Aphi) and np.any(AZ):
+        if AR is not None and Aphi is not None and AZ is not None:
             AR, Aphi, AZ = map(_atleast_4d, (AR, Aphi, AZ))
             assert AR.shape == Aphi.shape == AZ.shape == shape
             self._AR = AR
@@ -1888,6 +1887,12 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
+        if hasattr(field, "compute_magnetic_vector_potential"):
+            AR, AP, AZ = field.compute_magnetic_vector_potential(
+                coords, params, basis="rpz"
+            ).T
+        else:
+            AR = AP = AZ = None
         return cls(
             R,
             phi,
@@ -1895,6 +1900,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
             BR.reshape(shp),
             BP.reshape(shp),
             BZ.reshape(shp),
+            AR=AR.reshape(shp),
+            Aphi=AP.reshape(shp),
+            AZ=AZ.reshape(shp),
             currents=1.0,
             NFP=NFP,
             method=method,

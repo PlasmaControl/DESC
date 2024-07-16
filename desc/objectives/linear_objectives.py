@@ -2735,11 +2735,12 @@ class FixSumCoilCurrent(FixCoilCurrent):
         Coil(s) that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is FIXME.
+        Must be broadcastable to Objective.dim_f.
+        Default is the objective value for the coil.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Default is FIXME.
+        Default is to use the target instead.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2781,9 +2782,9 @@ class FixSumCoilCurrent(FixCoilCurrent):
         # full coil set with TF coils, VF coils, and other single coil
         full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
 
-        # fix the current of the 1st & 3rd TF coil
-        # fix none of the currents in the VF coil set
-        # fix the current of the other coil
+        # fix the sum of:
+        # the 1st & 3rd TF coil currents, none of the currents in the VF coil set,
+        # and the current of the other coil
         obj = FixSumCoilCurrent(
             full_coilset, indices=[[True, False, True, False], False, True]
         )
@@ -2807,8 +2808,9 @@ class FixSumCoilCurrent(FixCoilCurrent):
         indices=True,
         name="summed coil current",
     ):
+        self._default_target = False
         if target is None and bounds is None:
-            target = 0
+            self._default_target = True
         super().__init__(
             coil=coil,
             target=target,
@@ -2833,6 +2835,8 @@ class FixSumCoilCurrent(FixCoilCurrent):
         """
         super().build(use_jit=use_jit, verbose=verbose)
         self._dim_f = 1
+        if self._default_target:
+            self.update_target(thing=self.things[0])
 
     def compute(self, params, constants=None):
         """Compute sum of coil currents.

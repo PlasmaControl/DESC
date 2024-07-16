@@ -2729,6 +2729,11 @@ class FixCoilCurrent(FixParameters):
 class FixSumCoilCurrent(FixCoilCurrent):
     """Fixes the sum of coil current(s) in a Coil or CoilSet.
 
+    NOTE: When using this objective, take care in knowing the signs
+    oof current in the coils and the rientations of the coils, it may
+    be possible that two coils have differing current signs but in physical
+     space the currents flow similarly.
+
     Parameters
     ----------
     coil : Coil
@@ -2782,12 +2787,14 @@ class FixSumCoilCurrent(FixCoilCurrent):
         # full coil set with TF coils, VF coils, and other single coil
         full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
 
-        # equilibrium G(rho=1) determines the necessary poloidal current through
+        # equilibrium G(rho=1) determines the necessary net poloidal current through
         # the coils (as dictated by Ampere's law)
         grid_at_surf = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
         G_tot = eq.compute("G", grid=grid_at_surf)["G"][0] / (mu_0 * 2 * jnp.pi)
 
-        # only coils that link the equilibrium poloidally should be included in the sum,
+        # to use this objective to force the coilset to adhere to Ampere's law
+        # for the targeted equilibrium, we want only coils that link
+        # the equilibrium poloidally to be included in the sum,
         # which is the TF coil set and the FourierXYZ coil, but not the VF coil set
         obj = FixSumCoilCurrent(full_coilset, indices=[True, False, True], target=G_tot)
 

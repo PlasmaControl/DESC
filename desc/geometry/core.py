@@ -18,6 +18,7 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
+from desc.utils import errorif
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -120,11 +121,11 @@ class Curve(IOAble, Optimizable, ABC):
             grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=grid * getattr(self, "NFP", 1))
-        else:
-            raise TypeError(
-                "must pass in a Grid object or an integer for argument grid!"
-                f" instead got type {type(grid)}"
-            )
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            f"grid argument must be a Grid object or an integer, got type {type(grid)}",
+        )
 
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))

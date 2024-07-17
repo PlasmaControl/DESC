@@ -1147,6 +1147,24 @@ def test_boozer_transform():
 
 
 @pytest.mark.unit
+@pytest.mark.solve
+def test_boozer_jacobian():
+    """Test Boozer to cylindrical jacobian."""
+    # TODO: add test with stellarator example
+    eq = get("DSHAPE_CURRENT")
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    data = eq.compute(
+        ["sqrt(g)_booz", "sqrt(g)_B"], grid=grid, M_booz=eq.M, N_booz=eq.N
+    )
+    np.testing.assert_allclose(
+        data["sqrt(g)_booz"],
+        data["sqrt(g)_B"],
+        rtol=1e-3,
+        atol=1e-4,
+    )
+
+
+@pytest.mark.unit
 def test_compute_everything():
     """Test that the computations on this branch agree with those on master.
 

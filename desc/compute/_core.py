@@ -69,6 +69,27 @@ def _R_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="R_r_B",
+    label="\\partial_{\\rho_B} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first radial Boozer derivative",
+    dim=1,
+    params=["R_mn_B"],
+    transforms={"B": [[1, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+    ],
+)
+def _R_r_B(params, transforms, profiles, data, **kwargs):
+    data["R_r_B"] = transforms["B"].transform(params["R_mn_B"], 1, 0, 0)
+    return data
+
+
+@register_compute_fun(
     name="R_rr",
     label="\\partial_{\\rho \\rho} R",
     units="m",
@@ -489,6 +510,27 @@ def _R_t(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="R_t_B",
+    label="\\partial_{\\theta_{B}} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first poloidal Boozer derivative",
+    dim=1,
+    params=["R_mn_B"],
+    transforms={"B": [[0, 1, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+    ],
+)
+def _R_t_B(params, transforms, profiles, data, **kwargs):
+    data["R_t_B"] = transforms["B"].transform(params["R_mn_B"], 0, 1, 0)
+    return data
+
+
+@register_compute_fun(
     name="R_tt",
     label="\\partial_{\\theta \\theta} R",
     units="m",
@@ -620,6 +662,27 @@ def _R_tzz(params, transforms, profiles, data, **kwargs):
 )
 def _R_z(params, transforms, profiles, data, **kwargs):
     data["R_z"] = transforms["R"].transform(params["R_lmn"], 0, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="R_z_B",
+    label="\\partial_{\\zeta_{B}} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first toroidal Boozer derivative",
+    dim=1,
+    params=["R_mn_B"],
+    transforms={"B": [[0, 0, 1]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+    ],
+)
+def _R_z_B(params, transforms, profiles, data, **kwargs):
+    data["R_z_B"] = transforms["B"].transform(params["R_mn_B"], 0, 0, 1)
     return data
 
 
@@ -1286,6 +1349,28 @@ def _Z_t(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="Z_t_B",
+    label="\\partial_{\\theta_{B}} Z",
+    units="m",
+    units_long="meters",
+    description="Verical coordinate in lab frame, first poloidal Boozer derivative",
+    dim=1,
+    params=["Z_mn_B"],
+    transforms={"B": [[0, 1, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _Z_t_B(params, transforms, profiles, data, **kwargs):
+    data["Z_t_B"] = transforms["B"].transform(params["Z_mn_B"], 0, 1, 0)
+    return data
+
+
+@register_compute_fun(
     name="Z_tt",
     label="\\partial_{\\theta \\theta} Z",
     units="m",
@@ -1417,6 +1502,28 @@ def _Z_tzz(params, transforms, profiles, data, **kwargs):
 )
 def _Z_z(params, transforms, profiles, data, **kwargs):
     data["Z_z"] = transforms["Z"].transform(params["Z_lmn"], 0, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="Z_z_B",
+    label="\\partial_{\\zeta_{B}} Z",
+    units="m",
+    units_long="meters",
+    description="Verical coordinate in lab frame, first toroidal Boozer derivative",
+    dim=1,
+    params=["R_mn_B"],
+    transforms={"B": [[0, 0, 1]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _Z_z_B(params, transforms, profiles, data, **kwargs):
+    data["Z_z_B"] = transforms["B"].transform(params["Z_mn_B"], 0, 0, 1)
     return data
 
 

@@ -548,6 +548,33 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e_theta_B",
+    label="\\mathbf{e}_{\\theta_{B}}",
+    units="m",
+    units_long="meters",
+    description="Covariant Boozer Poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R", "R_t_B", "Z_t_B", "nu_t_B", "phi"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+    ],
+    basis="basis",
+)
+def _e_sub_theta_sub_B(params, transforms, profiles, data, **kwargs):
+    # TODO:Additional terms needed for a finite omega (general toroidal angle)
+    data["e_theta_B"] = jnp.array(
+        [data["R_t_B"], -data["R"] * data["nu_t_B"], data["Z_t_B"]]
+    ).T
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e_theta_B"] = rpz2xyz_vec(data["e_theta_B"], phi=data["phi"])
+    return data
+
+
+@register_compute_fun(
     name="e^theta*sqrt(g)",
     label="\\mathbf{e}^{\\theta} \\sqrt{g}",
     units="m^{2}",
@@ -1549,6 +1576,35 @@ def _e_sub_rho(params, transforms, profiles, data, **kwargs):
     data["e_rho"] = jnp.array([data["R_r"], data["R"] * data["omega_r"], data["Z_r"]]).T
     if kwargs.get("basis", "rpz").lower() == "xyz":
         data["e_rho"] = rpz2xyz_vec(data["e_rho"], phi=data["phi"])
+    return data
+
+
+# NOTE: Bad name
+@register_compute_fun(
+    name="e_rho_B",
+    label="\\mathbf{e}_{\\rho_{B}}",
+    units="m",
+    units_long="meters",
+    description="Covariant Boozer Radial basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R", "R_r", "Z_r", "nu_r_B", "phi"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+    ],
+    basis="basis",
+)
+def _e_sub_rho_sub_B(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞ᵨ | ρ=0 }.
+    data["e_rho_B"] = jnp.array(
+        [data["R_r"], data["R"] * data["nu_r_B"], data["Z_r"]]
+    ).T
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e_rho"] = rpz2xyz_vec(data["e_rho_B"], phi=data["phi"])
     return data
 
 
@@ -3714,6 +3770,33 @@ def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
     ).T
     if kwargs.get("basis", "rpz").lower() == "xyz":
         data["e_zeta"] = rpz2xyz_vec(data["e_zeta"], phi=data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="e_zeta_B",
+    label="\\mathbf{e}_{\\zeta_{B}}",
+    units="m",
+    units_long="meters",
+    description="Covariant Boozer Toroidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R", "R_z_B", "Z_z_B", "nu_z_B", "phi"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+    ],
+    basis="basis",
+)
+def _e_sub_zeta_sub_B(params, transforms, profiles, data, **kwargs):
+    # TODO:Additional terms needed for a finite omega (general toroidal angle)
+    data["e_zeta_B"] = jnp.array(
+        [data["R_z_B"], -data["R"] * data["nu_z_B"], data["Z_z_B"]]
+    ).T
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        data["e_zeta_B"] = rpz2xyz_vec(data["e_zeta_B"], phi=data["phi"])
     return data
 
 

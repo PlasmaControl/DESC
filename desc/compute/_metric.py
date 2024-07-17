@@ -56,6 +56,26 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="sqrt(g)_booz",
+    label="\\sqrt{g}_{Boozer}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of Boozer flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho_B", "e_theta_B", "e_zeta_B"],
+)
+def _sqrtg_booz(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_booz"] = dot(
+        data["e_rho_B"], cross(data["e_theta_B"], data["e_zeta_B"])
+    )
+    return data
+
+
+@register_compute_fun(
     name="|e_theta x e_zeta|",
     label="|\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
     units="m^{2}",

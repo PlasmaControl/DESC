@@ -117,13 +117,9 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=False)
+            grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
-            NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=grid, NFP=NFP, endpoint=False)
-        elif hasattr(grid, "NFP"):
-            NFP = grid.NFP
+            grid = LinearGrid(N=grid * getattr(self, "NFP", 1))
         else:
             raise TypeError(
                 "must pass in a Grid object or an integer for argument grid!"
@@ -156,7 +152,7 @@ class Curve(IOAble, Optimizable, ABC):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
+            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
             data0d = compute_fun(
                 self,
                 dep0d,

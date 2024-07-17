@@ -1887,11 +1887,14 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
-        if hasattr(field, "compute_magnetic_vector_potential"):
+        try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords, params, basis="rpz"
             ).T
-        else:
+            AR = AR.reshape(shp)
+            AP = AP.reshape(shp)
+            AZ = AZ.reshape(shp)
+        except NotImplementedError:
             AR = AP = AZ = None
         return cls(
             R,
@@ -1900,9 +1903,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
             BR.reshape(shp),
             BP.reshape(shp),
             BZ.reshape(shp),
-            AR=AR.reshape(shp),
-            Aphi=AP.reshape(shp),
-            AZ=AZ.reshape(shp),
+            AR=AR,
+            Aphi=AP,
+            AZ=AZ,
             currents=1.0,
             NFP=NFP,
             method=method,

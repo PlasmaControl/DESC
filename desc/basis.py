@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from math import factorial
 
 import mpmath
+import jax as jax
 import numpy as np
 import skfem as fem
 from matplotlib import pyplot as plt
@@ -1180,7 +1181,7 @@ class FiniteElementBasis(_FE_Basis):
         return np.unique(lij_mesh, axis=0)
 
     # Need to add in the unique keyword
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None, n=-1):
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None, n=-1, unique=False):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -1191,6 +1192,8 @@ class FiniteElementBasis(_FE_Basis):
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of int, shape(num_modes,2), optional
             Basis modes to evaluate (if None, full basis is used).
+            
+        unique=False
 
         Returns
         -------
@@ -1212,9 +1215,33 @@ class FiniteElementBasis(_FE_Basis):
             # and most will be zeros at a given point because of local support.
             basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
         elif self.N == 0:
-            # Tessellate the domain and find the basis functions for theta, zeta
-            Rho_Theta = jnp.array([jnp.ravel(r), jnp.ravel(t)]).T
-            basis_functions = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
+            # Tessellate the domain and find the basis functions for rho, theta
+            
+           # print("Type of r =",  type(r) )
+           # print("Type of t =",  type(t) )
+           
+           
+           # These print statements return:  <class 'jax._src.interpreters.partial_eval.DynamicJaxprTracer'>
+           # This indicates r and t are tracer objects. So we need to transform from tracer objects
+           # to numpy arrays. 
+           
+            #@jax.jit
+            @jit
+            def convert_to_numpy(x):
+              end_shape = jax.core.ShapedArray(x.shape, x.dtype)
+              return jax.pure_callback(np.array, end_shape, x)
+            
+         
+            print("Convert r = ", convert_to_numpy(r))
+            print("Convert t = ", convert_to_numpy(t))
+           
+            r = convert_to_numpy(r)
+            t = convert_to_numpy(t)
+            
+            Rho_Theta = np.array([np.ravel(r), np.ravel(t)]).T
+            basis_functions = self.mesh.find_triangles_corresponding_to_points(
+                Rho_Theta
+            )
             # print(Rho_Theta, intervals, basis_functions)
         else:
             # Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
@@ -2041,7 +2068,7 @@ class FiniteElementMesh3D:
         # Trying a Hex Mesh, and then adding in the tetrahedra to each prism
         if rho_range is None:
             rho_range = np.linspace(0, 1, L, endpoint=True)
-        
+
         mesh = fem.MeshHex.init_tensor(
             rho_range,
             np.linspace(0, 2 * np.pi, M),
@@ -2116,7 +2143,7 @@ class FiniteElementMesh3D:
                     rectangular_prism_vertices[6] = vertices[t_l_2]
                     rectangular_prism_vertices[7] = vertices[t_r_2]
 
-                    #Deciding now to form six tetrahedra out of rectangular prisms.
+                    # Deciding now to form six tetrahedra out of rectangular prisms.
                     # Basing this on the way MeshHex.to_meshtet functions
 
                     tetrahedron_1_vertices = np.zeros([4, 3])
@@ -2365,56 +2392,54 @@ class FiniteElementMesh3D:
                         v_0 = tetrahedron_5_vertices[0].copy()
                         tetrahedron_5_vertices[0] = tetrahedron_5_vertices[1]
                         tetrahedron_5_vertices[1] = v_0
-                        
-                        
-                        
+
                     tetrahedron_6_vertices[0] = rectangular_prism_vertices[1]
                     tetrahedron_6_vertices[1] = rectangular_prism_vertices[3]
                     tetrahedron_6_vertices[2] = rectangular_prism_vertices[4]
                     tetrahedron_6_vertices[3] = rectangular_prism_vertices[5]
-                    
+
                     D_6 = np.array(
-                         [
-                             [
-                                 1,
-                                 tetrahedron_6_vertices[0, 0],
-                                 tetrahedron_6_vertices[0, 1],
-                                 tetrahedron_6_vertices[0, 2],
-                             ],
-                             [
-                                 1,
-                                 tetrahedron_6_vertices[1, 0],
-                                 tetrahedron_6_vertices[1, 1],
-                                 tetrahedron_6_vertices[1, 2],
-                             ],
-                             [
-                                 1,
-                                 tetrahedron_6_vertices[2, 0],
-                                 tetrahedron_6_vertices[2, 1],
-                                 tetrahedron_6_vertices[2, 2],
-                             ],
-                             [
-                                 1,
-                                 tetrahedron_6_vertices[3, 0],
-                                 tetrahedron_6_vertices[3, 1],
-                                 tetrahedron_6_vertices[3, 2],
-                             ],
-                         ]
-                     )
+                        [
+                            [
+                                1,
+                                tetrahedron_6_vertices[0, 0],
+                                tetrahedron_6_vertices[0, 1],
+                                tetrahedron_6_vertices[0, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_6_vertices[1, 0],
+                                tetrahedron_6_vertices[1, 1],
+                                tetrahedron_6_vertices[1, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_6_vertices[2, 0],
+                                tetrahedron_6_vertices[2, 1],
+                                tetrahedron_6_vertices[2, 2],
+                            ],
+                            [
+                                1,
+                                tetrahedron_6_vertices[3, 0],
+                                tetrahedron_6_vertices[3, 1],
+                                tetrahedron_6_vertices[3, 2],
+                            ],
+                        ]
+                    )
 
-                     # Making sure volume is positive; if not, then we switch the first two
-                     # rows:
+                    # Making sure volume is positive; if not, then we switch the first two
+                    # rows:
                     if (np.linalg.det(D_6) < 0) and (
-                         not np.isclose(np.linalg.det(D_6), 0.0)
-                     ):
+                        not np.isclose(np.linalg.det(D_6), 0.0)
+                    ):
 
-                         r_0 = D_6[0].copy()
-                         D_6[0] = D_6[1]
-                         D_6[1] = r_0
+                        r_0 = D_6[0].copy()
+                        D_6[0] = D_6[1]
+                        D_6[1] = r_0
 
-                         v_0 = tetrahedron_6_vertices[0].copy()
-                         tetrahedron_6_vertices[0] = tetrahedron_6_vertices[1]
-                         tetrahedron_6_vertices[1] = v_0
+                        v_0 = tetrahedron_6_vertices[0].copy()
+                        tetrahedron_6_vertices[0] = tetrahedron_6_vertices[1]
+                        tetrahedron_6_vertices[1] = v_0
 
                     # Grabbing the five tetrahedra in each Rectangular prism:
                     tetrahedron1 = TetrahedronFiniteElement(tetrahedron_1_vertices, K=K)
@@ -2442,7 +2467,6 @@ class FiniteElementMesh3D:
                     vertices_final.append(tetrahedron_5_vertices)
                     vertices_final.append(tetrahedron_6_vertices)
 
-
         self.vertices_final = np.array(vertices_final)
         self.vertices = vertices
         self.tetrahedra = tetrahedra
@@ -2451,7 +2475,9 @@ class FiniteElementMesh3D:
 
         # Increase integration order to avoid singularities coming from
         # numerical discretization
-        [integration_points, weights] = fem.quadrature.get_quadrature(element, 2 * K + 3) 
+        [integration_points, weights] = fem.quadrature.get_quadrature(
+            element, 2 * K + 3
+        )
         integration_points = integration_points.T
 
         # We want to add a 4th column to the transpose of the
@@ -2474,7 +2500,9 @@ class FiniteElementMesh3D:
         self.integration_points = np.array(integration_points)
         self.weights = np.array(weights)
         self.volume6s = np.array(volume6s)
-        self.weighted_volumes = np.ravel(np.outer(np.abs(np.array(volume6s)), self.weights))
+        self.weighted_volumes = np.ravel(
+            np.outer(np.abs(np.array(volume6s)), self.weights)
+        )
         self.nquad = self.integration_points.shape[0]
         # self.plot_tetrahedra()  #plot_quadrature_points=True)
 
@@ -2489,11 +2517,15 @@ class FiniteElementMesh3D:
                 fig2 = plt.figure(100)
                 for i in range(self.Q):
                     # ax = fig.get_axes()[i]
-                    ax = fig2.add_subplot(1, self.Q, i + 1, projection='3d')
-                    ax.scatter(quadpoints[i * nquad: (i + 1) * nquad, 0], 
-                               quadpoints[i * nquad: (i + 1) * nquad, 1], 
-                               quadpoints[i * nquad: (i + 1) * nquad, 2], 
-                               c='k', marker="x", s=100)
+                    ax = fig2.add_subplot(1, self.Q, i + 1, projection="3d")
+                    ax.scatter(
+                        quadpoints[i * nquad : (i + 1) * nquad, 0],
+                        quadpoints[i * nquad : (i + 1) * nquad, 1],
+                        quadpoints[i * nquad : (i + 1) * nquad, 2],
+                        c="k",
+                        marker="x",
+                        s=100,
+                    )
         plt.show()
 
     def return_quadrature_points(self):
@@ -2608,7 +2640,7 @@ class FiniteElementMesh3D:
         v3 = self.vertices_final[:, 2, :]
         v4 = self.vertices_final[:, 3, :]
         v = rho_theta_zeta
-        ones_v =  np.ones(v.shape[0])
+        ones_v = np.ones(v.shape[0])
         ones_v1 = np.ones(v1.shape[0])
         vx = np.outer(v[:, 0], ones_v1)
         vy = np.outer(v[:, 1], ones_v1)
@@ -2662,14 +2694,19 @@ class FiniteElementMesh3D:
         Det2 = np.linalg.det(np.transpose(D2, axes=([2, 3, 0, 1])))
         Det3 = np.linalg.det(np.transpose(D3, axes=([2, 3, 0, 1])))
         Det4 = np.linalg.det(np.transpose(D4, axes=([2, 3, 0, 1])))
-                
-        # numpy isclose is required to catch the tricky points at the 
+
+        # numpy isclose is required to catch the tricky points at the
         # edges or vertices of the tetrahedra
-        good_inds = np.logical_and(np.logical_and(np.logical_and(
-            np.logical_or(Det1 > 0.0, np.isclose(Det1, 0.0)), 
-            np.logical_or(Det2 > 0.0, np.isclose(Det2, 0.0))), 
-            np.logical_or(Det3 > 0.0, np.isclose(Det3, 0.0))), 
-            np.logical_or(Det4 > 0.0, np.isclose(Det4, 0.0)))
+        good_inds = np.logical_and(
+            np.logical_and(
+                np.logical_and(
+                    np.logical_or(Det1 > 0.0, np.isclose(Det1, 0.0)),
+                    np.logical_or(Det2 > 0.0, np.isclose(Det2, 0.0)),
+                ),
+                np.logical_or(Det3 > 0.0, np.isclose(Det3, 0.0)),
+            ),
+            np.logical_or(Det4 > 0.0, np.isclose(Det4, 0.0)),
+        )
         # print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
 
         # Deal with points right at a vertex between four quadrilaterals (12 tets)
@@ -2709,27 +2746,30 @@ class FiniteElementMesh3D:
         for i in duplicates:
             max_col = np.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-        
+
         # Deal with points shared on an edge by 3 tets
         duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 3))
         for i in duplicates:
             max_col = np.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-        
+
         # Deal with points shared on an edge by 2 tets (+ finish the vertex case)
         duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 2))
         for i in duplicates:
             max_col = np.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-        
-        true_rows, true_cols = np.where(good_inds)   
+
+        true_rows, true_cols = np.where(good_inds)
         for i in np.unique(true_cols):
             row_i = true_rows[true_cols == i]
             # print(i, row_i, i * Q, (i + 1) * Q, v[row_i, :], v1[i, :], v2[i, :], v3[i, :], v4[i, :], self.tetrahedra[i].det)
-            basis_functions[row_i, i * Q: (i + 1) * Q], _ = (
-                    self.tetrahedra[i].get_basis_functions(v[row_i, :])
-                )
-        print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))        
+            basis_functions[row_i, i * Q : (i + 1) * Q], _ = self.tetrahedra[
+                i
+            ].get_basis_functions(v[row_i, :])
+        print(
+            np.max(np.count_nonzero(good_inds, axis=-1)),
+            np.min(np.count_nonzero(good_inds, axis=-1)),
+        )
         return basis_functions
 
 
@@ -2768,7 +2808,7 @@ class FiniteElementMesh2D:
         mesh = fem.MeshLine(rho_range) * fem.MeshLine(
             np.linspace(0, 2 * np.pi, M, endpoint=True)
         )
-        # print(np.meshgrid(np.linspace(0, 1, L), 
+        # print(np.meshgrid(np.linspace(0, 1, L),
         #     np.linspace(0, 2 * np.pi, M), indexing='ij'))
 
         # Turn squares into triangles
@@ -2804,7 +2844,7 @@ class FiniteElementMesh2D:
             return dot(u, v)
 
         self.assembly_matrix = assembly.assemble(basis).todense()
-        
+
         # print('Assembly matrix shape = ', self.assembly_matrix.shape)
 
         # Will fix this next section later
@@ -2888,7 +2928,7 @@ class FiniteElementMesh2D:
         self.integration_points = np.array(integration_points)
         self.weights = np.array(weights)
         self.nquad = self.integration_points.shape[0]
-        self.weighted_areas = np.ravel(np.outer(np.abs(area2s), self.weights))   
+        self.weighted_areas = np.ravel(np.outer(np.abs(area2s), self.weights))
 
     def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""
@@ -2917,13 +2957,13 @@ class FiniteElementMesh2D:
             The basis functions corresponding to the triangles in
             triangle_indices.
         """
-        # method here adapted from 
+        # method here adapted from
         # https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
         Q = self.Q
         basis_functions = np.zeros((v.shape[0], self.I_LMN * Q))
         v1 = self.vertices_all[:, 0, :]  # shape (num_triangles, 2)
-        v2 = self.vertices_all[:, 1, :]  #- self.vertices_all[:, 0, :]
-        v3 = self.vertices_all[:, 2, :]  #- self.vertices_all[:, 0, :]
+        v2 = self.vertices_all[:, 1, :]  # - self.vertices_all[:, 0, :]
+        v3 = self.vertices_all[:, 2, :]  # - self.vertices_all[:, 0, :]
 
         v1x = np.outer(np.ones(v.shape[0]), v1[:, 0])
         v1y = np.outer(np.ones(v.shape[0]), v1[:, 1])
@@ -2937,17 +2977,25 @@ class FiniteElementMesh2D:
         v_v2y = v[:, None, 1] - v2y
         v_v3x = v[:, None, 0] - v3x
         v_v3y = v[:, None, 1] - v3y
-        
-        s = (v1[:, 0] - v3[:, 0])[None, :] * v_v3y - (v1[:, 1] - v3[:, 1])[None, :] * v_v3x
-        t = (v2[:, 0] - v1[:, 0])[None, :] * v_v1y - (v2[:, 1] - v1[:, 1])[None, :] * v_v1x
-        d = (v3[:, 0] - v2[:, 0])[None, :] * v_v2y - (v3[:, 1] - v2[:, 1])[None, :] * v_v2x
-        
+
+        s = (v1[:, 0] - v3[:, 0])[None, :] * v_v3y - (v1[:, 1] - v3[:, 1])[
+            None, :
+        ] * v_v3x
+        t = (v2[:, 0] - v1[:, 0])[None, :] * v_v1y - (v2[:, 1] - v1[:, 1])[
+            None, :
+        ] * v_v1x
+        d = (v3[:, 0] - v2[:, 0])[None, :] * v_v2y - (v3[:, 1] - v2[:, 1])[
+            None, :
+        ] * v_v2x
+
         # Find all the places where point v lies between vertices v1, v2, v3
-        triangle_indices = ~np.logical_and(~np.isclose(np.sign(s), jnp.sign(t)), 
-                np.logical_and(~jnp.isclose(s, 0.0), ~np.isclose(t, 0.0))
+        triangle_indices = ~np.logical_and(
+            ~np.isclose(np.sign(s), jnp.sign(t)),
+            np.logical_and(~jnp.isclose(s, 0.0), ~np.isclose(t, 0.0)),
         )
-        triangle_indices = np.logical_and(triangle_indices, jnp.logical_or( 
-            np.isclose(d, 0.0), np.isclose((d < 0), (s + t <= 0)))
+        triangle_indices = np.logical_and(
+            triangle_indices,
+            jnp.logical_or(np.isclose(d, 0.0), np.isclose((d < 0), (s + t <= 0))),
         )
 
         # Deal with points at a triangle vertex
@@ -2955,8 +3003,8 @@ class FiniteElementMesh2D:
         # for i in duplicates:
         #     max_col = jnp.argmax(triangle_indices[i, :])
         #     triangle_indices[i, max_col] = False
-        
-        # # Still need to deal with case when points lie exactly along the edge 
+
+        # # Still need to deal with case when points lie exactly along the edge
         # # between two triangles A and B (and finish off the vertex case)
         # # in which case triangle_indices will say that the point lies in
         # # both triangle A and triangle B, leading to incorrect results.
@@ -2964,26 +3012,28 @@ class FiniteElementMesh2D:
         # for i in duplicates:
         #     max_col = jnp.argmax(triangle_indices[i, :])
         #     triangle_indices[i, max_col] = False
-        
-        
-        
+
         # Now loop through and get the basis functions in triangle i,
         # evaluated all at once on all the points that are in triangle i
-        true_rows, true_cols = np.where(triangle_indices)     
+        true_rows, true_cols = np.where(triangle_indices)
         for i in np.unique(true_cols):
             row_i = true_rows[true_cols == i]
-            basis_functions[row_i, i * Q: (i + 1) * Q], _ = (
-                    self.triangles[i].get_basis_functions(v[row_i, :])  #.reshape(-1, 2))
-                )
-            
-        print(np.min(np.count_nonzero(triangle_indices, axis=-1)), np.max(np.count_nonzero(triangle_indices, axis=-1)))
+            basis_functions[row_i, i * Q : (i + 1) * Q], _ = self.triangles[
+                i
+            ].get_basis_functions(
+                v[row_i, :]
+            )  # .reshape(-1, 2))
+
+        print(
+            np.min(np.count_nonzero(triangle_indices, axis=-1)),
+            np.max(np.count_nonzero(triangle_indices, axis=-1)),
+        )
         # Finally, rescale the basis functions at theta = 0 or theta = 2 * pi by 1/2pi
         # zero_inds = np.ravel(np.where(np.isclose(v[:, 1], 0.0, rtol=1e-7)))
         # basis_functions[zero_inds, :] *= np.sqrt(1.0 / (2 * np.pi))
         # twopi_inds = np.ravel(np.where(np.isclose(v[:, 1], 2 * np.pi, rtol=1e-7)))
         # basis_functions[twopi_inds, :] *= np.sqrt(1.0 / (2 * np.pi))
         return basis_functions
-
 
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
@@ -3005,7 +3055,7 @@ class FiniteElementMesh2D:
             A = np.array(
                 [
                     [v[2, 0] - v[0, 0], v[1, 0] - v[0, 0]],
-                    [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1]]
+                    [v[2, 1] - v[0, 1], v[1, 1] - v[0, 1]],
                 ]
             )
 
@@ -3073,6 +3123,7 @@ class FiniteElementMesh2D:
         """
         return self.weighted_areas @ f
 
+
 class TetrahedronFiniteElement:
     """Class representing a triangle in a 3D grid of finite elements.
 
@@ -3084,9 +3135,9 @@ class TetrahedronFiniteElement:
         The order of the finite elements to use, which gives (K+1)(K+2)(K+3) / 6
         basis functions.
     """
+
     def __init__(self, vertices, K=1):
-        """
-        """
+        """ """
         v = vertices
         A1 = np.array(
             [
@@ -3097,21 +3148,15 @@ class TetrahedronFiniteElement:
         )
 
         B1 = np.array(
-            [[v[1, 1], v[1, 2], 1], 
-             [v[2, 1], v[2, 2], 1], 
-             [v[3, 1], v[3, 2], 1]]
+            [[v[1, 1], v[1, 2], 1], [v[2, 1], v[2, 2], 1], [v[3, 1], v[3, 2], 1]]
         )
 
         C1 = np.array(
-            [[v[1, 2], 1, v[1, 0]], 
-             [v[2, 2], 1, v[2, 0]], 
-             [v[3, 2], 1, v[3, 0]]]
+            [[v[1, 2], 1, v[1, 0]], [v[2, 2], 1, v[2, 0]], [v[3, 2], 1, v[3, 0]]]
         )
 
         D1 = np.array(
-            [[1, v[1, 0], v[1, 1]], 
-             [1, v[2, 0], v[2, 1]], 
-             [1, v[3, 0], v[3, 1]]]
+            [[1, v[1, 0], v[1, 1]], [1, v[2, 0], v[2, 1]], [1, v[3, 0], v[3, 1]]]
         )
 
         A2 = np.array(
@@ -3123,21 +3168,15 @@ class TetrahedronFiniteElement:
         )
 
         B2 = np.array(
-            [[v[2, 1], v[2, 2], 1], 
-             [v[3, 1], v[3, 2], 1], 
-             [v[0, 1], v[0, 2], 1]]
+            [[v[2, 1], v[2, 2], 1], [v[3, 1], v[3, 2], 1], [v[0, 1], v[0, 2], 1]]
         )
 
         C2 = np.array(
-            [[v[2, 2], 1, v[2, 0]], 
-             [v[3, 2], 1, v[3, 0]], 
-             [v[0, 2], 1, v[0, 0]]]
+            [[v[2, 2], 1, v[2, 0]], [v[3, 2], 1, v[3, 0]], [v[0, 2], 1, v[0, 0]]]
         )
 
         D2 = np.array(
-            [[1, v[2, 0], v[2, 1]], 
-             [1, v[3, 0], v[3, 1]], 
-             [1, v[0, 0], v[0, 1]]]
+            [[1, v[2, 0], v[2, 1]], [1, v[3, 0], v[3, 1]], [1, v[0, 0], v[0, 1]]]
         )
 
         A3 = np.array(
@@ -3149,21 +3188,15 @@ class TetrahedronFiniteElement:
         )
 
         B3 = np.array(
-            [[v[3, 1], v[3, 2], 1], 
-             [v[0, 1], v[0, 2], 1], 
-             [v[1, 1], v[1, 2], 1]]
+            [[v[3, 1], v[3, 2], 1], [v[0, 1], v[0, 2], 1], [v[1, 1], v[1, 2], 1]]
         )
 
         C3 = np.array(
-            [[v[3, 2], 1, v[3, 0]], 
-             [v[0, 2], 1, v[0, 0]], 
-             [v[1, 2], 1, v[1, 0]]]
+            [[v[3, 2], 1, v[3, 0]], [v[0, 2], 1, v[0, 0]], [v[1, 2], 1, v[1, 0]]]
         )
 
         D3 = np.array(
-            [[1, v[3, 0], v[3, 1]], 
-             [1, v[0, 0], v[0, 1]], 
-             [1, v[1, 0], v[1, 1]]]
+            [[1, v[3, 0], v[3, 1]], [1, v[0, 0], v[0, 1]], [1, v[1, 0], v[1, 1]]]
         )
 
         A4 = np.array(
@@ -3175,21 +3208,15 @@ class TetrahedronFiniteElement:
         )
 
         B4 = np.array(
-            [[v[0, 1], v[0, 2], 1], 
-             [v[1, 1], v[1, 2], 1], 
-             [v[2, 1], v[2, 2], 1]]
+            [[v[0, 1], v[0, 2], 1], [v[1, 1], v[1, 2], 1], [v[2, 1], v[2, 2], 1]]
         )
 
         C4 = np.array(
-            [[v[0, 2], 1, v[0, 0]], 
-             [v[1, 2], 1, v[1, 0]], 
-             [v[2, 2], 1, v[2, 0]]]
+            [[v[0, 2], 1, v[0, 0]], [v[1, 2], 1, v[1, 0]], [v[2, 2], 1, v[2, 0]]]
         )
 
         D4 = np.array(
-            [[1, v[0, 0], v[0, 1]], 
-             [1, v[1, 0], v[1, 1]], 
-             [1, v[2, 0], v[2, 1]]]
+            [[1, v[0, 0], v[0, 1]], [1, v[1, 0], v[1, 1]], [1, v[2, 0], v[2, 1]]]
         )
 
         self.vertices = vertices
@@ -3495,12 +3522,12 @@ class TetrahedronFiniteElement:
 
             for i in range(rho_theta_zeta.shape[0]):
                 # Node numbers labeled according to Zienkiewicz textbook Fig. 6.12
-                basis_functions[i, 4] = 4 * eta[i, 1] * eta[i, 0]  #L1L2  # node 5
-                basis_functions[i, 5] = 4 * eta[i, 1] * eta[i, 2]  #L3L2  # node 8
-                basis_functions[i, 6] = 4 * eta[i, 0] * eta[i, 2]  #L3L1  # node 6
-                basis_functions[i, 7] = 4 * eta[i, 0] * eta[i, 3]  #L4L1  # node 7
-                basis_functions[i, 8] = 4 * eta[i, 1] * eta[i, 3]  #L4L2  # node 10
-                basis_functions[i, 9] = 4 * eta[i, 2] * eta[i, 3]  #L4L3  # node 9
+                basis_functions[i, 4] = 4 * eta[i, 1] * eta[i, 0]  # L1L2  # node 5
+                basis_functions[i, 5] = 4 * eta[i, 1] * eta[i, 2]  # L3L2  # node 8
+                basis_functions[i, 6] = 4 * eta[i, 0] * eta[i, 2]  # L3L1  # node 6
+                basis_functions[i, 7] = 4 * eta[i, 0] * eta[i, 3]  # L4L1  # node 7
+                basis_functions[i, 8] = 4 * eta[i, 1] * eta[i, 3]  # L4L2  # node 10
+                basis_functions[i, 9] = 4 * eta[i, 2] * eta[i, 3]  # L4L3  # node 9
 
         if K == 3:
             for i in range(rho_theta_zeta.shape[0]):
@@ -3554,7 +3581,7 @@ class TetrahedronFiniteElement:
                 basis_functions[i, 19] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 3]
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
-    
+
     def plot_tetrahedron(self, fig):
         """
         Plot the tetrahedron in (rho, theta, zeta) coordinates.
@@ -3642,15 +3669,14 @@ class TriangleFiniteElement:
         self.area2 = self.vertices[:, 0] @ self.b
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
-        
+
         D = np.array(
             [
                 [1, vertices[0, 0], vertices[0, 1]],
                 [1, vertices[1, 0], vertices[1, 1]],
-                [1, vertices[2, 0], vertices[2, 1]]
+                [1, vertices[2, 0], vertices[2, 1]],
             ]
         )
-        
 
         self.det = np.linalg.det(D)
 
@@ -3671,7 +3697,7 @@ class TriangleFiniteElement:
         angle2 = np.arccos((d1**2 + d3**2 - d2**2) / (2 * d1 * d3))
         angle3 = np.arccos((d2**2 + d1**2 - d3**2) / (2 * d2 * d1))
         self.angles = np.array([angle1, angle2, angle3]).T
-        
+
         # Going to construct equally spaced nodes for order K triangle,
         # which gives Q such nodes.
         nodes = []
@@ -3679,63 +3705,56 @@ class TriangleFiniteElement:
         # Start with the vertices of the triangle
         for i in range(3):
             nodes.append(vertices[i, :])
-            
+
         if K == 2:
-            
-        # We create one additional midpoint node
-           # on each of the three triangle edges
-           # for a total of 3 more nodes
-           # Checked that the order matches sci-kit
 
-           midpoints = np.zeros([3, 2])
+            # We create one additional midpoint node
+            # on each of the three triangle edges
+            # for a total of 3 more nodes
+            # Checked that the order matches sci-kit
 
-           for i in range(2):
-               midpoints[i] = (vertices[i, :] + vertices[i + 1, :]) / 2
+            midpoints = np.zeros([3, 2])
 
+            for i in range(2):
+                midpoints[i] = (vertices[i, :] + vertices[i + 1, :]) / 2
 
-           midpoints[2] = (vertices[0, :] + vertices[2, :]) / 2
+            midpoints[2] = (vertices[0, :] + vertices[2, :]) / 2
 
-           # Now, we add all of these nodes to our list of nodes
+            # Now, we add all of these nodes to our list of nodes
 
-           for j in range(3):
-               nodes.append(midpoints[j, :])
-               
-           # We next place the interior nodes in the tetrahedra.
-           
-        if K==3:
-            
-    
+            for j in range(3):
+                nodes.append(midpoints[j, :])
+
+            # We next place the interior nodes in the tetrahedra.
+
+        if K == 3:
+
             # We place the edge nodes first, spaced out by thirds:
-    
+
             one_third = np.zeros([3, 2])
             two_thirds = np.zeros([3, 2])
-            
+
             for i in range(2):
-               one_third[i, :] = (1 / 3) * vertices[i + 1, :] + (2 / 3) * vertices[
-                   i, :
-               ]
-               two_thirds[i, :] = (2 / 3) * vertices[i + 1, :] + (1 / 3) * vertices[
-                   i, :
-               ]
-                   
-                   
+                one_third[i, :] = (1 / 3) * vertices[i + 1, :] + (2 / 3) * vertices[
+                    i, :
+                ]
+                two_thirds[i, :] = (2 / 3) * vertices[i + 1, :] + (1 / 3) * vertices[
+                    i, :
+                ]
+
             # p0p2
 
             one_third[2, :] = (1 / 3) * vertices[2, :] + (2 / 3) * vertices[0, :]
             two_thirds[2, :] = (2 / 3) * vertices[2, :] + (1 / 3) * vertices[0, :]
-            
-            
-            
-            
+
             for i in range(3):
-               nodes.append(one_third[i, :])
-               nodes.append(two_thirds[i, :])
+                nodes.append(one_third[i, :])
+                nodes.append(two_thirds[i, :])
 
-
-           # Next we place the interior nodes. We use the barycenter of
-           # each of the four faces.
+            # Next we place the interior nodes. We use the barycenter of
+            # each of the four faces.
             barycenter = np.zeros([1, 2])
-            barycenter[0,:] =  (vertices[0, :] + vertices[1, :] + vertices[2, :]) / 3
+            barycenter[0, :] = (vertices[0, :] + vertices[1, :] + vertices[2, :]) / 3
             nodes.append(barycenter[0, :])
 
         self.nodes = np.array(nodes)
@@ -3754,8 +3773,7 @@ class TriangleFiniteElement:
 
         # Check we have the same number of basis functions as nodes.
         assert self.nodes.shape[0] == self.Q
-        
-        
+
     def get_basis_functions(self, rho_theta):
         """
         Gets the barycentric basis functions.
@@ -3773,10 +3791,10 @@ class TriangleFiniteElement:
         -------
          psi_q = (rho_theta, Q)
 
-         """
+        """
         eta, rho_theta_in_triangle = self.get_barycentric_coordinates(rho_theta)
         rho_theta = rho_theta_in_triangle
-  
+
         # Now, we have the rho_theta points that lie in the triangle.
         # Recall that eta_nodes is the set of barycentric coordinates for the points
         # lying in the specific triangle.
@@ -3793,12 +3811,12 @@ class TriangleFiniteElement:
             for i in range(rho_theta.shape[0]):
                 for j in range(3):
                     basis_functions[i, j] = eta[i, j]
-              
+
         # Next, we deal with the edge nodes. This will provide an additional 6 columns.
 
         if K == 2:
-            
-            #Vertices
+
+            # Vertices
             for i in range(rho_theta.shape[0]):
                 for j in range(3):
                     basis_functions[i, j] = eta[i, j] * (2 * eta[i, j] - 1)
@@ -3816,7 +3834,7 @@ class TriangleFiniteElement:
                     )
             for i in range(rho_theta.shape[0]):
                 # Edge nodes
-                
+
                 basis_functions[i, 3] = (
                     (9 / 2) * eta[i, 0] * eta[i, 1] * (3 * eta[i, 0] - 1)
                 )
@@ -3835,102 +3853,91 @@ class TriangleFiniteElement:
                 basis_functions[i, 8] = (
                     (9 / 2) * eta[i, 0] * eta[i, 2] * (3 * eta[i, 2] - 1)
                 )
-               
-               
+
                 # Mid-face node
                 basis_functions[i, 9] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 2]
 
         return basis_functions, rho_theta_in_triangle
 
     def get_barycentric_coordinates(self, rho_theta):
-         """Gets the barycentic coordinates, given a mesh in rho, theta
+        """Gets the barycentic coordinates, given a mesh in rho, theta
 
-         Parameters
-         ----------
-         rho_theta = 2D ndarray, shape(nrho * ntheta, 2)
-             Coordinates of the origininal grid, lying inside this triangle.
+        Parameters
+        ----------
+        rho_theta = 2D ndarray, shape(nrho * ntheta, 2)
+            Coordinates of the origininal grid, lying inside this triangle.
 
-         Returns
-         -------
-         eta_final = 3D array, shape (nrho * ntheta 3)
-             Barycentric coordinates defined by the triangle and evaluated at the
-             points (rho, theta)
-         """
-         eta = []
-         rho_theta_in_triangle = []
-         for i in range(rho_theta.shape[0]):
+        Returns
+        -------
+        eta_final = 3D array, shape (nrho * ntheta 3)
+            Barycentric coordinates defined by the triangle and evaluated at the
+            points (rho, theta)
+        """
+        eta = []
+        rho_theta_in_triangle = []
+        for i in range(rho_theta.shape[0]):
 
-             g_v = self.vertices
+            g_v = self.vertices
 
-             D_1 = np.array(
-                 [
-                     [
-                         1,
-                         rho_theta[i][0],
-                         rho_theta[i][1]
-                     ],
-                     [1, g_v[1][0], g_v[1][1]],
-                     [1, g_v[2][0], g_v[2][1]],
-                 ]
-             )
+            D_1 = np.array(
+                [
+                    [1, rho_theta[i][0], rho_theta[i][1]],
+                    [1, g_v[1][0], g_v[1][1]],
+                    [1, g_v[2][0], g_v[2][1]],
+                ]
+            )
 
-             D_2 = np.array(
-                 [
-                     [1, g_v[0][0], g_v[0][1]],
-                     [
-                         1,
-                         rho_theta[i][0],
-                         rho_theta[i][1]
-                     ],
-                     [1, g_v[2][0], g_v[2][1]]             ]
-             )
+            D_2 = np.array(
+                [
+                    [1, g_v[0][0], g_v[0][1]],
+                    [1, rho_theta[i][0], rho_theta[i][1]],
+                    [1, g_v[2][0], g_v[2][1]],
+                ]
+            )
 
-             D_3 = np.array(
-                 [
-                     [1, g_v[0][0], g_v[0][1]],
-                     [1, g_v[1][0], g_v[1][1]],
-                     [
-                         1,
-                         rho_theta[i][0],
-                         rho_theta[i][1],
-                     ],
-                 ]
-             )
+            D_3 = np.array(
+                [
+                    [1, g_v[0][0], g_v[0][1]],
+                    [1, g_v[1][0], g_v[1][1]],
+                    [
+                        1,
+                        rho_theta[i][0],
+                        rho_theta[i][1],
+                    ],
+                ]
+            )
 
-          
+            d_1 = np.linalg.det(D_1)
+            d_2 = np.linalg.det(D_2)
+            d_3 = np.linalg.det(D_3)
 
-             d_1 = np.linalg.det(D_1)
-             d_2 = np.linalg.det(D_2)
-             d_3 = np.linalg.det(D_3)
-      
+            eta_1 = d_1 / self.det
+            eta_2 = d_2 / self.det
+            eta_3 = d_3 / self.det
 
-             eta_1 = d_1 / self.det
-             eta_2 = d_2 / self.det
-             eta_3 = d_3 / self.det
-        
-             # print(i, eta_1, eta_2, eta_3, eta_4)
+            # print(i, eta_1, eta_2, eta_3, eta_4)
 
-             # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
-             # is not sufficient because sometimes numerical errors
-             # have eta_i ~ -1e-16 which breaks this
-             ind_1 = (eta_1 < 0) and (not np.isclose(eta_1, 0.0))
-             ind_2 = (eta_2 < 0) and (not np.isclose(eta_2, 0.0))
-             ind_3 = (eta_3 < 0) and (not np.isclose(eta_3, 0.0))
-             if ind_1 or ind_2 or ind_3:
-                 warnings.warn(
-                     "Found rho_theta points outside the triangle ... "
-                     "Not using these points to evaluate the barycentric "
-                     "coordinates."
-                 )
-             else:
-                 eta.append(eta_1)
-                 eta.append(eta_2)
-                 eta.append(eta_3)
-                 rho_theta_in_triangle.append(rho_theta[i, :])
+            # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
+            # is not sufficient because sometimes numerical errors
+            # have eta_i ~ -1e-16 which breaks this
+            ind_1 = (eta_1 < 0) and (not np.isclose(eta_1, 0.0))
+            ind_2 = (eta_2 < 0) and (not np.isclose(eta_2, 0.0))
+            ind_3 = (eta_3 < 0) and (not np.isclose(eta_3, 0.0))
+            if ind_1 or ind_2 or ind_3:
+                warnings.warn(
+                    "Found rho_theta points outside the triangle ... "
+                    "Not using these points to evaluate the barycentric "
+                    "coordinates."
+                )
+            else:
+                eta.append(eta_1)
+                eta.append(eta_2)
+                eta.append(eta_3)
+                rho_theta_in_triangle.append(rho_theta[i, :])
 
-         return np.array(eta).reshape(-1, 3), np.array(
-             rho_theta_in_triangle
-         ).reshape(-1, 2)
+        return np.array(eta).reshape(-1, 3), np.array(rho_theta_in_triangle).reshape(
+            -1, 2
+        )
 
     # def get_barycentric_coordinates(self, rho_theta):
     #     """
@@ -4349,7 +4356,6 @@ class FiniteElementMesh1D:
                     basis_functions[i, j, :] = bfs
                     break
         return basis_functions
-    
 
     def find_intervals_corresponding_to_points(self, theta):
         """Given a point on the mesh, find which interval it lies inside.
@@ -4379,8 +4385,6 @@ class FiniteElementMesh1D:
                     interval_indices[i] = j
                     basis_functions[i, :], _ = interval.get_basis_functions(v)
         return interval_indices, basis_functions
-    
-    
 
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.
@@ -4405,7 +4409,6 @@ class FiniteElementMesh1D:
                 q = q + 1
 
         return quadrature_points
-    
 
     def integrate(self, f):
         """Integrates a function over the 1D mesh in theta.

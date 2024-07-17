@@ -58,7 +58,6 @@ class ObjectiveFunction(IOAble):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
-        # TODO: does deriv_mode have to be "blocked" if there is an ExternalObjective?
         if self._deriv_mode == "auto":
             if all((obj._deriv_mode == "fwd") for obj in self.objectives):
                 self._deriv_mode = "batched"

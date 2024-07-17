@@ -5,7 +5,9 @@ from ._coils import (
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
+    CoilSetMinDistance,
     CoilTorsion,
+    PlasmaCoilSetMinDistance,
     QuadraticFlux,
     ToroidalFlux,
 )
@@ -80,6 +82,7 @@ from .linear_objectives import (
     FixPressure,
     FixPsi,
     FixSheetCurrent,
+    FixSumCoilCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,

@@ -2789,8 +2789,10 @@ class FixSumCoilCurrent(FixCoilCurrent):
 
         # equilibrium G(rho=1) determines the necessary net poloidal current through
         # the coils (as dictated by Ampere's law)
+        # the sign convention is positive poloidal current flows up through the torus
+        # hole
         grid_at_surf = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
-        G_tot = eq.compute("G", grid=grid_at_surf)["G"][0] / (mu_0 * 2 * jnp.pi)
+        G_tot = 2*jnp.pi*eq.compute("G", grid=grid_at_surf)["G"][0] / mu_0
 
         # to use this objective to satisfy Ampere's law for the targeted equilibrium,
         # only coils that link the equilibrium poloidally should be included in the sum,

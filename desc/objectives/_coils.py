@@ -180,8 +180,6 @@ class _CoilObjective(_Objective):
         if self._normalize:
             self._scales = [compute_scaling_factors(coil) for coil in coils]
 
-        super().build(use_jit=use_jit, verbose=verbose)
-
     def compute(self, params, constants=None):
         """Compute data of coil for given data key.
 
@@ -202,8 +200,8 @@ class _CoilObjective(_Objective):
         if constants is None:
             constants = self._constants
 
-        coils = self.things[0]
-        data = coils.compute(
+        coil = self.things[0]
+        data = coil.compute(
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -261,7 +259,7 @@ class CoilLength(_CoilObjective):
 
     def __init__(
         self,
-        coils,
+        coil,
         target=None,
         bounds=None,
         weight=1,
@@ -272,12 +270,11 @@ class CoilLength(_CoilObjective):
         grid=None,
         name="coil length",
     ):
-        self._coils = coils
         if target is None and bounds is None:
             target = 2 * np.pi
 
         super().__init__(
-            coils,
+            coil,
             ["length"],
             target=target,
             bounds=bounds,
@@ -309,6 +306,8 @@ class CoilLength(_CoilObjective):
         if self._normalize:
             self._normalization = np.mean([scale["a"] for scale in self._scales])
 
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
     def compute(self, params, constants=None):
         """Compute coil length.
 
@@ -335,8 +334,10 @@ class CoilLength(_CoilObjective):
 class CoilCurvature(_CoilObjective):
     """Coil curvature.
 
-    Targets the local curvature value per grid node for each coil. A smaller curvature
-    value indicates straighter coils. All curvature values are positive.
+    Targets the local curvature at each grid node for each coil.
+    Positive curvature corresponds to "convex" curves (a circle has positive curvature),
+    while negative curvature corresponds to "concave" curves.
+    Curvature values closer to 0 indicate straighter sections of coils.
 
     Parameters
     ----------
@@ -427,6 +428,8 @@ class CoilCurvature(_CoilObjective):
         if self._normalize:
             self._normalization = 1 / np.mean([scale["a"] for scale in self._scales])
 
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
     def compute(self, params, constants=None):
         """Compute coil curvature.
 
@@ -453,9 +456,8 @@ class CoilCurvature(_CoilObjective):
 class CoilTorsion(_CoilObjective):
     """Coil torsion.
 
-    Targets the local torsion value per grid node for each coil. Indicative
-    of how much the coil goes out of the poloidal plane. e.g. a torsion
-    value of 0 means the coil is completely planar.
+    Targets the local torsion value at each grid node for each coil. Indicative of how
+    non-planar the coil is (a torsion value of 0 means the coil is perfectly planar).
 
     Parameters
     ----------
@@ -545,6 +547,8 @@ class CoilTorsion(_CoilObjective):
 
         if self._normalize:
             self._normalization = 1 / np.mean([scale["a"] for scale in self._scales])
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute coil torsion.
@@ -672,6 +676,8 @@ class CoilCurrentLength(CoilLength):
             mean_current = np.max((mean_current, 1))
             self._normalization = mean_current * mean_length
 
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
     def compute(self, params, constants=None):
         """Compute coil current length (current * length).
 
@@ -703,8 +709,8 @@ class CoilSetMinDistance(_Objective):
 
     Parameters
     ----------
-    coils : CoilSet
-        Coils that are to be optimized.
+    coil : CoilSet
+        Coil(s) that are to be optimized.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
@@ -746,7 +752,7 @@ class CoilSetMinDistance(_Objective):
 
     def __init__(
         self,
-        coils,
+        coil,
         target=None,
         bounds=None,
         weight=1,
@@ -757,11 +763,18 @@ class CoilSetMinDistance(_Objective):
         grid=None,
         name="coil-coil minimum distance",
     ):
+        from desc.coils import CoilSet
+
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._grid = grid
+        errorif(
+            not isinstance(coil, CoilSet),
+            ValueError,
+            "coil must be of type CoilSet, not an individual Coil",
+        )
         super().__init__(
-            things=coils,
+            things=coil,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -854,8 +867,8 @@ class PlasmaCoilSetMinDistance(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium (or FourierRZToroidalSurface) that will be optimized
         to satisfy the Objective.
-    coils : CoilSet
-        Coils that are to be optimized.
+    coil : CoilSet
+        Coil(s) that are to be optimized.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
@@ -893,15 +906,15 @@ class PlasmaCoilSetMinDistance(_Objective):
     eq_fixed: bool, optional
         Whether the equilibrium is fixed or not. If True, the last closed flux surface
         is fixed and its coordinates are precomputed, which saves on computation time
-        during optimization, and self.things = [coils] only.
+        during optimization, and self.things = [coil] only.
         If False, the surface coordinates are computed at every iteration.
-        False by default, so that self.things = [coils, eq].
+        False by default, so that self.things = [coil, eq].
     coils_fixed: bool, optional
         Whether the coils are fixed or not. If True, the coils
         are fixed and their coordinates are precomputed, which saves on computation time
         during optimization, and self.things = [eq] only.
         If False, the coil coordinates are computed at every iteration.
-        False by default, so that self.things = [coils, eq].
+        False by default, so that self.things = [coil, eq].
     name : str, optional
         Name of the objective function.
 
@@ -914,7 +927,7 @@ class PlasmaCoilSetMinDistance(_Objective):
     def __init__(
         self,
         eq,
-        coils,
+        coil,
         target=None,
         bounds=None,
         weight=1,
@@ -931,17 +944,17 @@ class PlasmaCoilSetMinDistance(_Objective):
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._eq = eq
-        self._coils = coils
+        self._coil = coil
         self._plasma_grid = plasma_grid
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
         self._coils_fixed = coils_fixed
-        errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coils")
+        errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
         things = []
         if not eq_fixed:
             things.append(eq)
         if not coils_fixed:
-            things.append(coils)
+            things.append(coil)
         super().__init__(
             things=things,
             target=target,
@@ -967,13 +980,13 @@ class PlasmaCoilSetMinDistance(_Objective):
         """
         if self._eq_fixed:
             eq = self._eq
-            coils = self.things[0]
+            coil = self.things[0]
         elif self._coils_fixed:
             eq = self.things[0]
-            coils = self._coils
+            coil = self._coil
         else:
             eq = self.things[0]
-            coils = self.things[1]
+            coil = self.things[1]
         plasma_grid = self._plasma_grid or LinearGrid(M=eq.M_grid, N=eq.N_grid)
         coil_grid = self._coil_grid or None
         warnif(
@@ -982,7 +995,7 @@ class PlasmaCoilSetMinDistance(_Objective):
             "Plasma/Surface grid includes interior points, should be rho=1.",
         )
 
-        self._dim_f = coils.num_coils
+        self._dim_f = coil.num_coils
         self._eq_data_keys = ["R", "phi", "Z"]
 
         eq_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=plasma_grid)
@@ -990,7 +1003,7 @@ class PlasmaCoilSetMinDistance(_Objective):
 
         self._constants = {
             "eq": eq,
-            "coils": coils,
+            "coil": coil,
             "coil_grid": coil_grid,
             "eq_profiles": eq_profiles,
             "eq_transforms": eq_transforms,
@@ -1009,9 +1022,7 @@ class PlasmaCoilSetMinDistance(_Objective):
             plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
             self._constants["plasma_coords"] = plasma_pts
         if self._coils_fixed:
-            coils_pts = coils._compute_position(
-                params=coils.params_dict, grid=coil_grid
-            )
+            coils_pts = coil._compute_position(params=coil.params_dict, grid=coil_grid)
             self._constants["coil_coords"] = coils_pts
 
         if self._normalize:
@@ -1057,7 +1068,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         if self._coils_fixed:
             coils_pts = constants["coil_coords"]
         else:
-            coils_pts = constants["coils"]._compute_position(
+            coils_pts = constants["coil"]._compute_position(
                 params=coils_params, grid=constants["coil_grid"]
             )
 
@@ -1229,7 +1240,6 @@ class QuadraticFlux(_Objective):
         # pre-compute B_plasma because we are assuming eq is fixed
         if self._vacuum:
             Bplasma = jnp.zeros(eval_grid.num_nodes)
-
         else:
             Bplasma = compute_B_plasma(
                 eq, eval_grid, self._source_grid, normal_only=True

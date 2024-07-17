@@ -352,7 +352,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     Parameters
     ----------
     current : float
-        current through coil, in Amperes
+        Current through the coil, in Amperes.
     R_n, Z_n: array-like
         fourier coefficients for R, Z
     modes_R : array-like
@@ -420,7 +420,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         Parameters
         ----------
         current : float
-            Current through the coil, in Amps.
+            Current through the coil, in Amperes.
         coords: ndarray, shape (num_coords,3)
             coordinates to fit a FourierRZCurve object with each column
             corresponding to xyz or rpz depending on the basis argument.
@@ -443,9 +443,11 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             New representation of the coil parameterized by Fourier series for R,Z.
 
         """
-        curve = super().from_values(coords, N=N, NFP=NFP, basis=basis, sym=sym)
+        curve = super().from_values(
+            coords=coords, N=N, NFP=NFP, basis=basis, sym=sym, name=name
+        )
         return cls(
-            current,
+            current=current,
             R_n=curve.R_n,
             Z_n=curve.Z_n,
             modes_R=curve.R_basis.modes[:, 2],
@@ -462,7 +464,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     Parameters
     ----------
     current : float
-        current through coil, in Amperes
+        Current through the coil, in Amperes.
     X_n, Y_n, Z_n: array-like
         fourier coefficients for X, Y, Z
     modes : array-like
@@ -525,7 +527,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         Parameters
         ----------
         current : float
-            Current through the coil, in Amps.
+            Current through the coil, in Amperes.
         coords: ndarray
             Coordinates to fit a FourierXYZCoil object with.
         N : int
@@ -544,12 +546,13 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             New representation of the coil parameterized by Fourier series for X,Y,Z.
 
         """
-        curve = super().from_values(coords, N, s, basis)
+        curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
         return cls(
-            current,
+            current=current,
             X_n=curve.X_n,
             Y_n=curve.Y_n,
             Z_n=curve.Z_n,
+            modes=curve.X_basis.modes[:, 2],
             name=name,
         )
 
@@ -627,6 +630,41 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     ):
         super().__init__(current, center, normal, r_n, modes, basis, name)
 
+    @classmethod
+    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
+        """Fit coordinates to FourierPlanarCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierPlanarCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new r representation.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierPlanarCoil
+            New representation of the coil parameterized by a Fourier series for r.
+
+        """
+        curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
+        return cls(
+            current=current,
+            center=curve.center,
+            normal=curve.normal,
+            r_n=curve.r_n,
+            modes=curve.r_basis.modes[:, 2],
+            basis="xyz",
+            name=name,
+        )
+
 
 class SplineXYZCoil(_Coil, SplineXYZCurve):
     """Coil parameterized by spline points in X,Y,Z.
@@ -634,7 +672,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     Parameters
     ----------
     current : float
-        current through coil, in Amperes
+        Current through the coil, in Amperes.
     X, Y, Z: array-like
         Points for X, Y, Z describing the curve. If the endpoint is included
         (ie, X[0] == X[-1]), then the final point will be dropped.
@@ -746,7 +784,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Parameters
         ----------
         current : float
-            Current through the coil, in Amps.
+            Current through the coil, in Amperes.
         coords: ndarray
             Points for X, Y, Z describing the curve. If the endpoint is included
             (ie, X[0] == X[-1]), then the final point will be dropped.
@@ -778,9 +816,11 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             New representation of the coil parameterized by splines in X,Y,Z.
 
         """
-        curve = super().from_values(coords, knots, method, basis=basis)
+        curve = super().from_values(
+            coords=coords, knots=knots, method=method, basis=basis, name=name
+        )
         return cls(
-            current,
+            current=current,
             X=curve.X,
             Y=curve.Y,
             Z=curve.Z,

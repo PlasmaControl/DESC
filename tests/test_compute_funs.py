@@ -1154,13 +1154,16 @@ def test_boozer_jacobian():
     eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute(
-        ["sqrt(g)_booz", "sqrt(g)_B"], grid=grid, M_booz=eq.M, N_booz=eq.N
+        ["sqrt(g)_booz", "sqrt(g)_B"],
+        grid=grid,
+        M_booz=eq.M,
+        N_booz=eq.N,
     )
     np.testing.assert_allclose(
         data["sqrt(g)_booz"],
         data["sqrt(g)_B"],
-        rtol=1e-3,
-        atol=1e-4,
+        rtol=1e-10,
+        atol=1e-10,
     )
 
 

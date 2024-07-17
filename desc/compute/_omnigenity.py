@@ -254,6 +254,7 @@ def _nu_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _nu_r_B(params, transforms, profiles, data, **kwargs):
     data["nu_r_B"] = transforms["B"].transform(params["nu_mn"], 1, 0, 0)
@@ -272,6 +273,7 @@ def _nu_r_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _nu_t_B(params, transforms, profiles, data, **kwargs):
     data["nu_t_B"] = transforms["B"].transform(params["nu_mn"], 0, 1, 0)
@@ -290,6 +292,7 @@ def _nu_t_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _nu_z_B(params, transforms, profiles, data, **kwargs):
     data["nu_z_B"] = transforms["B"].transform(params["nu_mn"], 0, 0, 1)

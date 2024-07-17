@@ -80,9 +80,7 @@ def _R_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-    ],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _R_r_B(params, transforms, profiles, data, **kwargs):
     data["R_r_B"] = transforms["B"].transform(params["R_mn_B"], 1, 0, 0)
@@ -521,9 +519,7 @@ def _R_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-    ],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _R_t_B(params, transforms, profiles, data, **kwargs):
     data["R_t_B"] = transforms["B"].transform(params["R_mn_B"], 0, 1, 0)
@@ -677,9 +673,7 @@ def _R_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-    ],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _R_z_B(params, transforms, profiles, data, **kwargs):
     data["R_z_B"] = transforms["B"].transform(params["R_mn_B"], 0, 0, 1)
@@ -929,6 +923,25 @@ def _Z(params, transforms, profiles, data, **kwargs):
 )
 def _Z_r(params, transforms, profiles, data, **kwargs):
     data["Z_r"] = transforms["Z"].transform(params["Z_lmn"], 1, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_r_B",
+    label="\\partial_{\\rho_B} Z",
+    units="m",
+    units_long="meters",
+    description="Verical coordinate lab frame, first radial Boozer derivative",
+    dim=1,
+    params=["Z_mn_B"],
+    transforms={"B": [[1, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
+)
+def _Z_r_B(params, transforms, profiles, data, **kwargs):
+    data["Z_r_B"] = transforms["B"].transform(params["Z_mn_B"], 1, 0, 0)
     return data
 
 
@@ -1360,10 +1373,7 @@ def _Z_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _Z_t_B(params, transforms, profiles, data, **kwargs):
     data["Z_t_B"] = transforms["B"].transform(params["Z_mn_B"], 0, 1, 0)
@@ -1517,10 +1527,7 @@ def _Z_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _Z_z_B(params, transforms, profiles, data, **kwargs):
     data["Z_z_B"] = transforms["B"].transform(params["Z_mn_B"], 0, 0, 1)

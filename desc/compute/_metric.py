@@ -57,7 +57,7 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="sqrt(g)_booz",
-    label="\\sqrt{g}_{Boozer}",
+    label="\\sqrt{g}_{Boozer}2",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant of Boozer flux coordinate system",
@@ -66,12 +66,16 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho_B", "e_theta_B", "e_zeta_B"],
+    data=["nu_t_B"],  # "R_t_B"],#, "R_z_B"],
+    parameterization=["desc.magnetic_fields._core.OmnigenousField"],
 )
 def _sqrtg_booz(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_booz"] = dot(
-        data["e_rho_B"], cross(data["e_theta_B"], data["e_zeta_B"])
-    )
+    data["sqrt(g)_booz"] = data["nu_t_B"]  # + data["R_t_B"] + data["R_z_B"]
+
+    # --no-verify dot(
+    # --no-verify data["e_theta_B"], cross(data["e_theta_B"], data["e_zeta_B"])
+    # --no-verify data["R_r_B"], cross(data["e_theta_B"], data["e_zeta_B"])
+
     return data
 
 

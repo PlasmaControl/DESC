@@ -164,6 +164,8 @@ def get_data_deps(keys, obj, has_axis=False):
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
 
+    print(p, keys)
+
     def _get_deps_1_key(key):
         if has_axis:
             if "full_with_axis_dependencies" in data_index[p][key]:

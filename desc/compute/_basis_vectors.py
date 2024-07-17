@@ -559,9 +559,7 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["R", "R_t_B", "Z_t_B", "nu_t_B", "phi"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-    ],
+    parameterization=[],
     basis="basis",
 )
 def _e_sub_theta_sub_B(params, transforms, profiles, data, **kwargs):
@@ -1591,20 +1589,16 @@ def _e_sub_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_r", "Z_r", "nu_r_B", "phi"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-    ],
+    data=["R", "R_r_B", "Z_r_B", "nu_r_B", "phi"],
+    parameterization=[],
     basis="basis",
 )
 def _e_sub_rho_sub_B(params, transforms, profiles, data, **kwargs):
-    # At the magnetic axis, this function returns the multivalued map whose
-    # image is the set { 𝐞ᵨ | ρ=0 }.
     data["e_rho_B"] = jnp.array(
-        [data["R_r"], data["R"] * data["nu_r_B"], data["Z_r"]]
+        [data["R_r_B"], -data["R"] * data["nu_r_B"], data["Z_r_B"]]
     ).T
     if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho"] = rpz2xyz_vec(data["e_rho_B"], phi=data["phi"])
+        data["e_rho_B"] = rpz2xyz_vec(data["e_rho_B"], phi=data["phi"])
     return data
 
 
@@ -3785,9 +3779,7 @@ def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["R", "R_z_B", "Z_z_B", "nu_z_B", "phi"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-    ],
+    parameterization=[],
     basis="basis",
 )
 def _e_sub_zeta_sub_B(params, transforms, profiles, data, **kwargs):

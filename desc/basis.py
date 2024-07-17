@@ -1179,6 +1179,7 @@ class FiniteElementBasis(_FE_Basis):
         lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (2, self.nmodes)).T
         return np.unique(lij_mesh, axis=0)
 
+    # Need to add in the unique keyword
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None, n=-1):
         """Evaluate basis functions at specified nodes.
 
@@ -1212,7 +1213,7 @@ class FiniteElementBasis(_FE_Basis):
             basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
         elif self.N == 0:
             # Tessellate the domain and find the basis functions for theta, zeta
-            Rho_Theta = np.array([np.ravel(r), np.ravel(t)]).T
+            Rho_Theta = jnp.array([jnp.ravel(r), jnp.ravel(t)]).T
             basis_functions = self.mesh.find_triangles_corresponding_to_points(Rho_Theta)
             # print(Rho_Theta, intervals, basis_functions)
         else:
@@ -2942,27 +2943,29 @@ class FiniteElementMesh2D:
         d = (v3[:, 0] - v2[:, 0])[None, :] * v_v2y - (v3[:, 1] - v2[:, 1])[None, :] * v_v2x
         
         # Find all the places where point v lies between vertices v1, v2, v3
-        triangle_indices = ~np.logical_and(~np.isclose(np.sign(s), np.sign(t)), 
-                np.logical_and(~np.isclose(s, 0.0), ~np.isclose(t, 0.0))
+        triangle_indices = ~np.logical_and(~np.isclose(np.sign(s), jnp.sign(t)), 
+                np.logical_and(~jnp.isclose(s, 0.0), ~np.isclose(t, 0.0))
         )
-        triangle_indices = np.logical_and(triangle_indices, np.logical_or( 
+        triangle_indices = np.logical_and(triangle_indices, jnp.logical_or( 
             np.isclose(d, 0.0), np.isclose((d < 0), (s + t <= 0)))
         )
 
         # Deal with points at a triangle vertex
-        duplicates = np.ravel(np.where(np.count_nonzero(triangle_indices, axis=-1) == 3))
-        for i in duplicates:
-            max_col = np.argmax(triangle_indices[i, :])
-            triangle_indices[i, max_col] = False
+        # duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(triangle_indices, axis=-1) == 3))
+        # for i in duplicates:
+        #     max_col = jnp.argmax(triangle_indices[i, :])
+        #     triangle_indices[i, max_col] = False
         
-        # Still need to deal with case when points lie exactly along the edge 
-        # between two triangles A and B (and finish off the vertex case)
-        # in which case triangle_indices will say that the point lies in
-        # both triangle A and triangle B, leading to incorrect results.
-        duplicates = np.ravel(np.where(np.count_nonzero(triangle_indices, axis=-1) == 2))
-        for i in duplicates:
-            max_col = np.argmax(triangle_indices[i, :])
-            triangle_indices[i, max_col] = False
+        # # Still need to deal with case when points lie exactly along the edge 
+        # # between two triangles A and B (and finish off the vertex case)
+        # # in which case triangle_indices will say that the point lies in
+        # # both triangle A and triangle B, leading to incorrect results.
+        # duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(triangle_indices, axis=-1) == 2))
+        # for i in duplicates:
+        #     max_col = jnp.argmax(triangle_indices[i, :])
+        #     triangle_indices[i, max_col] = False
+        
+        
         
         # Now loop through and get the basis functions in triangle i,
         # evaluated all at once on all the points that are in triangle i

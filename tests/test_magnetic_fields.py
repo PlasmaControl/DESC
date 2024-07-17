@@ -162,11 +162,14 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             sum_field([1.3, 0, 0.0]), [[0.0, 2, 3.2 + 2 * 1.2 * 0.3]]
         )
-        R = 1.3
-        tfield_A = np.array([[0, 0, -2 * 1.3 * np.log(R)]])
-        vfield_A = np.array([[vfield.B0, -vfield.B0, 0]]) / 2
+
+        tfield_A = np.array([[0, 0, -tfield.B0 * tfield.R0 * np.log(tfield.R0)]])
+        x = tfield.R0 * np.cos(np.pi / 4)
+        y = tfield.R0 * np.sin(np.pi / 4)
+        vfield_A = np.array([[vfield.B0 * y, -vfield.B0 * x, 0]]) / 2
+
         np.testing.assert_allclose(
-            sum_field_tv.compute_magnetic_vector_potential([R, 0, 0.0], basis="xyz"),
+            sum_field_tv.compute_magnetic_vector_potential([x, y, 0.0], basis="xyz"),
             tfield_A + vfield_A,
         )
 

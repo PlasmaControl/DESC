@@ -1222,7 +1222,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         ay = -B0 / 2 * coords_xyz[:, 0]
 
         az = jnp.zeros_like(ax)
-        A = jnp.array([ax, -ay, az]).T
+        A = jnp.array([ax, ay, az]).T
         if basis == "rpz":
             A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
 

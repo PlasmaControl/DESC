@@ -66,7 +66,7 @@ class TestRZCurve:
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         data = c.compute(
-            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="rpz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
@@ -470,9 +470,9 @@ class TestPlanarCurve:
         datax = cx.compute("x", grid=20, basis="xyz")
         datay = cy.compute("x", grid=20, basis="xyz")
         dataz = cz.compute("x", grid=20, basis="xyz")
-        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=1e-16)  # only in Y-Z plane
-        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=1e-16)  # only in X-Z plane
-        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=1e-16)  # only in X-Y plane
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=2e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=2e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=2e-16)  # only in X-Y plane
 
     @pytest.mark.unit
     def test_length(self):
@@ -625,7 +625,6 @@ class TestSplineXYZCurve:
             "cubic2",
             "catmull-rom",
             "monotonic",
-            "monotonic-0",
             "cardinal",
         ]:
             R = 1

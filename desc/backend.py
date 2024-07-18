@@ -1,6 +1,5 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
-import multiprocessing
 import os
 import warnings
 
@@ -11,23 +10,15 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
-verbose = True
-
-# set child processes to use numpy backend and suppress print statements
-if not multiprocessing.current_process().name == "MainProcess":
-    os.environ["DESC_BACKEND"] = "numpy"
-    verbose = False
-
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
     set_device(kind="cpu")
-    if verbose:
-        print(
-            "DESC version {}, using numpy backend, version={}, dtype={}".format(
-                desc.__version__, np.__version__, np.linspace(0, 1).dtype
-            )
+    print(
+        "DESC version {}, using numpy backend, version={}, dtype={}".format(
+            desc.__version__, np.__version__, np.linspace(0, 1).dtype
         )
+    )
 else:
     if desc_config.get("device") is None:
         set_device("cpu")
@@ -49,12 +40,11 @@ else:
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
-        if verbose:
-            print(
-                f"DESC version {desc.__version__}, "
-                + f"using JAX backend, jax version={jax.__version__}, "
-                + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
-            )
+        print(
+            f"DESC version {desc.__version__}, "
+            + f"using JAX backend, jax version={jax.__version__}, "
+            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
+        )
         del x, y
     except ModuleNotFoundError:
         jnp = np
@@ -69,12 +59,11 @@ else:
             )
         )
 
-if verbose:
-    print(
-        "Using device: {}, with {:.2f} GB available memory".format(
-            desc_config.get("device"), desc_config.get("avail_mem")
-        )
+print(
+    "Using device: {}, with {:.2f} GB available memory".format(
+        desc_config.get("device"), desc_config.get("avail_mem")
     )
+)
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     jit = jax.jit

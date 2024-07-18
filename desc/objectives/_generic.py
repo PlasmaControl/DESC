@@ -2,8 +2,6 @@
 
 import functools
 import inspect
-import multiprocessing as mp
-import os
 import re
 from abc import ABC
 
@@ -96,11 +94,6 @@ class _ExternalObjective(_Objective, ABC):
         self._fd_step = fd_step
         self._vectorized = vectorized
         self._kwargs = kwargs
-        if self._vectorized:
-            try:  # spawn a new environment so the backend can be set to numpy
-                mp.set_start_method("spawn")
-            except RuntimeError:  # context can only be set once
-                pass
         super().__init__(
             things=eq,
             target=target,
@@ -133,35 +126,19 @@ class _ExternalObjective(_Objective, ABC):
             param_shape = params["Psi"].shape
             num_eq = param_shape[0] if len(param_shape) > 1 else 1
 
-            if self._vectorized and num_eq > 1:
-                # convert params to list of equilibria
-                eqs = [self._eq.copy() for _ in range(num_eq)]
-                for k, eq in enumerate(eqs):
-                    # update equilibria with new params
-                    for param_key in self._eq.optimizable_params:
-                        param_value = np.array(params[param_key][k, :])
-                        if len(param_value):
-                            setattr(eq, param_key, param_value)
-                # parallelize calls to external function
-                max_processes = (
-                    self._vectorized
-                    if isinstance(self._vectorized, int)
-                    else os.cpu_count()
-                )
-                with mp.Pool(processes=min(max_processes, num_eq)) as pool:
-                    results = pool.map(
-                        functools.partial(self._fun, **self._kwargs), eqs
-                    )
-                    pool.close()
-                    pool.join()
-                    return jnp.vstack(results, dtype=float)
-            else:  # no vectorization
-                # update equilibrium with new params
+            # convert params to list of equilibria
+            eqs = [self._eq.copy() for _ in range(num_eq)]
+            for k, eq in enumerate(eqs):
+                # update equilibria with new params
                 for param_key in self._eq.optimizable_params:
-                    param_value = params[param_key]
+                    param_value = np.atleast_2d(params[param_key])[k, :]
                     if len(param_value):
-                        setattr(self._eq, param_key, param_value)
-                return self._fun(self._eq, **self._kwargs)
+                        setattr(eq, param_key, param_value)
+
+            # call external function on equilibrium or list of equilibria
+            if not self._vectorized:
+                eqs = eqs[0]
+            return self._fun(eqs, **self._kwargs)
 
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)

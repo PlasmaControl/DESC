@@ -53,7 +53,10 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         Profile objects for pressure, iota, current, etc. Defaults to attributes
         of self
     data : dict of ndarray
-        Data computed so far, generally output from other compute functions
+        Data computed so far, generally output from other compute functions.
+        Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+        v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+        of the cylindrical coordinates R, ϕ, Z.
 
     Returns
     -------
@@ -108,7 +111,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
                 "Tensor quantities cannot be converted to Cartesian coordinates.",
             )
             if data_index[p][name]["dim"] == 3:  # only convert vector data
-                if name == "x":
+                if name in ["x", "center"]:
                     data[name] = rpz2xyz(data[name])
                 else:
                     data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
@@ -120,6 +123,10 @@ def _compute(
     parameterization, names, params, transforms, profiles, data=None, **kwargs
 ):
     """Same as above but without checking inputs for faster recursion.
+
+    Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+    v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+    of the cylindrical coordinates R, ϕ, Z.
 
     We need to directly call this function in objectives, since the checks in above
     function are not compatible with JIT. This function computes given names while

@@ -1603,10 +1603,12 @@ def test_external_vs_generic_objectives(tmpdir_factory):
     # generic
     objective = ObjectiveFunction(
         (
-            GenericObjective("<beta>_vol", eq=eq0, target=target[0]),
-            GenericObjective("<beta_pol>_vol", eq=eq0, target=target[1]),
-            GenericObjective("<beta_tor>_vol", eq=eq0, target=target[2]),
-            GenericObjective("p", eq=eq0, target=0, grid=LinearGrid(rho=[1], M=0, N=0)),
+            GenericObjective("<beta>_vol", thing=eq0, target=target[0]),
+            GenericObjective("<beta_pol>_vol", thing=eq0, target=target[1]),
+            GenericObjective("<beta_tor>_vol", thing=eq0, target=target[2]),
+            GenericObjective(
+                "p", thing=eq0, target=0, grid=LinearGrid(rho=[1], M=0, N=0)
+            ),
         )
     )
     constraints = FixParameters(

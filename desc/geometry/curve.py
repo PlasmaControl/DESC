@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, sign
 from desc.basis import FourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import rotation_matrix
@@ -807,9 +807,13 @@ class FourierPlanarCurve(Curve):
         coords = coords - center  # shift to origin
 
         # normal
-        idx = coords.shape[0] // 2
-        normal = np.cross(coords[0, :], coords[idx, :])  # 2 arbitrary points on curve
-        normal = normal / np.linalg.norm(normal)
+        normal = np.empty((0, 3))  # avg of normals btw all pts in case it is non-planar
+        for idx in range(1, coords.shape[0], coords.shape[0] // 8):
+            norm = np.cross(coords[0, :], coords[idx, :])
+            norm = norm / np.linalg.norm(norm)
+            sgn = sign(-int(all(sign(norm) != sign(normal[0, :])))) if idx > 1 else 1
+            normal = np.vstack((normal, norm * sgn))
+        normal = np.mean(normal, axis=0)
 
         # axis and angle of rotation
         Z_axis = np.array([0, 0, 1])
@@ -821,7 +825,7 @@ class FourierPlanarCurve(Curve):
         warnif(
             np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points
             UserWarning,
-            "Curve values are not planar!",
+            "Curve values are not planar! Using the projection onto a plane.",
         )
 
         # polar radius and angle

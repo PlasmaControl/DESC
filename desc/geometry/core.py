@@ -98,7 +98,10 @@ class Curve(IOAble, Optimizable, ABC):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
@@ -128,10 +131,13 @@ class Curve(IOAble, Optimizable, ABC):
             )
 
         if params is None:
-            params = get_params(names, obj=self)
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
             transforms = get_transforms(
-                names, obj=self, grid=grid, jitable=True, **kwargs
+                names,
+                obj=self,
+                grid=grid,
+                jitable=True,
             )
         if data is None:
             data = {}
@@ -156,7 +162,11 @@ class Curve(IOAble, Optimizable, ABC):
                 dep0d,
                 params=params,
                 transforms=get_transforms(
-                    dep0d, obj=self, grid=grid0d, jitable=True, **kwargs
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    jitable=True,
+                    **kwargs,
                 ),
                 profiles={},
                 data=None,
@@ -230,6 +240,8 @@ class Curve(IOAble, Optimizable, ABC):
 
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
             grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
 
@@ -301,10 +313,11 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import FourierRZCurve
 
+        NFP = 1 or NFP
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1, NFP=NFP)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return FourierRZCurve.from_values(
-            coords, N=N, NFP=NFP if NFP is not None else 1, basis="xyz", name=name
-        )
+        return FourierRZCurve.from_values(coords, N=N, NFP=NFP, basis="xyz", name=name)
 
 
 class Surface(IOAble, Optimizable, ABC):
@@ -441,10 +454,17 @@ class Surface(IOAble, Optimizable, ABC):
                 "must pass in a Grid object or an integer for argument grid!"
                 f" instead got type {type(grid)}"
             )
+
         if params is None:
-            params = get_params(names, obj=self)
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
-            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+            transforms = get_transforms(
+                names,
+                obj=self,
+                grid=grid,
+                jitable=kwargs.pop("jitable", False),
+                **kwargs,
+            )
         if data is None:
             data = {}
         profiles = {}
@@ -490,7 +510,13 @@ class Surface(IOAble, Optimizable, ABC):
                 self,
                 dep0d,
                 params=params,
-                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                transforms=get_transforms(
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    jitable=kwargs.pop("jitable", False),
+                    **kwargs,
+                ),
                 profiles={},
                 data=None,
                 **kwargs,

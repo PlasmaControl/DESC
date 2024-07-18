@@ -31,6 +31,7 @@
    notebooks/tutorials/omnigenity.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
+   notebooks/tutorials/coil_stage_two_optimization.ipynb
 
 .. toctree::
    :maxdepth: 1

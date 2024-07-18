@@ -237,6 +237,8 @@ class Curve(IOAble, Optimizable, ABC):
 
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
             grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
 
@@ -308,10 +310,11 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import FourierRZCurve
 
+        NFP = 1 or NFP
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1, NFP=NFP)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return FourierRZCurve.from_values(
-            coords, N=N, NFP=NFP if NFP is not None else 1, basis="xyz", name=name
-        )
+        return FourierRZCurve.from_values(coords, N=N, NFP=NFP, basis="xyz", name=name)
 
 
 class Surface(IOAble, Optimizable, ABC):

@@ -852,7 +852,7 @@ class CoilSetMinDistance(_Objective):
 class PlasmaCoilSetMinDistance(_Objective):
     """Target the minimum distance between the plasma and coilset.
 
-    Will yield one value per coil in the coilset, which is the minimumm distance from
+    Will yield one value per coil in the coilset, which is the minimum distance from
     that coil to the plasma boundary surface.
 
     NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are

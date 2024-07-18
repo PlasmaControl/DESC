@@ -14,7 +14,7 @@ from desc.backend import (
 )
 from desc.utils import setdefault
 
-from .utils import chol
+from .utils import chol, solve_triangular_regularized
 
 
 @jit
@@ -350,6 +350,12 @@ def trust_region_step_exact_cho(
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
+
             k += 1
             return alpha, alpha_lower, alpha_upper, phi, k
 
@@ -359,6 +365,118 @@ def trust_region_step_exact_cho(
         Bi = B + alpha * jnp.eye(B.shape[0])
         R = chol(Bi)
         p = cho_solve((R, True), -g)
+
+        # Make the norm of p equal to trust_radius; p is changed only slightly.
+        # This is done to prevent p from lying outside the trust region
+        # (which can cause problems later).
+        p *= trust_radius / jnp.linalg.norm(p)
+
+        return p, True, alpha
+
+    return cond(jnp.linalg.norm(p_newton) <= trust_radius, truefun, falsefun, None)
+
+
+@jit
+def trust_region_step_exact_qr(
+    f, J, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
+):
+    """Solve a trust-region problem using a semi-exact method.
+
+    Solves problems of the form
+        min_p ||J*p + f||^2,  ||p|| < trust_radius
+
+    Parameters
+    ----------
+    f : ndarray
+        Vector of residuals.
+    J : ndarray
+        Jacobian matrix.
+    trust_radius : float
+        Radius of a trust region.
+    initial_alpha : float, optional
+        Initial guess for alpha, which might be available from a previous
+        iteration. If None, determined automatically.
+    rtol : float, optional
+        Stopping tolerance for the root-finding procedure. Namely, the
+        solution ``p`` will satisfy
+        ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
+    max_iter : int, optional
+        Maximum allowed number of iterations for the root-finding procedure.
+
+    Returns
+    -------
+    p : ndarray, shape (n,)
+        Found solution of a trust-region problem.
+    hits_boundary : bool
+        True if the proposed step is on the boundary of the trust region.
+    alpha : float
+        Positive value such that (J.T*J + alpha*I)*p = -J.T*f.
+        Sometimes called Levenberg-Marquardt parameter.
+
+    """
+    # try full newton step
+    tall = J.shape[0] >= J.shape[1]
+    if tall:
+        Q, R = qr(J, mode="economic")
+        p_newton = solve_triangular_regularized(R, -Q.T @ f)
+    else:
+        Q, R = qr(J.T, mode="economic")
+        p_newton = Q @ solve_triangular_regularized(R.T, f, lower=True)
+
+    def truefun(*_):
+        return p_newton, False, 0.0
+
+    def falsefun(*_):
+        alpha_upper = jnp.linalg.norm(J.T @ f) / trust_radius
+        alpha_lower = 0.0
+        alpha = setdefault(
+            initial_alpha,
+            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+        )
+        k = 0
+        # algorithm 4.3 from Nocedal & Wright
+        fp = jnp.pad(f, (0, J.shape[1]))
+
+        def loop_cond(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+            return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
+
+        def loop_body(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
+
+            Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
+            # Ji is always tall since its padded by alpha*I
+            Q, R = qr(Ji, mode="economic")
+            p = solve_triangular_regularized(R, -Q.T @ fp)
+            p_norm = jnp.linalg.norm(p)
+            phi = p_norm - trust_radius
+            alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
+            alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
+
+            q = solve_triangular_regularized(R.T, p, lower=True)
+            q_norm = jnp.linalg.norm(q)
+
+            alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
+            k += 1
+            return alpha, alpha_lower, alpha_upper, phi, k
+
+        alpha, *_ = while_loop(
+            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, jnp.inf, k)
+        )
+        Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
+        Q, R = qr(Ji, mode="economic")
+        p = solve_triangular(R, -Q.T @ fp)
 
         # Make the norm of p equal to trust_radius; p is changed only slightly.
         # This is done to prevent p from lying outside the trust region

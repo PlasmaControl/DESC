@@ -158,6 +158,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
 
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return 1
+
     def _compute_position(self, params=None, grid=None, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
@@ -295,6 +300,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
             grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCoil.from_values(
             self.current, coords, N=N, s=s, basis="xyz", name=name
@@ -1665,7 +1672,7 @@ class MixedCoilSet(CoilSet):
     @property
     def num_coils(self):
         """int: Number of coils."""
-        return sum([c.num_coils if hasattr(c, "num_coils") else 1 for c in self])
+        return sum([c.num_coils for c in self])
 
     def compute(
         self,

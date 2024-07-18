@@ -6,6 +6,7 @@ import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
+from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -40,11 +41,13 @@ from desc.objectives import (
     FixParameters,
     FixPressure,
     FixPsi,
+    FixSumCoilCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
     GenericObjective,
+    LinearObjectiveFromUser,
     ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -1015,3 +1018,51 @@ def test_fix_coil_current(DummyMixedCoilSet):
     obj.build()
     assert obj.dim_f == 4
     np.testing.assert_allclose(obj.target, [3, -1, -1, 2])
+
+
+@pytest.mark.unit
+def test_fix_sum_coil_current(DummyMixedCoilSet):
+    """Tests FixSumCoilCurrent."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    # sum a single coil current
+    obj = FixSumCoilCurrent(coil=coilset.coils[1].coils[0])
+    obj.build()
+    params = coilset.coils[1].coils[0].params_dict
+    np.testing.assert_allclose(obj.compute(params), -1)
+
+    # sum all coil currents
+    obj = FixSumCoilCurrent(coil=coilset)
+    obj.build()
+    params = coilset.params_dict
+    np.testing.assert_allclose(obj.compute(params), 3)
+    # the default target should be the original sum
+    np.testing.assert_allclose(obj.compute_scaled_error(params), 0)
+
+    # only sum currents of some coils in the coil set
+    obj = FixSumCoilCurrent(
+        coil=coilset, indices=[[True], [True, False, True], True, False]
+    )
+    obj.build()
+    np.testing.assert_allclose(obj.compute(params), 3)
+
+
+@pytest.mark.unit
+def test_linear_objective_from_user_on_collection(DummyCoilSet):
+    """Test LinearObjectiveFromUser on an OptimizableCollection."""
+    # test that LinearObjectiveFromUser can be used for the same functionality as
+    # FixSumCoilCurrent to sum all currents in a CoilSet
+
+    coilset = load(load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5")
+    params = coilset.params_dict
+
+    obj1 = FixSumCoilCurrent(coil=coilset)
+    obj1.build()
+
+    obj2 = LinearObjectiveFromUser(
+        lambda params: jnp.sum(jnp.array([param["current"] for param in params])),
+        coilset,
+    )
+    obj2.build()
+
+    np.testing.assert_allclose(obj1.compute(params), obj2.compute(params))

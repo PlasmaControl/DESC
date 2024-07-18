@@ -1335,7 +1335,7 @@ class InputReader:
                         )
                         inputs["axis"][-1, :] = np.array([n, -numbers[k], 0.0])
             match = re.search(
-                r"ZAXIS(_CS)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
+                r"ZAXIS_CC\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -1354,7 +1354,7 @@ class InputReader:
                         )
                         inputs["axis"][-1, :] = np.array([n, 0.0, numbers[k]])
             match = re.search(
-                r"ZAXIS_CC\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
+                r"ZAXIS_(CS)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [

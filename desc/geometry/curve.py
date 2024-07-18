@@ -808,7 +808,7 @@ class FourierPlanarCurve(Curve):
 
         # normal
         normal = np.empty((0, 3))  # avg of normals btw all pts in case it is non-planar
-        for idx in range(1, coords.shape[0], coords.shape[0] // 8):
+        for idx in range(1, coords.shape[0]):
             norm = np.cross(coords[0, :], coords[idx, :])
             norm = norm / np.linalg.norm(norm)
             sgn = sign(-int(all(sign(norm) != sign(normal[0, :])))) if idx > 1 else 1

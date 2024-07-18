@@ -54,25 +54,29 @@ def write_csv(parameterization):
                 writer.writerow(d)
 
 
-header = """
+header = r"""
 List of Variables
 #################
 
 The table below contains a list of variables that are used in the code and that are
 available for plotting / analysis.
 
-  * **Name** : name of the variable as it appears in the code. Pass a string with this
+  * **Name** : Name of the variable as it appears in the code. Pass a string with this
     name to any of the plotting functions to plot, or to the relevant ``.compute()``
     method to return the calculated quantity.
-  * **Label** : TeX label for the variable
-  * **Units** : physical units for the variable
-  * **Description** : description of the variable
-  * **Aliases** : alternative names of a variable that can be used in the same way as
-    the primary name
-  * **kwargs** : optional keyword arguments that can be passed in when computing
-    certain quantities, see the bottom of this page for a more detailed description
-    and for the default values of the keyword arguments.
+  * **Label** : TeX label for the variable.
+  * **Units** : Physical units for the variable.
+  * **Description** : Description of the variable.
+  * **Aliases** : Alternative names of the variable that are equivalent to the primary
+    name.
+  * **kwargs** : Optional keyword arguments that can be supplied when computing the
+    variable. See the bottom of this page for detailed descriptions and default values
+    of each argument. The only keyword argument that is valid for all variables is
+    'basis' (see explanation below).
 
+All vector quantities are computed in toroidal coordinates :math:`(R,\phi,Z)` by default.
+The keyword argument ``basis='xyz'`` can be used to convert the variables into Cartesian
+coordinates :math:`(X,Y,Z)`. ``basis`` must be one of ``{'rpz', 'xyz'}``.
 
 """
 

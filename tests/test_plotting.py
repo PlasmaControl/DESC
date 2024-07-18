@@ -20,7 +20,11 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    SplineMagneticField,
+    ToroidalMagneticField,
+)
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -39,8 +43,10 @@ from desc.plotting import (
     plot_qs_error,
     plot_section,
     plot_surfaces,
+    poincare_plot,
 )
 from desc.utils import isalmostequal
+from desc.vmec import VMECIO
 
 tol_1d = 7.8
 tol_2d = 15
@@ -861,4 +867,24 @@ def test_plot_coefficients():
 def test_plot_logo():
     """Test plotting the DESC logo."""
     fig, ax = plot_logo()
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_poincare():
+    """Test making a poincare plot."""
+    # TODO: tracing from spline field seems a lot slower than from a coilset, we
+    # can probably make this test a lot faster if we make some example coilsets
+    extcur = [4700.0, 1000.0]
+    ext_field = SplineMagneticField.from_mgrid(
+        "tests/inputs/mgrid_test.nc", extcur=extcur
+    )
+    with pytest.warns(UserWarning, match="VMEC output"):
+        eq = VMECIO.load("tests/inputs/wout_test_freeb.nc")
+    grid_trace = LinearGrid(rho=np.linspace(0, 1, 9))
+    r0 = eq.compute("R", grid=grid_trace)["R"]
+    z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+    fig, ax = poincare_plot(ext_field, r0, z0, ntransit=50, NFP=eq.NFP)
     return fig

@@ -706,7 +706,7 @@ class PlasmaVesselDistance(_Objective):
 
         self._dim_f = surface_grid.num_nodes
         self._equil_data_keys = ["R", "phi", "Z"]
-        self._surface_data_keys = ["x", "n_rho"] if self._use_signed_distance else ["x"]
+        self._surface_data_keys = ["x"]
 
         timer = Timer()
         if verbose > 0:
@@ -749,15 +749,15 @@ class PlasmaVesselDistance(_Objective):
         if self._surface_fixed:
             # precompute the surface coordinates
             # as the surface is fixed during the optimization
-            data_surf = compute_fun(
+            surface_coords = compute_fun(
                 self._surface,
                 self._surface_data_keys,
                 params=self._surface.params_dict,
                 transforms=surface_transforms,
                 profiles={},
-                basis="xyz",
-            )
-            self._constants["data_surf"] = data_surf
+            )["x"]
+            surface_coords = rpz2xyz(surface_coords)
+            self._constants["surface_coords"] = surface_coords
         elif self._eq_fixed:
             data_eq = compute_fun(
                 self._eq,
@@ -820,18 +820,17 @@ class PlasmaVesselDistance(_Objective):
         plasma_coords_rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
         plasma_coords = rpz2xyz(plasma_coords_rpz)
         if self._surface_fixed:
-            data_surf = constants["data_surf"]
+            surface_coords = constants["surface_coords"]
         else:
-            data_surf = compute_fun(
+            surface_coords = compute_fun(
                 self._surface,
                 self._surface_data_keys,
                 params=surface_params,
                 transforms=constants["surface_transforms"],
                 profiles={},
-                basis="xyz",
-            )
+            )["x"]
+            surface_coords = rpz2xyz(surface_coords)
 
-        surface_coords = data_surf["x"]
         diff_vec = plasma_coords[:, None, :] - surface_coords[None, :, :]
         d = safenorm(diff_vec, axis=-1)
 

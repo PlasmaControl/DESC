@@ -120,7 +120,7 @@ class Curve(IOAble, Optimizable, ABC):
         if grid is None:
             grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
-            grid = LinearGrid(N=grid * getattr(self, "NFP", 1))
+            grid = LinearGrid(N=grid)
         errorif(
             not isinstance(grid, _Grid),
             TypeError,

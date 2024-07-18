@@ -132,7 +132,7 @@ class _CoilObjective(_Objective):
             for c in coils:
                 grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
         if isinstance(grid, numbers.Integral):
-            grid = LinearGrid(N=self._grid * getattr(c, "NFP", 1))
+            grid = LinearGrid(N=self._grid)
         if isinstance(grid, _Grid):
             grid = [grid] * self._num_coils
         if isinstance(grid, list):

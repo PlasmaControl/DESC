@@ -72,7 +72,6 @@ from desc.objectives import (
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec import VMECIO
-from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
 
@@ -1550,6 +1549,7 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
 
 @pytest.mark.unit
 @pytest.mark.slow

@@ -1,5 +1,6 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
+import functools
 import os
 import warnings
 
@@ -73,7 +74,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     vmap = jax.vmap
     scan = jax.lax.scan
     bincount = jnp.bincount
-    set_default_cpu = jax.default_device(jax.devices("cpu")[0])
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -112,6 +112,28 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
+
+    def set_default_cpu(func):
+        """Decorator to set default device to CPU for a function.
+
+        Parameters
+        ----------
+        func : callable
+            Function to decorate
+
+        Returns
+        -------
+        wrapper : callable
+            Decorated function that will run always on CPU even if
+            there are available GPUs.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with jax.default_device(jax.devices("cpu")[0]):
+                return func(*args, **kwargs)
+
+        return wrapper
 
     def sign(x):
         """Sign function, but returns 1 for x==0.

@@ -130,10 +130,9 @@ class _CoilObjective(_Objective):
         if grid is None:
             grid = []
             for c in coils:
-                NFP = c.NFP if hasattr(c, "NFP") else 1
-                grid.append(LinearGrid(N=2 * c.N + 5, NFP=NFP, endpoint=False))
+                grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
         if isinstance(grid, numbers.Integral):
-            grid = LinearGrid(N=self._grid, endpoint=False)
+            grid = LinearGrid(N=self._grid)
         if isinstance(grid, _Grid):
             grid = [grid] * self._num_coils
         if isinstance(grid, list):
@@ -853,7 +852,7 @@ class CoilSetMinDistance(_Objective):
 class PlasmaCoilSetMinDistance(_Objective):
     """Target the minimum distance between the plasma and coilset.
 
-    Will yield one value per coil in the coilset, which is the minimumm distance from
+    Will yield one value per coil in the coilset, which is the minimum distance from
     that coil to the plasma boundary surface.
 
     NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
@@ -1137,7 +1136,7 @@ class QuadraticFlux(_Objective):
         Collocation grid containing the nodes on the plasma surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
         Default grid is: ``LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
-        NFP=int(eq.NFP), sym=False)``
+        NFP=eq.NFP, sym=False)``
     field_grid : Grid, optional
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils). Default grid is determined by the specific MagneticField object, see
@@ -1205,11 +1204,7 @@ class QuadraticFlux(_Objective):
 
         if self._eval_grid is None:
             eval_grid = LinearGrid(
-                rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=int(eq.NFP),
-                sym=False,
+                rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
             self._eval_grid = eval_grid
         else:

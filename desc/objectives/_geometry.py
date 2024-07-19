@@ -1452,7 +1452,7 @@ class UmbilicHighCurvature(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Umbilic curvature: {:10.3e} "
+    _print_value_fmt = "Umbilic high curvature: {:10.3e} "
 
     def __init__(
         self,
@@ -1467,7 +1467,7 @@ class UmbilicHighCurvature(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="Umbilic curvature",
+        name="Umbilic high curvature",
     ):
 
         if target is None and bounds is None:
@@ -1505,19 +1505,16 @@ class UmbilicHighCurvature(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 6 * curve.N)
-            phi_arr = jnp.concatenate(
-                (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
-            )
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 2 * curve.N)
+            phi_arr = (
+                phi_arr[:, jnp.newaxis]
+                + 2 * np.pi * jnp.arange(curve.NFP_umbilic_factor)
+            ).ravel()
             curve_grid = LinearGrid(
                 zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor
             )
         else:
             curve_grid = self._curve_grid
-
-        assert (
-            curve.NFP_umbilic_factor == 3
-        ), "objective not gneralized for the right umbilic factor"
 
         if eq != self._eq:
             self._eq = eq
@@ -1589,7 +1586,7 @@ class UmbilicHighCurvature(_Objective):
         curve_phi = curve_data["phi"]
         curve_Z = curve_data["R"]
 
-        theta_points = (curve_phi + curve_R + curve_Z) / 3
+        theta_points = (curve_phi + curve_R + curve_Z) / self._curve.NFP_umbilic_factor
 
         umbilic_edge_grid = Grid(
             jnp.array([jnp.ones_like(theta_points), theta_points, curve_phi]).T,
@@ -1601,7 +1598,6 @@ class UmbilicHighCurvature(_Objective):
             obj=self._eq,
             grid=umbilic_edge_grid,
             has_axis=umbilic_edge_grid.axis.size,
-            jitable=True,
         )
         equil_transforms = get_transforms(
             self._equil_data_keys,
@@ -1631,7 +1627,8 @@ class UmbilicLowCurvature(_Objective):
 
     Using the grid defined by the umbilic curve object,
     this class returns the minimum gaussian curvature k2 along that curve
-    which is used by us to ensure a large negative curvature and ensure umbilic-ness.
+    which is used by us to ensure a small negative curvature and ensure
+    non-umbilic-ness.
 
     Parameters
     ----------
@@ -1676,7 +1673,7 @@ class UmbilicLowCurvature(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Umbilic curvature: {:10.3e} "
+    _print_value_fmt = "Umbilic low curvature: {:10.3e} "
 
     def __init__(
         self,
@@ -1691,7 +1688,7 @@ class UmbilicLowCurvature(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="Umbilic curvature",
+        name="Umbilic low curvature",
     ):
 
         if target is None and bounds is None:
@@ -1729,26 +1726,23 @@ class UmbilicLowCurvature(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 6 * curve.N)
-            phi_arr = jnp.concatenate(
-                (phi_arr, phi_arr + 2 * jnp.pi, phi_arr + 4 * jnp.pi)
-            )
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 2 * curve.N)
+            phi_arr = (
+                phi_arr[:, jnp.newaxis]
+                + 2 * np.pi * jnp.arange(curve.NFP_umbilic_factor + 1)
+            ).ravel()
             curve_grid = LinearGrid(
                 zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor
             )
         else:
             curve_grid = self._curve_grid
 
-        assert (
-            curve.NFP_umbilic_factor == 3
-        ), "objective not gneralized for the right umbilic factor"
-
         if eq != self._eq:
             self._eq = eq
 
         self._dim_f = int(curve_grid.num_nodes)
 
-        self._curve_data_keys = ["R", "phi"]
+        self._curve_data_keys = ["R", "phi", "Z"]
         self._equil_data_keys = ["curvature_k2_rho"]
 
         timer = Timer()
@@ -1811,8 +1805,32 @@ class UmbilicLowCurvature(_Objective):
         )
         curve_R = curve_data["R"]
         curve_phi = curve_data["phi"]
+        curve_Z = curve_data["Z"]
 
-        theta_points = (curve_phi + curve_R) / 3
+        NFP_umbilic_factor = self._curve.NFP_umbilic_factor
+
+        theta_points1 = (
+            curve_phi
+            + 2 * (NFP_umbilic_factor + 0.5) * jnp.pi / (2 * NFP_umbilic_factor + 1)
+            + curve_R
+            + curve_Z
+        ) / NFP_umbilic_factor
+        theta_points2 = (
+            curve_phi
+            + 2 * (NFP_umbilic_factor + 1.8) * jnp.pi / (2 * NFP_umbilic_factor + 1)
+            + curve_R
+            + curve_Z
+        ) / NFP_umbilic_factor
+        theta_points3 = (
+            curve_phi
+            + 2 * (NFP_umbilic_factor - 1.8) * jnp.pi / (2 * NFP_umbilic_factor + 1)
+            + curve_R
+            + curve_Z
+        ) / NFP_umbilic_factor
+
+        theta_points = jnp.concatenate((theta_points1, theta_points2, theta_points3))
+
+        curve_phi = jnp.concatenate((curve_phi, curve_phi, curve_phi))
 
         umbilic_edge_grid = Grid(
             jnp.array([jnp.ones_like(theta_points), theta_points, curve_phi]).T,
@@ -1824,7 +1842,6 @@ class UmbilicLowCurvature(_Objective):
             obj=self._eq,
             grid=umbilic_edge_grid,
             has_axis=umbilic_edge_grid.axis.size,
-            jitable=True,
         )
         equil_transforms = get_transforms(
             self._equil_data_keys,

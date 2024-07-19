@@ -84,9 +84,9 @@ def test_singular_integral_greens_id():
 def test_singular_integral_vac_estell():
     """Test calculating Bplasma for vacuum estell, which should be near 0."""
     eq = desc.examples.get("ESTELL")
-    eval_grid = LinearGrid(M=8, N=8, NFP=int(eq.NFP))
+    eval_grid = LinearGrid(M=8, N=8, NFP=eq.NFP)
 
-    source_grid = LinearGrid(M=18, N=18, NFP=int(eq.NFP))
+    source_grid = LinearGrid(M=18, N=18, NFP=eq.NFP)
 
     keys = [
         "K_vc",

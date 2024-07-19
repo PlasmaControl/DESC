@@ -232,12 +232,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
-        if source_grid is None and hasattr(self, "NFP"):
-            # NFP=1 to ensure we have points along whole grid
-            # multiply by NFP in case the coil has NFP>1
-            # to ensure whole coil gets counted for the
-            # biot savart integration
-            source_grid = LinearGrid(N=2 * self.N * self.NFP + 5, NFP=1, endpoint=False)
+        if source_grid is None:
+            # NFP=1 to ensure points span the entire length of the coil
+            # multiply resolution by NFP to ensure Biot-Savart integration is accurate
+            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
 
         if not params or not transforms:
             data = self.compute(

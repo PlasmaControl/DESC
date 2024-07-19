@@ -1569,32 +1569,9 @@ def test_external_vs_generic_objectives(tmpdir_factory):
 
     class TestExternalObjective(_ExternalObjective):
 
-        def __init__(
-            self,
-            eq,
-            target=None,
-            bounds=None,
-            weight=1,
-            normalize=False,
-            normalize_target=False,
-            loss_function=None,
-            path="",
-            name="external",
-        ):
+        def __init__(self, eq, target=None, path=""):
             super().__init__(
-                eq=eq,
-                fun=data_from_vmec,
-                dim_f=4,
-                target=target,
-                bounds=bounds,
-                weight=weight,
-                normalize=normalize,
-                normalize_target=normalize_target,
-                loss_function=loss_function,
-                fd_step=1e-4,
-                vectorized=False,
-                name=name,
-                path=path,
+                eq=eq, fun=data_from_vmec, dim_f=4, target=target, path=path
             )
 
     eq0 = get("SOLOVEV")

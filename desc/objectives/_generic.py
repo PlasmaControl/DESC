@@ -1,6 +1,5 @@
 """Generic objectives that don't belong anywhere else."""
 
-import functools
 import inspect
 import re
 from abc import ABC
@@ -13,7 +12,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.optimizable import OptimizableCollection
-from desc.utils import errorif, parse_argname_change
+from desc.utils import errorif, jaxify, parse_argname_change
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
@@ -23,21 +22,22 @@ class _ExternalObjective(_Objective, ABC):
     """Wrap an external code.
 
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
-    computed with finite differences instead of AD.
+    computed with finite differences instead of AD. The function does not need not be
+    JAX transformable.
 
     The user supplied function must take an Equilibrium as its only positional argument,
     but can take additional keyword arguments.
-
-    # TODO: add Parameters documentation
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     fun : callable
-        Custom objective function.
+        External objective function. It must take an Equilibrium as its only positional
+        argument, but can take additional kewyord arguments. It does not need to be JAX
+        transformable.
     dim_f : int
-        Dimension of the output of fun.
+        Dimension of the output of ``fun``.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
@@ -59,6 +59,14 @@ class _ExternalObjective(_Objective, ABC):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    vectorized : bool, optional
+        Whether or not ``fun`` is vectorized. Default = False.
+    abs_step : float, optional
+        Absolute finite difference step size. Default = 1e-4.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    rel_step : float, optional
+        Relative finite difference step size. Default = 0.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
     name : str, optional
         Name of the objective function.
 
@@ -80,8 +88,9 @@ class _ExternalObjective(_Objective, ABC):
         normalize=False,
         normalize_target=False,
         loss_function=None,
-        fd_step=1e-4,  # TODO: generalize this to allow a vector of different scales
-        vectorized=False,  # False or int
+        vectorized=False,
+        abs_step=1e-4,
+        rel_step=0,
         name="external",
         **kwargs,
     ):
@@ -91,8 +100,9 @@ class _ExternalObjective(_Objective, ABC):
         self._eq = eq.copy()
         self._fun = fun
         self._dim_f = dim_f
-        self._fd_step = fd_step
         self._vectorized = vectorized
+        self._abs_step = abs_step
+        self._rel_step = rel_step
         self._kwargs = kwargs
         super().__init__(
             things=eq,
@@ -142,7 +152,13 @@ class _ExternalObjective(_Objective, ABC):
 
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
-        self._fun_wrapped = self._jaxify(fun_wrapped, abstract_eval)
+        self._fun_wrapped = jaxify(
+            fun_wrapped,
+            abstract_eval,
+            vectorized=self._vectorized,
+            abs_step=self._abs_step,
+            rel_step=self._rel_step,
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -165,85 +181,6 @@ class _ExternalObjective(_Objective, ABC):
         """
         f = self._fun_wrapped(params)
         return f
-
-    def _jaxify(self, func, abstract_eval):
-        """Make an external (python) function work with JAX.
-
-        Positional arguments to func can be differentiated,
-        use keyword args for static values and non-differentiable stuff.
-
-        Note: Only forward mode differentiation is supported currently.
-
-        Parameters
-        ----------
-        func : callable
-            Function to wrap. Should be a "pure" function, in that it has no side
-            effects and doesn't maintain state. Does not need to be JAX transformable.
-        abstract_eval : callable
-            Auxilliary function that computes the output shape and dtype of func.
-            **Must be JAX transformable**. Should be of the form
-
-                abstract_eval(*args, **kwargs) -> Pytree with same shape and dtype as
-                func(*args, **kwargs)
-
-            For example, if func always returns a scalar:
-
-                abstract_eval = lambda *args, **kwargs: jnp.array(1.)
-
-            Or if func takes an array of shape(n) and returns a dict of arrays of
-            shape(n-2):
-
-                abstract_eval = lambda arr, **kwargs:
-                {"out1": jnp.empty(arr.size-2), "out2": jnp.empty(arr.size-2)}
-
-        Returns
-        -------
-        func : callable
-            New function that behaves as func but works with jit/vmap/jacfwd etc.
-
-        """
-        import jax
-
-        def wrap_pure_callback(func):
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs):
-                result_shape_dtype = abstract_eval(*args, **kwargs)
-                return jax.pure_callback(
-                    func,
-                    result_shape_dtype,
-                    *args,
-                    vectorized=bool(self._vectorized),
-                    **kwargs,
-                )
-
-            return wrapper
-
-        def define_fd_jvp(func):
-            func = jax.custom_jvp(func)
-
-            @func.defjvp
-            def func_jvp(primals, tangents):
-                primal_out = func(*primals)
-
-                # flatten everything into 1D vectors for easier finite differences
-                y, unflaty = jax.flatten_util.ravel_pytree(primal_out)
-                x, unflatx = jax.flatten_util.ravel_pytree(primals)
-                v, _______ = jax.flatten_util.ravel_pytree(tangents)
-                # scale to unit norm if nonzero
-                normv = jnp.linalg.norm(v)
-                vh = jnp.where(normv == 0, v, v / normv)
-
-                def f(x):
-                    return jax.flatten_util.ravel_pytree(func(*unflatx(x)))[0]
-
-                tangent_out = (f(x + self._fd_step * vh) - y) / self._fd_step * normv
-                tangent_out = unflaty(tangent_out)
-
-                return primal_out, tangent_out
-
-            return func
-
-        return define_fd_jvp(wrap_pure_callback(func))
 
 
 class GenericObjective(_Objective):

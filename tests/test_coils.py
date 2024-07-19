@@ -275,6 +275,38 @@ class TestCoil:
         rs = np.linspace(0.1, 3, 10, endpoint=True)
         N = 200
         curve_grid = LinearGrid(zeta=N)
+
+        def test(
+            coil, grid_xyz, grid_rpz, A_true_rpz, correct_flux, rtol=1e-10, atol=1e-12
+        ):
+            """Test that we compute the correct flux for the given coil."""
+            A_xyz = coil.compute_magnetic_vector_potential(
+                grid_xyz, basis="xyz", source_grid=coil_grid
+            )
+            A_rpz = coil.compute_magnetic_vector_potential(
+                grid_rpz, basis="rpz", source_grid=coil_grid
+            )
+            flux_xyz = jnp.sum(
+                dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+            )
+            flux_rpz = jnp.sum(
+                dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+            )
+
+            np.testing.assert_allclose(
+                correct_flux, flux_xyz, rtol=rtol, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                correct_flux, flux_rpz, rtol=rtol, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                A_true_rpz,
+                A_rpz,
+                rtol=rtol,
+                atol=atol,
+                err_msg=f"Using {coil}",
+            )
+
         for r in rs:
             # A_phi is constant around the loop (no phi dependence)
             A_true_phi = _A_analytic(r) * np.ones(N)
@@ -300,119 +332,51 @@ class TestCoil:
             grid_xyz = rpz2xyz(grid_rpz)
             # FourierXYZCoil
             coil = FourierXYZCoil(I, X_n=[-R, 0, 0], Y_n=[0, 0, R], Z_n=[0, 0, 0])
-            A_xyz = coil.compute_magnetic_vector_potential(
-                grid_xyz, basis="xyz", source_grid=coil_grid
-            )
-            A_rpz = coil.compute_magnetic_vector_potential(
-                grid_rpz, basis="rpz", source_grid=coil_grid
-            )
-            flux_xyz = jnp.sum(
-                dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
-            )
-            flux_rpz = jnp.sum(
-                dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
-            )
-
-            np.testing.assert_allclose(
-                correct_flux, flux_xyz, rtol=1e-8, err_msg="Using FourierXYZCoil"
-            )
-            np.testing.assert_allclose(
-                correct_flux, flux_rpz, rtol=1e-8, err_msg="Using FourierXYZCoil"
-            )
-            np.testing.assert_allclose(
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
                 A_true_rpz,
-                A_rpz,
+                correct_flux,
                 rtol=1e-8,
                 atol=1e-12,
-                err_msg="Using FourierXYZCoil",
             )
 
             # SplineXYZCoil
             x = coil.compute("x", grid=coil_grid, basis="xyz")["x"]
             coil = SplineXYZCoil(I, X=x[:, 0], Y=x[:, 1], Z=x[:, 2])
-            A_xyz = coil.compute_magnetic_vector_potential(
-                grid_xyz, basis="xyz", source_grid=coil_grid
-            )
-            A_rpz = coil.compute_magnetic_vector_potential(
-                grid_rpz, basis="rpz", source_grid=coil_grid
-            )
-            flux_xyz = jnp.sum(
-                dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
-            )
-            flux_rpz = jnp.sum(
-                dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
-            )
-            np.testing.assert_allclose(
-                correct_flux, flux_xyz, rtol=1e-4, err_msg="Using SplineXYZCoil"
-            )
-            np.testing.assert_allclose(
-                correct_flux, flux_rpz, rtol=1e-4, err_msg="Using SplineXYZCoil"
-            )
-            np.testing.assert_allclose(
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
                 A_true_rpz,
-                A_rpz,
+                correct_flux,
                 rtol=1e-4,
                 atol=1e-12,
-                err_msg="Using SplineXYZCoil",
             )
+
             # FourierPlanarCoil
             coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R)
-            A_xyz = coil.compute_magnetic_vector_potential(
-                grid_xyz, basis="xyz", source_grid=coil_grid
-            )
-            A_rpz = coil.compute_magnetic_vector_potential(
-                grid_rpz, basis="rpz", source_grid=coil_grid
-            )
-
-            flux_xyz = jnp.sum(
-                dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
-            )
-            flux_rpz = jnp.sum(
-                dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
-            )
-
-            np.testing.assert_allclose(
-                correct_flux, flux_xyz, rtol=1e-8, err_msg="Using FourierPlanarCoil"
-            )
-            np.testing.assert_allclose(
-                correct_flux, flux_rpz, rtol=1e-8, err_msg="Using FourierPlanarCoil"
-            )
-            np.testing.assert_allclose(
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
                 A_true_rpz,
-                A_rpz,
+                correct_flux,
                 rtol=1e-8,
                 atol=1e-12,
-                err_msg="Using FourierPlanarCoil",
             )
 
             # FourierRZCoil
             coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
-            A_xyz = coil.compute_magnetic_vector_potential(
-                grid_xyz, basis="xyz", source_grid=coil_grid
-            )
-            A_rpz = coil.compute_magnetic_vector_potential(
-                grid_rpz, basis="rpz", source_grid=coil_grid
-            )
-
-            flux_xyz = jnp.sum(
-                dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
-            )
-            flux_rpz = jnp.sum(
-                dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
-            )
-
-            np.testing.assert_allclose(
-                correct_flux, flux_xyz, rtol=1e-8, err_msg="Using FourierRZCoil"
-            )
-            np.testing.assert_allclose(
-                correct_flux, flux_rpz, rtol=1e-8, err_msg="Using FourierRZCoil"
-            )
-            np.testing.assert_allclose(
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
                 A_true_rpz,
-                A_rpz,
+                correct_flux,
                 rtol=1e-8,
                 atol=1e-12,
-                err_msg="Using FourierRZCoil",
             )
 
     @pytest.mark.unit

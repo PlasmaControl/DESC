@@ -292,7 +292,7 @@ class FourierRZCurve(Curve):
         transform = Transform(grid, basis, build_pinv=True)
         R_n = transform.fit(R)
         Z_n = transform.fit(Z)
-        return cls(
+        return FourierRZCurve(
             R_n=R_n,
             Z_n=Z_n,
             modes_R=basis.modes[:, 2],
@@ -561,7 +561,9 @@ class FourierXYZCurve(Curve):
         X_n = transform.fit(X)
         Y_n = transform.fit(Y)
         Z_n = transform.fit(Z)
-        return cls(X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name)
+        return FourierXYZCurve(
+            X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name
+        )
 
 
 class FourierPlanarCurve(Curve):
@@ -842,7 +844,7 @@ class FourierPlanarCurve(Curve):
         transform_fit = Transform(grid_fit, basis, build_pinv=True)
         r_n = transform_fit.fit(r)
 
-        return cls(
+        return FourierPlanarCurve(
             center=center,
             normal=normal,
             r_n=r_n,
@@ -1116,7 +1118,7 @@ class SplineXYZCurve(Curve):
         """
         if basis == "rpz":
             coords = rpz2xyz(coords)
-        return cls(
+        return SplineXYZCurve(
             X=coords[:, 0],
             Y=coords[:, 1],
             Z=coords[:, 2],

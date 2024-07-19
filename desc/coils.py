@@ -448,7 +448,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         curve = super().from_values(
             coords=coords, N=N, NFP=NFP, basis=basis, sym=sym, name=name
         )
-        return cls(
+        return FourierRZCoil(
             current=current,
             R_n=curve.R_n,
             Z_n=curve.Z_n,
@@ -549,7 +549,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
 
         """
         curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
-        return cls(
+        return FourierXYZCoil(
             current=current,
             X_n=curve.X_n,
             Y_n=curve.Y_n,
@@ -657,7 +657,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
 
         """
         curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
-        return cls(
+        return FourierPlanarCoil(
             current=current,
             center=curve.center,
             normal=curve.normal,
@@ -821,7 +821,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         curve = super().from_values(
             coords=coords, knots=knots, method=method, basis=basis, name=name
         )
-        return cls(
+        return SplineXYZCoil(
             current=current,
             X=curve.X,
             Y=curve.Y,

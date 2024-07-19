@@ -614,9 +614,11 @@ def _splinexyz_helper(f, transforms, s_query_pts, method, derivative):
 
         # fill f values outside of interval with break point values so that
         # interpolation only takes into consideration the interval
-        f_in_interval = jnp.where(full_knots > full_knots[istop], full_f[istop], full_f)
         f_in_interval = jnp.where(
-            full_knots < full_knots[istart], full_f[istart], f_in_interval
+            full_knots > full_knots[istop], full_f[:, istop][..., None], full_f
+        )
+        f_in_interval = jnp.where(
+            full_knots < full_knots[istart], full_f[:, istart][..., None], f_in_interval
         )
         f_interp = inner_body(f_in_interval, full_knots, period=None)
 

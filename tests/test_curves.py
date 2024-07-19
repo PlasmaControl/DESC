@@ -847,7 +847,7 @@ class TestSplineXYZCurve:
     @pytest.mark.unit
     def test_discontinuous_splines(self):
         """Test splines that have break points."""
-        break_indices = [0, 10]
+        break_indices = [0, 500, 800]
 
         def test(method, data_key, compare_breaks=True):
             R = 2
@@ -873,7 +873,7 @@ class TestSplineXYZCurve:
             assert discontinuous.method == method
             assert continuous.method == method
 
-            grid = LinearGrid(N=1000)
+            grid = LinearGrid(N=100)
 
             discont_data = discontinuous.compute([data_key], grid=grid)
             discont_quantity = discont_data[data_key]

@@ -2284,8 +2284,8 @@ class TestObjectiveNaNGrad:
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
-        # TODO: add Omnigenity objective (see GH issue #943)
         Omnigenity,
+        EffectiveRipple,
     ]
     other_objectives = list(set(objectives) - set(specials))
 

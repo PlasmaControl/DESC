@@ -242,7 +242,7 @@ class EffectiveRipple(_Objective):
             self._keys,
             params,
             get_transforms(self._keys, eq, grid, jitable=True),
-            get_profiles(self._keys, eq, grid, jitable=True),
+            get_profiles(self._keys, eq, grid),
             data=data,
             **self._hyperparameters,
         )

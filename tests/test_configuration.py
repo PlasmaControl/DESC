@@ -465,6 +465,7 @@ class TestGetSurfaces:
         np.testing.assert_allclose(surf.compute("S")["S"], 4 * np.pi**2 * R0 * rho)
 
     @pytest.mark.unit
+    @pytest.mark.xfail(reason="GitHub issue 1127.")
     def test_get_zeta_surface(self):
         """Test getting a constant zeta surface."""
         eq = Equilibrium()

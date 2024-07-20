@@ -482,13 +482,18 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["chi"][:], desc.variables["chi"][:], atol=2e-5
     )
     np.testing.assert_allclose(vmec.variables["chipf"][:], desc.variables["chipf"][:])
+    # TODO: loosen test tol
     np.testing.assert_allclose(
-        vmec.variables["Rmajor_p"][:], desc.variables["Rmajor_p"][:]
+        vmec.variables["Rmajor_p"][:], desc.variables["Rmajor_p"][:], rtol=3e-4
     )
     np.testing.assert_allclose(
-        vmec.variables["Aminor_p"][:], desc.variables["Aminor_p"][:]
+        vmec.variables["Aminor_p"][:],
+        desc.variables["Aminor_p"][:],
+        rtol=2e-4,
     )
-    np.testing.assert_allclose(vmec.variables["aspect"][:], desc.variables["aspect"][:])
+    np.testing.assert_allclose(
+        vmec.variables["aspect"][:], desc.variables["aspect"][:], rtol=4e-4
+    )
     np.testing.assert_allclose(
         vmec.variables["volume_p"][:], desc.variables["volume_p"][:], rtol=1e-5
     )

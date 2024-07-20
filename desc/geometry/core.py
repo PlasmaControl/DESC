@@ -18,6 +18,7 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
+from desc.utils import errorif
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -160,12 +161,14 @@ class Curve(IOAble, Optimizable, ABC):
                 N=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False
             )
         elif hasattr(grid, "NFP"):
-            NFP = grid.NFP
-        else:
-            raise TypeError(
-                "must pass in a Grid object or an integer for argument grid!"
-                f" instead got type {type(grid)}"
-            )
+            grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+        elif isinstance(grid, numbers.Integral):
+            grid = LinearGrid(N=grid)
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            f"grid argument must be a Grid object or an integer, got type {type(grid)}",
+        )
 
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
@@ -193,12 +196,7 @@ class Curve(IOAble, Optimizable, ABC):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(
-                N=2 * self.N + 5,
-                NFP=NFP,
-                # --no-verify NFP_umbilic_factor=NFP_umbilic_factor,
-                endpoint=True,
-            )
+            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
             data0d = compute_fun(
                 self,
                 dep0d,

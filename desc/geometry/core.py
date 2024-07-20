@@ -18,6 +18,7 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
+from desc.utils import errorif
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -98,7 +99,10 @@ class Curve(IOAble, Optimizable, ABC):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
@@ -114,18 +118,14 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=False)
+            grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
-            NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=grid, NFP=NFP, endpoint=False)
-        elif hasattr(grid, "NFP"):
-            NFP = grid.NFP
-        else:
-            raise TypeError(
-                "must pass in a Grid object or an integer for argument grid!"
-                f" instead got type {type(grid)}"
-            )
+            grid = LinearGrid(N=grid)
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            f"grid argument must be a Grid object or an integer, got type {type(grid)}",
+        )
 
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
@@ -153,7 +153,7 @@ class Curve(IOAble, Optimizable, ABC):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
+            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -237,6 +237,8 @@ class Curve(IOAble, Optimizable, ABC):
 
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
             grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
 
@@ -308,10 +310,11 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import FourierRZCurve
 
+        NFP = 1 or NFP
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1, NFP=NFP)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return FourierRZCurve.from_values(
-            coords, N=N, NFP=NFP if NFP is not None else 1, basis="xyz", name=name
-        )
+        return FourierRZCurve.from_values(coords, N=N, NFP=NFP, basis="xyz", name=name)
 
 
 class Surface(IOAble, Optimizable, ABC):

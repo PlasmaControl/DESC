@@ -14,6 +14,7 @@ from .bound_utils import (
 )
 from .tr_subproblems import (
     trust_region_step_exact_cho,
+    trust_region_step_exact_qr,
     trust_region_step_exact_svd,
     update_tr_radius,
 )
@@ -165,11 +166,12 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         - ``"tr_decrease_ratio"`` : (0 < float < 1) Factor to decrease the trust region
           radius by when  the ratio of actual to predicted reduction falls below
           threshold. Default 0.25.
-        - ``"tr_method"`` : ``"svd"``, ``"cho"``) Method to use for solving the trust
-          region subproblem. ``"cho"`` uses a sequence of cholesky factorizations
-          (generally 2-3), while ``"svd"`` uses one singular value decomposition.
-          ``"cho"`` is generally faster for large systems, especially on GPU, but may
-          be less accurate for badly scaled systems. Default ``"svd"``
+        - ``"tr_method"`` : (``"qr"``, ``"svd"``, ``"cho"``) Method to use for solving
+          the trust region subproblem. ``"qr"`` and ``"cho"`` uses a sequence of QR or
+          Cholesky factorizations (generally 2-3), while ``"svd"`` uses one singular
+          value decomposition. ``"cho"`` is generally the fastest for large systems,
+          especially on GPU, but may be less accurate for badly scaled systems.
+          ``"svd"`` is the most accurate but significantly slower. Default ``"qr"``.
 
     Returns
     -------
@@ -314,12 +316,17 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.5)
     tr_increase_ratio = options.pop("tr_increase_ratio", 4)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
-    tr_method = options.pop("tr_method", "svd")
+    tr_method = options.pop("tr_method", "qr")
 
     errorif(
         len(options) > 0,
         ValueError,
         "Unknown options: {}".format([key for key in options]),
+    )
+    errorif(
+        tr_method not in ["cho", "svd", "qr"],
+        ValueError,
+        "tr_method should be one of 'cho', 'svd', 'qr', got {}".format(tr_method),
     )
 
     callback = setdefault(callback, lambda *args: False)
@@ -330,7 +337,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     step_norm = jnp.inf
     actual_reduction = jnp.inf
     Lactual_reduction = jnp.inf
-    alpha = 0  # "Levenberg-Marquardt" parameter
+    alpha = None  # "Levenberg-Marquardt" parameter
 
     allx = [z]
     alltr = [trust_radius]
@@ -381,6 +388,11 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 step_h, hits_boundary, alpha = trust_region_step_exact_cho(
                     g_h, B_h, trust_radius, alpha
                 )
+            elif tr_method == "qr":
+                step_h, hits_boundary, alpha = trust_region_step_exact_qr(
+                    L_a, J_a, trust_radius, alpha
+                )
+
             step = d * step_h  # Trust-region solution in the original space.
 
             step, step_h, Lpredicted_reduction = select_step(

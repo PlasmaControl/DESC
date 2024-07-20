@@ -158,7 +158,7 @@ def test_compute_everything():
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 
-    with open("tests/inputs/master_compute_data.pkl", "rb") as file:
+    with open("tests/inputs/master_compute_data_rpz.pkl", "rb") as file:
         master_data_rpz = pickle.load(file)
     with open("tests/inputs/master_compute_data_xyz.pkl", "rb") as file:
         master_data_xyz = pickle.load(file)

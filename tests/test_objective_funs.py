@@ -42,7 +42,7 @@ from desc.objectives import (
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
-    CoilsetMinDistance,
+    CoilSetMinDistance,
     CoilTorsion,
     EffectiveRipple,
     Elongation,
@@ -59,7 +59,7 @@ from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
-    PlasmaCoilsetMinDistance,
+    PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
@@ -870,7 +870,7 @@ class TestObjectiveFunction:
         """Tests minimum distance between coils in a coilset."""
 
         def test(coils, mindist, grid=None, expect_intersect=False, tol=None):
-            obj = CoilsetMinDistance(coils, grid=grid)
+            obj = CoilSetMinDistance(coils, grid=grid)
             obj.build()
             f = obj.compute(params=coils.params_dict)
             assert f.size == coils.num_coils
@@ -940,9 +940,9 @@ class TestObjectiveFunction:
             eq_fixed=False,
             coils_fixed=False,
         ):
-            obj = PlasmaCoilsetMinDistance(
+            obj = PlasmaCoilSetMinDistance(
                 eq=eq,
-                coils=coils,
+                coil=coils,
                 plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=eq_fixed,
@@ -1945,11 +1945,11 @@ class TestComputeScalarResolution:
         CoilCurrentLength,
         CoilCurvature,
         CoilLength,
-        CoilsetMinDistance,
+        CoilSetMinDistance,
         CoilTorsion,
         GenericObjective,
         Omnigenity,
-        PlasmaCoilsetMinDistance,
+        PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
         ToroidalFlux,
@@ -2238,7 +2238,7 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective",
-        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilsetMinDistance],
+        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilSetMinDistance],
     )
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
@@ -2273,10 +2273,10 @@ class TestObjectiveNaNGrad:
         CoilLength,
         CoilCurrentLength,
         CoilCurvature,
-        CoilsetMinDistance,
+        CoilSetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
-        PlasmaCoilsetMinDistance,
+        PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
         ToroidalFlux,
@@ -2285,10 +2285,9 @@ class TestObjectiveNaNGrad:
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
-        # TODO: add Omnigenity objective (see GH issue #943)
         Omnigenity,
-        GammaC,
         EffectiveRipple,
+        GammaC,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -2422,7 +2421,7 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "objective",
-        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilsetMinDistance],
+        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilSetMinDistance],
     )
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""

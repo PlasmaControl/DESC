@@ -88,6 +88,24 @@ Free boundary / Single stage optimization
     desc.objectives.VacuumBoundaryError
 
 
+Coil Optimization
+-----------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+
+    desc.objectives.QuadraticFlux
+    desc.objectives.CoilLength
+    desc.objectives.CoilCurvature
+    desc.objectives.CoilTorsion
+    desc.objectives.CoilSetMinDistance
+    desc.objectives.PlasmaCoilSetMinDistance
+    desc.objectives.CoilCurrentLength
+    desc.objectives.ToroidalFlux
+
+
 Profiles
 --------
 .. autosummary::
@@ -121,11 +139,14 @@ Fixing degrees of freedom
     desc.objectives.FixElectronDensity
     desc.objectives.FixElectronTemperature
     desc.objectives.FixIonTemperature
+    desc.objectives.FixAnisotropy
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
+    desc.objectives.FixCoilCurrent
+    desc.objectives.FixSumCoilCurrent
     desc.objectives.FixParameters
 
 

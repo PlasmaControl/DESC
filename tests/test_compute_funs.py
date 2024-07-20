@@ -1264,7 +1264,7 @@ def test_compute_everything():
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 
-    with open("tests/inputs/master_compute_data.pkl", "rb") as file:
+    with open("tests/inputs/master_compute_data_rpz.pkl", "rb") as file:
         master_data_rpz = pickle.load(file)
     with open("tests/inputs/master_compute_data_xyz.pkl", "rb") as file:
         master_data_xyz = pickle.load(file)
@@ -1345,10 +1345,10 @@ def test_compute_everything():
                 else:  # update master data with new compute quantity
                     update_master_data_xyz = True
 
+    # update the master compute data, if necessary
+    # remember to git commit these files
     if not error_rpz and update_master_data_rpz:
-        # then update the master compute data
-        with open("tests/inputs/master_compute_data.pkl", "wb") as file:
-            # remember to git commit this file
+        with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             pickle.dump(this_branch_data_rpz, file)
     if not error_xyz and update_master_data_xyz:
         with open("tests/inputs/master_compute_data_xyz.pkl", "wb") as file:

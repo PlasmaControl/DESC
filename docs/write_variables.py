@@ -78,6 +78,12 @@ All vector quantities are computed in toroidal coordinates :math:`(R,\phi,Z)` by
 The keyword argument ``basis='xyz'`` can be used to convert the variables into Cartesian
 coordinates :math:`(X,Y,Z)`. ``basis`` must be one of ``{'rpz', 'xyz'}``.
 
+Our convention to denote partial derivatives is an underscore followed by the first
+letter of the coordinate that the partial derivative is taken with respect to. Unless
+otherwise specified or implied by the variable name, these partial derivatives are
+the partial derivatives of the DESC coordinate system. For example, ``|B|_z`` is
+:math:`(\partial\vertB\vert / \partial\zeta)|_{\rho, \theta}`.
+
 """
 
 block = """

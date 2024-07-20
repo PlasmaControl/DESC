@@ -1727,9 +1727,10 @@ class UmbilicLowCurvature(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 3 * curve.N)
+            len_phi_arr = 3 * curve.N
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, len_phi_arr)
             phi_arr = jnp.tile(phi_arr, curve.NFP_umbilic_factor) + jnp.repeat(
-                2 * np.pi * np.arange(curve.NFP_umbilic_factor), len(phi_arr)
+                2 * np.pi * np.arange(curve.NFP_umbilic_factor), len_phi_arr
             )
             phi_arr = phi_arr.ravel()
             curve_grid = LinearGrid(

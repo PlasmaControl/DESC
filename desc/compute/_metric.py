@@ -14,7 +14,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
+from .utils import cross, dot, safediv, safenorm, surface_averages
 
 
 @register_compute_fun(
@@ -52,6 +52,27 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     data["sqrt(g)_PEST"] = dot(
         data["e_rho"], cross(data["e_theta_PEST"], data["e_phi"])
     )
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_Clebsch",
+    label="\\sqrt{g}_{\\text{Clebsch}}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of Clebsch field line coordinate system (ρ,α,ζ)"
+    " where ζ is the DESC toroidal coordinate.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "alpha_t"],
+)
+def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
+    # Same as dot(data["e_rho|a,z"], cross(data["e_alpha"], data["e_zeta|r,a"])), but
+    # more efficient as it avoids computing radial derivative of alpha and hence iota.
+    data["sqrt(g)_Clebsch"] = data["sqrt(g)"] / data["alpha_t"]
     return data
 
 
@@ -222,6 +243,27 @@ def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
 )
 def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
     data["|e_rho x e_theta|"] = safenorm(cross(data["e_rho"], data["e_theta"]), axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="|e_rho x e_alpha|",
+    label="|\\mathbf{e}_{\\rho} \\times \\mathbf{e}_{\\alpha}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant zeta surface in Clebsch "
+    "field line coordinates (ρ,α,ζ) where ζ is the DESC toroidal coordinate.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|e_rho x e_theta|", "alpha_t"],
+)
+def _e_rho_x_e_alpha(params, transforms, profiles, data, **kwargs):
+    # Same as safenorm(cross(data["e_rho|a,z"], data["e_alpha"]), axis=-1), but more
+    # efficient as it avoids computing radial derivative of iota and stream functions.
+    data["|e_rho x e_alpha|"] = data["|e_rho x e_theta|"] / jnp.abs(data["alpha_t"])
     return data
 
 
@@ -1756,6 +1798,31 @@ def _gradrho(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<|grad(rho)|>",  # same as S(r) / V_r(r)
+    label="\\langle \\vert \\nabla \\rho \\vert \\rangle|",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Magnitude of contravariant radial basis vector, flux surface average",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|grad(rho)|", "sqrt(g)"],
+    axis_limit_data=["sqrt(g)_r"],
+)
+def _gradrho_norm_fsa(params, transforms, profiles, data, **kwargs):
+    data["<|grad(rho)|>"] = surface_averages(
+        transforms["grid"],
+        data["|grad(rho)|"],
+        sqrt_g=transforms["grid"].replace_at_axis(
+            data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
+        ),
+    )
+    return data
+
+
+@register_compute_fun(
     name="|grad(psi)|",
     label="|\\nabla\\psi|",
     units="Wb / m",
@@ -1843,12 +1910,12 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "grad(alpha)", "grad(|B|)"],
+    data=["|B|^2", "b", "grad(alpha)", "grad(|B|)"],
 )
 def _gbdrift(params, transforms, profiles, data, **kwargs):
     data["gbdrift"] = (
         1
-        / data["|B|"] ** 2
+        / data["|B|^2"]
         * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
     )
     return data
@@ -1870,11 +1937,11 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "psi_r", "|B|", "gbdrift"],
+    data=["p_r", "psi_r", "|B|^2", "gbdrift"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
-    data["cvdrift"] = 1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
+    data["cvdrift"] = 1 / data["|B|^2"] * dp_dpsi + data["gbdrift"]
     return data
 
 
@@ -1888,16 +1955,16 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     units="1/(T-m^{2})",
     units_long="inverse Tesla meters^2",
     description="Radial component of the geometric part of the curvature drift"
-    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    + " used for local stability analyses, gyrokinetics, Gamma_c.",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "e^rho", "grad(|B|)"],
+    data=["|B|^2", "b", "e^rho", "grad(|B|)"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (
-        1 / data["|B|"] ** 2 * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
+        1 / data["|B|^2"] * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
     )
     return data

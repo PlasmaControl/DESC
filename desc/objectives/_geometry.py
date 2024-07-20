@@ -1505,11 +1505,12 @@ class UmbilicHighCurvature(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 2 * curve.N)
-            phi_arr = (
-                phi_arr[:, jnp.newaxis]
-                + 2 * np.pi * jnp.arange(curve.NFP_umbilic_factor)
-            ).ravel()
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 3 * curve.N)
+            phi_arr = jnp.tile(phi_arr, curve.NFP_umbilic_factor) + jnp.repeat(
+                2 * np.pi * np.arange(curve.NFP_umbilic_factor), len(phi_arr)
+            )
+            phi_arr = phi_arr.ravel()
+
             curve_grid = LinearGrid(
                 zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor
             )
@@ -1726,11 +1727,11 @@ class UmbilicLowCurvature(_Objective):
         if curve != self._curve:
             self._curve = curve
         if self._curve_grid is None:
-            phi_arr = jnp.linspace(0, 2 * jnp.pi, 2 * curve.N)
-            phi_arr = (
-                phi_arr[:, jnp.newaxis]
-                + 2 * np.pi * jnp.arange(curve.NFP_umbilic_factor + 1)
-            ).ravel()
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 3 * curve.N)
+            phi_arr = jnp.tile(phi_arr, curve.NFP_umbilic_factor) + jnp.repeat(
+                2 * np.pi * np.arange(curve.NFP_umbilic_factor), len(phi_arr)
+            )
+            phi_arr = phi_arr.ravel()
             curve_grid = LinearGrid(
                 zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor
             )

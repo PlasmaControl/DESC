@@ -124,46 +124,6 @@ dependencies specified by the decorator. The function itself should do any calcu
 needed using these dependencies and then add the output to the ``data`` dictionary and
 return it. The key in the ``data`` dictionary should match the ``name`` of the quantity.
 
-Here is another example.
-::
-
-    @register_compute_fun(
-        name="perimeter(z)",
-        label="P(\\zeta)",
-        units="m",
-        units_long="meters",
-        description="Perimeter of enclosed cross-section (enclosed constant phi surface), "
-        "scaled by max(ρ)⁻¹, as function of zeta",
-        dim=1,
-        params=[],
-        transforms={"grid": []},
-        profiles=[],
-        coordinates="z",
-        data=["rho", "e_theta|r,p"],
-        parameterization=[
-            "desc.equilibrium.equilibrium.Equilibrium",
-            "desc.geometry.core.Surface",
-        ],
-        # Document that the grid should have resolution in theta for an accurate
-        # computation, as required for integration over theta.
-        resolution_requirement="t",
-    )
-    def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
-        warnif_sym(transforms["grid"], "perimeter(z)")
-        max_rho = jnp.max(data["rho"])
-        data["perimeter(z)"] = (
-            line_integrals(
-                transforms["grid"],
-                safenorm(data["e_theta|r,p"], axis=-1),
-                line_label="theta",
-                fix_surface=("rho", max_rho),
-            )
-            # To approximate perimeter at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
-            # varies little from ρ = max_rho to ρ = 1.
-            / max_rho
-        )
-        return data
-
 Once a new quantity is added to the ``desc.compute`` module, there are two final steps involving the testing suite which must be checked.
 The first step is implementing the correct axis limit, or marking it as not finite or not implemented.
 We can check whether the axis limit currently evaluates as finite by computing the quantity on a grid with nodes at the axis.

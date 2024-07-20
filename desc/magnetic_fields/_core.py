@@ -227,6 +227,8 @@ class _MagneticField(IOAble, ABC):
         source_grid : Grid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------
@@ -241,7 +243,7 @@ class _MagneticField(IOAble, ABC):
 
     @abstractmethod
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -256,6 +258,8 @@ class _MagneticField(IOAble, ABC):
         source_grid : Grid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------
@@ -469,6 +473,7 @@ class _MagneticField(IOAble, ABC):
         nR=101,
         nZ=101,
         nphi=90,
+        save_vector_potential=True,
     ):
         """Save the magnetic field to an mgrid NetCDF file in "raw" format.
 
@@ -490,6 +495,9 @@ class _MagneticField(IOAble, ABC):
             Number of grid points in the Z coordinate (default = 101).
         nphi : int, optional
             Number of grid points in the toroidal angle (default = 90).
+        save_vector_potential : bool, optional
+            Whether or not to save the magnetic vector potential to the mgrid
+            file, in addition to the magnetic field. Defaults to True.
 
         Returns
         -------
@@ -511,19 +519,12 @@ class _MagneticField(IOAble, ABC):
         B_Z = field[:, 2].reshape(nphi, nZ, nR)
 
         # evaluate magnetic vector potential on grid
-        try:
+        if save_vector_potential:
             field = self.compute_magnetic_vector_potential(grid, basis="rpz")
             A_R = field[:, 0].reshape(nphi, nZ, nR)
             A_phi = field[:, 1].reshape(nphi, nZ, nR)
             A_Z = field[:, 2].reshape(nphi, nZ, nR)
-        except Exception as e:
-            warnif(
-                True,
-                UserWarning,
-                "Encountered error:"
-                f"{e} \nwhile attempting to compute vector magnetic potential."
-                " Vector potential will not be saved.",
-            )
+        else:
             A_R = None
 
         # write mgrid file
@@ -828,7 +829,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -843,6 +844,8 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         source_grid : Grid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------
@@ -930,7 +933,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         return B
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -945,6 +948,8 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         source_grid : Grid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating A from
             Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------
@@ -960,15 +965,23 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             source_grid = [None] * len(self._fields)
         if not isinstance(source_grid, (list, tuple)):
             source_grid = [source_grid]
+        if transforms is None:
+            transforms = [None] * len(self._fields)
+        if not isinstance(transforms, (list, tuple)):
+            transforms = [transforms]
         if len(source_grid) != len(self._fields):
             # ensure that if source_grid is shorter, that it is simply repeated so that
             # zip does not terminate early
             source_grid = source_grid * len(self._fields)
+        if len(transforms) != len(self._fields):
+            # ensure that if transforms is shorter, that it is simply repeated so that
+            # zip does not terminate early
+            transforms = transforms * len(self._fields)
 
         A = 0
-        for i, (field, g) in enumerate(zip(self._fields, source_grid)):
+        for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
             A += field.compute_magnetic_vector_potential(
-                coords, params[i % len(params)], basis, source_grid=g
+                coords, params[i % len(params)], basis, source_grid=g, transforms=tr
             )
 
         return A
@@ -1082,11 +1095,11 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         return B
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
-            The vector potential is specified assuming the Coulomb Gauge.
+        The vector potential is specified assuming the Coulomb Gauge.
 
         Parameters
         ----------
@@ -1097,6 +1110,9 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -1123,6 +1139,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
 class VerticalMagneticField(_MagneticField, Optimizable):
     """Uniform magnetic field purely in the vertical (Z) direction.
+
+    The vector potential is specified assuming the Coulomb Gauge.
 
     Parameters
     ----------
@@ -1184,7 +1202,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         return B
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1199,6 +1217,9 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -1339,7 +1360,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         return B
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1352,6 +1373,9 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -1486,6 +1510,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
             self._derivs["AR"] = self._approx_derivs(self._AR)
             self._derivs["Aphi"] = self._approx_derivs(self._Aphi)
             self._derivs["AZ"] = self._approx_derivs(self._AZ)
+        else:
+            self._AR = self._Aphi = self._AZ = None
 
     @property
     def NFP(self):
@@ -1645,7 +1671,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         return B
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1658,6 +1684,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -1844,12 +1873,11 @@ class SplineMagneticField(_MagneticField, Optimizable):
             ar = np.moveaxis(ar, (0, 1, 2), (1, 2, 0))
             ap = np.moveaxis(ap, (0, 1, 2), (1, 2, 0))
             az = np.moveaxis(az, (0, 1, 2), (1, 2, 0))
-        except IndexError as e:
+        except IndexError:
             warnif(
                 True,
                 UserWarning,
-                "Encountered error:"
-                f"{e} \nwhile attempting to read vector magnetic potential from mgrid."
+                "mgrid does not appear to contain vector potential information."
                 " Vector potential will not be computable.",
             )
             ar = ap = az = None
@@ -1977,7 +2005,7 @@ class ScalarPotentialField(_MagneticField):
         return B
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1990,6 +2018,9 @@ class ScalarPotentialField(_MagneticField):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -2113,10 +2144,6 @@ class VectorPotentialField(_MagneticField):
         if basis == "xyz":
             A = rpz2xyz_vec(A, phi=coords[:, 1])
         return A
-
-
-# TODO: Implement a VectorPotentialField that uses AD to do curl(A) on the input
-# magnetic vector potential function
 
 
 def field_line_integrate(

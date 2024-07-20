@@ -220,7 +220,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -234,6 +234,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------
@@ -252,6 +254,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             params=params,
             basis=basis,
             source_grid=source_grid,
+            transforms=transforms,
         )
 
     @classmethod
@@ -574,7 +577,7 @@ class FourierCurrentPotentialField(
         )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -588,6 +591,8 @@ class FourierCurrentPotentialField(
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------
@@ -606,6 +611,7 @@ class FourierCurrentPotentialField(
             params=params,
             basis=basis,
             source_grid=source_grid,
+            transforms=transforms,
         )
 
     @classmethod
@@ -773,11 +779,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
 
 
 def _compute_vector_potential_from_CurrentPotentialField(
-    field,
-    coords,
-    source_grid,
-    params=None,
-    basis="rpz",
+    field, coords, source_grid, params=None, basis="rpz", transforms=None
 ):
     """Compute magnetic vector potential at a set of points.
 
@@ -794,6 +796,8 @@ def _compute_vector_potential_from_CurrentPotentialField(
         should include the potential
     basis : {"rpz", "xyz"}
         basis for input coordinates and returned magnetic vector potential
+    transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
 
     Returns
@@ -810,7 +814,24 @@ def _compute_vector_potential_from_CurrentPotentialField(
     # compute surface current, and store grid quantities
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = field.compute(["K", "x"], grid=source_grid, basis="xyz", params=params)
+    if not params or not transforms:
+        data = field.compute(
+            ["K", "x"],
+            grid=source_grid,
+            basis="xyz",
+            params=params,
+            transforms=transforms,
+            jitable=True,
+        )
+    else:
+        data = compute_fun(
+            field,
+            names=["K", "x"],
+            params=params,
+            transforms=transforms,
+            profiles={},
+            basis="xyz",
+        )
 
     _rs = xyz2rpz(data["x"])
     _K = xyz2rpz_vec(data["K"], phi=source_grid.nodes[:, 2])

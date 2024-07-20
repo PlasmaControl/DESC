@@ -333,8 +333,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
                 params=params,
                 transforms=transforms,
                 profiles={},
-                basis="xyz",
             )
+            # TODO: need to check if basis is xyz here and swap if so?
 
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
@@ -345,7 +345,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         return B
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -363,6 +363,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -388,9 +390,23 @@ class _Coil(_MagneticField, Optimizable, ABC):
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(
-            ["x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
-        )
+        if not params or not transforms:
+            data = self.compute(
+                ["x", "x_s", "ds"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
+        else:
+            data = compute_fun(
+                self,
+                name=["x", "x_s", "ds"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+            )
+            # TODO: need to check if basis is xyz here and swap if so?
         A = biot_savart_vector_potential_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )
@@ -814,7 +830,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(["x"], grid=source_grid, params=params, basis="xyz")
+        data = self.compute(
+            ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
+        )
         # need to make sure the curve is closed. If it's already closed, this doesn't
         # do anything (effectively just adds a segment of zero length which has no
         # effect on the overall result)
@@ -832,11 +850,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         return B
 
     def compute_magnetic_vector_potential(
-        self,
-        coords,
-        params=None,
-        basis="rpz",
-        source_grid=None,
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -855,6 +869,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -878,7 +894,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(["x"], grid=source_grid, params=params, basis="xyz")
+        data = self.compute(
+            ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
+        )
         # need to make sure the curve is closed. If it's already closed, this doesn't
         # do anything (effectively just adds a segment of zero length which has no
         # effect on the overall result)

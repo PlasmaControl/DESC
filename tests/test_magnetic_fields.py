@@ -1122,10 +1122,11 @@ class TestMagneticFields:
         Rmax = 7
         Zmin = -2
         Zmax = 2
-        with pytest.warns(UserWarning):
-            # user warning because poloidal field has no vector potential
+        with pytest.raises(NotImplementedError):
+            # Raises error because poloidal field has no vector potential
             # and so cannot save the vector potential
             save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
+        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax, save_vector_potential=False)
         with pytest.warns(UserWarning):
             # user warning because saved mgrid has no vector potential
             # and so cannot load the vector potential

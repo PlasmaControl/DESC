@@ -1403,7 +1403,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Parameters to pass to coils, either the same for all coils or one for each.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-         source_grid : Grid, int or None, optional
+        source_grid : Grid, int or None, optional
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like

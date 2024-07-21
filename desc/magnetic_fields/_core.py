@@ -878,6 +878,86 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         )
         self._fields = fields
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating B from
+            Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            scaled magnetic field at specified points
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        if params is None:
+            params = [None] * len(self._fields)
+        if isinstance(params, dict):
+            params = [params]
+        if source_grid is None:
+            source_grid = [None] * len(self._fields)
+        if not isinstance(source_grid, (list, tuple)):
+            source_grid = [source_grid]
+        if transforms is None:
+            transforms = [None] * len(self._fields)
+        if not isinstance(transforms, (list, tuple)):
+            transforms = [transforms]
+        if len(source_grid) != len(self._fields):
+            # ensure that if source_grid is shorter, that it is simply repeated so that
+            # zip does not terminate early
+            source_grid = source_grid * len(self._fields)
+        if len(transforms) != len(self._fields):
+            # ensure that if transforms is shorter, that it is simply repeated so that
+            # zip does not terminate early
+            transforms = transforms * len(self._fields)
+
+        if compute_A_or_B == "B":
+            B = 0
+            for i, (field, g, tr) in enumerate(
+                zip(self._fields, source_grid, transforms)
+            ):
+                B += field.compute_magnetic_field(
+                    coords, params[i % len(params)], basis, source_grid=g, transforms=tr
+                )
+            return B
+        elif compute_A_or_B == "A":
+            A = 0
+            for i, (field, g, tr) in enumerate(
+                zip(self._fields, source_grid, transforms)
+            ):
+                A += field.compute_magnetic_vector_potential(
+                    coords, params[i % len(params)], basis, source_grid=g, transforms=tr
+                )
+
+            return A
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -900,37 +980,12 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         Returns
         -------
         field : ndarray, shape(N,3)
-            scaled magnetic field at specified points
+            sum magnetic field at specified points
 
         """
-        if params is None:
-            params = [None] * len(self._fields)
-        if isinstance(params, dict):
-            params = [params]
-        if source_grid is None:
-            source_grid = [None] * len(self._fields)
-        if not isinstance(source_grid, (list, tuple)):
-            source_grid = [source_grid]
-        if transforms is None:
-            transforms = [None] * len(self._fields)
-        if not isinstance(transforms, (list, tuple)):
-            transforms = [transforms]
-        if len(source_grid) != len(self._fields):
-            # ensure that if source_grid is shorter, that it is simply repeated so that
-            # zip does not terminate early
-            source_grid = source_grid * len(self._fields)
-        if len(transforms) != len(self._fields):
-            # ensure that if transforms is shorter, that it is simply repeated so that
-            # zip does not terminate early
-            transforms = transforms * len(self._fields)
-
-        B = 0
-        for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
-            B += field.compute_magnetic_field(
-                coords, params[i % len(params)], basis, source_grid=g, transforms=tr
-            )
-
-        return B
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, compute_A_or_B="B"
+        )
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -954,37 +1009,12 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         Returns
         -------
         A : ndarray, shape(N,3)
-            scaled magnetic vector potential at specified points
+            sum magnetic vector potential at specified points
 
         """
-        if params is None:
-            params = [None] * len(self._fields)
-        if isinstance(params, dict):
-            params = [params]
-        if source_grid is None:
-            source_grid = [None] * len(self._fields)
-        if not isinstance(source_grid, (list, tuple)):
-            source_grid = [source_grid]
-        if transforms is None:
-            transforms = [None] * len(self._fields)
-        if not isinstance(transforms, (list, tuple)):
-            transforms = [transforms]
-        if len(source_grid) != len(self._fields):
-            # ensure that if source_grid is shorter, that it is simply repeated so that
-            # zip does not terminate early
-            source_grid = source_grid * len(self._fields)
-        if len(transforms) != len(self._fields):
-            # ensure that if transforms is shorter, that it is simply repeated so that
-            # zip does not terminate early
-            transforms = transforms * len(self._fields)
-
-        A = 0
-        for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
-            A += field.compute_magnetic_vector_potential(
-                coords, params[i % len(params)], basis, source_grid=g, transforms=tr
-            )
-
-        return A
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, compute_A_or_B="A"
+        )
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
@@ -1053,6 +1083,69 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     def B0(self, new):
         self._B0 = float(np.squeeze(new))
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for R0 and B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field or vector potential at specified points
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+        R0 = params.get("R0", self.R0)
+
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        if compute_A_or_B == "B":
+            bp = B0 * R0 / coords[:, 0]
+            brz = jnp.zeros_like(bp)
+            B = jnp.array([brz, bp, brz]).T
+            if basis == "xyz":
+                B = rpz2xyz_vec(B, phi=coords[:, 1])
+
+            return B
+        elif compute_A_or_B == "A":
+            az = -B0 * R0 * jnp.log(coords[:, 0])
+            arp = jnp.zeros_like(az)
+            A = jnp.array([arp, arp, az]).T
+            # b/c it only has a nonzero z component, no need
+            # to switch bases back if xyz is given
+            return A
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -1078,21 +1171,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
-        params = setdefault(params, {})
-        B0 = params.get("B0", self.B0)
-        R0 = params.get("R0", self.R0)
-
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-        bp = B0 * R0 / coords[:, 0]
-        brz = jnp.zeros_like(bp)
-        B = jnp.array([brz, bp, brz]).T
-        if basis == "xyz":
-            B = rpz2xyz_vec(B, phi=coords[:, 1])
-
-        return B
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1121,20 +1200,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             magnetic vector potential at specified points
 
         """
-        params = setdefault(params, {})
-        B0 = params.get("B0", self.B0)
-        R0 = params.get("R0", self.R0)
-
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-        az = -B0 * R0 * jnp.log(coords[:, 0])
-        arp = jnp.zeros_like(az)
-        A = jnp.array([arp, arp, az]).T
-        # b/c it only has a nonzero z component, no need
-        # to switch bases back if xyz is given
-        return A
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
 
 class VerticalMagneticField(_MagneticField, Optimizable):
@@ -1164,6 +1230,71 @@ class VerticalMagneticField(_MagneticField, Optimizable):
     def B0(self, new):
         self._B0 = float(np.squeeze(new))
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field or vector potential at specified points
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if compute_A_or_B == "B":
+            bz = B0 * jnp.ones_like(coords[:, 2])
+            brp = jnp.zeros_like(bz)
+            B = jnp.array([brp, brp, bz]).T
+            # b/c it only has a nonzero z component, no need
+            # to switch bases back if xyz is given
+
+            return B
+        elif compute_A_or_B == "A":
+            if basis == "xyz":
+                coords_xyz = coords
+                coords_rpz = xyz2rpz(coords)
+            else:
+                coords_rpz = coords
+                coords_xyz = rpz2xyz(coords)
+            ax = B0 / 2 * coords_xyz[:, 1]
+            ay = -B0 / 2 * coords_xyz[:, 0]
+
+            az = jnp.zeros_like(ax)
+            A = jnp.array([ax, ay, az]).T
+            if basis == "rpz":
+                A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
+
+            return A
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -1189,17 +1320,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
-        params = setdefault(params, {})
-        B0 = params.get("B0", self.B0)
-
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        bz = B0 * jnp.ones_like(coords[:, 2])
-        brp = jnp.zeros_like(bz)
-        B = jnp.array([brp, brp, bz]).T
-        # b/c it only has a nonzero z component, no need
-        # to switch bases back if xyz is given
-
-        return B
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1228,26 +1349,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             magnetic vector potential at specified points
 
         """
-        params = setdefault(params, {})
-        B0 = params.get("B0", self.B0)
-
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "xyz":
-            coords_xyz = coords
-            coords_rpz = xyz2rpz(coords)
-        else:
-            coords_rpz = coords
-            coords_xyz = rpz2xyz(coords)
-        ax = B0 / 2 * coords_xyz[:, 1]
-        ay = -B0 / 2 * coords_xyz[:, 0]
-
-        az = jnp.zeros_like(ax)
-        A = jnp.array([ax, ay, az]).T
-        if basis == "rpz":
-            A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
-
-        return A
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
 
 class PoloidalMagneticField(_MagneticField, Optimizable):
@@ -1550,6 +1652,156 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 tempdict[key] = val[:, 0, :]
         return tempdict
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field or vector potential at specified points,
+            in cylindrical form [BR, Bphi,BZ]
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        errorif(
+            compute_A_or_B == "A" and not hasattr(self, "_AR"),
+            ValueError,
+            "Cannot calculate vector potential"
+            " as no vector potential spline values exist.",
+        )
+        assert basis.lower() in ["rpz", "xyz"]
+        currents = self.currents if params is None else params["currents"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        Rq, phiq, Zq = coords.T
+        if compute_A_or_B == "B":
+            A_or_B_R = self._BR
+            A_or_B_phi = self._Bphi
+            A_or_B_Z = self._BZ
+        elif compute_A_or_B == "A":
+            A_or_B_R = self._AR
+            A_or_B_phi = self._Aphi
+            A_or_B_Z = self._AZ
+
+        if self._axisym:
+            ABRq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                A_or_B_R[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs[compute_A_or_B + "R"],
+            )
+            ABphiq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                A_or_B_phi[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs[compute_A_or_B + "phi"],
+            )
+            ABZq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                A_or_B_Z[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs[compute_A_or_B + "Z"],
+            )
+
+        else:
+            ABRq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                A_or_B_R,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, 2 * np.pi / self.NFP, None),
+                **self._derivs[compute_A_or_B + "R"],
+            )
+            ABphiq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                A_or_B_phi,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, 2 * np.pi / self.NFP, None),
+                **self._derivs[compute_A_or_B + "phi"],
+            )
+            ABZq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                A_or_B_Z,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, 2 * np.pi / self.NFP, None),
+                **self._derivs[compute_A_or_B + "Z"],
+            )
+        # ABRq etc shape(nq, ngroups)
+        AB = jnp.stack([ABRq, ABphiq, ABZq], axis=1)
+        # AB shape(nq, 3, ngroups)
+        AB = jnp.sum(AB * currents, axis=-1)
+        if basis == "xyz":
+            AB = rpz2xyz_vec(AB, phi=coords[:, 1])
+        return AB
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -1575,100 +1827,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        currents = self.currents if params is None else params["currents"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-        Rq, phiq, Zq = coords.T
-        if self._axisym:
-            BRq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._BR[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["BR"],
-            )
-            Bphiq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._Bphi[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["Bphi"],
-            )
-            BZq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._BZ[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["BZ"],
-            )
-
-        else:
-            BRq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._BR,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["BR"],
-            )
-            Bphiq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._Bphi,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["Bphi"],
-            )
-            BZq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._BZ,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["BZ"],
-            )
-        # BRq etc shape(nq, ngroups)
-        B = jnp.stack([BRq, Bphiq, BZq], axis=1)
-        # B shape(nq, 3, ngroups)
-        B = jnp.sum(B * currents, axis=-1)
-        if basis == "xyz":
-            B = rpz2xyz_vec(B, phi=coords[:, 1])
-        return B
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1695,106 +1854,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             magnetic vector potential at specified points
 
         """
-        errorif(
-            not hasattr(self, "_AR"),
-            ValueError,
-            "Cannot calculate vector potential"
-            " as no vector potential spline values exist.",
-        )
-        assert basis.lower() in ["rpz", "xyz"]
-        currents = self.currents if params is None else params["currents"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-        Rq, phiq, Zq = coords.T
-        if self._axisym:
-            ARq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._AR[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["AR"],
-            )
-            Aphiq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._Aphi[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["Aphi"],
-            )
-            AZq = interp2d(
-                Rq,
-                Zq,
-                self._R,
-                self._Z,
-                self._AZ[:, 0, :],
-                self._method,
-                (0, 0),
-                self._extrap,
-                (None, None),
-                **self._derivs["AZ"],
-            )
-
-        else:
-            ARq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._AR,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["AR"],
-            )
-            Aphiq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._Aphi,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["Aphi"],
-            )
-            AZq = interp3d(
-                Rq,
-                phiq,
-                Zq,
-                self._R,
-                self._phi,
-                self._Z,
-                self._AZ,
-                self._method,
-                (0, 0, 0),
-                self._extrap,
-                (None, 2 * np.pi / self.NFP, None),
-                **self._derivs["AZ"],
-            )
-        # ARq etc shape(nq, ngroups)
-        A = jnp.stack([ARq, Aphiq, AZq], axis=1)
-        # A shape(nq, 3, ngroups)
-        A = jnp.sum(A * currents, axis=-1)
-        if basis == "xyz":
-            A = rpz2xyz_vec(A, phi=coords[:, 1])
-        return A
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     @classmethod
     def from_mgrid(cls, mgrid_file, extcur=None, method="cubic", extrap=False):
@@ -2053,8 +2113,86 @@ class VectorPotentialField(_MagneticField):
         self._potential = potential
         self._params = params
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        coords = coords.astype(float)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+
+        if params is None:
+            params = self._params
+        r, p, z = coords.T
+
+        if compute_A_or_B == "B":
+            funR = lambda x: self._potential(x, p, z, **params)
+            funP = lambda x: self._potential(r, x, z, **params)
+            funZ = lambda x: self._potential(r, p, x, **params)
+
+            ap = self._potential(r, p, z, **params)[:, 1]
+
+            # these are the gradients of each component of A
+            dAdr = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
+            dAdp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
+            dAdz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
+
+            # form the B components with the appropriate combinations
+            B = jnp.array(
+                [
+                    dAdp[:, 2] / r - dAdz[:, 1],
+                    dAdz[:, 0] - dAdr[:, 2],
+                    dAdr[:, 1] + (ap - dAdp[:, 0]) / r,
+                ]
+            ).T
+            if basis == "xyz":
+                B = rpz2xyz_vec(B, phi=coords[:, 1])
+            return B
+        elif compute_A_or_B == "A":
+            A = self._potential(r, p, z, **params)
+            if basis == "xyz":
+                A = rpz2xyz_vec(A, phi=coords[:, 1])
+            return A
+
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -2068,6 +2206,9 @@ class VectorPotentialField(_MagneticField):
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None
             Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
 
         Returns
         -------
@@ -2075,40 +2216,10 @@ class VectorPotentialField(_MagneticField):
             magnetic field at specified points
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        coords = coords.astype(float)
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-
-        if params is None:
-            params = self._params
-        r, p, z = coords.T
-        funR = lambda x: self._potential(x, p, z, **params)
-        funP = lambda x: self._potential(r, x, z, **params)
-        funZ = lambda x: self._potential(r, p, x, **params)
-
-        ap = self._potential(r, p, z, **params)[:, 1]
-
-        # these are the gradients of each component of A
-        dAdr = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
-        dAdp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
-        dAdz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
-
-        # form the B components with the appropriate combinations
-        B = jnp.array(
-            [
-                dAdp[:, 2] / r - dAdz[:, 1],
-                dAdz[:, 0] - dAdr[:, 2],
-                dAdr[:, 1] + (ap - dAdp[:, 0]) / r,
-            ]
-        ).T
-        if basis == "xyz":
-            B = rpz2xyz_vec(B, phi=coords[:, 1])
-        return B
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -2122,6 +2233,9 @@ class VectorPotentialField(_MagneticField):
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
             Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
 
         Returns
         -------
@@ -2129,21 +2243,7 @@ class VectorPotentialField(_MagneticField):
             magnetic vector potential at specified points
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        coords = coords.astype(float)
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-
-        if params is None:
-            params = self._params
-        r, p, z = coords.T
-
-        A = self._potential(r, p, z, **params)
-
-        if basis == "xyz":
-            A = rpz2xyz_vec(A, phi=coords[:, 1])
-        return A
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
 
 def field_line_integrate(

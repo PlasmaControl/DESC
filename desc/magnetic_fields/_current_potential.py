@@ -181,6 +181,54 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             " as the potential function cannot be serialized."
         )
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field or vector potential at specified points
+
+        """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * self.M,
+            N=30 + 2 * self.N,
+            NFP=self.NFP,
+        )
+        return _compute_A_or_B_from_CurrentPotentialField(
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
+            transforms=transforms,
+            compute_A_or_B=compute_A_or_B,
+        )
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -205,19 +253,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
-        source_grid = source_grid or LinearGrid(
-            M=30 + 2 * self.M,
-            N=30 + 2 * self.N,
-            NFP=self.NFP,
-        )
-        return _compute_magnetic_field_from_CurrentPotentialField(
-            field=self,
-            coords=coords,
-            params=params,
-            basis=basis,
-            source_grid=source_grid,
-            transforms=transforms,
-        )
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -243,19 +279,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Magnetic vector potential at specified points.
 
         """
-        source_grid = source_grid or LinearGrid(
-            M=30 + 2 * self.M,
-            N=30 + 2 * self.N,
-            NFP=self.NFP,
-        )
-        return _compute_vector_potential_from_CurrentPotentialField(
-            field=self,
-            coords=coords,
-            params=params,
-            basis=basis,
-            source_grid=source_grid,
-            transforms=transforms,
-        )
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     @classmethod
     def from_surface(
@@ -538,6 +562,54 @@ class FourierCurrentPotentialField(
             NFP=NFP
         )  # make sure surface and Phi basis NFP are the same
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field or vector potential at specified points
+
+        """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * max(self.M, self.M_Phi),
+            N=30 + 2 * max(self.N, self.N_Phi),
+            NFP=self.NFP,
+        )
+        return _compute_A_or_B_from_CurrentPotentialField(
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
+            transforms=transforms,
+            compute_A_or_B=compute_A_or_B,
+        )
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -562,19 +634,7 @@ class FourierCurrentPotentialField(
             magnetic field at specified points
 
         """
-        source_grid = source_grid or LinearGrid(
-            M=30 + 2 * max(self.M, self.M_Phi),
-            N=30 + 2 * max(self.N, self.N_Phi),
-            NFP=self.NFP,
-        )
-        return _compute_magnetic_field_from_CurrentPotentialField(
-            field=self,
-            coords=coords,
-            params=params,
-            basis=basis,
-            source_grid=source_grid,
-            transforms=transforms,
-        )
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -600,19 +660,7 @@ class FourierCurrentPotentialField(
             Magnetic vector potential at specified points.
 
         """
-        source_grid = source_grid or LinearGrid(
-            M=30 + 2 * max(self.M, self.M_Phi),
-            N=30 + 2 * max(self.N, self.N_Phi),
-            NFP=self.NFP,
-        )
-        return _compute_vector_potential_from_CurrentPotentialField(
-            field=self,
-            coords=coords,
-            params=params,
-            basis=basis,
-            source_grid=source_grid,
-            transforms=transforms,
-        )
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     @classmethod
     def from_surface(
@@ -691,6 +739,107 @@ class FourierCurrentPotentialField(
             name=name,
             check_orientation=False,
         )
+
+
+def _compute_A_or_B_from_CurrentPotentialField(
+    field,
+    coords,
+    source_grid,
+    params=None,
+    basis="rpz",
+    transforms=None,
+    compute_A_or_B="B",
+):
+    """Compute magnetic field or vector potential at a set of points.
+
+    Parameters
+    ----------
+    field : CurrentPotentialField or FourierCurrentPotentialField
+        current potential field object from which to compute magnetic field.
+    coords : array-like shape(N,3)
+        cylindrical or cartesian coordinates
+    source_grid : Grid,
+        source grid upon which to evaluate the surface current density K
+    params : dict, optional
+        parameters to pass to compute function
+        should include the potential
+    basis : {"rpz", "xyz"}
+        basis for input coordinates and returned magnetic field
+    compute_A_or_B: {"A", "B"}, optional
+        whether to compute the magnetic vector potential "A" or the magnetic field
+        "B". Defaults to "B"
+
+
+    Returns
+    -------
+    field : ndarray, shape(N,3)
+        magnetic field or vector potential at specified points
+
+    """
+    errorif(
+        compute_A_or_B not in ["A", "B"],
+        ValueError,
+        f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+    )
+    assert basis.lower() in ["rpz", "xyz"]
+    coords = jnp.atleast_2d(jnp.asarray(coords))
+    if basis == "rpz":
+        coords = rpz2xyz(coords)
+    op = {"B": biot_savart_general, "A": biot_savart_general_vector_potential}[
+        compute_A_or_B
+    ]
+    # compute surface current, and store grid quantities
+    # needed for integration in class
+    # TODO: does this have to be xyz, or can it be computed in rpz as well?
+    if not params or not transforms:
+        data = field.compute(
+            ["K", "x"],
+            grid=source_grid,
+            basis="xyz",
+            params=params,
+            transforms=transforms,
+            jitable=True,
+        )
+    else:
+        data = compute_fun(
+            field,
+            names=["K", "x"],
+            params=params,
+            transforms=transforms,
+            profiles={},
+            basis="xyz",
+        )
+
+    _rs = xyz2rpz(data["x"])
+    _K = xyz2rpz_vec(data["K"], phi=source_grid.nodes[:, 2])
+
+    # surface element, must divide by NFP to remove the NFP multiple on the
+    # surface grid weights, as we account for that when doing the for loop
+    # over NFP
+    _dV = source_grid.weights * data["|e_theta x e_zeta|"] / source_grid.NFP
+
+    def nfp_loop(j, f):
+        # calculate (by rotating) rs, rs_t, rz_t
+        phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
+            2 * jnp.pi
+        )
+        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
+        rs = rpz2xyz(rs)
+        K = rpz2xyz_vec(_K, phi=phi)
+        fj = op(
+            coords,
+            rs,
+            K,
+            _dV,
+        )
+        f += fj
+        return f
+
+    B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    if basis == "rpz":
+        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+    return B
 
 
 def _compute_magnetic_field_from_CurrentPotentialField(

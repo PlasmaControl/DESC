@@ -17,6 +17,7 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import GenericObjective, ObjectiveFunction
+from desc.utils import ResolutionWarning
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -282,12 +283,14 @@ class TestAxisLimits:
         eq = get("W7-X")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(4, 4, 4, 8, 8, 8)
-        assert_is_continuous(eq, kwargs=kwargs)
+        with pytest.warns(ResolutionWarning, match="full domain [0, 2π) is required"):
+            assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
         eq = get("NCSX")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(4, 4, 4, 8, 8, 8)
-        assert_is_continuous(eq, kwargs=kwargs)
+        with pytest.warns(ResolutionWarning, match="full domain [0, 2π) is required"):
+            assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):

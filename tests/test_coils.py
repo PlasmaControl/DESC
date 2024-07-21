@@ -196,6 +196,13 @@ class TestCoil:
         # FourierRZCoil
         coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
         test(coil, grid_xyz, grid_rpz)
+        # test in a CoilSet
+        coil2 = CoilSet(coil)
+        test(coil2, grid_xyz, grid_rpz)
+        # test in a MixedCoilSet
+        coil3 = MixedCoilSet(coil2, coil, check_intersection=False)
+        coil3[1].current = 0
+        test(coil3, grid_xyz, grid_rpz)
 
     @pytest.mark.unit
     def test_biot_savart_vector_potential_integral_all_coils(self):

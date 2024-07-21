@@ -268,6 +268,97 @@ class _Coil(_MagneticField, Optimizable, ABC):
             x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
         return x
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        The coil current may be overridden by including `current`
+        in the `params` dictionary.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict, optional
+            Parameters to pass to Curve.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+
+        Notes
+        -----
+        Uses direct quadrature of the Biot-Savart integral for filamentary coils with
+        tangents provided by the underlying curve class. Convergence should be
+        exponential in the number of points used to discretize the curve, though curl(B)
+        may not be zero if not fully converged.
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        op = {"B": biot_savart_quad, "A": biot_savart_vector_potential_quad}[
+            compute_A_or_B
+        ]
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis.lower() == "rpz":
+            phi = coords[:, 1]
+            coords = rpz2xyz(coords)
+        if params is None:
+            current = self.current
+        else:
+            current = params.pop("current", self.current)
+        if source_grid is None:
+            # NFP=1 to ensure points span the entire length of the coil
+            # multiply resolution by NFP to ensure Biot-Savart integration is accurate
+            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+
+        if not params or not transforms:
+            data = self.compute(
+                ["x", "x_s", "ds"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
+        else:
+            data = compute_fun(
+                self,
+                name=["x", "x_s", "ds"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+            )
+            # TODO: need to check if basis is xyz here and swap if so?
+
+        AB = op(coords, data["x"], data["x_s"] * data["ds"][:, None], current)
+
+        if basis.lower() == "rpz":
+            AB = xyz2rpz_vec(AB, phi=phi)
+        return AB
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -304,45 +395,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis.lower() == "rpz":
-            phi = coords[:, 1]
-            coords = rpz2xyz(coords)
-        if params is None:
-            current = self.current
-        else:
-            current = params.pop("current", self.current)
-        if source_grid is None:
-            # NFP=1 to ensure points span the entire length of the coil
-            # multiply resolution by NFP to ensure Biot-Savart integration is accurate
-            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
-
-        if not params or not transforms:
-            data = self.compute(
-                ["x", "x_s", "ds"],
-                grid=source_grid,
-                params=params,
-                transforms=transforms,
-                basis="xyz",
-            )
-        else:
-            data = compute_fun(
-                self,
-                name=["x", "x_s", "ds"],
-                params=params,
-                transforms=transforms,
-                profiles={},
-            )
-            # TODO: need to check if basis is xyz here and swap if so?
-
-        B = biot_savart_quad(
-            coords, data["x"], data["x_s"] * data["ds"][:, None], current
-        )
-
-        if basis.lower() == "rpz":
-            B = xyz2rpz_vec(B, phi=phi)
-        return B
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -380,40 +433,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis.lower() == "rpz":
-            phi = coords[:, 1]
-            coords = rpz2xyz(coords)
-        if params is None:
-            current = self.current
-        else:
-            current = params.pop("current", self.current)
-
-        if not params or not transforms:
-            data = self.compute(
-                ["x", "x_s", "ds"],
-                grid=source_grid,
-                params=params,
-                transforms=transforms,
-                basis="xyz",
-            )
-        else:
-            data = compute_fun(
-                self,
-                name=["x", "x_s", "ds"],
-                params=params,
-                transforms=transforms,
-                profiles={},
-            )
-            # TODO: need to check if basis is xyz here and swap if so?
-        A = biot_savart_vector_potential_quad(
-            coords, data["x"], data["x_s"] * data["ds"][:, None], current
-        )
-
-        if basis.lower() == "rpz":
-            A = xyz2rpz_vec(A, phi=phi)
-        return A
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -787,6 +807,83 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     ):
         super().__init__(current, X, Y, Z, knots, method, name)
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        The coil current may be overridden by including `current`
+        in the `params` dictionary.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict, optional
+            Parameters to pass to Curve.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+
+        Notes
+        -----
+        Discretizes the coil into straight segments between grid points, and uses the
+        Hanson-Hirshman expression for exact field from a straight segment. Convergence
+        is approximately quadratic in the number of coil points.
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        op = {"B": biot_savart_hh, "A": biot_savart_vector_potential_hh}[compute_A_or_B]
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        if params is None:
+            current = self.current
+        else:
+            current = params.pop("current", self.current)
+
+        data = self.compute(
+            ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
+        )
+        # need to make sure the curve is closed. If it's already closed, this doesn't
+        # do anything (effectively just adds a segment of zero length which has no
+        # effect on the overall result)
+        coil_pts_start = data["x"]
+        coil_pts_end = jnp.concatenate([data["x"][1:], data["x"][:1]])
+        # could get up to 4th order accuracy by shifting points outward as in
+        # (McGreivy, Zhu, Gunderson, Hudson 2021), however that requires knowing the
+        # coils curvature which is a 2nd derivative of the position, and doing that
+        # with only possibly c1 cubic splines is inaccurate, so we don't do it
+        # (for now, maybe in the future?)
+        AB = op(coords, coil_pts_start, coil_pts_end, current)
+
+        if basis == "rpz":
+            AB = xyz2rpz_vec(AB, x=coords[:, 0], y=coords[:, 1])
+        return AB
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -821,33 +918,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         is approximately quadratic in the number of coil points.
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "rpz":
-            coords = rpz2xyz(coords)
-        if params is None:
-            current = self.current
-        else:
-            current = params.pop("current", self.current)
-
-        data = self.compute(
-            ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
-        )
-        # need to make sure the curve is closed. If it's already closed, this doesn't
-        # do anything (effectively just adds a segment of zero length which has no
-        # effect on the overall result)
-        coil_pts_start = data["x"]
-        coil_pts_end = jnp.concatenate([data["x"][1:], data["x"][:1]])
-        # could get up to 4th order accuracy by shifting points outward as in
-        # (McGreivy, Zhu, Gunderson, Hudson 2021), however that requires knowing the
-        # coils curvature which is a 2nd derivative of the position, and doing that
-        # with only possibly c1 cubic splines is inaccurate, so we don't do it
-        # (for now, maybe in the future?)
-        B = biot_savart_hh(coords, coil_pts_start, coil_pts_end, current)
-
-        if basis == "rpz":
-            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        return B
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -885,35 +956,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Convergence is approximately quadratic in the number of coil points.
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "rpz":
-            coords = rpz2xyz(coords)
-        if params is None:
-            current = self.current
-        else:
-            current = params.pop("current", self.current)
-
-        data = self.compute(
-            ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
-        )
-        # need to make sure the curve is closed. If it's already closed, this doesn't
-        # do anything (effectively just adds a segment of zero length which has no
-        # effect on the overall result)
-        coil_pts_start = data["x"]
-        coil_pts_end = jnp.concatenate([data["x"][1:], data["x"][:1]])
-        # could get up to 4th order accuracy by shifting points outward as in
-        # (McGreivy, Zhu, Gunderson, Hudson 2021), however that requires knowing the
-        # coils curvature which is a 2nd derivative of the position, and doing that
-        # with only possibly c1 cubic splines is inaccurate, so we don't do it
-        # (for now, maybe in the future?)
-        A = biot_savart_vector_potential_hh(
-            coords, coil_pts_start, coil_pts_end, current
-        )
-
-        if basis == "rpz":
-            A = xyz2rpz_vec(A, x=coords[:, 0], y=coords[:, 1])
-        return A
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     @classmethod
     def from_values(
@@ -1222,8 +1265,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             x = rpz
         return x
 
-    def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
     ):
         """Compute magnetic field at a set of points.
 
@@ -1240,13 +1289,22 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
 
         Returns
         -------
         field : ndarray, shape(n,3)
-            Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
+            Magnetic field or vector potential at specified nodes, in [R,phi,Z]
+            or [X,Y,Z] coordinates.
 
         """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
@@ -1276,31 +1334,89 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         # field period rotation is easiest in [R,phi,Z] coordinates
         coords_rpz = xyz2rpz(coords_xyz)
+        op = {
+            "B": self[0].compute_magnetic_field,
+            "A": self[0].compute_magnetic_vector_potential,
+        }[compute_A_or_B]
 
         # sum the magnetic fields from each field period
-        def nfp_loop(k, B):
+        def nfp_loop(k, AB):
             coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
-            def body(B, x):
-                B += self[0].compute_magnetic_field(
-                    coords_nfp, params=x, basis="rpz", source_grid=source_grid
-                )
-                return B, None
+            def body(AB, x):
+                AB += op(coords_nfp, params=x, basis="rpz", source_grid=source_grid)
+                return AB, None
 
-            B += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
-            return B
+            AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
+            return AB
 
-        B = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))
+        AB = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))
 
-        # sum the magnetic fields from both halves of the symmetric field period
+        # sum the magnetic field/potential from both halves of
+        # the symmetric field period
         if self.sym:
-            B = B[: coords.shape[0], :] + B[coords.shape[0] :, :] * jnp.array(
+            AB = AB[: coords.shape[0], :] + AB[coords.shape[0] :, :] * jnp.array(
                 [-1, 1, 1]
             )
 
         if basis.lower() == "xyz":
-            B = rpz2xyz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        return B
+            AB = rpz2xyz_vec(AB, x=coords[:, 0], y=coords[:, 1])
+        return AB
+
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+    ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+         source_grid : Grid, int or None, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+
+        Returns
+        -------
+        vector_potential : ndarray, shape(n,3)
+            magnetic vector potential at specified points, in either rpz
+            or xyz coordinates
+
+        """
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     @classmethod
     def linspaced_angular(
@@ -1976,6 +2092,65 @@ class MixedCoilSet(CoilSet):
         )
         return x
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+            If array-like, should be 1 value per coil.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+            If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field or vector potential at specified points, in either rpz
+            or xyz coordinates
+
+        """
+        errorif(
+            compute_A_or_B not in ["A", "B"],
+            ValueError,
+            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        params = self._make_arraylike(params)
+        source_grid = self._make_arraylike(source_grid)
+        transforms = self._make_arraylike(transforms)
+
+        AB = 0
+        if compute_A_or_B == "B":
+            for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
+                AB += coil.compute_magnetic_field(
+                    coords, par, basis, grd, transforms=tr
+                )
+        elif compute_A_or_B == "A":
+            for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
+                AB += coil.compute_magnetic_vector_potential(
+                    coords, par, basis, grd, transforms=tr
+                )
+        return AB
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -2003,15 +2178,37 @@ class MixedCoilSet(CoilSet):
             magnetic field at specified points, in either rpz or xyz coordinates
 
         """
-        params = self._make_arraylike(params)
-        source_grid = self._make_arraylike(source_grid)
-        transforms = self._make_arraylike(transforms)
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
-        B = 0
-        for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
-            B += coil.compute_magnetic_field(coords, par, basis, grd, transforms=tr)
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+    ):
+        """Compute magnetic vector potential at a set of points.
 
-        return B
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+            If array-like, should be 1 value per coil.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+            If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+
+        Returns
+        -------
+        vector_potential : ndarray, shape(n,3)
+            magnetic vector potential at specified points, in either rpz
+            or xyz coordinates
+
+        """
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
         """Convert all coils to FourierXYZCoil representation.

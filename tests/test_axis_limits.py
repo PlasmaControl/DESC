@@ -283,13 +283,13 @@ class TestAxisLimits:
         eq = get("W7-X")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(4, 4, 4, 8, 8, 8)
-        with pytest.warns(ResolutionWarning, match="full domain [0, 2π) is required"):
+        with pytest.warns(ResolutionWarning, match="full domain"):
             assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
         eq = get("NCSX")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(4, 4, 4, 8, 8, 8)
-        with pytest.warns(ResolutionWarning, match="full domain [0, 2π) is required"):
+        with pytest.warns(ResolutionWarning, match="full domain"):
             assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit

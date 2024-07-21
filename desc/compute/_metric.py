@@ -1810,6 +1810,7 @@ def _gradrho(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["|grad(rho)|", "sqrt(g)"],
     axis_limit_data=["sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _gradrho_norm_fsa(params, transforms, profiles, data, **kwargs):
     data["<|grad(rho)|>"] = surface_averages(

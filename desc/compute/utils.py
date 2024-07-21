@@ -685,7 +685,10 @@ def _has_transforms(qty, transforms, parameterization):
 
 
 def dot(a, b, axis=-1):
-    """Batched vector dot product.
+    """Batched coordinate dot product.
+
+    This returns the dot product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal.
 
     Parameters
     ----------
@@ -702,11 +705,15 @@ def dot(a, b, axis=-1):
         y = sum(a*b, axis=axis)
 
     """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
+    return jnp.sum(a * b, axis=axis)
 
 
 def cross(a, b, axis=-1):
-    """Batched vector cross product.
+    """Batched coordinate cross product.
+
+    This returns the cross product between elements of a vector space only
+    if the basis vectors associated with these coordinates are orthonormal,
+    and the coordinate system is right-handed.
 
     Parameters
     ----------
@@ -954,7 +961,7 @@ def line_integrals(
         The coordinate curve to compute the integration over.
         To clarify, a theta (poloidal) curve is the intersection of a
         rho surface (flux surface) and zeta (toroidal) surface.
-    fix_surface : str, float
+    fix_surface : (str, float)
         A tuple of the form: label, value.
         ``fix_surface`` label should differ from ``line_label``.
         By default, ``fix_surface`` is chosen to be the flux surface at rho=1.

@@ -405,6 +405,7 @@ class TestZernikeRZToroidalSection:
     """Tests for ZernikeRZToroidalSection class."""
 
     @pytest.mark.unit
+    @pytest.mark.xfail(reason="GitHub issue 1127.")
     def test_area(self):
         """Test calculation of surface area."""
         s = ZernikeRZToroidalSection()

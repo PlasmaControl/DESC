@@ -941,7 +941,7 @@ class TestObjectiveFunction:
         ):
             obj = PlasmaCoilSetMinDistance(
                 eq=eq,
-                coils=coils,
+                coil=coils,
                 plasma_grid=plasma_grid,
                 coil_grid=coil_grid,
                 eq_fixed=eq_fixed,

@@ -146,6 +146,7 @@ Fixing degrees of freedom
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
     desc.objectives.FixCoilCurrent
+    desc.objectives.FixSumCoilCurrent
     desc.objectives.FixParameters
 
 

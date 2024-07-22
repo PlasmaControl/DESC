@@ -188,6 +188,8 @@ Objective Functions
     desc.objectives.FixParameters
     desc.objectives.FixPressure
     desc.objectives.FixPsi
+    desc.objectives.FixSumCoilCurrent
+    desc.objectives.FixSumModesLambda
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL

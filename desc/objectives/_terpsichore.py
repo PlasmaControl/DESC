@@ -8,12 +8,13 @@ import numpy as np
 from netCDF4 import Dataset, stringtochar
 
 from desc.basis import DoubleFourierSeries
+from desc.compute.utils import get_transforms
 from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import errorif
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 
-from ._generic import _ExternalObjective
+from ._generic import ExternalObjective
 
 
 def terpsichore(
@@ -37,6 +38,8 @@ def terpsichore(
     al0=-5e-1,
     sleep_time=1,
     stop_time=60,
+    data_transforms=None,
+    fit_transform=None,
 ):
     """TERPSICHORE driver function."""
     process = mp.current_process()
@@ -55,7 +58,13 @@ def terpsichore(
     shutil.copy(os.path.join(path, exec), exec_path)
 
     # write input files
-    _write_wout(eq=eq, path=wout_path, surfs=surfs)
+    _write_wout(
+        eq=eq,
+        path=wout_path,
+        surfs=surfs,
+        data_transforms=data_transforms,
+        fit_transform=fit_transform,
+    )
     _write_terps_input(
         path=input_path,
         mode_family=mode_family,
@@ -88,7 +97,7 @@ def terpsichore(
         )
         growth_rate = _read_terps_output(path=fort16_path)
     except RuntimeError:
-        growth_rate = al0  # default growth rate if it was unable to find one
+        growth_rate = abs(al0)  # default growth rate if it was unable to find one
 
     # remove temporary directory
     shutil.rmtree(pid_path)
@@ -96,7 +105,7 @@ def terpsichore(
     return np.atleast_1d(growth_rate)
 
 
-def _write_wout(eq, path, surfs):  # noqa: C901
+def _write_wout(eq, path, surfs, data_transforms, fit_transform):  # noqa: C901
     """Write the wout NetCDF file from the equilibrium."""
     # this is a lightweight version of VMECIO.save
     file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
@@ -129,7 +138,6 @@ def _write_wout(eq, path, surfs):  # noqa: C901
     file.createDimension("dim_00100", 100)
     file.createDimension("dim_00200", 200)
 
-    grid_lcfs = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1.0]), NFP=NFP)
     grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
     data_half = eq.compute(
         [
@@ -147,6 +155,7 @@ def _write_wout(eq, path, surfs):  # noqa: C901
             "<|B|^2>",
         ],
         grid=grid_half,
+        transforms=data_transforms,
     )
 
     mgrid_file = file.createVariable("mgrid_file", "S1", ("dim_00200",))
@@ -276,38 +285,20 @@ def _write_wout(eq, path, surfs):  # noqa: C901
 
     # derived quantities (approximate conversion)
 
-    if eq.sym:
-        cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
-        cos_transform = Transform(
-            grid=grid_lcfs, basis=cos_basis, build=False, build_pinv=True
-        )
-
-        def cosfit(x):
-            y = cos_transform.fit(x)
-            return np.where(cos_transform.basis.modes[:, 1] < 0, -y, y)
-
-    else:
-        full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
-        full_transform = Transform(
-            grid=grid_lcfs, basis=full_basis, build=False, build_pinv=True
-        )
-
-        def fullfit(x):
-            y = full_transform.fit(x)
-            return np.where(full_transform.basis.modes[:, 1] < 0, -y, y)
+    def fit(x):
+        y = fit_transform.fit(x)
+        return np.where(fit_transform.basis.modes[:, 1] < 0, -y, y)
 
     # Jacobian
     gmnc = file.createVariable("gmnc", np.float64, ("radius", "mn_mode_nyq"))
     gmnc.long_name = "cos(m*t-n*p) component of Jacobian, on half mesh"
     gmnc.units = "m"
-    m = cos_basis.modes[:, 1]
-    n = cos_basis.modes[:, 2]
     if not eq.sym:
         gmns = file.createVariable("gmns", np.float64, ("radius", "mn_mode_nyq"))
         gmns.long_name = "sin(m*t-n*p) component of Jacobian, on half mesh"
         gmns.units = "m"
-        m = full_basis.modes[:, 1]
-        n = full_basis.modes[:, 2]
+    m = fit_transform.basis.modes[:, 1]
+    n = fit_transform.basis.modes[:, 2]
     # d(rho)/d(s) = 1/(2*rho)
     data = (
         (data_half["sqrt(g)"] / (2 * data_half["rho"]))
@@ -319,10 +310,7 @@ def _write_wout(eq, path, surfs):  # noqa: C901
     )
     x_mn = np.zeros((surfs - 1, m.size))
     for i in range(surfs - 1):
-        if eq.sym:
-            x_mn[i, :] = cosfit(data[i, :])
-        else:
-            x_mn[i, :] = fullfit(data[i, :])
+        x_mn[i, :] = fit(data[i, :])
     xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
     gmnc[0, :] = 0
     gmnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -334,14 +322,12 @@ def _write_wout(eq, path, surfs):  # noqa: C901
     bmnc = file.createVariable("bmnc", np.float64, ("radius", "mn_mode_nyq"))
     bmnc.long_name = "cos(m*t-n*p) component of |B|, on half mesh"
     bmnc.units = "T"
-    m = cos_basis.modes[:, 1]
-    n = cos_basis.modes[:, 2]
     if not eq.sym:
         bmns = file.createVariable("bmns", np.float64, ("radius", "mn_mode_nyq"))
         bmns.long_name = "sin(m*t-n*p) component of |B|, on half mesh"
         bmns.units = "T"
-        m = full_basis.modes[:, 1]
-        n = full_basis.modes[:, 2]
+    m = fit_transform.basis.modes[:, 1]
+    n = fit_transform.basis.modes[:, 2]
     data = (
         data_half["|B|"]
         .reshape(
@@ -352,10 +338,7 @@ def _write_wout(eq, path, surfs):  # noqa: C901
     )
     x_mn = np.zeros((surfs - 1, m.size))
     for i in range(surfs - 1):
-        if eq.sym:
-            x_mn[i, :] = cosfit(data[i, :])
-        else:
-            x_mn[i, :] = full_transform.fit(data[i, :])
+        x_mn[i, :] = fit(data[i, :])
     xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
     bmnc[0, :] = 0
     bmnc[1:, :] = c
@@ -422,23 +405,21 @@ def _write_terps_input(  # noqa: C901
     boz_str_title = "C M=  0"
     boz_str_neg = "      0"
     boz_str_pos = "      1"
-    for _im in range(1, 37):
-        if _im >= 10:
-            boz_str_title += " " + str(_im)[1]
+    for m in range(1, 37):
+        if m >= 10:
+            boz_str_title += " " + str(m)[1]
         else:
-            boz_str_title += " " + str(_im)
+            boz_str_title += " " + str(m)
         boz_str_neg += " 1"
         boz_str_pos += " 1"
-
     boz_str_title += "  N\n"
     f.write(boz_str_title)
-    for _in in range(-N_booz_max, N_booz_max + 1):
-        final_str_neg = boz_str_neg + "{:>3}\n".format(_in)
-        final_str_pos = boz_str_pos + "{:>3}\n".format(_in)
-        if _in < 0.0:
-            f.write(final_str_neg)
+
+    for n in range(-N_booz_max, N_booz_max + 1):
+        if n < 0:
+            f.write(boz_str_neg + "{:>3}\n".format(n))
         else:
-            f.write(final_str_pos)
+            f.write(boz_str_pos + "{:>3}\n".format(n))
 
     f.write("C\n")
     f.write("      LLAMPR      LVMTPR      LMETPR      LFOUPR\n")
@@ -494,28 +475,20 @@ def _write_terps_input(  # noqa: C901
         + "0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5  N\n"
     )
 
-    for n in range(-8, 11):
-
-        in_family = False
-        if n % 2 == mode_family:  # FIXME: must be modified for nfp != 2,3
-            in_family = True
-
-        if n <= 0:
-            mode_str = "      0"
-        else:
-            if (n <= N_max) and (n >= N_min):
-                if (mode_family < 0) or (in_family):
-                    mode_str = "      1"
-            else:
-                mode_str = "      0"
-
-        for m in range(1, 55 + 1):
-            if m <= M_max:
-                if (mode_family < 0) or (in_family):
-                    if (n <= N_max) and (n >= N_min):
-                        mode_str += " 1"
+    for n in range(-9, 10):
+        mode_str = "     "
+        for m in range(56):
+            if mode_family < 0 or n % 2 == mode_family:  # FIXME: modify for nfp != 2,3
+                if (m <= M_max) and (n >= N_min) and (n <= N_max):
+                    if m == 0:
+                        if n > 0:
+                            mode_str += " 1"
+                        else:
+                            mode_str += " 0"
                     else:
-                        mode_str += " 0"
+                        mode_str += " 1"
+                else:
+                    mode_str += " 0"
             else:
                 mode_str += " 0"
 
@@ -604,7 +577,7 @@ def _read_terps_output(path):
     return growth_rates[0]
 
 
-class TERPSICHORE(_ExternalObjective):
+class TERPSICHORE(ExternalObjective):
     """Computes linear MHD stability from calls to the code TERPSICHORE.
 
     Returns the linear growth rate of the fastest growing instability.
@@ -654,23 +627,24 @@ class TERPSICHORE(_ExternalObjective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
-        fd_step=1e-4,
-        vectorized=True,
+        vectorized=False,
+        abs_step=1e-4,
+        rel_step=0,
         path="",
         exec="",
         mode_family=-1,
         surfs=16,
         lssl=200,
         lssd=100,
-        M_max=2,
-        N_min=-2,
-        N_max=2,
-        M_booz_max=4,
-        N_booz_max=4,
-        awall=2.0,
+        M_max=8,
+        N_min=-4,
+        N_max=4,
+        M_booz_max=19,
+        N_booz_max=18,
+        awall=1.3,
         xplo=1e-6,
-        deltajp=1e-2,
-        modelk=1,
+        deltajp=5e-1,
+        modelk=0,
         nev=1,
         al0=-5e-1,
         sleep_time=1,
@@ -687,9 +661,9 @@ class TERPSICHORE(_ExternalObjective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            fd_step=fd_step,
             vectorized=vectorized,
-            name=name,
+            abs_step=abs_step,
+            rel_step=rel_step,
             path=path,
             exec=exec,
             mode_family=mode_family,
@@ -709,4 +683,56 @@ class TERPSICHORE(_ExternalObjective):
             al0=al0,
             sleep_time=sleep_time,
             stop_time=stop_time,
+            name=name,
         )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        # transforms for _write_wout
+        surfs = self._kwargs.get("surfs")
+        NFP = self._eq.NFP
+        M = self._eq.M
+        N = self._eq.N
+        M_nyq = M + 4
+        N_nyq = N + 2 if N > 0 else 0
+        s_full = np.linspace(0, 1, surfs)
+        s_half = s_full[0:-1] + 0.5 / (surfs - 1)
+        r_half = np.sqrt(s_half)
+        grid_lcfs = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1.0]), NFP=NFP)
+        grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
+        self._kwargs["data_transforms"] = get_transforms(
+            keys=[
+                "B_rho",
+                "B_theta",
+                "B_zeta",
+                "G",
+                "I",
+                "J",
+                "iota",
+                "p",
+                "sqrt(g)",
+                "V_r(r)",
+                "|B|",
+                "<|B|^2>",
+            ],
+            obj=self._eq,
+            grid=grid_half,
+        )
+        if self._eq.sym:
+            fit_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
+        else:
+            fit_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
+        self._kwargs["fit_transform"] = Transform(
+            grid=grid_lcfs, basis=fit_basis, build=False, build_pinv=True
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)

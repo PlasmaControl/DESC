@@ -77,7 +77,7 @@ class ExternalObjective(_Objective, ABC):
     """
 
     _units = "(Unknown)"
-    _print_value_fmt = "External objective value: {:10.3e}"
+    _print_value_fmt = "External objective value: {:10.3e} "
 
     def __init__(
         self,

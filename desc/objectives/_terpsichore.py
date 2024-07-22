@@ -1,3 +1,4 @@
+import functools
 import multiprocessing as mp
 import os
 import shutil
@@ -7,6 +8,7 @@ import time
 import numpy as np
 from netCDF4 import Dataset, stringtochar
 
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute.utils import get_transforms
 from desc.grid import LinearGrid
@@ -19,6 +21,7 @@ from ._generic import ExternalObjective
 
 def terpsichore(
     eq,
+    processes=1,
     path="",
     exec="",
     mode_family=-1,
@@ -42,67 +45,80 @@ def terpsichore(
     fit_transform=None,
 ):
     """TERPSICHORE driver function."""
-    process = mp.current_process()
-    pid = str(process.pid)
+    idxs = list(range(len(eq)))  # equilibrium indices
 
     # create temporary directory to store I/O files
-    pid_path = os.path.join(path, pid)
-    os.mkdir(pid_path)
+    tmp_path = os.path.join(path, "tmp-TERPS")
+    os.mkdir(tmp_path)
 
-    exec_path = os.path.join(pid_path, exec)
-    input_path = os.path.join(pid_path, "input")
-    wout_path = os.path.join(pid_path, "wout.nc")
-    fort16_path = os.path.join(pid_path, "fort.16")
-
-    # copy executable to temporary directory
-    shutil.copy(os.path.join(path, exec), exec_path)
-
-    # write input files
-    _write_wout(
-        eq=eq,
-        path=wout_path,
-        surfs=surfs,
-        data_transforms=data_transforms,
-        fit_transform=fit_transform,
-    )
-    _write_terps_input(
-        path=input_path,
-        mode_family=mode_family,
-        surfs=surfs,
-        lssl=lssl,
-        lssd=lssd,
-        M_max=M_max,
-        N_min=N_min,
-        N_max=N_max,
-        M_booz_max=M_booz_max,
-        N_booz_max=N_booz_max,
-        awall=awall,
-        xplo=xplo,
-        deltajp=deltajp,
-        modelk=modelk,
-        nfp=eq.NFP,
-        nev=nev,
-        al0=al0,
-    )
-
-    # run TERPSICHORE
-    try:
-        _run_terps(
-            dir=pid_path,
-            exec=exec_path,
-            input=input_path,
-            wout=wout_path,
-            sleep_time=sleep_time,
-            stop_time=stop_time,
+    # write input files for each equilibrium in serial
+    for k in idxs:
+        idx_path = os.path.join(tmp_path, str(k))
+        os.mkdir(idx_path)
+        exec_path = os.path.join(idx_path, exec)
+        input_path = os.path.join(idx_path, "input")
+        wout_path = os.path.join(idx_path, "wout.nc")
+        shutil.copy(os.path.join(path, exec), exec_path)
+        _write_wout(
+            eq=eq[k],
+            path=wout_path,
+            surfs=surfs,
+            data_transforms=data_transforms,
+            fit_transform=fit_transform,
         )
-        growth_rate = _read_terps_output(path=fort16_path)
-    except RuntimeError:
-        growth_rate = abs(al0)  # default growth rate if it was unable to find one
+        _write_terps_input(
+            path=input_path,
+            mode_family=mode_family,
+            surfs=surfs,
+            lssl=lssl,
+            lssd=lssd,
+            M_max=M_max,
+            N_min=N_min,
+            N_max=N_max,
+            M_booz_max=M_booz_max,
+            N_booz_max=N_booz_max,
+            awall=awall,
+            xplo=xplo,
+            deltajp=deltajp,
+            modelk=modelk,
+            nfp=eq[k].NFP,
+            nev=nev,
+            al0=al0,
+        )
+
+    # run TERPSICHORE on list of equilibria in parallel
+    if len(eq) == 1:  # no multiprocessing if only one equilibrium
+        result = jnp.atleast_1d(
+            _pool_fun(
+                0,
+                path=tmp_path,
+                exec=exec,
+                al0=al0,
+                sleep_time=sleep_time,
+                stop_time=stop_time,
+            )
+        )
+    else:
+        with mp.Pool(processes=min(processes, len(eq))) as pool:
+            results = pool.map(
+                functools.partial(
+                    _pool_fun,
+                    path=tmp_path,
+                    exec=exec,
+                    al0=al0,
+                    sleep_time=sleep_time,
+                    stop_time=stop_time,
+                ),
+                idxs,
+            )
+            pool.close()
+            pool.join()
+            result = jnp.vstack(results, dtype=float)
 
     # remove temporary directory
-    shutil.rmtree(pid_path)
+    shutil.rmtree(tmp_path)
 
-    return np.atleast_1d(growth_rate)
+    return result
 
 
 def _write_wout(eq, path, surfs, data_transforms, fit_transform):  # noqa: C901
@@ -503,6 +519,30 @@ def _write_terps_input(  # noqa: C901
     f.close()
 
 
+def _pool_fun(k, path, exec, al0, sleep_time, stop_time):
+    """Run TERPSICHORE and read growth rate for equilibrium with index k."""
+    idx_path = os.path.join(path, str(k))
+    exec_path = os.path.join(idx_path, exec)
+    fort16_path = os.path.join(idx_path, "fort.16")
+    input_path = os.path.join(idx_path, "input")
+    wout_path = os.path.join(idx_path, "wout.nc")
+
+    try:
+        _run_terps(
+            dir=idx_path,
+            exec=exec_path,
+            input=input_path,
+            wout=wout_path,
+            sleep_time=sleep_time,
+            stop_time=stop_time,
+        )
+        growth_rate = _read_terps_output(path=fort16_path)
+    except RuntimeError:
+        growth_rate = abs(al0)  # default growth rate if it was unable to find one
+
+    return np.atleast_1d(growth_rate)
+
+
 def _run_terps(dir, exec, input, wout, sleep_time, stop_time):
     """Run TERPSICHORE."""
     stdout_path = os.path.join(dir, "stdout.terps")
@@ -615,8 +655,8 @@ class TERPSICHORE(ExternalObjective):
 
     """
 
-    _units = "(???)"
-    _print_value_fmt = "TERPSICHORE growth rate: {:10.3e}"
+    _units = "(?)"
+    _print_value_fmt = "TERPSICHORE growth rate: {:10.3e} "
 
     def __init__(
         self,
@@ -627,9 +667,9 @@ class TERPSICHORE(ExternalObjective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
-        vectorized=False,
         abs_step=1e-4,
         rel_step=0,
+        processes=1,
         path="",
         exec="",
         mode_family=-1,
@@ -661,9 +701,10 @@ class TERPSICHORE(ExternalObjective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            vectorized=vectorized,
+            vectorized=True,
             abs_step=abs_step,
             rel_step=rel_step,
+            processes=processes,
             path=path,
             exec=exec,
             mode_family=mode_family,
@@ -697,7 +738,7 @@ class TERPSICHORE(ExternalObjective):
             Level of output.
 
         """
-        # transforms for _write_wout
+        # transforms for writing the wout file
         surfs = self._kwargs.get("surfs")
         NFP = self._eq.NFP
         M = self._eq.M

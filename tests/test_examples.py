@@ -1449,10 +1449,10 @@ def test_regcoil_helical_coils_check_objective_method(
     # test finding coils
 
     numCoils = 15
-
-    coilset2 = surface_current_field2.to_CoilSet(
-        num_coils=numCoils,
-    )
+    with pytest.warns(UserWarning, match="intersecting"):
+        coilset2 = surface_current_field2.to_CoilSet(
+            num_coils=numCoils,
+        )
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=7e-3, rtol=1e-3)
 

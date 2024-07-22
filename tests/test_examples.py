@@ -14,6 +14,7 @@ from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
     FourierRZCoil,
+    FourierRZWindingSurfaceCoil,
     FourierXYZCoil,
     MixedCoilSet,
     _Coil,
@@ -1546,3 +1547,36 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+
+@pytest.mark.unit
+def test_optimize_FourierRZWindingSurfaceCoil_surface():
+    """Tests optimizing the surface of a winding surface coil."""
+    c = FourierRZWindingSurfaceCoil(secular_theta=1, secular_zeta=0)
+    # default surface has R0=10, a=1
+    target_a = 2
+    # target a minor radius of the surface of 2
+    obj = ObjectiveFunction(
+        CoilLength(c, target=2 * np.pi * target_a, grid=LinearGrid(N=40))
+    )
+    # we will fix all but the R_lmn, Z_lmn of the surface (which are
+    # params of the FourierRZWindingSurfaceCoil object)
+    # so that the surface geometry must change to satisfy the
+    # optimizatin problem
+    cons = (
+        FixCoilCurrent(c),
+        FixParameters(
+            c,
+            params={
+                "theta_n": True,
+                "zeta_n": True,
+                "secular_theta": True,
+                "secular_zeta": True,
+            },
+        ),
+    )
+
+    opt = Optimizer("fmintr")
+    (c,), _ = opt.optimize(c, objective=obj, constraints=cons, verbose=3)
+    np.testing.assert_allclose(c.R_lmn[c.surface.R_basis.get_idx(M=1, N=0)], target_a)
+    np.testing.assert_allclose(c.Z_lmn[c.surface.Z_basis.get_idx(M=-1, N=0)], -target_a)

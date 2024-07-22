@@ -644,7 +644,7 @@ def _center_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **k
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["rotmat", "shift"],
+    params=["rotmat", "shift", "R_lmn", "Z_lmn"],
     transforms={"surface": []},
     profiles=[],
     coordinates="s",
@@ -654,8 +654,15 @@ def _center_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **k
 def _x_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
     nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
     grid = Grid(nodes, sort=False, jitable=True)
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
+
     data_surf = transforms["surface"].compute(
-        ["R", "phi", "Z"], grid=grid, method="jitable"
+        ["R", "phi", "Z"],
+        grid=grid,
+        method="jitable",
+        params=params_temp,
     )
     coords = jnp.stack([data_surf["R"], data_surf["phi"], data_surf["Z"]], axis=1)
     # convert to xyz for displacement and rotation
@@ -703,7 +710,7 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["rotmat", "shift"],
+    params=["rotmat", "shift", "R_lmn", "Z_lmn"],
     transforms={"surface": []},
     profiles=[],
     coordinates="s",
@@ -713,10 +720,15 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 def _x_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
     nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
     grid = Grid(nodes, sort=False, jitable=True)
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
+    names = ["R_t", "R_z", "Z_t", "Z_z", "phi", "phi_z", "phi_t"]
     data_surf = transforms["surface"].compute(
-        ["R_t", "R_z", "Z_t", "Z_z", "phi", "phi_z", "phi_t"],
+        names,
         grid=grid,
         method="jitable",
+        params=params_temp,
     )
 
     coords = jnp.stack(
@@ -775,7 +787,7 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["rotmat", "shift"],
+    params=["rotmat", "shift", "R_lmn", "Z_lmn"],
     transforms={"surface": []},
     profiles=[],
     coordinates="s",
@@ -785,6 +797,9 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 def _x_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
     nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
     grid = Grid(nodes, sort=False, jitable=True)
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
     data_surf = transforms["surface"].compute(
         [
             "e_theta",
@@ -800,6 +815,7 @@ def _x_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwa
         grid=grid,
         method="jitable",
         basis="rpz",
+        params=params_temp,
     )
     # first derivs
     data_surf["R_t"] = data_surf["e_theta"][:, 0]
@@ -896,7 +912,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["rotmat", "shift"],
+    params=["rotmat", "shift", "R_lmn", "Z_lmn"],
     transforms={"surface": []},
     profiles=[],
     coordinates="s",
@@ -915,7 +931,9 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
     nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
     grid = Grid(nodes, sort=False, jitable=True)
-
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
     data_surf = transforms["surface"].compute(
         [
             "R_t",
@@ -950,6 +968,7 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
         grid=grid,
         method="jitable",
         basis="rpz",
+        params=params_temp,
     )
 
     d3R = (

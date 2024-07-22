@@ -23,7 +23,6 @@ from desc.compute.utils import safenorm
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
-    FourierRZToroidalSurface,
     FourierRZWindingSurfaceCurve,
     FourierXYZCurve,
     SplineXYZCurve,
@@ -459,8 +458,6 @@ class FourierRZWindingSurfaceCoil(_Coil, FourierRZWindingSurfaceCurve):
         sym_zeta="sin",
         name="",
     ):
-        if surface is None:
-            surface = FourierRZToroidalSurface()
         super().__init__(
             current,
             surface,

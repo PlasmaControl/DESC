@@ -1088,6 +1088,9 @@ class FourierRZWindingSurfaceCurve(Curve):
             f"object, instead got type {type(surface)}"
         )
         self._surface = surface
+        self._R_lmn = surface.R_lmn
+        self._Z_lmn = surface.Z_lmn
+
         theta_n, zeta_n = np.atleast_1d(theta_n), np.atleast_1d(zeta_n)
         if modes_theta is None:
             modes_theta = np.arange(-(theta_n.size // 2), theta_n.size // 2 + 1)
@@ -1166,8 +1169,43 @@ class FourierRZWindingSurfaceCurve(Curve):
         """Maximum mode number."""
         return max(self.theta_basis.N, self.zeta_basis.N)
 
+    @optimizable_parameter
+    @property
+    def R_lmn(self):
+        """ndarray: Spectral coefficients for surface R."""
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        if len(new) == self.surface.R_basis.num_modes:
+            self._R_lmn = jnp.asarray(new)
+            self.surface._R_lmn = self._R_lmn
+        else:
+            raise ValueError(
+                f"R_lmn should have the same size as the surface basis, got {len(new)}"
+                + f" for basis with {self.surface.R_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients for surface Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        if len(new) == self.surface.Z_basis.num_modes:
+            self._Z_lmn = jnp.asarray(new)
+            self.surface._Z_lmn = self._Z_lmn
+        else:
+            raise ValueError(
+                f"Z_lmn should have the same size as the surface basis, got {len(new)}"
+                + f" for basis with {self.surface.Z_basis.num_modes} modes."
+            )
+
+    # todo: need a change_surf_resolutoin that just calls underlying surf?
     def change_resolution(self, N=None, NFP=None, sym=None):
-        """Change the maximum toroidal resolution."""
+        """Change the maximum toroidal resolution for the curve."""
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))
@@ -1256,7 +1294,7 @@ class FourierRZWindingSurfaceCurve(Curve):
 
     @secular_theta.setter
     def secular_theta(self, new):
-        self._secular_theta = float(new)
+        self._secular_theta = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -1266,7 +1304,7 @@ class FourierRZWindingSurfaceCurve(Curve):
 
     @secular_zeta.setter
     def secular_zeta(self, new):
-        self._secular_zeta = float(new)
+        self._secular_zeta = float(np.squeeze(new))
 
     # TODO: add symmetry? I think for modular coils to be not
     # all at the same zeta angle, the zeta basis must

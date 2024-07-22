@@ -3,6 +3,8 @@ from desc.backend import jnp
 from .data_index import register_compute_fun
 from .geom_utils import rpz2xyz
 
+# TODO: review when zeta no longer equals phi
+
 
 @register_compute_fun(
     name="x",
@@ -25,6 +27,7 @@ from .geom_utils import rpz2xyz
 def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
     Z = transforms["Z"].transform(params["Z_lmn"])
+    # TODO: change when zeta no longer equals phi
     phi = transforms["grid"].nodes[:, 2]
     coords = jnp.stack([R, phi, Z], axis=1)
     # default basis for "x" is rpz, the conversion will be done

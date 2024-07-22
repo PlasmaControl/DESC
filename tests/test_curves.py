@@ -15,8 +15,22 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
 
 
-class TestRZCurve:
+class TestFourierRZCurve:
     """Tests for FourierRZCurve class."""
+
+    @pytest.mark.unit
+    def test_center(self):
+        """Test center of curve."""
+        c = FourierRZCurve(R_n=[-2, 10, 4], Z_n=[1, 3, 2])
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [2, -1, 3]
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [-3, 0, 4], atol=1e-15
+        )
 
     @pytest.mark.unit
     def test_length(self):
@@ -57,7 +71,7 @@ class TestRZCurve:
         """Test frenet-serret frame of circular curve."""
         c = FourierRZCurve()
         data = c.compute(
-            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="rpz", grid=0
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
@@ -67,7 +81,7 @@ class TestRZCurve:
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         data = c.compute(
-            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="rpz", grid=0
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
@@ -489,6 +503,20 @@ class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""
 
     @pytest.mark.unit
+    def test_center(self):
+        """Test center of curve."""
+        c = FourierXYZCurve(X_n=[1, 10, 2], Y_n=[0, -3, 1], Z_n=[-2, 2, 3])
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [10, -3, 2]
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [-11, -2, 3]
+        )
+
+    @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
         c = FourierXYZCurve()
@@ -531,7 +559,7 @@ class TestFourierXYZCurve:
         """Test frenet-serret frame of circular curve."""
         c = FourierXYZCurve()
         data = c.compute(
-            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="rpz", grid=0
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
@@ -630,8 +658,26 @@ class TestFourierXYZCurve:
             _ = FourierXYZCurve(Z_n=[1], modes=[1, 2])
 
 
-class TestPlanarCurve:
+class TestFourierPlanarCurve:
     """Tests for FourierPlanarCurve class."""
+
+    @pytest.mark.unit
+    def test_center(self):
+        """Test center of curve."""
+        c = FourierPlanarCurve(center=[5, 4, 3], r_n=[1, 2, 0.5], basis="xyz")
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [5, 4, 3]
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [-6, 5, 4]
+        )
+        c = FourierPlanarCurve(center=[5, 1, -2], r_n=[1, 2, 0.5], basis="rpz")
+        np.testing.assert_allclose(
+            c.compute("center", basis="rpz")["center"][0, :], [5, 1, -2]
+        )
 
     @pytest.mark.unit
     def test_rotation(self):
@@ -786,6 +832,24 @@ class TestPlanarCurve:
 
 class TestSplineXYZCurve:
     """Tests for SplineXYZCurve class."""
+
+    @pytest.mark.unit
+    def test_center(self):
+        """Test center of curve."""
+        c = SplineXYZCurve(
+            X=np.array([5, 8, 7, 6]),
+            Y=np.array([4, 2, 3, 1]),
+            Z=np.array([-2, -1, 1, 0]),
+        )
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [6.5, 2.5, -0.5]
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute("center", basis="xyz")["center"][0, :], [-7.5, 3.5, 0.5]
+        )
 
     @pytest.mark.unit
     def test_length(self):

@@ -21,10 +21,10 @@ from ._equilibrium import (
 )
 from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import (
+    ExternalObjective,
     GenericObjective,
     LinearObjectiveFromUser,
     ObjectiveFromUser,
-    _ExternalObjective,
 )
 from ._geometry import (
     AspectRatio,

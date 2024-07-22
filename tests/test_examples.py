@@ -39,6 +39,7 @@ from desc.objectives import (
     CoilSetMinDistance,
     CoilTorsion,
     CurrentDensity,
+    ExternalObjective,
     FixBoundaryR,
     FixBoundaryZ,
     FixCoilCurrent,
@@ -65,7 +66,6 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     VacuumBoundaryError,
     Volume,
-    _ExternalObjective,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
@@ -1567,13 +1567,6 @@ def test_external_vs_generic_objectives(tmpdir_factory):
         file.close()
         return np.atleast_1d([betatot, betapol, betator, presf1])
 
-    class TestExternalObjective(_ExternalObjective):
-
-        def __init__(self, eq, target=None, path=""):
-            super().__init__(
-                eq=eq, fun=data_from_vmec, dim_f=4, target=target, path=path
-            )
-
     eq0 = get("SOLOVEV")
     optimizer = Optimizer("lsq-exact")
 
@@ -1612,7 +1605,7 @@ def test_external_vs_generic_objectives(tmpdir_factory):
     dir = tmpdir_factory.mktemp("results")
     path = dir.join("wout_result.nc")
     objective = ObjectiveFunction(
-        TestExternalObjective(eq=eq0, target=target, path=path)
+        ExternalObjective(eq=eq0, fun=data_from_vmec, dim_f=4, target=target, path=path)
     )
     constraints = FixParameters(
         eq0,

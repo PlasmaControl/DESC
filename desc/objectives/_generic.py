@@ -18,7 +18,7 @@ from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
 
 
-class _ExternalObjective(_Objective, ABC):
+class ExternalObjective(_Objective, ABC):
     """Wrap an external code.
 
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
@@ -69,6 +69,8 @@ class _ExternalObjective(_Objective, ABC):
         Total step size is ``abs_step + rel_step * mean(abs(x))``.
     name : str, optional
         Name of the objective function.
+    kwargs : any, optional
+        Keyword arguments that are passed as inputs to ``fun``.
 
     # TODO: add example
 
@@ -94,7 +96,6 @@ class _ExternalObjective(_Objective, ABC):
         name="external",
         **kwargs,
     ):
-        assert isinstance(vectorized, bool) or isinstance(vectorized, int)
         if target is None and bounds is None:
             target = 0
         self._eq = eq.copy()

@@ -1,45 +1,43 @@
 """Generic objectives that don't belong anywhere else."""
 
-import functools
 import inspect
-import multiprocessing as mp
-import os
 import re
 from abc import ABC
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_unflatten
 from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import get_profiles, get_transforms
+from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
+from desc.optimizable import OptimizableCollection
+from desc.utils import errorif, jaxify, parse_argname_change
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective
 
 
-class _ExternalObjective(_Objective, ABC):
+class ExternalObjective(_Objective, ABC):
     """Wrap an external code.
 
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
-    computed with finite differences instead of AD.
+    computed with finite differences instead of AD. The function does not need not be
+    JAX transformable.
 
     The user supplied function must take an Equilibrium as its only positional argument,
     but can take additional keyword arguments.
-
-    # TODO: document that driver script has to include ``if __name__ == "__main__":``
-
-    # TODO: add Parameters documentation
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     fun : callable
-        Custom objective function.
+        External objective function. It must take an Equilibrium as its only positional
+        argument, but can take additional kewyord arguments. It does not need to be JAX
+        transformable.
     dim_f : int
-        Dimension of the output of fun.
+        Dimension of the output of ``fun``.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
@@ -61,8 +59,18 @@ class _ExternalObjective(_Objective, ABC):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    vectorized : bool, optional
+        Whether or not ``fun`` is vectorized. Default = False.
+    abs_step : float, optional
+        Absolute finite difference step size. Default = 1e-4.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    rel_step : float, optional
+        Relative finite difference step size. Default = 0.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
     name : str, optional
         Name of the objective function.
+    kwargs : any, optional
+        Keyword arguments that are passed as inputs to ``fun``.
 
     # TODO: add example
 
@@ -82,25 +90,21 @@ class _ExternalObjective(_Objective, ABC):
         normalize=False,
         normalize_target=False,
         loss_function=None,
-        fd_step=1e-4,  # TODO: generalize this to allow a vector of different scales
-        vectorized=False,  # False or int
+        vectorized=False,
+        abs_step=1e-4,
+        rel_step=0,
         name="external",
         **kwargs,
     ):
-        assert isinstance(vectorized, bool) or isinstance(vectorized, int)
         if target is None and bounds is None:
             target = 0
         self._eq = eq.copy()
         self._fun = fun
         self._dim_f = dim_f
-        self._fd_step = fd_step
         self._vectorized = vectorized
+        self._abs_step = abs_step
+        self._rel_step = rel_step
         self._kwargs = kwargs
-        if self._vectorized:
-            try:  # spawn a new environment so the backend can be set to numpy
-                mp.set_start_method("spawn")
-            except RuntimeError:  # context can only be set once
-                pass
         super().__init__(
             things=eq,
             target=target,
@@ -127,54 +131,35 @@ class _ExternalObjective(_Objective, ABC):
         self._scalar = self._dim_f == 1
         self._constants = {"quad_weights": 1.0}
 
-        if self._vectorized:
-            max_processes = (
-                self._vectorized
-                if isinstance(self._vectorized, int)
-                else os.cpu_count()
-            )
-            self._pool = mp.Pool(processes=max_processes)
-
         def fun_wrapped(params):
             """Wrap external function with possibly vectorized params."""
             # number of equilibria for vectorized computations
             param_shape = params["Psi"].shape
             num_eq = param_shape[0] if len(param_shape) > 1 else 1
 
-            if self._vectorized and num_eq > 1:
-                # convert params to list of equilibria
-                eqs = [self._eq.copy() for _ in range(num_eq)]
-                for k, eq in enumerate(eqs):
-                    # update equilibria with new params
-                    for param_key in self._eq.optimizable_params:
-                        param_value = np.array(params[param_key][k, :])
-                        if len(param_value):
-                            setattr(eq, param_key, param_value)
-                # parallelize calls to external function
-                max_processes = (
-                    self._vectorized
-                    if isinstance(self._vectorized, int)
-                    else os.cpu_count()
-                )
-                # TODO: re-use same pool
-                with mp.Pool(processes=min(max_processes, num_eq)) as pool:
-                    results = pool.map(
-                        functools.partial(self._fun, **self._kwargs), eqs
-                    )
-                    pool.close()
-                    pool.join()
-                    return jnp.vstack(results, dtype=float)
-            else:  # no vectorization
-                # update equilibrium with new params
+            # convert params to list of equilibria
+            eqs = [self._eq.copy() for _ in range(num_eq)]
+            for k, eq in enumerate(eqs):
+                # update equilibria with new params
                 for param_key in self._eq.optimizable_params:
-                    param_value = params[param_key]
+                    param_value = np.atleast_2d(params[param_key])[k, :]
                     if len(param_value):
-                        setattr(self._eq, param_key, param_value)
-                return self._fun(self._eq, **self._kwargs)
+                        setattr(eq, param_key, param_value)
+
+            # call external function on equilibrium or list of equilibria
+            if not self._vectorized:
+                eqs = eqs[0]
+            return self._fun(eqs, **self._kwargs)
 
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
-        self._fun_wrapped = self._jaxify(fun_wrapped, abstract_eval)
+        self._fun_wrapped = jaxify(
+            fun_wrapped,
+            abstract_eval,
+            vectorized=self._vectorized,
+            abs_step=self._abs_step,
+            rel_step=self._rel_step,
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -198,85 +183,6 @@ class _ExternalObjective(_Objective, ABC):
         f = self._fun_wrapped(params)
         return f
 
-    def _jaxify(self, func, abstract_eval):
-        """Make an external (python) function work with JAX.
-
-        Positional arguments to func can be differentiated,
-        use keyword args for static values and non-differentiable stuff.
-
-        Note: Only forward mode differentiation is supported currently.
-
-        Parameters
-        ----------
-        func : callable
-            Function to wrap. Should be a "pure" function, in that it has no side
-            effects and doesn't maintain state. Does not need to be JAX transformable.
-        abstract_eval : callable
-            Auxilliary function that computes the output shape and dtype of func.
-            **Must be JAX transformable**. Should be of the form
-
-                abstract_eval(*args, **kwargs) -> Pytree with same shape and dtype as
-                func(*args, **kwargs)
-
-            For example, if func always returns a scalar:
-
-                abstract_eval = lambda *args, **kwargs: jnp.array(1.)
-
-            Or if func takes an array of shape(n) and returns a dict of arrays of
-            shape(n-2):
-
-                abstract_eval = lambda arr, **kwargs:
-                {"out1": jnp.empty(arr.size-2), "out2": jnp.empty(arr.size-2)}
-
-        Returns
-        -------
-        func : callable
-            New function that behaves as func but works with jit/vmap/jacfwd etc.
-
-        """
-        import jax
-
-        def wrap_pure_callback(func):
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs):
-                result_shape_dtype = abstract_eval(*args, **kwargs)
-                return jax.pure_callback(
-                    func,
-                    result_shape_dtype,
-                    *args,
-                    vectorized=bool(self._vectorized),
-                    **kwargs,
-                )
-
-            return wrapper
-
-        def define_fd_jvp(func):
-            func = jax.custom_jvp(func)
-
-            @func.defjvp
-            def func_jvp(primals, tangents):
-                primal_out = func(*primals)
-
-                # flatten everything into 1D vectors for easier finite differences
-                y, unflaty = jax.flatten_util.ravel_pytree(primal_out)
-                x, unflatx = jax.flatten_util.ravel_pytree(primals)
-                v, _______ = jax.flatten_util.ravel_pytree(tangents)
-                # scale to unit norm if nonzero
-                normv = jnp.linalg.norm(v)
-                vh = jnp.where(normv == 0, v, v / normv)
-
-                def f(x):
-                    return jax.flatten_util.ravel_pytree(func(*unflatx(x)))[0]
-
-                tangent_out = (f(x + self._fd_step * vh) - y) / self._fd_step * normv
-                tangent_out = unflaty(tangent_out)
-
-                return primal_out, tangent_out
-
-            return func
-
-        return define_fd_jvp(wrap_pure_callback(func))
-
 
 class GenericObjective(_Objective):
     """A generic objective that can compute any quantity from the `data_index`.
@@ -285,8 +191,8 @@ class GenericObjective(_Objective):
     ----------
     f : str
         Name of the quantity to compute.
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    thing : Optimizable
+        Object that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
@@ -314,8 +220,8 @@ class GenericObjective(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
     name : str, optional
         Name of the objective function.
 
@@ -326,7 +232,7 @@ class GenericObjective(_Objective):
     def __init__(
         self,
         f,
-        eq,
+        thing,
         target=None,
         bounds=None,
         weight=1,
@@ -336,13 +242,20 @@ class GenericObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name="generic",
+        **kwargs,
     ):
+        errorif(
+            isinstance(thing, OptimizableCollection),
+            NotImplementedError,
+            "thing must be of type Optimizable and not OptimizableCollection.",
+        )
+        thing = parse_argname_change(thing, kwargs, "eq", "thing")
         if target is None and bounds is None:
             target = 0
         self.f = f
         self._grid = grid
         super().__init__(
-            things=eq,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -352,17 +265,10 @@ class GenericObjective(_Objective):
             deriv_mode=deriv_mode,
             name=name,
         )
-        self._scalar = not bool(
-            data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["dim"]
-        )
-        self._coordinates = data_index["desc.equilibrium.equilibrium.Equilibrium"][
-            self.f
-        ]["coordinates"]
-        self._units = (
-            "("
-            + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]
-            + ")"
-        )
+        self._p = _parse_parameterization(thing)
+        self._scalar = not bool(data_index[self._p][self.f]["dim"])
+        self._coordinates = data_index[self._p][self.f]["coordinates"]
+        self._units = "(" + data_index[self._p][self.f]["units"] + ")"
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -375,21 +281,25 @@ class GenericObjective(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
+        thing = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+            errorif(
+                self._p != "desc.equilibrium.equilibrium.Equilibrium",
+                ValueError,
+                "grid must be supplied for things besides an Equilibrium.",
+            )
+            grid = QuadratureGrid(thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP)
         else:
             grid = self._grid
 
-        p = "desc.equilibrium.equilibrium.Equilibrium"
-        if data_index[p][self.f]["dim"] == 0:
+        if data_index[self._p][self.f]["dim"] == 0:
             self._dim_f = 1
-        elif data_index[p][self.f]["coordinates"] == "r":
+        elif data_index[self._p][self.f]["coordinates"] == "r":
             self._dim_f = grid.num_rho
         else:
-            self._dim_f = grid.num_nodes * np.prod(data_index[p][self.f]["dim"])
-        profiles = get_profiles(self.f, obj=eq, grid=grid)
-        transforms = get_transforms(self.f, obj=eq, grid=grid)
+            self._dim_f = grid.num_nodes * np.prod(data_index[self._p][self.f]["dim"])
+        profiles = get_profiles(self.f, obj=thing, grid=grid)
+        transforms = get_transforms(self.f, obj=thing, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -404,8 +314,8 @@ class GenericObjective(_Objective):
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self.constants
 
         Returns
         -------
@@ -416,7 +326,7 @@ class GenericObjective(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self._p,
             self.f,
             params=params,
             transforms=constants["transforms"],
@@ -514,13 +424,14 @@ class LinearObjectiveFromUser(_FixedObjective):
         self._dim_f = jax.eval_shape(self._fun, thing.params_dict).size
 
         # check that fun is linear
+        params, params_tree = tree_flatten(thing.params_dict)
+        for param in params:
+            param += np.random.rand(param.size) * 10
+        params = tree_unflatten(params_tree, params)
         J1 = jax.jacrev(self._fun)(thing.params_dict)
-        params = thing.params_dict.copy()
-        for key, value in params.items():
-            params[key] = value + np.random.rand(value.size) * 10
         J2 = jax.jacrev(self._fun)(params)
-        for key in J1.keys():
-            assert np.all(J1[key] == J2[key]), "Function must be linear!"
+        for j1, j2 in zip(tree_leaves(J1), tree_leaves(J2)):
+            assert np.all(j1 == j2), "Function must be linear!"
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -565,8 +476,8 @@ class ObjectiveFromUser(_Objective):
     ----------
     fun : callable
         Custom objective function.
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    thing : Optimizable
+        Object that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
@@ -594,17 +505,17 @@ class ObjectiveFromUser(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
     name : str, optional
         Name of the objective function.
-
 
     Examples
     --------
     .. code-block:: python
 
         from desc.compute.utils import surface_averages
+
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
@@ -613,7 +524,7 @@ class ObjectiveFromUser(_Objective):
             # this is the FSA on the full grid, but we only want the unique values:
             return grid.compress(f_fsa)
 
-        myobj = ObjectiveFromUser(myfun)
+        myobj = ObjectiveFromUser(fun=myfun, thing=eq)
 
     """
 
@@ -623,7 +534,7 @@ class ObjectiveFromUser(_Objective):
     def __init__(
         self,
         fun,
-        eq,
+        thing,
         target=None,
         bounds=None,
         weight=1,
@@ -633,13 +544,20 @@ class ObjectiveFromUser(_Objective):
         deriv_mode="auto",
         grid=None,
         name="custom",
+        **kwargs,
     ):
+        errorif(
+            isinstance(thing, OptimizableCollection),
+            NotImplementedError,
+            "thing must be of type Optimizable and not OptimizableCollection.",
+        )
+        thing = parse_argname_change(thing, kwargs, "eq", "thing")
         if target is None and bounds is None:
             target = 0
         self._fun = fun
         self._grid = grid
         super().__init__(
-            things=eq,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -649,6 +567,7 @@ class ObjectiveFromUser(_Objective):
             deriv_mode=deriv_mode,
             name=name,
         )
+        self._p = _parse_parameterization(thing)
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -663,9 +582,14 @@ class ObjectiveFromUser(_Objective):
         """
         import jax
 
-        eq = self.things[0]
+        thing = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+            errorif(
+                self._p != "desc.equilibrium.equilibrium.Equilibrium",
+                ValueError,
+                "grid must be supplied for things besides an Equilibrium.",
+            )
+            grid = QuadratureGrid(thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP)
         else:
             grid = self._grid
 
@@ -678,22 +602,21 @@ class ObjectiveFromUser(_Objective):
 
         self._data_keys = get_vars(self._fun)
         dummy_data = {}
-        p = "desc.equilibrium.equilibrium.Equilibrium"
         for key in self._data_keys:
-            assert key in data_index[p], f"Don't know how to compute {key}"
-            if data_index[p][key]["dim"] == 0:
+            assert key in data_index[self._p], f"Don't know how to compute {key}."
+            if data_index[self._p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:
                 dummy_data[key] = jnp.empty(
-                    (grid.num_nodes, data_index[p][key]["dim"])
+                    (grid.num_nodes, data_index[self._p][key]["dim"])
                 ).squeeze()
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=thing, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=thing, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -722,7 +645,7 @@ class ObjectiveFromUser(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self._p,
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

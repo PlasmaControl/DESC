@@ -1,6 +1,6 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
-import multiprocessing
+import multiprocessing as mp
 import os
 import warnings
 
@@ -11,12 +11,8 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
-verbose = True
-
-# set child processes to use numpy backend and suppress print statements
-if not multiprocessing.current_process().name == "MainProcess":
-    os.environ["DESC_BACKEND"] = "numpy"
-    verbose = False
+# only print details in the main process, not child processes spawned by multiprocessing
+verbose = bool(mp.current_process().name == "MainProcess")
 
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
@@ -83,8 +79,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
-    scan = jax.lax.scan
     bincount = jnp.bincount
+    repeat = jnp.repeat
+    take = jnp.take
+    scan = jax.lax.scan
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -647,6 +645,13 @@ else:  # pragma: no cover
         """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
         return np.bincount(x, weights, minlength)
 
+    def repeat(a, repeats, axis=None, total_repeat_length=None):
+        """A numpy implementation of jnp.repeat."""
+        out = np.repeat(a, repeats, axis)
+        if total_repeat_length is not None:
+            out = out[:total_repeat_length]
+        return out
+
     def custom_jvp(fun, *args, **kwargs):
         """Dummy function for custom_jvp without JAX."""
         fun.defjvp = lambda *args, **kwargs: None
@@ -756,3 +761,37 @@ else:  # pragma: no cover
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
+
+    def take(
+        a,
+        indices,
+        axis=None,
+        out=None,
+        mode="fill",
+        unique_indices=False,
+        indices_are_sorted=False,
+        fill_value=None,
+    ):
+        """A numpy implementation of jnp.take."""
+        if mode == "fill":
+            if fill_value is None:
+                # copy jax logic
+                # https://jax.readthedocs.io/en/latest/_modules/jax/_src/lax/slicing.html#gather
+                if np.issubdtype(a.dtype, np.inexact):
+                    fill_value = np.nan
+                elif np.issubdtype(a.dtype, np.signedinteger):
+                    fill_value = np.iinfo(a.dtype).min
+                elif np.issubdtype(a.dtype, np.unsignedinteger):
+                    fill_value = np.iinfo(a.dtype).max
+                elif a.dtype == np.bool_:
+                    fill_value = True
+                else:
+                    raise ValueError(f"Unsupported dtype {a.dtype}.")
+            out = np.where(
+                (-a.size <= indices) & (indices < a.size),
+                np.take(a, indices, axis, out, mode="wrap"),
+                fill_value,
+            )
+        else:
+            out = np.take(a, indices, axis, out, mode)
+        return out

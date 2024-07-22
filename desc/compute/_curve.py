@@ -633,7 +633,7 @@ def _center_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **k
     # don't need to do displacement/rotation as it already is accounted for in
     # data["X"], data["Y"], data["Z"] call
     # convert to rpz
-    data["center"] = xyz2rpz(center) * jnp.ones_like(data["x"])
+    data["center"] = xyz2rpz(center) * jnp.ones_like(xyz)
     return data
 
 

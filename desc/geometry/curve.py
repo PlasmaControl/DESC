@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 
-from desc.backend import jnp, put, sign
+from desc.backend import jnp, put
 from desc.basis import FourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import rotation_matrix
@@ -809,13 +809,8 @@ class FourierPlanarCurve(Curve):
         coords = coords - center  # shift to origin
 
         # normal
-        normal = np.empty((0, 3))  # avg of normals btw all pts in case it is non-planar
-        for idx in range(1, coords.shape[0]):
-            norm = np.cross(coords[0, :], coords[idx, :])
-            norm = norm / np.linalg.norm(norm)
-            sgn = sign(-int(all(sign(norm) != sign(normal[0, :])))) if idx > 1 else 1
-            normal = np.vstack((normal, norm * sgn))
-        normal = np.mean(normal, axis=0)
+        U, _, _ = np.linalg.svd(coords.T)
+        normal = U[:, -1].T  # left singular vector of the least singular value
 
         # axis and angle of rotation
         Z_axis = np.array([0, 0, 1])

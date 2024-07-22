@@ -536,6 +536,12 @@ def errorif(cond, err=ValueError, msg=""):
         raise err(msg)
 
 
+class ResolutionWarning(UserWarning):
+    """Warning for insufficient resolution."""
+
+    pass
+
+
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:

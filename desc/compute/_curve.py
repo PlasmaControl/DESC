@@ -619,7 +619,7 @@ def _zeta_sss_FourierRZWindingSurfaceCurve(
     units_long="meters",
     description="Centroid of the curve",
     dim=3,
-    params=["rotmat", "shift"],
+    params=[],
     transforms={},
     profiles=[],
     coordinates="s",

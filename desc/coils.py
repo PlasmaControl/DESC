@@ -829,6 +829,8 @@ def _check_type(coil0, coil):
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
         SplineXYZCoil: ["method", "N"],
+        # TODO: probably add a surf_R_basis or R_basis and Z_basis to this
+        FourierRZWindingSurfaceCoil: ["N", "theta_basis", "zeta_basis", "surface"],
     }
 
     for attr in attrs[coil0.__class__]:

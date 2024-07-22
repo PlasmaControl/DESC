@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import dot, surface_integrals_map
+from desc.compute.utils import _grow_seeds, dot, surface_integrals_map
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
@@ -113,40 +113,11 @@ def add_all_aliases(names):
 zero_limits = add_all_aliases(zero_limits)
 not_finite_limits = add_all_aliases(not_finite_limits)
 not_implemented_limits = add_all_aliases(not_implemented_limits)
-
-
-def grow_seeds(
-    seeds, search_space, parameterization="desc.equilibrium.equilibrium.Equilibrium"
-):
-    """Traverse the dependency DAG for keys in search space dependent on seeds.
-
-    Parameters
-    ----------
-    seeds : set
-        Keys to find paths toward.
-    search_space : iterable
-        Additional keys to consider returning.
-    parameterization: str or list of str
-        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
-        or `desc.equilibrium.Equilibrium`.
-
-    Returns
-    -------
-    out : set
-        All keys in search space with any path in the dependency DAG to any seed.
-
-    """
-    out = seeds.copy()
-    for key in search_space:
-        deps = data_index[parameterization][key]["full_with_axis_dependencies"]["data"]
-        if not seeds.isdisjoint(deps):
-            out.add(key)
-    return out
-
-
-not_implemented_limits = grow_seeds(
+not_implemented_limits = _grow_seeds(
+    "desc.equilibrium.equilibrium.Equilibrium",
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
+    has_axis=True,
 )
 
 
@@ -166,9 +137,9 @@ def _skip_this(eq, name):
 def assert_is_continuous(
     eq,
     names=data_index["desc.equilibrium.equilibrium.Equilibrium"].keys(),
-    delta=5e-5,
-    rtol=1e-4,
-    atol=1e-6,
+    delta=1e-4,
+    rtol=1e-5,
+    atol=5e-7,
     desired_at_axis=None,
     kwargs=None,
 ):
@@ -220,7 +191,7 @@ def assert_is_continuous(
 
     num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)
-    grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     axis = grid.nodes[:, 0] == 0
     assert axis.any() and not axis.all()
     integrate = surface_integrals_map(grid, expand_out=False)
@@ -235,11 +206,12 @@ def assert_is_continuous(
             continue
         else:
             assert np.isfinite(data[name]).all(), name
+
         if (
             data_index[p][name]["coordinates"] == ""
             or data_index[p][name]["coordinates"] == "z"
         ):
-            # can't check continuity of global scalar or function of toroidal angle
+            # can't check radial continuity of scalar or function of toroidal angle
             continue
         # make single variable function of rho
         if data_index[p][name]["coordinates"] == "r":
@@ -300,10 +272,9 @@ class TestAxisLimits:
         # The need for a weaker tolerance on these keys may be due to a subpar
         # polynomial regression fit against which the axis limit is compared.
         weaker_tolerance = {
-            "B0_rr": {"rtol": 5e-03},
-            "iota_r": {"atol": 1e-4},
-            "iota_num_rr": {"atol": 5e-3},
-            "alpha_r": {"rtol": 1e-3},
+            "iota_r": {"atol": 1e-6},
+            "iota_num_rr": {"atol": 5e-5},
+            "grad(B)": {"rtol": 1e-4},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_map
@@ -399,7 +370,8 @@ def _reverse_mode_unsafe_names():
     return unsafe_names
 
 
-@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.regression
 @pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
 def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""

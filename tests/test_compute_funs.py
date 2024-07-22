@@ -2,6 +2,7 @@
 
 import copy
 import pickle
+import warnings
 
 import numpy as np
 import pytest
@@ -25,6 +26,7 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
 )
+from desc.utils import ResolutionWarning
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1273,10 +1275,13 @@ def test_compute_everything():
     no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
 
     for p in things:
-        # test compute in RPZ basis
-        this_branch_data_rpz[p] = things[p].compute(
-            list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
-        )
+        with warnings.catch_warnings():
+            # Max resolution of master_compute_data.pkl limited by GitHub file
+            # size cap at 100 mb, so can't hit suggested resolution for some things.
+            warnings.filterwarnings("ignore", category=ResolutionWarning)
+            this_branch_data_rpz[p] = things[p].compute(
+                list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
+            )
         # make sure we can compute everything
         assert this_branch_data_rpz[p].keys() == data_index[p].keys(), (
             f"Parameterization: {p}. Can't compute "
@@ -1308,9 +1313,13 @@ def test_compute_everything():
                 del data_index_xyz[p]["grad(B)"]
                 del data_index_xyz[p]["|grad(B)|"]
                 del data_index_xyz[p]["L_grad(B)"]
-            this_branch_data_xyz[p] = things[p].compute(
-                list(data_index_xyz[p].keys()), **grid.get(p, {}), basis="xyz"
-            )
+            with warnings.catch_warnings():
+                # Max resolution of master_compute_data.pkl limited by GitHub file
+                # size cap at 100 mb, so can't hit suggested resolution for some things.
+                warnings.filterwarnings("ignore", category=ResolutionWarning)
+                this_branch_data_xyz[p] = things[p].compute(
+                    list(data_index_xyz[p].keys()), **grid.get(p, {}), basis="xyz"
+                )
             assert this_branch_data_xyz[p].keys() == data_index_xyz[p].keys(), (
                 f"Parameterization: {p}. Can't compute "
                 + f"{data_index_xyz[p].keys() - this_branch_data_xyz[p].keys()}."

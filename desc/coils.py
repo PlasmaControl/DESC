@@ -248,13 +248,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
         else:
             data = compute_fun(
                 self,
-                name=["x", "x_s", "ds"],
+                names=["x", "x_s", "ds"],
                 params=params,
                 transforms=transforms,
                 profiles={},
             )
-            data["x"] = rpz2xyz(data["x"])
             data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
+            data["x"] = rpz2xyz(data["x"])
 
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current

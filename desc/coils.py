@@ -345,7 +345,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    def to_FourierRZ(self, N=None, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
         """Convert Coil to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -380,7 +380,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
         )
 
-    def to_FourierPlanar(self, N=None, grid=None, name=""):
+    def to_FourierPlanar(self, N=10, grid=None, name=""):
         """Convert Coil to FourierPlanarCoil representation.
 
         Note that some types of coils may not be representable in this basis.

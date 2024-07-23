@@ -209,7 +209,7 @@ class Curve(IOAble, Optimizable, ABC):
             + " (name={})".format(self.name)
         )
 
-    def to_FourierXYZ(self, N=None, grid=None, s=None, name=""):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
         """Convert Curve to FourierXYZCurve representation.
 
         Parameters
@@ -284,7 +284,7 @@ class Curve(IOAble, Optimizable, ABC):
             coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    def to_FourierRZ(self, N=None, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
         """Convert Curve to FourierRZCurve representation.
 
         Note that some types of curves may not be representable in this basis.
@@ -321,7 +321,7 @@ class Curve(IOAble, Optimizable, ABC):
             coords, N=N, NFP=NFP, basis="xyz", name=name, sym=sym
         )
 
-    def to_FourierPlanar(self, N=None, grid=None, name=""):
+    def to_FourierPlanar(self, N=10, grid=None, name=""):
         """Convert Curve to FourierPlanarCurve representation.
 
         Note that some types of curves may not be representable in this basis.

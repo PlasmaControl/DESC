@@ -83,6 +83,7 @@ class ForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="force",
+        chunk_size=12,
     ):
         if target is None and bounds is None:
             target = 0
@@ -97,6 +98,7 @@ class ForceBalance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

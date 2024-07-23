@@ -5,7 +5,14 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
+from desc.backend import (
+    batched_vectorize,
+    jit,
+    jnp,
+    tree_flatten,
+    tree_unflatten,
+    use_jax,
+)
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -39,7 +46,12 @@ class ObjectiveFunction(IOAble):
     _io_attrs_ = ["_objectives"]
 
     def __init__(
-        self, objectives, use_jit=True, deriv_mode="auto", name="ObjectiveFunction"
+        self,
+        objectives,
+        use_jit=True,
+        deriv_mode="auto",
+        name="ObjectiveFunction",
+        chunk_size=None,
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -48,6 +60,10 @@ class ObjectiveFunction(IOAble):
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
         assert deriv_mode in {"auto", "batched", "looped", "blocked"}
+        if chunk_size is None:
+            self.chunk_size = objectives[0].chunk_size
+        else:
+            self.chunk_size = chunk_size
 
         self._objectives = objectives
         self._use_jit = use_jit
@@ -444,15 +460,21 @@ class ObjectiveFunction(IOAble):
         fun = lambda x: getattr(self, op)(x, constants)
         if len(v) == 1:
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
-            return jnp.vectorize(jvpfun, signature="(n)->(k)")(v[0])
+            return batched_vectorize(
+                jvpfun, signature="(n)->(k)", chunk_size=self.chunk_size
+            )(v[0])
         elif len(v) == 2:
             jvpfun = lambda dx1, dx2: Derivative.compute_jvp2(fun, 0, 0, dx1, dx2, x)
-            return jnp.vectorize(jvpfun, signature="(n),(n)->(k)")(v[0], v[1])
+            return batched_vectorize(
+                jvpfun, signature="(n),(n)->(k)", chunk_size=self.chunk_size
+            )(v[0], v[1])
         elif len(v) == 3:
             jvpfun = lambda dx1, dx2, dx3: Derivative.compute_jvp3(
                 fun, 0, 0, 0, dx1, dx2, dx3, x
             )
-            return jnp.vectorize(jvpfun, signature="(n),(n),(n)->(k)")(v[0], v[1], v[2])
+            return batched_vectorize(
+                jvpfun, signature="(n),(n),(n)->(k)", chunk_size=self.chunk_size
+            )(v[0], v[1], v[2])
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
@@ -783,6 +805,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
+        chunk_size=None,
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -793,6 +816,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
         assert deriv_mode in {"auto", "fwd", "rev"}
+        self.chunk_size = chunk_size
 
         self._target = target
         self._bounds = bounds
@@ -1024,7 +1048,7 @@ class _Objective(IOAble, ABC):
         fun = lambda *x: getattr(self, op)(*x, constants=constants)
         jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
         sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
-        return jnp.vectorize(jvpfun, signature=sig)(*v)
+        return batched_vectorize(jvpfun, signature=sig, chunk_size=self.chunk_size)(*v)
 
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.

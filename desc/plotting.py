@@ -1801,6 +1801,7 @@ def poincare_plot(
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    alpha = kwargs.pop("alpha", 1)
 
     assert (
         len(kwargs) == 0
@@ -1859,6 +1860,7 @@ def poincare_plot(
             color=color,
             marker=marker,
             s=size,
+            alpha=alpha,
         )
 
         ax.flat[i].set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)

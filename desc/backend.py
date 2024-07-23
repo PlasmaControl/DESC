@@ -65,21 +65,20 @@ print(
 )
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
-    jit = jax.jit
-    fori_loop = jax.lax.fori_loop
-    cond = jax.lax.cond
-    switch = jax.lax.switch
-    while_loop = jax.lax.while_loop
-    vmap = jax.vmap
+    from jax import custom_jvp, jit, vmap
+
     imap = jax.lax.map
-    scan = jax.lax.scan
-    bincount = jnp.bincount
-    repeat = jnp.repeat
-    flatnonzero = jnp.flatnonzero
-    take = jnp.take
-    from jax import custom_jvp
     from jax.experimental.ode import odeint
-    from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+    from jax.lax import cond, fori_loop, scan, switch, while_loop
+    from jax.numpy import bincount, flatnonzero, repeat, take
+    from jax.scipy.linalg import (
+        block_diag,
+        cho_factor,
+        cho_solve,
+        eigh_tridiagonal,
+        qr,
+        solve_triangular,
+    )
     from jax.scipy.special import gammaln, logsumexp
     from jax.tree_util import (
         register_pytree_node,
@@ -89,6 +88,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         tree_structure,
         tree_unflatten,
         treedef_is_leaf,
+    )
+
+    trapezoid = (
+        jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
     )
 
     def put(arr, inds, vals):
@@ -375,14 +378,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         )
         return x, (safenorm(res), niter)
 
-    def trapezoid(y, x=None, dx=1.0, axis=-1):
-        """Integrate along the given axis using the composite trapezoidal rule."""
-        if hasattr(jnp, "trapezoid"):
-            # https://github.com/google/jax/issues/20410
-            return jnp.trapezoid(y, x, dx, axis)
-        else:
-            return jax.scipy.integrate.trapezoid(y, x, dx, axis)
-
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -394,10 +389,13 @@ else:  # pragma: no cover
         block_diag,
         cho_factor,
         cho_solve,
+        eigh_tridiagonal,
         qr,
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
+
+    trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
     def imap(f, xs, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
@@ -777,14 +775,6 @@ else:  # pragma: no cover
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
-
-    def trapezoid(y, x=None, dx=1.0, axis=-1):
-        """Integrate along the given axis using the composite trapezoidal rule."""
-        if hasattr(np, "trapezoid"):
-            # https://github.com/numpy/numpy/issues/25586
-            return np.trapezoid(y, x, dx, axis)
-        else:
-            return np.trapz(y, x, dx, axis)
 
     def flatnonzero(a, size=None, fill_value=0):
         """A numpy implementation of jnp.flatnonzero."""

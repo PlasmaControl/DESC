@@ -199,8 +199,8 @@ def _compute(
 
 
 @set_default_cpu
-def get_data_deps(keys, obj, has_axis=False, basis="rpz"):
-    """Get list of data keys needed to compute a given quantity.
+def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
+    """Get list of keys needed to compute ``keys`` given already computed data.
 
     Parameters
     ----------

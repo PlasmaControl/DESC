@@ -64,8 +64,8 @@ class Transform(IOAble):
             and grid.node_pattern != "custom"
             and self.basis.N != 0
             and self.grid.NFP != self.basis.NFP
-            and self.grid.NFP_umbilic_factor != self.basis.NFP_umbilic_factor
             and np.any(self.grid.nodes[:, 2] != 0)
+            or self.grid.NFP_umbilic_factor != self.basis.NFP_umbilic_factor
         ):
             warnings.warn(
                 colored(
@@ -76,14 +76,6 @@ class Transform(IOAble):
                 )
             )
 
-            warnings.warn(
-                colored(
-                    "Unequal umbic factor for grid {} and basis {}.".format(
-                        self.grid.NFP_umbilic_factor, self.basis.NFP_umiblic_factor
-                    ),
-                    "yellow",
-                )
-            )
         self._built = False
         self._built_pinv = False
         self._derivatives = self._get_derivatives(derivs)

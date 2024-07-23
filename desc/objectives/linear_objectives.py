@@ -11,7 +11,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, tree_leaves, tree_map, tree_structure
+from desc.backend import jnp, set_default_cpu, tree_leaves, tree_map, tree_structure
 from desc.basis import zernike_radial, zernike_radial_coeffs
 from desc.utils import broadcast_tree, errorif, setdefault
 
@@ -275,6 +275,7 @@ class BoundaryRSelfConsistency(_Objective):
             name=name,
         )
 
+    @set_default_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -373,6 +374,7 @@ class BoundaryZSelfConsistency(_Objective):
             name=name,
         )
 
+    @set_default_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -467,6 +469,7 @@ class AxisRSelfConsistency(_Objective):
             normalize_target=False,
         )
 
+    @set_default_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -553,6 +556,7 @@ class AxisZSelfConsistency(_Objective):
             normalize_target=False,
         )
 
+    @set_default_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -1548,6 +1552,7 @@ class FixSumModesZ(_FixedObjective):
             normalize_target=normalize_target,
         )
 
+    @set_default_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -1714,6 +1719,7 @@ class FixSumModesLambda(_FixedObjective):
             name=name,
         )
 
+    @set_default_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -3029,6 +3035,7 @@ class FixOmniBmax(_FixedObjective):
             name=name,
         )
 
+    @set_default_cpu
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 

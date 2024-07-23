@@ -342,7 +342,6 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d3X, d3Y, d3Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-
     axis = cross(Zaxis, normal)
     angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
     A = rotation_matrix(axis=axis, angle=angle)

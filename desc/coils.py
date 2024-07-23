@@ -345,6 +345,73 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
+    def to_FourierRZ(self, N=None, grid=None, NFP=None, sym=False, name=""):
+        """Convert Coil to FourierRZCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the coil will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            whether the curve is stellarator-symmetric or not. Default
+            is False.
+        name : str
+            name for this coil
+
+        Returns
+        -------
+        curve : FourierRZCoil
+            New representation of the coil parameterized by Fourier series for R,Z.
+
+        """
+        NFP = 1 or NFP
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1, NFP=NFP)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierRZCoil.from_values(
+            self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
+        )
+
+    def to_FourierPlanar(self, N=None, grid=None, name=""):
+        """Convert Coil to FourierPlanarCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
+        name : str
+            name for this coil
+
+        Returns
+        -------
+        coil : FourierPlanarCoil
+            New representation of the coil parameterized by Fourier series for
+            minor radius r in a plane specified by a center position and normal
+            vector.
+
+        """
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierPlanarCoil.from_values(
+            self.current, coords, N=N, basis="xyz", name=name
+        )
+
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.

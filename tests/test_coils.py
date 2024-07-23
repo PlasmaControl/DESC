@@ -204,7 +204,7 @@ class TestCoil:
     def test_converting_coil_types(self):
         """Test conversions between coil representations."""
         s = np.linspace(0, 2 * np.pi, 100, endpoint=False)
-        coil1 = FourierRZCoil(1e6, [0, 10, 0], [0, 0, 0])
+        coil1 = FourierRZCoil(1e6, [0, 10, 1], [0, 0, 0])
         coil2 = coil1.to_FourierXYZ(s=s)
         coil3 = coil1.to_SplineXYZ(knots=s)
         coil4 = coil1.to_FourierRZ(N=coil1.N)

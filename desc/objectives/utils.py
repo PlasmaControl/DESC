@@ -320,7 +320,7 @@ def check_if_points_are_inside_perimeter(R, Z, Rcheck, Zcheck):
     R,Z : ndarray
         1-D arrays of coordinates of the points defining the polygonal
         perimeter. The function will determine if the check point is inside
-        or outside of this perimeter.
+        or outside of this perimeter. These should form a closed curve.
     Rcheck, Zcheck : ndarray
         coordinates of the points being checked if they are inside or outside of the
         given perimeter.

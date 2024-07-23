@@ -855,7 +855,6 @@ class PlasmaVesselDistance(_Objective):
                     (plasma_pts_at_zeta_plane, plasma_pts_at_zeta_plane[0, :])
                 )
 
-                surface_pts_at_zeta_plane
                 pt_sign = check_if_points_are_inside_perimeter(
                     plasma_pts_at_zeta_plane[:, 0],
                     plasma_pts_at_zeta_plane[:, 2],

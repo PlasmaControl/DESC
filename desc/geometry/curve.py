@@ -814,14 +814,10 @@ class FourierPlanarCurve(Curve):
 
         # axis and angle of rotation
         Z_axis = np.array([0, 0, 1])
-        # check if we are already in the x-y plane, if so
-        # no need to rotate into it
-        if not np.allclose(normal, Z_axis):
-            axis = np.cross(Z_axis, normal)
-            axis = axis / np.linalg.norm(axis)
-            angle = np.arccos(np.dot(Z_axis, normal))
-            rotmat = rotation_matrix(axis, angle)
-            coords = coords @ rotmat  # rotate to X-Y plane
+        axis = np.cross(Z_axis, normal)
+        angle = np.arccos(np.dot(Z_axis, normal))
+        rotmat = rotation_matrix(axis, angle)
+        coords = coords @ rotmat  # rotate to X-Y plane
 
         warnif(
             np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points

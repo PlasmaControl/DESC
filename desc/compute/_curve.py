@@ -205,14 +205,10 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([X, Y, Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    # check if we are already in the x-y plane, if so
-    # no need to rotate into it
-    unit_normal = safenormalize(normal)
-    if not jnp.allclose(unit_normal, Zaxis):
-        axis = cross(Zaxis, normal)
-        angle = jnp.arccos(dot(Zaxis, unit_normal))
-        A = rotation_matrix(axis=axis, angle=angle)
-        coords = jnp.matmul(coords, A.T) + center
+    axis = cross(Zaxis, normal)
+    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
     coords = xyz2rpz(coords)
@@ -249,14 +245,10 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([dX, dY, dZ]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    # check if we are already in the x-y plane, if so
-    # no need to rotate into it
-    unit_normal = safenormalize(normal)
-    if not jnp.allclose(unit_normal, Zaxis):
-        axis = cross(Zaxis, normal)
-        angle = jnp.arccos(dot(Zaxis, unit_normal))
-        A = rotation_matrix(axis=axis, angle=angle)
-        coords = jnp.matmul(coords, A.T)
+    axis = cross(Zaxis, normal)
+    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
     coords = xyz2rpz_vec(coords, phi=data["phi"])
@@ -298,14 +290,10 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d2X, d2Y, d2Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    # check if we are already in the x-y plane, if so
-    # no need to rotate into it
-    unit_normal = safenormalize(normal)
-    if not jnp.allclose(unit_normal, Zaxis):
-        axis = cross(Zaxis, normal)
-        angle = jnp.arccos(dot(Zaxis, unit_normal))
-        A = rotation_matrix(axis=axis, angle=angle)
-        coords = jnp.matmul(coords, A.T)
+    axis = cross(Zaxis, normal)
+    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
     coords = xyz2rpz_vec(coords, phi=data["phi"])
@@ -354,14 +342,11 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d3X, d3Y, d3Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    # check if we are already in the x-y plane, if so
-    # no need to rotate into it
-    unit_normal = safenormalize(normal)
-    if not jnp.allclose(unit_normal, Zaxis):
-        axis = cross(Zaxis, normal)
-        angle = jnp.arccos(dot(Zaxis, unit_normal))
-        A = rotation_matrix(axis=axis, angle=angle)
-        coords = jnp.matmul(coords, A.T)
+
+    axis = cross(Zaxis, normal)
+    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
     coords = xyz2rpz_vec(coords, phi=data["phi"])

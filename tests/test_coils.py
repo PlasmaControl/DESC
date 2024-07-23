@@ -204,11 +204,11 @@ class TestCoil:
     def test_converting_coil_types(self):
         """Test conversions between coil representations."""
         s = np.linspace(0, 2 * np.pi, 100, endpoint=False)
-        coil1 = FourierRZCoil(1e6, [0, 10, 0], [0, 0, 0])
+        coil1 = FourierRZCoil(1e6, [0, 10, 1], [0, 0, 0])
         coil2 = coil1.to_FourierXYZ(s=s)
         coil3 = coil1.to_SplineXYZ(knots=s)
         coil4 = coil1.to_FourierRZ(N=coil1.N)
-        coil5 = coil1.to_FourierPlanar(N=10, grid=LinearGrid(N=50))
+        coil5 = coil1.to_FourierPlanar(N=10)
 
         grid = LinearGrid(zeta=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
@@ -243,7 +243,7 @@ class TestCoil:
         np.testing.assert_allclose(x1, x2, atol=1e-12)
         np.testing.assert_allclose(x1, x3, atol=1e-12)
         np.testing.assert_allclose(x1, x4, atol=1e-12)
-        np.testing.assert_allclose(x1, x5, atol=1e-6)
+        np.testing.assert_allclose(x1, x5, atol=1e-12)
         np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
         np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)

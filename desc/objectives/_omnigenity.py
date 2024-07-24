@@ -1022,7 +1022,7 @@ class PiecewiseOmnigenity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",
+        deriv_mode="rev",
         eq_grid=None,
         field_grid=None,
         M_booz=None,
@@ -1109,8 +1109,8 @@ class PiecewiseOmnigenity(_Objective):
             field_grid = self._field_grid
 
         self._dim_f = field_grid.num_nodes
-        self._eq_data_keys = ["|B|", "theta_B", "zeta_B"]
-        self._field_data_keys = ["|B|", "theta_B", "zeta_B"]
+        self._eq_data_keys = ["|B|_mn"]
+        self._field_data_keys = ["|B|_pwO", "theta_B", "zeta_B"]
 
         errorif(
             eq_grid.NFP != field_grid.NFP,
@@ -1133,7 +1133,7 @@ class PiecewiseOmnigenity(_Objective):
 
         profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eq_grid)
         eq_transforms = get_transforms(
-            "desc.magnetic_fields._core.PiecewiseOmnigenousField",
+            "desc.magnetic_fields._core.OmnigenousField",
             self._eq_data_keys,
             obj=eq,
             grid=eq_grid,
@@ -1175,7 +1175,7 @@ class PiecewiseOmnigenity(_Objective):
         if self._field_fixed:
             # precompute the field data since it is fixed during the optimization
             field_data = compute_fun(
-                "desc.magnetic_fields._core.PiecewiseOmnigenousField",
+                "desc.magnetic_fields._core.OmnigenousField",
                 self._field_data_keys,
                 params=self._field.params_dict,
                 transforms=self._constants["field_transforms"],
@@ -1189,8 +1189,8 @@ class PiecewiseOmnigenity(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            # average |B| on axis
-            self._normalization = jnp.mean(field.B_lm[: field.M_B])
+            # normalized with max |B|_pwO
+            self._normalization = jnp.max(field.B_max)
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1242,8 +1242,6 @@ class PiecewiseOmnigenity(_Objective):
 
         # compute field data
         if self._field_fixed:
-            # Do we need a new theta_B and zeta_B when iota changes?
-            # update theta_B and zeta_B with new iota from the equilibrium
             field_data = constants["field_data"]
         else:
             field_data = compute_fun(
@@ -1255,7 +1253,19 @@ class PiecewiseOmnigenity(_Objective):
                 iota=jnp.mean(eq_data["iota"]),
             )
 
-        omnigenity_error = eq_data["|B|"] - field_data["|B|"]
+        # additional computations that cannot be part of the regular compute API
+        nodes = jnp.vstack(
+            (
+                jnp.zeros_like(field_data["theta_B"]),
+                field_data["theta_B"],
+                field_data["zeta_B"],
+            )
+        ).T
+        modB = jnp.matmul(
+            constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
+        )
+
+        omnigenity_error = modB - field_data["|B|_pwO"]
 
         return omnigenity_error
 

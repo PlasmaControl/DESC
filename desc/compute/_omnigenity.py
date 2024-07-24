@@ -496,6 +496,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
     dim=1,
+    params=["B_min", "B_max", "c_1", "c_2", "t_1", "t_2", "w_2"],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
@@ -509,7 +510,7 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     c_2 = params["c_2"]
     t_1 = params["t_1"]
     t_2 = params["t_2"]
-    w_1 = params["w_1"]
+    # --no-verify w_1 = params["w_1"]
     w_2 = params["w_2"]
     B_min = params["B_min"]
     B_max = params["B_max"]

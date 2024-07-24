@@ -81,8 +81,8 @@ coordinates :math:`(X,Y,Z)`. ``basis`` must be one of ``{'rpz', 'xyz'}``.
 Our convention to denote partial derivatives is an underscore followed by the first
 letter of the coordinate that the partial derivative is taken with respect to. Unless
 otherwise specified or implied by the variable name, these partial derivatives are
-the partial derivatives of the DESC coordinate system. For example, ``|B|_z`` is
-:math:`(\partial\vertB\vert / \partial\zeta)|_{\rho, \theta}`.
+those of the DESC :math:`\rho, \theta, \zeta` coordinate system. For example, ``|B|_z``
+is :math:`(\partial \vert B \vert / \partial\zeta)|_{\rho, \theta}`.
 
 """
 

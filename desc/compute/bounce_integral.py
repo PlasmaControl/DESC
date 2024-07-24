@@ -68,6 +68,16 @@ def _filter_nonzero_measure(bp1, bp2):
     return bp1[mask], bp2[mask]
 
 
+def _filter_distinct(r, sentinel, eps):
+    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
+    # eps needs to be low enough that close distinct roots do not get removed.
+    # Otherwise, algorithms relying on continuity will fail.
+    # TODO: check if numpy even tries to make isclose fast
+    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
+    r = jnp.where(mask, sentinel, r)
+    return r
+
+
 def _sentinel_append(r, sentinel, num=1):
     """Concat ``sentinel`` ``num`` times to ``r`` on last axis."""
     sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
@@ -186,7 +196,7 @@ def _poly_root(
     sentinel : float
         Value with which to pad array in place of filtered elements.
         Anything less than ``a_min`` or greater than ``a_max`` plus some floating point
-        error buffer will work just like nan while also avoiding nan gradient.
+        error buffer will work just like nan while avoiding nan gradient.
     eps : float
         Absolute tolerance with which to consider value as zero.
     distinct : bool
@@ -228,14 +238,6 @@ def _poly_root(
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
     return _filter_distinct(r, sentinel, eps) if distinct else r
-
-
-def _filter_distinct(r, sentinel, eps):
-    # eps needs to be low enough that close distinct roots do not get removed.
-    # Otherwise, algorithms relying on continuity will fail.
-    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-    r = jnp.where(mask, sentinel, r)
-    return r
 
 
 def _poly_der(c):
@@ -511,7 +513,7 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
-def _correct_inversion(is_intersect, B_z_ra):
+def _fix_inversion(is_intersect, B_z_ra):
     # idx of first two intersects
     idx = flatnonzero(is_intersect, size=2, fill_value=-1)
     edge_case = (
@@ -570,16 +572,13 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
     -------
     bp1, bp2 : (jnp.ndarray, jnp.ndarray)
         Shape (P, S, N * degree).
-        The field line-following ζ coordinates of bounce points for a given pitch along
-        a field line. The pairs ``bp1[i,j,k]`` and ``bp2[i,j,k]`` form left and right
-        integration boundaries, respectively, for the bounce integrals.
+        The field line-following coordinates of bounce points for a given pitch along
+        a field line. The pairs ``bp1`` and ``bp2`` form left and right integration
+        boundaries, respectively, for the bounce integrals.
 
-        For the shaping notation, the ``degree`` of the spline of |B| matches
-        ``B_c.shape[0]-1``, the number of polynomials per spline ``N`` matches
-        ``knots.size-1``, and the number of field lines is denoted by ``S``.
-        If there were less than ``N*degree`` bounce points detected along a field line,
-        then the last axis, which enumerates the bounce points for a particular field
-        line, is padded with zero.
+        If there were less than ``N * degree`` bounce points detected
+        along a field line, then the last axis, which enumerates the bounce points for
+        a particular field line, is padded with zero.
 
     """
     B_c, B_z_ra_c, pitch = _check_shape(knots, B_c, B_z_ra_c, pitch)
@@ -601,15 +600,14 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = intersect.reshape(P, S, -1) >= 0
     # Following discussion on page 3 and 5 of https://doi.org/10.1063/1.873749,
-    # we ignore the bounce points of particles assigned to a class that are
+    # we ignore the bounce points of particles only assigned to a class that are
     # trapped outside this snapshot of the field line.
     is_bp1 = (B_z_ra <= 0) & is_intersect
-    is_bp2 = (B_z_ra >= 0) & _correct_inversion(is_intersect, B_z_ra)
+    is_bp2 = (B_z_ra >= 0) & _fix_inversion(is_intersect, B_z_ra)
 
     # Transform out of local power basis expansion.
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
     sentinel = knots[0] - 1
-    # Get ζ values of bounce points.
     bp1 = _take_mask(intersect, is_bp1, fill_value=sentinel)
     bp2 = _take_mask(intersect, is_bp2, fill_value=sentinel)
 
@@ -617,7 +615,7 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
         _check_bounce_points(bp1, bp2, sentinel, pitch, knots, B_c, plot, **kwargs)
 
     mask = (bp1 > sentinel) & (bp2 > sentinel)
-    # Set outside mask to same value so that integration is over set of measure zero.
+    # Set outside mask to same value so integration is over set of measure zero.
     bp1 = jnp.where(mask, bp1, 0)
     bp2 = jnp.where(mask, bp2, 0)
     return bp1, bp2
@@ -876,7 +874,6 @@ def tanh_sinh(deg, m=10):
     return x, w
 
 
-# TODO: upstream to orthax?
 def leggausslob(deg):
     """Lobatto-Gauss-Legendre quadrature.
 

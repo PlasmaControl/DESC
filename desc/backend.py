@@ -71,6 +71,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.numpy import bincount, flatnonzero, repeat, take
+    from jax.numpy.fft import irfft, rfft
+    from jax.scipy.fft import dct, idct
     from jax.scipy.linalg import (
         block_diag,
         cho_factor,
@@ -88,6 +90,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         tree_structure,
         tree_unflatten,
         treedef_is_leaf,
+    )
+
+    trapezoid = (
+        jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
     )
 
     trapezoid = (
@@ -384,6 +390,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     import scipy.optimize
+    from scipy.fft import dct, idct, irfft, rfft  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
@@ -394,6 +401,8 @@ else:  # pragma: no cover
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
+
+    trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 

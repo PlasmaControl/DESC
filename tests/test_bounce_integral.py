@@ -38,6 +38,7 @@ from desc.compute.bounce_integral import (
     plot_field_line,
     tanh_sinh,
 )
+from desc.compute.fourier_bounce_integral import FourierChebyshevBasis
 from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
@@ -793,4 +794,23 @@ def test_drift():
 
     assert np.isclose(grad(dummy_fun)(1.0), 650, rtol=1e-3)
 
+    return fig
+
+
+# todo:
+@pytest.mark.unit
+def test_fcb_interp():
+    """Test interpolation for this basis function."""
+    domain = (0, 2 * np.pi)
+    M, N = 1, 5
+    xy0 = FourierChebyshevBasis.nodes(M, N, domain=domain)
+    f0 = jnp.mean(xy0.reshape(M, N, 2), axis=-1)
+    fcb = FourierChebyshevBasis(f0, M, N, domain=domain)
+    f1 = fcb.evaluate(1, fcb.N * 10)
+    xy1 = FourierChebyshevBasis.nodes(1, fcb.N * 10, domain=domain)
+
+    fig, ax = plt.subplots()
+    ax.plot(xy0[:, 1], f0[0, :], linestyle="--")
+    ax.plot(xy1[:, 1], f1[0, :], marker="x")
+    plt.show()
     return fig

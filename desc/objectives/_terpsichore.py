@@ -26,14 +26,14 @@ def terpsichore(
     path="",
     exec="",
     mode_family=-1,
-    surfs=16,
-    lssl=200,
-    lssd=100,
-    M_max=2,
-    N_min=-2,
-    N_max=2,
-    M_booz_max=4,
-    N_booz_max=4,
+    surfs=32,
+    lssl=1000,
+    lssd=1000,
+    M_max=8,
+    N_min=-4,
+    N_max=4,
+    M_booz_max=19,
+    N_booz_max=18,
     awall=2.0,
     xplo=1e-6,
     deltajp=1e-2,
@@ -656,7 +656,7 @@ class TERPSICHORE(ExternalObjective):
 
     """
 
-    _units = "(?)"
+    _units = "(?)"  # FIXME: normalized by Alfven frequency
     _print_value_fmt = "TERPSICHORE growth rate: {:10.3e} "
 
     def __init__(
@@ -674,15 +674,15 @@ class TERPSICHORE(ExternalObjective):
         path="",
         exec="",
         mode_family=-1,
-        surfs=16,
-        lssl=200,
-        lssd=100,
+        surfs=32,
+        lssl=1000,
+        lssd=1000,
         M_max=8,
         N_min=-4,
         N_max=4,
         M_booz_max=19,
         N_booz_max=18,
-        awall=1.3,
+        awall=2.0,
         xplo=1e-6,
         deltajp=5e-1,
         modelk=0,
@@ -692,6 +692,8 @@ class TERPSICHORE(ExternalObjective):
         stop_time=60,
         name="terpsichore",
     ):
+        if target is None and bounds is None:
+            bounds = (-np.inf, 0)
         super().__init__(
             eq=eq,
             fun=terpsichore,

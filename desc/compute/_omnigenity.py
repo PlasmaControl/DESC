@@ -502,7 +502,8 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["theta_B", "zeta_B", "|B|"],  # Potential error, we want eq |B|
-    parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
+    parametrization=[],
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     zeta_B = data["zeta_B"]

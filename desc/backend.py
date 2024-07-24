@@ -123,7 +123,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
 
-    def set_default_cpu(func):
+    def execute_on_cpu(func):
         """Decorator to set default device to CPU for a function.
 
         Parameters
@@ -407,7 +407,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
-    set_default_cpu = lambda func: func
+    execute_on_cpu = lambda func: func
     import scipy.optimize
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401

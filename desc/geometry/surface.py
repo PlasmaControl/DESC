@@ -6,11 +6,11 @@ import numpy as np
 
 from desc.backend import (
     block_diag,
+    execute_on_cpu,
     jit,
     jnp,
     put,
     root_scalar,
-    set_default_cpu,
     sign,
     vmap,
 )
@@ -66,7 +66,7 @@ class FourierRZToroidalSurface(Surface):
         "_rho",
     ]
 
-    @set_default_cpu
+    @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
@@ -175,7 +175,7 @@ class FourierRZToroidalSurface(Surface):
     def rho(self, rho):
         self._rho = rho
 
-    @set_default_cpu
+    @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
@@ -812,7 +812,7 @@ class ZernikeRZToroidalSection(Surface):
         "_zeta",
     ]
 
-    @set_default_cpu
+    @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
@@ -924,7 +924,7 @@ class ZernikeRZToroidalSection(Surface):
     def zeta(self, zeta):
         self._zeta = zeta
 
-    @set_default_cpu
+    @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
         assert (

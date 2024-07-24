@@ -381,7 +381,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
         )
 
-    def to_FourierPlanar(self, N=10, grid=None, name=""):
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
         """Convert Coil to FourierPlanarCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -395,6 +395,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
             If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
             name for this coil
 
@@ -408,9 +410,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """
         if grid is None:
             grid = LinearGrid(N=2 * N + 1)
-        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCoil.from_values(
-            self.current, coords, N=N, basis="xyz", name=name
+            self.current, coords, N=N, basis=basis, name=name
         )
 
 

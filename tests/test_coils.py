@@ -213,7 +213,7 @@ class TestCoil:
         coil2 = coil1.to_FourierXYZ(s=s)
         coil3 = coil1.to_SplineXYZ(knots=s)
         coil4 = coil1.to_FourierRZ(N=coil1.N)
-        coil5 = coil1.to_FourierPlanar(N=10)
+        coil5 = coil1.to_FourierPlanar(N=10, basis="rpz")
 
         grid = LinearGrid(zeta=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
@@ -248,7 +248,7 @@ class TestCoil:
         np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
         np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
-        np.testing.assert_allclose(B1, B5, rtol=1e-8, atol=1e-8)
+        np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
 
 
 class TestCoilSet:

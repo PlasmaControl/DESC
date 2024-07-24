@@ -351,7 +351,7 @@ class Curve(IOAble, Optimizable, ABC):
 
         if grid is None:
             grid = LinearGrid(N=2 * N + 1)
-        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCurve.from_values(coords, N=N, basis=basis, name=name)
 
 

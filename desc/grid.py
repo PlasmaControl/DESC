@@ -161,7 +161,7 @@ class _Grid(IOAble, ABC):
         nodes = put(
             nodes,
             Index[:, 2],
-            nodes[:, 2] % (2 * np.pi / (self.NFP / self.NFP_umbilic_factor)),
+            nodes[:, 2] % (2 * np.pi / self.NFP * self.NFP_umbilic_factor),
         )
         # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
@@ -664,7 +664,6 @@ class Grid(_Grid):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
-        self._NFP = 1
         self._NFP_umbilic_factor = 1
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
@@ -847,12 +846,6 @@ class Grid(_Grid):
 
         """
         nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
-        # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2pi or 2pi/(NFP/NFP_umbilic_factor).
-        # This may cause the surface_integrals() function to fail recognizing
-        # surfaces outside the interval [0, 2pi] as duplicates. However, most
-        # surface integral computations are done with LinearGrid anyway.
-        # In particular, do not modulo nodes by 2π or 2π/NFP.
         return nodes
 
     @property
@@ -1468,10 +1461,6 @@ class ConcentricGrid(_Grid):
             node spacing, based on local volume around the node
 
         """
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)

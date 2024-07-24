@@ -374,7 +374,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """
         NFP = 1 or NFP
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1, NFP=NFP)
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCoil.from_values(
             self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name

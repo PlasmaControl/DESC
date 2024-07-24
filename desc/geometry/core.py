@@ -315,7 +315,7 @@ class Curve(IOAble, Optimizable, ABC):
 
         NFP = 1 or NFP
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1, NFP=NFP)
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCurve.from_values(
             coords, N=N, NFP=NFP, basis="xyz", name=name, sym=sym

@@ -300,8 +300,7 @@ class Curve(IOAble, Optimizable, ABC):
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
         sym : bool, optional
-            whether the curve is stellarator-symmetric or not. Default
-            is False.
+            Whether the curve is stellarator-symmetric or not. Default is False.
         name : str
             name for this curve
 
@@ -321,7 +320,7 @@ class Curve(IOAble, Optimizable, ABC):
             coords, N=N, NFP=NFP, basis="xyz", name=name, sym=sym
         )
 
-    def to_FourierPlanar(self, N=10, grid=None, name=""):
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
         """Convert Curve to FourierPlanarCurve representation.
 
         Note that some types of curves may not be representable in this basis.
@@ -335,6 +334,8 @@ class Curve(IOAble, Optimizable, ABC):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierPlanarCurve.
             If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
             name for this curve
 
@@ -351,7 +352,7 @@ class Curve(IOAble, Optimizable, ABC):
         if grid is None:
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return FourierPlanarCurve.from_values(coords, N=N, basis="xyz", name=name)
+        return FourierPlanarCurve.from_values(coords, N=N, basis=basis, name=name)
 
 
 class Surface(IOAble, Optimizable, ABC):

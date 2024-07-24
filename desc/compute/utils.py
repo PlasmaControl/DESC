@@ -6,7 +6,7 @@ import inspect
 import numpy as np
 from termcolor import colored
 
-from desc.backend import cond, fori_loop, jnp, put, set_default_cpu
+from desc.backend import cond, execute_on_cpu, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from ..utils import errorif, warnif
@@ -198,7 +198,7 @@ def _compute(
     return data
 
 
-@set_default_cpu
+@execute_on_cpu
 def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
     """Get list of keys needed to compute ``keys`` given already computed data.
 
@@ -358,7 +358,7 @@ def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
     return out
 
 
-@set_default_cpu
+@execute_on_cpu
 def get_derivs(keys, obj, has_axis=False, basis="rpz"):
     """Get dict of derivative orders needed to compute a given quantity.
 
@@ -448,7 +448,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     return profiles
 
 
-@set_default_cpu
+@execute_on_cpu
 def get_params(keys, obj, has_axis=False, basis="rpz"):
     """Get parameters needed to compute a given quantity.
 
@@ -489,7 +489,7 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
     return temp_params
 
 
-@set_default_cpu
+@execute_on_cpu
 def get_transforms(
     keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
 ):

@@ -8,7 +8,7 @@ import time
 import numpy as np
 from netCDF4 import Dataset, stringtochar
 
-from desc.backend import jnp, set_default_cpu
+from desc.backend import execute_on_cpu, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute.utils import get_transforms
 from desc.grid import LinearGrid
@@ -19,7 +19,7 @@ from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 from ._generic import ExternalObjective
 
 
-@set_default_cpu
+@execute_on_cpu
 def terpsichore(
     eq,
     processes=1,

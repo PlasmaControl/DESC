@@ -1931,24 +1931,37 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     _io_attrs_ = [
         "_NFP",
         "_helicity",
-        "_params0",
+        "_B_min",
+        "_B_max",
+        "_c_1",
+        "_c_2",
+        "_t_1",
+        "_t_2",
+        "_w_2",
     ]
 
     def __init__(
         self,
+        B_min,
+        B_max,
+        c_1,
+        c_2,
+        t_1,
+        t_2,
+        w_2,
         NFP=1,
         helicity=(1, 0),
-        params0=None,
     ):
         self._NFP = int(NFP)
         self.helicity = helicity
-        if params0 is None:
-            self._params0 = np.array(
-                ["t_1", "t_2", "w_1", "w_2", "c_1", "c_2", "B_min", "B_max"]
-            )
-        else:
-            assert len(params0) == int(7)
-            self._params0 = params0
+
+        self._B_min = B_min
+        self._B_max = B_max
+        self._c_1 = c_1
+        self._c_2 = c_2
+        self._t_1 = t_1
+        self._t_2 = t_2
+        self._w_2 = w_2
 
         helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(
@@ -1962,22 +1975,6 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
             UserWarning,
             "Typical helicity (M,N) has N=NFP.",
         )
-
-    def change_resolution(
-        self,
-        NFP=None,
-    ):
-        """Set the spectral resolution of field parameters.
-
-        Parameters
-        ----------
-        NFP : int
-            Number of field periods.
-
-        """
-        self._NFP = setdefault(NFP, self.NFP)
-
-        self._params0
 
     def compute(
         self,
@@ -2060,14 +2057,73 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
 
     @optimizable_parameter
     @property
-    def params0(self):
-        """ndarray: Omnigenity magnetic well shape parameters."""
-        return self._params0
+    def B_min(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._B_min
 
-    @params0.setter
-    def params0(self, params0):
-        assert len(params0) == int(7)
-        self._params0 = params0
+    @B_min.setter
+    def B_min(self, B_min):
+        self._B_min = B_min
+
+    @optimizable_parameter
+    @property
+    def B_max(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._B_max
+
+    @B_max.setter
+    def B_max(self, B_max):
+        self._B_max = B_max
+
+    @optimizable_parameter
+    @property
+    def c_1(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._c_1
+
+    @c_1.setter
+    def c_1(self, c_1):
+        self._c_1 = c_1
+
+    @optimizable_parameter
+    @property
+    def c_2(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._c_2
+
+    @c_2.setter
+    def c_2(self, c_2):
+        self._c_2 = c_2
+
+    @optimizable_parameter
+    @property
+    def t_1(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._t_1
+
+    @t_1.setter
+    def t_1(self, t_1):
+        self._t_1 = t_1
+
+    @optimizable_parameter
+    @property
+    def t_2(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._t_2
+
+    @t_2.setter
+    def t_2(self, t_2):
+        self._t_2 = t_2
+
+    @optimizable_parameter
+    @property
+    def w_2(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._w_2
+
+    @w_2.setter
+    def w_2(self, w_2):
+        self._w_2 = w_2
 
     @property
     def helicity(self):

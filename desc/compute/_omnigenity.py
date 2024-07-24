@@ -496,12 +496,13 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
     dim=1,
-    params=["B_min", "B_max", "c_1", "c_2", "t_1", "t_2", "w_2"],
+    # --no-verify params=["B_min", "B_max", "c_1", "c_2", "t_1", "t_2", "w_2"],
+    params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["theta_B", "zeta_B", "|B|"],  # Potential error, we want eq |B|
-    parameterization="",
+    parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     zeta_B = data["zeta_B"]
@@ -522,7 +523,7 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
         + ((zeta_B + t_2 * theta_B - c_2) / w_2) ** (2 * p)
     )
 
-    data = B_min + (B_max - B_min) * jnp.exp(exponent)
+    data["|B|_pwO"] = B_min + (B_max - B_min) * jnp.exp(exponent)
     return data
 
 

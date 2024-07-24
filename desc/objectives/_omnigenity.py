@@ -1133,7 +1133,8 @@ class PiecewiseOmnigenity(_Objective):
 
         profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eq_grid)
         eq_transforms = get_transforms(
-            "desc.magnetic_fields._core.OmnigenousField",
+            # "desc.magnetic_fields._core.PiecewiseOmnigenousField",
+            # "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
             obj=eq,
             grid=eq_grid,
@@ -1175,7 +1176,7 @@ class PiecewiseOmnigenity(_Objective):
         if self._field_fixed:
             # precompute the field data since it is fixed during the optimization
             field_data = compute_fun(
-                "desc.magnetic_fields._core.OmnigenousField",
+                "desc.magnetic_fields._core.PiecewiseOmnigenousField",
                 self._field_data_keys,
                 params=self._field.params_dict,
                 transforms=self._constants["field_transforms"],
@@ -1245,6 +1246,7 @@ class PiecewiseOmnigenity(_Objective):
             field_data = constants["field_data"]
         else:
             field_data = compute_fun(
+                "desc.magnetic_fields._core.OmnigenousField",
                 self._field_data_keys,
                 params=field_params,
                 transforms=constants["field_transforms"],

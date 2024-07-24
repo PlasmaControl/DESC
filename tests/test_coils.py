@@ -215,15 +215,10 @@ class TestCoil:
         x2 = coil2.compute("x", grid=grid, basis="xyz")["x"]
         x3 = coil3.compute("x", grid=grid, basis="xyz")["x"]
         x4 = coil4.compute("x", grid=grid, basis="xyz")["x"]
-        # find the arctan angle corresponding to the above pts for the
-        # planar coil
-        x5 = coil5.compute(
-            "x",
-            grid=LinearGrid(
-                zeta=np.arctan2(x1[:, 1] - coil5.center[1], x1[:, 0] - coil5.center[0])
-            ),
-            basis="xyz",
-        )["x"]
+        grid = LinearGrid(
+            zeta=np.arctan2(x1[:, 1] - coil5.center[1], x1[:, 0] - coil5.center[0])
+        )  # zeta = arctan angle instead of s for the planar coil for the same points
+        x5 = coil5.compute("x", grid=grid, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
@@ -240,6 +235,7 @@ class TestCoil:
         B5 = coil5.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
         )
+
         np.testing.assert_allclose(x1, x2, atol=1e-12)
         np.testing.assert_allclose(x1, x3, atol=1e-12)
         np.testing.assert_allclose(x1, x4, atol=1e-12)

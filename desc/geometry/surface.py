@@ -4,7 +4,16 @@ import warnings
 
 import numpy as np
 
-from desc.backend import block_diag, jit, jnp, put, root_scalar, sign, vmap
+from desc.backend import (
+    block_diag,
+    execute_on_cpu,
+    jit,
+    jnp,
+    put,
+    root_scalar,
+    sign,
+    vmap,
+)
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
@@ -57,6 +66,7 @@ class FourierRZToroidalSurface(Surface):
         "_rho",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
@@ -165,6 +175,7 @@ class FourierRZToroidalSurface(Surface):
     def rho(self, rho):
         self._rho = rho
 
+    @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
@@ -801,6 +812,7 @@ class ZernikeRZToroidalSection(Surface):
         "_zeta",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
@@ -912,6 +924,7 @@ class ZernikeRZToroidalSection(Surface):
     def zeta(self, zeta):
         self._zeta = zeta
 
+    @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
         assert (

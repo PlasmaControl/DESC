@@ -3,12 +3,8 @@ Changelog
 
 New Features
 
-- adds from_values method that was present in FourierRZCurve but missing in FourierRZCoil
-- also adds new from_values method for FourierPlanarCurve and FourierPlanarCoil
-
-Minor changes
-
--  modifies FourierPlanarCurve compute implementation to check if normal is already parallel to the Zaxis, in which case no rotation is needed.
+- adds ``from_values`` method that was present in ``FourierRZCurve`` but missing in ``FourierRZCoil``
+- also adds new ``from_values`` method for ``FourierPlanarCurve`` and ``FourierPlanarCoil``
 
 
 v0.12.0

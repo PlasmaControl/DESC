@@ -13,7 +13,7 @@ from desc.coils import (
     MixedCoilSet,
     SplineXYZCoil,
 )
-from desc.compute import get_transforms, xyz2rpz, xyz2rpz_vec
+from desc.compute import get_params, get_transforms, xyz2rpz, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -45,8 +45,13 @@ class TestCoil:
         # FourierXYZCoil
         coil = FourierXYZCoil(I)
         transforms = get_transforms(["x", "x_s", "ds"], coil, coil_grid)
+        params = get_params(["x", "x_s", "ds"], coil)
         B_xyz = coil.compute_magnetic_field(
-            grid_xyz, basis="xyz", source_grid=coil_grid, transforms=transforms
+            grid_xyz,
+            basis="xyz",
+            source_grid=coil_grid,
+            transforms=transforms,
+            params=params,
         )
         B_rpz = coil.compute_magnetic_field(
             grid_rpz, basis="rpz", source_grid=coil_grid

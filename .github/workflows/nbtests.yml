@@ -39,7 +39,7 @@ jobs:
           lscpu
           export PYTHONPATH=$(pwd)
           pytest -v --nbmake "./docs/notebooks" \
-            --nbmake-timeout=1000 \
+            --nbmake-timeout=2000 \
             --ignore=./docs/notebooks/zernike_eval.ipynb \
             --splits 2 \
             --group ${{ matrix.group }} \

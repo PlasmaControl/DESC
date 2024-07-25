@@ -6,9 +6,20 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import fori_loop, jit, jnp, scan, tree_stack, tree_unstack, vmap
+from desc.backend import (
+    fori_loop,
+    jit,
+    jnp,
+    scan,
+    tree_leaves,
+    tree_stack,
+    tree_unstack,
+    vmap,
+)
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
+from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import safenorm
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -147,8 +158,37 @@ class _Coil(_MagneticField, Optimizable, ABC):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
 
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return 1
+
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        x = self.compute("x", grid=grid, params=params, **kwargs)["x"]
+        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
+        basis = kwargs.pop("basis", "xyz")
+        if basis.lower() == "rpz":
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        return x
+
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -166,6 +206,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+
 
         Returns
         -------
@@ -189,10 +232,30 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
+        if source_grid is None:
+            # NFP=1 to ensure points span the entire length of the coil
+            # multiply resolution by NFP to ensure Biot-Savart integration is accurate
+            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
 
-        data = self.compute(
-            ["x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
-        )
+        if not params or not transforms:
+            data = self.compute(
+                ["x", "x_s", "ds"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
+        else:
+            data = compute_fun(
+                self,
+                names=["x", "x_s", "ds"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+            )
+            data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
+            data["x"] = rpz2xyz(data["x"])
+
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )
@@ -236,6 +299,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
             grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCoil.from_values(
             self.current, coords, N=N, s=s, basis="xyz", name=name
@@ -572,7 +637,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -590,6 +655,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -703,7 +770,7 @@ def _check_type(coil0, coil):
         FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
-        SplineXYZCoil: ["method", "N"],
+        SplineXYZCoil: ["method", "N", "knots"],
     }
 
     for attr in attrs[coil0.__class__]:
@@ -714,7 +781,8 @@ def _check_type(coil0, coil):
             ValueError,
             (
                 "coils in a CoilSet must have the same parameterization, got a "
-                + f"mismatch between attr {attr}, with values {a0} and {a1}"
+                + f"mismatch between attr {attr}, with values {a0} and {a1}."
+                + " Consider using a MixedCoilSet"
             ),
         )
 
@@ -737,25 +805,37 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assuming 'virtual' coils from the other half field period. Default = False.
     name : str
         Name of this CoilSet.
+    check_intersection: bool
+        Whether or not to check the coils in the coilset for intersections.
 
     """
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
 
-    def __init__(self, *coils, NFP=1, sym=False, name=""):
+    def __init__(
+        self,
+        *coils,
+        NFP=1,
+        sym=False,
+        name="",
+        check_intersection=True,
+    ):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
-        self._NFP = NFP
-        self._sym = sym
+        self._NFP = int(NFP)
+        self._sym = bool(sym)
         self._name = str(name)
+
+        if check_intersection:
+            self.is_self_intersecting()
 
     @property
     def name(self):
         """str: Name of the curve."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
@@ -765,6 +845,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def coils(self):
         """list: coils in the coilset."""
         return self._coils
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return len(self) * (int(self.sym) + 1) * self.NFP
 
     @property
     def NFP(self):
@@ -834,16 +919,19 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if params is None:
-            params = [get_params(names, coil) for coil in self]
+            params = [
+                get_params(names, coil, basis=kwargs.get("basis", "rpz"))
+                for coil in self
+            ]
         if data is None:
             data = [{}] * len(self)
+
         # if user supplied initial data for each coil we also need to vmap over that.
         data = vmap(
             lambda d, x: self[0].compute(
                 names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
             )
         )(tree_stack(data), tree_stack(params))
-
         return tree_unstack(data)
 
     def translate(self, *args, **kwargs):
@@ -858,8 +946,66 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        basis = kwargs.pop("basis", "xyz")
+        if params is None:
+            params = [get_params("x", coil, basis=basis) for coil in self]
+        data = self.compute("x", grid=grid, params=params, basis=basis, **kwargs)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+        if basis.lower() == "rpz":
+            xyz = rpz2xyz(x)
+        else:
+            xyz = x
+
+        # if stellarator symmetric, add reflected coils from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
+
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        rpz = xyz2rpz(xyz)
+
+        # if field period symmetry, add rotated coils from other field periods
+        if self.NFP > 1:
+            rpz0 = rpz
+            for k in range(1, self.NFP):
+                rpz = jnp.vstack(
+                    (rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0]))
+                )
+
+        # ensure phi in [0, 2pi)
+        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
+
+        if basis.lower() == "xyz":
+            x = rpz2xyz(rpz)
+        else:
+            x = rpz
+        return x
+
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -874,6 +1020,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid : Grid, int or None, optional
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -884,7 +1032,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
-            params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
+            params = [
+                get_params(["x_s", "x", "s", "ds"], coil, basis=basis) for coil in self
+            ]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
 
@@ -1015,7 +1165,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Parameters
         ----------
-        coils : Coil, CoilGroup, Coilset
+        coils : Coil, CoilSet
             Coil or collection of coils in one field period or half field period.
         NFP : int (optional)
             Number of field periods for enforcing field period symmetry.
@@ -1034,24 +1184,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if not isinstance(coils, CoilSet):
-            coils = CoilSet(coils)
-
-        [_check_type(coil, coils[0]) for coil in coils]
-
-        # check toroidal extent of coils to be repeated
-        maxphi = 2 * np.pi / NFP / (sym + 1)
-        data = coils.compute("phi")
-        for i, cdata in enumerate(data):
-            errorif(
-                np.any(cdata["phi"] > maxphi),
-                ValueError,
-                f"coil {i} exceeds the toroidal extent for NFP={NFP} and sym={sym}",
-            )
-            warnif(
-                sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
-                UserWarning,
-                f"coil {i} is on the symmetry plane phi=0",
-            )
+            try:
+                coils = CoilSet(coils)
+            except (TypeError, ValueError):
+                # likely there are multiple coil types,
+                # so make a MixedCoilSet
+                coils = MixedCoilSet(coils)
+        if not isinstance(coils, MixedCoilSet):
+            # only need to check this for a CoilSet, not MixedCoilSet
+            [_check_type(coil, coils[0]) for coil in coils]
 
         coilset = []
         if sym:
@@ -1367,6 +1508,100 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
+    def is_self_intersecting(self, grid=None, tol=None):
+        """Check if any coils in the CoilSet intersect.
+
+        By default, checks intersection by checking that for each point on a given coil
+        the closest point in the coilset is on that same coil. If the closest point is
+        on another coil, that indicates that the coils may be close to intersecting.
+
+        If instead the ``tol`` argument is provided, then the function will
+        check the minimum distance from each coil to each other coil against
+        that tol and if it finds the minimum distance is less than the ``tol``,
+        it will take it as intersecting coils, returning True and raising a warning.
+
+        NOTE: If grid resolution used is too low, this function may fail to return
+        the correct answer.
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            Collocation grid containing the nodes to evaluate the coil positions at.
+            If a list, must have the same structure as the coilset. Defaults to a
+            LinearGrid(N=100)
+        tol : float, optional
+            the tolerance (in meters) to check the intersections to, if points on any
+            two coils are closer than this tolerance, then the function will return
+            True and a warning will be raised. If not passed, then the method used
+            to determine coilset intersection will be based off of checking that
+            each point on a coil is closest to a point on the same coil, which does
+            not rely on a ``tol`` parameter.
+
+        Returns
+        -------
+        is_self_intersecting : bool
+            Whether or not any coils in the CoilSet come close enough to each other to
+            possibly be intersecting.
+
+        """
+        from desc.objectives._coils import CoilSetMinDistance
+
+        grid = grid if grid else LinearGrid(N=100)
+        obj = CoilSetMinDistance(self, grid=grid)
+        obj.build(verbose=0)
+        if tol:
+            min_dists = obj.compute(self.params_dict)
+            is_nearly_intersecting = np.any(min_dists < tol)
+            warnif(
+                is_nearly_intersecting,
+                UserWarning,
+                "Found coils which are nearly intersecting according to the given tol "
+                + "(min coil-coil distance = "
+                + f"{np.min(min_dists):1.3e} m < {tol:1.3e} m)"
+                + " in the coilset, it is recommended to check coils closely.",
+            )
+            return is_nearly_intersecting
+        else:
+
+            pts = obj._constants["coilset"]._compute_position(
+                params=self.params_dict, grid=obj._constants["grid"], basis="xyz"
+            )
+            pts = np.array(pts)
+            num_nodes = pts.shape[1]
+            bad_coil_inds = []
+            # We will raise the warning if the jth point on the
+            # kth coil is closer to a point on a different coil than
+            # it is to the neighboring points on itself
+            for k in range(self.num_coils):
+                # dist[i,j,n] is the distance from the jth point on the kth coil
+                # to the nth point on the ith coil
+                dist = np.asarray(
+                    safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
+                )
+                for j in range(num_nodes):
+                    dists_for_this_pt = dist[:, j, :].copy()
+                    dists_for_this_pt[k][
+                        j
+                    ] = np.inf  # Set the dist from the pt to itself to inf to ignore
+                    ind_min = np.argmin(dists_for_this_pt)
+                    # check if the index returned corresponds to a point on the same
+                    # coil. if it does not, then this jth pt on the kth coil is closer
+                    #  to a point on another coil than it is to pts on its own coil,
+                    # which means it may be intersecting it.
+                    if ind_min not in np.arange((num_nodes) * k, (num_nodes) * (k + 1)):
+                        bad_coil_inds.append(k)
+            bad_coil_inds = set(bad_coil_inds)
+            is_nearly_intersecting = True if bad_coil_inds else False
+            warnif(
+                is_nearly_intersecting,
+                UserWarning,
+                "Found coils which are nearly intersecting according to the given grid"
+                + " it is recommended to check coils closely or run function "
+                + "again with a higher resolution grid."
+                + f" Offending coil indices are {bad_coil_inds}.",
+            )
+            return is_nearly_intersecting
+
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
             return CoilSet(*self.coils, *other.coils)
@@ -1417,16 +1652,27 @@ class MixedCoilSet(CoilSet):
         Collection of coils.
     name : str
         Name of this CoilSet.
+    check_intersection: bool
+        Whether or not to check the coils in the coilset for intersections.
 
     """
 
-    def __init__(self, *coils, name=""):
+    _io_attrs_ = CoilSet._io_attrs_
+
+    def __init__(self, *coils, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         self._coils = list(coils)
         self._NFP = 1
         self._sym = False
         self._name = str(name)
+        if check_intersection:
+            self.is_self_intersecting()
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return sum([c.num_coils for c in self])
 
     def compute(
         self,
@@ -1478,8 +1724,42 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int or array-like, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+            If array-like, should be 1 value per coil.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        errorif(
+            grid is None,
+            ValueError,
+            "grid must be supplied to MixedCoilSet._compute_position, since the "
+            + "default grid for each coil could have a different number of nodes.",
+        )
+        params = self._make_arraylike(params)
+        grid = self._make_arraylike(grid)
+        x = jnp.vstack(
+            [
+                coil._compute_position(par, grd, **kwargs)
+                for coil, par, grd in zip(self.coils, params, grid)
+            ]
+        )
+        return x
+
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1496,6 +1776,8 @@ class MixedCoilSet(CoilSet):
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
             If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -1505,10 +1787,11 @@ class MixedCoilSet(CoilSet):
         """
         params = self._make_arraylike(params)
         source_grid = self._make_arraylike(source_grid)
+        transforms = self._make_arraylike(transforms)
 
         B = 0
-        for coil, par, grd in zip(self.coils, params, source_grid):
-            B += coil.compute_magnetic_field(coords, par, basis, grd)
+        for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
+            B += coil.compute_magnetic_field(coords, par, basis, grd, transforms=tr)
 
         return B
 

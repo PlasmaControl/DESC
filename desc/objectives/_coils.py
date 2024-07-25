@@ -124,6 +124,11 @@ class _CoilObjective(_Objective):
 
         # get individual coils from coilset
         coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
+        errorif(
+            not all([isinstance(c, _Coil) for c in coils]),
+            ValueError,
+            "CoilSet must contain only Coil objects.",
+        )
         self._num_coils = len(coils)
 
         # map grid to list of length coils

@@ -12,7 +12,7 @@ from desc.compute.utils import safediv
 from desc.utils import errorif, warnif
 
 
-@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
+@partial(jnp.vectorize, signature="(m),(m)->(n)")
 def _take_mask(a, mask, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 

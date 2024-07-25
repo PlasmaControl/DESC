@@ -831,7 +831,7 @@ def _check_type(coil0, coil):
         FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
-        SplineXYZCoil: ["method", "N"],
+        SplineXYZCoil: ["method", "N", "knots"],
     }
 
     for attr in attrs[coil0.__class__]:
@@ -842,7 +842,8 @@ def _check_type(coil0, coil):
             ValueError,
             (
                 "coils in a CoilSet must have the same parameterization, got a "
-                + f"mismatch between attr {attr}, with values {a0} and {a1}"
+                + f"mismatch between attr {attr}, with values {a0} and {a1}."
+                + " Consider using a MixedCoilSet"
             ),
         )
 

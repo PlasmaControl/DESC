@@ -805,7 +805,7 @@ class TestObjectiveFunction:
             obj.build()
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 4 * np.pi, rtol=1e-8)
-            assert len(f) == obj.dim_f
+            assert f.shape == (obj.dim_f,)
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
         coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])

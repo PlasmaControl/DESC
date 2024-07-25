@@ -1954,7 +1954,7 @@ class Equilibrium(IOAble, Optimizable):
             idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
-            L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
+            L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
 
         inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
         inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]

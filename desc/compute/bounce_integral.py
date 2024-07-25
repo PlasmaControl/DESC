@@ -9,10 +9,10 @@ from orthax.legendre import leggauss
 
 from desc.backend import flatnonzero, imap, jnp, put, take
 from desc.compute.utils import safediv
-from desc.utils import Index, errorif, warnif
+from desc.utils import errorif, warnif
 
 
-@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={2, 3})
+@partial(jnp.vectorize, signature="(m),(m)->(n)")
 def _take_mask(a, mask, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 
@@ -66,6 +66,15 @@ def _filter_nonzero_measure(bp1, bp2):
     """Return only bounce points such that |bp2 - bp1| > 0."""
     mask = (bp2 - bp1) != 0
     return bp1[mask], bp2[mask]
+
+
+def _filter_distinct(r, sentinel, eps):
+    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
+    # eps needs to be low enough that close distinct roots do not get removed.
+    # Otherwise, algorithms relying on continuity will fail.
+    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
+    r = jnp.where(mask, sentinel, r)
+    return r
 
 
 def _sentinel_append(r, sentinel, num=1):
@@ -170,24 +179,28 @@ def _poly_root(
         First axis should store coefficients of a polynomial. For a polynomial given by
         ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
         ``c[n-i]``.
-    k : Array
+    k : jnp.ndarray
         Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``. Should broadcast with arrays of
         shape ``c.shape[1:]``.
-    a_min, a_max : jnp.ndarray, jnp.ndarray
-        Minimum and maximum value to return roots between. If specified only real roots
-        are returned. If None, returns all complex roots. Should broadcast with arrays
-        of shape ``c.shape[1:]``.
+    a_min : jnp.ndarray
+        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
+        If specified only real roots  are returned. If None, returns all complex roots.
+        Should broadcast with arrays of shape ``c.shape[1:]``.
+    a_max : jnp.ndarray
+        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
+        If specified only real roots  are returned. If None, returns all complex roots.
+        Should broadcast with arrays of shape ``c.shape[1:]``.
     sort : bool
         Whether to sort the roots.
     sentinel : float
         Value with which to pad array in place of filtered elements.
         Anything less than ``a_min`` or greater than ``a_max`` plus some floating point
-        error buffer will work just like nan while also avoiding nan gradient.
+        error buffer will work just like nan while avoiding nan gradient.
     eps : float
         Absolute tolerance with which to consider value as zero.
     distinct : bool
         Whether to only return the distinct roots. If true, when the multiplicity is
-        greater than one, the repeated roots are set to nan.
+        greater than one, the repeated roots are set to ``sentinel``.
 
     Returns
     -------
@@ -211,7 +224,7 @@ def _poly_root(
         c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
         c.append(c_n)
         c = jnp.stack(c, axis=-1)
-        r = jnp.nan_to_num(_roots(c), nan=sentinel)
+        r = _roots(c)
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
@@ -223,12 +236,7 @@ def _poly_root(
 
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
-    if distinct:
-        # eps needs to be low enough that close distinct roots do not get removed.
-        # Otherwise, algorithms relying on continuity will fail.
-        mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-        r = jnp.where(mask, sentinel, r)
-    return r
+    return _filter_distinct(r, sentinel, eps) if distinct else r
 
 
 def _poly_der(c):
@@ -288,7 +296,7 @@ def _poly_val(x, c):
             )
 
     """
-    # Fine instead of Horner's method as we expect to evaluate cubic polynomials.
+    # Better than Horner's method as we expect to evaluate low order polynomials.
     X = x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1)
     val = jnp.einsum("...i,i...->...", X, c)
     return val
@@ -503,6 +511,31 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     return B_c, B_z_ra_c, pitch
 
 
+@partial(jnp.vectorize, signature="(m),(m)->(m)")
+def _fix_inversion(is_intersect, B_z_ra):
+    # idx of first two intersects
+    idx = flatnonzero(is_intersect, size=2, fill_value=-1)
+    edge_case = (
+        (B_z_ra[idx[0]] == 0)
+        & (B_z_ra[idx[1]] < 0)
+        & is_intersect[idx[0]]
+        & is_intersect[idx[1]]
+        # In theory, we need to keep propagating this edge case,
+        # e.g. (B_z_ra[..., 1] < 0) | ((B_z_ra[..., 1] == 0) & (B_z_ra[..., 2] < 0)...).
+        # At each step, the likelihood that an intersection has already been lost
+        # due to floating point errors grows, so the real solution is to pick a less
+        # degenerate pitch value - one that does not ride the global extrema of |B|.
+    )
+    # The pairs bp1[i, j, k] and bp2[i, j, k] are boundaries of an integral only
+    # if bp1[i, j, k] <= bp2[i, j, k]. For correctness of the algorithm, it is
+    # required that the first intersect satisfies non-positive derivative. Now,
+    # because B_z_ra[i, j, k] <= 0 implies B_z_ra[i, j, k + 1] >= 0 by continuity,
+    # there can be at most one inversion, and if it exists, the inversion must be
+    # at the first pair. To correct the inversion, it suffices to disqualify the
+    # first intersect as a right boundary, except under the above edge case.
+    return put(is_intersect, idx[0], edge_case)
+
+
 def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs):
     """Compute the bounce points given spline of |B| and pitch λ.
 
@@ -538,16 +571,13 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
     -------
     bp1, bp2 : (jnp.ndarray, jnp.ndarray)
         Shape (P, S, N * degree).
-        The field line-following ζ coordinates of bounce points for a given pitch along
-        a field line. The pairs ``bp1[i,j,k]`` and ``bp2[i,j,k]`` form left and right
-        integration boundaries, respectively, for the bounce integrals.
+        The field line-following coordinates of bounce points for a given pitch along
+        a field line. The pairs ``bp1`` and ``bp2`` form left and right integration
+        boundaries, respectively, for the bounce integrals.
 
-        For the shaping notation, the ``degree`` of the spline of |B| matches
-        ``B_c.shape[0]-1``, the number of polynomials per spline ``N`` matches
-        ``knots.size-1``, and the number of field lines is denoted by ``S``.
-        If there were less than ``N*degree`` bounce points detected along a field line,
-        then the last axis, which enumerates the bounce points for a particular field
-        line, is padded with zero.
+        If there were less than ``N * degree`` bounce points detected
+        along a field line, then the last axis, which enumerates the bounce points for
+        a particular field line, is padded with zero.
 
     """
     B_c, B_z_ra_c, pitch = _check_shape(knots, B_c, B_z_ra_c, pitch)
@@ -565,54 +595,26 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
     assert intersect.shape == (P, S, N, degree)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
+    B_z_ra = _poly_val(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = intersect.reshape(P, S, -1) >= 0
-    B_z_ra = _poly_val(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
-    # Gather intersects along a field line to be contiguous.
-    B_z_ra = _take_mask(B_z_ra, is_intersect, fill_value=0)
+    # Following discussion on page 3 and 5 of https://doi.org/10.1063/1.873749,
+    # we ignore the bounce points of particles only assigned to a class that are
+    # trapped outside this snapshot of the field line.
+    is_bp1 = (B_z_ra <= 0) & is_intersect
+    is_bp2 = (B_z_ra >= 0) & _fix_inversion(is_intersect, B_z_ra)
 
-    sentinel = knots[0] - 1
     # Transform out of local power basis expansion.
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
-    # Gather intersects along a field line to be contiguous, followed by some sentinel.
-    intersect = _take_mask(intersect, is_intersect, fill_value=sentinel)
-    is_intersect = intersect > sentinel
-    is_bp1 = (B_z_ra <= 0) & is_intersect
-    is_bp2 = (B_z_ra >= 0) & is_intersect
-    edge_case = (
-        (B_z_ra[..., 0] == 0)
-        & (B_z_ra[..., 1] < 0)
-        & is_intersect[..., 0]
-        & is_intersect[..., 1]
-        # In theory, we need to keep propagating this edge case,
-        # e.g (B_z_ra[..., 1] < 0) | ((B_z_ra[..., 1] == 0) & (B_z_ra[..., 2] < 0)...).
-        # At each step, the likelihood that an intersection has already been lost
-        # due to floating point errors grows, so the real solution is to pick a less
-        # degenerate pitch value - one that does not ride the global extrema of |B|.
-    )
-    is_bp2 = put(is_bp2, Index[..., 0], edge_case)
-    # Get ζ values of bounce points from the masks.
+    sentinel = knots[0] - 1
     bp1 = _take_mask(intersect, is_bp1, fill_value=sentinel)
     bp2 = _take_mask(intersect, is_bp2, fill_value=sentinel)
-    # The pairs bp1[i, j, k] and bp2[i, j, k] are boundaries of an integral only
-    # if bp1[i, j, k] <= bp2[i, j, k]. For correctness of the algorithm, it is
-    # required that the first intersect satisfies non-positive derivative. Now,
-    # because B_z_ra[i, j, k] <= 0 implies B_z_ra[i, j, k + 1] >= 0 by continuity,
-    # there can be at most one inversion, and if it exists, the inversion must be
-    # at the first pair. To correct the inversion, it suffices to disqualify the
-    # first intersect as a right boundary, except under the above edge case.
-
-    # Following discussion on page 3 and 5 of https://doi.org/10.1063/1.873749,
-    # we ignore the bounce points of particles assigned to a class that are
-    # trapped outside this snapshot of the field line.
-    # TODO: Better to always consider boundary as bounce points. Simple change;
-    #  do in same pull request that resolves GitHub issue #1045.
 
     if check:
         _check_bounce_points(bp1, bp2, sentinel, pitch, knots, B_c, plot, **kwargs)
 
     mask = (bp1 > sentinel) & (bp2 > sentinel)
-    # Set outside mask to same value so that integration is over set of measure zero.
+    # Set outside mask to same value so integration is over set of measure zero.
     bp1 = jnp.where(mask, bp1, 0)
     bp2 = jnp.where(mask, bp2, 0)
     return bp1, bp2
@@ -638,7 +640,7 @@ def _composite_linspace(x, num):
     """
     x = jnp.atleast_1d(x)
     pts = jnp.linspace(x[:-1], x[1:], num + 1, endpoint=False)
-    pts = jnp.moveaxis(pts, source=0, destination=1).reshape(-1, *x.shape[1:])
+    pts = jnp.swapaxes(pts, 0, 1).reshape(-1, *x.shape[1:])
     pts = jnp.append(pts, x[jnp.newaxis, -1], axis=0)
     assert pts.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
     return pts
@@ -737,6 +739,12 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     )
     assert B_extrema.shape == (N * (degree - 1), S)
     return B_extrema
+
+
+def affine_bijection_to_disc(x, a, b):
+    """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
+    y = 2 * (x - a) / (b - a) - 1
+    return y
 
 
 def affine_bijection(x, a, b):
@@ -840,7 +848,7 @@ def tanh_sinh(deg, m=10):
 
     Parameters
     ----------
-    deg: int
+    deg : int
         Number of quadrature points.
     m : float
         Number of machine epsilons used for floating point error buffer. Larger implies

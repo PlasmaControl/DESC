@@ -228,7 +228,7 @@ def test_compute_everything():
 
     if not error_rpz and update_master_data_rpz:
         # then update the master compute data
-        with open("tests/inputs/master_compute_data.pkl", "wb") as file:
+        with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file
             pickle.dump(this_branch_data_rpz, file)
     if not error_xyz and update_master_data_xyz:

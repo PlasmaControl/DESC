@@ -10,7 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import execute_on_cpu, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
@@ -170,6 +170,7 @@ class Equilibrium(IOAble, Optimizable):
         "_N_grid",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         Psi=1.0,
@@ -539,6 +540,7 @@ class Equilibrium(IOAble, Optimizable):
             new = copy.copy(self)
         return new
 
+    @execute_on_cpu
     def change_resolution(
         self,
         L=None,
@@ -624,6 +626,7 @@ class Equilibrium(IOAble, Optimizable):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
+    @execute_on_cpu
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
 
@@ -1300,6 +1303,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
+    @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 

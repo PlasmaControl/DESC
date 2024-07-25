@@ -315,6 +315,13 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         "of function evaluations."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
+    num_wells=(
+        "int : Maximum number of wells to detect for each pitch and field line. "
+        "Default is to detect all wells, but due to limitations in JAX this option "
+        "may consume more memory. Specifying a number that tightly upper bounds "
+        "the number of wells will increase performance. "
+        "As a reference, there are typically <= 5 wells per toroidal transit."
+    ),
 )
 @partial(jit, static_argnames=["num_quad", "num_pitch", "adaptive", "batch"])
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
@@ -332,6 +339,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     Equation 61, using Velasco's γ_c from equation 15 of the above paper.
     """
     batch = kwargs.get("batch", True)
+    num_wells = kwargs.get("num_wells", None)
     g = transforms["grid"].source_grid
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
     quad = leggauss(kwargs.get("num_quad", 31))
@@ -354,17 +362,27 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             # Return ∑ⱼ [v τ γ_c²]ⱼ evaluated at λ = pitch.
             # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
             # τ is the bounce time, and I is defined in Nemov eq. 36.
-            v_tau = bounce_integrate(d_v_tau, [], pitch, batch=batch)
+            v_tau = bounce_integrate(
+                d_v_tau, [], pitch, batch=batch, num_wells=num_wells
+            )
             gamma_c = (
                 2
                 / jnp.pi
                 * jnp.arctan(
                     safediv(
                         bounce_integrate(
-                            d_gamma_c, data["cvdrift0"], pitch, batch=batch
+                            d_gamma_c,
+                            data["cvdrift0"],
+                            pitch,
+                            batch=batch,
+                            num_wells=num_wells,
                         ),
                         bounce_integrate(
-                            d_gamma_c, data["gbdrift"], pitch, batch=batch
+                            d_gamma_c,
+                            data["gbdrift"],
+                            pitch,
+                            batch=batch,
+                            num_wells=num_wells,
                         ),
                     )
                 )
@@ -385,14 +403,20 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
         def d_Gamma_c(pitch, B_sup_z, B, B_z_ra, cvdrift0, gbdrift):
             bounce_integrate, _ = bounce_integral(B_sup_z, B, B_z_ra, knots, quad)
-            v_tau = bounce_integrate(d_v_tau, [], pitch, batch=batch)
+            v_tau = bounce_integrate(
+                d_v_tau, [], pitch, batch=batch, num_wells=num_wells
+            )
             gamma_c = (
                 2
                 / jnp.pi
                 * jnp.arctan(
                     safediv(
-                        bounce_integrate(d_gamma_c, cvdrift0, pitch, batch=batch),
-                        bounce_integrate(d_gamma_c, gbdrift, pitch, batch=batch),
+                        bounce_integrate(
+                            d_gamma_c, cvdrift0, pitch, batch=batch, num_wells=num_wells
+                        ),
+                        bounce_integrate(
+                            d_gamma_c, gbdrift, pitch, batch=batch, num_wells=num_wells
+                        ),
                     )
                 )
             )

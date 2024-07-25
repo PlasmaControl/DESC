@@ -209,13 +209,22 @@ class TestCoil:
     def test_converting_coil_types(self):
         """Test conversions between coil representations."""
         s = np.linspace(0, 2 * np.pi, 100, endpoint=False)
-        coil1 = FourierRZCoil(1e6, [0, 10, 2], [-2, 0, 0])
+        coil1 = FourierRZCoil(1e6, [0, 10, 1], [0, 0, 0])
         coil2 = coil1.to_FourierXYZ(s=s)
         coil3 = coil1.to_SplineXYZ(knots=s)
+        coil4 = coil1.to_FourierRZ(N=coil1.N)
+        coil5 = coil1.to_FourierPlanar(N=10, basis="rpz")
+
         grid = LinearGrid(zeta=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
         x2 = coil2.compute("x", grid=grid, basis="xyz")["x"]
         x3 = coil3.compute("x", grid=grid, basis="xyz")["x"]
+        x4 = coil4.compute("x", grid=grid, basis="xyz")["x"]
+        grid = LinearGrid(
+            zeta=np.arctan2(x1[:, 1] - coil5.center[1], x1[:, 0] - coil5.center[0])
+        )  # zeta = arctan angle instead of s for the planar coil for the same points
+        x5 = coil5.compute("x", grid=grid, basis="xyz")["x"]
+
         B1 = coil1.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
         )
@@ -225,10 +234,21 @@ class TestCoil:
         B3 = coil3.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
         )
+        B4 = coil4.compute_magnetic_field(
+            np.zeros((1, 3)), source_grid=grid, basis="xyz"
+        )
+        B5 = coil5.compute_magnetic_field(
+            np.zeros((1, 3)), source_grid=grid, basis="xyz"
+        )
+
         np.testing.assert_allclose(x1, x2, atol=1e-12)
         np.testing.assert_allclose(x1, x3, atol=1e-12)
+        np.testing.assert_allclose(x1, x4, atol=1e-12)
+        np.testing.assert_allclose(x1, x5, atol=1e-12)
         np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
+        np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
+        np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
 
 
 class TestCoilSet:

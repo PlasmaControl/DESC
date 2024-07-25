@@ -16,8 +16,10 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
 
     Parameters
     ----------
-    qsc : Qsc equilibrium
+    qsc : Qsc or None
         Qsc object to use as the NAE constraints on the DESC equilibrium.
+        if None is passed, will instead use the given DESC equilibrium's
+        current near-axis behavior for the constraint.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
     N : int,
@@ -37,9 +39,7 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
         FourierSeries basis corresponding to L_0_n coefficients
 
     """
-    phi = qsc.phi
-    dphi = phi[1] - phi[0]
-    nfp = qsc.nfp
+    nfp = desc_eq.NFP
     if N is None:
         N = desc_eq.N
     else:
@@ -48,23 +48,31 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
         Lbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
     else:
         Lbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+    if qsc is not None:
+        phi = qsc.phi
+        dphi = phi[1] - phi[0]
 
-    grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
-    Ltrans_sin = Transform(grid, Lbasis_sin, build_pinv=True, method="auto")
+        grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
+        Ltrans_sin = Transform(grid, Lbasis_sin, build_pinv=True, method="auto")
 
-    # from integrating eqn A20 in
-    # Constructing stellarators with quasisymmetry to high order 2019
-    #  Landreman and Sengupta
-    nu_0 = np.cumsum(qsc.B0 / qsc.G0 * qsc.d_l_d_phi - 1) * np.ones_like(phi) * dphi
-    nu_0_n = Ltrans_sin.fit(nu_0)
+        # from integrating eqn A20 in
+        # Constructing stellarators with quasisymmetry to high order 2019
+        #  Landreman and Sengupta
+        nu_0 = np.cumsum(qsc.B0 / qsc.G0 * qsc.d_l_d_phi - 1) * np.ones_like(phi) * dphi
+        nu_0_n = Ltrans_sin.fit(nu_0)
+
+        # lambda = -iota_0 * nu
+        L_0_n = -qsc.iota * nu_0_n
+    else:
+        # we will fix to eq current on-axis lambda, so just set L_0_n to 0
+        # as it will be unused
+        L_0_n = np.zeros(Lbasis_sin.num_modes)
 
     Lconstraints = ()
-    # lambda = -iota_0 * nu
-    L_0_n = -qsc.iota * nu_0_n
     for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], L_0_n):
         sum_weights = []
         modes = []
-        target = NAEcoeff
+        target = None if qsc is None else NAEcoeff
         for l in range(int(desc_eq.L + 1)):
             modes.append([l, 0, n])
             if (l // 2) % 2 == 0:
@@ -88,8 +96,10 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
 
     Parameters
     ----------
-    qsc : Qsc equilibrium
+    qsc : Qsc or None
         Qsc object to use as the NAE constraints on the DESC equilibrium.
+        if None is passed, will instead use the given DESC equilibrium's
+        current near-axis behavior for the constraint.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
     N : int,
@@ -113,6 +123,38 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
         and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
     """
+    if qsc is None:
+        nfp = desc_eq.NFP
+        # we will set behavior to the eq's current near axis behavior
+        # we dont need to calculate any NAE coeffs, we only need the
+        # bases and arrays of appropriate sizes for the coefficients
+        if desc_eq.sym:
+            Rbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+            Zbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+            Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
+            Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
+        else:
+            Rbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+            Zbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+            Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
+            Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
+        bases = {}
+        bases["Rbasis_cos"] = Rbasis
+        bases["Rbasis_sin"] = Rbasis_sin
+        bases["Zbasis_cos"] = Zbasis
+        bases["Zbasis_sin"] = Zbasis_sin
+        bases["Lbasis_cos"] = Zbasis  # L has same basis as Z bc has the same symmetry
+        bases["Lbasis_sin"] = Zbasis_sin
+
+        coeffs = {}
+        coeffs["R_1_1_n"] = np.zeros(Rbasis.num_modes)
+        coeffs["R_1_neg1_n"] = np.zeros(Rbasis_sin.num_modes)
+        coeffs["Z_1_1_n"] = np.zeros(Zbasis_sin.num_modes)
+        coeffs["Z_1_neg1_n"] = np.zeros(Zbasis.num_modes)
+        coeffs["L_1_1_n"] = np.zeros(Zbasis_sin.num_modes)
+        coeffs["L_1_neg1_n"] = np.zeros(Zbasis.num_modes)
+        return coeffs, bases
+
     phi = qsc.phi
     dphi = phi[1] - phi[0]
 
@@ -215,13 +257,17 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     return coeffs, bases
 
 
-def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
+def _make_RZ_cons_order_rho(  # noqa: C901
+    qsc, desc_eq, coeffs, bases, fix_lambda=False
+):
     """Create the linear constraints for constraining an eq with O(rho) NAE behavior.
 
     Parameters
     ----------
-    qsc : Qsc equilibrium
+    qsc : Qsc or None
         Qsc object to use as the NAE constraints on the DESC equilibrium.
+        if None is passed, will instead use the given DESC equilibrium's
+        current near-axis behavior for the constraint.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
     coeffs : dict
@@ -256,8 +302,12 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         Tuple is empty if fix_lambda=False.
 
     """
-    # r is the ratio  r_NAE / rho_DESC
-    r = np.sqrt(2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi)
+    if qsc is not None:
+        # r is the ratio  r_NAE / rho_DESC
+        r = np.sqrt(2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi)
+    else:
+        # TODO: is this true?
+        r = 1  # using DESC equilibrium's behavior, no conversion is needed
 
     Rconstraints = ()
     Zconstraints = ()
@@ -275,7 +325,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = None if qsc is None else NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
             sum_weights.append((-1) ** k * k)
@@ -289,7 +339,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = None if qsc is None else NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
             sum_weights.append((-1) ** k * k)
@@ -304,7 +354,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         for n, NAEcoeff in zip(Lbasis_cos.modes[:, 2], coeffs["L_1_neg1_n"]):
             sum_weights = []
             modes = []
-            target = NAEcoeff * r
+            target = None if qsc is None else NAEcoeff * r
             for k in range(1, int((desc_eq.L + 1) / 2) + 1):
                 modes.append([2 * k - 1, -1, n])
                 sum_weights.append((-1) ** k * k)
@@ -318,7 +368,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = None if qsc is None else NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
             sum_weights.append((-1) ** k * k)
@@ -332,7 +382,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = None if qsc is None else NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
             sum_weights.append((-1) ** k * k)
@@ -347,7 +397,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
         for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], coeffs["L_1_1_n"]):
             sum_weights = []
             modes = []
-            target = NAEcoeff * r
+            target = None if qsc is None else NAEcoeff * r
             for k in range(1, int((desc_eq.L + 1) / 2) + 1):
                 modes.append([2 * k - 1, 1, n])
                 sum_weights.append((-1) ** k * k)
@@ -365,8 +415,10 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
 
     Parameters
     ----------
-    qsc : Qsc equilibrium
+    qsc : Qsc or None
         Qsc object to use as the NAE constraints on the DESC equilibrium.
+        if None is passed, will instead use the given DESC equilibrium's
+        current near-axis behavior for the constraint.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
     fix_lambda : bool, default False

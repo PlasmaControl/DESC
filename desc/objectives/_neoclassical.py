@@ -82,6 +82,14 @@ class EffectiveRipple(_Objective):
         between neighboring surfaces, increasing num_pitch will smooth the profile).
     batch : bool
         Whether to vectorize part of the computation. Default is true.
+    num_wells : int
+        Maximum number of wells to detect for each pitch and field line.
+        Default is to detect all wells, but due to limitations in JAX this option
+        may consume more memory. Specifying a number that tightly upper bounds
+        the number of wells will increase performance.
+        As a reference, there are typically <= 5 wells per toroidal transit.
+        There exist utilities to plot the field line with the bounce points
+        to see how many wells there are.
     name : str, optional
         Name of the objective function.
 
@@ -107,6 +115,7 @@ class EffectiveRipple(_Objective):
         num_quad=31,
         num_pitch=99,
         batch=True,
+        num_wells=None,
         name="Effective ripple",
     ):
         if bounds is not None:
@@ -135,6 +144,7 @@ class EffectiveRipple(_Objective):
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "batch": batch,
+            "num_wells": num_wells,
         }
 
         super().__init__(

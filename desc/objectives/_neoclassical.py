@@ -302,7 +302,6 @@ class GammaC(_Objective):
         more toroidal transits will give more accurate result, with diminishing returns.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 31.
-        which gets sufficient convergence, so higher values are likely unnecessary.
     num_pitch : int
         Resolution for quadrature over velocity coordinate. Default is 99.
     batch : bool
@@ -397,8 +396,8 @@ class GammaC(_Objective):
         self._constants["transforms_1dr"] = get_transforms(
             self._keys_1dr, eq, self._grid_1dr
         )
-        self._constants["profiles_1dr"] = get_profiles(
-            self._keys_1dr, eq, self._grid_1dr
+        self._constants["profiles"] = get_profiles(
+            self._keys_1dr + self._keys, eq, self._grid_1dr
         )
 
         timer.stop("Precomputing transforms")
@@ -431,7 +430,7 @@ class GammaC(_Objective):
             self._keys_1dr,
             params,
             constants["transforms_1dr"],
-            constants["profiles_1dr"],
+            constants["profiles"],
         )
         iota = self._grid_1dr.compress(data["iota"])
         iota_r = self._grid_1dr.compress(data["iota_r"])
@@ -453,7 +452,7 @@ class GammaC(_Objective):
             self._keys,
             params,
             get_transforms(self._keys, eq, grid, jitable=True),
-            get_profiles(self._keys, eq, grid),
+            constants["profiles"],
             data=data,
             **self._hyperparameters,
         )

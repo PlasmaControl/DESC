@@ -293,10 +293,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         "<L|r,a>",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad=(
-        "int : Resolution for quadrature of bounce integrals. Default is 31, "
-        "which gets sufficient convergence, so higher values are likely unnecessary."
-    ),
+    num_quad="int : Resolution for quadrature of bounce integrals. Default is 31.",
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate. Default is 125."
     ),

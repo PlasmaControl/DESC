@@ -179,10 +179,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     ],
     resolution_requirement="z",  # and poloidal if near rational surfaces
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad=(
-        "int : Resolution for quadrature of bounce integrals. Default is 31, "
-        "which gets sufficient convergence, so higher values are likely unnecessary."
-    ),
+    num_quad="int : Resolution for quadrature of bounce integrals. Default is 31.",
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate, preferably odd. "
         "Default is 125. Effective ripple will look smoother at high values. "

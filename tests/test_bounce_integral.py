@@ -747,15 +747,17 @@ def test_drift():
         integrand=integrand_num,
         f=[cvdrift, gbdrift],
         pitch=pitch[:, np.newaxis],
+        num_wells=1,  # don't need to specify but will reduce memory and improve speed
     )
     drift_numerical_den = bounce_integrate(
         integrand=integrand_den,
         f=[],
         pitch=pitch[:, np.newaxis],
+        num_wells=1,
     )
 
-    drift_numerical_num = np.squeeze(drift_numerical_num[drift_numerical_num != 0])
-    drift_numerical_den = np.squeeze(drift_numerical_den[drift_numerical_den != 0])
+    drift_numerical_num = np.squeeze(drift_numerical_num)
+    drift_numerical_den = np.squeeze(drift_numerical_den)
     drift_numerical = drift_numerical_num / drift_numerical_den
     msg = "There should be one bounce integral per pitch in this example."
     assert drift_numerical.size == drift_analytic.size, msg

@@ -9,10 +9,10 @@ from orthax.legendre import leggauss
 
 from desc.backend import flatnonzero, imap, jnp, put, take
 from desc.compute.utils import safediv
-from desc.utils import errorif, warnif
+from desc.utils import errorif, setdefault, warnif
 
 
-@partial(jnp.vectorize, signature="(m),(m)->(n)")
+@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
 def _take_mask(a, mask, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 
@@ -39,9 +39,7 @@ def _take_mask(a, mask, size=None, fill_value=None):
 
     """
     assert a.shape == mask.shape
-    idx = flatnonzero(
-        mask, size=mask.size if size is None else size, fill_value=mask.size
-    )
+    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
     return take(
         a,
         idx,
@@ -314,7 +312,7 @@ def plot_field_line(
     title_id=None,
     include_knots=True,
     alpha_knot=0.1,
-    alpha_pitch=0.25,
+    alpha_pitch=0.3,
     show=True,
 ):
     """Plot the field line given spline of |B|.
@@ -368,8 +366,8 @@ def plot_field_line(
         for knot in B.x:
             add(ax.axvline(x=knot, color="tab:blue", alpha=alpha_knot, label="knot"))
     z = np.linspace(
-        start=B.x[0] if start is None else start,
-        stop=B.x[-1] if stop is None else stop,
+        start=setdefault(start, B.x[0]),
+        stop=setdefault(stop, B.x[-1]),
         num=num,
     )
     add(ax.plot(z, B(z), label=r"$\vert B \vert (\zeta)$"))
@@ -536,7 +534,9 @@ def _fix_inversion(is_intersect, B_z_ra):
     return put(is_intersect, idx[0], edge_case)
 
 
-def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs):
+def bounce_points(
+    pitch, knots, B_c, B_z_ra_c, num_wells=None, check=False, plot=True, **kwargs
+):
     """Compute the bounce points given spline of |B| and pitch λ.
 
     Parameters
@@ -562,22 +562,35 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines along the field lines. Last axis enumerates the
         polynomials that compose the spline along a particular field line.
+    num_wells : int
+        If not specified, then all bounce points are returned in an array whose
+        last axis has size ``(knots.size - 1) * (B_c.shape[0] - 1)``. If there
+        were less than that many wells detected along a field line, then the last
+        axis of the returned arrays, which enumerates bounce points for a particular
+        field line and pitch, is padded with zero.
+
+        Specify to only return the first ``size`` pairs of bounce points for each
+        pitch along each field line. This is useful if ``size`` is a close upper
+        bound to the actual number of wells. To get an intuition for a good estimate
+        for ``size``, plot the field line with all the bounce points identified
+        by calling this function with ``check=True``.
+        As a reference, there are typically <= 5 wells per toroidal transit.
     check : bool
         Flag for debugging.
     plot : bool
-        Whether to plot some things if check is true.
+        Whether to plot some things if check is true. Default is true.
 
     Returns
     -------
     bp1, bp2 : (jnp.ndarray, jnp.ndarray)
-        Shape (P, S, N * degree).
+        Shape (P, S, num_wells).
         The field line-following coordinates of bounce points for a given pitch along
         a field line. The pairs ``bp1`` and ``bp2`` form left and right integration
         boundaries, respectively, for the bounce integrals.
 
-        If there were less than ``N * degree`` bounce points detected
-        along a field line, then the last axis, which enumerates the bounce points for
-        a particular field line, is padded with zero.
+        If there were less than ``size`` wells detected along a field line, then
+        the last axis, which enumerates bounce points for  a particular field line
+        and pitch, is padded with zero.
 
     """
     B_c, B_z_ra_c, pitch = _check_shape(knots, B_c, B_z_ra_c, pitch)
@@ -606,9 +619,10 @@ def bounce_points(pitch, knots, B_c, B_z_ra_c, check=False, plot=True, **kwargs)
 
     # Transform out of local power basis expansion.
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
-    sentinel = knots[0] - 1
-    bp1 = _take_mask(intersect, is_bp1, fill_value=sentinel)
-    bp2 = _take_mask(intersect, is_bp2, fill_value=sentinel)
+    # New versions of jax only like static sentinels.
+    sentinel = -10000000.0  # knots[0] - 1
+    bp1 = _take_mask(intersect, is_bp1, size=num_wells, fill_value=sentinel)
+    bp2 = _take_mask(intersect, is_bp2, size=num_wells, fill_value=sentinel)
 
     if check:
         _check_bounce_points(bp1, bp2, sentinel, pitch, knots, B_c, plot, **kwargs)
@@ -1232,7 +1246,7 @@ def bounce_integral(
     check : bool
         Flag for debugging. Must be false for jax transformations.
     plot : bool
-        Whether to plot stuff if ``check`` is true.
+        Whether to plot stuff if ``check`` is true. Default is false.
 
     Returns
     -------
@@ -1296,7 +1310,9 @@ def bounce_integral(
         # Recall affine_bijection(auto(x), ζ_b₁, ζ_b₂) = ζ.
         x = auto(x)
 
-    def bounce_integrate(integrand, f, pitch, method="akima", batch=True):
+    def bounce_integrate(
+        integrand, f, pitch, method="akima", batch=True, num_wells=None
+    ):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
         Parameters
@@ -1323,16 +1339,30 @@ def bounce_integral(
             Default is akima spline.
         batch : bool
             Whether to perform computation in a batched manner. Default is true.
+        num_wells : int
+            If not specified, then all bounce integrals are returned in an array whose
+            last axis has size ``(knots.size - 1) * degree``. If there
+            were less than that many wells detected along a field line, then the last
+            axis of the returned array, which enumerates bounce integrals for a
+            particular field line and pitch, is padded with zero.
+
+            Specify to only return the bounce integrals between the first ``size``
+            wells for each pitch along each field line. This is useful if ``size`` is a
+            close upper bound to the actual number of wells. To get an intuition for a
+            good estimate for ``size``, plot the field line with all the bounce points
+            identified. This will be done automatically if the ``bounce_integral``
+            function is called with ``check=True`` and ``plot=True``.
+            As a reference, there are typically <= 5 wells per toroidal transit.
 
         Returns
         -------
         result : jnp.ndarray
-            Shape (P, S, (knots.size - 1) * degree).
+            Shape (P, S, num_wells).
             First axis enumerates pitch values. Second axis enumerates the field lines.
             Last axis enumerates the bounce integrals.
 
         """
-        bp1, bp2 = bounce_points(pitch, knots, B_c, B_z_ra_c, check, plot)
+        bp1, bp2 = bounce_points(pitch, knots, B_c, B_z_ra_c, num_wells, check, plot)
         result = _bounce_quadrature(
             bp1,
             bp2,
@@ -1350,7 +1380,7 @@ def bounce_integral(
             batch=batch,
             check=check,
         )
-        assert result.shape[-1] == (knots.size - 1) * degree
+        assert result.shape[-1] == setdefault(num_wells, (knots.size - 1) * degree)
         return result
 
     return bounce_integrate, spline

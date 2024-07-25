@@ -187,6 +187,13 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "between neighboring surfaces, increasing num_pitch will smooth the profile)."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
+    num_wells=(
+        "int : Maximum number of wells to detect for each pitch and field line. "
+        "Default is to detect all wells, but due to limitations in JAX this option "
+        "may consume more memory. Specifying a number that tightly upper bounds "
+        "the number of wells will increase performance. "
+        "As a reference, there are typically <= 5 wells per toroidal transit."
+    ),
     # Some notes on choosing the resolution hyperparameters:
     # The default settings above were chosen such that the effective ripple profile on
     # the W7-X stellarator looks similar to the profile computed at higher resolution,
@@ -216,6 +223,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     batch = kwargs.get("batch", True)
+    num_wells = kwargs.get("size", None)
     g = transforms["grid"].source_grid
     bounce_integrate, _ = bounce_integral(
         data["B^zeta"],
@@ -242,9 +250,13 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         # Note (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) where B₀ has units of λ⁻¹.
         # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
         H = bounce_integrate(
-            dH, data["|grad(rho)|"] * data["kappa_g"], pitch, batch=batch
+            dH,
+            data["|grad(rho)|"] * data["kappa_g"],
+            pitch,
+            batch=batch,
+            num_wells=num_wells,
         )
-        I = bounce_integrate(dI, [], pitch, batch=batch)
+        I = bounce_integrate(dI, [], pitch, batch=batch, num_wells=num_wells)
         return pitch * jnp.sum(safediv(H**2, I), axis=-1)
 
     # The integrand is continuous and likely poorly approximated by a polynomial.

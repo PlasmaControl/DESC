@@ -12,7 +12,7 @@ from desc.compute.utils import safediv
 from desc.utils import errorif, warnif
 
 
-@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
+@partial(jnp.vectorize, signature="(m),(m)->(n)")
 def _take_mask(a, mask, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 
@@ -72,7 +72,6 @@ def _filter_distinct(r, sentinel, eps):
     """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
     # eps needs to be low enough that close distinct roots do not get removed.
     # Otherwise, algorithms relying on continuity will fail.
-    # TODO: check if numpy even tries to make isclose fast
     mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
     r = jnp.where(mask, sentinel, r)
     return r

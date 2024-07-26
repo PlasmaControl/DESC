@@ -11,7 +11,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.utils import parse_argname_change, setdefault
+from desc.utils import setdefault
 
 
 def map_coordinates(  # noqa: C901
@@ -44,20 +44,20 @@ def map_coordinates(  # noqa: C901
     inbasis, outbasis : tuple of str
         Labels for input and output coordinates, eg ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
-        same as the compute function data key
+        same as the compute function data key.
     guess : None or ndarray, shape(k,3)
         Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
         corresponding to coords in inbasis. If None, heuristics are used based on
         inbasis or a nearest neighbor search on a grid.
     params : dict
-        Values of equilibrium parameters to use, eg eq.params_dict
+        Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
     period : tuple of float
         Assumed periodicity for each quantity in inbasis.
         Use np.inf to denote no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int > 0
-        Maximum number of Newton iterations
+        Maximum number of Newton iterations.
     full_output : bool, optional
         If True, also return a tuple where the first element is the residual from
         the root finding and the second is the number of iterations.
@@ -164,8 +164,7 @@ def map_coordinates(  # noqa: C901
     )
     # See description here
     # https://github.com/PlasmaControl/DESC/pull/504#discussion_r1194172532
-    # except we make sure properly mod the function on which the root finding is
-    # done to handle periodic coordinates.
+    # except we make sure properly handle periodic coordinates.
     yk, (res, niter) = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
@@ -235,20 +234,18 @@ def _initial_guess_nn_search(yk, coords, inbasis, eq, period, compute):
     return yg[idx]
 
 
-def compute_theta_coords(  # TODO: change name to map_sfl_coords.
-    eq, sfl_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+def compute_theta_coords(
+    eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
 ):
     """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
-
-    Assumes ζ = ϕ.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to use.
-    sfl_coords : ndarray
+    flux_coords : ndarray
         Shape (k, 3).
-        Straight field line PEST coordinates [ρ, ϑ, ϕ].
+        Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
         Each row is a different point in space.
     L_lmn : ndarray
         Spectral coefficients for lambda. Defaults to those of the equilibrium.
@@ -271,17 +268,17 @@ def compute_theta_coords(  # TODO: change name to map_sfl_coords.
     info : tuple
         2 element tuple containing residuals and number of iterations for each point.
         Only returned if ``full_output`` is True.
+
     """
-    parse_argname_change(
-        sfl_coords, kwargs, oldname="flux_coords", newname="sfl_coords"
-    )
     kwargs.setdefault("maxiter", maxiter)
     kwargs.setdefault("tol", tol)
 
     if L_lmn is None:
         L_lmn = eq.L_lmn
-    rho, theta_PEST, zeta = sfl_coords.T
+    rho, theta_PEST, zeta = flux_coords.T
+    theta_PEST = theta_PEST % (2 * np.pi)
 
+    # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
     def rootfun(theta_DESC, theta_PEST, rho, zeta):
         nodes = jnp.atleast_2d(
             jnp.array([rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()])
@@ -290,7 +287,7 @@ def compute_theta_coords(  # TODO: change name to map_sfl_coords.
         lmbda = A @ L_lmn
         theta_PEST_k = (theta_DESC + lmbda) % (2 * np.pi)
         r = theta_PEST_k - theta_PEST
-        # r should be between -pi and pi to minimize |r|
+        # r should be between -pi and pi
         r = jnp.where(r > np.pi, r - 2 * np.pi, r)
         r = jnp.where(r < -np.pi, r + 2 * np.pi, r)
         return r.squeeze()
@@ -314,7 +311,8 @@ def compute_theta_coords(  # TODO: change name to map_sfl_coords.
             )
         )
     )
-    theta_DESC, (res, niter) = vecroot(theta_PEST, theta_PEST % (2 * np.pi), rho, zeta)
+    # Assume λ=0 for initial guess.
+    theta_DESC, (res, niter) = vecroot(theta_PEST, theta_PEST, rho, zeta)
 
     nodes = jnp.array([rho, jnp.atleast_1d(theta_DESC.squeeze()), zeta]).T
 
@@ -336,15 +334,13 @@ def map_clebsch_coords(
 ):
     """Find θ for given Clebsch field line poloidal label α.
 
-    Assumes ζ = ϕ.
-
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to use.
     clebsch_coords : ndarray
         Shape (k, 3).
-        Clebsch field line coordinates [ρ, α, ζ].
+        Clebsch field line coordinates [ρ, α, ζ]. Assumes ζ = ϕ.
         Each row is a different point in space.
     iota : ndarray
         Shape (k, )
@@ -370,10 +366,8 @@ def map_clebsch_coords(
     info : tuple
         2 element tuple containing residuals and number of iterations for each point.
         Only returned if ``full_output`` is True.
-    """
-    kwargs.setdefault("maxiter", maxiter)
-    kwargs.setdefault("tol", tol)
 
+    """
     kwargs.setdefault("maxiter", maxiter)
     kwargs.setdefault("tol", tol)
 
@@ -392,7 +386,7 @@ def map_clebsch_coords(
         # TODO: generalize for toroidal angle
         alpha_k = ((theta + lmbda) % (2 * np.pi) - iota * zeta) % (2 * np.pi)
         r = alpha_k - alpha
-        # r should be between -pi and pi to minimize |r|
+        # r should be between -pi and pi
         r = jnp.where(r > np.pi, r - 2 * np.pi, r)
         r = jnp.where(r < -np.pi, r + 2 * np.pi, r)
         return r.squeeze()
@@ -416,7 +410,7 @@ def map_clebsch_coords(
             )
         )
     )
-    # Assume λ is small for initial guess.
+    # Assume λ=0 for initial guess.
     theta, (res, niter) = vecroot(
         (alpha + iota * zeta) % (2 * np.pi), alpha, rho, zeta, iota
     )

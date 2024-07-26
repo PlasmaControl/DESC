@@ -232,12 +232,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
-        if source_grid is None and hasattr(self, "NFP"):
-            # NFP=1 to ensure we have points along whole grid
-            # multiply by NFP in case the coil has NFP>1
-            # to ensure whole coil gets counted for the
-            # biot savart integration
-            source_grid = LinearGrid(N=2 * self.N * self.NFP + 5, NFP=1, endpoint=False)
+        if source_grid is None:
+            # NFP=1 to ensure points span the entire length of the coil
+            # multiply resolution by NFP to ensure Biot-Savart integration is accurate
+            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
 
         if not params or not transforms:
             data = self.compute(
@@ -250,12 +248,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
         else:
             data = compute_fun(
                 self,
-                name=["x", "x_s", "ds"],
+                names=["x", "x_s", "ds"],
                 params=params,
                 transforms=transforms,
                 profiles={},
-                basis="xyz",
             )
+            data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
+            data["x"] = rpz2xyz(data["x"])
 
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
@@ -367,6 +366,75 @@ class _Coil(_MagneticField, Optimizable, ABC):
             break_indices=break_indices,
         )
 
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+        """Convert Coil to FourierRZCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the coil will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            whether the curve is stellarator-symmetric or not. Default
+            is False.
+        name : str
+            name for this coil
+
+        Returns
+        -------
+        curve : FourierRZCoil
+            New representation of the coil parameterized by Fourier series for R,Z.
+
+        """
+        NFP = 1 or NFP
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierRZCoil.from_values(
+            self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
+        )
+
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+        """Convert Coil to FourierPlanarCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            name for this coil
+
+        Returns
+        -------
+        coil : FourierPlanarCoil
+            New representation of the coil parameterized by Fourier series for
+            minor radius r in a plane specified by a center position and normal
+            vector.
+
+        """
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
+        return FourierPlanarCoil.from_values(
+            self.current, coords, N=N, basis=basis, name=name
+        )
+
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
@@ -374,7 +442,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     Parameters
     ----------
     current : float
-        current through coil, in Amperes
+        Current through the coil, in Amperes.
     R_n, Z_n: array-like
         fourier coefficients for R, Z
     modes_R : array-like
@@ -435,6 +503,50 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     ):
         super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
+    @classmethod
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
+        """Fit coordinates to FourierRZCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierRZCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new R,Z representation.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "rpz"
+        sym : bool
+            Whether to enforce stellarator symmetry.
+        name : str
+            name for this coil
+
+
+        Returns
+        -------
+        coil : FourierRZCoil
+            New representation of the coil parameterized by Fourier series for R,Z.
+
+        """
+        curve = super().from_values(
+            coords=coords, N=N, NFP=NFP, basis=basis, sym=sym, name=name
+        )
+        return FourierRZCoil(
+            current=current,
+            R_n=curve.R_n,
+            Z_n=curve.Z_n,
+            modes_R=curve.R_basis.modes[:, 2],
+            modes_Z=curve.Z_basis.modes[:, 2],
+            NFP=NFP,
+            sym=curve.sym,
+            name=name,
+        )
+
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
     """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle s.
@@ -442,7 +554,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     Parameters
     ----------
     current : float
-        current through coil, in Amperes
+        Current through the coil, in Amperes.
     X_n, Y_n, Z_n: array-like
         fourier coefficients for X, Y, Z
     modes : array-like
@@ -505,7 +617,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         Parameters
         ----------
         current : float
-            Current through the coil, in Amps.
+            Current through the coil, in Amperes.
         coords: ndarray
             Coordinates to fit a FourierXYZCoil object with.
         N : int
@@ -524,12 +636,13 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             New representation of the coil parameterized by Fourier series for X,Y,Z.
 
         """
-        curve = super().from_values(coords, N, s, basis)
-        return cls(
-            current,
+        curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
+        return FourierXYZCoil(
+            current=current,
             X_n=curve.X_n,
             Y_n=curve.Y_n,
             Z_n=curve.Z_n,
+            modes=curve.X_basis.modes[:, 2],
             name=name,
         )
 
@@ -607,6 +720,41 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     ):
         super().__init__(current, center, normal, r_n, modes, basis, name)
 
+    @classmethod
+    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
+        """Fit coordinates to FourierPlanarCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierPlanarCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new r representation.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierPlanarCoil
+            New representation of the coil parameterized by a Fourier series for r.
+
+        """
+        curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
+        return FourierPlanarCoil(
+            current=current,
+            center=curve.center,
+            normal=curve.normal,
+            r_n=curve.r_n,
+            modes=curve.r_basis.modes[:, 2],
+            basis="xyz",
+            name=name,
+        )
+
 
 class SplineXYZCoil(_Coil, SplineXYZCurve):
     """Coil parameterized by spline points in X,Y,Z.
@@ -614,7 +762,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     Parameters
     ----------
     current : float
-        current through coil, in Amperes
+        Current through the coil, in Amperes.
     X, Y, Z: array-like
         Points for X, Y, Z describing the curve. If the endpoint is included
         (ie, X[0] == X[-1]), then the final point will be dropped.
@@ -745,7 +893,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Parameters
         ----------
         current : float
-            Current through the coil, in Amps.
+            Current through the coil, in Amperes.
         coords: ndarray
             Points for X, Y, Z describing the curve. If the endpoint is included
             (ie, X[0] == X[-1]), then the final point will be dropped.
@@ -789,9 +937,11 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             New representation of the coil parameterized by splines in X,Y,Z.
 
         """
-        curve = super().from_values(coords, knots, method, basis=basis)
-        return cls(
-            current,
+        curve = super().from_values(
+            coords=coords, knots=knots, method=method, basis=basis, name=name
+        )
+        return SplineXYZCoil(
+            current=current,
             X=curve.X,
             Y=curve.Y,
             Z=curve.Z,
@@ -823,7 +973,7 @@ def _check_type(coil0, coil):
         FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
-        SplineXYZCoil: ["method", "N"],
+        SplineXYZCoil: ["method", "N", "knots"],
     }
 
     for attr in attrs[coil0.__class__]:
@@ -834,7 +984,8 @@ def _check_type(coil0, coil):
             ValueError,
             (
                 "coils in a CoilSet must have the same parameterization, got a "
-                + f"mismatch between attr {attr}, with values {a0} and {a1}"
+                + f"mismatch between attr {attr}, with values {a0} and {a1}."
+                + " Consider using a MixedCoilSet"
             ),
         )
 

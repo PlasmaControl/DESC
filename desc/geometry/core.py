@@ -18,6 +18,7 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
+from desc.utils import errorif
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -117,18 +118,14 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=False)
+            grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
-            NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=grid, NFP=NFP, endpoint=False)
-        elif hasattr(grid, "NFP"):
-            NFP = grid.NFP
-        else:
-            raise TypeError(
-                "must pass in a Grid object or an integer for argument grid!"
-                f" instead got type {type(grid)}"
-            )
+            grid = LinearGrid(N=grid)
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            f"grid argument must be a Grid object or an integer, got type {type(grid)}",
+        )
 
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
@@ -156,7 +153,7 @@ class Curve(IOAble, Optimizable, ABC):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
+            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -212,7 +209,7 @@ class Curve(IOAble, Optimizable, ABC):
             + " (name={})".format(self.name)
         )
 
-    def to_FourierXYZ(self, N=None, grid=None, s=None, name=""):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
         """Convert Curve to FourierXYZCurve representation.
 
         Parameters
@@ -287,7 +284,7 @@ class Curve(IOAble, Optimizable, ABC):
             coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    def to_FourierRZ(self, N=None, grid=None, NFP=None, name=""):
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
         """Convert Curve to FourierRZCurve representation.
 
         Note that some types of curves may not be representable in this basis.
@@ -302,6 +299,8 @@ class Curve(IOAble, Optimizable, ABC):
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
         name : str
             name for this curve
 
@@ -315,9 +314,45 @@ class Curve(IOAble, Optimizable, ABC):
 
         NFP = 1 or NFP
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1, NFP=NFP)
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return FourierRZCurve.from_values(coords, N=N, NFP=NFP, basis="xyz", name=name)
+        return FourierRZCurve.from_values(
+            coords, N=N, NFP=NFP, basis="xyz", name=name, sym=sym
+        )
+
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+        """Convert Curve to FourierPlanarCurve representation.
+
+        Note that some types of curves may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar curve that best represents the curve.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCurve representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCurve.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierPlanarCurve
+            New representation of the curve parameterized by Fourier series for
+            minor radius r in a plane specified by a center position and normal
+            vector.
+
+        """
+        from .curve import FourierPlanarCurve
+
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
+        return FourierPlanarCurve.from_values(coords, N=N, basis=basis, name=name)
 
 
 class Surface(IOAble, Optimizable, ABC):

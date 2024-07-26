@@ -362,10 +362,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
             Number of field periods, the coil will have a discrete toroidal symmetry
             according to NFP.
         sym : bool, optional
-            whether the curve is stellarator-symmetric or not. Default
-            is False.
+            Whether the curve is stellarator-symmetric or not. Default is False.
         name : str
-            name for this coil
+            Name for this coil.
 
         Returns
         -------
@@ -398,14 +397,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
-            name for this coil
+            Name for this coil.
 
         Returns
         -------
         coil : FourierPlanarCoil
-            New representation of the coil parameterized by Fourier series for
-            minor radius r in a plane specified by a center position and normal
-            vector.
+            New representation of the coil parameterized by Fourier series for minor
+            radius r in a plane specified by a center position and normal vector.
 
         """
         if grid is None:
@@ -1598,6 +1596,64 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             lines[real_end_ind] = lines[real_end_ind].strip("\n") + f" {name}\n"
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
+
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+        """Convert all coils to FourierPlanarCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a Fourier series for
+            minor radius r in a plane specified by a center position and normal vector.
+
+        """
+        coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
+
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+        """Convert all coils to FourierRZCoil.
+
+        Note that some types of coils may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the coil will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
+        name : str
+            Name for this coilset.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a Fourier series for R,Z.
+
+        """
+        coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
+        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
         """Convert all coils to FourierXYZCoil representation.

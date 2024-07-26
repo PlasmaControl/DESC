@@ -40,10 +40,10 @@ def output_to_file(solution, name):
     #     for row in combined_lists:
     #         row_str = '\t'.join(map(str, row))
     #         file.write(row_str + '\n')
-    reshaped_array = np.hstack([solution[i] for i in range(solution.shape[0])])
+    reshaped_array = jnp.hstack([solution[i] for i in range(solution.shape[0])])
 
     # Save to a text file
-    np.savetxt(f'{name}.txt', reshaped_array, delimiter='\t')
+    jnp.savetxt(f'{name}.txt', reshaped_array, delimiter='\t')
 
 
 

@@ -8,7 +8,7 @@ from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import Grid
 from jax.experimental.ode import odeint as jax_odeint
 from functools import partial
-from jax import jit
+from jax import jit, vmap
 from .objective_funs import _Objective
 
 class ParticleTracer(_Objective):
@@ -129,15 +129,21 @@ class ParticleTracer(_Objective):
             psi, theta, zeta, vpar = initial_conditions
             grid = Grid(jnp.array([jnp.sqrt(psi), theta, zeta]).T, spacing=jnp.zeros((3,)).T, jitable=True, sort=False)
             transforms = get_transforms(self._data_keys, self._things[0], grid, jitable=True)
-            profiles = get_profiles(self._data_keys, self._things[0], grid, jitable=True)
+            profiles = get_profiles(self._data_keys, self._things[0], grid)
             data = compute_fun("desc.equilibrium.equilibrium.Equilibrium", self._data_keys, params, transforms, profiles, 
                                mu=initial_parameters[0], m_q=initial_parameters[1], vpar=vpar)
 
             return jnp.array([data[f"{key}dot"] for key in ['psi', 'theta', 'zeta', 'vpar']])
 
         initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
+        initial_parameters_jax = jnp.array(self.initial_parameters, dtype=jnp.float64)
         system_jit = jit(system)
-        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, self.output_time, rtol=self.tolerance)
+        
+        #solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, self.output_time, rtol=self.tolerance)
+        intfun = lambda initial_conditions_jax, initial_parameters_jax: jax_odeint(partial(system_jit, initial_parameters=initial_parameters_jax), 
+                                                           initial_conditions_jax, self.output_time, rtol=self.tolerance)
+
+        solution = vmap(intfun)(initial_conditions_jax, initial_parameters_jax)
 
         if self.compute_option == "optimization":
             return jnp.sum((solution[:, 0] - solution[0, 0]) ** 2, axis=-1)

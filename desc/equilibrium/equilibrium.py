@@ -48,7 +48,6 @@ from desc.utils import (
     copy_coeffs,
     errorif,
     only1,
-    parse_argname_change,
     setdefault,
     warnif,
 )
@@ -1257,9 +1256,6 @@ class Equilibrium(IOAble, Optimizable):
             point. Only returned if ``full_output`` is True.
 
         """
-        flux_coords = parse_argname_change(
-            flux_coords, kwargs, oldname="flux_coords", newname="sfl_coords"
-        )
         return compute_theta_coords(
             self,
             flux_coords,

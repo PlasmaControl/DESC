@@ -395,10 +395,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         # polynomial. Composite quadrature should perform better than higher order
         # methods.
         Gamma_c = trapezoid(
-            _poloidal_mean(
+            y=_poloidal_mean(
                 g, imap(d_Gamma_c, pitch).reshape(-1, g.num_rho, g.num_alpha)
             ),
-            pitch,
+            x=pitch,
             axis=0,
         )
     else:

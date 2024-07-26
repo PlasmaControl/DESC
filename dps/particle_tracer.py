@@ -43,7 +43,9 @@ def output_to_file(solution, name):
     reshaped_array = jnp.hstack([solution[i] for i in range(solution.shape[0])])
 
     # Save to a text file
-    jnp.savetxt(f'{name}.txt', reshaped_array, delimiter='\t')
+    with open("output.txt", 'w') as f:
+        for row in reshaped_array:
+            f.write('\t'.join(f'{x}' for x in row) + '\n')
 
 
 
@@ -71,7 +73,7 @@ gridnodes = jnp.array([[float(psi_i), theta_i, zeta_i] for psi_i in psi_i])
 # Time
 tmin = 0
 tmax = 1e-4
-nt = 500
+nt = 1500
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond

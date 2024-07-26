@@ -158,6 +158,7 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
 _roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
 
 
+# TODO: upstream to interpax
 def _poly_root(
     c,
     k=0,
@@ -569,12 +570,12 @@ def bounce_points(
         axis of the returned arrays, which enumerates bounce points for a particular
         field line and pitch, is padded with zero.
 
-        Specify to only return the first ``size`` pairs of bounce points for each
-        pitch along each field line. This is useful if ``size`` is a close upper
-        bound to the actual number of wells. To get an intuition for a good estimate
-        for ``size``, plot the field line with all the bounce points identified
-        by calling this function with ``check=True``.
-        As a reference, there are typically <= 5 wells per toroidal transit.
+        Specify to only return the first ``num_wells`` pairs of bounce points for each
+        pitch along each field line. This is useful if ``num_wells`` is a close upper
+        bound to the actual number of wells. To obtain a good choice for ``num_wells``,
+        plot the field line with all the bounce points identified by calling this
+        function with ``check=True``. As a reference, there are typically <= 5 wells
+        per toroidal transit.
     check : bool
         Flag for debugging.
     plot : bool
@@ -588,7 +589,7 @@ def bounce_points(
         a field line. The pairs ``bp1`` and ``bp2`` form left and right integration
         boundaries, respectively, for the bounce integrals.
 
-        If there were less than ``size`` wells detected along a field line, then
+        If there were less than ``num_wells`` wells detected along a field line, then
         the last axis, which enumerates bounce points for  a particular field line
         and pitch, is padded with zero.
 
@@ -1346,13 +1347,13 @@ def bounce_integral(
             axis of the returned array, which enumerates bounce integrals for a
             particular field line and pitch, is padded with zero.
 
-            Specify to only return the bounce integrals between the first ``size``
-            wells for each pitch along each field line. This is useful if ``size`` is a
-            close upper bound to the actual number of wells. To get an intuition for a
-            good estimate for ``size``, plot the field line with all the bounce points
+            Specify to only return the bounce integrals between the first ``num_wells``
+            wells for each pitch along each field line. This is useful if ``num_wells``
+            is a close upper bound to the actual number of wells. To obtain a good
+            choice for ``num_wells``, plot the field line with all the bounce points
             identified. This will be done automatically if the ``bounce_integral``
-            function is called with ``check=True`` and ``plot=True``.
-            As a reference, there are typically <= 5 wells per toroidal transit.
+            function is called with ``check=True`` and ``plot=True``. As a reference,
+            there are typically <= 5 wells per toroidal transit.
 
         Returns
         -------

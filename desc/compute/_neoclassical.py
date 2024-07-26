@@ -112,8 +112,8 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     L_ra = simpson(
-        jnp.reciprocal(data["B^zeta"]).reshape(shape),
-        jnp.reshape(g.nodes[:, 2], shape),
+        y=jnp.reciprocal(data["B^zeta"]).reshape(shape),
+        x=jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
     data["<L|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, L_ra)))
@@ -140,8 +140,8 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     g = transforms["grid"].source_grid
     shape = (g.num_rho, g.num_alpha, g.num_zeta)
     G_ra = simpson(
-        jnp.reciprocal(data["B^zeta"] * data["sqrt(g)"]).reshape(shape),
-        jnp.reshape(g.nodes[:, 2], shape),
+        y=jnp.reciprocal(data["B^zeta"] * data["sqrt(g)"]).reshape(shape),
+        x=jnp.reshape(g.nodes[:, 2], shape),
         axis=-1,
     )
     data["<G|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, G_ra)))
@@ -265,8 +265,8 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         g, data["min_tz |B|"], data["max_tz |B|"], kwargs.get("num_pitch", 125)
     )
     ripple = simpson(
-        _poloidal_mean(g, imap(d_ripple, pitch).reshape(-1, g.num_rho, g.num_alpha)),
-        pitch,
+        y=_poloidal_mean(g, imap(d_ripple, pitch).reshape(-1, g.num_rho, g.num_alpha)),
+        x=pitch,
         axis=0,
     )
     data["effective ripple"] = (

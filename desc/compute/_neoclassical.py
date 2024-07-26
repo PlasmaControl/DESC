@@ -186,7 +186,6 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "(If computed on many flux surfaces and micro oscillation is seen "
         "between neighboring surfaces, increasing num_pitch will smooth the profile)."
     ),
-    batch="bool : Whether to vectorize part of the computation. Default is true.",
     num_wells=(
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
@@ -194,6 +193,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "the number of wells will increase performance. "
         "As a reference, there are typically <= 5 wells per toroidal transit."
     ),
+    batch="bool : Whether to vectorize part of the computation. Default is true.",
     # Some notes on choosing the resolution hyperparameters:
     # The default settings above were chosen such that the effective ripple profile on
     # the W7-X stellarator looks similar to the profile computed at higher resolution,
@@ -214,7 +214,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     #  required for sufficient coverage of the surface. This requires many knots to
     #  for the spline of the magnetic field to capture fine ripples in a large interval.
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "batch"])
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_wells", "batch"])
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 

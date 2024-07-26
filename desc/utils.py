@@ -766,7 +766,7 @@ def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
             def f(x):
                 return jax.flatten_util.ravel_pytree(func(*unflatx(x)))[0]
 
-            tangent_out = (f(x + fd_step * vh) - y) / fd_step
+            tangent_out = (f(x + fd_step * vh) - y) / fd_step * normv
             tangent_out = unflaty(tangent_out)
 
             return primal_out, tangent_out

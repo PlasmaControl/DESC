@@ -309,12 +309,6 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate. Default is 125."
     ),
-    adaptive=(
-        "bool : Whether to adaptively integrate over the velocity coordinate. "
-        "If true, then num_pitch specifies an upper bound on the maximum number "
-        "of function evaluations."
-    ),
-    batch="bool : Whether to vectorize part of the computation. Default is true.",
     num_wells=(
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
@@ -322,8 +316,16 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         "the number of wells will increase performance. "
         "As a reference, there are typically <= 5 wells per toroidal transit."
     ),
+    batch="bool : Whether to vectorize part of the computation. Default is true.",
+    adaptive=(
+        "bool : Whether to adaptively integrate over the velocity coordinate. "
+        "If true, then num_pitch specifies an upper bound on the maximum number "
+        "of function evaluations."
+    ),
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "adaptive", "batch"])
+@partial(
+    jit, static_argnames=["num_quad", "num_pitch", "num_wells", "batch", "adaptive"]
+)
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy.
 

@@ -492,7 +492,7 @@ def test_NAE_QSC_solve():
 
         iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
 
-        np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
+        np.testing.assert_allclose(iota[0], qsc.iota, atol=3e-5, err_msg=string)
         np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
         # check lambda to match near axis

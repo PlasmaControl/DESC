@@ -11,7 +11,7 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
-if os.environ.get("DESC_BACKEND") == "numpy":
+if os.environ.get("DESC_BACKEND") == "numpy":  # pragma: no cover
     use_jax = False
     warnings.warn(
         "DESC_BACKEND=numpy is deprecated. Please use DESC_BACKEND=jax instead.",
@@ -43,7 +43,7 @@ else:
             + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
         )
         del x, y
-    except ModuleNotFoundError:
+    except ModuleNotFoundError:  # pragma: no cover
         use_jax = False
         warnings.warn(
             colored(

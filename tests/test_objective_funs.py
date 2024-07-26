@@ -46,6 +46,7 @@ from desc.objectives import (
     CoilTorsion,
     Elongation,
     Energy,
+    ExternalObjective,
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
@@ -1954,7 +1955,8 @@ class TestComputeScalarResolution:
         VacuumBoundaryError,
         # need to avoid blowup near the axis
         MercierStability,
-        # don't test these since they depend on what user wants
+        # we do not test these since they depend too much on what the user wants
+        ExternalObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
     ]
@@ -2274,17 +2276,17 @@ class TestObjectiveNaNGrad:
         CoilSetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
+        Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
-        # we don't test these since they depend too much on what exactly the user wants
+        # we do not test these since they depend too much on what the user wants
+        ExternalObjective,
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
-        # TODO: add Omnigenity objective (see GH issue #943)
-        Omnigenity,
     ]
     other_objectives = list(set(objectives) - set(specials))
 

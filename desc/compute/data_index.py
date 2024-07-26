@@ -47,7 +47,7 @@ def assign_alias_data(
     return data
 
 
-def register_compute_fun(
+def register_compute_fun(  # noqa: C901
     name,
     label,
     units,
@@ -59,10 +59,11 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
+    axis_limit_data=None,
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
-    grid_type=None,
-    axis_limit_data=None,
+    resolution_requirement="",
+    source_grid_requirement=None,
     **kwargs,
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
@@ -94,16 +95,27 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
+    axis_limit_data : list of str
+        Names of other items in the data index needed to compute axis limit of qty.
     aliases : list of str
         Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
         data.
     parameterization : str or list of str
         Name of desc types the method is valid for. eg `'desc.geometry.FourierXYZCurve'`
         or `'desc.equilibrium.Equilibrium'`.
-    grid_type : str
-        Name of grid type the quantity must be computed with. eg `'quad'`.
-    axis_limit_data : list of str
-        Names of other items in the data index needed to compute axis limit of qty.
+    resolution_requirement : str
+        Resolution requirements in coordinates. I.e. "r" expects radial resolution
+        in the grid, "rtz" expects a grid with radial, poloidal, and toroidal resolution.
+    source_grid_requirement : dict
+        Attributes of the source grid that the compute function requires.
+        Also assumes dependencies were computed on such a grid.
+        By default, the source grid is assumed to be ``transforms["grid"]`` and
+        no requirements are expected of it. As an example, quantities that require
+        integration along field lines may specify
+        ``source_grid_requirement={"coordinates": "raz"}``.
+        which will allow accessing the Clebsch-Type rho, alpha, zeta coordinates in
+        ``transforms["grid"].source_grid``` that correspond to the DESC rho, theta,
+        zeta coordinates in ``transforms["grid"]``.
 
     Notes
     -----
@@ -112,6 +124,8 @@ def register_compute_fun(
     """
     if aliases is None:
         aliases = []
+    if source_grid_requirement is None:
+        source_grid_requirement = {}
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
 
@@ -147,7 +161,8 @@ def register_compute_fun(
             "coordinates": coordinates,
             "dependencies": deps,
             "aliases": aliases,
-            "grid_type": grid_type,
+            "resolution_requirement": resolution_requirement,
+            "source_grid_requirement": source_grid_requirement,
         }
         for p in parameterization:
             flag = False
@@ -245,4 +260,30 @@ _class_inheritance = {
 }
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
-allowed_kwargs = set()
+allowed_kwargs = {"basis"}
+
+
+def is_0d_vol_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant throughout plasma volume and needs full volume to compute?."""
+    # Should compute on a grid that samples entire plasma volume.
+    # In particular, a QuadratureGrid for accurate radial integration.
+    return (
+        data_index[p][name]["coordinates"] == ""
+        and data_index[p][name]["resolution_requirement"] != ""
+    )
+
+
+def is_1dr_rad_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant over radial surfaces and needs full surface to compute?."""
+    return (
+        data_index[p][name]["coordinates"] == "r"
+        and data_index[p][name]["resolution_requirement"] == "tz"
+    )
+
+
+def is_1dz_tor_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):
+    """Is name constant over toroidal surfaces and needs full surface to compute?."""
+    return (
+        data_index[p][name]["coordinates"] == "z"
+        and data_index[p][name]["resolution_requirement"] == "rt"
+    )

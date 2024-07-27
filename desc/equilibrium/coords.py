@@ -280,8 +280,8 @@ def compute_theta_coords(
 
     # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
     def rootfun(theta_DESC, theta_PEST, rho, zeta):
-        nodes = jnp.atleast_2d(
-            jnp.array([rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()])
+        nodes = jnp.array(
+            [rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()], ndmin=2
         )
         A = eq.L_basis.evaluate(nodes)
         lmbda = A @ L_lmn
@@ -294,8 +294,8 @@ def compute_theta_coords(
 
     def jacfun(theta_DESC, theta_PEST, rho, zeta):
         # Valid everywhere except θ such that θ+λ = k 2π where k ∈ ℤ.
-        nodes = jnp.atleast_2d(
-            jnp.array([rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()])
+        nodes = jnp.array(
+            [rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()], ndmin=2
         )
         A1 = eq.L_basis.evaluate(nodes, (0, 1, 0))
         lmbda_t = jnp.dot(A1, L_lmn)
@@ -378,9 +378,7 @@ def map_clebsch_coords(
 
     # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
     def rootfun(theta, alpha, rho, zeta, iota):
-        nodes = jnp.atleast_2d(
-            jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()])
-        )
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
         A = eq.L_basis.evaluate(nodes)
         lmbda = A @ L_lmn
         # TODO: generalize for toroidal angle
@@ -393,9 +391,7 @@ def map_clebsch_coords(
 
     def jacfun(theta, alpha, rho, zeta, iota):
         # Valid everywhere except θ such that θ+λ = k 2π where k ∈ ℤ.
-        nodes = jnp.atleast_2d(
-            jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()])
-        )
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
         A1 = eq.L_basis.evaluate(nodes, (0, 1, 0))
         lmbda_t = jnp.dot(A1, L_lmn)
         return 1 + lmbda_t.squeeze()

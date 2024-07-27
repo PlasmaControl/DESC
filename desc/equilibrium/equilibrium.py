@@ -1278,15 +1278,13 @@ class Equilibrium(IOAble, Optimizable):
     ):
         """Find θ for given Clebsch field line poloidal label α.
 
-        Assumes ζ = ϕ.
-
         Parameters
         ----------
         eq : Equilibrium
             Equilibrium to use.
         clebsch_coords : ndarray
             Shape (k, 3).
-            Clebsch field line coordinates [ρ, α, ζ].
+            Clebsch field line coordinates [ρ, α, ζ]. Assumes ζ = ϕ.
             Each row is a different point in space.
         iota : ndarray
             Shape (k, )

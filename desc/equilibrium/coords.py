@@ -248,7 +248,7 @@ def compute_theta_coords(
         Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
         Each row is a different point in space.
     L_lmn : ndarray
-        Spectral coefficients for lambda. Defaults to those of the equilibrium.
+        Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
     tol : float
         Stopping tolerance.
     maxiter : int > 0
@@ -346,7 +346,7 @@ def map_clebsch_coords(
         Shape (k, )
         Rotational transform on each node.
     L_lmn : ndarray
-        Spectral coefficients for lambda. Defaults to those of the equilibrium.
+        Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
     tol : float
         Stopping tolerance.
     maxiter : int > 0
@@ -382,7 +382,7 @@ def map_clebsch_coords(
         A = eq.L_basis.evaluate(nodes)
         lmbda = A @ L_lmn
         # TODO: generalize for toroidal angle
-        alpha_k = ((theta + lmbda) % (2 * np.pi) - iota * zeta) % (2 * np.pi)
+        alpha_k = (theta + lmbda - iota * zeta) % (2 * np.pi)
         r = alpha_k - alpha
         # r should be between -pi and pi
         r = jnp.where(r > np.pi, r - 2 * np.pi, r)

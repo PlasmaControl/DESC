@@ -1234,7 +1234,7 @@ class Equilibrium(IOAble, Optimizable):
             Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
             Each row is a different point in space.
         L_lmn : ndarray
-            Spectral coefficients for lambda. Defaults to those of the equilibrium.
+            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
         tol : float
             Stopping tolerance.
         maxiter : int > 0
@@ -1290,7 +1290,7 @@ class Equilibrium(IOAble, Optimizable):
             Shape (k, )
             Rotational transform on each node.
         L_lmn : ndarray
-            Spectral coefficients for lambda. Defaults to those of the equilibrium.
+            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
         tol : float
             Stopping tolerance.
         maxiter : int > 0

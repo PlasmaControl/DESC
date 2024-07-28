@@ -506,6 +506,45 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|B|_pwO",
+    label="|\\mathbf{B}|",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of omnigenous magnetic field",
+    dim=1,
+    # --no-verify params=["B_min", "B_max", "c_1", "c_2", "t_1", "t_2", "w_2"],
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_B", "zeta_B", "|B|"],  # Potential error, we want eq |B|
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
+    parametrization=[],
+)
+def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
+    zeta_B = data["zeta_B"]
+    theta_B = data["theta_B"]
+    c_1 = params["c_1"]
+    c_2 = params["c_2"]
+    t_1 = params["t_1"]
+    t_2 = params["t_2"]
+    # --no-verify w_1 = params["w_1"]
+    w_2 = params["w_2"]
+    B_min = params["B_min"]
+    B_max = params["B_max"]
+    iota = data["iota"]
+    w_1 = jnp.pi / data["NFP"] * (1 - t_1 * t_2) / (1 + t_2 / iota)
+    p = int(10)
+    exponent = -1 * (
+        ((zeta_B + t_1 * theta_B - c_1) / w_1) ** (2 * p)
+        + ((zeta_B + t_2 * theta_B - c_2) / w_2) ** (2 * p)
+    )
+
+    data["|B|_pwO"] = B_min + (B_max - B_min) * jnp.exp(exponent)
+    return data
+
+
+@register_compute_fun(
     name="isodynamicity",
     label="1/|B|^2 (\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\psi",
     units="~",

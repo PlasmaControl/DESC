@@ -34,6 +34,7 @@ from ._geometry import (
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,
+    PiecewiseOmnigenity,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,

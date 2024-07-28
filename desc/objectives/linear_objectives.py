@@ -11,8 +11,9 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, tree_leaves, tree_map, tree_structure
+from desc.backend import execute_on_cpu, jnp, tree_leaves, tree_map, tree_structure
 from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -105,25 +106,28 @@ class FixParameters(_Objective):
         )
         from desc.objectives import FixParameters
 
-        # toroidal field coil set with 3 coils
-        tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
-        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=3)
-        # vertical field coil set with 2 coils
-        vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
+        # toroidal field coil set with 4 coils
+        tf_coil = FourierPlanarCoil(
+            current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
+        )
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        # vertical field coil set with 3 coils
+        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
         vf_coilset = CoilSet.linspaced_linear(
-            vf_coil, displacement=[0, 0, 2], n=2, endpoint=True
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
         )
         # another single coil
-        coil = FourierXYZCoil()
+        xyz_coil = FourierXYZCoil(current=2)
         # full coil set with TF coils, VF coils, and other single coil
-        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xy_coil))
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
 
         params = [
             [
-                {"current": True},  # fix "current" in 1st TF coil
-                # fix "center" and one component of "normal" for 2nd TF coil
+                {"current": True},  # fix "current" of the 1st TF coil
+                # fix "center" and one component of "normal" for the 2nd TF coil
                 {"center": True, "normal": np.array([1])},
-                {},  # fix nothing in 3rd TF coil
+                {"r_n": True},  # fix radius of the 3rd TF coil
+                {},  # fix nothing in the 4th TF coil
             ],
             {"shift": True, "rotmat": True},  # fix "shift" & "rotmat" for all VF coils
             # fix specified indices of "X_n" and "Z_n", but not "Y_n", for other coil
@@ -148,7 +152,7 @@ class FixParameters(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        name="Fixed parameters",
+        name="fixed parameters",
     ):
         self._params = params
         super().__init__(
@@ -272,6 +276,7 @@ class BoundaryRSelfConsistency(_Objective):
             name=name,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -370,6 +375,7 @@ class BoundaryZSelfConsistency(_Objective):
             name=name,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -464,6 +470,7 @@ class AxisRSelfConsistency(_Objective):
             normalize_target=False,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -550,6 +557,7 @@ class AxisZSelfConsistency(_Objective):
             normalize_target=False,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -1545,6 +1553,7 @@ class FixSumModesZ(_FixedObjective):
             normalize_target=normalize_target,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -1711,6 +1720,7 @@ class FixSumModesLambda(_FixedObjective):
             name=name,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -2611,6 +2621,267 @@ class FixCurveRotation(FixParameters):
         )
 
 
+class FixCoilCurrent(FixParameters):
+    """Fixes current(s) in a Coil or CoilSet.
+
+    Parameters
+    ----------
+    coil : Coil
+        Coil(s) that will be optimized to satisfy the Objective.
+    target : dict of {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Should have the same tree structure as coil.params.
+        Default is ``target=coil.current``.
+    bounds : tuple of dict {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Should have the same tree structure as coil.params.
+        Default is ``target=coil.current``.
+    weight : dict of {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Should be a scalar or have the same tree structure as coil.params.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    indices : nested list of bool, optional
+        Pytree of bool specifying which coil currents to fix.
+        See the example for how to use this on a mixed coil set.
+        If True/False fixes all/none of the coil currents.
+    name : str, optional
+        Name of the objective function.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from desc.coils import (
+            CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
+        )
+        from desc.objectives import FixCoilCurrent
+
+        # toroidal field coil set with 4 coils
+        tf_coil = FourierPlanarCoil(
+            current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
+        )
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        # vertical field coil set with 3 coils
+        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+        vf_coilset = CoilSet.linspaced_linear(
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+        )
+        # another single coil
+        xyz_coil = FourierXYZCoil(current=2)
+        # full coil set with TF coils, VF coils, and other single coil
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+
+        # fix the current of the 1st & 3rd TF coil
+        # fix none of the currents in the VF coil set
+        # fix the current of the other coil
+        obj = FixCoilCurrent(
+            full_coilset, indices=[[True, False, True, False], False, True]
+        )
+
+    """
+
+    _units = "(A)"
+    _print_value_fmt = "Fixed coil current error: {:10.3e} "
+
+    def __init__(
+        self,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        indices=True,
+        name="fixed coil current",
+    ):
+        indices = tree_map(lambda idx: {"current": idx}, indices)
+        super().__init__(
+            thing=coil,
+            params=indices,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        coil = self.things[0]
+        if self._normalize:
+            params = tree_leaves(
+                coil.params_dict, is_leaf=lambda x: isinstance(x, dict)
+            )
+            mean_current = np.mean([np.abs(param["current"]) for param in params])
+            self._normalization = np.max((mean_current, 1))
+        super().build(use_jit=use_jit, verbose=verbose)
+
+
+class FixSumCoilCurrent(FixCoilCurrent):
+    """Fixes the sum of coil current(s) in a Coil or CoilSet.
+
+    NOTE: When using this objective, take care in knowing the signs of the current in
+    the coils and the orientations of the coils. It is possible for coils with the same
+    signs of their current to have currents flowing in differing directions in physical
+    space due to the orientation of the coils.
+
+    Parameters
+    ----------
+    coil : Coil
+        Coil(s) that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+        Default is the objective value for the coil.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Default is to use the target instead.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    indices : nested list of bool, optional
+        Pytree of bool specifying which coil currents to sum together.
+        See the example for how to use this on a mixed coil set.
+        If True/False sums all/none of the coil currents.
+    name : str, optional
+        Name of the objective function.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from desc.coils import (
+            CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
+        )
+        from desc.objectives import FixSumCoilCurrent
+
+        # toroidal field coil set with 4 coils
+        tf_coil = FourierPlanarCoil(
+            current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
+        )
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        # vertical field coil set with 3 coils
+        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+        vf_coilset = CoilSet.linspaced_linear(
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+        )
+        # another single coil
+        xyz_coil = FourierXYZCoil(current=2)
+        # full coil set with TF coils, VF coils, and other single coil
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+
+        # equilibrium G(rho=1) determines the necessary net poloidal current through
+        # the coils (as dictated by Ampere's law)
+        # the sign convention is positive poloidal current flows up through the torus
+        # hole
+        grid_at_surf = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
+        G_tot = 2*jnp.pi*eq.compute("G", grid=grid_at_surf)["G"][0] / mu_0
+
+        # to use this objective to satisfy Ampere's law for the targeted equilibrium,
+        # only coils that link the equilibrium poloidally should be included in the sum,
+        # which is the TF coil set and the FourierXYZ coil, but not the VF coil set
+        obj = FixSumCoilCurrent(full_coilset, indices=[True, False, True], target=G_tot)
+
+    """
+
+    _scalar = True
+    _linear = True
+    _fixed = False
+    _units = "(A)"
+    _print_value_fmt = "Summed coil current error: {:10.3e} "
+
+    def __init__(
+        self,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        indices=True,
+        name="summed coil current",
+    ):
+        self._default_target = False
+        if target is None and bounds is None:
+            self._default_target = True
+        super().__init__(
+            coil=coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            indices=indices,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+        self._dim_f = 1
+        if self._default_target:
+            self.update_target(thing=self.things[0])
+
+    def compute(self, params, constants=None):
+        """Compute sum of coil currents.
+
+        Parameters
+        ----------
+        params : list of dict
+            List of dictionaries of degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Sum of coil currents.
+
+        """
+        return jnp.sum(
+            jnp.concatenate(
+                [
+                    jnp.atleast_1d(param[idx])
+                    for param, idx in zip(tree_leaves(params), self._indices)
+                ]
+            )
+        )
+
+
 class FixOmniWell(FixParameters):
     """Fixes OmnigenousField.B_lm coefficients.
 
@@ -2765,6 +3036,7 @@ class FixOmniBmax(_FixedObjective):
             name=name,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
@@ -2834,11 +3106,12 @@ class FixSheetCurrent(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is ``target=eq.Psi``.
+        Must be broadcastable to Objective.dim_f.
+        Defaults to the equilibrium sheet current parameters.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Default is ``target=eq.Psi``.
+        Default is to use target.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -2877,3 +3150,400 @@ class FixSheetCurrent(FixParameters):
             name=name,
         )
         # TODO: add normalization?
+
+
+class FixNearAxisR(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in R to specified order.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    order : {0,1,2}
+        order (in rho) of near-axis behavior to constrain
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "R_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Near-Axis R Behavior error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        order=1,
+        N=None,
+        target=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis R Behavior",
+    ):
+        self._nae_eq = target
+        self._eq = eq
+        self._order = order
+        self._N = N
+        super().__init__(
+            things=eq,
+            target=None,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq, self._nae_eq, order=self._order, N=self._N, fix_lambda=False
+        )
+        for con in cons:
+            if isinstance(con, FixSumModesR) or isinstance(con, AxisRSelfConsistency):
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.stack(
+            [con._A for con in cons if isinstance(con, FixSumModesR)]
+        ).squeeze()
+        # add the axis constraint last if it is in cons
+        axis_con = None
+        for con in cons:
+            if isinstance(con, AxisRSelfConsistency):
+                self._A = np.vstack([self._A, con._A]).squeeze()
+                axis_con = con
+
+        self._target = np.concatenate(
+            [con.target for con in cons if isinstance(con, FixSumModesR)]
+        )
+        if axis_con:
+            if self._nae_eq is not None:
+                # use NAE axis as target
+                axis = FourierRZCurve(
+                    R_n=np.concatenate(
+                        (np.flipud(self._nae_eq.rs[1:]), self._nae_eq.rc)
+                    ),
+                    Z_n=np.concatenate(
+                        (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
+                    ),
+                    NFP=self._nae_eq.nfp,
+                )
+                axis.change_resolution(N=self._eq.N)
+                axis_target = axis.R_n
+            else:  # else use eq axis a target
+                axis_target = self._eq.Ra_n
+            self._target = np.append(self._target, axis_target).squeeze()
+        self._dim_f = self.target.size
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis R behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["R_lmn"]).squeeze()
+
+        return f
+
+
+class FixNearAxisZ(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in Z to specified order.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    order : {0,1,2}
+        order (in rho) of near-axis behavior to constrain
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "Z_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Near-Axis Z Behavior error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        order=1,
+        N=None,
+        target=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis Z Behavior",
+    ):
+        self._nae_eq = target
+        self._eq = eq
+        self._order = order
+        self._N = N
+        super().__init__(
+            things=eq,
+            target=None,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq, self._nae_eq, order=self._order, N=self._N, fix_lambda=False
+        )
+        for con in cons:
+            if isinstance(con, FixSumModesZ) or isinstance(con, AxisZSelfConsistency):
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.stack(
+            [con._A for con in cons if isinstance(con, FixSumModesZ)]
+        ).squeeze()
+        # add the axis constraint last if it is in cons
+        axis_con = None
+        for con in cons:
+            if isinstance(con, AxisZSelfConsistency):
+                self._A = np.vstack([self._A, con._A]).squeeze()
+                axis_con = con
+        self._target = np.concatenate(
+            [con.target for con in cons if isinstance(con, FixSumModesZ)]
+        )
+        if axis_con:
+            if self._nae_eq is not None:
+                # use NAE axis as target
+                axis = FourierRZCurve(
+                    R_n=np.concatenate(
+                        (np.flipud(self._nae_eq.rs[1:]), self._nae_eq.rc)
+                    ),
+                    Z_n=np.concatenate(
+                        (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
+                    ),
+                    NFP=self._nae_eq.nfp,
+                )
+                axis.change_resolution(N=self._eq.N)
+                axis_target = axis.Z_n
+            else:  # else use eq axis a target
+                axis_target = self._eq.Za_n
+            self._target = np.append(self._target, axis_target).squeeze()
+
+        self._dim_f = self.target.size
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis Z behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["Z_lmn"]).squeeze()
+
+        return f
+
+
+class FixNearAxisLambda(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in lambda to specified order.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    order : int
+        order (in rho) of near-axis lambda behavior to constrain
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+        Unused for this objective, as target will be automatically
+        set according to the ``nae_eq``
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "L_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(dimensionless)"
+    _print_value_fmt = "Fixed-Near-Axis Lambda Behavior error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        order=1,
+        N=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis Lambda Behavior",
+    ):
+        self._nae_eq = target
+        self._order = order
+        self._N = N
+        self._target_from_user = setdefault(bounds, None)
+        super().__init__(
+            things=eq,
+            target=None,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+            fix_lambda=self._order,
+        )
+        for con in cons:
+            if isinstance(con, FixSumModesLambda):
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.vstack(
+            [con._A for con in cons if isinstance(con, FixSumModesLambda)]
+        )
+        self._target = np.concatenate(
+            [con.target for con in cons if isinstance(con, FixSumModesLambda)]
+        )
+
+        self._dim_f = self.target.size
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis Lambda behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis Lambda behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["L_lmn"]).squeeze()
+        return f

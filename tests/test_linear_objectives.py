@@ -6,13 +6,7 @@ import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
-from desc.coils import (
-    CoilSet,
-    FourierPlanarCoil,
-    FourierRZCoil,
-    FourierXYZCoil,
-    MixedCoilSet,
-)
+from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -29,6 +23,7 @@ from desc.objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
     FixElectronDensity,
     FixElectronTemperature,
@@ -38,16 +33,21 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixNearAxisLambda,
+    FixNearAxisR,
+    FixNearAxisZ,
     FixOmniMap,
     FixOmniWell,
     FixParameters,
     FixPressure,
     FixPsi,
+    FixSumCoilCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
     GenericObjective,
+    LinearObjectiveFromUser,
     ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -66,7 +66,8 @@ def test_LambdaGauge_sym(DummyStellarator):
     """Test that lambda is fixed correctly for symmetric equilibrium."""
     # symmetric cases automatically satisfy gauge freedom, no constraint needed.
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
-    eq.change_resolution(L=2, M=1, N=1)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=2, M=1, N=1)
     correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
     lam_con.build()
@@ -416,13 +417,14 @@ def test_correct_indexing_passed_modes():
     """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
         (
             # just need dummy objective for factorizing constraints
-            GenericObjective("0", eq=eq),
+            GenericObjective("0", thing=eq),
         ),
         use_jit=False,
     )
@@ -469,11 +471,12 @@ def test_correct_indexing_passed_modes_and_passed_target():
     """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()
@@ -531,12 +534,13 @@ def test_correct_indexing_passed_modes_axis():
     """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
     eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()
@@ -591,12 +595,13 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     n = 1
 
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(4, 4, 4, 8, 8, 8)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
     eq.surface = eq.get_surface_at(1.0)
     eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()
@@ -850,21 +855,27 @@ def test_FixNAE_util_correct_objectives():
     eq = Equilibrium()
     qsc = Qsc.from_paper("precise QA")
     cs = get_NAE_constraints(eq, qsc)
-    assert _is_any_instance(cs, FixAxisR)
-    assert _is_any_instance(cs, FixAxisZ)
+    for c in cs:
+        c.build()
     assert _is_any_instance(cs, FixPsi)
-    assert _is_any_instance(cs, FixSumModesR)
-    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_NAE_constraints(eq, qsc, fix_lambda=1)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
+    assert _is_any_instance(cs, FixNearAxisLambda)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
     eq = Equilibrium(electron_temperature=1, electron_density=1, iota=1)
     cs = get_NAE_constraints(eq, qsc)
-    assert _is_any_instance(cs, FixAxisR)
-    assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
-    assert _is_any_instance(cs, FixSumModesR)
-    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
     assert _is_any_instance(cs, FixElectronDensity)
     assert _is_any_instance(cs, FixElectronTemperature)
     assert _is_any_instance(cs, FixIonTemperature)
@@ -953,30 +964,21 @@ def test_fix_parameters_input_order(DummyStellarator):
 
 
 @pytest.mark.unit
-def test_fix_subset_of_params_in_collection():
+def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
     """Tests FixParameters fixing a subset of things in the collection."""
-    tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
-    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
-    vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
-    vf_coilset = CoilSet.linspaced_linear(
-        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
-    )
-    xy_coil = FourierXYZCoil()
-    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xy_coil))
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
 
     params = [
         [
             {"current": True},
-            {"center": True, "normal": np.array([1])},
-            {"r_n": True},
-            {},
         ],
         {"shift": True, "rotmat": True},
         {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+        {},
     ]
     target = np.concatenate(
         (
-            np.array([1, 2, 0, 0, 1, 1]),
+            np.array([3]),
             np.eye(3).flatten(),
             np.array([0, 0, 0]),
             np.eye(3).flatten(),
@@ -987,6 +989,80 @@ def test_fix_subset_of_params_in_collection():
         )
     )
 
-    obj = FixParameters(full_coilset, params)
+    obj = FixParameters(coilset, params)
     obj.build()
     np.testing.assert_allclose(obj.target, target)
+
+
+@pytest.mark.unit
+def test_fix_coil_current(DummyMixedCoilSet):
+    """Tests FixCoilCurrent."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    # fix a single coil current
+    obj = FixCoilCurrent(coil=coilset.coils[1].coils[0])
+    obj.build()
+    assert obj.dim_f == 1
+    np.testing.assert_allclose(obj.target, -1)
+
+    # fix all coil currents
+    obj = FixCoilCurrent(coil=coilset)
+    obj.build()
+    assert obj.dim_f == 6
+    np.testing.assert_allclose(obj.target, [3, -1, -1, -1, 2, 1])
+
+    # only fix currents of some coils in the coil set
+    obj = FixCoilCurrent(
+        coil=coilset, indices=[[True], [True, False, True], True, False]
+    )
+    obj.build()
+    assert obj.dim_f == 4
+    np.testing.assert_allclose(obj.target, [3, -1, -1, 2])
+
+
+@pytest.mark.unit
+def test_fix_sum_coil_current(DummyMixedCoilSet):
+    """Tests FixSumCoilCurrent."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    # sum a single coil current
+    obj = FixSumCoilCurrent(coil=coilset.coils[1].coils[0])
+    obj.build()
+    params = coilset.coils[1].coils[0].params_dict
+    np.testing.assert_allclose(obj.compute(params), -1)
+
+    # sum all coil currents
+    obj = FixSumCoilCurrent(coil=coilset)
+    obj.build()
+    params = coilset.params_dict
+    np.testing.assert_allclose(obj.compute(params), 3)
+    # the default target should be the original sum
+    np.testing.assert_allclose(obj.compute_scaled_error(params), 0)
+
+    # only sum currents of some coils in the coil set
+    obj = FixSumCoilCurrent(
+        coil=coilset, indices=[[True], [True, False, True], True, False]
+    )
+    obj.build()
+    np.testing.assert_allclose(obj.compute(params), 3)
+
+
+@pytest.mark.unit
+def test_linear_objective_from_user_on_collection(DummyCoilSet):
+    """Test LinearObjectiveFromUser on an OptimizableCollection."""
+    # test that LinearObjectiveFromUser can be used for the same functionality as
+    # FixSumCoilCurrent to sum all currents in a CoilSet
+
+    coilset = load(load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5")
+    params = coilset.params_dict
+
+    obj1 = FixSumCoilCurrent(coil=coilset)
+    obj1.build()
+
+    obj2 = LinearObjectiveFromUser(
+        lambda params: jnp.sum(jnp.array([param["current"] for param in params])),
+        coilset,
+    )
+    obj2.build()
+
+    np.testing.assert_allclose(obj1.compute(params), obj2.compute(params))

@@ -63,10 +63,10 @@ def _build_data_index():
     for p in data_index:
         for key in data_index[p]:
             full = {
-                "data": get_data_deps(key, p, has_axis=False),
-                "transforms": get_derivs(key, p, has_axis=False),
-                "params": get_params(key, p, has_axis=False),
-                "profiles": get_profiles(key, p, has_axis=False),
+                "data": get_data_deps(key, p, has_axis=False, basis="rpz"),
+                "transforms": get_derivs(key, p, has_axis=False, basis="rpz"),
+                "params": get_params(key, p, has_axis=False, basis="rpz"),
+                "profiles": get_profiles(key, p, has_axis=False, basis="rpz"),
             }
             data_index[p][key]["full_dependencies"] = full
 
@@ -81,9 +81,9 @@ def _build_data_index():
             else:
                 full_with_axis = {
                     "data": full_with_axis_data,
-                    "transforms": get_derivs(key, p, has_axis=True),
-                    "params": get_params(key, p, has_axis=True),
-                    "profiles": get_profiles(key, p, has_axis=True),
+                    "transforms": get_derivs(key, p, has_axis=True, basis="rpz"),
+                    "params": get_params(key, p, has_axis=True, basis="rpz"),
+                    "profiles": get_profiles(key, p, has_axis=True, basis="rpz"),
                 }
                 for _key, val in full_with_axis.items():
                     if full[_key] == val:

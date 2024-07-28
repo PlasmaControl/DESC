@@ -1,5 +1,6 @@
 """Functions for plotting and visualizing equilibria."""
 
+import inspect
 import numbers
 import tkinter
 import warnings
@@ -20,6 +21,7 @@ from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
+from desc.magnetic_fields import field_line_integrate
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -1721,6 +1723,156 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     if return_data:
         return fig, ax, plot_data
 
+    return fig, ax
+
+
+def poincare_plot(
+    field,
+    R0,
+    Z0,
+    ntransit=100,
+    phi=None,
+    NFP=None,
+    grid=None,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
+    """Poincare plot of field lines from external magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField
+        External field, coilset, current potential etc to plot from.
+    R0, Z0 : array-like
+        Starting points at phi=0 for field line tracing.
+    ntransit : int
+        Number of transits to trace field lines for.
+    phi : float, int or array-like or None
+        Values of phi to plot section at.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
+        Default is 6.
+    NFP : int, optional
+        Number of field periods. By default attempts to infer from ``field``, otherwise
+        uses NFP=1.
+    grid : Grid, optional
+        Grid used to discretize ``field``.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),)
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``color``: str or tuple, color to use for field lines.
+        * ``marker``: str, markerstyle to use for the plotted points
+        * ``size``: float, markersize to use for the plotted points
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+
+        Additionally, any other keyword arguments will be passed on to
+        ``desc.magnetic_fields.field_line_integrate``
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted, only returned if ``return_data=True``
+    """
+    fli_kwargs = {}
+    for key in inspect.signature(field_line_integrate).parameters:
+        if key in kwargs:
+            fli_kwargs[key] = kwargs.pop(key)
+
+    figsize = kwargs.pop("figsize", None)
+    color = kwargs.pop("color", colorblind_colors[0])
+    marker = kwargs.pop("marker", "o")
+    size = kwargs.pop("size", 5)
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
+    assert (
+        len(kwargs) == 0
+    ), f"poincare_plot got unexpected keyword argument: {kwargs.keys()}"
+
+    if NFP is None:
+        NFP = getattr(field, "NFP", 1)
+
+    phi = 6 if phi is None else phi
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi / NFP, phi, endpoint=False)
+    phi = np.atleast_1d(phi)
+    nplanes = len(phi)
+
+    phis = (phi + np.arange(0, ntransit)[:, None] * 2 * np.pi / NFP).flatten()
+
+    R0, Z0 = np.atleast_1d(R0, Z0)
+
+    fieldR, fieldZ = field_line_integrate(
+        r0=R0,
+        z0=Z0,
+        phis=phis,
+        field=field,
+        source_grid=grid,
+        **fli_kwargs,
+    )
+
+    zs = fieldZ.reshape((ntransit, nplanes, -1))
+    rs = fieldR.reshape((ntransit, nplanes, -1))
+
+    signBT = np.sign(
+        field.compute_magnetic_field(np.array([R0.flat[0], 0.0, Z0.flat[0]]))[:, 1]
+    ).flat[0]
+    if signBT < 0:  # field lines are traced backwards when toroidal field < 0
+        rs, zs = rs[:, ::-1], zs[:, ::-1]
+        rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
+
+    data = {
+        "R": rs,
+        "Z": zs,
+    }
+
+    rows = np.floor(np.sqrt(nplanes)).astype(int)
+    cols = np.ceil(nplanes / rows).astype(int)
+
+    figw = 4 * cols
+    figh = 5 * rows
+    if figsize is None:
+        figsize = (figw, figh)
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True)
+
+    for i in range(nplanes):
+        ax.flat[i].scatter(
+            rs[:, i, :],
+            zs[:, i, :],
+            color=color,
+            marker=marker,
+            s=size,
+        )
+
+        ax.flat[i].set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+        ax.flat[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
+        ax.flat[i].tick_params(labelbottom=True, labelleft=True)
+        ax.flat[i].set_title(
+            "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(NFP * phi[i] / (2 * np.pi)),
+            fontsize=title_fontsize,
+        )
+
+    _set_tight_layout(fig)
+
+    if return_data:
+        return fig, ax, data
     return fig, ax
 
 

@@ -40,17 +40,21 @@ def _sqrtg(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_{PEST}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant of PEST flux coordinate system",
+    description="Jacobian determinant of (ρ,ϑ,ϕ) coordinate system or"
+    " straight field line PEST coordinates. ϕ increases counterclockwise"
+    " when viewed from above (cylindrical R,ϕ plane with Z out of page).",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_theta_PEST", "e_phi"],
+    data=["sqrt(g)", "theta_PEST_t", "phi_z", "theta_PEST_z", "phi_t"],
 )
 def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST"] = dot(
-        data["e_rho"], cross(data["e_theta_PEST"], data["e_phi"])
+    # Same as dot(data["e_rho|v,p"], cross(data["e_vartheta"], data["e_phi|r,v"])), but
+    # more efficient as it avoids computing radial derivatives of the stream functions.
+    data["sqrt(g)_PEST"] = data["sqrt(g)"] / (
+        data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"]
     )
     return data
 

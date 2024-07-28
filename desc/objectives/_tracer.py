@@ -146,7 +146,8 @@ class ParticleTracer(_Objective):
         solution = vmap(intfun)(initial_conditions_jax, initial_parameters_jax)
 
         if self.compute_option == "optimization":
-            return jnp.sum(jnp.mean((solution[:, :, 0] - solution[:, :, 0][0])**2, axis=-1), axis=-1)
+            new = jnp.repeat(solution[:, :, 0][:, 0:1], solution[:, :, 0].shape[1], axis=1)
+            return jnp.sum(jnp.mean((solution[:, :, 0] - new)**2, axis=-1), axis=-1)
             # return jnp.sum((solution[:, 0] - solution[0, 0]) ** 2, axis=-1)
         elif self.compute_option == "tracer":
             return solution

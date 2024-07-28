@@ -27,23 +27,10 @@ eq._current = None
 
 # Output the resulting solution to a .txt file, in 4 columns (psi, theta, zeta, vpar)
 def output_to_file(solution, name):
-    # list1 = solution[:, 0]
-    # list2 = solution[:, 1]
-    # list3 = solution[:, 2]
-    # list4 = solution[:, 3]
-
-    # combined_lists = zip(list1, list2, list3, list4)
-    
-    # file_name = f'{name}.txt'
-
-    # with open(file_name, 'w') as file:        
-    #     for row in combined_lists:
-    #         row_str = '\t'.join(map(str, row))
-    #         file.write(row_str + '\n')
     reshaped_array = jnp.hstack([solution[i] for i in range(solution.shape[0])])
 
     # Save to a text file
-    with open("output.txt", 'w') as f:
+    with open(f"{name}.txt", 'w') as f:
         for row in reshaped_array:
             f.write('\t'.join(f'{x}' for x in row) + '\n')
 

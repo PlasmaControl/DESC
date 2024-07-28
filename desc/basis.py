@@ -1,3 +1,13 @@
+
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jul 26 16:41:26 2024
+
+@author: juliannestratton
+"""
+
 """Classes for spectral bases and functions for evaluation."""
 
 import functools
@@ -1216,33 +1226,39 @@ class FiniteElementBasis(_FE_Basis):
             basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
         elif self.N == 0:
             # Tessellate the domain and find the basis functions for rho, theta
-            
-           # print("Type of r =",  type(r) )
-           # print("Type of t =",  type(t) )
-           
-           
-           # These print statements return:  <class 'jax._src.interpreters.partial_eval.DynamicJaxprTracer'>
-           # This indicates r and t are tracer objects. So we need to transform from tracer objects
-           # to numpy arrays. 
-           
-            #@jax.jit
-            @jit
-            def convert_to_numpy(x):
-              end_shape = jax.core.ShapedArray(x.shape, x.dtype)
-              return jax.pure_callback(np.array, end_shape, x)
-            
+        
          
-            print("Convert r = ", convert_to_numpy(r))
-            print("Convert t = ", convert_to_numpy(t))
-           
-            r = convert_to_numpy(r)
-            t = convert_to_numpy(t)
+            # My attempt to make the code in the 2D case jax friendly, without 
+            # having to change over the find_triangle function. 
             
-            Rho_Theta = np.array([np.ravel(r), np.ravel(t)]).T
-            basis_functions = self.mesh.find_triangles_corresponding_to_points(
-                Rho_Theta
-            )
-            # print(Rho_Theta, intervals, basis_functions)
+            
+            
+            def g_numpy(x):
+              # Calling function that is defined with numpy
+              return self.mesh.find_triangles_corresponding_to_points(x).astype(x.dtype)
+       
+            
+            @jax.jit
+            def g(x):
+             # Getting quantities needed to define the shape of the output of 
+             # basis_functions.
+             
+             # The shape should be (num_of_points, Q)
+              r_s = r.size
+              M = jnp.zeros((r_s,self.Q))
+              result_shape = jax.ShapeDtypeStruct(M.shape, x.dtype)
+              return jax.pure_callback(g_numpy, result_shape, x)
+            
+                
+            #Make static
+            new_g = jit(g, static_argnums=(0,))
+           
+            Rho_Theta = jnp.array([jnp.ravel(r), jnp.ravel(t)]).T
+            basis_functions = new_g(Rho_Theta)
+            
+            
+            # Still throwing up an unhashable error. From what I can tell, potentially
+            # might need to use Partial?
         else:
             # Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
             basis_functions = self.mesh.find_tetrahedra_corresponding_to_points(nodes)

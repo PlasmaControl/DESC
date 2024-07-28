@@ -83,7 +83,7 @@ intermediate_time_3 = timet()
 print(f"Time to build and compile: {intermediate_time_3 - intermediate_time_2}s")
 
 R_modes = jnp.array([[0, 0, 0]])
-constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPsi(eq), FixPressure(eq)) #FixPressure(eq), FixCurrent(eq), FixIota(eq), ForceBalance(eq, bounds=(-1e-3, 1e-3))
+constraints = (ForceBalance(eq, bounds=(-1e-2, 1e-2)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPsi(eq), FixPressure(eq)) #FixPressure(eq), FixCurrent(eq), FixIota(eq), ForceBalance(eq, bounds=(-1e-3, 1e-3))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100, copy=False)
 eq.save(savename)
 

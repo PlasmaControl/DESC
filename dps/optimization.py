@@ -13,8 +13,6 @@ from time import time as timet
 
 initial_time = timet()
 
-# filename = "input.final_freeb_output.h5"
-# filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
 filename = "eq_2411_M1_N1.h5"
 savename = "optimized_" + filename
 
@@ -40,29 +38,34 @@ Mass = 4*Proton_Mass
 Charge = 2*Proton_Charge
 
 # Initial State
-psi_i = 0.8
+psi_i = jnp.linspace(0.1, 0.9, 1000)
 zeta_i = 0.5
 theta_i = jnp.pi/2
 vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
-ini_cond = jnp.array([float(psi_i), theta_i, zeta_i, float(vpar_i)])
+
+# Initial Conditions
+ini_cond = jnp.array([[float(psi_i), theta_i, zeta_i, float(vpar_i)] for psi_i in psi_i])
+gridnodes = jnp.array([[float(psi_i), theta_i, zeta_i] for psi_i in psi_i])
 
 # Time
 tmin = 0
-tmax = 1e-6
-nt = 500
+tmax = 1e-4
+nt = 1500
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-grid = Grid(nodes=jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=False, sort=False)
+# grid = Grid(nodes=jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=False, sort=False)
+grid = Grid(nodes=gridnodes.T, jitable=False, sort=False)
 data = eq.compute(["|B|", "R"], grid=grid)
 
 mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
-ini_param = jnp.array([mu[0], Mass_Charge_Ratio])
+ini_param = jnp.array([[mu, Mass_Charge_Ratio] for mu in mu])
 
 intermediate_time = timet()
+
 print(f"Time from beginning until here: {intermediate_time - initial_time}s")
 
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.4e-8)
@@ -73,29 +76,15 @@ solution = objective.compute(*objective.xs(eq))
 intermediate_time_2 = timet()
 print(f"Time to build and compute: {intermediate_time_2 - intermediate_time}s")
 
-print("*************** SOLUTION .compute() ***************")
-print(solution)
-print("***************************************************")
-
-ObjFunction = ObjectiveFunction([objective])
+ObjFunction = ObjectiveFunction((objective), deriv_mode="looped")
 ObjFunction.build()
-
-print("*************** ObjFunction.compile() ***************")
-ObjFunction.compile(mode="bfgs")
-print("*****************************************************")
 
 intermediate_time_3 = timet()
 print(f"Time to build and compile: {intermediate_time_3 - intermediate_time_2}s")
 
-#print(ObjFunction.x(eq))
-#xs = objective.xs(eq)
-#print("*************** xs **************")
-#print(xs)
-#print("*********************************")
-
-R_modes = np.array([[0, 0, 0]])
-constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
-eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100) # Mudar o número de iterações para 3, 10, 100
+R_modes = jnp.array([[0, 0, 0]])
+constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPsi(eq), FixPressure(eq)) #FixPressure(eq), FixCurrent(eq), FixIota(eq), ForceBalance(eq, bounds=(-1e-3, 1e-3))
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100, copy=False)
 eq.save(savename)
 
 intermediate_time_4 = timet()

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=DPS
+#SBATCH --job-name=optimization
 #SBATCH --nodes=1
 #SBATCH -n 1
 #SBATCH --mem=16G

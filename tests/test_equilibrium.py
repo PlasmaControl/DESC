@@ -49,17 +49,23 @@ def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) for common use cases."""
     # finding coordinates along a single field line
     eq = get("NCSX")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    out = eq.map_coordinates(
+    grid = LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
+    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
+    iota = np.broadcast_to(iota, shape=(n,))
+
+    out_1 = eq.map_clebsch_coords(coords, iota)
+    assert np.isfinite(out_1).all()
+    out_2 = eq.map_coordinates(
         coords,
         ["rho", "alpha", "zeta"],
         ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 10 * np.pi),
+        period=(np.inf, 2 * np.pi, np.inf),
     )
-    assert not np.any(np.isnan(out))
+    assert np.isfinite(out_2).all()
+    diff = (out_1 - out_2) % (2 * np.pi)
+    assert np.all(np.isclose(diff, 0) | np.isclose(diff, 2 * np.pi))
 
     eq = get("DSHAPE")
 

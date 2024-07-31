@@ -53,7 +53,13 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
+from .coords import (
+    compute_theta_coords,
+    is_nested,
+    map_clebsch_coords,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -1219,21 +1225,20 @@ class Equilibrium(IOAble, Optimizable):
     def compute_theta_coords(
         self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
     ):
-        """Find theta_DESC for given straight field line theta_PEST.
+        """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to use
-        flux_coords : ndarray, shape(k,3)
-            2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-            point in space.
+        flux_coords : ndarray
+            Shape (k, 3).
+            Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
+            Each row is a different point in space.
         L_lmn : ndarray
-            spectral coefficients for lambda. Defaults to eq.L_lmn
+            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
         tol : float
             Stopping tolerance.
         maxiter : int > 0
-            maximum number of Newton iterations
+            Maximum number of Newton iterations.
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
             the root finding and the second is the number of iterations.
@@ -1243,15 +1248,74 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        coords : ndarray, shape(k,3)
-            coordinates [rho,theta,zeta].
+        coords : ndarray
+            Shape (k, 3).
+            DESC computational coordinates [ρ, θ, ζ].
         info : tuple
-            2 element tuple containing residuals and number of iterations
-            for each point. Only returned if ``full_output`` is True
+            2 element tuple containing residuals and number of iterations for each
+            point. Only returned if ``full_output`` is True.
+
         """
         return compute_theta_coords(
             self,
             flux_coords,
+            L_lmn=L_lmn,
+            maxiter=maxiter,
+            tol=tol,
+            full_output=full_output,
+            **kwargs,
+        )
+
+    def map_clebsch_coords(
+        self,
+        clebsch_coords,
+        iota,
+        L_lmn=None,
+        tol=1e-6,
+        maxiter=20,
+        full_output=False,
+        **kwargs,
+    ):
+        """Find θ for given Clebsch field line poloidal label α.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to use.
+        clebsch_coords : ndarray
+            Shape (k, 3).
+            Clebsch field line coordinates [ρ, α, ζ]. Assumes ζ = ϕ.
+            Each row is a different point in space.
+        iota : ndarray
+            Shape (k, )
+            Rotational transform on each node.
+        L_lmn : ndarray
+            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
+        tol : float
+            Stopping tolerance.
+        maxiter : int > 0
+            Maximum number of Newton iterations.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root_scalar`` such as
+            ``maxiter_ls``, ``alpha``.
+
+        Returns
+        -------
+        coords : ndarray
+            Shape (k, 3).
+            DESC computational coordinates [ρ, θ, ζ].
+        info : tuple
+            2 element tuple containing residuals and number of iterations for each
+            point. Only returned if ``full_output`` is True.
+
+        """
+        return map_clebsch_coords(
+            self,
+            clebsch_coords,
+            iota,
             L_lmn=L_lmn,
             maxiter=maxiter,
             tol=tol,

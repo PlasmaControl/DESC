@@ -139,12 +139,17 @@ class _Coil(_MagneticField, Optimizable, ABC):
     ----------
     current : float
         Current through the coil, in Amperes.
+    current_scale : float
+        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+        Default = 1 (current in Amperes with no scaling).
+
     """
 
-    _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_current", "_current_scale"]
 
-    def __init__(self, current, *args, **kwargs):
+    def __init__(self, current, current_scale=1, *args, **kwargs):
         self._current = float(np.squeeze(current))
+        self._current_scale = float(np.squeeze(current))
         super().__init__(*args, **kwargs)
 
     @optimizable_parameter
@@ -157,6 +162,16 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
+
+    @property
+    def current_scale(self):
+        """float: Current passing through the coil, in Amperes."""
+        return self._current_scale
+
+    @current_scale.setter
+    def current_scale(self, new):
+        assert jnp.isscalar(new) or new.size == 1
+        self._current_scale = float(np.squeeze(new))
 
     @property
     def num_coils(self):
@@ -257,7 +272,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             data["x"] = rpz2xyz(data["x"])
 
         B = biot_savart_quad(
-            coords, data["x"], data["x_s"] * data["ds"][:, None], current
+            coords,
+            data["x"],
+            data["x_s"] * data["ds"][:, None],
+            current * self.current_scale,
         )
 
         if basis.lower() == "rpz":
@@ -900,19 +918,26 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
 def _check_type(coil0, coil):
     errorif(
+        coil0.current_scale != coil.current_scale,
+        ValueError,
+        "Coils in a CoilSet must all have the same current scale, got scales "
+        + f"{coil0.current_scale} and {coil.current_scale}. "
+        + "Consider using a MixedCoilSet.",
+    )
+    errorif(
         not isinstance(coil, coil0.__class__),
         TypeError,
         (
-            "coils in a CoilSet must all be the same type, got types "
-            + f"{type(coil0)}, {type(coil)}. Consider using a MixedCoilSet"
+            "Coils in a CoilSet must all be the same type, got types "
+            + f"{type(coil0)} and {type(coil)}. Consider using a MixedCoilSet."
         ),
     )
     errorif(
         isinstance(coil0, CoilSet),
         TypeError,
         (
-            "coils in a CoilSet must all be base Coil types, not CoilSet. "
-            + "Consider using a MixedCoilSet"
+            "Coils in a CoilSet must all be base Coil types, not CoilSet. "
+            + "Consider using a MixedCoilSet."
         ),
     )
     attrs = {
@@ -921,7 +946,6 @@ def _check_type(coil0, coil):
         FourierPlanarCoil: ["r_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
     }
-
     for attr in attrs[coil0.__class__]:
         a0 = getattr(coil0, attr)
         a1 = getattr(coil, attr)
@@ -929,9 +953,9 @@ def _check_type(coil0, coil):
             not equals(a0, a1),
             ValueError,
             (
-                "coils in a CoilSet must have the same parameterization, got a "
+                "Coils in a CoilSet must have the same parameterization, got a "
                 + f"mismatch between attr {attr}, with values {a0} and {a1}."
-                + " Consider using a MixedCoilSet"
+                + " Consider using a MixedCoilSet."
             ),
         )
 
@@ -961,6 +985,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
+    _io_attrs_.remove("_current_scale")
 
     def __init__(
         self,
@@ -1021,6 +1046,16 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             new = [new] * len(self)
         for coil, cur in zip(self.coils, new):
             coil.current = cur
+
+    @property
+    def current_scale(self):
+        """list: current scale of each coil."""
+        return self.coils[0].current_scale
+
+    @current_scale.setter
+    def current_scale(self, new):
+        for coil in self.coils:
+            coil.current_scale = new
 
     def _make_arraylike(self, x):
         if isinstance(x, dict):
@@ -1552,7 +1587,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             contour_Y = np.asarray(coords[0:, 1])
             contour_Z = np.asarray(coords[0:, 2])
 
-            currents = np.ones_like(contour_X) * float(coil.current)
+            currents = np.ones_like(contour_X) * float(
+                coil.current * coil.current_scale
+            )
             if endpoint:
                 currents[-1] = 0  # this last point must have 0 current
             else:  # close the curves if needed
@@ -1874,6 +1911,18 @@ class MixedCoilSet(CoilSet):
         self._name = str(name)
         if check_intersection:
             self.is_self_intersecting()
+
+    @property
+    def current_scale(self):
+        """list: current scale of each coil."""
+        return [coil.current_scale for coil in self.coils]
+
+    @current_scale.setter
+    def current_scale(self, new):
+        if jnp.isscalar(new):
+            new = [new] * len(self)
+        for coil, scale in zip(self.coils, new):
+            coil.current_scale = scale
 
     @property
     def num_coils(self):

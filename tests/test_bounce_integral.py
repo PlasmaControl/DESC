@@ -14,7 +14,19 @@ from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1, roots_chebyu
 from tests.test_plotting import tol_1d
 
-from desc.backend import flatnonzero, jnp
+from desc.backend import flatnonzero, jnp, put, rfft
+from desc.compute._interp_utils import interp_rfft, interp_rfft2
+from desc.compute._quadrature_utils import (
+    affine_bijection,
+    affine_bijection_to_disc,
+    automorphism_arcsin,
+    automorphism_sin,
+    grad_affine_bijection,
+    grad_automorphism_arcsin,
+    grad_automorphism_sin,
+    leggausslob,
+    tanh_sinh,
+)
 from desc.compute.bounce_integral import (
     _composite_linspace,
     _filter_nonzero_measure,
@@ -22,29 +34,19 @@ from desc.compute.bounce_integral import (
     _poly_der,
     _poly_root,
     _poly_val,
-    _take_mask,
-    affine_bijection,
-    affine_bijection_to_disc,
-    automorphism_arcsin,
-    automorphism_sin,
     bounce_integral,
     bounce_points,
     get_extrema,
     get_pitch,
-    grad_affine_bijection,
-    grad_automorphism_arcsin,
-    grad_automorphism_sin,
-    leggausslob,
     plot_field_line,
-    tanh_sinh,
 )
 from desc.compute.fourier_bounce_integral import FourierChebyshevBasis
-from desc.compute.utils import dot
+from desc.compute.utils import dot, take_mask
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
-from desc.utils import only1
+from desc.utils import Index, only1
 
 
 @partial(np.vectorize, signature="(m)->()")
@@ -63,7 +65,7 @@ def test_mask_operations():
     a = np.random.rand(rows, cols)
     nan_idx = np.random.choice(rows * cols, size=(rows * cols) // 2, replace=False)
     a.ravel()[nan_idx] = np.nan
-    taken = _take_mask(a, ~np.isnan(a))
+    taken = take_mask(a, ~np.isnan(a))
     last = _last_value(taken)
     for i in range(rows):
         desired = a[i, ~np.isnan(a[i])]
@@ -797,6 +799,75 @@ def test_drift():
     assert np.isclose(grad(dummy_fun)(1.0), 650, rtol=1e-3)
 
     return fig
+
+
+# TODO: upstream to interpax
+@pytest.mark.unit
+def test_interp_rfft():
+    """Test FFT interpolation."""
+
+    def _interp_rfft(xq, f):
+        assert xq.ndim == f.ndim >= 1
+        M = f.shape[-1]
+        a = rfft(f, norm="forward")
+        a = put(a, Index[..., 0], a[..., 0] / 2)
+        a = put(a, Index[..., -1], a[..., -1] / (1 + ((M % 2) == 0)))
+
+        m = np.fft.rfftfreq(M, d=1 / M)
+        np.testing.assert_allclose(m, np.arange(M // 2 + 1), err_msg="rfftfreq wrong.")
+
+        mx = m * xq[..., np.newaxis]
+        fq = 2 * (
+            np.sum(np.cos(mx) * np.real(a), axis=-1)
+            - np.sum(np.sin(mx) * np.imag(a), axis=-1)
+        )
+        return fq
+
+    def test(xq, func, n):
+        x = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        assert not np.any(np.isclose(xq[..., np.newaxis], x))
+        f = func(x)
+        np.testing.assert_allclose(_interp_rfft(xq, f), func(xq))
+        np.testing.assert_allclose(interp_rfft(xq, f), func(xq))
+
+    xq = np.array([7.34, 1.10134, 2.28])
+    freq_nyquist = 7
+    f = lambda x: np.cos(freq_nyquist * x) + np.sin(x)
+    test(xq, f, 2 * freq_nyquist)
+    test(xq, f, 2 * freq_nyquist + 1)
+
+
+@pytest.mark.xfail(reason="Numpy, jax, and scipy need to fix bug on their end.")
+@pytest.mark.unit
+def test_interp_rfft2():
+    """Test FFT interpolation."""
+
+    def test(xq, func, m, n):
+        x = np.linspace(0, 2 * np.pi, m, endpoint=False)
+        y = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        assert not np.any(np.isclose(xq[..., 0, np.newaxis], x))
+        assert not np.any(np.isclose(xq[..., 1, np.newaxis], y))
+        x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))
+        np.testing.assert_allclose(
+            interp_rfft2(
+                xq,
+                jnp.array(func(x, y).reshape(m, n), ndmin=xq.ndim),
+            ),
+            func(xq[..., 0], xq[..., 1]),
+        )
+
+    def f(x, y):
+        # something that's not separable
+        return np.cos(x_freq * x) * np.sin(2 * x + y) + np.sin(y_freq * y) * np.cos(
+            x + 3 * y
+        )
+
+    xq = np.array([[7.34, 1.10134, 2.28], [1.1, 3.78432, 8.542]]).T
+    x_freq, y_freq = 3, 5
+    x_rate_nyquist, y_rate_nyquist = 2 * (x_freq + 2), 2 * (y_freq + 3)
+    test(xq, f, x_rate_nyquist + 1, y_rate_nyquist + 1)
+    # FIXME: Bug with numpy's computation of nyquist freq fourier coefficient.
+    test(xq, f, x_rate_nyquist, y_rate_nyquist)
 
 
 # todo:

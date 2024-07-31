@@ -72,7 +72,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.numpy import bincount, flatnonzero, repeat, take
-    from jax.numpy.fft import irfft, rfft
+    from jax.numpy.fft import irfft, rfft, rfft2
     from jax.scipy.fft import dct, idct
     from jax.scipy.linalg import (
         block_diag,
@@ -414,7 +414,8 @@ else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     execute_on_cpu = lambda func: func
     import scipy.optimize
-    from scipy.fft import dct, idct, irfft, rfft  # noqa: F401
+    from numpy.fft import irfft, rfft, rfft2  # noqa: F401
+    from scipy.fft import dct, idct  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
@@ -430,7 +431,7 @@ else:  # pragma: no cover
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
-    def imap(f, xs, in_axes=0, out_axes=0):
+    def imap(f, xs, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
         if not isinstance(xs, np.ndarray):
             raise NotImplementedError(
@@ -461,7 +462,7 @@ else:  # pragma: no cover
             Vectorized version of fun.
 
         """
-        return lambda xs: imap(fun, xs, in_axes, out_axes)
+        return lambda xs: imap(fun, xs, in_axes=in_axes, out_axes=out_axes)
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""

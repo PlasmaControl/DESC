@@ -5,49 +5,18 @@ from functools import partial
 import numpy as np
 from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
 from matplotlib import pyplot as plt
-from orthax.legendre import legder, leggauss, legval
+from orthax.legendre import leggauss
 
-from desc.backend import eigh_tridiagonal, flatnonzero, imap, jnp, put, take
-from desc.compute.utils import safediv
+from desc.backend import flatnonzero, imap, jnp, put
+from desc.compute._interp_utils import _poly_root
+from desc.compute._quadrature_utils import (
+    affine_bijection,
+    automorphism_sin,
+    grad_affine_bijection,
+    grad_automorphism_sin,
+)
+from desc.compute.utils import take_mask
 from desc.utils import errorif, setdefault, warnif
-
-
-@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
-def _take_mask(a, mask, size=None, fill_value=None):
-    """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
-
-    Parameters
-    ----------
-    a : jnp.ndarray
-        The source array.
-    mask : jnp.ndarray
-        Boolean mask to index into ``a``. Should have same shape as ``a``.
-    size : int
-        Elements of ``a`` at the first size True indices of ``mask`` will be returned.
-        If there are fewer elements than size indicates, the returned array will be
-        padded with ``fill_value``. The size default is ``mask.size``.
-    fill_value : Any
-        When there are fewer than the indicated number of elements, the remaining
-        elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
-        the largest negative value for signed types, the largest positive value for
-        unsigned types, and True for booleans.
-
-    Returns
-    -------
-    result : jnp.ndarray
-        Shape (size, ).
-
-    """
-    assert a.shape == mask.shape
-    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
-    return take(
-        a,
-        idx,
-        mode="fill",
-        fill_value=fill_value,
-        unique_indices=True,
-        indices_are_sorted=True,
-    )
 
 
 # use for debugging and testing
@@ -64,178 +33,6 @@ def _filter_nonzero_measure(bp1, bp2):
     """Return only bounce points such that |bp2 - bp1| > 0."""
     mask = (bp2 - bp1) != 0
     return bp1[mask], bp2[mask]
-
-
-def _filter_distinct(r, sentinel, eps):
-    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
-    # eps needs to be low enough that close distinct roots do not get removed.
-    # Otherwise, algorithms relying on continuity will fail.
-    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-    r = jnp.where(mask, sentinel, r)
-    return r
-
-
-def _sentinel_append(r, sentinel, num=1):
-    """Concat ``sentinel`` ``num`` times to ``r`` on last axis."""
-    sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
-    return jnp.append(r, sent, axis=-1)
-
-
-def _root_linear(a, b, sentinel, eps, distinct=False):
-    """Return r such that a r + b = 0."""
-    return safediv(-b, a, jnp.where(jnp.abs(b) <= eps, 0, sentinel))
-
-
-def _root_quadratic(a, b, c, sentinel, eps, distinct):
-    """Return r such that a r² + b r + c = 0, assuming real coefficients and roots."""
-    # numerical.recipes/book.html, page 227
-    discriminant = b**2 - 4 * a * c
-    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
-    r1 = jnp.where(
-        discriminant < 0,
-        sentinel,
-        safediv(q, a, _root_linear(b, c, sentinel, eps)),
-    )
-    r2 = jnp.where(
-        # more robust to remove repeated roots with discriminant
-        (discriminant < 0) | (distinct & (discriminant <= eps)),
-        sentinel,
-        safediv(c, q, sentinel),
-    )
-    return jnp.stack([r1, r2], axis=-1)
-
-
-def _root_cubic(a, b, c, d, sentinel, eps, distinct):
-    """Return r such that a r³ + b r² + c r + d = 0, assuming real coef and roots."""
-    # numerical.recipes/book.html, page 228
-
-    def irreducible(Q, R, b, mask):
-        # Three irrational real roots.
-        theta = jnp.arccos(R / jnp.sqrt(jnp.where(mask, Q**3, R**2 + 1)))
-        return jnp.moveaxis(
-            -2
-            * jnp.sqrt(Q)
-            * jnp.stack(
-                [
-                    jnp.cos(theta / 3),
-                    jnp.cos((theta + 2 * jnp.pi) / 3),
-                    jnp.cos((theta - 2 * jnp.pi) / 3),
-                ]
-            )
-            - b / 3,
-            source=0,
-            destination=-1,
-        )
-
-    def reducible(Q, R, b):
-        # One real and two complex roots.
-        A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3))) ** (1 / 3)
-        B = safediv(Q, A)
-        r1 = (A + B) - b / 3
-        return _sentinel_append(r1[..., jnp.newaxis], sentinel, num=2)
-
-    def root(b, c, d):
-        b = safediv(b, a)
-        c = safediv(c, a)
-        d = safediv(d, a)
-        Q = (b**2 - 3 * c) / 9
-        R = (2 * b**3 - 9 * b * c + 27 * d) / 54
-        mask = R**2 < Q**3
-        return jnp.where(
-            mask[..., jnp.newaxis],
-            irreducible(jnp.abs(Q), R, b, mask),
-            reducible(Q, R, b),
-        )
-
-    return jnp.where(
-        # Tests catch failure here if eps < 1e-12 for 64 bit jax.
-        jnp.expand_dims(jnp.abs(a) <= eps, axis=-1),
-        _sentinel_append(_root_quadratic(b, c, d, sentinel, eps, distinct), sentinel),
-        root(b, c, d),
-    )
-
-
-_roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
-
-
-# TODO: upstream to interpax
-def _poly_root(
-    c,
-    k=0,
-    a_min=None,
-    a_max=None,
-    sort=False,
-    sentinel=jnp.nan,
-    # About 2e-12 for 64 bit jax.
-    eps=min(jnp.finfo(jnp.array(1.0).dtype).eps * 1e4, 1e-8),
-    distinct=False,
-):
-    """Roots of polynomial with given coefficients.
-
-    Parameters
-    ----------
-    c : jnp.ndarray
-        First axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
-        ``c[n-i]``.
-    k : jnp.ndarray
-        Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``. Should broadcast with arrays of
-        shape ``c.shape[1:]``.
-    a_min : jnp.ndarray
-        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
-        If specified only real roots  are returned. If None, returns all complex roots.
-        Should broadcast with arrays of shape ``c.shape[1:]``.
-    a_max : jnp.ndarray
-        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
-        If specified only real roots  are returned. If None, returns all complex roots.
-        Should broadcast with arrays of shape ``c.shape[1:]``.
-    sort : bool
-        Whether to sort the roots.
-    sentinel : float
-        Value with which to pad array in place of filtered elements.
-        Anything less than ``a_min`` or greater than ``a_max`` plus some floating point
-        error buffer will work just like nan while avoiding nan gradient.
-    eps : float
-        Absolute tolerance with which to consider value as zero.
-    distinct : bool
-        Whether to only return the distinct roots. If true, when the multiplicity is
-        greater than one, the repeated roots are set to ``sentinel``.
-
-    Returns
-    -------
-    r : jnp.ndarray
-        Shape (..., c.shape[1:], c.shape[0] - 1).
-        The roots of the polynomial, iterated over the last axis.
-
-    """
-    is_real = not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
-    get_only_real_roots = not (a_min is None and a_max is None)
-
-    func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
-    if c.shape[0] in func and is_real and get_only_real_roots:
-        # Compute from analytic formula to avoid the issue of complex roots with small
-        # imaginary parts and to avoid nan in gradient.
-        r = func[c.shape[0]](*c[:-1], c[-1] - k, sentinel, eps, distinct)
-        distinct = distinct and c.shape[0] > 3
-    else:
-        # Compute from eigenvalues of polynomial companion matrix.
-        c_n = c[-1] - k
-        c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
-        c.append(c_n)
-        c = jnp.stack(c, axis=-1)
-        r = _roots(c)
-    if get_only_real_roots:
-        a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
-        a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
-        r = jnp.where(
-            (jnp.abs(jnp.imag(r)) <= eps) & (a_min <= r) & (r <= a_max),
-            jnp.real(r),
-            sentinel,
-        )
-
-    if sort or distinct:
-        r = jnp.sort(r, axis=-1)
-    return _filter_distinct(r, sentinel, eps) if distinct else r
 
 
 def _poly_der(c):
@@ -297,7 +94,7 @@ def _poly_val(x, c):
     """
     # Better than Horner's method as we expect to evaluate low order polynomials.
     X = x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1)
-    val = jnp.einsum("...i,i...->...", X, c)
+    val = jnp.einsum("...i,i...", X, c)
     return val
 
 
@@ -570,9 +367,9 @@ def bounce_points(
         axis of the returned arrays, which enumerates bounce points for a particular
         field line and pitch, is padded with zero.
 
-        Specify to only return the first ``num_wells`` pairs of bounce points for each
-        pitch along each field line. This is useful if ``num_wells`` is a close upper
-        bound to the actual number of wells. To obtain a good choice for ``num_wells``,
+        Specify to return the first ``num_wells`` pairs of bounce points for each
+        pitch along each field line. This is useful if ``num_wells`` tightly
+        bounds the actual number of wells. To obtain a good choice for ``num_wells``,
         plot the field line with all the bounce points identified by calling this
         function with ``check=True``. As a reference, there are typically <= 5 wells
         per toroidal transit.
@@ -588,10 +385,6 @@ def bounce_points(
         The field line-following coordinates of bounce points for a given pitch along
         a field line. The pairs ``bp1`` and ``bp2`` form left and right integration
         boundaries, respectively, for the bounce integrals.
-
-        If there were less than ``num_wells`` wells detected along a field line, then
-        the last axis, which enumerates bounce points for  a particular field line
-        and pitch, is padded with zero.
 
     """
     B_c, B_z_ra_c, pitch = _check_shape(knots, B_c, B_z_ra_c, pitch)
@@ -622,8 +415,8 @@ def bounce_points(
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
     # New versions of jax only like static sentinels.
     sentinel = -10000000.0  # knots[0] - 1
-    bp1 = _take_mask(intersect, is_bp1, size=num_wells, fill_value=sentinel)
-    bp2 = _take_mask(intersect, is_bp2, size=num_wells, fill_value=sentinel)
+    bp1 = take_mask(intersect, is_bp1, size=num_wells, fill_value=sentinel)
+    bp2 = take_mask(intersect, is_bp2, size=num_wells, fill_value=sentinel)
 
     if check:
         _check_bounce_points(bp1, bp2, sentinel, pitch, knots, B_c, plot, **kwargs)
@@ -754,177 +547,6 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
     )
     assert B_extrema.shape == (N * (degree - 1), S)
     return B_extrema
-
-
-def affine_bijection_to_disc(x, a, b):
-    """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
-    y = 2 * (x - a) / (b - a) - 1
-    return y
-
-
-def affine_bijection(x, a, b):
-    """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
-    y = (x + 1) / 2 * (b - a) + a
-    return y
-
-
-def grad_affine_bijection(a, b):
-    """Gradient of affine bijection."""
-    dy_dx = (b - a) / 2
-    return dy_dx
-
-
-def automorphism_arcsin(x):
-    """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
-
-    The arcsin transformation introduces a singularity that augments the singularity
-    in the bounce integral, so the quadrature scheme used to evaluate the integral must
-    work well on functions with large derivative near the boundary.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Points to transform.
-
-    Returns
-    -------
-    y : jnp.ndarray
-        Transformed points.
-
-    """
-    y = 2 * jnp.arcsin(x) / jnp.pi
-    return y
-
-
-def grad_automorphism_arcsin(x):
-    """Gradient of arcsin automorphism."""
-    dy_dx = 2 / (jnp.sqrt(1 - x**2) * jnp.pi)
-    return dy_dx
-
-
-grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
-
-
-def automorphism_sin(x, s=0, m=10):
-    """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
-
-    When used as the change of variable map for the bounce integral, the Lipschitzness
-    of the sin transformation prevents generation of new singularities. Furthermore,
-    its derivative vanishes to zero slowly near the boundary, which will suppress the
-    large derivatives near the boundary of singular integrals.
-
-    In effect, this map pulls the mass of the integral away from the singularities,
-    which should improve convergence if the quadrature performs better on less singular
-    integrands. Pairs well with Gauss-Legendre quadrature.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Points to transform.
-    s : float
-        Strength of derivative suppression, s ∈ [0, 1].
-    m : float
-        Number of machine epsilons used for floating point error buffer.
-
-    Returns
-    -------
-    y : jnp.ndarray
-        Transformed points.
-
-    """
-    errorif(not (0 <= s <= 1))
-    # s = 0 -> derivative vanishes like cosine.
-    # s = 1 -> derivative vanishes like cosine^k.
-    y0 = jnp.sin(jnp.pi * x / 2)
-    y1 = x + jnp.sin(jnp.pi * x) / jnp.pi  # k = 2
-    y = (1 - s) * y0 + s * y1
-    # y is an expansion, so y(x) > x near x ∈ {−1, 1} and there is a tendency
-    # for floating point error to overshoot the true value.
-    eps = m * jnp.finfo(jnp.array(1.0).dtype).eps
-    return jnp.clip(y, -1 + eps, 1 - eps)
-
-
-def grad_automorphism_sin(x, s=0):
-    """Gradient of sin automorphism."""
-    dy0_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
-    dy1_dx = 1 + jnp.cos(jnp.pi * x)
-    dy_dx = (1 - s) * dy0_dx + s * dy1_dx
-    return dy_dx
-
-
-grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
-
-
-def tanh_sinh(deg, m=10):
-    """Tanh-Sinh quadrature.
-
-    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
-    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
-
-    Parameters
-    ----------
-    deg : int
-        Number of quadrature points.
-    m : float
-        Number of machine epsilons used for floating point error buffer. Larger implies
-        less floating point error, but increases the minimum achievable error.
-
-    Returns
-    -------
-    x, w : (jnp.ndarray, jnp.ndarray)
-        Quadrature points and weights.
-
-    """
-    # buffer to avoid numerical instability
-    x_max = jnp.array(1.0)
-    x_max = x_max - m * jnp.finfo(x_max.dtype).eps
-    t_max = jnp.arcsinh(2 * jnp.arctanh(x_max) / jnp.pi)
-    # maximal-spacing scheme, doi.org/10.48550/arXiv.2007.15057
-    t = jnp.linspace(-t_max, t_max, deg)
-    dt = 2 * t_max / (deg - 1)
-    arg = 0.5 * jnp.pi * jnp.sinh(t)
-    x = jnp.tanh(arg)  # x = g(t)
-    w = 0.5 * jnp.pi * jnp.cosh(t) / jnp.cosh(arg) ** 2 * dt  # w = (dg/dt) dt
-    return x, w
-
-
-def leggausslob(deg):
-    """Lobatto-Gauss-Legendre quadrature.
-
-    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
-    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
-
-    Parameters
-    ----------
-    deg : int
-        Number of (interior) quadrature points to return.
-
-    Returns
-    -------
-    x, w : (jnp.ndarray, jnp.ndarray)
-        Quadrature points in (-1, 1) and associated weights.
-        Excludes points and weights at -1 and 1.
-
-    """
-    # Designate two degrees for endpoints.
-    deg = int(deg) + 2
-
-    n = jnp.arange(2, deg - 1)
-    x = eigh_tridiagonal(
-        jnp.zeros(deg - 2),
-        jnp.sqrt((n**2 - 1) / (4 * n**2 - 1)),
-        eigvals_only=True,
-    )
-    c0 = put(jnp.zeros(deg), -1, 1)
-
-    # improve (single multiplicity) roots by one application of Newton
-    c = legder(c0)
-    dy = legval(x=x, c=c)
-    df = legval(x=x, c=legder(c))
-    x -= dy / df
-
-    w = 2 / (deg * (deg - 1) * legval(x=x, c=c0) ** 2)
-    return x, w
 
 
 def _plot(Z, V, title_id=""):
@@ -1386,9 +1008,9 @@ def bounce_integral(
             axis of the returned array, which enumerates bounce integrals for a
             particular field line and pitch, is padded with zero.
 
-            Specify to only return the bounce integrals between the first ``num_wells``
+            Specify to return the bounce integrals between the first ``num_wells``
             wells for each pitch along each field line. This is useful if ``num_wells``
-            is a close upper bound to the actual number of wells. To obtain a good
+            tightly bounds the actual number of wells. To obtain a good
             choice for ``num_wells``, plot the field line with all the bounce points
             identified. This will be done automatically if the ``bounce_integral``
             function is called with ``check=True`` and ``plot=True``. As a reference,

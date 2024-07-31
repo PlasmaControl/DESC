@@ -149,7 +149,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
     def __init__(self, current, current_scale=1, *args, **kwargs):
         self._current = float(np.squeeze(current))
-        self._current_scale = float(np.squeeze(current))
+        self._current_scale = float(np.squeeze(current_scale))
         super().__init__(*args, **kwargs)
 
     @optimizable_parameter
@@ -449,6 +449,9 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         number of field periods
     sym : bool
         whether to enforce stellarator symmetry
+    current_scale : float
+        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+        Default = 1 (current in Amperes with no scaling).
     name : str
         name for this coil
 
@@ -495,12 +498,25 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         modes_Z=None,
         NFP=1,
         sym="auto",
+        current_scale=1,
         name="",
     ):
-        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
+        super().__init__(
+            current, current_scale, R_n, Z_n, modes_R, modes_Z, NFP, sym, name
+        )
 
     @classmethod
-    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
+    def from_values(
+        cls,
+        current,
+        coords,
+        N=10,
+        NFP=1,
+        current_scale=1,
+        basis="rpz",
+        sym=False,
+        name="",
+    ):
         """Fit coordinates to FourierRZCoil representation.
 
         Parameters
@@ -515,13 +531,15 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
+        current_scale : float
+            Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+            Default = 1 (current in Amperes with no scaling).
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "rpz"
         sym : bool
             Whether to enforce stellarator symmetry.
         name : str
             name for this coil
-
 
         Returns
         -------
@@ -534,6 +552,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         )
         return FourierRZCoil(
             current=current,
+            current_scale=current_scale,
             R_n=curve.R_n,
             Z_n=curve.Z_n,
             modes_R=curve.R_basis.modes[:, 2],
@@ -555,6 +574,9 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         fourier coefficients for X, Y, Z
     modes : array-like
         mode numbers associated with X_n etc.
+    current_scale : float
+        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+        Default = 1 (current in Amperes with no scaling).
     name : str
         name for this coil
 
@@ -602,12 +624,15 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         Y_n=[0, 0, 0],
         Z_n=[-2, 0, 0],
         modes=None,
+        current_scale=1,
         name="",
     ):
-        super().__init__(current, X_n, Y_n, Z_n, modes, name)
+        super().__init__(current, current_scale, X_n, Y_n, Z_n, modes, name)
 
     @classmethod
-    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
+    def from_values(
+        cls, current, coords, N=10, s=None, current_scale=1, basis="xyz", name=""
+    ):
         """Fit coordinates to FourierXYZCoil representation.
 
         Parameters
@@ -624,6 +649,9 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             Should be monotonic, 1D array of same length as
             coords
             if None, defaults to normalized arclength
+        current_scale : float
+            Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+            Default = 1 (current in Amperes with no scaling).
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
         Returns
@@ -635,6 +663,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
         return FourierXYZCoil(
             current=current,
+            current_scale=current_scale,
             X_n=curve.X_n,
             Y_n=curve.Y_n,
             Z_n=curve.Z_n,
@@ -664,6 +693,9 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         mode numbers associated with r_n
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
+    current_scale : float
+        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+        Default = 1 (current in Amperes with no scaling).
     name : str
         Name for this coil.
 
@@ -712,12 +744,15 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         r_n=2,
         modes=None,
         basis="xyz",
+        current_scale=1,
         name="",
     ):
-        super().__init__(current, center, normal, r_n, modes, basis, name)
+        super().__init__(
+            current, current_scale, center, normal, r_n, modes, basis, name
+        )
 
     @classmethod
-    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
+    def from_values(cls, current, coords, N=10, current_scale=1, basis="xyz", name=""):
         """Fit coordinates to FourierPlanarCoil representation.
 
         Parameters
@@ -729,6 +764,9 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
             corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new r representation.
+        current_scale : float
+            Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+            Default = 1 (current in Amperes with no scaling).
         basis : {"rpz", "xyz"}
             Basis for input coordinates. Defaults to "xyz".
         name : str
@@ -743,6 +781,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
         return FourierPlanarCoil(
             current=current,
+            current_scale=current_scale,
             center=curve.center,
             normal=curve.normal,
             r_n=curve.r_n,
@@ -782,6 +821,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
 
+    current_scale : float
+        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+        Default = 1 (current in Amperes with no scaling).
     name : str
         name for this curve
 
@@ -797,9 +839,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Z,
         knots=None,
         method="cubic",
+        current_scale=1,
         name="",
     ):
-        super().__init__(current, X, Y, Z, knots, method, name)
+        super().__init__(current, current_scale, X, Y, Z, knots, method, name)
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -855,7 +898,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # coils curvature which is a 2nd derivative of the position, and doing that
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
-        B = biot_savart_hh(coords, coil_pts_start, coil_pts_end, current)
+        B = biot_savart_hh(
+            coords, coil_pts_start, coil_pts_end, current * self.current_scale
+        )
 
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
@@ -863,7 +908,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     @classmethod
     def from_values(
-        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
+        cls,
+        current,
+        coords,
+        knots=None,
+        method="cubic",
+        current_scale=1,
+        basis="xyz",
+        name="",
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -891,10 +943,13 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
-        name : str
-            name for this curve
+        current_scale : float
+            Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
+            Default = 1 (current in Amperes with no scaling).
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        name : str
+            name for this curve
 
         Returns
         -------
@@ -907,6 +962,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         )
         return SplineXYZCoil(
             current=current,
+            current_scale=current_scale,
             X=curve.X,
             Y=curve.Y,
             Z=curve.Z,

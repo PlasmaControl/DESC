@@ -2093,7 +2093,7 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
-    def test_compute_scalar_resolution_toroidal_flux(self):
+    def test_compute_scalar_resolution_toroidal_flux_A(self):
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
         eq = get("precise_QA")
@@ -2106,6 +2106,26 @@ class TestComputeScalarResolution:
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
             obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_toroidal_flux_B(self):
+        """ToroidalFlux."""
+        ext_field = ToroidalMagneticField(1, 1)
+        eq = get("precise_QA")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(
+                ToroidalFlux(eq, ext_field, use_vector_potential=False), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2415,7 +2435,14 @@ class TestObjectiveNaNGrad:
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(ext_field))
-        assert not np.any(np.isnan(g)), "toroidal flux"
+        assert not np.any(np.isnan(g)), "toroidal flux A"
+
+        obj = ObjectiveFunction(
+            ToroidalFlux(eq, ext_field, use_vector_potential=False), use_jit=False
+        )
+        obj.build()
+        g = obj.grad(obj.x(ext_field))
+        assert not np.any(np.isnan(g)), "toroidal flux B"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

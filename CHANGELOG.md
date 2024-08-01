@@ -1,6 +1,22 @@
 Changelog
 =========
 
+v0.12.1
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.12.0...v0.12.1)
+
+- Optimizers now default to use QR factorization for least squares which is much faster
+especially on GPU.
+- Fix bug when reading VMEC input ZAXIS as ZAXIS_CS
+- Some fixes/improvements for computing quantities along a fieldline.
+- Adds compute quantities for PEST coordinate system basis vectors
+- Many init methods now default to running on CPU, even when GPU is enabled, as CPU was found
+to be much faster for these cases.
+- New objectives `desc.objectives.FixNearAxis{R,Z,Lambda}` for fixing near axis behavior.
+- Adds ``from_values`` method that was present in ``FourierRZCurve`` but missing in ``FourierRZCoil``
+- Adds new ``from_values`` method for ``FourierPlanarCurve`` and ``FourierPlanarCoil``
+
 
 New Features
 

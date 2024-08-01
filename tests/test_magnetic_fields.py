@@ -7,7 +7,7 @@ from scipy.constants import mu_0
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.compute.utils import dot
+from desc.compute.utils import dot, get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
@@ -480,8 +480,16 @@ class TestMagneticFields:
         field.change_resolution(3, 3)
         field.change_Phi_resolution(2, 2)
 
+        params = get_params(["K", "x"], field)
+        transforms = get_transforms(["K", "x"], field, grid=surface_grid)
+
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
+            field.compute_magnetic_field(
+                [10.0, 0, 0],
+                source_grid=surface_grid,
+                params=params,
+                transforms=transforms,
+            ),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,

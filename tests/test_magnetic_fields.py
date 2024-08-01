@@ -901,7 +901,7 @@ class TestMagneticFields:
 
     @pytest.mark.slow
     @pytest.mark.unit
-    def test_spline_field(self):
+    def test_spline_field(self, tmpdir_factory):
         """Test accuracy of spline magnetic field."""
         field1 = ScalarPotentialField(phi_lm, args)
         R = np.linspace(0.5, 1.5, 20)
@@ -916,6 +916,31 @@ class TestMagneticFields:
         extcur = [4700.0, 1000.0]
         mgrid = "tests/inputs/mgrid_test.nc"
         field3 = SplineMagneticField.from_mgrid(mgrid, extcur)
+        # test saving and loading from mgrid
+        tmpdir = tmpdir_factory.mktemp("spline_mgrid_with_A")
+        path = tmpdir.join("spline_mgrid_with_A.nc")
+        field3.save_mgrid(
+            path,
+            Rmin=np.min(field3._R),
+            Rmax=np.max(field3._R),
+            Zmin=np.min(field3._Z),
+            Zmax=np.max(field3._Z),
+            nR=field3._R.size,
+            nZ=field3._Z.size,
+            nphi=field3._phi.size,
+        )
+        # no need for extcur b/c is saved in "raw" format, no need to scale again
+        field4 = SplineMagneticField.from_mgrid(path)
+        attrs_4d = ["_AR", "_Aphi", "_AZ", "_BR", "_Bphi", "_BZ"]
+        for attr in attrs_4d:
+            np.testing.assert_allclose(
+                (getattr(field3, attr) * np.array(extcur)).sum(axis=-1),
+                getattr(field4, attr).squeeze(),
+                err_msg=attr,
+            )
+        attrs_3d = ["_R", "_phi", "_Z"]
+        for attr in attrs_3d:
+            np.testing.assert_allclose(getattr(field3, attr), getattr(field4, attr))
 
         r = 0.70
         p = 0
@@ -947,6 +972,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             field3([0.70, 0, 0]), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
         )
+
         np.testing.assert_allclose(field3([0.70, 0, 0]), B2, rtol=1e-3, atol=5e-3)
 
         field3.currents *= 2

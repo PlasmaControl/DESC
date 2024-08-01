@@ -1693,7 +1693,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
         )
         errorif(
-            compute_A_or_B == "A" and not hasattr(self, "_AR"),
+            compute_A_or_B == "A" and self._AR is None,
             ValueError,
             "Cannot calculate vector potential"
             " as no vector potential spline values exist.",

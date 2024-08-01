@@ -361,8 +361,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             return state[0], state[1:]
 
         def tangent_solve(g, y):
-            A = jnp.atleast_2d(jax.jacfwd(g)(y))
-            return _lstsq(A, jnp.atleast_1d(y))
+            # A = jnp.atleast_2d(jax.jacfwd(g)(y))
+            # return _lstsq(A, jnp.atleast_1d(y))
+            return y
 
         x, (res, niter) = jax.lax.custom_root(
             res, x0, solve, tangent_solve, has_aux=True

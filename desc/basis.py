@@ -1202,7 +1202,7 @@ class FiniteElementBasis(_FE_Basis):
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of int, shape(num_modes,2), optional
             Basis modes to evaluate (if None, full basis is used).
-            
+
         unique=False
 
         Returns
@@ -1226,37 +1226,25 @@ class FiniteElementBasis(_FE_Basis):
             basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
         elif self.N == 0:
             # Tessellate the domain and find the basis functions for rho, theta
-        
-         
-            # My attempt to make the code in the 2D case jax friendly, without 
-            # having to change over the find_triangle function. 
-            
-            
-            
+
+
+            # My attempt to make the code in the 2D case jax friendly, without
+            # having to change over the find_triangle function.
+
+
+
             def g_numpy(x):
               # Calling function that is defined with numpy
               return self.mesh.find_triangles_corresponding_to_points(x).astype(x.dtype)
-       
-            
-            @jax.jit
-            def g(x):
-             # Getting quantities needed to define the shape of the output of 
-             # basis_functions.
-             
-             # The shape should be (num_of_points, Q)
-              r_s = r.size
-              M = jnp.zeros((r_s,self.Q))
-              result_shape = jax.ShapeDtypeStruct(M.shape, x.dtype)
-              return jax.pure_callback(g_numpy, result_shape, x)
-            
-                
-            #Make static
-            new_g = jit(g, static_argnums=(0,))
-           
+
+
+            abstract_eval = lambda x: jnp.zeros((r.size,len(modes)))
+            new_g = jaxify(g_numpy, abstract_eval)
+
             Rho_Theta = jnp.array([jnp.ravel(r), jnp.ravel(t)]).T
             basis_functions = new_g(Rho_Theta)
-            
-            
+
+
             # Still throwing up an unhashable error. From what I can tell, potentially
             # might need to use Partial?
         else:
@@ -4578,3 +4566,83 @@ def _jacobi_jvp(x, xdot):
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
     return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
+
+
+
+import functools
+import jax
+import jax.numpy as jnp
+
+
+def jaxify(func, abstract_eval, fd_step=1e-4):
+    """Make an external (python) function work with JAX AD etc.
+
+    Positional arguments to func can be differentiated, use keyword args for static values and
+    non-differentiable stuff.
+
+    Note: Only forward mode differentiation is supported currently.
+
+    Parameters
+    ----------
+    func : callable
+        Function to wrap. Should be a "pure" function, in that it has no side effects
+        and doesn't maintain state. Does not need to be JAX transformable.
+    abstract_eval : callable
+        Auxilliary function that computes the output shape and dtype of func. **Must be JAX
+        transformable**. Should be of the form
+
+            abstract_eval(*args, **kwargs) -> Pytree with same shape and dtype as func(*args, **kwargs)
+
+        For example, if func always returns a scalar:
+
+            abstract_eval = lambda *args, **kwargs: jnp.array(1.)
+
+        Or if func takes an array of shape(n) and returns a dict of arrays of shape(n-2):
+
+            abstract_eval = lambda arr, **kwargs: {"out1": jnp.empty(arr.size-2), "out2": jnp.empty(arr.size-2)}
+    fd_step : float
+        Step size for finite differences (first order forward difference)
+
+    Returns
+    -------
+    func : callable
+        New function that behaves as func but works with jit/vmap/forward mode AD etc.
+
+    """
+
+    def wrap_pure_callback(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            result_shape_dtype = abstract_eval(*args, **kwargs)
+            return jax.pure_callback(func, result_shape_dtype, *args, **kwargs)
+
+        return wrapper
+
+
+    def define_fd_jvp(func):
+        func = jax.custom_jvp(func)
+
+        @func.defjvp
+        def func_jvp(primals, tangents):
+            primal_out = func(*primals)
+
+            # flatten everything into 1d vectors for easier finite differences
+            y, unflaty = jax.flatten_util.ravel_pytree(primal_out)
+            v, unflatv = jax.flatten_util.ravel_pytree(*tangents) # remember that primals/tangets are passed as tuples
+            x, unflatx = jax.flatten_util.ravel_pytree(*primals)
+            normv = jnp.linalg.norm(v)
+            # scale to unit norm if its nonzero
+            vh = jnp.where(normv==0, v, v/normv)
+
+            def f(x):
+                return jax.flatten_util.ravel_pytree(func(unflatx(x)))[0]
+
+            tangent_out = (f(x + fd_step * vh) - y) / fd_step * normv
+            tangent_out = unflaty(tangent_out)
+
+            return primal_out, tangent_out
+
+        return func
+
+
+    return define_fd_jvp(wrap_pure_callback(func))

@@ -125,6 +125,7 @@ class ParticleTracer(_Objective):
 
         constants = constants or self.constants
 
+        @jit
         def system(initial_conditions = self.initial_conditions, t = self.output_time, initial_parameters = self.initial_parameters):
             psi, theta, zeta, vpar = initial_conditions
             grid = Grid(jnp.array([jnp.sqrt(psi), theta, zeta]).T, spacing=jnp.zeros((3,)).T, jitable=True, sort=False)
@@ -137,10 +138,10 @@ class ParticleTracer(_Objective):
 
         initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
         initial_parameters_jax = jnp.array(self.initial_parameters, dtype=jnp.float64)
-        system_jit = jit(system)
+        
         
         #solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, self.output_time, rtol=self.tolerance)
-        intfun = lambda initial_conditions_jax, initial_parameters_jax: jax_odeint(partial(system_jit, initial_parameters=initial_parameters_jax), 
+        intfun = lambda initial_conditions_jax, initial_parameters_jax: jax_odeint(partial(system, initial_parameters=initial_parameters_jax), 
                                                            initial_conditions_jax, self.output_time, rtol=self.tolerance)
 
         solution = vmap(intfun)(initial_conditions_jax, initial_parameters_jax)

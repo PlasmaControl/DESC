@@ -13,7 +13,7 @@ from time import time as timet
 
 initial_time = timet()
 
-filename = "eq_0112_M1_N1.h5"
+filename = "eq_0108_M1_N1.h5"
 savename = "optimized_" + filename
 
 print("*************** START ***************")
@@ -41,7 +41,7 @@ Charge = 2*Proton_Charge
 psi_i = jnp.linspace(0.1, 0.9, 1000)
 zeta_i = 0.5
 theta_i = jnp.pi/2
-vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
+vpar_i = 0.6*jnp.sqrt(2*Energy_SI/Mass)
 
 # Initial Conditions
 ini_cond = jnp.array([[float(psi_i), theta_i, zeta_i, float(vpar_i)] for psi_i in psi_i])
@@ -49,8 +49,8 @@ gridnodes = jnp.array([[float(psi_i), theta_i, zeta_i] for psi_i in psi_i])
 
 # Time
 tmin = 0
-tmax = 1e-4
-nt = 500
+tmax = 1e-3
+nt = 1500
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond

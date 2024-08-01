@@ -1303,6 +1303,8 @@ class ToroidalFlux(_Objective):
     a vacuum equilibrium, to avoid the trivial solution of minimizing Bn
     by making the coil currents zero. Instead, this objective ensures
     the coils create the necessary toroidal flux for the equilibrium field.
+    It is also useful for finite beta to ensure the proper toroidal flux
+    is created even when there is nonzero residual normal field error.
 
     Parameters
     ----------
@@ -1415,22 +1417,6 @@ class ToroidalFlux(_Objective):
         )
         if self._normalize:
             self._normalization = eq.Psi
-
-        # ensure vacuum eq, as is unneeded for finite beta
-        pres = np.max(np.abs(eq.compute("p")["p"]))
-        curr = np.max(np.abs(eq.compute("current")["current"]))
-        warnif(
-            pres > 1e-8,
-            UserWarning,
-            f"Pressure appears to be non-zero (max {pres} Pa), "
-            + "this objective is unneeded at finite beta.",
-        )
-        warnif(
-            curr > 1e-8,
-            UserWarning,
-            f"Current appears to be non-zero (max {curr} A), "
-            + "this objective is unneeded at finite beta.",
-        )
 
         # eval_grid.num_nodes for quad flux cost,
         self._dim_f = 1

@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH -n 1
 #SBATCH --mem=16G
-#SBATCH --time=1:30:00
+#SBATCH --time=00:30:00
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=a100
 #SBATCH --mail-type=ALL

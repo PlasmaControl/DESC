@@ -938,25 +938,16 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             # zip does not terminate early
             transforms = transforms * len(self._fields)
 
-        if compute_A_or_B == "B":
-            B = 0
-            for i, (field, g, tr) in enumerate(
-                zip(self._fields, source_grid, transforms)
-            ):
-                B += field.compute_magnetic_field(
-                    coords, params[i % len(params)], basis, source_grid=g, transforms=tr
-                )
-            return B
-        elif compute_A_or_B == "A":
-            A = 0
-            for i, (field, g, tr) in enumerate(
-                zip(self._fields, source_grid, transforms)
-            ):
-                A += field.compute_magnetic_vector_potential(
-                    coords, params[i % len(params)], basis, source_grid=g, transforms=tr
-                )
+        op = {"B": "compute_magnetic_field", "A": "compute_magnetic_vector_potential"}[
+            compute_A_or_B
+        ]
 
-            return A
+        AB = 0
+        for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
+            AB += getattr(field, op)(
+                coords, params[i % len(params)], basis, source_grid=g, transforms=tr
+            )
+        return AB
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None

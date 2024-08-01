@@ -1019,6 +1019,10 @@ class TestMagneticFields:
         B2 = field.compute_magnetic_field(np.array([1.75, 1.0, 0.0]))
         np.testing.assert_allclose(B1, B2)
 
+        # test the error when no vec pot values exist
+        with pytest.raises(ValueError, match="no vector potential"):
+            field.compute_magnetic_vector_potential(np.array([1.75, 0.0, 0.0]))
+
     @pytest.mark.unit
     def test_field_line_integrate(self):
         """Test field line integration."""

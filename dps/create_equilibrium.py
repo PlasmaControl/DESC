@@ -19,4 +19,4 @@ surf = FourierRZToroidalSurface(
 eq = Equilibrium(M=1, N=1, Psi=1, surface=surf)
 eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
 
-eq.save("eq_0112_M1_N1.h5")
+eq.save("eq_0108_M1_N1.h5")

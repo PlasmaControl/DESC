@@ -13,7 +13,7 @@ from time import time as timet
 
 initial_time = timet()
 
-filename = "eq_2411_M1_N1.h5"
+filename = "eq_0112_M1_N1.h5"
 savename = "optimized_" + filename
 
 print("*************** START ***************")
@@ -50,7 +50,7 @@ gridnodes = jnp.array([[float(psi_i), theta_i, zeta_i] for psi_i in psi_i])
 # Time
 tmin = 0
 tmax = 1e-4
-nt = 1500
+nt = 500
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond

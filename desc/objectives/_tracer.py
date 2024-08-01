@@ -147,7 +147,7 @@ class ParticleTracer(_Objective):
 
         if self.compute_option == "optimization":
             new = jnp.repeat(solution[:, :, 0][:, 0:1], solution[:, :, 0].shape[1], axis=1)
-            return jnp.mean(jnp.sum((solution[:, :, 0] - new)**2, axis=-1), axis=-1)
+            return jnp.sum(jnp.sum((solution[:, :, 0] - new)**2, axis=-1), axis=-1)
             # return jnp.sum((solution[:, 0] - solution[0, 0]) ** 2, axis=-1)
         elif self.compute_option == "tracer":
             return solution

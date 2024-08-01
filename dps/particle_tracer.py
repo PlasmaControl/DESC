@@ -11,9 +11,9 @@ from time import time as timet
 
 initial_time = timet()
 
-filename = "eq_2411_M1_N1.h5"
+filename = "eq_0112_M1_N1.h5"
 eq = desc.io.load(filename)
-save_text_name = "solution" + filename
+save_text_name = "solution_test_" + filename
 
 print("*************** Start ***************")
 print("Particle Tracer")
@@ -33,8 +33,6 @@ def output_to_file(solution, name):
     with open(f"{name}.txt", 'w') as f:
         for row in reshaped_array:
             f.write('\t'.join(f'{x}' for x in row) + '\n')
-
-
 
 # Energy and Mass info
 Energy_eV = 100
@@ -60,7 +58,7 @@ gridnodes = jnp.array([[float(psi_i), theta_i, zeta_i] for psi_i in psi_i])
 # Time
 tmin = 0
 tmax = 1e-4
-nt = 1500
+nt = 200
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond
@@ -76,12 +74,12 @@ ini_param = jnp.array([[mu, Mass_Charge_Ratio] for mu in mu])
 
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.e-7)
 
-print(f"Initial Velocity (parallel component): {vpar_i}")
-print(f"Radius: {data['R']}")
-print(f"Magnetic Field (abs): {data['|B|']}")
-print(f"μ: {mu}")
-print(f"Gyroradius: {Mass/Charge*jnp.sqrt(2*mu/data['|B|'])}") #GyroRadius
-print(f"Gyrofrequency: {Charge*data['|B|']/Mass}") #Gyrofrequency
+# print(f"Initial Velocity (parallel component): {vpar_i}")
+# print(f"Radius: {data['R']}")
+# print(f"Magnetic Field (abs): {data['|B|']}")
+# print(f"μ: {mu}")
+# print(f"Gyroradius: {Mass/Charge*jnp.sqrt(2*mu/data['|B|'])}") #GyroRadius
+# print(f"Gyrofrequency: {Charge*data['|B|']/Mass}") #Gyrofrequency
 
 intermediate_time = timet()
 print(f"Time from beginning until here: {intermediate_time - initial_time}s")

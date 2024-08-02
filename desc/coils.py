@@ -88,7 +88,7 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
 
     The coil is approximated by a series of straight line segments
     and an analytic expression is used to evaluate the vector potential from each
-    segment.
+    segment. This expression assumes the Coulomb gauge.
 
     Parameters
     ----------
@@ -173,6 +173,8 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
 @jit
 def biot_savart_vector_potential_quad(eval_pts, coil_pts, tangents, current):
     """Biot-Savart law (for A) for filamentary coil using numerical quadrature.
+
+    This expression assumes the Coulomb gauge.
 
     Parameters
     ----------

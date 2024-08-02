@@ -260,6 +260,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     ):
         """Compute magnetic vector potential at a set of points.
 
+        This assumes the Coulomb gauge.
+
         Parameters
         ----------
         coords : array-like shape(n,3)
@@ -640,6 +642,8 @@ class FourierCurrentPotentialField(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic vector potential at a set of points.
+
+        This assumes the Coulomb gauge.
 
         Parameters
         ----------

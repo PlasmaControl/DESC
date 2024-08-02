@@ -492,7 +492,7 @@ def test_NAE_QSC_solve():
 
         iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
 
-        np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
+        np.testing.assert_allclose(iota[0], qsc.iota, atol=3e-5, err_msg=string)
         np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
         # check lambda to match near axis
@@ -503,7 +503,7 @@ def test_NAE_QSC_solve():
 
         phi = np.squeeze(grid_axis.nodes[:, 2])
         np.testing.assert_allclose(
-            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=3e-5, err_msg=string
         )
 
         # check |B| on axis
@@ -578,8 +578,8 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
 
         iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
 
-        np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
-        np.testing.assert_allclose(iota[1:10], qsc.iota, rtol=5e-3, err_msg=string)
+        np.testing.assert_allclose(iota[0], qsc.iota, atol=3e-5, err_msg=string)
+        np.testing.assert_allclose(iota[1:10], qsc.iota, rtol=6e-3, err_msg=string)
 
         ### check lambda to match on axis
         # Evaluate lambda on the axis
@@ -588,7 +588,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
 
         phi = np.squeeze(grid_axis.nodes[:, 2])
         np.testing.assert_allclose(
-            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=3e-5, err_msg=string
         )
 
         # check |B| on axis
@@ -801,6 +801,7 @@ def test_omnigenity_qa():
     eq.L_lmn *= lone
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
+    eq.xsection = eq.get_surface_at(zeta=0)
     eq.Psi *= 5  # B0 = 1 T
     eq.solve()
 

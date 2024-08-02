@@ -33,7 +33,7 @@ the magnetic axis, cross section, and various space curves.
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
     desc.geometry.SplineXYZCurve
-    desc.geometry.ZernikeRZToroidalSection
+    desc.geometry.PoincareRZLSection
 
 
 Profiles

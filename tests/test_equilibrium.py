@@ -13,7 +13,14 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
-from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
+from desc.objectives import (
+    ForceBalance,
+    ObjectiveFunction,
+    get_equilibrium_objective,
+    get_fixed_boundary_constraints,
+    get_fixed_xsection_constraints,
+)
+from desc.perturbations import get_deltas
 from desc.profiles import PowerSeriesProfile
 
 from .utils import area_difference, compute_coords
@@ -282,38 +289,105 @@ def test_equilibrium_from_near_axis():
     np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 
-@pytest.mark.unit
-def test_poincare_solve_not_implemented():
-    """Test that solving with fixed poincare section doesn't work yet."""
-    inputs = {
-        "L": 4,
-        "M": 2,
-        "N": 2,
-        "NFP": 3,
-        "sym": False,
-        "spectral_indexing": "ansi",
-        "axis": np.array([[0, 10, 0]]),
-        "pressure": np.array([[0, 10], [2, 5]]),
-        "iota": np.array([[0, 1], [2, 3]]),
-        "surface": np.array(
-            [
-                [0, 0, 0, 10, 0],
-                [1, 1, 0, 1, 0.1],
-                [1, -1, 0, 0.2, -1],
-            ]
-        ),
-    }
+@pytest.mark.regression
+@pytest.mark.slow
+def test_poincare_bc():
+    """Test fixed Poincare section solve for non-axisymmetry."""
+    eq = get("HELIOTRON")
 
-    eq = Equilibrium(**inputs)
-    assert eq.bdry_mode == "poincare"
-    np.testing.assert_allclose(
-        eq.Rb_lmn, [10.0, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    print("Creating equilibrium...")
+    eq_poin = eq.set_poincare_equilibrium()
+    eq_GS = eq_poin.copy()
+    eq_GS.surface = eq_poin.get_surface_at(rho=1)
+    eq_GS.change_resolution(eq.L, eq.M, 0, N_grid=0)
+
+    print("\nSolving Grad Shafranov...")
+    constraints = get_fixed_boundary_constraints(eq=eq_GS)
+    objective = ObjectiveFunction(ForceBalance(eq_GS))
+    eq_GS.solve(
+        verbose=3,
+        objective=objective,
+        constraints=constraints,
+        maxiter=100,
+        ftol=0,
+        xtol=0,
+        gtol=0,
     )
-    np.testing.assert_allclose(
-        eq.Zb_lmn, [0.0, -1.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    print("\nPerturbing GS...")
+    eq_GS.change_resolution(eq.L, eq.M, eq.N, N_grid=eq.N_grid)
+    eq_perturb = eq_GS.set_poincare_equilibrium()
+    eq_perturb.change_resolution(eq.L, eq.M, eq.N)
+
+    surf1 = eq_perturb.xsection
+    surf2 = eq_poin.xsection
+    things1 = {"surface_poincare": surf1}
+    things2 = {"surface_poincare": surf2}
+
+    deltas = get_deltas(things1, things2)
+    constraints = get_fixed_xsection_constraints(eq=eq_perturb)
+    objective = ObjectiveFunction(ForceBalance(eq_perturb))
+    eq_perturb.perturb(
+        objective=objective, constraints=constraints, deltas=deltas, tr_ratio=0.02
     )
-    with pytest.raises(NotImplementedError):
-        eq.solve()
+
+    print("\nSolving last time...")
+    constraints = get_fixed_xsection_constraints(eq=eq_perturb)
+    objective = ObjectiveFunction(ForceBalance(eq_perturb))
+    eq_perturb.solve(
+        verbose=3,
+        objective=objective,
+        constraints=constraints,
+        maxiter=250,
+        ftol=0,
+        xtol=0,
+        gtol=0,
+    )
+
+    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq, Nz=6)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq_perturb, Nz=6)
+    rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+    np.testing.assert_allclose(rho_err, 0, atol=5e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=5e-2)
+
+
+@pytest.mark.regression
+@pytest.mark.slow
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_poincare_as_bc():
+    """Test fixed Poincare section solve for axisymmetry."""
+    eq = get("SOLOVEV")
+    eq_poin = eq.copy()
+
+    eq_poin.change_resolution(
+        eq_poin.L, eq_poin.M, 1, N_grid=2
+    )  # add toroidal modes to the equilibrium
+
+    # perturb slightly from the axisymmetric equilibrium
+    eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)
+    constraints = get_fixed_xsection_constraints(eq=eq_poin)
+    objective = ObjectiveFunction(ForceBalance(eq=eq_poin))
+    eq_poin.solve(
+        verbose=3,
+        ftol=1e-8,
+        objective=objective,
+        constraints=constraints,
+        maxiter=20,
+        xtol=1e-8,
+        gtol=1e-8,
+    )
+
+    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq, Nz=6)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq_poin, Nz=6)
+    rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+
+    np.testing.assert_allclose(rho_err, 0, atol=6e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=2e-3)
+
+    grid = LinearGrid(L=50, M=50, zeta=0)
+    L_2D = eq.compute(names="lambda", grid=grid)
+    L_3D = eq_poin.compute(names="lambda", grid=grid)
+    np.testing.assert_allclose(L_2D["lambda"], L_3D["lambda"], atol=1e-1)
 
 
 @pytest.mark.unit

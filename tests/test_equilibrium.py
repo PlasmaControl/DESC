@@ -289,11 +289,11 @@ def test_equilibrium_from_near_axis():
     np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
-def test_poincare_bc(HELIOTRON):
-    """Test fixed poincare solve from input file."""
-    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
+def test_poincare_bc():
+    """Test fixed Poincare section solve for non-axisymmetry."""
+    eq = get("HELIOTRON")
 
     print("Creating equilibrium...")
     eq_poin = eq.set_poincare_equilibrium()
@@ -351,14 +351,13 @@ def test_poincare_bc(HELIOTRON):
     np.testing.assert_allclose(theta_err, 0, atol=5e-2)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.filterwarnings("ignore::UserWarning")
-def test_poincare_as_bc(SOLOVEV):
-    """Test fixed poincare+lambda solve for axissymetric equilibrium."""
-    # solve an equilibrium with R,Z and lambda specified on zeta=0 surface
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    eq_poin = eq.set_poincare_equilibrium()
+def test_poincare_as_bc():
+    """Test fixed Poincare section solve for axisymmetry."""
+    eq = get("SOLOVEV")
+    eq_poin = eq.copy()
 
     eq_poin.change_resolution(
         eq_poin.L, eq_poin.M, 1, N_grid=2
@@ -366,15 +365,14 @@ def test_poincare_as_bc(SOLOVEV):
 
     # perturb slightly from the axisymmetric equilibrium
     eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)
-    # this constrains lambda at the zeta=0 surface, using eq's current value of lambda
     constraints = get_fixed_xsection_constraints(eq=eq_poin)
     objective = ObjectiveFunction(ForceBalance(eq=eq_poin))
     eq_poin.solve(
-        verbose=1,
+        verbose=3,
         ftol=1e-8,
         objective=objective,
         constraints=constraints,
-        maxiter=100,
+        maxiter=20,
         xtol=1e-8,
         gtol=1e-8,
     )

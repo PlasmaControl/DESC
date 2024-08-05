@@ -133,9 +133,9 @@ plt.grid()
 # plt.show()
 points_fourier = np.array([R, Z]).T
 
-Ks = np.arange(1, 4)
+Ks = np.arange(1, 3)
 # Ls = np.arange(2, 8, 2)
-Ms = np.arange(2, 60, 4)
+Ms = np.arange(4, 10, 4)
 errors = np.zeros((len(Ks), len(Ms)))
 q = 0 
 for k in Ks:

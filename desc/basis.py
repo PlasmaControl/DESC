@@ -1223,7 +1223,7 @@ class FiniteElementBasis(_FE_Basis):
         if self.L == 0 and self.N == 0:
             # Get all IQ basis functions from each of the points,
             # and most will be zeros at a given point because of local support.
-            basis_functions = self.mesh.full_basis_functions_corresponding_to_points(t)
+            basis_functions = self.mesh.find_intervals_corresponding_to_points(t, derivatives[1])
         elif self.N == 0:
             # Tessellate the domain and find the basis functions for rho, theta
 
@@ -1235,7 +1235,7 @@ class FiniteElementBasis(_FE_Basis):
 
             def g_numpy(x):
               # Calling function that is defined with numpy
-              return self.mesh.find_triangles_corresponding_to_points(x).astype(x.dtype)
+              return self.mesh.find_triangles_corresponding_to_points(x, derivatives[:2]).astype(x.dtype)
 
 
             abstract_eval = lambda x: jnp.zeros((r.size,len(modes)))
@@ -1249,7 +1249,7 @@ class FiniteElementBasis(_FE_Basis):
             # might need to use Partial?
         else:
             # Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
-            basis_functions = self.mesh.find_tetrahedra_corresponding_to_points(nodes)
+            basis_functions = self.mesh.find_tetrahedra_corresponding_to_points(nodes, derivatives)
 
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
@@ -2618,7 +2618,7 @@ class FiniteElementMesh3D:
         """
         return self.weighted_volumes @ f
 
-    def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta):
+    def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta, derivatives=np.array([0, 0, 0])):
         """Given a point on the mesh, find which tetrahedron it lies inside.
 
         Parameters
@@ -2769,11 +2769,13 @@ class FiniteElementMesh3D:
             # print(i, row_i, i * Q, (i + 1) * Q, v[row_i, :], v1[i, :], v2[i, :], v3[i, :], v4[i, :], self.tetrahedra[i].det)
             basis_functions[row_i, i * Q : (i + 1) * Q], _ = self.tetrahedra[
                 i
-            ].get_basis_functions(v[row_i, :])
-        print(
-            np.max(np.count_nonzero(good_inds, axis=-1)),
-            np.min(np.count_nonzero(good_inds, axis=-1)),
-        )
+            ].get_basis_functions(v[row_i, :], derivatives)
+        # print(
+        #     np.max(np.count_nonzero(good_inds, axis=-1)),
+        #     np.min(np.count_nonzero(good_inds, axis=-1)),
+        # )
+        assert np.isclose(np.max(np.count_nonzero(good_inds, axis=-1)), 1)
+        assert np.isclose(np.min(np.count_nonzero(good_inds, axis=-1)), 1)
         return basis_functions
 
 
@@ -2946,7 +2948,7 @@ class FiniteElementMesh2D:
                 plt.plot(quadpoints[:, 0], quadpoints[:, 1], "ko")
         plt.show()
 
-    def find_triangles_corresponding_to_points(self, v):
+    def find_triangles_corresponding_to_points(self, v, derivatives=np.array([0, 0])):
         """Given a point on the mesh, find which triangle it lies inside.
 
         Parameters
@@ -3003,19 +3005,21 @@ class FiniteElementMesh2D:
         )
 
         # Deal with points at a triangle vertex
-        # duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(triangle_indices, axis=-1) == 3))
-        # for i in duplicates:
-        #     max_col = jnp.argmax(triangle_indices[i, :])
-        #     triangle_indices[i, max_col] = False
+        duplicates = jnp.where(jnp.isclose(jnp.count_nonzero(triangle_indices, axis=-1), 3))
+        duplicates = duplicates[0]
+        for i in duplicates:
+            max_col = jnp.argmax(triangle_indices[i, :])
+            triangle_indices[i, max_col] = False
 
         # # Still need to deal with case when points lie exactly along the edge
         # # between two triangles A and B (and finish off the vertex case)
         # # in which case triangle_indices will say that the point lies in
         # # both triangle A and triangle B, leading to incorrect results.
-        # duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(triangle_indices, axis=-1) == 2))
-        # for i in duplicates:
-        #     max_col = jnp.argmax(triangle_indices[i, :])
-        #     triangle_indices[i, max_col] = False
+        duplicates = jnp.where(jnp.isclose(jnp.count_nonzero(triangle_indices, axis=-1), 2))
+        duplicates = duplicates[0]
+        for i in duplicates:
+            max_col = jnp.argmax(triangle_indices[i, :])
+            triangle_indices[i, max_col] = False
 
         # Now loop through and get the basis functions in triangle i,
         # evaluated all at once on all the points that are in triangle i
@@ -3025,13 +3029,15 @@ class FiniteElementMesh2D:
             basis_functions[row_i, i * Q : (i + 1) * Q], _ = self.triangles[
                 i
             ].get_basis_functions(
-                v[row_i, :]
+                v[row_i, :], derivatives,
             )  # .reshape(-1, 2))
 
-        print(
-            np.min(np.count_nonzero(triangle_indices, axis=-1)),
-            np.max(np.count_nonzero(triangle_indices, axis=-1)),
-        )
+        # print(
+        #     np.min(np.count_nonzero(triangle_indices, axis=-1)),
+        #     np.max(np.count_nonzero(triangle_indices, axis=-1)),
+        # )
+        assert np.isclose(np.min(np.count_nonzero(triangle_indices, axis=-1)), 1)
+        assert np.isclose(np.max(np.count_nonzero(triangle_indices, axis=-1)), 1)
         # Finally, rescale the basis functions at theta = 0 or theta = 2 * pi by 1/2pi
         # zero_inds = np.ravel(np.where(np.isclose(v[:, 1], 0.0, rtol=1e-7)))
         # basis_functions[zero_inds, :] *= np.sqrt(1.0 / (2 * np.pi))
@@ -3477,7 +3483,7 @@ class TetrahedronFiniteElement:
             rho_theta_zeta_in_tetrahedron
         ).reshape(-1, 3)
 
-    def get_basis_functions(self, rho_theta_zeta):
+    def get_basis_functions(self, rho_theta_zeta, derivatives=np.array([0, 0, 0])):
         """
         Gets the barycentric basis functions.
 
@@ -3673,7 +3679,10 @@ class TriangleFiniteElement:
         self.area2 = self.vertices[:, 0] @ self.b
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
-
+        self.deta_dx = np.array([[self.b1, self.c1],
+                                 [self.b2, self.c2],
+                                 [self.b3, self.c3]]) / self.area2 / 2.0  # R^(3 x 2)
+        
         D = np.array(
             [
                 [1, vertices[0, 0], vertices[0, 1]],
@@ -3778,7 +3787,7 @@ class TriangleFiniteElement:
         # Check we have the same number of basis functions as nodes.
         assert self.nodes.shape[0] == self.Q
 
-    def get_basis_functions(self, rho_theta):
+    def get_basis_functions(self, rho_theta, derivatives=np.array([0, 0])):
         """
         Gets the barycentric basis functions.
 
@@ -3810,6 +3819,7 @@ class TriangleFiniteElement:
         # Compute the vertex basis functions first. This will be the first 3 columns
         # of basis_functions. There are hard-coded from book.
         # print(basis_functions.shape, self.eta_nodes.shape)
+        # if np.allclose(derivatives, 0):
 
         if K == 1:
             for i in range(rho_theta.shape[0]):
@@ -3860,6 +3870,84 @@ class TriangleFiniteElement:
 
                 # Mid-face node
                 basis_functions[i, 9] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 2]
+        # else:
+        r_deriv = derivatives[0]
+        t_deriv = derivatives[1]
+        dbasis_deta = np.zeros((rho_theta.shape[0], self.Q, 3))
+        dbasis2_d2eta = np.zeros((rho_theta.shape[0], self.Q, 3, 3))
+        if K == 1:
+            dbasis_deta[:, 0, 0] = 1.0 
+            dbasis_deta[:, 1, 1] = 1.0 
+            dbasis_deta[:, 2, 2] = 1.0
+        if K == 2:
+            dbasis_deta[:, 0, 0] = 4.0 * eta[:, 0] - 1.0
+            dbasis_deta[:, 1, 1] = 4.0 * eta[:, 1] - 1.0
+            dbasis_deta[:, 2, 2] = 4.0 * eta[:, 2] - 1.0
+            dbasis_deta[:, 3, 0] = 4.0 * eta[:, 1] 
+            dbasis_deta[:, 3, 1] = 4.0 * eta[:, 0] 
+            dbasis_deta[:, 4, 1] = 4.0 * eta[:, 2] 
+            dbasis_deta[:, 4, 2] = 4.0 * eta[:, 1] 
+            dbasis_deta[:, 5, 0] = 4.0 * eta[:, 2] 
+            dbasis_deta[:, 5, 2] = 4.0 * eta[:, 0] 
+        if K == 3:
+            dbasis_deta[:, 0, 0] = 27.0 / 2.0 * eta[:, 0] - 18.0 * eta[:, 0] + 1.0
+            dbasis_deta[:, 1, 1] = 27.0 / 2.0 * eta[:, 1] - 18.0 * eta[:, 1] + 1.0
+            dbasis_deta[:, 2, 2] = 27.0 / 2.0 * eta[:, 2] - 18.0 * eta[:, 2] + 1.0
+            dbasis_deta[:, 3, 0] = (27.0 * eta[:, 0] - 9.0 / 2.0) * eta[:, 1]
+            dbasis_deta[:, 3, 1] = 9.0 / 2.0 * (eta[:, 0] * (3 * eta[:, 1] - 1))
+            dbasis_deta[:, 4, 0] = (9.0 / 2.0) * eta[:, 1] * (3 * eta[:, 1] - 1)
+            dbasis_deta[:, 4, 1] = (9.0 / 2.0) * eta[:, 0] * (3 * eta[:, 1] - 1) + (27.0 / 2.0) * eta[:, 0] * eta[:, 1]
+            dbasis_deta[:, 5, 1] = (9.0 / 2.0) * eta[:, 2] * (3 * eta[:, 1] - 1) + (27.0 / 2.0) * eta[:, 2] * eta[:, 1]
+            dbasis_deta[:, 5, 2] = (9.0 / 2.0) * eta[i, 1] * (3 * eta[i, 1] - 1)
+            dbasis_deta[:, 6, 1] = (9.0 / 2.0) * eta[:, 2] * (3 * eta[:, 2] - 1)
+            dbasis_deta[:, 6, 2] = (9.0 / 2.0) * eta[:, 1] * (3 * eta[:, 2] - 1) + (27.0 / 2.0) * eta[:, 2] * eta[:, 1]
+            dbasis_deta[:, 7, 0] = (9.0 / 2.0) * eta[i, 2] * (3 * eta[i, 0] - 1) + (27.0 / 2.0) * eta[:, 0] * eta[:, 2]
+            dbasis_deta[:, 7, 2] = (9.0 / 2.0) * eta[i, 0] * (3 * eta[i, 0] - 1)
+            dbasis_deta[:, 8, 0] = (9.0 / 2.0) * eta[i, 2] * (3 * eta[i, 2] - 1)
+            dbasis_deta[:, 8, 2] = (9.0 / 2.0) * eta[i, 0] * (3 * eta[i, 2] - 1) + (27.0 / 2.0) * eta[:, 2] * eta[:, 0]
+            dbasis_deta[:, 9, 0] = 27 * eta[:, 1] * eta[:, 2]
+            dbasis_deta[:, 9, 1] = 27 * eta[:, 0] * eta[:, 2]
+            dbasis_deta[:, 9, 2] = 27 * eta[:, 0] * eta[:, 1]
+
+        dbasis_dx = dbasis_deta @ self.deta_dx
+        # basis_functions = dbasis_dtheta
+        # if K == 1:
+            # d2basis_d2eta[:, 0, 0] = 1.0 
+            # d2basis_d2eta[:, 1, 1] = 1.0 
+            # d2basis_d2eta[:, 2, 2] = 1.0
+        if K == 2:
+            dbasis2_d2eta[:, 0, 0, 0] = 4.0
+            dbasis2_d2eta[:, 1, 1, 1] = 4.0
+            dbasis2_d2eta[:, 2, 2, 2] = 4.0
+            dbasis2_d2eta[:, 3, 0, 1] = 4.0
+            dbasis2_d2eta[:, 3, 1, 0] = 4.0
+            dbasis2_d2eta[:, 4, 1, 2] = 4.0
+            dbasis2_d2eta[:, 4, 2, 1] = 4.0
+            dbasis2_d2eta[:, 5, 0, 2] = 4.0
+            dbasis2_d2eta[:, 5, 2, 0] = 4.0
+            
+        dbasis2_dx2 = np.tensordot(dbasis2_d2eta, self.deta_dx, axes=([-2], [0])) @ self.deta_dx
+
+        basis_funcs = np.ones(basis_functions.shape)
+        for i, deriv in enumerate(derivatives):
+            if deriv == 0:
+                basis_funcs *= basis_functions
+            elif deriv == 1:
+                basis_funcs *= dbasis_dx[:, :, i]
+            elif deriv == 2:
+                basis_funcs *= dbasis2_dx2[:, :, i, j]
+            # basis_functions = dbasis2_dx2
+            # if r_deriv == 1:
+            #     dbasis_deta = np.zeros((rho_theta.shape[0], self.Q, 3))
+            #     dbasis_deta[:, 0] = -0.5
+            #     dbasis_deta[:, 1] = 0.5
+            #     if self.K >= 2:
+            #         dbasis_deta[:, 2] = eta - 0.5
+            #         dbasis_deta[:, 3] = eta + 0.5
+            #         dbasis_deta[:, 4] = -2 * eta
+            #     dbasis_dtheta = dbasis_deta @ self.deta_dtheta
+            #     basis_functions = dbasis_dtheta
+            # elif r_deriv == 2:
 
         return basis_functions, rho_theta_in_triangle
 
@@ -4065,6 +4153,8 @@ class IntervalFiniteElement:
         self.length = vertices[1] - vertices[0]
         self.Q = K + 1
         self.K = K
+        self.deta_dtheta = 2.0 / self.length
+        self.dtheta_deta = self.length / 2.0
 
         # if K = 1 or K = 2 with equally-spaced points
         # Jacobian is length / 2 for isoparametric form eta in [-1, 1]
@@ -4087,7 +4177,7 @@ class IntervalFiniteElement:
         # Check we have the same number of basis functions as nodes.
         assert self.nodes.shape[0] == self.Q
 
-    def get_basis_functions(self, theta):
+    def get_basis_functions(self, theta, derivatives=0):
         """
         Gets the barycentric basis functions.
 
@@ -4113,14 +4203,38 @@ class IntervalFiniteElement:
         for i in range(self.Q):
             basis_functions[:, i] = self.lagrange_polynomial(eta, self.eta_nodes, i)
 
-        if self.K == 1:
-            assert np.allclose(basis_functions[:, 0], 0.5 * (1 - eta))
-            assert np.allclose(basis_functions[:, 1], 0.5 * (1 + eta))
-        if self.K == 2:
-            # Note the basis function ordering
-            assert np.allclose(basis_functions[:, 0], 0.5 * eta * (eta - 1))
-            assert np.allclose(basis_functions[:, 2], 0.5 * eta * (eta + 1))
-            assert np.allclose(basis_functions[:, 1], 1 - eta**2)
+        if t_deriv == 1:
+            dbasis_deta = np.zeros(basis_functions.shape)
+            dbasis_deta[:, 0] = -0.5
+            dbasis_deta[:, 1] = 0.5
+
+            if self.K >= 2:
+                dbasis_deta[:, 2] = eta - 0.5
+                dbasis_deta[:, 3] = eta + 0.5
+                dbasis_deta[:, 4] = -2 * eta
+            dbasis_dtheta = dbasis_deta * self.deta_dtheta
+            basis_functions = dbasis_dtheta  # overwrite basis_functions
+
+        elif t_deriv == 2:
+            d2basis_deta2 = np.zeros(basis_functions.shape)
+            d2basis_deta2[:, 0] = 0.0
+            d2basis_deta2[:, 1] = 0.0
+            
+            if self.K >= 2:
+                d2basis_deta2[:, 2] = 1.0
+                d2basis_deta2[:, 3] = 1.0
+                d2basis_deta2[:, 4] = -2.0
+            d2basis_dtheta2 = d2basis_deta2 * self.deta_dtheta ** 2
+            basis_functions = d2basis_dtheta2  # overwrite basis_functions
+
+        # if self.K == 1:
+        #     assert np.allclose(basis_functions[:, 0], 0.5 * (1 - eta))
+        #     assert np.allclose(basis_functions[:, 1], 0.5 * (1 + eta))
+        # if self.K == 2:
+        #     # Note the basis function ordering
+        #     assert np.allclose(basis_functions[:, 0], 0.5 * eta * (eta - 1))
+        #     assert np.allclose(basis_functions[:, 2], 0.5 * eta * (eta + 1))
+        #     assert np.allclose(basis_functions[:, 1], 1 - eta**2)            
 
         return basis_functions, theta_in_interval
 
@@ -4334,7 +4448,7 @@ class FiniteElementMesh1D:
                 plt.plot(quadpoints, np.zeros(len(quadpoints)), "ko")
         plt.show()
 
-    def full_basis_functions_corresponding_to_points(self, theta):
+    def find_intervals_corresponding_to_points(self, theta, derivative=0):
         """Given points on the mesh, find all (I, Q) basis functions values.
 
         Parameters
@@ -4356,39 +4470,10 @@ class FiniteElementMesh1D:
                 v1 = interval.vertices[0]
                 v2 = interval.vertices[1]
                 if v >= v1 and v <= v2:
-                    bfs, _ = interval.get_basis_functions(v)
+                    bfs, _ = interval.get_basis_functions(v, derivative)
                     basis_functions[i, j, :] = bfs
                     break
         return basis_functions
-
-    def find_intervals_corresponding_to_points(self, theta):
-        """Given a point on the mesh, find which interval it lies inside.
-
-        Parameters
-        ----------
-        theta : 1D ndarray, shape (num_points)
-            Set of points for which we want to find the intervals that
-            they lie inside of in the mesh.
-
-        Returns
-        -------
-        interval_indices : 1D ndarray, shape (num_points)
-            Set of indices that specific the intervals where each point lies.
-        basis_functions : 2D ndarray, shape (num_points, Q)
-            The basis functions corresponding to the intervals in
-            interval_indices.
-        """
-        interval_indices = np.zeros(theta.shape[0])
-        basis_functions = np.zeros((theta.shape[0], self.Q))
-        for i in range(theta.shape[0]):
-            v = theta[i]
-            for j, interval in enumerate(self.intervals):
-                v1 = interval.vertices[0]
-                v2 = interval.vertices[1]
-                if v >= v1 and v <= v2:
-                    interval_indices[i] = j
-                    basis_functions[i, :], _ = interval.get_basis_functions(v)
-        return interval_indices, basis_functions
 
     def return_quadrature_points(self):
         """Get quadrature points for numerical integration over the mesh.

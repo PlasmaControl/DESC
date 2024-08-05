@@ -22,7 +22,7 @@ pert_order = 2
 ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-6
-maxiter = 100
+maxiter = 1
 
 # solver methods
 basis             = FiniteElementBasis

@@ -706,7 +706,7 @@ def _get_extrema(knots, B_c, B_z_ra_c, sentinel=jnp.nan):
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines along the field lines. Last axis enumerates the
         polynomials that compose the spline along a particular field line.
-     B_z_ra_c : jnp.ndarray
+    B_z_ra_c : jnp.ndarray
         Shape (B_c.shape[0] - 1, *B_c.shape[1:]).
         Polynomial coefficients of the spline of (∂|B|/∂ζ)|ρ,α in local power basis.
         First axis enumerates the coefficients of power series. Second axis

@@ -138,7 +138,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
     Parameters
     ----------
     current : float
-        current passing through the coil, in Amperes
+        Current through the coil, in Amperes.
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
@@ -362,10 +362,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
             Number of field periods, the coil will have a discrete toroidal symmetry
             according to NFP.
         sym : bool, optional
-            whether the curve is stellarator-symmetric or not. Default
-            is False.
+            Whether the curve is stellarator-symmetric or not. Default is False.
         name : str
-            name for this coil
+            Name for this coil.
 
         Returns
         -------
@@ -398,14 +397,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
-            name for this coil
+            Name for this coil.
 
         Returns
         -------
         coil : FourierPlanarCoil
-            New representation of the coil parameterized by Fourier series for
-            minor radius r in a plane specified by a center position and normal
-            vector.
+            New representation of the coil parameterized by Fourier series for minor
+            radius r in a plane specified by a center position and normal vector.
 
         """
         if grid is None:
@@ -1239,22 +1237,22 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def linspaced_angular(
         cls, coil, current=None, axis=[0, 0, 1], angle=2 * np.pi, n=10, endpoint=False
     ):
-        """Create a coil set by repeating a coil n times rotationally.
+        """Create a CoilSet by repeating a coil at equal spacing around the torus.
 
         Parameters
         ----------
         coil : Coil
-            base coil to repeat
+            Base coil to repeat.
         current : float or array-like, shape(n,)
-            current in (each) coil, overrides coil.current
+            Current through (each) coil, in Amperes. Overrides coil.current.
         axis : array-like, shape(3,)
-            axis to rotate about
+            Axis to rotate about, in X,Y,Z coordinates.
         angle : float
-            total rotational extent of coil set
+            Total rotational extent of the final coil, in radians.
         n : int
-            number of copies of original coil
+            Number of copies of original coil.
         endpoint : bool
-            whether to include a coil at final angle
+            Whether to include a coil at final rotation angle. Default = False.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -1274,20 +1272,21 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def linspaced_linear(
         cls, coil, current=None, displacement=[2, 0, 0], n=4, endpoint=False
     ):
-        """Create a coil group by repeating a coil n times in a straight line.
+        """Create a CoilSet by repeating a coil at equal spacing in a straight line.
 
         Parameters
         ----------
         coil : Coil
-            base coil to repeat
+            Base coil to repeat.
         current : float or array-like, shape(n,)
-            current in (each) coil
+            Current through (each) coil, in Amperes. Overrides coil.current.
         displacement : array-like, shape(3,)
-            total displacement of the final coil
+            Total displacement of the final coil, relative to the initial coil position,
+            in X,Y,Z coordinates.
         n : int
-            number of copies of original coil
+            Number of copies of original coil.
         endpoint : bool
-            whether to include a coil at final point
+            Whether to include a coil at final displacement location. Default = False.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -1470,14 +1469,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         try:
             return cls(*coils)
-        except ValueError as e:  # can't load as a CoilSet if any of the coils have
-            # different length of knots, tell user to load as MixedCoilSet instead
+        except ValueError as e:
             errorif(
                 True,
                 ValueError,
-                "Unable to create CoilSet with the coils in the file,"
-                f" got error {e}."
-                "Likely the issue is differing numbers of knots for the coils,"
+                f"Unable to create CoilSet with the coils in the file, got error {e}."
+                + "The issue is likely differing numbers of knots for the coils, "
                 "try using a MixedCoilSet instead of a CoilSet.",
             )
 
@@ -1599,6 +1596,64 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
 
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+        """Convert all coils to FourierPlanarCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a Fourier series for
+            minor radius r in a plane specified by a center position and normal vector.
+
+        """
+        coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
+
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+        """Convert all coils to FourierRZCoil representaion.
+
+        Note that some types of coils may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the coil will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
+        name : str
+            Name for this coilset.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a Fourier series for R,Z.
+
+        """
+        coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
+        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
+
     def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
         """Convert all coils to FourierXYZCoil representation.
 
@@ -1610,33 +1665,33 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
             If an integer, uses that many equally spaced points.
         s : ndarray
-            arbitrary curve parameter to use for the fitting. if None, defaults to
-            normalized arclength
+            Arbitrary curve parameter to use for the fitting. If None, defaults to
+            normalized arclength.
         name : str
-            name for the new CoilSet
+            Name for the new CoilSet.
 
         Returns
         -------
         coilset : CoilSet
-            New representation of the coilset parameterized by Fourier series for X,Y,Z.
+            New representation of the coil set parameterized by a Fourier series for
+            X,Y,Z.
 
         """
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
     def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
-        """Convert all coils to SplineXYZCoil.
+        """Convert all coils to SplineXYZCoil representation.
 
         Parameters
         ----------
         knots : ndarray
-            arbitrary curve parameter values to use for spline knots,
+            Arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
-            (input length in this case is determined by grid argument, since
-            the input coordinates come from
-            Coil.compute("x",grid=grid))
-            If None, defaults to using an equal-arclength angle as the knots
-            If supplied, will be rescaled to lie in [0,2pi]
+            (Input length in this case is determined by grid argument, since
+            the input coordinates come from Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots.
+            If supplied, will be rescaled to the range [0,2pi].
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
             If an integer, uses that many equally spaced points.
@@ -1648,7 +1703,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
-            name for the new CoilSet
+            Name for the new CoilSet.
 
         Returns
         -------
@@ -1946,6 +2001,64 @@ class MixedCoilSet(CoilSet):
 
         return B
 
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+        """Convert all coils to FourierPlanarCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for the new MixedCoilSet.
+
+        Returns
+        -------
+        coilset : MixedCoilSet
+            New representation of the coilset parameterized by a Fourier series for
+            minor radius r in a plane specified by a center position and normal vector.
+
+        """
+        coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        return self.__class__(*coils, name=name)
+
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+        """Convert all coils to FourierRZCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the coil will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
+        name : str
+            Name for the new MixedCoilSet.
+
+        Returns
+        -------
+        coilset : MixedCoilSet
+            New representation of the coilset parameterized by a Fourier series for R,Z.
+
+        """
+        coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
+        return self.__class__(*coils, name=name)
+
     def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
         """Convert all coils to FourierXYZCoil representation.
 
@@ -1957,33 +2070,33 @@ class MixedCoilSet(CoilSet):
             Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
             If an integer, uses that many equally spaced points.
         s : ndarray
-            arbitrary curve parameter to use for the fitting. if None, defaults to
-            normalized arclength
+            Arbitrary curve parameter to use for the fitting. If None, defaults to
+            normalized arclength.
         name : str
-            name for the new CoilSet
+            Name for the new MixedCoilSet.
 
         Returns
         -------
-        coilset : CoilSet
-            New representation of the coilset parameterized by Fourier series for X,Y,Z.
+        coilset : MixedCoilSet
+            New representation of the coil set parameterized by a Fourier series for
+            X,Y,Z.
 
         """
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
         return self.__class__(*coils, name=name)
 
     def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
-        """Convert all coils to SplineXYZCoil.
+        """Convert all coils to SplineXYZCoil representation.
 
         Parameters
         ----------
         knots : ndarray
-            arbitrary curve parameter values to use for spline knots,
+            Arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
-            (input length in this case is determined by grid argument, since
-            the input coordinates come from
-            Coil.compute("x",grid=grid))
-            If None, defaults to using an equal-arclength angle as the knots
-            If supplied, will be rescaled to lie in [0,2pi]
+            (Input length in this case is determined by grid argument, since
+            the input coordinates come from Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots.
+            If supplied, will be rescaled to the range [0,2pi].
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
             If an integer, uses that many equally spaced points.
@@ -1995,11 +2108,11 @@ class MixedCoilSet(CoilSet):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
-            name for the new CoilSet
+            Name for the new MixedCoilSet.
 
         Returns
         -------
-        coilset : CoilSet
+        coilset : MixedCoilSet
             New representation of the coilset parameterized by a spline for X,Y,Z.
 
         """

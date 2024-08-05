@@ -917,6 +917,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[
+        "phi",
         "theta",
         "theta_s",
         "theta_ss",

@@ -79,8 +79,9 @@ def test_Gamma_c():
         coordinates="raz",
         period=(np.inf, 2 * np.pi, np.inf),
     )
-    data = eq.compute("Gamma_c", grid=grid)
+    data = eq.compute(["Gamma_c"], grid=grid)
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")
+    plt.show()
     return fig

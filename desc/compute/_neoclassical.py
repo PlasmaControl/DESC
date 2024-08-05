@@ -529,7 +529,7 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     # tan(π/2 γ_c) =
     #              ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ρ| κ_g / |B|
     #              ----------------------------------------------
-    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ √(1 − λ|B|) [ (1 − λ|B|/2)/(1 − λ|B|) ∂|B|/∂ψ + K ] / |B| ]
+    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ √(1 − λ|B|) [ (1 − λ|B|/2)/(1 − λ|B|) ∂|B|/∂ψ + K ] / |B|
 
     def d_v_tau(B, pitch):
         return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))

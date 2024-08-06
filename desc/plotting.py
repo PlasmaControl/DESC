@@ -3850,6 +3850,7 @@ def plot_regcoil_outputs(
     figdata = {}
     axdata = {}
     if not scan:
+        figsize = kwargs.pop("figsize", (8, 8))
         field.Phi_mn = data["Phi_mn"]
         field.I = data["I"]
         field.G = data["G"]
@@ -3868,7 +3869,7 @@ def plot_regcoil_outputs(
             Bn_tot += B_ext
             print("adding bext")
         plt.rcParams.update({"font.size": 26})
-        plt.figure(figsize=(8, 8))
+        plt.figure(figsize=figsize)
         plt.contourf(
             eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
             eval_grid.nodes[eval_grid.unique_theta_idx, 1],
@@ -3884,7 +3885,7 @@ def plot_regcoil_outputs(
 
         # TODO: replace with plot_2d call
         # current potential contour plot
-        plt.figure(figsize=(10, 10))
+        plt.figure(figsize=figsize)
         plt.rcParams.update({"font.size": 18})
         plt.contour(
             source_grid.nodes[source_grid.unique_zeta_idx, 2],
@@ -3907,7 +3908,8 @@ def plot_regcoil_outputs(
     else:  # show composite scan over alpha plots
         # strongly based off of Landreman's REGCOIL plotting routine:
         # github.com/landreman/regcoil/blob/master/
-        plt.figure(figsize=(16, 12))
+        figsize = kwargs.pop("figsize", (16, 12))
+        plt.figure(figsize=figsize)
         plt.rcParams.update({"font.size": 20})
         plt.scatter(alphas, chi2Bs, s=markersize)
         plt.xlabel(r"$\alpha$ (regularization parameter)")
@@ -3916,7 +3918,7 @@ def plot_regcoil_outputs(
         plt.xscale("log")
         figdata["fig_chi^2_B_vs_alpha"] = plt.gcf()
         axdata["ax_chi^2_B_vs_alpha"] = plt.gca()
-        plt.figure(figsize=(16, 12))
+        plt.figure(figsize=figsize)
         plt.scatter(alphas, chi2Ks, s=markersize)
         plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
         plt.xlabel(r"$\alpha$ (regularization parameter)")
@@ -3924,7 +3926,7 @@ def plot_regcoil_outputs(
         plt.xscale("log")
         figdata["fig_chi^2_K_vs_alpha"] = plt.gcf()
         axdata["ax_chi^2_K_vs_alpha"] = plt.gca()
-        plt.figure(figsize=(16, 12))
+        plt.figure(figsize=figsize)
         plt.scatter(chi2Ks, chi2Bs, s=markersize)
         plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
         plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
@@ -3945,7 +3947,7 @@ def plot_regcoil_outputs(
         ########################################################
         # Plot total current potentials
         ########################################################
-        plt.figure(figsize=(16, 12))
+        plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
             phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
@@ -3990,7 +3992,7 @@ def plot_regcoil_outputs(
         ########################################################
         # Plot Bn
         ########################################################
-        plt.figure(figsize=(16, 12))
+        plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
             field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
@@ -4037,7 +4039,7 @@ def plot_regcoil_outputs(
         ########################################################
         # Plot Surface Current |K|
         ########################################################
-        plt.figure(figsize=(16, 12))
+        plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
             field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]

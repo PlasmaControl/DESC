@@ -354,13 +354,12 @@ def regcoil_helical_coils_scan():
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=8, N_Phi=8
     )
-    # TODO: lower the number of scans here
     fields, data = run_regcoil(
         surface_current_field,
         eq,
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
-        alpha=np.append(np.array([0.0]), np.logspace(-30, -1, 30)),
+        alpha=np.append(np.array([0.0]), np.logspace(-30, -1, 11)),
         current_helicity=-1,
         vacuum=True,
     )

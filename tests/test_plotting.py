@@ -335,7 +335,7 @@ class TestPlotFSA:
             plot_data["<" + name + ">"], desired, equal_nan=False
         )
 
-        name = "B0"
+        name = "psi_r/sqrt(g)"
         assert (
             "<" + name + ">"
             not in data_index["desc.equilibrium.equilibrium.Equilibrium"]

@@ -252,7 +252,7 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_axis_limit_api(self):
         """Test that axis limit dependencies are computed only when necessary."""
-        name = "B0"
+        name = "psi_r/sqrt(g)"
         deps = {"psi_r", "sqrt(g)"}
         axis_limit_deps = {"psi_rr", "sqrt(g)_r"}
         eq = Equilibrium()

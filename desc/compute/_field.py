@@ -27,7 +27,7 @@ from .utils import (
 
 
 @register_compute_fun(
-    name="B0",
+    name="psi_r/sqrt(g)",
     label="\\psi' / \\sqrt{g}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
@@ -40,8 +40,8 @@ from .utils import (
     data=["psi_r", "sqrt(g)"],
     axis_limit_data=["psi_rr", "sqrt(g)_r"],
 )
-def _B0(params, transforms, profiles, data, **kwargs):
-    data["B0"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg(params, transforms, profiles, data, **kwargs):
+    data["psi_r/sqrt(g)"] = transforms["grid"].replace_at_axis(
         safediv(data["psi_r"], data["sqrt(g)"]),
         lambda: safediv(data["psi_rr"], data["sqrt(g)_r"]),
     )
@@ -77,10 +77,10 @@ def _B_sup_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "iota", "lambda_z", "omega_z"],
+    data=["psi_r/sqrt(g)", "iota", "lambda_z", "omega_z"],
 )
 def _B_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["B^theta"] = data["B0"] * (
+    data["B^theta"] = data["psi_r/sqrt(g)"] * (
         data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
     )
     return data
@@ -97,10 +97,10 @@ def _B_sup_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "iota", "lambda_t", "omega_t"],
+    data=["psi_r/sqrt(g)", "iota", "lambda_t", "omega_t"],
 )
 def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
-    data["B^zeta"] = data["B0"] * (
+    data["B^zeta"] = data["psi_r/sqrt(g)"] * (
         -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
     )
     return data
@@ -181,7 +181,7 @@ def _B_Z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_r",
+    name="(psi_r/sqrt(g))_r",
     label="\\partial_{\\rho} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
@@ -194,8 +194,8 @@ def _B_Z(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "psi_rr", "sqrt(g)", "sqrt(g)_r"],
     axis_limit_data=["psi_rrr", "sqrt(g)_rr"],
 )
-def _B0_r(params, transforms, profiles, data, **kwargs):
-    data["B0_r"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_r(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_r"] = transforms["grid"].replace_at_axis(
         safediv(
             data["psi_rr"] * data["sqrt(g)"] - data["psi_r"] * data["sqrt(g)_r"],
             data["sqrt(g)"] ** 2,
@@ -223,8 +223,8 @@ def _B0_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_r",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_r",
         "iota",
         "iota_r",
         "lambda_rz",
@@ -234,12 +234,12 @@ def _B0_r(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
-    data["B^theta_r"] = data["B0"] * (
+    data["B^theta_r"] = data["psi_r/sqrt(g)"] * (
         data["iota"] * data["omega_rz"]
         + data["iota_r"] * data["omega_z"]
         + data["iota_r"]
         - data["lambda_rz"]
-    ) + data["B0_r"] * (
+    ) + data["(psi_r/sqrt(g))_r"] * (
         data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
     )
     return data
@@ -260,8 +260,8 @@ def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_r",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_r",
         "iota",
         "iota_r",
         "lambda_rt",
@@ -271,11 +271,13 @@ def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_sup_zeta_r(params, transforms, profiles, data, **kwargs):
-    data["B^zeta_r"] = data["B0"] * (
+    data["B^zeta_r"] = data["psi_r/sqrt(g)"] * (
         -data["iota"] * data["omega_rt"]
         - data["iota_r"] * data["omega_t"]
         + data["lambda_rt"]
-    ) + data["B0_r"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+    ) + data["(psi_r/sqrt(g))_r"] * (
+        -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
+    )
     return data
 
 
@@ -312,7 +314,7 @@ def _B_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_t",
+    name="(psi_r/sqrt(g))_t",
     label="\\partial_{\\theta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
@@ -325,8 +327,8 @@ def _B_r(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "sqrt(g)", "sqrt(g)_t"],
     axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rt"],
 )
-def _B0_t(params, transforms, profiles, data, **kwargs):
-    data["B0_t"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_t(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_t"] = transforms["grid"].replace_at_axis(
         safediv(-data["psi_r"] * data["sqrt(g)_t"], data["sqrt(g)"] ** 2),
         lambda: safediv(-data["psi_rr"] * data["sqrt(g)_rt"], data["sqrt(g)_r"] ** 2),
     )
@@ -347,12 +349,20 @@ def _B0_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_t", "iota", "lambda_tz", "lambda_z", "omega_tz", "omega_z"],
+    data=[
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_t",
+        "iota",
+        "lambda_tz",
+        "lambda_z",
+        "omega_tz",
+        "omega_z",
+    ],
 )
 def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
-    data["B^theta_t"] = data["B0"] * (
+    data["B^theta_t"] = data["psi_r/sqrt(g)"] * (
         data["iota"] * data["omega_tz"] - data["lambda_tz"]
-    ) + data["B0_t"] * (
+    ) + data["(psi_r/sqrt(g))_t"] * (
         data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
     )
     return data
@@ -372,12 +382,22 @@ def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_t", "iota", "lambda_t", "lambda_tt", "omega_t", "omega_tt"],
+    data=[
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_t",
+        "iota",
+        "lambda_t",
+        "lambda_tt",
+        "omega_t",
+        "omega_tt",
+    ],
 )
 def _B_sup_zeta_t(params, transforms, profiles, data, **kwargs):
-    data["B^zeta_t"] = data["B0"] * (
+    data["B^zeta_t"] = data["psi_r/sqrt(g)"] * (
         -data["iota"] * data["omega_tt"] + data["lambda_tt"]
-    ) + data["B0_t"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+    ) + data["(psi_r/sqrt(g))_t"] * (
+        -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
+    )
     return data
 
 
@@ -414,7 +434,7 @@ def _B_t(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_z",
+    name="(psi_r/sqrt(g))_z",
     label="\\partial_{\\zeta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
@@ -427,8 +447,8 @@ def _B_t(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "sqrt(g)", "sqrt(g)_z"],
     axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rz"],
 )
-def _B0_z(params, transforms, profiles, data, **kwargs):
-    data["B0_z"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_z(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_z"] = transforms["grid"].replace_at_axis(
         safediv(-data["psi_r"] * data["sqrt(g)_z"], data["sqrt(g)"] ** 2),
         lambda: safediv(-data["psi_rr"] * data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2),
     )
@@ -449,12 +469,20 @@ def _B0_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_z", "iota", "lambda_z", "lambda_zz", "omega_z", "omega_zz"],
+    data=[
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_z",
+        "iota",
+        "lambda_z",
+        "lambda_zz",
+        "omega_z",
+        "omega_zz",
+    ],
 )
 def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
-    data["B^theta_z"] = data["B0"] * (
+    data["B^theta_z"] = data["psi_r/sqrt(g)"] * (
         data["iota"] * data["omega_zz"] - data["lambda_zz"]
-    ) + data["B0_z"] * (
+    ) + data["(psi_r/sqrt(g))_z"] * (
         data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
     )
     return data
@@ -474,12 +502,22 @@ def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_z", "iota", "lambda_t", "lambda_tz", "omega_t", "omega_tz"],
+    data=[
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_z",
+        "iota",
+        "lambda_t",
+        "lambda_tz",
+        "omega_t",
+        "omega_tz",
+    ],
 )
 def _B_sup_zeta_z(params, transforms, profiles, data, **kwargs):
-    data["B^zeta_z"] = data["B0"] * (
+    data["B^zeta_z"] = data["psi_r/sqrt(g)"] * (
         -data["iota"] * data["omega_tz"] + data["lambda_tz"]
-    ) + data["B0_z"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+    ) + data["(psi_r/sqrt(g))_z"] * (
+        -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
+    )
     return data
 
 
@@ -516,7 +554,7 @@ def _B_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_rr",
+    name="(psi_r/sqrt(g))_rr",
     label="\\partial_{\\rho \\rho} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meters",
@@ -529,8 +567,8 @@ def _B_z(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "psi_rr", "psi_rrr", "sqrt(g)", "sqrt(g)_r", "sqrt(g)_rr"],
     axis_limit_data=["sqrt(g)_rrr"],
 )
-def _B0_rr(params, transforms, profiles, data, **kwargs):
-    data["B0_rr"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_rr(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_rr"] = transforms["grid"].replace_at_axis(
         safediv(
             data["psi_rrr"] * data["sqrt(g)"] ** 2
             - 2 * data["psi_rr"] * data["sqrt(g)_r"] * data["sqrt(g)"]
@@ -563,9 +601,9 @@ def _B0_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_r",
-        "B0_rr",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_r",
+        "(psi_r/sqrt(g))_rr",
         "iota",
         "iota_r",
         "iota_rr",
@@ -579,7 +617,7 @@ def _B0_rr(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_theta_rr(params, transforms, profiles, data, **kwargs):
     data["B^theta_rr"] = (
-        data["B0"]
+        data["psi_r/sqrt(g)"]
         * (
             data["iota"] * data["omega_rrz"]
             + 2 * data["iota_r"] * data["omega_rz"]
@@ -588,14 +626,14 @@ def _B_sup_theta_rr(params, transforms, profiles, data, **kwargs):
             - data["lambda_rrz"]
         )
         + 2
-        * data["B0_r"]
+        * data["(psi_r/sqrt(g))_r"]
         * (
             data["iota"] * data["omega_rz"]
             + data["iota_r"] * data["omega_z"]
             + data["iota_r"]
             - data["lambda_rz"]
         )
-        + data["B0_rr"]
+        + data["(psi_r/sqrt(g))_rr"]
         * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
@@ -616,9 +654,9 @@ def _B_sup_theta_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_r",
-        "B0_rr",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_r",
+        "(psi_r/sqrt(g))_rr",
         "iota",
         "iota_r",
         "iota_rr",
@@ -632,7 +670,7 @@ def _B_sup_theta_rr(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
     data["B^zeta_rr"] = (
-        -data["B0"]
+        -data["psi_r/sqrt(g)"]
         * (
             data["iota"] * data["omega_rrt"]
             + 2 * data["iota_r"] * data["omega_rt"]
@@ -640,13 +678,14 @@ def _B_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
             - data["lambda_rrt"]
         )
         - 2
-        * data["B0_r"]
+        * data["(psi_r/sqrt(g))_r"]
         * (
             data["iota"] * data["omega_rt"]
             + data["iota_r"] * data["omega_t"]
             - data["lambda_rt"]
         )
-        + data["B0_rr"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        + data["(psi_r/sqrt(g))_rr"]
+        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -690,7 +729,7 @@ def _B_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_tt",
+    name="(psi_r/sqrt(g))_tt",
     label="\\partial_{\\theta \\theta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
@@ -703,8 +742,8 @@ def _B_rr(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "sqrt(g)", "sqrt(g)_t", "sqrt(g)_tt"],
     axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rt", "sqrt(g)_rtt"],
 )
-def _B0_tt(params, transforms, profiles, data, **kwargs):
-    data["B0_tt"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_tt(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_tt"] = transforms["grid"].replace_at_axis(
         safediv(
             data["psi_r"]
             * (2 * data["sqrt(g)_t"] ** 2 - data["sqrt(g)"] * data["sqrt(g)_tt"]),
@@ -734,9 +773,9 @@ def _B0_tt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_t",
-        "B0_tt",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_t",
+        "(psi_r/sqrt(g))_tt",
         "iota",
         "lambda_ttz",
         "lambda_tz",
@@ -748,9 +787,11 @@ def _B0_tt(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     data["B^theta_tt"] = (
-        data["B0"] * (data["iota"] * data["omega_ttz"] - data["lambda_ttz"])
-        + 2 * data["B0_t"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
-        + data["B0_tt"]
+        data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_ttz"] - data["lambda_ttz"])
+        + 2
+        * data["(psi_r/sqrt(g))_t"]
+        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        + data["(psi_r/sqrt(g))_tt"]
         * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
@@ -771,9 +812,9 @@ def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_t",
-        "B0_tt",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_t",
+        "(psi_r/sqrt(g))_tt",
         "iota",
         "lambda_t",
         "lambda_tt",
@@ -785,9 +826,12 @@ def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
     data["B^zeta_tt"] = (
-        -data["B0"] * (data["iota"] * data["omega_ttt"] - data["lambda_ttt"])
-        - 2 * data["B0_t"] * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
-        + data["B0_tt"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        -data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_ttt"] - data["lambda_ttt"])
+        - 2
+        * data["(psi_r/sqrt(g))_t"]
+        * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        + data["(psi_r/sqrt(g))_tt"]
+        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -831,7 +875,7 @@ def _B_tt(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_zz",
+    name="(psi_r/sqrt(g))_zz",
     label="\\partial_{\\zeta \\zeta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
@@ -844,8 +888,8 @@ def _B_tt(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "sqrt(g)", "sqrt(g)_z", "sqrt(g)_zz"],
     axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rz", "sqrt(g)_rzz"],
 )
-def _B0_zz(params, transforms, profiles, data, **kwargs):
-    data["B0_zz"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_zz(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_zz"] = transforms["grid"].replace_at_axis(
         safediv(
             data["psi_r"]
             * (2 * data["sqrt(g)_z"] ** 2 - data["sqrt(g)"] * data["sqrt(g)_zz"]),
@@ -875,9 +919,9 @@ def _B0_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_z",
-        "B0_zz",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_z",
+        "(psi_r/sqrt(g))_zz",
         "iota",
         "lambda_z",
         "lambda_zz",
@@ -889,9 +933,11 @@ def _B0_zz(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     data["B^theta_zz"] = (
-        data["B0"] * (data["iota"] * data["omega_zzz"] - data["lambda_zzz"])
-        + 2 * data["B0_z"] * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
-        + data["B0_zz"]
+        data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_zzz"] - data["lambda_zzz"])
+        + 2
+        * data["(psi_r/sqrt(g))_z"]
+        * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
+        + data["(psi_r/sqrt(g))_zz"]
         * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
@@ -912,9 +958,9 @@ def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_z",
-        "B0_zz",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_z",
+        "(psi_r/sqrt(g))_zz",
         "iota",
         "lambda_t",
         "lambda_tz",
@@ -926,9 +972,12 @@ def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     data["B^zeta_zz"] = (
-        -data["B0"] * (data["iota"] * data["omega_tzz"] - data["lambda_tzz"])
-        - 2 * data["B0_z"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
-        + data["B0_zz"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        -data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_tzz"] - data["lambda_tzz"])
+        - 2
+        * data["(psi_r/sqrt(g))_z"]
+        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        + data["(psi_r/sqrt(g))_zz"]
+        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -972,7 +1021,7 @@ def _B_zz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_rt",
+    name="(psi_r/sqrt(g))_rt",
     label="\\partial_{\\rho\\theta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meters",
@@ -985,8 +1034,8 @@ def _B_zz(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "psi_rr", "sqrt(g)", "sqrt(g)_r", "sqrt(g)_t", "sqrt(g)_rt"],
     axis_limit_data=["psi_rrr", "sqrt(g)_rr", "sqrt(g)_rrt"],
 )
-def _B0_rt(params, transforms, profiles, data, **kwargs):
-    data["B0_rt"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_rt(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_rt"] = transforms["grid"].replace_at_axis(
         safediv(
             -data["sqrt(g)"]
             * (data["psi_rr"] * data["sqrt(g)_t"] + data["psi_r"] * data["sqrt(g)_rt"])
@@ -1021,10 +1070,10 @@ def _B0_rt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_r",
-        "B0_rt",
-        "B0_t",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_r",
+        "(psi_r/sqrt(g))_rt",
+        "(psi_r/sqrt(g))_t",
         "iota",
         "iota_r",
         "lambda_rtz",
@@ -1039,21 +1088,22 @@ def _B0_rt(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_theta_rt(params, transforms, profiles, data, **kwargs):
     data["B^theta_rt"] = (
-        data["B0"]
+        data["psi_r/sqrt(g)"]
         * (
             data["iota"] * data["omega_rtz"]
             + data["iota_r"] * data["omega_tz"]
             - data["lambda_rtz"]
         )
-        + data["B0_r"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
-        + data["B0_t"]
+        + data["(psi_r/sqrt(g))_r"]
+        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        + data["(psi_r/sqrt(g))_t"]
         * (
             data["iota"] * data["omega_rz"]
             + data["iota_r"] * data["omega_z"]
             + data["iota_r"]
             - data["lambda_rz"]
         )
-        + data["B0_rt"]
+        + data["(psi_r/sqrt(g))_rt"]
         * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
@@ -1074,10 +1124,10 @@ def _B_sup_theta_rt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_r",
-        "B0_rt",
-        "B0_t",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_r",
+        "(psi_r/sqrt(g))_rt",
+        "(psi_r/sqrt(g))_t",
         "iota",
         "iota_r",
         "lambda_rt",
@@ -1092,20 +1142,22 @@ def _B_sup_theta_rt(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
     data["B^zeta_rt"] = (
-        -data["B0"]
+        -data["psi_r/sqrt(g)"]
         * (
             data["iota"] * data["omega_rtt"]
             + data["iota_r"] * data["omega_tt"]
             - data["lambda_rtt"]
         )
-        - data["B0_r"] * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
-        - data["B0_t"]
+        - data["(psi_r/sqrt(g))_r"]
+        * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        - data["(psi_r/sqrt(g))_t"]
         * (
             data["iota"] * data["omega_rt"]
             + data["iota_r"] * data["omega_t"]
             - data["lambda_rt"]
         )
-        + data["B0_rt"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        + data["(psi_r/sqrt(g))_rt"]
+        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -1156,7 +1208,7 @@ def _B_rt(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_tz",
+    name="(psi_r/sqrt(g))_tz",
     label="\\partial_{\\theta\\zeta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
@@ -1169,8 +1221,8 @@ def _B_rt(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "sqrt(g)", "sqrt(g)_t", "sqrt(g)_z", "sqrt(g)_tz"],
     axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rt", "sqrt(g)_rz", "sqrt(g)_rtz"],
 )
-def _B0_tz(params, transforms, profiles, data, **kwargs):
-    data["B0_tz"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_tz(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_tz"] = transforms["grid"].replace_at_axis(
         safediv(
             data["psi_r"]
             * (
@@ -1206,10 +1258,10 @@ def _B0_tz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_t",
-        "B0_tz",
-        "B0_z",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_t",
+        "(psi_r/sqrt(g))_tz",
+        "(psi_r/sqrt(g))_z",
         "iota",
         "lambda_tz",
         "lambda_tzz",
@@ -1223,10 +1275,12 @@ def _B0_tz(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     data["B^theta_tz"] = (
-        data["B0"] * (data["iota"] * data["omega_tzz"] - data["lambda_tzz"])
-        + data["B0_t"] * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
-        + data["B0_z"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
-        + data["B0_tz"]
+        data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_tzz"] - data["lambda_tzz"])
+        + data["(psi_r/sqrt(g))_t"]
+        * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
+        + data["(psi_r/sqrt(g))_z"]
+        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        + data["(psi_r/sqrt(g))_tz"]
         * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
@@ -1247,10 +1301,10 @@ def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_t",
-        "B0_tz",
-        "B0_z",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_t",
+        "(psi_r/sqrt(g))_tz",
+        "(psi_r/sqrt(g))_z",
         "iota",
         "lambda_t",
         "lambda_tt",
@@ -1264,10 +1318,13 @@ def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
     data["B^zeta_tz"] = (
-        -data["B0"] * (data["iota"] * data["omega_ttz"] - data["lambda_ttz"])
-        - data["B0_t"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
-        - data["B0_z"] * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
-        + data["B0_tz"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        -data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_ttz"] - data["lambda_ttz"])
+        - data["(psi_r/sqrt(g))_t"]
+        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        - data["(psi_r/sqrt(g))_z"]
+        * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        + data["(psi_r/sqrt(g))_tz"]
+        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -1317,7 +1374,7 @@ def _B_tz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B0_rz",
+    name="(psi_r/sqrt(g))_rz",
     label="\\partial_{\\rho\\zeta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meters",
@@ -1330,8 +1387,8 @@ def _B_tz(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "psi_rr", "sqrt(g)", "sqrt(g)_r", "sqrt(g)_z", "sqrt(g)_rz"],
     axis_limit_data=["psi_rrr", "sqrt(g)_rr", "sqrt(g)_rrz"],
 )
-def _B0_rz(params, transforms, profiles, data, **kwargs):
-    data["B0_rz"] = transforms["grid"].replace_at_axis(
+def _psi_r_over_sqrtg_rz(params, transforms, profiles, data, **kwargs):
+    data["(psi_r/sqrt(g))_rz"] = transforms["grid"].replace_at_axis(
         safediv(
             -data["sqrt(g)"]
             * (data["psi_rr"] * data["sqrt(g)_z"] + data["psi_r"] * data["sqrt(g)_rz"])
@@ -1366,10 +1423,10 @@ def _B0_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_r",
-        "B0_rz",
-        "B0_z",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_r",
+        "(psi_r/sqrt(g))_rz",
+        "(psi_r/sqrt(g))_z",
         "iota",
         "iota_r",
         "lambda_rz",
@@ -1384,21 +1441,22 @@ def _B0_rz(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     data["B^theta_rz"] = (
-        data["B0"]
+        data["psi_r/sqrt(g)"]
         * (
             data["iota"] * data["omega_rzz"]
             + data["iota_r"] * data["omega_zz"]
             - data["lambda_rzz"]
         )
-        + data["B0_r"] * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
-        + data["B0_z"]
+        + data["(psi_r/sqrt(g))_r"]
+        * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
+        + data["(psi_r/sqrt(g))_z"]
         * (
             data["iota"] * data["omega_rz"]
             + data["iota_r"] * data["omega_z"]
             + data["iota_r"]
             - data["lambda_rz"]
         )
-        + data["B0_rz"]
+        + data["(psi_r/sqrt(g))_rz"]
         * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
@@ -1419,10 +1477,10 @@ def _B_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
-        "B0_r",
-        "B0_rz",
-        "B0_z",
+        "psi_r/sqrt(g)",
+        "(psi_r/sqrt(g))_r",
+        "(psi_r/sqrt(g))_rz",
+        "(psi_r/sqrt(g))_z",
         "iota",
         "iota_r",
         "lambda_rt",
@@ -1437,20 +1495,22 @@ def _B_sup_theta_rz(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
     data["B^zeta_rz"] = (
-        -data["B0"]
+        -data["psi_r/sqrt(g)"]
         * (
             data["iota"] * data["omega_rtz"]
             + data["iota_r"] * data["omega_tz"]
             - data["lambda_rtz"]
         )
-        - data["B0_r"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
-        - data["B0_z"]
+        - data["(psi_r/sqrt(g))_r"]
+        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        - data["(psi_r/sqrt(g))_z"]
         * (
             data["iota"] * data["omega_rt"]
             + data["iota_r"] * data["omega_t"]
             - data["lambda_rt"]
         )
-        + data["B0_rz"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        + data["(psi_r/sqrt(g))_rz"]
+        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 

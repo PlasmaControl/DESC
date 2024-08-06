@@ -31,6 +31,10 @@ class ObjectiveFunction(IOAble):
         Jacobian column by column. Generally the slowest, but most memory efficient.
         "auto" defaults to "batched" if all sub-objectives are set to "fwd",
         otherwise "blocked".
+    jac_precision: {"float64", "float32"}
+        Precision of the jacobian calculated by jac_scaled_error to reduce memory
+        consumption due to the jacobian calculation.
+        Default precision is float64
     name : str
         Name of the objective function.
 
@@ -39,7 +43,12 @@ class ObjectiveFunction(IOAble):
     _io_attrs_ = ["_objectives"]
 
     def __init__(
-        self, objectives, use_jit=True, deriv_mode="auto", name="ObjectiveFunction"
+        self,
+        objectives,
+        use_jit=True,
+        deriv_mode="auto",
+        jac_precision="float64",
+        name="ObjectiveFunction",
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -48,10 +57,12 @@ class ObjectiveFunction(IOAble):
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
         assert deriv_mode in {"auto", "batched", "looped", "blocked"}
+        assert jac_precision in {"float32", "float64"}
 
         self._objectives = objectives
         self._use_jit = use_jit
         self._deriv_mode = deriv_mode
+        self._jac_precision = jac_precision
         self._built = False
         self._compiled = False
         self._name = name
@@ -288,6 +299,8 @@ class ObjectiveFunction(IOAble):
                 for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
+        # , dtype=self._jac_precision)
+
         return f
 
     def compute_scaled_error(self, x, constants=None):
@@ -309,12 +322,14 @@ class ObjectiveFunction(IOAble):
         params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+
+        list0 = []
+
+        for par, obj, const in zip(params, self.objectives, constants):
+            list0.append(obj.compute_scaled_error(*par, constants=const))
+
+        f = jnp.concatenate(list0)
+
         return f
 
     def compute_scalar(self, x, constants=None):
@@ -431,7 +446,7 @@ class ObjectiveFunction(IOAble):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         if constants is None:
             constants = self.constants
-        return jnp.atleast_2d(self._jac_scaled_error(x, constants).squeeze())
+        return jnp.atleast_2d(self._jac_scaled_error(x, constants)).squeeze()
 
     def jac_unscaled(self, x, constants=None):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
@@ -441,9 +456,10 @@ class ObjectiveFunction(IOAble):
 
     def _jvp(self, v, x, constants=None, op="compute_scaled"):
         v = v if isinstance(v, (tuple, list)) else (v,)
-
         fun = lambda x: getattr(self, op)(x, constants)
         if len(v) == 1:
+            # --no-verify jvpfun = lambda dx:
+            # --no-verify Derivative.compute_jvp(fun, 0, _as32bit(dx), _as32bit(x))
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return jnp.vectorize(jvpfun, signature="(n)->(k)")(v[0])
         elif len(v) == 2:
@@ -784,6 +800,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
+        jac_precision="float64",
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -794,6 +811,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
         assert deriv_mode in {"auto", "fwd", "rev"}
+        assert jac_precision in {"float32", "float64"}
 
         self._target = target
         self._bounds = bounds
@@ -811,6 +829,7 @@ class _Objective(IOAble, ABC):
             "min": jnp.min,
             None: None,
         }[loss_function]
+        self._jac_precision = jac_precision
 
         self._things = flatten_list([things], True)
 
@@ -945,7 +964,10 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(self._scale(f, **kwargs))
+
+        out = jnp.atleast_1d(self._scale(f, **kwargs)).astype(self._jac_precision)
+        # --no-verify print("out data type = ", jnp.dtype(out))
+        return out
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
@@ -953,7 +975,12 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
+        out = jnp.atleast_1d(self._scale(self._shift(f), **kwargs)).astype(
+            self._jac_precision
+        )
+        print("out data type = ", jnp.dtype(out))
+        # --no-verify return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
+        return out
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""
@@ -976,7 +1003,7 @@ class _Objective(IOAble, ABC):
                 target = self.target
             else:
                 target = self.target * self.normalization
-            f_target = f - target
+            f_target = f - target.astype(f.dtype)
         return f_target
 
     def _scale(self, f, *args, **kwargs):
@@ -986,7 +1013,9 @@ class _Objective(IOAble, ABC):
             w = jnp.ones_like(f)
         else:
             w = constants["quad_weights"]
-        f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
+        f_norm = jnp.atleast_1d(f) / jnp.astype(
+            self.normalization, f.dtype
+        )  # normalization
         return f_norm * w * self.weight
 
     def compute_scalar(self, *args, **kwargs):

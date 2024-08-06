@@ -214,6 +214,7 @@ class AutoDiffDerivative(_Derivative):
             return fun(*_args, **kwargs)
 
         y, u = jax.jvp(_fun, tuple(args[i] for i in argnum), v)
+        print(jnp.dtype(y), jnp.dtype(u))
         return u
 
     @classmethod

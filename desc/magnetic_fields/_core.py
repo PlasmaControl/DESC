@@ -107,7 +107,12 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
         )
 
     curpol = (
-        (2 * jnp.pi / eq.NFP * eq.compute("G", grid=LinearGrid(rho=jnp.array(1)))["G"])
+        (
+            2
+            * jnp.pi
+            / eq.NFP
+            * eq.compute("G", grid=LinearGrid(rho=jnp.array([1.0])))["G"]
+        )
         if scale_by_curpol
         else 1
     )
@@ -879,7 +884,10 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         if basis == "xyz":
             coords = xyz2rpz(coords)
         bp = B0 * R0 / coords[:, 0]
-        brz = jnp.zeros_like(bp)
+        import pdb
+
+        pdb.set_trace()
+        brz = jnp.zeros_like(bp, dtype=B0.dtype)
         B = jnp.array([brz, bp, brz]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])

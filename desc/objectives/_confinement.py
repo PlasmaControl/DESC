@@ -1,11 +1,8 @@
 """Objectives for targeting energy confinement."""
 
-import numpy as np
-
-from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import QuadratureGrid
 from desc.utils import Timer, errorif
 
 from .objective_funs import _Objective
@@ -15,6 +12,13 @@ class HeatingPower(_Objective):
     """Heating power required by the ISS04 energy confinement time scaling.
 
     tau_E^ISS04 = 0.134 a^2.28 R^0.64 P^-0.61 n_e^0.54 B^0.84 iota^0.41 (s)
+
+    References
+    ----------
+    https://doi.org/10.1088/0029-5515/45/12/024.
+    Characterization of energy confinement in net-current free plasmas using the
+    extended International Stellarator Database.
+    H. Yamada et al. Nucl. Fusion 29 November 2005; 45 (12): 1684–1693.
 
     Parameters
     ----------
@@ -47,21 +51,14 @@ class HeatingPower(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     f_ren : float, optional
-        Renormalization or confinement enhancement factor. Defaults = 1.
+        ISS04 renormalization factor. Default = 1.
+    H_ISS04 : float, optional
+        ISS04 confinement enhancement factor. Default = 1.
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
-    grid_geometry : Grid, optional
-        Collocation grid used to compute the major and minor radii.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
-    grid_density : Grid, optional
-        Collocation grid used to compute the line-averaged density.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
-    grid_B : Grid, optional
-        Collocation grid used to compute the magnetic field strength.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
-    grid_iota : Grid, optional
-        Collocation grid used to compute the rotational transform.
-        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``.
+    grid : Grid, optional
+        Collocation grid used to compute the intermediate quantities.
+        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
     name : str, optional
         Name of the objective function.
 
@@ -82,21 +79,17 @@ class HeatingPower(_Objective):
         loss_function=None,
         deriv_mode="auto",
         f_ren=1,
+        H_ISS04=1,
         gamma=0,
-        grid_geometry=None,
-        grid_density=None,
-        grid_B=None,
-        grid_iota=None,
+        grid=None,
         name="heating power",
     ):
         if target is None and bounds is None:
-            target = 2
+            target = 0
         self._f_ren = f_ren
+        self._H_ISS04 = H_ISS04
         self._gamma = gamma
-        self._grid_geometry = grid_geometry
-        self._grid_density = grid_density
-        self._grid_B = grid_B
-        self._grid_iota = grid_iota
+        self._grid = grid
         super().__init__(
             things=eq,
             target=target,
@@ -126,28 +119,15 @@ class HeatingPower(_Objective):
             ValueError,
             "Equilibrium must have an electron density profile.",
         )
-
-        if self._grid_geometry is None:
-            self._grid_geometry = QuadratureGrid(
+        if self._grid is None:
+            self._grid = QuadratureGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
             )
-        if self._grid_density is None:
-            self._grid_density = LinearGrid(L=eq.L_grid, M=0, N=0)
-        if self._grid_B is None:
-            self._grid_B = LinearGrid(rho=np.array([0]), N=eq.N_grid, NFP=eq.NFP)
-        if self._grid_iota is None:
-            self._grid_iota = LinearGrid(
-                rho=np.array([2 / 3.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
-
         self._dim_f = 1
-        self._data_keys_geometry = ["a", "R0", "W_p"]
-        self._data_keys_density = ["ne"]
-        self._data_keys_B = ["|B|"]
-        self._data_keys_iota = ["iota"]
+        self._data_keys = ["W_p", "a", "R0", "<ne>_rho", "B0", "iota_23"]
 
         timer = Timer()
         if verbose > 0:
@@ -155,29 +135,10 @@ class HeatingPower(_Objective):
         timer.start("Precomputing transforms")
 
         self._constants = {
-            "profiles_geometry": get_profiles(
-                self._data_keys_geometry, obj=eq, grid=self._grid_geometry
-            ),
-            "transforms_geometry": get_transforms(
-                self._data_keys_geometry, obj=eq, grid=self._grid_geometry
-            ),
-            "profiles_density": get_profiles(
-                self._data_keys_density, obj=eq, grid=self._grid_density
-            ),
-            "transforms_density": get_transforms(
-                self._data_keys_density, obj=eq, grid=self._grid_density
-            ),
-            "profiles_B": get_profiles(self._data_keys_B, obj=eq, grid=self._grid_B),
-            "transforms_B": get_transforms(
-                self._data_keys_B, obj=eq, grid=self._grid_B
-            ),
-            "profiles_iota": get_profiles(
-                self._data_keys_iota, obj=eq, grid=self._grid_iota
-            ),
-            "transforms_iota": get_transforms(
-                self._data_keys_iota, obj=eq, grid=self._grid_iota
-            ),
+            "profiles": get_profiles(self._data_keys, obj=eq, grid=self._grid),
+            "transforms": get_transforms(self._data_keys, obj=eq, grid=self._grid),
             "f_ren": self._f_ren,
+            "H_ISS04": self._H_ISS04,
             "gamma": self._gamma,
         }
 
@@ -207,46 +168,29 @@ class HeatingPower(_Objective):
         """
         if constants is None:
             constants = self.constants
-        data_geometry = compute_fun(
+        data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys_geometry,
+            self._data_keys,
             params=params,
-            transforms=constants["transforms_geometry"],
-            profiles=constants["profiles_geometry"],
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
             gamma=constants["gamma"],
         )
-        data_density = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys_density,
-            params=params,
-            transforms=constants["transforms_density"],
-            profiles=constants["profiles_density"],
-        )
-        data_B = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys_B,
-            params=params,
-            transforms=constants["transforms_B"],
-            profiles=constants["profiles_B"],
-        )
-        data_iota = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys_iota,
-            params=params,
-            transforms=constants["transforms_iota"],
-            profiles=constants["profiles_iota"],
-        )
 
-        P = (data_geometry["W_p"] / 1e6) / (  # MJ
-            0.134
-            * data_geometry["a"] ** 2.28  # m
-            * data_geometry["R0"] ** 0.64  # m
-            * (jnp.mean(data_density["n_e"]) ** 0.54 / 1e19)  # 1e19/m^3
-            * jnp.mean(data_B["|B|"]) ** 0.84  # T
-            * jnp.mean(data_iota["iota"]) ** 0.41
-            * constants["f_ren"]
-        ) ** -0.39
-        return P
+        P = (
+            (data["W_p"] / -1e6)  # MJ
+            / (
+                0.134
+                * data["a"] ** 2.28  # m
+                * data["R0"] ** 0.64  # m
+                * (data["<ne>_rho"] / 1e19) ** 0.54  # 1e19/m^3
+                * data["B0"] ** 0.84  # T
+                * data["iota_23"] ** 0.41
+                * constants["f_ren"]
+                * constants["H_ISS04"]
+            )
+        ) ** (1 / 0.39)
+        return P * 1e6  # W
 
     @property
     def f_ren(self):

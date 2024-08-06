@@ -603,14 +603,16 @@ def update_qr_jax(A, w, q, r):
 def update_qr_jax_eco(A, w, q, r):
     """Update QR factorization with a diagonal matrix w at the bottom."""
     m, n = A.shape
-    Q = jnp.eye(m + n)
-    Q = Q.at[:m, :m].set(q)
+    mr, nr = r.shape
+    Q = jnp.zeros([m + n, 2 * n])
+    Q = Q.at[:m, :n].set(q)
+    Q = Q.at[-n:, -n:].set(jnp.eye(n))
 
     R = jnp.vstack([r, w])
 
     def body_inner(i, jQR):
         j, Q, R = jQR
-        i = m + j - i
+        i = n + j - i
         a, b = R[i - 1, j], R[i, j]
         G2 = _givens_jax(a, b)
         R = R.at[jnp.array([i - 1, i])].set(G2 @ R[jnp.array([i - 1, i])])
@@ -619,7 +621,7 @@ def update_qr_jax_eco(A, w, q, r):
 
     def body(j, QR):
         Q, R = QR
-        j, Q, R = fori_loop(0, m, body_inner, (j, Q, R))
+        j, Q, R = fori_loop(0, n, body_inner, (j, Q, R))
         return Q, R
 
     Q, R = fori_loop(0, n, body, (Q, R))

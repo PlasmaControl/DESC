@@ -217,6 +217,26 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<ne>_rho",
+    label="\\bar{n}_e",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Line-averaged electron density",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["ne"],
+)
+def _bar_ne(params, transforms, profiles, data, **kwargs):
+    data["<ne>_rho"] = jnp.sum(data["ne"] * transforms["grid"].spacing[:, 0]) / jnp.sum(
+        transforms["grid"].spacing[:, 0]
+    )
+    return data
+
+
+@register_compute_fun(
     name="ne",
     label="n_e",
     units="m^{-3}",

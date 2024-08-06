@@ -355,6 +355,44 @@ def _Ti_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="ni",
+    label="n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["ne", "Zeff"],
+)
+def _ni(params, transforms, profiles, data, **kwargs):
+    data["ni"] = data["ne"] / data["Zeff"]
+    return data
+
+
+@register_compute_fun(
+    name="ni_r",
+    label="\\partial_{\\rho} n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density, first radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["ne", "ne_r", "Zeff", "Zeff_r"],
+)
+def _ni_r(params, transforms, profiles, data, **kwargs):
+    data["ni_r"] = (data["ne_r"] * data["Zeff"] - data["ne"] * data["Zeff_r"]) / data[
+        "Zeff"
+    ] ** 2
+    return data
+
+
+@register_compute_fun(
     name="Zeff",
     label="Z_{eff}",
     units="~",
@@ -411,7 +449,7 @@ def _Zeff_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
-    data=["Te", "ne", "Ti", "Zeff"],
+    data=["ne", "ni", "Te", "Ti"],
 )
 def _p(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
@@ -420,7 +458,7 @@ def _p(params, transforms, profiles, data, **kwargs):
         )
     else:
         data["p"] = elementary_charge * (
-            data["ne"] * data["Te"] + data["Ti"] * data["ne"] / data["Zeff"]
+            data["ne"] * data["Te"] + data["ni"] * data["Ti"]
         )
     return data
 
@@ -436,7 +474,7 @@ def _p(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
-    data=["Te", "Te_r", "ne", "ne_r", "Ti", "Ti_r", "Zeff", "Zeff_r"],
+    data=["ne", "ne_r", "ni", "ni_r", "Te", "Te_r", "Ti", "Ti_r"],
 )
 def _p_r(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
@@ -447,9 +485,8 @@ def _p_r(params, transforms, profiles, data, **kwargs):
         data["p_r"] = elementary_charge * (
             data["ne_r"] * data["Te"]
             + data["ne"] * data["Te_r"]
-            + data["Ti_r"] * data["ne"] / data["Zeff"]
-            + data["Ti"] * data["ne_r"] / data["Zeff"]
-            - data["Ti"] * data["ne"] * data["Zeff_r"] / data["Zeff"] ** 2
+            + data["ni_r"] * data["Ti"]
+            + data["ni"] * data["Ti_r"]
         )
     return data
 

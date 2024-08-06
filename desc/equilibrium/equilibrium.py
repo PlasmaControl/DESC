@@ -1260,8 +1260,8 @@ class Equilibrium(IOAble, Optimizable):
             self,
             flux_coords,
             L_lmn=L_lmn,
-            maxiter=maxiter,
             tol=tol,
+            maxiter=maxiter,
             full_output=full_output,
             **kwargs,
         )
@@ -1271,6 +1271,7 @@ class Equilibrium(IOAble, Optimizable):
         clebsch_coords,
         iota,
         L_lmn=None,
+        L_basis=None,
         tol=1e-6,
         maxiter=20,
         full_output=False,
@@ -1291,6 +1292,8 @@ class Equilibrium(IOAble, Optimizable):
             Rotational transform on each node.
         L_lmn : ndarray
             Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
+        L_basis : Basis
+            Spectral basis for lambda. Defaults to ``eq.L_basis``.
         tol : float
             Stopping tolerance.
         maxiter : int > 0
@@ -1313,12 +1316,12 @@ class Equilibrium(IOAble, Optimizable):
 
         """
         return map_clebsch_coords(
-            self,
             clebsch_coords,
             iota,
-            L_lmn=L_lmn,
-            maxiter=maxiter,
+            L_lmn=setdefault(L_lmn, self.L_lmn),
+            L_basis=setdefault(L_basis, self.L_basis),
             tol=tol,
+            maxiter=maxiter,
             full_output=full_output,
             **kwargs,
         )

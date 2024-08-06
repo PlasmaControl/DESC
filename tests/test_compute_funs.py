@@ -8,7 +8,13 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierRZWindingSurfaceCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
 from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -16,6 +22,7 @@ from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierRZToroidalSurface,
+    FourierRZWindingSurfaceCurve,
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
@@ -1182,6 +1189,23 @@ def test_compute_everything():
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
+        ),
+        "desc.geometry.curve.FourierRZWindingSurfaceCurve": (
+            FourierRZWindingSurfaceCurve(
+                surface=(
+                    FourierRZToroidalSurface(**elliptic_cross_section_with_torsion)
+                ),
+                theta_n=[0.5, 0.5, 0.5],
+                zeta_n=[0.5, 0.5, 0.5],
+                secular_zeta=2,
+            )
+        ),
+        "desc.coils.FourierRZWindingSurfaceCoil": FourierRZWindingSurfaceCoil(
+            surface=FourierRZToroidalSurface(**elliptic_cross_section_with_torsion),
+            theta_n=[0.5, 0.5, 0.5],
+            zeta_n=[0.5, 0.5, 0.5],
+            secular_zeta=2,
+            current=5,
         ),
         "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
             **elliptic_cross_section_with_torsion

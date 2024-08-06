@@ -3679,10 +3679,9 @@ class TriangleFiniteElement:
         self.area2 = self.vertices[:, 0] @ self.b
         self.Q = int((K + 1) * (K + 2) / 2)
         self.K = K
-        self.deta_dx = np.array([[self.b1, self.c1],
-                                 [self.b2, self.c2],
-                                 [self.b3, self.c3]]) / self.area2 / 2.0  # R^(3 x 2)
-        
+        self.deta_dx = np.array([[b1, c1],
+                                 [b2, c2],
+                                 [b3, c3]]) / self.area2 / 2.0  # R^(3 x 2)
         D = np.array(
             [
                 [1, vertices[0, 0], vertices[0, 1]],
@@ -3870,9 +3869,7 @@ class TriangleFiniteElement:
 
                 # Mid-face node
                 basis_functions[i, 9] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 2]
-        # else:
-        r_deriv = derivatives[0]
-        t_deriv = derivatives[1]
+
         dbasis_deta = np.zeros((rho_theta.shape[0], self.Q, 3))
         dbasis2_d2eta = np.zeros((rho_theta.shape[0], self.Q, 3, 3))
         if K == 1:
@@ -3910,11 +3907,6 @@ class TriangleFiniteElement:
             dbasis_deta[:, 9, 2] = 27 * eta[:, 0] * eta[:, 1]
 
         dbasis_dx = dbasis_deta @ self.deta_dx
-        # basis_functions = dbasis_dtheta
-        # if K == 1:
-            # d2basis_d2eta[:, 0, 0] = 1.0 
-            # d2basis_d2eta[:, 1, 1] = 1.0 
-            # d2basis_d2eta[:, 2, 2] = 1.0
         if K == 2:
             dbasis2_d2eta[:, 0, 0, 0] = 4.0
             dbasis2_d2eta[:, 1, 1, 1] = 4.0
@@ -3925,29 +3917,57 @@ class TriangleFiniteElement:
             dbasis2_d2eta[:, 4, 2, 1] = 4.0
             dbasis2_d2eta[:, 5, 0, 2] = 4.0
             dbasis2_d2eta[:, 5, 2, 0] = 4.0
+        if K == 3:
+            dbasis2_d2eta[:, 0, 0, 0] = -7.0 / 2.0
+            dbasis2_d2eta[:, 1, 1, 1] = -7.0 / 2.0
+            dbasis2_d2eta[:, 2, 2, 2] = -7.0 / 2.0
+            dbasis2_d2eta[:, 3, 0, 0] = 27.0 * eta[:, 1]
+            dbasis2_d2eta[:, 3, 0, 1] = (27.0 * eta[:, 0] - 9.0 / 2.0)
+            # dbasis2_d2eta[:, 3, 1, 0] = (27.0 * eta[:, 0] - 9.0 / 2.0)
+            dbasis2_d2eta[:, 3, 1, 0] = 9.0 / 2.0 * (3 * eta[:, 1] - 1)
+            dbasis2_d2eta[:, 3, 1, 1] = 9.0 / 2.0 * (eta[:, 0] * 3)
+            dbasis2_d2eta[:, 4, 0, 1] = (9.0 / 2.0) * (3 * eta[:, 1] - 1) + (27.0 / 2.0) * eta[:, 1]
+            dbasis2_d2eta[:, 4, 1, 0] = (9.0 / 2.0) * (3 * eta[:, 1] - 1) + (27.0 / 2.0) * eta[:, 1]
+            dbasis2_d2eta[:, 4, 1, 1] = (9.0 / 2.0) * eta[:, 0] * 3 + (27.0 / 2.0) * eta[:, 0]
+            dbasis2_d2eta[:, 5, 1, 1] = (9.0 / 2.0) * eta[:, 2] * 3 + (27.0 / 2.0) * eta[:, 2]
+            dbasis2_d2eta[:, 5, 1, 2] = (9.0 / 2.0) * (3 * eta[:, 1] - 1) + (27.0 / 2.0) * eta[:, 1]
+            dbasis2_d2eta[:, 5, 2, 1] = (9.0 / 2.0) * (3 * eta[i, 1] - 1) + (27.0 / 2.0) * eta[i, 1]
+            dbasis2_d2eta[:, 6, 1, 2] = (9.0 / 2.0) * (3 * eta[i, 2] - 1) + (27.0 / 2.0) * eta[i, 2]
+            dbasis2_d2eta[:, 6, 2, 1] = (9.0 / 2.0) * (3 * eta[:, 2] - 1) + (27.0 / 2.0) * eta[:, 2]
+            dbasis2_d2eta[:, 6, 2, 2] = (9.0 / 2.0) * eta[:, 1] * 3 + (27.0 / 2.0) * eta[:, 1]
+            dbasis2_d2eta[:, 7, 0, 0] = (9.0 / 2.0) * eta[i, 2] * 3 + (27.0 / 2.0) * eta[:, 2]
+            dbasis2_d2eta[:, 7, 0, 2] = (9.0 / 2.0) * (3 * eta[i, 0] - 1) + (27.0 / 2.0) * eta[:, 0]
+            dbasis2_d2eta[:, 7, 2, 0] = (9.0 / 2.0) * eta[:, 0] * 3 + (27.0 / 2.0) * eta[:, 0]
+            dbasis2_d2eta[:, 8, 0, 2] = (9.0 / 2.0) * eta[:, 2] * 3 + (27.0 / 2.0) * eta[:, 2]
+            dbasis2_d2eta[:, 8, 2, 0] = (9.0 / 2.0) * (3 * eta[i, 2] - 1) + (27.0 / 2.0) * eta[:, 2]
+            dbasis2_d2eta[:, 8, 2, 2] = (9.0 / 2.0) * eta[i, 0] * 3 + (27.0 / 2.0) * eta[:, 0]
+            dbasis2_d2eta[:, 9, 0, 1] = 27 * eta[:, 2]
+            dbasis2_d2eta[:, 9, 0, 2] = 27 * eta[:, 1]
+            dbasis2_d2eta[:, 9, 1, 0] = 27 * eta[:, 2]
+            dbasis2_d2eta[:, 9, 1, 2] = 27 * eta[:, 0]
+            dbasis2_d2eta[:, 9, 2, 0] = 27 * eta[:, 1]
+            dbasis2_d2eta[:, 9, 2, 1] = 27 * eta[:, 0]
             
-        dbasis2_dx2 = np.tensordot(dbasis2_d2eta, self.deta_dx, axes=([-2], [0])) @ self.deta_dx
+        # print(dbasis2_d2eta.shape, np.tensordot(dbasis2_d2eta, self.deta_dx, axes=([2], [0])).shape)
+        dbasis2_dx2 = np.tensordot(np.tensordot(dbasis2_d2eta, self.deta_dx, axes=([2], [0])), self.deta_dx, axes=([2], [0]))
 
         basis_funcs = np.ones(basis_functions.shape)
-        for i, deriv in enumerate(derivatives):
-            if deriv == 0:
-                basis_funcs *= basis_functions
-            elif deriv == 1:
-                basis_funcs *= dbasis_dx[:, :, i]
-            elif deriv == 2:
-                basis_funcs *= dbasis2_dx2[:, :, i, j]
-            # basis_functions = dbasis2_dx2
-            # if r_deriv == 1:
-            #     dbasis_deta = np.zeros((rho_theta.shape[0], self.Q, 3))
-            #     dbasis_deta[:, 0] = -0.5
-            #     dbasis_deta[:, 1] = 0.5
-            #     if self.K >= 2:
-            #         dbasis_deta[:, 2] = eta - 0.5
-            #         dbasis_deta[:, 3] = eta + 0.5
-            #         dbasis_deta[:, 4] = -2 * eta
-            #     dbasis_dtheta = dbasis_deta @ self.deta_dtheta
-            #     basis_functions = dbasis_dtheta
-            # elif r_deriv == 2:
+        if np.allclose(derivatives, np.array([0, 1])):
+            basis_functions = dbasis_dx[:, :, 1]
+        if np.allclose(derivatives, np.array([1, 0])):
+            basis_functions = dbasis_dx[:, :, 0]
+        if np.allclose(derivatives, np.array([1, 1])):
+            basis_functions = dbasis2_dx2[:, :, 0, 1]
+        if np.allclose(derivatives, np.array([2, 0])):
+            basis_functions = dbasis2_dx2[:, :, 0, 0]
+        if np.allclose(derivatives, np.array([0, 2])):
+            basis_functions = dbasis2_dx2[:, :, 1, 1]
+        if np.allclose(derivatives, np.array([2, 2])):
+            basis_functions = dbasis2_dx2[:, :, 0, 0] * dbasis2_dx2[:, :, 1, 1]
+        if np.allclose(derivatives, np.array([2, 1])):
+            basis_functions = dbasis2_dx2[:, :, 0, 0] * dbasis_dx[:, :, 1]
+        if np.allclose(derivatives, np.array([1, 2])):
+            basis_functions = dbasis2_dx2[:, :, 1, 1] * dbasis_dx[:, :, 0]
 
         return basis_functions, rho_theta_in_triangle
 

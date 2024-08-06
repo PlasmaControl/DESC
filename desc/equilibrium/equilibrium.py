@@ -397,7 +397,7 @@ class Equilibrium(IOAble, Optimizable):
 
         # Now that initial guess is initialized, convert to the
         # FE basis
-        if basis != "FourierZernike":
+        if np.char.lower(basis) != "fourierzernike":
             Rprime_basis = FiniteElementBasis(
                 L=self.L_grid,
                 M=self.M_grid,
@@ -1947,6 +1947,7 @@ class Equilibrium(IOAble, Optimizable):
             `OptimizeResult` for a description of other attributes.
 
         """
+        print('Constraints are here = ', constraints)
         if constraints is None:
             constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):

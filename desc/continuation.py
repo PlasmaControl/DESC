@@ -664,6 +664,7 @@ def solve_continuation(  # noqa: C901
         final desired configuration,
 
     """
+    print('here3')
     errorif(
         not all([eq.electron_temperature is None for eq in eqfam]),
         NotImplementedError,
@@ -688,9 +689,10 @@ def solve_continuation(  # noqa: C901
     objective_i = get_equilibrium_objective(eq=eqfam[0], mode=objective)
     constraints_i = get_fixed_boundary_constraints(eq=eqfam[0])
 
+    print('here4')
     ii = 0
     nn = len(eqfam)
-    stop = False
+    stop = True
     while ii < nn and not stop:
         timer.start("Iteration {} total".format(ii + 1))
         eqi = eqfam[ii]

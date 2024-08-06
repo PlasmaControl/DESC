@@ -1525,9 +1525,6 @@ class SurfaceCurrentRegularization(_Objective):
     the REGCOIL algorithm described in [1]_ (if used with a
     ``FourierCurrentPotentialField``).
 
-    [1] Landreman, An improved current potential method for fast computation
-        of stellarator coil shapes, Nuclear Fusion (2017)
-
     Parameters
     ----------
     surface_current_field : CurrentPotentialField
@@ -1571,6 +1568,12 @@ class SurfaceCurrentRegularization(_Objective):
         in [1]_.
     name : str, optional
         Name of the objective function.
+
+    References
+    ----------
+    .. [1] Landreman, An improved current potential method for fast computation
+        of stellarator coil shapes, Nuclear Fusion (2017)
+
     """
 
     _coordinates = "tz"

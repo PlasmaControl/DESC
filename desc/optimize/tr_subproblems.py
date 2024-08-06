@@ -14,7 +14,7 @@ from desc.backend import (
 )
 from desc.utils import setdefault
 
-from .utils import chol, solve_triangular_regularized, update_qr_jax
+from .utils import chol, solve_triangular_regularized, update_qr_jax_eco
 
 
 @jit
@@ -441,16 +441,15 @@ def trust_region_step_exact_qr(
                 jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
                 alpha,
             )
+            Q2, R2 = update_qr_jax_eco(J, jnp.sqrt(alpha) * jnp.eye(J.shape[1]), Q, R)
 
-            Q1, R1 = update_qr_jax(J, jnp.sqrt(alpha) * jnp.eye(J.shape[1]), Q, R)
-            R1 = R1[: R1.shape[1], : R1.shape[1]]
-            p = solve_triangular_regularized(R1, -Q1.T @ fp)
+            p = solve_triangular_regularized(R2, -Q2.T @ fp)
             p_norm = jnp.linalg.norm(p)
             phi = p_norm - trust_radius
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
             alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
 
-            q = solve_triangular_regularized(R.T, p, lower=True)
+            q = solve_triangular_regularized(R2.T, p, lower=True)
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
@@ -465,9 +464,10 @@ def trust_region_step_exact_qr(
         alpha, *_ = while_loop(
             loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, jnp.inf, k)
         )
-        Q1, R1 = update_qr_jax(J, jnp.sqrt(alpha) * jnp.eye(J.shape[1]), Q, R)
-        R1 = R1[: R1.shape[1], : R1.shape[1]]
-        p = solve_triangular_regularized(R1, -Q1.T @ fp)
+
+        Q2, R2 = update_qr_jax_eco(J, jnp.sqrt(alpha) * jnp.eye(J.shape[1]), Q, R)
+
+        p = solve_triangular(R2, -Q2.T @ fp)
 
         # Make the norm of p equal to trust_radius; p is changed only slightly.
         # This is done to prevent p from lying outside the trust region

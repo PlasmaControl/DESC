@@ -1,5 +1,6 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
+import functools
 import os
 import warnings
 
@@ -123,6 +124,28 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
+
+    def execute_on_cpu(func):
+        """Decorator to set default device to CPU for a function.
+
+        Parameters
+        ----------
+        func : callable
+            Function to decorate
+
+        Returns
+        -------
+        wrapper : callable
+            Decorated function that will run always on CPU even if
+            there are available GPUs.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with jax.default_device(jax.devices("cpu")[0]):
+                return func(*args, **kwargs)
+
+        return wrapper
 
     def sign(x):
         """Sign function, but returns 1 for x==0.
@@ -475,6 +498,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     import numpy as np
+
+    execute_on_cpu = lambda func: func
     import scipy.optimize
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401

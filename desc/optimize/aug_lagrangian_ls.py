@@ -373,11 +373,16 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
-                Q, R = qr(J_a, mode="economic")
-                p_newton = solve_triangular_regularized(R, -Q.T @ L_a)
+                Q, R = qr(J_a)
+                p_newton = solve_triangular_regularized(
+                    R[: R.shape[1], : R.shape[1]], -Q[:, : R.shape[1]].T @ L_a
+                )
             else:
-                Q, R = qr(J_a.T, mode="economic")
-                p_newton = Q @ solve_triangular_regularized(R.T, L_a, lower=True)
+                Q, R = qr(J_a.T)
+                p_newton = Q[:, : R.shape[1]] @ solve_triangular_regularized(
+                    R[: R.shape[1], : R.shape[1]].T, L_a, lower=True
+                )
+                Q, R = qr(J_a)
 
         actual_reduction = -1
         Lactual_reduction = -1

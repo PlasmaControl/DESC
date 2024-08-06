@@ -5,7 +5,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp, put, solve_triangular
+from desc.backend import cond, fori_loop, jit, jnp, put, solve_triangular
 from desc.utils import Index
 
 
@@ -551,3 +551,49 @@ def solve_triangular_regularized(R, b, lower=False):
     Rs = R * dri[:, None]
     b = dri * b
     return solve_triangular(Rs, b, unit_diagonal=True, lower=lower)
+
+
+# TODO: add references to the docstrings
+def _givens_jax(a, b):
+    """Compute Givens rotation matrix.
+
+    Compute the Givens rotation matrix G2 that zeros out the second element
+    of a 2-vector.
+        G2*[a; b] = [r; 0]
+        where r = sqrt(a^2 + b^2)
+        G2 = [[c, -s], [s, c]]
+    """
+    r = jnp.sqrt(a**2 + b**2)
+    c = a / r
+    s = -b / r
+
+    G2 = jnp.array([[c, -s], [s, c]])
+    return G2.astype(float)
+
+
+@jit
+def update_qr_jax(A, w, q, r):
+    """Update QR factorization with a diagonal matrix w at the bottom."""
+    m, n = A.shape
+    Q = jnp.eye(m + n)
+    Q = Q.at[:m, :m].set(q)
+
+    R = jnp.vstack([r, w])
+
+    def body_inner(i, jQR):
+        j, Q, R = jQR
+        i = m + j - i
+        a, b = R[i - 1, j], R[i, j]
+        G2 = _givens_jax(a, b)
+        R = R.at[jnp.array([i - 1, i])].set(G2 @ R[jnp.array([i - 1, i])])
+        Q = Q.at[:, jnp.array([i - 1, i])].set(Q[:, jnp.array([i - 1, i])] @ G2.T)
+        return j, Q, R
+
+    def body(j, QR):
+        Q, R = QR
+        j, Q, R = fori_loop(0, m, body_inner, (j, Q, R))
+        return Q, R
+
+    Q, R = fori_loop(0, n, body, (Q, R))
+
+    return Q, R

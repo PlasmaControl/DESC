@@ -2,7 +2,7 @@
 
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
-from desc.backend import jnp
+from desc.backend import jnp, qr
 from desc.utils import errorif, setdefault
 
 from .bound_utils import (
@@ -25,6 +25,7 @@ from .utils import (
     inequality_to_bounds,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    solve_triangular_regularized,
 )
 
 
@@ -368,6 +369,15 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
+        elif tr_method == "qr":
+            # try full newton step
+            tall = J_a.shape[0] >= J_a.shape[1]
+            if tall:
+                Q, R = qr(J_a, mode="economic")
+                p_newton = solve_triangular_regularized(R, -Q.T @ L_a)
+            else:
+                Q, R = qr(J_a.T, mode="economic")
+                p_newton = Q @ solve_triangular_regularized(R.T, L_a, lower=True)
 
         actual_reduction = -1
         Lactual_reduction = -1
@@ -390,7 +400,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
-                    L_a, J_a, trust_radius, alpha
+                    Q, R, p_newton, L_a, J_a, trust_radius, alpha
                 )
 
             step = d * step_h  # Trust-region solution in the original space.

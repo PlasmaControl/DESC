@@ -354,6 +354,7 @@ def regcoil_helical_coils_scan():
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=8, N_Phi=8
     )
+    # TODO: lower the number of scans here
     fields, data = run_regcoil(
         surface_current_field,
         eq,
@@ -399,37 +400,3 @@ def regcoil_modular_coils():
     )
 
     return (data, surface_current_field, eq)
-
-
-@pytest.fixture(scope="session")
-def regcoil_helical_coils_pos_helicity():
-    """Run regcoil for precise QA eq and surface with positive helicity."""
-    eq = get("precise_QA")
-    surf_winding = eq.surface.constant_offset_surface(
-        offset=0.2,  # desired offset
-        M=16,  # Poloidal resolution of desired offset surface
-        N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
-    )
-    M_Phi = 8
-    N_Phi = 8
-    M_egrid = 30
-    N_egrid = 30
-    M_sgrid = 50
-    N_sgrid = 50
-    alpha = 1e-18
-
-    surface_current_field = FourierCurrentPotentialField.from_surface(
-        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
-    )
-    surface_current_field, data = run_regcoil(
-        surface_current_field,
-        eq,
-        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
-        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
-        alpha=alpha,
-        current_helicity=2,
-        vacuum=True,
-    )
-
-    return (surface_current_field, data["chi^2_B"], eq)

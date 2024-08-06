@@ -459,6 +459,78 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    def test_fourier_current_potential_field_helical_coil_cut(self):
+        """Test Fourier current potential helix coil cut against analytic solenoid."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([20, 3]),
+            Z_lmn=jnp.array([0, -3]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        # make a current potential corresponding a helical current
+        # with a sharp pitch (approximating a toroidal solenoid)
+        G = 2e2  # net poloidal current
+        I = 1
+        correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
+
+        field = FourierCurrentPotentialField(
+            I=I,
+            G=-G,
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+
+        coils = field.to_CoilSet(1)  # .to_FourierXYZ(N=100,grid=LinearGrid(N=200))
+
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            correct_field(20.0, 0, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field(
+                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+            ),
+            correct_field(20.0, np.pi / 4, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        # check with opposite helicity current
+        field = FourierCurrentPotentialField(
+            I=I,
+            G=G,
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+
+        coils = field.to_CoilSet(1)  # .to_FourierXYZ(N=100,grid=LinearGrid(N=200))
+
+        np.testing.assert_allclose(
+            -coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            correct_field(20.0, 0, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            -coils.compute_magnetic_field(
+                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+            ),
+            correct_field(20.0, np.pi / 4, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+
+    @pytest.mark.unit
     def test_fourier_current_potential_field_symmetry(self):
         """Test Fourier current potential magnetic field Phi symmetry logic."""
         surface = FourierRZToroidalSurface(

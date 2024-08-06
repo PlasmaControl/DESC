@@ -1396,7 +1396,7 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
 @pytest.mark.solve
 @pytest.mark.slow
 def test_regcoil_helical_coils_check_objective_method(
-    regcoil_helical_coils_pos_helicity,
+    regcoil_helical_coils_scan,
 ):
     """Test precise QA helical coil regcoil solution."""
     M_egrid = 30
@@ -1405,21 +1405,17 @@ def test_regcoil_helical_coils_check_objective_method(
     N_sgrid = 50
 
     (
-        initial_surface_current_field,
         _,
+        initial_surface_current_field,
         eq,
-    ) = regcoil_helical_coils_pos_helicity
+    ) = regcoil_helical_coils_scan
     surface_current_field = initial_surface_current_field.copy()
 
-    # check against the objective method of running REGCOIL
-    # with external field providing half the TF
-
-    surface_current_field2 = surface_current_field.copy()
     # reset the Phi_mn
-    surface_current_field2.Phi_mn = surface_current_field2.Phi_mn.at[:].set(0.0)
+    surface_current_field.Phi_mn = surface_current_field.Phi_mn.at[:].set(0.0)
     constraints = (  # now fix all but Phi_mn
         FixParameters(
-            surface_current_field2,
+            surface_current_field,
             params={"I": True, "G": True, "R_lmn": True, "Z_lmn": True},
         ),
     )
@@ -1432,7 +1428,7 @@ def test_regcoil_helical_coils_check_objective_method(
     )
 
     obj = QuadraticFlux(
-        field=surface_current_field2,
+        field=surface_current_field,
         eq=eq,
         eval_grid=eval_grid,
         field_grid=sgrid,
@@ -1443,7 +1439,7 @@ def test_regcoil_helical_coils_check_objective_method(
         (
             obj,
             SurfaceCurrentRegularization(
-                surface_current_field=surface_current_field2,
+                surface_current_field=surface_current_field,
                 weight=1e-18,
                 source_grid=sgrid,
             ),
@@ -1453,8 +1449,8 @@ def test_regcoil_helical_coils_check_objective_method(
 
     optimizer = Optimizer("lsq-exact")
 
-    (surface_current_field2,), _ = optimizer.optimize(
-        (surface_current_field2,),
+    (surface_current_field,), _ = optimizer.optimize(
+        (surface_current_field,),
         objective,
         constraints,
         verbose=1,
@@ -1468,85 +1464,18 @@ def test_regcoil_helical_coils_check_objective_method(
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-    B_from_surf = surface_current_field2.compute_magnetic_field(
+    B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
         source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
         basis="rpz",
     )
-    B_from_orig_surf = surface_current_field.compute_magnetic_field(
+    B_from_orig_surf = initial_surface_current_field.compute_magnetic_field(
         coords,
         source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=6e-3, rtol=1e-4)
     np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=5e-3, rtol=1e-4)
-
-    # test finding coils
-
-    numCoils = 15
-    coilset2 = surface_current_field2.to_CoilSet(
-        num_coils=numCoils,
-    )
-    B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
-    np.testing.assert_allclose(B, B_from_coils, atol=7e-3, rtol=1e-3)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
-def test_regcoil_helical_coils_check_B_pos_helicity(
-    regcoil_helical_coils_pos_helicity,
-):
-    """Test elliptical eq and winding surf helical coil regcoil solution."""
-    # with positive current helicity
-    (
-        initial_surface_current_field,
-        chi_B,
-        eq,
-    ) = regcoil_helical_coils_pos_helicity
-
-    surface_current_field = initial_surface_current_field.copy()
-
-    assert np.all(chi_B < 1e-5)
-    coords = eq.compute(["R", "phi", "Z", "B"])
-    B = coords["B"]
-    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-    B_from_surf = surface_current_field.compute_magnetic_field(
-        coords,
-        source_grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
-        basis="rpz",
-    )
-    np.testing.assert_allclose(B, B_from_surf, atol=3e-3)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
-def test_regcoil_helical_coils_check_coils_pos_helicity(
-    regcoil_helical_coils_pos_helicity,
-):
-    """Test elliptical eq and winding surf helical coil regcoil solution."""
-    # with positive current helicity
-    (
-        initial_surface_current_field,
-        _,
-        eq,
-    ) = regcoil_helical_coils_pos_helicity
-    surface_current_field = initial_surface_current_field.copy()
-
-    # test finding coils
-
-    numCoils = 15
-    coilset2 = surface_current_field.to_CoilSet(
-        num_coils=numCoils,
-        step=6,
-    )
-    assert not coilset2.is_self_intersecting(grid=LinearGrid(N=500))
-    coords = eq.compute(["R", "phi", "Z", "B"])
-    B = coords["B"]
-    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-    B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
-    np.testing.assert_allclose(B, B_from_coils, rtol=1e-3, atol=8e-3)
 
 
 @pytest.mark.unit

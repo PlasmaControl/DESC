@@ -323,10 +323,10 @@ def compute_theta_coords(
 
 
 def map_clebsch_coords(
-    eq,
     clebsch_coords,
     iota,
-    L_lmn=None,
+    L_lmn,
+    L_basis,
     tol=1e-6,
     maxiter=20,
     full_output=False,
@@ -346,7 +346,9 @@ def map_clebsch_coords(
         Shape (k, )
         Rotational transform on each node.
     L_lmn : ndarray
-        Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
+        Spectral coefficients for lambda.
+    L_basis : Basis
+        Spectral basis for lambda.
     tol : float
         Stopping tolerance.
     maxiter : int > 0
@@ -371,15 +373,13 @@ def map_clebsch_coords(
     kwargs.setdefault("maxiter", maxiter)
     kwargs.setdefault("tol", tol)
 
-    if L_lmn is None:
-        L_lmn = eq.L_lmn
     rho, alpha, zeta = clebsch_coords.T
     alpha = alpha % (2 * np.pi)
 
     # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
     def rootfun(theta, alpha, rho, zeta, iota):
         nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
-        A = eq.L_basis.evaluate(nodes)
+        A = L_basis.evaluate(nodes)
         lmbda = A @ L_lmn
         # TODO: generalize for toroidal angle
         alpha_k = (theta + lmbda - iota * zeta) % (2 * np.pi)
@@ -392,7 +392,7 @@ def map_clebsch_coords(
     def jacfun(theta, alpha, rho, zeta, iota):
         # Valid everywhere except θ such that θ+λ = k 2π where k ∈ ℤ.
         nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
-        A1 = eq.L_basis.evaluate(nodes, (0, 1, 0))
+        A1 = L_basis.evaluate(nodes, (0, 1, 0))
         lmbda_t = jnp.dot(A1, L_lmn)
         return 1 + lmbda_t.squeeze()
 

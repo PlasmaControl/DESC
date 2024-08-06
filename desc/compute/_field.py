@@ -2221,6 +2221,28 @@ def _B_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="B0",
+    label="B_0",
+    units="T",
+    units_long="Tesla",
+    description="Average magnitude of magnetic field on the magnetic axis",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["|B|", "sqrt(g)"],
+)
+def _B0(params, transforms, profiles, data, **kwargs):
+    # indices of the innermost flux surface
+    idx = jnp.where(transforms["grid"].inverse_rho_idx == 0)[0]
+    data["B0"] = jnp.sum(
+        data["|B|"][idx] * data["sqrt(g)"][idx] * transforms["grid"].weights[idx]
+    ) / jnp.sum(data["sqrt(g)"][idx] * transforms["grid"].weights[idx])
+    return data
+
+
+@register_compute_fun(
     name="|B|^2",
     label="|\\mathbf{B}|^{2}",
     units="T^2",

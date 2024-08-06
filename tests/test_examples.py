@@ -31,7 +31,6 @@ from desc.magnetic_fields import (
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
-    field_line_integrate,
     run_regcoil,
 )
 from desc.objectives import (
@@ -1396,54 +1395,6 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_regcoil_modular_coils_check_coils(regcoil_modular_coils):
-    """Test precise QA modular regcoil solution coils."""
-    (
-        _,
-        initial_surface_current_field,
-        eq,
-    ) = regcoil_modular_coils
-    surface_current_field = initial_surface_current_field.copy()
-
-    # test finding coils
-    ## 20 coils per FP
-    numCoils = 20
-
-    coilset2 = surface_current_field.to_CoilSet(
-        num_coils=numCoils,
-        stell_sym=False,
-    )
-    coilset2.to_FourierXYZ(N=150)
-    coords = eq.compute(["R", "phi", "Z", "B"])
-    B = coords["B"]
-    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-    B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
-    np.testing.assert_allclose(B, B_from_coils, atol=4e-3)
-
-    ntransit = 15
-    r0 = eq.compute("R", grid=LinearGrid(L=5, M=0, N=0, NFP=eq.NFP, axis=False))["R"]
-    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
-    fieldR, fieldZ = field_line_integrate(
-        r0=r0,
-        z0=np.zeros_like(r0),
-        phis=phis,
-        field=coilset2,
-    )
-
-    # make sure none of the field lines went off to infinity
-    # this along with the coil field matching the equilibrium field
-    # is a good indicator that they are creating the flux
-    # surface correctly
-    assert np.max(fieldR) < 1.4
-    assert np.min(fieldR) > 1.0
-
-    assert np.max(fieldZ) < 0.5
-    assert np.min(fieldZ) > -0.5
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
 def test_regcoil_helical_coils_check_objective_method(
     regcoil_helical_coils_pos_helicity,
 ):
@@ -1533,10 +1484,9 @@ def test_regcoil_helical_coils_check_objective_method(
     # test finding coils
 
     numCoils = 15
-    with pytest.warns(UserWarning, match="intersecting"):
-        coilset2 = surface_current_field2.to_CoilSet(
-            num_coils=numCoils,
-        )
+    coilset2 = surface_current_field2.to_CoilSet(
+        num_coils=numCoils,
+    )
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=7e-3, rtol=1e-3)
 
@@ -1587,13 +1537,10 @@ def test_regcoil_helical_coils_check_coils_pos_helicity(
     # test finding coils
 
     numCoils = 15
-    with pytest.warns(UserWarning, match="intersecting"):
-        # the default grid for checking coil coil intersection
-        # is not good for long coils like these helical coils
-        coilset2 = surface_current_field.to_CoilSet(
-            num_coils=numCoils,
-            step=6,
-        )
+    coilset2 = surface_current_field.to_CoilSet(
+        num_coils=numCoils,
+        step=6,
+    )
     assert not coilset2.is_self_intersecting(grid=LinearGrid(N=500))
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]

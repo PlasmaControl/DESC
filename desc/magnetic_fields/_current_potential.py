@@ -799,17 +799,26 @@ class FourierCurrentPotentialField(
                 method=spline_method,
             )
             coils.append(coil)
+        # TODO: interpolate the points so that they are all the same number of knots
+        # (and the same knots)
+        # check_intersection is False here as these coils by construction
+        # cannot intersect eachother (they are contours of the current potential
+        # which cannot self-intersect by definition)
         try:
             if jnp.isclose(helicity, 0):
-                final_coilset = CoilSet(*coils, NFP=nfp, sym=stell_sym)
+                final_coilset = CoilSet(
+                    *coils, NFP=nfp, sym=stell_sym, check_intersection=False
+                )
             else:
-                final_coilset = CoilSet(*coils)
+                final_coilset = CoilSet(*coils, check_intersection=False)
         except ValueError:
             # can't make a CoilSet so make a MixedCoilSet instead
             final_coilset = (
-                MixedCoilSet(*coils)
+                MixedCoilSet(*coils, check_intersection=False)
                 if not jnp.isclose(helicity, 0)
-                else MixedCoilSet.from_symmetry(coils, NFP=nfp, sym=stell_sym)
+                else MixedCoilSet.from_symmetry(
+                    coils, NFP=nfp, sym=stell_sym, check_intersection=False
+                )
             )
         return final_coilset
 

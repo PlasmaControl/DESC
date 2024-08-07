@@ -1659,7 +1659,7 @@ def test_ballooning_stability_opt():
     alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
 
     # Number of toroidal transits of the field line
-    ntor = int(3)
+    ntor = int(2)
 
     # Number of point along a field line in ballooning space
     N0 = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
@@ -1729,7 +1729,9 @@ def test_ballooning_stability_opt():
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
     ]
 
-    objective = ObjectiveFunction(tuple(objs_ball.values()))
+    objective = ObjectiveFunction(
+        (AspectRatio(eq=eq, bounds=(5, 15)),) + tuple(objs_ball.values())
+    )
 
     constraints = (
         ForceBalance(eq=eq),
@@ -1741,7 +1743,7 @@ def test_ballooning_stability_opt():
     )
 
     optimizer = Optimizer("proximal-lsq-exact")
-    (eq,), _ = optimizer.optimize(
+    eq, _ = optimizer.optimize(
         eq,
         objective,
         constraints,

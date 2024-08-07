@@ -11,7 +11,7 @@ expensive computations.
 
 from scipy.constants import mu_0
 
-from desc.backend import eigvals, jax, jit, jnp, vmap
+from desc.backend import eigvals, jit, jnp, scan, vmap
 
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals_map
@@ -315,7 +315,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
 
     phi = data["phi"]
 
-    N_alpha = int(len(jnp.where(jnp.abs(phi) <= 1e-10)[0]))
+    N_alpha = int(8)
     N = int(len(phi) / N_alpha)
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
@@ -682,7 +682,7 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     eps = 5e-3  # slope of the test function
     Yp = eps * jnp.ones((N_alpha, N_zeta0))
 
-    @jax.jit
+    @jit
     def integrator(carry, x):
         arr, arr_d = carry
         g_element, c_element = x
@@ -694,9 +694,9 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
 
         return (arr_updated, arr_d_updated), (arr_updated, sign_product)
 
-    @jax.jit
+    @jit
     def cumulative_update_jit(arr, arr_d, g_half, c_full):
-        _, scan_output = jax.lax.scan(integrator, (arr, arr_d), (g_half, c_full))
+        _, scan_output = scan(integrator, (arr, arr_d), (g_half, c_full))
         Y, sign_product = scan_output
         # Create a mask where sign_product is negative
         negative_mask = sign_product < 0

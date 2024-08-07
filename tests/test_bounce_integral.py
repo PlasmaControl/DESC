@@ -874,13 +874,12 @@ def test_interp_rfft2():
 @pytest.mark.unit
 def test_fcb_interp():
     """Test interpolation for this basis function."""
-    domain = (0, 2 * np.pi)
     M, N = 1, 5
-    xy0 = FourierChebyshevBasis.nodes(M, N, domain=domain)
+    xy0 = FourierChebyshevBasis.nodes(M, N)
     f0 = jnp.mean(xy0.reshape(M, N, 2), axis=-1)
-    fcb = FourierChebyshevBasis(f0, M, N, domain=domain)
+    fcb = FourierChebyshevBasis(f0, M, N)
     f1 = fcb.evaluate(1, fcb.N * 10)
-    xy1 = FourierChebyshevBasis.nodes(1, fcb.N * 10, domain=domain)
+    xy1 = FourierChebyshevBasis.nodes(1, fcb.N * 10)
 
     fig, ax = plt.subplots()
     ax.plot(xy0[:, 1], f0[0, :], linestyle="--")

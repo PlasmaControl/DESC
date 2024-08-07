@@ -1,17 +1,16 @@
-"""FFT interpolation."""
+"""Interpolation utilities."""
 
 from functools import partial
 
 from desc.backend import jnp, rfft, rfft2
 from desc.compute.utils import safediv
 
-# TODO: upstream fft methods to interpax.
 # TODO: For inverse transforms, do multipoint evaluation with FFT.
 #   FFT cost is 𝒪(M N log[M N]) while direct evaluation is 𝒪(M² N²).
 #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-#   Likely better than using approximate NFFT to evaluate f(xq) given fourier
+#   Likely better than using NFFT to evaluate f(xq) given fourier
 #   coefficients because evaluation points are quadratically packed near edges as
-#   required by algebraic polynomial quadrature to avoid runge.
+#   required by quadrature to avoid runge. NFFT is only approximation anyway.
 
 
 def interp_rfft(xq, f):
@@ -61,8 +60,7 @@ def irfft_non_uniform(xq, a, M):
     a = a.at[..., 0].divide(2.0).at[..., -1].divide(1.0 + ((M % 2) == 0))
     m = jnp.fft.rfftfreq(M, d=1 / M)
     basis = jnp.exp(1j * m * xq[..., jnp.newaxis])
-    fq = 2 * jnp.real(jnp.einsum("...m,...m", basis, a))
-    # ℜ einsum(basis, a) = einsum(cos(mx), ℜ(a)) - einsum(sin(mx), ℑ(a))
+    fq = 2 * jnp.real(jnp.linalg.vecdot(jnp.conj(basis), a))
     return fq
 
 

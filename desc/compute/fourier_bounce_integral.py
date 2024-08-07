@@ -1,61 +1,19 @@
 """Methods for constructing f(α, ζ) splines and bounce integrals."""
 
-from orthax.chebyshev import chebpts1, chebpts2, chebval
+from orthax.chebyshev import chebpts1, chebpts2, chebroots, chebval
 
-from desc.backend import dct, idct, irfft, jnp, put, rfft
-from desc.compute._interp_utils import _filter_distinct, irfft_non_uniform
+from desc.backend import dct, idct, irfft, jnp, rfft
+from desc.compute._interp_utils import _filter_distinct, interp_rfft2, irfft_non_uniform
 from desc.compute._quadrature_utils import affine_bijection as map_domain
 from desc.compute._quadrature_utils import (
     affine_bijection_to_disc as map_domain_to_disc,
 )
 from desc.compute.bounce_integral import _fix_inversion
 from desc.compute.utils import take_mask
-from desc.utils import Index, errorif
+from desc.equilibrium.coords import map_clebsch_coords
+from desc.utils import errorif
 
-# Vectorized versions of numpy functions. Need root finding to be as efficient as
-# possible, so vectorize to solve stack of matrices. Also skip the slow input
-# massaging because we don't allow duck typed lists.
-
-
-def _chebcompanion(c):
-    # Adapted from
-    # numpy.org/doc/stable/reference/generated/
-    # numpy.polynomial.chebyshev.chebcompanion.html.
-    # github.com/f0uriest/orthax/blob/main/orthax/chebyshev.py.
-    errorif(c.shape[-1] < 2, msg="Series must have maximum degree of at least 1.")
-    if c.shape[-1] == 2:
-        return jnp.array([[-c[..., 0] / c[..., 1]]])
-
-    n = c.shape[-1] - 1
-    scl = jnp.hstack([1.0, jnp.full(n - 1, jnp.sqrt(0.5))])
-    mat = jnp.zeros((*c.shape[:-1], n, n), dtype=c.dtype)
-    mat = put(mat, Index[..., 0, 0], jnp.sqrt(0.5))
-    mat = put(mat, Index[..., 0, 1:], 0.5)
-    mat = put(mat, Index[..., -1, :], mat[..., 0, :])
-    mat = put(
-        mat,
-        Index[..., -1],
-        mat[..., -1] - c[..., :-1] / c[..., -1] * scl / scl[-1] * 0.5,
-    )
-    return mat
-
-
-def _chebroots(c):
-    # Adapted from
-    # numpy.org/doc/stable/reference/generated/
-    # numpy.polynomial.chebyshev.chebroots.html.
-    # github.com/f0uriest/orthax/blob/main/orthax/chebyshev.py,
-    if c.shape[-1] < 2:
-        return jnp.reshape([], (0,) * c.ndim)
-    if c.shape[-1] == 2:
-        return jnp.array([-c[..., 0] / c[..., 1]])
-
-    # rotated companion matrix reduces error
-    m = _chebcompanion(c)[..., ::-1, ::-1]
-    # Low priority:
-    # there are better techniques to find eigenvalues of Chebyshev colleague matrix.
-    r = jnp.sort(jnp.linalg.eigvals(m))
-    return r
+chebroots = jnp.vectorize(chebroots, signature="(m)->(m)")
 
 
 def _cheb_from_dct(c):
@@ -90,7 +48,7 @@ def alpha_sequence(alpha_0, m, iota, period):
         Sequence of poloidal coordinates (α₀, α₁, …, αₘ₋₁) that specify field line.
 
     """
-    # Δz (∂α/∂ζ) = Δz ι̅ = Δz ι/2π = Δz data["iota"]
+    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
     return (alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(m)) % (2 * jnp.pi)
 
 
@@ -117,7 +75,7 @@ class FourierChebyshevBasis:
 
     _eps = min(jnp.finfo(jnp.array(1.0).dtype).eps * 1e2, 1e-10)
 
-    def __init__(self, f, lobatto=False, domain=(-1, 1)):
+    def __init__(self, f, lobatto=False, domain=(0, 2 * jnp.pi)):
         """Interpolate Fourier-Chebyshev basis to ``f``.
 
         Parameters
@@ -130,7 +88,7 @@ class FourierChebyshevBasis:
             Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
             or interior roots grid for Chebyshev points.
         domain : (float, float)
-            Domain for y coordinates. Default is [-1, 1].
+            Domain for y coordinates. Default is [0, 2π].
 
         """
         errorif(domain[0] > domain[-1], msg="Got inverted y coordinate domain.")
@@ -161,12 +119,12 @@ class FourierChebyshevBasis:
     # of trig poly.
     # answer: research shows doesn't really matter.
     @staticmethod
-    def _chebyshev_pts(N, lobatto, domain=(-1, 1)):
+    def _chebyshev_pts(N, lobatto, domain=(0, 2 * jnp.pi)):
         y = chebpts2(N) if lobatto else chebpts1(N)
         return map_domain(y, domain[0], domain[-1])
 
     @staticmethod
-    def nodes(M, N, lobatto=False, domain=(-1, 1), **kwargs):
+    def nodes(M, N, lobatto=False, domain=(0, 2 * jnp.pi), **kwargs):
         """Tensor product grid of optimal collocation nodes for this basis.
 
         Parameters
@@ -179,7 +137,7 @@ class FourierChebyshevBasis:
             Whether to use the Gauss-Lobatto (Extrema-plus-Endpoint)
             or interior roots grid for Chebyshev points.
         domain : (float, float)
-            Domain for y coordinates. Default is [-1, 1].
+            Domain for y coordinates. Default is [0, 2π].
 
         Returns
         -------
@@ -234,7 +192,7 @@ class FourierChebyshevBasis:
 
         """
         c = _cheb_from_dct(self._c)
-        # Convert rfft to Nyquist trigonometric harmonics.
+        # convert rfft to Nyquist trigonometric harmonics
         is_even = (self.M % 2) == 0
         # ∂ₓ = 0 coefficients
         a0 = jnp.real(c[..., 0, :])[..., jnp.newaxis, :]
@@ -273,7 +231,7 @@ class FourierChebyshevBasis:
         assert cheb.shape == (*self._c.shape[:-2], x.shape[-1], self.N)
         return cheb
 
-    def y_intersect(self, cheb, k=0, eps=_eps):
+    def intersect(self, cheb, k=0, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
 
         Parameters
@@ -307,7 +265,7 @@ class FourierChebyshevBasis:
         c = cheb[jnp.newaxis] if k.ndim > cheb.ndim else cheb
         c = c.at[..., 0].add(-k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
-        y = _chebroots(c)
+        y = chebroots(c)
         assert y.shape == (*c.shape[:-1], self.N - 1)
 
         y = _filter_distinct(y, sentinel=-2, eps=eps)
@@ -316,11 +274,10 @@ class FourierChebyshevBasis:
         y = jnp.where(is_intersect, jnp.real(y), 0)  # ensure y is in domain of arcos
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₁ᴺ⁻¹ aₙ(x) sin(n arcos y)
-        s = jnp.einsum(
+        s = jnp.linalg.vecdot(
             # TODO: Multipoint evaluation with FFT.
             #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-            "...n,...yn",
-            cheb,
+            cheb[..., jnp.newaxis, :],
             jnp.sin(jnp.arange(self.N) * jnp.arccos(y)[..., jnp.newaxis]),
         )
         is_decreasing = s <= 0
@@ -387,10 +344,9 @@ class FourierChebyshevBasis:
         # Set outside mask to same value so integration is over set of measure zero.
         bp1 = jnp.where(mask, bp1, 0)
         bp2 = jnp.where(mask, bp2, 0)
-        # These typically have shape (num pitch, num rho, num wells).
         return bp1, bp2
 
-    def interp_cheb_spline(self, z, cheb):
+    def interp_cheb(self, z, cheb):
         """Evaluate piecewise Chebyshev spline at coordinates z.
 
         The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ²
@@ -401,7 +357,7 @@ class FourierChebyshevBasis:
         Parameters
         ----------
         z : jnp.ndarray
-            Shape (*cheb.shape[:-2], num wells, num quadrature points).
+            Shape (*cheb.shape[:-2], z.shape[-1]).
             Isomorphic coordinates along field line [0, inf].
         cheb: jnp.ndarray
             Shape (..., num cheb series, N).
@@ -414,17 +370,17 @@ class FourierChebyshevBasis:
             Chebyshev basis evaluated at z.
 
         """
-        # TODO: Multipoint evaluation with FFT.
-        #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-        x_idx, y = map(_flatten_matrix, self._isomorphism_2d(z))
+        x_idx, y = self._isomorphism_2d(z)
         y = map_domain_to_disc(y, self.domain[0], self.domain[1])
         cheb = jnp.moveaxis(cheb, source=-1, destination=0)
         cheb = jnp.take_along_axis(cheb, x_idx, axis=-1, mode="promise_in_bounds")
-        f = chebval(y, cheb, tensor=False).reshape(z.shape)
+        # TODO: Multipoint evaluation with FFT.
+        #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
+        f = chebval(y, cheb, tensor=False)
         # TODO: Add below as unit test.
         # n = jnp.arange(self.N) # noqa: E800
         # T = jnp.cos(n * jnp.arccos(y)[..., jnp.newaxis]) # noqa: E800
-        # f = jnp.einsum("...n,n...", T, cheb).reshape(z.shape) # noqa: E800
+        # f = jnp.einsum("...n,n...", T, cheb) # noqa: E800
         return f
 
     def _isomorphism_1d(self, y):
@@ -473,7 +429,43 @@ class FourierChebyshevBasis:
         return x_index, y_value
 
 
-def bounce_integral(data, M, N, rho):
-    """WIP."""
-    cheb_nodes = FourierChebyshevBasis.nodes(M, N, domain=(0, 2 * jnp.pi), rho=rho)
-    return cheb_nodes
+def bounce_integral(
+    grid,
+    data,
+    L_lmn,
+    L_basis,
+    M,
+    N,
+    alpha,
+    pitch,
+    num_wells,
+    quad,
+    automorphism,
+    **kwargs,
+):
+    """TODO."""
+    raz = FourierChebyshevBasis.nodes(M, N, rho=grid.compress(data["rho"]))
+    rtz = map_clebsch_coords(raz, data["iota"], L_lmn, L_basis, **kwargs)
+    # Make θ(α, ζ) and B(α, ζ) splines.
+    theta = FourierChebyshevBasis(rtz[:, 1].reshape(grid.num_rho, M, N))  # noqa: F841
+    B = FourierChebyshevBasis(
+        interp_rfft2(
+            xq=rtz[:, 1:].reshape(grid.num_rho, -1, 2),
+            f=data["|B|"].reshape(grid.num_rho, grid.num_theta, grid.num_zeta),
+        ).reshape(grid.num_rho, M, N),
+    )
+    cheb = B.compute_cheb(alpha)
+    bp1, bp2 = B.bounce_points(*B.intersect(cheb, jnp.reciprocal(pitch)), num_wells)
+
+    x, w = quad
+    assert x.ndim == w.ndim == 1
+    if automorphism is not None:
+        auto, grad_auto = automorphism
+        w = w * grad_auto(x)
+        # Recall affine_bijection(auto(x), ζ_b₁, ζ_b₂) = ζ.
+        x = auto(x)
+
+    shape = (*bp1.shape, x.size)
+    # P, rho, num wells * num quad
+    Q_az = _flatten_matrix(map_domain(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis]))
+    B_quad = B.interp_cheb(Q_az, cheb).reshape(shape)  # noqa: F841

@@ -97,10 +97,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
     )
 
-    trapezoid = (
-        jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
-    )
-
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
 
@@ -426,8 +422,6 @@ else:  # pragma: no cover
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
-
-    trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 

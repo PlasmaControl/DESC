@@ -8,9 +8,10 @@ from scipy.interpolate import interp1d
 
 import desc.examples
 import desc.io
-from desc.compute import _stability
+from desc.backend import jnp
 from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import compute_theta_coords
 from desc.grid import Grid, LinearGrid
 from desc.objectives import MagneticWell, MercierStability
 
@@ -607,17 +608,182 @@ def test_ballooning_geometry(tmpdir_factory):
 
 
 @pytest.mark.unit
-def test_ballooning_eigenvalue():
-    """Compare the max. eigenvalues from flavors of the adjoint-ballooning solver."""
+def test_stability_eval():
+    """Cross-compare all the stability functions.
+
+    We calculated the ideal ballooning growth rate and Newcomb metric for
+    the HELIOTRON case at different radii.
+    """
     try:
-        eq = desc.examples.get("W7-X")[-1]
+        eq = desc.examples.get("HELIOTRON")[-1]
     except TypeError:
-        eq = desc.examples.get("W7-X")
+        eq = desc.examples.get("HELIOTRON")
 
-    lam2 = _stability._ideal_ballooning_gamma1(eq)
-    lam3 = _stability._ideal_ballooning_gamma2(eq)
+    # Flux surfaces on which to evaluate ballooning stability
+    surfaces = [0.01, 0.5, 0.8, 1.0]
 
-    lam2 = lam2 * (lam2 > 0)
-    lam3 = lam3 * (lam3 > 0)
+    grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
+    eq_data_keys = ["iota"]
 
-    np.testing.assert_allclose(lam2, lam3, atol=0.01, rtol=0.3)
+    data = eq.compute(eq_data_keys, grid=grid)
+    iota = data["iota"]
+
+    Nalpha = int(8)  # Number of field lines
+
+    assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
+
+    # Field lines on which to evaluate ballooning stability
+    alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
+
+    # Number of toroidal transits of the field line
+    ntor = int(3)
+
+    # Number of point along a field line in ballooning space
+    N0 = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
+
+    # range of the ballooning coordinate zeta
+    zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
+
+    for i in range(len(surfaces)):
+        rho = surfaces[i] * np.ones((N0 * Nalpha,))
+
+        theta_PEST = alpha[:, None] + iota[0] * zeta
+        zeta_full = jnp.tile(zeta, Nalpha)
+
+        theta_PEST = theta_PEST.flatten()
+        zeta_full = zeta_full.flatten()
+
+        theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
+
+        # Rootfinding theta for a given theta_PEST
+        desc_coords = compute_theta_coords(
+            eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
+        )
+
+        sfl_grid = Grid(desc_coords, sort=False)
+
+        data_keys = ["ideal_ball_gamma1", "ideal_ball_gamma2", "Newcomb_metric"]
+        data = eq.compute(data_keys, grid=sfl_grid)
+
+        lam1 = data["ideal_ball_gamma1"]
+        lam2 = data["ideal_ball_gamma2"]
+        Newcomb_metric = data["Newcomb_metric"]
+
+        np.testing.assert_allclose(lam1, lam2, atol=5e-3, rtol=1e-8)
+
+        if lam2 > 0:
+            assert (
+                Newcomb_metric >= 1
+            ), "Newcomb metric indicates stabiliy for an unstable equilibrium"
+        else:
+            assert (
+                Newcomb_metric < 1
+            ), "Newcomb metric indicates instabiliy for a stable equilibrium"
+
+
+@pytest.mark.unit
+def test_compare_with_COBRAVMEC():
+    """Compare DESC ballooning solved with COBRAVMEC."""
+
+    def find_root_simple(x, y):
+        sign_changes = np.where(np.diff(np.sign(y)))[0]
+
+        if len(sign_changes) == 0:
+            return None  # No zero crossing found
+
+        # Get the indices where y changes sign
+        i = sign_changes[0]
+
+        # Linear interpolation
+        x0, x1 = x[i], x[i + 1]
+        y0, y1 = y[i], y[i + 1]
+
+        # Calculate the zero crossing
+        x_zero = x0 + (0 - y0) * (x1 - x0) / (y1 - y0)
+
+        return x_zero
+
+    A = np.loadtxt("./tests/inputs/cobra_grate.HELIOTRON_L24_M16_N12")
+
+    ns1 = int(A[0, 2])
+    nangles = int(np.shape(A)[0] / (ns1 + 1))
+
+    B = np.zeros((ns1,))
+    for i in range(nangles):
+        if i == 0:
+            B = A[i + 1 : (i + 1) * ns1 + 1, 2]
+        else:
+            B = np.vstack((B, A[i * ns1 + i + 1 : (i + 1) * ns1 + i + 1, 2]))
+
+    gamma1 = np.amax(B, axis=0)
+
+    s1 = np.linspace(0, 1, ns1)
+    s1 = s1 + np.diff(s1)[0]
+
+    # COBRAVMEC calculated everything in s(=rho^2),
+    # DESC calculates in rho(=sqrt(s))
+    rho1 = np.sqrt(s1)
+
+    root_COBRAVMEC = find_root_simple(rho1, gamma1)
+
+    try:
+        eq = desc.examples.get("HELIOTRON")[-1]
+    except TypeError:
+        eq = desc.examples.get("HELIOTRON")
+
+    # Flux surfaces on which to evaluate ballooning stability
+    surfaces = [0.98, 0.985, 0.99, 0.995, 1.0]
+
+    grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
+    eq_data_keys = ["iota"]
+
+    data = eq.compute(eq_data_keys, grid=grid)
+    iota = data["iota"]
+
+    Nalpha = int(8)  # Number of field lines
+
+    assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
+
+    # Field lines on which to evaluate ballooning stability
+    alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
+
+    # Number of toroidal transits of the field line
+    ntor = int(3)
+
+    # Number of point along a field line in ballooning space
+    N0 = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
+
+    # range of the ballooning coordinate zeta
+    zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
+
+    lam2_array = np.zeros(
+        len(surfaces),
+    )
+
+    for i in range(len(surfaces)):
+        rho = surfaces[i] * np.ones((N0 * Nalpha,))
+
+        theta_PEST = alpha[:, None] + iota[0] * zeta
+        zeta_full = jnp.tile(zeta, Nalpha)
+
+        theta_PEST = theta_PEST.flatten()
+        zeta_full = zeta_full.flatten()
+
+        theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
+
+        # Rootfinding theta for a given theta_PEST
+        desc_coords = compute_theta_coords(
+            eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
+        )
+
+        sfl_grid = Grid(desc_coords, sort=False)
+
+        data_keys = ["ideal_ball_gamma2"]
+        data = eq.compute(data_keys, grid=sfl_grid)
+
+        lam2_array[i] = data["ideal_ball_gamma2"]
+
+    root_DESC = find_root_simple(np.array(surfaces), lam2_array)
+
+    # Comparing the points of marginal stability from COBRAVMEC and DESC
+    np.testing.assert_allclose(root_COBRAVMEC, root_DESC, atol=5e-4, rtol=1e-8)

@@ -376,7 +376,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
 
     lam = jnp.real(jnp.max(w, axis=(2,)))
 
-    lam = lam * (lam > 0)
+    lam = jnp.max(lam)
 
     data["ideal_ball_gamma1"] = lam
 
@@ -730,14 +730,14 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     )
 
     # value of Y at the zero-crossing. If there is a zero-crossing,
-    # it's very small, if not it's the Y intercept because first
+    # Y0 is very small, if not it's the Y intercept because first
     # negative index will be -1
     Y0 = Y0.at[i0, j0].set(Y[i0, j0, first_negative_indices[i0, j0]])
     Y0 = jnp.where(first_negative_indices != -1, 0, Y0)
 
     data2 = jnp.min(1 + jnp.tanh(jnp.cbrt(Y0[:, :])))
 
-    data3 = 2 * (2 - data2)
+    data3 = 2 - data2
 
     data["Newcomb_metric"] = data3
 
@@ -803,13 +803,13 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
         "B^zeta_tz",
     ],
 )
-def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
+def _effective_ballooning_potential(params, transforms, profiles, data, *kwargs):
     """
-    Ideal-ballooning growth rate finder.
+    Effective ballooning potential.
 
-    A finite-difference solver to calculate the maximum
-    growth rate against the infinite-n ideal ballooning mode.
-    The problem to solve is
+    We can rewrite the ideal ballooning equation
+    to a Schrodinger-like equation with an effective potential
+    V
 
     d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0.
 
@@ -818,6 +818,7 @@ def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
     g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
     c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
         * (b cross kappa) dot grad alpha/ B**2,
+    V = d^2 g/d z^2 - d c/d z
 
     Parameters
     ----------

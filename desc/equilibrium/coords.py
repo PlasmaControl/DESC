@@ -271,9 +271,6 @@ def compute_theta_coords(
         L_lmn = eq.L_lmn
     rho, theta_star, zeta = flux_coords.T
 
-    if maxiter <= 0:
-        raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-
     def rootfun(theta_DESC, theta_PEST, rho, zeta):
         nodes = jnp.atleast_2d(
             jnp.array([rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()])

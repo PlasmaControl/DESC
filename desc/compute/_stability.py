@@ -316,10 +316,10 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     phi = data["phi"]
 
     N_alpha = int(8)
-    N = int(len(phi) / N_alpha)
+    N_zeta = int(len(phi) / N_alpha)
 
-    B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
-    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
+    B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))
+    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N_zeta))
     dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
 
     gds2 = jnp.reshape(
@@ -329,7 +329,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
             - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
             + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
         ),
-        (N_alpha, N_zeta0, N),
+        (N_alpha, N_zeta0, N_zeta),
     )
 
     f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
@@ -349,18 +349,18 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
                 data["cvdrift"][None, :]
                 - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
             ),
-            (N_alpha, N_zeta0, N),
+            (N_alpha, N_zeta0, N_zeta),
         )
     )
 
     h = phi[1] - phi[0]
 
-    A = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
+    A = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
 
     i = jnp.arange(N_alpha)[:, None, None, None]
     l = jnp.arange(N_zeta0)[None, :, None, None]
-    j = jnp.arange(N - 2)[None, None, :, None]
-    k = jnp.arange(N - 2)[None, None, None, :]
+    j = jnp.arange(N_zeta - 2)[None, None, :, None]
+    k = jnp.arange(N_zeta - 2)[None, None, None, :]
 
     A = A.at[i, l, j, k].set(
         g_half[i, l, k] / f[i, l, k] * 1 / h**2 * (j - k == -1)
@@ -466,10 +466,10 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     phi = data["phi"]
 
     N_alpha = int(8)
-    N = int(len(phi) / N_alpha)
+    N_zeta = int(len(phi) / N_alpha)
 
-    B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
-    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
+    B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))
+    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N_zeta))
     dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
 
     gds2 = jnp.reshape(
@@ -479,7 +479,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
             - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
             + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
         ),
-        (N_alpha, N_zeta0, N),
+        (N_alpha, N_zeta0, N_zeta),
     )
 
     f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
@@ -499,7 +499,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
                 data["cvdrift"][None, :]
                 - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
             ),
-            (N_alpha, N_zeta0, N),
+            (N_alpha, N_zeta0, N_zeta),
         )
     )
 
@@ -507,12 +507,12 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     i = jnp.arange(N_alpha)[:, None, None, None]
     l = jnp.arange(N_zeta0)[None, :, None, None]
-    j = jnp.arange(N - 2)[None, None, :, None]
-    k = jnp.arange(N - 2)[None, None, None, :]
+    j = jnp.arange(N_zeta - 2)[None, None, :, None]
+    k = jnp.arange(N_zeta - 2)[None, None, None, :]
 
-    A = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
-    B = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
-    B_inv = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
+    A = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
+    B = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
+    B_inv = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
 
     A = A.at[i, l, j, k].set(
         g_half[i, l, k] * 1 / h**2 * (j - k == -1)
@@ -629,10 +629,10 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
 
     # Count the number of 0s in phi (= number of field lines)
     N_alpha = int(8)
-    N = int(len(phi) / N_alpha)
+    N_zeta = int(len(phi) / N_alpha)
 
-    B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
-    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
+    B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))
+    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N_zeta))
     dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
 
     gds2 = jnp.reshape(
@@ -642,7 +642,7 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
             - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
             + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
         ),
-        (N_alpha, N_zeta0, N),
+        (N_alpha, N_zeta0, N_zeta),
     )
 
     g = a_N**3 * B_N * gds2 / B * gradpar
@@ -661,7 +661,7 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
                 data["cvdrift"][None, :]
                 - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
             ),
-            (N_alpha, N_zeta0, N),
+            (N_alpha, N_zeta0, N_zeta),
         )
     )
 
@@ -673,9 +673,9 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
 
     i = jnp.arange(N_alpha)[:, None, None]
     j = jnp.arange(N_zeta0)[None, :, None]
-    k = jnp.arange(N - 1)[None, None, :]
+    k = jnp.arange(N_zeta - 1)[None, None, :]
 
-    X = jnp.zeros((N_alpha, N_zeta0, N - 1))
+    X = jnp.zeros((N_alpha, N_zeta0, N_zeta - 1))
     X = X.at[i, j, k].set(phi[k])
 
     Y = jnp.zeros((N_alpha, N_zeta0))

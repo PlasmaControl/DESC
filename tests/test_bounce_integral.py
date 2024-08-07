@@ -7,10 +7,11 @@ import numpy as np
 import pytest
 from jax import grad
 from matplotlib import pyplot as plt
+from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
-from scipy.special import ellipkm1
+from scipy.special import ellipe, ellipkm1, roots_chebyu
 from tests.test_plotting import tol_1d
 
 from desc.backend import flatnonzero, jnp
@@ -24,6 +25,7 @@ from desc.compute.bounce_integral import (
     _poly_val,
     _take_mask,
     affine_bijection,
+    affine_bijection_to_disc,
     automorphism_arcsin,
     automorphism_sin,
     bounce_integral,
@@ -32,21 +34,17 @@ from desc.compute.bounce_integral import (
     grad_affine_bijection,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
+    leggausslob,
     plot_field_line,
     tanh_sinh,
 )
+from desc.compute.fourier_bounce_integral import FourierChebyshevBasis
 from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.utils import only1
-
-
-def _affine_bijection_forward(x, a, b):
-    """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
-    y = 2 * (x - a) / (b - a) - 1
-    return y
 
 
 @partial(np.vectorize, signature="(m)->()")
@@ -386,10 +384,10 @@ def test_automorphism():
     """Test automorphisms."""
     a, b = -312, 786
     x = np.linspace(a, b, 10)
-    y = _affine_bijection_forward(x, a, b)
+    y = affine_bijection_to_disc(x, a, b)
     x_1 = affine_bijection(y, a, b)
     np.testing.assert_allclose(x_1, x)
-    np.testing.assert_allclose(_affine_bijection_forward(x_1, a, b), y)
+    np.testing.assert_allclose(affine_bijection_to_disc(x_1, a, b), y)
     np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y, atol=5e-7)
     np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y, atol=5e-7)
 
@@ -426,31 +424,56 @@ def test_bounce_quadrature():
     # (bp2 - bp1) / pi = pi / (bp2 - bp1) which could mask errors since pi
     # appears often in transformations.
     v = 7
-    truth = v * 2 * ellipkm1(p)
-    rtol = 1e-4
-
-    def integrand(B, pitch):
-        return jnp.reciprocal(jnp.sqrt(1 - pitch * m * B))
-
     bp1 = -np.pi / 2 * v
     bp2 = -bp1
     knots = np.linspace(bp1, bp2, 50)
-    B = np.clip(np.sin(knots / v) ** 2, 1e-7, 1)
-    B_z_ra = np.sin(2 * knots / v) / v
     pitch = 1 + 50 * jnp.finfo(jnp.array(1.0).dtype).eps
 
-    bounce_integrate, _ = bounce_integral(
-        B, B, B_z_ra, knots, quad=tanh_sinh(40), automorphism=None, check=True
-    )
-    tanh_sinh_vanilla = bounce_integrate(integrand, [], pitch)
-    assert np.count_nonzero(tanh_sinh_vanilla) == 1
-    np.testing.assert_allclose(np.sum(tanh_sinh_vanilla), truth, rtol=rtol)
-    bounce_integrate, _ = bounce_integral(
-        B, B, B_z_ra, knots, quad=leggauss(25), check=True
-    )
-    leg_gauss_sin = bounce_integrate(integrand, [], pitch, batch=False)
-    assert np.count_nonzero(tanh_sinh_vanilla) == 1
-    np.testing.assert_allclose(np.sum(leg_gauss_sin), truth, rtol=rtol)
+    def b_field(knots):
+        b = np.clip(np.sin(knots / v) ** 2, 1e-7, 1)
+        db = np.sin(2 * knots / v) / v
+        return b, db
+
+    b, db = b_field(knots)
+
+    def test(f, truth, quad, rtol=1e-4):
+        bounce_integrate, _ = bounce_integral(
+            b,
+            b,
+            db,
+            knots,
+            quad[0],
+            automorphism=None,
+            check=True,
+            plot=True,
+        )
+        result = bounce_integrate(f, [], pitch)
+        assert np.count_nonzero(result) == 1
+        np.testing.assert_allclose(np.sum(result), truth, rtol=rtol)
+
+        bounce_integrate, _ = bounce_integral(b, b, db, knots, quad[1], check=True)
+        result = bounce_integrate(f, [], pitch)
+        assert np.count_nonzero(result) == 1
+        np.testing.assert_allclose(np.sum(result), truth, rtol=rtol)
+
+        # sin automorphism still helps out chebyshev quadrature
+        bounce_integrate, _ = bounce_integral(b, b, db, knots, quad[2], check=True)
+        result = bounce_integrate(f, [], pitch)
+        assert np.count_nonzero(result) == 1
+        np.testing.assert_allclose(np.sum(result), truth, rtol=rtol)
+
+    def strong(B, pitch):
+        return 1 / jnp.sqrt(1 - pitch * m * B)
+
+    def weak(B, pitch):
+        return jnp.sqrt(1 - pitch * m * B)
+
+    x, w = chebgauss(30)
+    w /= chebweight(x)
+    test(strong, v * 2 * ellipkm1(p), [tanh_sinh(40), leggauss(25), (x, w)])
+    x, w = roots_chebyu(10)
+    w *= chebweight(x)
+    test(weak, v * 2 * ellipe(m), [tanh_sinh(20), leggausslob(10), (x, w)])
 
 
 @pytest.mark.unit
@@ -780,4 +803,23 @@ def test_drift():
 
     assert np.isclose(grad(dummy_fun)(1.0), 650, rtol=1e-3)
 
+    return fig
+
+
+# todo:
+@pytest.mark.unit
+def test_fcb_interp():
+    """Test interpolation for this basis function."""
+    domain = (0, 2 * np.pi)
+    M, N = 1, 5
+    xy0 = FourierChebyshevBasis.nodes(M, N, domain=domain)
+    f0 = jnp.mean(xy0.reshape(M, N, 2), axis=-1)
+    fcb = FourierChebyshevBasis(f0, M, N, domain=domain)
+    f1 = fcb.evaluate(1, fcb.N * 10)
+    xy1 = FourierChebyshevBasis.nodes(1, fcb.N * 10, domain=domain)
+
+    fig, ax = plt.subplots()
+    ax.plot(xy0[:, 1], f0[0, :], linestyle="--")
+    ax.plot(xy1[:, 1], f1[0, :], marker="x")
+    plt.show()
     return fig

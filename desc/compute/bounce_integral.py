@@ -6,9 +6,9 @@ import numpy as np
 from interpax import CubicHermiteSpline, PPoly, interp1d
 from jax.nn import softmax
 from matplotlib import pyplot as plt
-from orthax.legendre import leggauss
+from orthax.legendre import legder, leggauss, legval
 
-from desc.backend import flatnonzero, imap, jnp, put, take
+from desc.backend import eigh_tridiagonal, flatnonzero, imap, jnp, put, take
 from desc.compute.utils import safediv
 from desc.utils import errorif, setdefault, warnif
 
@@ -862,6 +862,45 @@ def tanh_sinh(deg, m=10):
     arg = 0.5 * jnp.pi * jnp.sinh(t)
     x = jnp.tanh(arg)  # x = g(t)
     w = 0.5 * jnp.pi * jnp.cosh(t) / jnp.cosh(arg) ** 2 * dt  # w = (dg/dt) dt
+    return x, w
+
+
+def leggausslob(deg):
+    """Lobatto-Gauss-Legendre quadrature.
+
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
+    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+
+    Parameters
+    ----------
+    deg : int
+        Number of (interior) quadrature points to return.
+
+    Returns
+    -------
+    x, w : (jnp.ndarray, jnp.ndarray)
+        Quadrature points in (-1, 1) and associated weights.
+        Excludes points and weights at -1 and 1.
+
+    """
+    # Designate two degrees for endpoints.
+    deg = int(deg) + 2
+
+    n = jnp.arange(2, deg - 1)
+    x = eigh_tridiagonal(
+        jnp.zeros(deg - 2),
+        jnp.sqrt((n**2 - 1) / (4 * n**2 - 1)),
+        eigvals_only=True,
+    )
+    c0 = put(jnp.zeros(deg), -1, 1)
+
+    # improve (single multiplicity) roots by one application of Newton
+    c = legder(c0)
+    dy = legval(x=x, c=c)
+    df = legval(x=x, c=legder(c))
+    x -= dy / df
+
+    w = 2 / (deg * (deg - 1) * legval(x=x, c=c0) ** 2)
     return x, w
 
 

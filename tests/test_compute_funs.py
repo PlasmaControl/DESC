@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
+from desc.backend import jnp
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import Equilibrium
@@ -19,7 +20,7 @@ from desc.geometry import (
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -1261,6 +1262,23 @@ def test_compute_everything():
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 
+    zeta = np.linspace(-jnp.pi, jnp.pi, 101)
+    theta_PEST = jnp.tile(zeta, 8)
+    zeta_full = jnp.tile(zeta, 8)
+
+    theta_PEST = theta_PEST.flatten()
+    zeta_full = zeta_full.flatten()
+    rho = jnp.ones_like(theta_PEST)
+    theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
+
+    ## Rootfinding theta for a given theta_PEST
+    # desc_coords = compute_theta_coords(
+    #    eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
+    # )
+
+    # sfl_grid = Grid(desc_coords, sort=False)
+    sfl_grid = Grid(theta_coords, sort=False)
+
     with open("tests/inputs/master_compute_data_rpz.pkl", "rb") as file:
         master_data_rpz = pickle.load(file)
     with open("tests/inputs/master_compute_data_xyz.pkl", "rb") as file:
@@ -1276,24 +1294,41 @@ def test_compute_everything():
     no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
 
     for p in things:
-        # Stability quantities computed in field-aligned coordinates
-        # can't be calculated here due to recent mods.
-        if p == "desc.equilibrium.equilibrium.Equilibrium":
-            stability_keys = [
-                "ideal_ball_gamma1",
-                "ideal_ball_gamma2",
-                "Newcomb_metric",
-            ]
-            for key in stability_keys:
-                data_index[p].pop(key, None)
-
         with warnings.catch_warnings():
             # Max resolution of master_compute_data.pkl limited by GitHub file
             # size cap at 100 mb, so can't hit suggested resolution for some things.
             warnings.filterwarnings("ignore", category=ResolutionWarning)
-            this_branch_data_rpz[p] = things[p].compute(
-                list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
-            )
+
+            ## Stability quantities computed in field-aligned coordinates
+            ## can't be calculated here due to recent mods.
+            if p == "desc.equilibrium.equilibrium.Equilibrium":
+                stability_keys = [
+                    "ideal_ball_gamma1",
+                    "ideal_ball_gamma2",
+                    "Newcomb_metric",
+                ]
+                dict1 = {}
+                dict1[p] = things[p].compute(stability_keys, sfl_grid, basis="rpz")
+
+                data_index_copy = {}
+                data_index_copy[p] = data_index[p].copy()
+
+                for key in stability_keys:
+                    data_index[p].pop(key, None)
+
+                this_branch_data_rpz[p] = things[p].compute(
+                    list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
+                )
+
+                dict1[p].update(this_branch_data_rpz[p])
+                this_branch_data_rpz[p] = dict1[p].copy()
+
+                data_index[p] = data_index_copy[p].copy()
+            else:
+                this_branch_data_rpz[p] = things[p].compute(
+                    list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
+                )
+
         # make sure we can compute everything
         assert this_branch_data_rpz[p].keys() == data_index[p].keys(), (
             f"Parameterization: {p}. Can't compute "
@@ -1329,9 +1364,37 @@ def test_compute_everything():
                 # Max resolution of master_compute_data.pkl limited by GitHub file
                 # size cap at 100 mb, so can't hit suggested resolution for some things.
                 warnings.filterwarnings("ignore", category=ResolutionWarning)
-                this_branch_data_xyz[p] = things[p].compute(
-                    list(data_index_xyz[p].keys()), **grid.get(p, {}), basis="xyz"
-                )
+
+                ## Stability quantities computed in field-aligned coordinates
+                ## can't be calculated normally here due to recent mods.
+                if p == "desc.equilibrium.equilibrium.Equilibrium":
+                    stability_keys = [
+                        "ideal_ball_gamma1",
+                        "ideal_ball_gamma2",
+                        "Newcomb_metric",
+                    ]
+                    dict1 = {}
+                    dict1[p] = things[p].compute(stability_keys, sfl_grid, basis="xyz")
+
+                    data_index_xyz_copy = {}
+                    data_index_xyz_copy[p] = data_index_xyz[p].copy()
+
+                    for key in stability_keys:
+                        data_index_xyz[p].pop(key, None)
+
+                    this_branch_data_xyz[p] = things[p].compute(
+                        list(data_index_xyz[p].keys()), **grid.get(p, {}), basis="xyz"
+                    )
+
+                    dict1[p].update(this_branch_data_xyz[p])
+                    this_branch_data_xyz[p] = dict1[p].copy()
+
+                    data_index_xyz[p] = data_index_xyz_copy[p].copy()
+                else:
+                    this_branch_data_xyz[p] = things[p].compute(
+                        list(data_index_xyz[p].keys()), **grid.get(p, {}), basis="xyz"
+                    )
+
             assert this_branch_data_xyz[p].keys() == data_index_xyz[p].keys(), (
                 f"Parameterization: {p}. Can't compute "
                 + f"{data_index_xyz[p].keys() - this_branch_data_xyz[p].keys()}."

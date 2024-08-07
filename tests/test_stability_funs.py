@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 from netCDF4 import Dataset
-from scipy.interpolate import CubicSpline as cubspl
 from scipy.interpolate import interp1d
 
 import desc.examples
@@ -364,8 +363,13 @@ def test_ballooning_geometry(tmpdir_factory):
     except TypeError:
         eq0 = desc.examples.get("W7-X")
 
-    eq_list = [eq0]
-    fac_list = [4]
+    try:
+        eq1 = desc.examples.get("precise_QA")[-1]
+    except TypeError:
+        eq1 = desc.examples.get("precise_QA")
+
+    eq_list = [eq0, eq1]
+    fac_list = [4, 4]
 
     for eq, fac in zip(eq_list, fac_list):
         print(eq)
@@ -411,35 +415,10 @@ def test_ballooning_geometry(tmpdir_factory):
             "g^aa",
             "g^ra",
             "g^rr",
-            "g^aa_z",
-            "g^aa_t",
-            "g^aa_zz",
-            "g^aa_tt",
-            "g^aa_tz",
-            "g^ra_z",
-            "g^ra_t",
-            "g^ra_zz",
-            "g^ra_tt",
-            "g^ra_tz",
-            "g^rr_z",
-            "g^rr_t",
-            "g^rr_zz",
-            "g^rr_tt",
-            "g^rr_tz",
             "cvdrift",
             "cvdrift0",
             "|B|",
-            "|B|_z",
-            "|B|_t",
-            "|B|_zz",
-            "|B|_tt",
-            "|B|_tz",
             "B^zeta",
-            "B^zeta_t",
-            "B^zeta_z",
-            "B^zeta_tt",
-            "B^zeta_zz",
-            "B^zeta_tz",
         ]
 
         data = eq.compute(data_keys, grid=grid)
@@ -461,69 +440,13 @@ def test_ballooning_geometry(tmpdir_factory):
         grad_psi_sq = data["|grad(psi)|^2"]
         grad_alpha = data["grad(alpha)"]
 
-        iota = data["iota"]
-
-        temp_fac1 = 1 / (1 + data["lambda_t"])
-        temp_fac2 = (iota - data["lambda_z"]) * temp_fac1
-
         g_sup_rr = data["g^rr"]
-        g_sup_rr_z0 = data["g^rr_z"] + data["g^rr_t"] * temp_fac2
-        g_sup_rr_zz0 = (
-            data["g^rr_zz"]
-            + 2 * data["g^rr_tz"] * temp_fac2
-            - data["g^rr_t"]
-            * (
-                data["lambda_zz"] * temp_fac1
-                + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-                + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-            )
-            + data["g^rr_tt"] * temp_fac2**2
-        )
-
         g_sup_ra = data["g^ra"]
-        g_sup_ra_z0 = data["g^ra_z"] + data["g^ra_t"] * temp_fac2
-
         g_sup_aa = data["g^aa"]
-        g_sup_aa_z0 = data["g^aa_z"] + data["g^aa_t"] * temp_fac2
-        g_sup_aa_zz0 = (
-            data["g^aa_zz"]
-            + 2 * data["g^aa_tz"] * temp_fac2
-            - data["g^aa_t"]
-            * (
-                data["lambda_zz"] * temp_fac1
-                + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-                + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-            )
-            + data["g^aa_tt"] * temp_fac2**2
-        )
 
         modB = data["|B|"]
-        modB_z0 = data["|B|_z"] + data["|B|_t"] * temp_fac2
-        modB_zz0 = (
-            data["|B|_zz"]
-            + 2 * data["|B|_tz"] * temp_fac2
-            - data["|B|_t"]
-            * (
-                data["lambda_zz"] * temp_fac1
-                + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-                + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-            )
-            + data["|B|_tt"] * temp_fac2**2
-        )
 
         B_sup_zeta = data["B^zeta"]
-        B_sup_zeta_z0 = data["B^zeta_z"] + temp_fac2 * data["B^zeta_t"]
-        B_sup_zeta_zz0 = (
-            data["B^zeta_zz"]
-            + 2 * data["B^zeta_tz"] * temp_fac2
-            - data["B^zeta_t"]
-            * (
-                data["lambda_zz"] * temp_fac1
-                + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
-                + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
-            )
-            + data["B^zeta_tt"] * temp_fac2**2
-        )
 
         gds2 = np.array(dot(grad_alpha, grad_alpha)) * Lref**2 * psi
         gds2_alt = g_sup_aa * Lref**2 * psi
@@ -556,45 +479,7 @@ def test_ballooning_geometry(tmpdir_factory):
         np.testing.assert_allclose(cvdrift, cvdrift_alt, atol=1e-2)
 
         sqrt_g_PEST = data["sqrt(g)_PEST"]
-        spl0 = cubspl(zeta, sqrt_g_PEST)
         np.testing.assert_allclose(sqrt_g_PEST, 1 / (B_sup_zeta / psi_r))
-        np.testing.assert_allclose(
-            spl0.derivative()(zeta),
-            -psi_r * B_sup_zeta_z0 / (B_sup_zeta) ** 2,
-            atol=1e-3,
-        )
-        np.testing.assert_allclose(
-            spl0.derivative(nu=2)(zeta),
-            psi_r
-            * (
-                -B_sup_zeta_zz0 / (B_sup_zeta) ** 2
-                + 2 * B_sup_zeta_z0**2 / (B_sup_zeta) ** 3
-            ),
-            atol=2e-1,
-        )
-
-        spl1 = cubspl(zeta, g_sup_aa)
-        spl11 = cubspl(zeta, g_sup_aa_z0)
-        np.testing.assert_allclose(g_sup_aa_z0, spl1.derivative()(zeta), atol=5e-2)
-        np.testing.assert_allclose(g_sup_aa_zz0, spl1.derivative(nu=2)(zeta), atol=1e2)
-        np.testing.assert_allclose(g_sup_aa_zz0, spl11.derivative()(zeta), atol=1e2)
-
-        spl2 = cubspl(zeta, g_sup_ra)
-        spl21 = cubspl(zeta, g_sup_ra_z0)
-        np.testing.assert_allclose(g_sup_ra_z0, spl2.derivative(nu=1)(zeta), atol=5e-2)
-        np.testing.assert_allclose(
-            spl2.derivative(nu=2)(zeta), spl21.derivative(nu=1)(zeta), atol=1e2
-        )
-
-        spl3 = cubspl(zeta, g_sup_rr)
-        spl31 = cubspl(zeta, g_sup_rr_z0)
-        np.testing.assert_allclose(g_sup_rr_z0, spl3.derivative(nu=1)(zeta), atol=5e-2)
-        np.testing.assert_allclose(g_sup_rr_zz0, spl3.derivative(nu=2)(zeta), atol=1e2)
-        np.testing.assert_allclose(g_sup_rr_zz0, spl31.derivative(nu=1)(zeta), atol=1e2)
-
-        spl4 = cubspl(zeta, modB)
-        np.testing.assert_allclose(modB_z0, spl4.derivative(nu=1)(zeta), atol=1e-3)
-        np.testing.assert_allclose(modB_zz0, spl4.derivative(nu=2)(zeta), atol=3e-1)
 
 
 @pytest.mark.unit

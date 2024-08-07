@@ -3456,8 +3456,8 @@ def _grad_alpha_tz(params, transforms, profiles, data, **kwargs):
         + data["alpha_tt"] * data["e^theta_z"].T
         + data["alpha_z"] * data["e^zeta_tz"].T
         + data["alpha_tzz"] * data["e^zeta"].T
-        + data["alpha_tz"] * data["e^zeta_t"].T
-        + data["alpha_tt"] * data["e^zeta_z"].T
+        + data["alpha_zz"] * data["e^zeta_t"].T
+        + data["alpha_tz"] * data["e^zeta_z"].T
     ).T
     return data
 

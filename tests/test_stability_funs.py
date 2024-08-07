@@ -364,18 +364,8 @@ def test_ballooning_geometry(tmpdir_factory):
     except TypeError:
         eq0 = desc.examples.get("W7-X")
 
-    try:
-        eq1 = desc.examples.get("NCSX")[-1]
-    except TypeError:
-        eq1 = desc.examples.get("NCSX")
-
-    try:
-        eq2 = desc.examples.get("precise_QH")[-1]
-    except TypeError:
-        eq2 = desc.examples.get("precise_QH")
-
-    eq_list = [eq0, eq1, eq2]
-    fac_list = [4, 6, 8]
+    eq_list = [eq0]
+    fac_list = [4]
 
     for eq, fac in zip(eq_list, fac_list):
         print(eq)

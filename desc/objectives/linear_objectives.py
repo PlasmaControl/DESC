@@ -2570,25 +2570,6 @@ class FixCurveShift(FixParameters):
         )
         # TODO: add normalization?
 
-    def compute(self, params, constants=None):
-        """Compute fixed-shift error.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of curve degrees of freedom, eg Curve.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Curve shift (m).
-
-        """
-        return params["shift"]
-
 
 class FixCurveRotation(FixParameters):
     """Fixes Curve.rotmat attribute, which is redundant with other Curve params.

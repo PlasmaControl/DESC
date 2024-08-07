@@ -3,7 +3,8 @@
 from functools import partial
 
 import numpy as np
-from interpax import CubicHermiteSpline, PchipInterpolator, PPoly, interp1d
+from interpax import CubicHermiteSpline, PPoly, interp1d
+from jax.nn import softmax
 from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
 
@@ -360,7 +361,7 @@ def bounce_points(
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines along the field lines. Last axis enumerates the
         polynomials that compose the spline along a particular field line.
-    num_wells : int
+    num_wells : int or None
         If not specified, then all bounce points are returned in an array whose
         last axis has size ``(knots.size - 1) * (B_c.shape[0] - 1)``. If there
         were less than that many wells detected along a field line, then the last
@@ -393,7 +394,7 @@ def bounce_points(
     intersect = _poly_root(
         c=B_c,
         k=jnp.reciprocal(pitch)[..., jnp.newaxis],
-        a_min=jnp.array([0]),
+        a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
         sort=True,
         sentinel=-1,
@@ -484,14 +485,8 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     return pitch
 
 
-def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
-    """Return |B| values at extrema.
-
-    The quantity 1 / √(1 − λ |B|) common to bounce integrals is singular with
-    strength ~ |ζ_b₂ - ζ_b₁| / |(∂|B|/∂ζ)|ρ,α|. Therefore, an integral over the pitch
-    angle λ may have mass concentrated near λ = 1 / |B|(ζ*) where |B|(ζ*) is a
-    local maximum. Depending on the quantity to integrate, it may be beneficial
-    to place quadrature points at these regions.
+def _get_extrema(knots, B_c, B_z_ra_c, sentinel=jnp.nan):
+    """Return extrema of |B| along field line. Sort order is arbitrary.
 
     Parameters
     ----------
@@ -510,43 +505,25 @@ def get_extrema(knots, B_c, B_z_ra_c, relative_shift=1e-6):
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines along the field lines. Last axis enumerates the
         polynomials that compose the spline along a particular field line.
-    relative_shift : float
-        Relative amount to shift maxima down and minima up to avoid floating point
-        errors in downstream routines.
+    sentinel : float
+        Value with which to pad array to return fixed shape.
 
     Returns
     -------
-    B_extrema : jnp.ndarray
-        Shape (N * (degree - 1), S).
-        For the shaping notation, the ``degree`` of the spline of |B| matches
-        ``B_c.shape[0]-1``, the number of polynomials per spline ``N`` matches
-        ``knots.size-1``, and the number of field lines is denoted by ``S``.
-        If there were less than ``N*degree`` bounce points detected along a field line,
-        then the last axis, which enumerates the bounce points for a particular field
-        line, is padded with nan.
+    extrema, B_extrema : jnp.ndarray
+        Shape (S, N * (degree - 1)).
 
     """
     B_c, B_z_ra_c, _ = _check_shape(knots, B_c, B_z_ra_c)
     S, N, degree = B_c.shape[1], knots.size - 1, B_c.shape[0] - 1
-    extrema = _poly_root(c=B_z_ra_c, a_min=jnp.array([0]), a_max=jnp.diff(knots))
-    assert extrema.shape == (S, N, degree - 1)
-    B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis])
-    B_zz_ra_extrema = _poly_val(x=extrema, c=_poly_der(B_z_ra_c)[..., jnp.newaxis])
-    # Floating point error impedes consistent detection of bounce points riding
-    # extrema. Shift pitch values slightly to resolve this issue.
-    B_extrema = (
-        jnp.where(
-            # Higher priority to shift down maxima than shift up minima, so identify
-            # near equality with zero as maxima.
-            B_zz_ra_extrema <= 0,
-            (1 - relative_shift) * B_extrema,
-            (1 + relative_shift) * B_extrema,
-        )
-        .reshape(S, -1)
-        .T
+    extrema = _poly_root(
+        c=B_z_ra_c, a_min=jnp.array([0.0]), a_max=jnp.diff(knots), sentinel=sentinel
     )
-    assert B_extrema.shape == (N * (degree - 1), S)
-    return B_extrema
+    assert extrema.shape == (S, N, degree - 1)
+    B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
+    # Transform out of local power basis expansion.
+    extrema = (extrema + knots[:-1, jnp.newaxis]).reshape(S, -1)
+    return extrema, B_extrema
 
 
 def _plot(Z, V, title_id=""):
@@ -574,7 +551,7 @@ def _plot(Z, V, title_id=""):
             plt.show()
 
 
-def _check_interp(Z, f, B_sup_z, B, B_z_ra, inner_product, plot):
+def _check_interp(Z, f, B_sup_z, B, B_z_ra, result, plot):
     """Check for floating point errors.
 
     Parameters
@@ -591,8 +568,8 @@ def _check_interp(Z, f, B_sup_z, B, B_z_ra, inner_product, plot):
     B_z_ra : jnp.ndarray
         Norm of magnetic field, derivative with respect to field-line following
         coordinate, interpolated to Z.
-    inner_product : jnp.ndarray
-        Output of ``_interpolatory_quadrature``.
+    result : jnp.ndarray
+        Output of ``_interpolate_and_integrate``.
     plot : bool
         Whether to plot stuff.
 
@@ -614,7 +591,7 @@ def _check_interp(Z, f, B_sup_z, B, B_z_ra, inner_product, plot):
     assert not jnp.isclose(B_sup_z, 0).any(), msg
 
     # Number of those integrals that were computed.
-    actual = jnp.sum(marked & jnp.isfinite(inner_product))
+    actual = jnp.sum(marked & jnp.isfinite(result))
     assert goal == actual, (
         f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
         "can be caused by floating point error or a poor choice of quadrature nodes."
@@ -645,7 +622,6 @@ def _interpolate_and_integrate(
     pitch,
     knots,
     method,
-    method_B="cubic",
     check=False,
     plot=False,
 ):
@@ -659,7 +635,7 @@ def _interpolate_and_integrate(
 
     Returns
     -------
-    inner_product : jnp.ndarray
+    result : jnp.ndarray
         Shape Z.shape[:-1].
         Quadrature for every pitch along every field line.
 
@@ -678,15 +654,15 @@ def _interpolate_and_integrate(
     # that the singularity near the bounce points can be captured more accurately than
     # can be by any polynomial.
     f = [_interp1d_vec(Z, knots, f_i, method=method).reshape(shape) for f_i in f]
-    # TODO: Pass in derivative and use method_B.
+    # TODO: Pass in derivative and use cubic method.
     b_sup_z = _interp1d_vec(Z, knots, B_sup_z / B, method=method).reshape(shape)
-    B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method=method_B).reshape(shape)
-    inner_product = jnp.dot(integrand(*f, B=B, pitch=pitch) / b_sup_z, w)
+    B = _interp1d_vec_with_df(Z, knots, B, B_z_ra, method="cubic").reshape(shape)
+    result = jnp.dot(integrand(*f, B=B, pitch=pitch) / b_sup_z, w)
 
     if check:
-        _check_interp(Z.reshape(shape), f, b_sup_z, B, B_z_ra, inner_product, plot)
+        _check_interp(Z.reshape(shape), f, b_sup_z, B, B_z_ra, result, plot)
 
-    return inner_product
+    return result
 
 
 def _bounce_quadrature(
@@ -702,7 +678,6 @@ def _bounce_quadrature(
     pitch,
     knots,
     method="akima",
-    method_B="cubic",
     batch=True,
     check=False,
 ):
@@ -758,8 +733,6 @@ def _bounce_quadrature(
         Method of interpolation for functions contained in ``f``.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
         Default is akima spline.
-    method_B : str
-        Method of interpolation for |B|. Default is C1 cubic Hermite spline.
     batch : bool
         Whether to perform computation in a batched manner. Default is true.
     check : bool
@@ -795,7 +768,6 @@ def _bounce_quadrature(
             pitch,
             knots,
             method,
-            method_B,
             check,
             # Only developers doing debugging want to see these plots.
             plot=False,
@@ -816,7 +788,6 @@ def _bounce_quadrature(
                 pitch,
                 knots,
                 method,
-                method_B,
                 check=False,
                 plot=False,
             )
@@ -949,13 +920,8 @@ def bounce_integral(
     B_sup_z, B, B_z_ra = (f.reshape(-1, knots.size) for f in [B_sup_z, B, B_z_ra])
 
     # Compute splines.
-    monotonic = kwargs.pop("monotonic", False)
     # Interpax interpolation requires strictly increasing knots.
-    B_c = (
-        PchipInterpolator(knots, B, axis=-1, check=check).c
-        if monotonic
-        else CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c
-    )
+    B_c = CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c
     B_c = jnp.moveaxis(B_c, source=1, destination=-1)
     B_z_ra_c = _poly_der(B_c)
     degree = 3
@@ -973,7 +939,13 @@ def bounce_integral(
         x = auto(x)
 
     def bounce_integrate(
-        integrand, f, pitch, method="akima", batch=True, num_wells=None
+        integrand,
+        f,
+        pitch,
+        method="akima",
+        batch=True,
+        num_wells=None,
+        weight=None,
     ):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
@@ -1001,7 +973,7 @@ def bounce_integral(
             Default is akima spline.
         batch : bool
             Whether to perform computation in a batched manner. Default is true.
-        num_wells : int
+        num_wells : int or None
             If not specified, then all bounce integrals are returned in an array whose
             last axis has size ``(knots.size - 1) * degree``. If there
             were less than that many wells detected along a field line, then the last
@@ -1015,6 +987,11 @@ def bounce_integral(
             identified. This will be done automatically if the ``bounce_integral``
             function is called with ``check=True`` and ``plot=True``. As a reference,
             there are typically <= 5 wells per toroidal transit.
+        weight : jnp.ndarray
+            Shape (S, knots.size) or (S * knots.size).
+            If supplied, the bounce integral labeled by well j is weighted such that
+            the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
+            evaluated at the deepest point in the magnetic well.
 
         Returns
         -------
@@ -1038,11 +1015,43 @@ def bounce_integral(
             pitch,
             knots,
             method,
-            method_B="monotonic" if monotonic else "cubic",
             batch=batch,
             check=check,
         )
+        if weight is not None:
+            result *= _compute_at_deepest(
+                bp1, bp2, knots, B_c, B_z_ra_c, weight.reshape(-1, knots.size), method
+            )
         assert result.shape[-1] == setdefault(num_wells, (knots.size - 1) * degree)
         return result
 
     return bounce_integrate, spline
+
+
+def _compute_at_deepest(bp1, bp2, knots, B_c, B_z_ra_c, f, method, beta=-50):
+    """Compute ``f`` at deepest point in the magnetic well.
+
+    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E |B|(ζ). Returns f_min = mean_A f.
+
+    Parameters
+    ----------
+    beta : float
+        More negative gives exponentially better approximation to f_min at the
+        expense of sharper gradients.
+
+    """
+    extrema, B_extrema = _get_extrema(knots, B_c, B_z_ra_c, sentinel=0)
+    P, S, num_wells = bp1.shape
+    assert extrema.shape == B_extrema.shape == (S, extrema.shape[-1])
+    B = jnp.where(
+        (bp1[..., jnp.newaxis] < extrema[:, jnp.newaxis])
+        & (extrema[:, jnp.newaxis] < bp2[..., jnp.newaxis]),
+        (B_extrema / jnp.mean(B_extrema, axis=-1, keepdims=True))[:, jnp.newaxis],
+        100,  # 100 >> max(|B|) / mean(|B|)
+    )
+    f_min = jnp.linalg.vecdot(
+        softmax(beta * B, axis=-1),
+        _interp1d_vec(extrema, knots, f, method=method)[:, jnp.newaxis],
+    )
+    assert f_min.shape == (P, S, num_wells)
+    return f_min

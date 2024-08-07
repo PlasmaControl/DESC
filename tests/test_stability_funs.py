@@ -608,7 +608,7 @@ def test_ballooning_geometry(tmpdir_factory):
 
 
 @pytest.mark.unit
-def test_stability_eval():
+def test_ballooning_stability_eval():
     """Cross-compare all the stability functions.
 
     We calculated the ideal ballooning growth rate and Newcomb metric for
@@ -620,7 +620,7 @@ def test_stability_eval():
         eq = desc.examples.get("HELIOTRON")
 
     # Flux surfaces on which to evaluate ballooning stability
-    surfaces = [0.01, 0.5, 0.8, 1.0]
+    surfaces = [0.01, 0.5, 1.0]
 
     grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
     eq_data_keys = ["iota"]

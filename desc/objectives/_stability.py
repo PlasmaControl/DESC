@@ -555,7 +555,7 @@ class BallooningStability(_Objective):
         transforms = get_transforms(
             self._data_keys, obj=eq, grid=sfl_grid, jitable=True
         )
-        profiles = get_profiles(self._data_keys, obj=eq, grid=sfl_grid, jitable=True)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=sfl_grid)
 
         # we prime the data dict with the correct iota values so we don't recompute them
         # using the wrong grid

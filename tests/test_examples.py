@@ -20,9 +20,10 @@ from desc.coils import (
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.coords import compute_theta_coords
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
@@ -32,6 +33,7 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    BallooningStability,
     BoundaryError,
     CoilCurvature,
     CoilLength,
@@ -1630,3 +1632,151 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+
+@pytest.mark.unit
+def test_ballooning_stability_opt():
+    """Perform ballooning stability optimization with DESC."""
+    try:
+        eq = get("HELIOTRON")[-1]
+    except TypeError:
+        eq = get("HELIOTRON")
+
+    # Flux surfaces on which to evaluate ballooning stability
+    surfaces = [0.8]
+
+    grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
+    eq_data_keys = ["iota"]
+
+    data = eq.compute(eq_data_keys, grid=grid)
+    iota = data["iota"]
+
+    Nalpha = int(8)  # Number of field lines
+
+    assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
+
+    # Field lines on which to evaluate ballooning stability
+    alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
+
+    # Number of toroidal transits of the field line
+    ntor = int(3)
+
+    # Number of point along a field line in ballooning space
+    N0 = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
+
+    # range of the ballooning coordinate zeta
+    zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
+
+    lam2_initial = np.zeros(
+        len(surfaces),
+    )
+    for i in range(len(surfaces)):
+        rho = surfaces[i] * np.ones((N0 * Nalpha,))
+
+        theta_PEST = alpha[:, None] + iota[0] * zeta
+        zeta_full = jnp.tile(zeta, Nalpha)
+
+        theta_PEST = theta_PEST.flatten()
+        zeta_full = zeta_full.flatten()
+
+        theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
+
+        # Rootfinding theta for a given theta_PEST
+        desc_coords = compute_theta_coords(
+            eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
+        )
+
+        sfl_grid = Grid(desc_coords, sort=False)
+
+        data_keys = ["ideal_ball_gamma2"]
+        data = eq.compute(data_keys, grid=sfl_grid)
+
+        lam2_initial[i] = data["ideal_ball_gamma2"]
+
+    # Flux surfaces on which to evaluate ballooning stability
+    surfaces_ball = surfaces
+
+    # Determine which modes to unfix
+    k = 2
+
+    objs_ball = {}
+
+    eq_ball_weight = 1.0e2
+
+    for i, rho in enumerate(surfaces_ball):
+        shift_arr = np.random.default_rng().uniform(-0.1, 0.1, Nalpha - 1)
+        alpha = np.reshape(np.linspace(0, np.pi, Nalpha + 1)[:Nalpha], (-1, 1))
+        alpha[1:, :] = alpha[1:, :] + np.reshape(shift_arr, (-1, 1))
+
+        objs_ball[rho] = BallooningStability(
+            eq=eq,
+            rho=np.array([rho]),
+            alpha=alpha,
+            zetamax=ntor * jnp.pi,
+            nzeta=N0,
+            weight=eq_ball_weight,
+        )
+
+    modes_R = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+            ],
+        )
+    )
+    modes_Z = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+    ]
+
+    objective = ObjectiveFunction(tuple(objs_ball.values()))
+
+    constraints = (
+        ForceBalance(eq=eq),
+        FixBoundaryR(eq=eq, modes=modes_R),
+        FixBoundaryZ(eq=eq, modes=modes_Z),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+    )
+
+    optimizer = Optimizer("proximal-lsq-exact")
+    (eq,), _ = optimizer.optimize(
+        eq,
+        objective,
+        constraints,
+        ftol=1e-4,
+        xtol=1e-6,
+        gtol=1e-6,
+        maxiter=5,  # increase maxiter to 50 for a better result
+        verbose=3,
+        options={"initial_trust_ratio": 2e-3},
+    )
+
+    lam2_optimized = np.zeros(
+        len(surfaces),
+    )
+    for i in range(len(surfaces)):
+        rho = surfaces[i] * np.ones((N0 * Nalpha,))
+
+        theta_PEST = alpha[:, None] + iota[0] * zeta
+        zeta_full = jnp.tile(zeta, Nalpha)
+
+        theta_PEST = theta_PEST.flatten()
+        zeta_full = zeta_full.flatten()
+
+        theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
+
+        # Rootfinding theta for a given theta_PEST
+        desc_coords = compute_theta_coords(
+            eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
+        )
+
+        sfl_grid = Grid(desc_coords, sort=False)
+
+        data_keys = ["ideal_ball_gamma2"]
+        data = eq.compute(data_keys, grid=sfl_grid)
+
+        lam2_optimized[i] = data["ideal_ball_gamma2"]
+
+    assert lam2_optimized < lam2_initial

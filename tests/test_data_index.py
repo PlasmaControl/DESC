@@ -118,9 +118,7 @@ class TestDataIndex:
                 #       the source code but actually needed for the computation. This
                 #       is a temporary fix until we have a better way to automatically
                 #       handle this.
-                assert queried_deps[p][name]["data"].issubset(
-                    data | axis_limit_data
-                ), err_msg
+                assert queried_deps[p][name]["data"] == data | axis_limit_data, err_msg
                 errorif(
                     name not in queried_deps[p],
                     AssertionError,

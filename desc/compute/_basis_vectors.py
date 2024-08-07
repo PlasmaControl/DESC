@@ -34,7 +34,7 @@ def _b(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^rho",  # ∇ρ is the same in (ρ,θ,ζ) and (ρ,α,ζ) coordinates.
+    name="e^rho",  # ∇ρ is the same in any coordinate system.
     label="\\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -927,7 +927,7 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^zeta",  # ∇ζ is the same in (ρ,θ,ζ) and (ρ,α,ζ) coordinates.
+    name="e^zeta",  # ∇ζ is the same in any coordinate system.
     label="\\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -2450,10 +2450,10 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
 )
 def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
     # constant ρ and ϕ
-    e_vartheta = (
-        data["e_theta"].T * data["phi_z"] - data["e_zeta"].T * data["phi_t"]
-    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
-    data["e_theta_PEST"] = e_vartheta.T
+    data["e_theta_PEST"] = (
+        (data["e_theta"].T * data["phi_z"] - data["e_zeta"].T * data["phi_t"])
+        / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    ).T
     return data
 
 
@@ -2474,11 +2474,13 @@ def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
 )
 def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
     # constant ρ and ϑ
-    e_phi = (
-        data["e_zeta"].T * data["theta_PEST_t"]
-        - data["e_theta"].T * data["theta_PEST_z"]
-    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
-    data["e_phi|r,v"] = e_phi.T
+    data["e_phi|r,v"] = (
+        (
+            data["e_zeta"].T * data["theta_PEST_t"]
+            - data["e_theta"].T * data["theta_PEST_z"]
+        )
+        / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    ).T
     return data
 
 
@@ -2500,10 +2502,10 @@ def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
 def _e_sub_rho_vp(params, transforms, profiles, data, **kwargs):
     # constant ϑ and ϕ
     data["e_rho|v,p"] = (
-        data["e_rho"].T
-        - data["e_vartheta"].T * data["theta_PEST_r"]
-        - data["e_phi|r,v"].T * data["phi_r"]
-    ).T
+        data["e_rho"]
+        - data["e_vartheta"] * data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_phi|r,v"] * data["phi_r"][:, jnp.newaxis]
+    )
     return data
 
 
@@ -3207,7 +3209,28 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
             data["Z_zzz"],
         ]
     ).T
+    return data
 
+
+@register_compute_fun(
+    name="grad(phi)",
+    label="\\nabla \\phi",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Gradient of cylindrical toroidal angle ϕ.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R", "0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+)
+def _grad_phi(params, transforms, profiles, data, **kwargs):
+    data["grad(phi)"] = jnp.column_stack([data["0"], 1 / data["R"], data["0"]])
     return data
 
 
@@ -3413,7 +3436,7 @@ def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\rho} |_{\\alpha, \\zeta}",
     units="m",
     units_long="meters",
-    description="Tangent vector along radial field line label",
+    description="Covariant radial basis vector in (ρ, α, ζ) Clebsch coordinates.",
     dim=3,
     params=[],
     transforms={},
@@ -3434,7 +3457,7 @@ def _e_rho_az(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\alpha}",
     units="m",
     units_long="meters",
-    description="Tangent vector along poloidal field line label",
+    description="Covariant poloidal basis vector in (ρ, α, ζ) Clebsch coordinates.",
     dim=3,
     params=[],
     transforms={},
@@ -3453,8 +3476,8 @@ def _e_alpha(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta} \\mathbf{e}_{\\alpha}",
     units="m",
     units_long="meters",
-    description="Tangent vector along poloidal field line label, derivative wrt"
-    " DESC poloidal angle",
+    description="Covariant poloidal basis vector in (ρ, α, ζ) Clebsch coordinates,"
+    " derivative wrt DESC poloidal angle",
     dim=3,
     params=[],
     transforms={},
@@ -3475,8 +3498,8 @@ def _e_alpha_t(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} \\mathbf{e}_{\\alpha}",
     units="m",
     units_long="meters",
-    description="Tangent vector along poloidal field line label, "
-    "derivative wrt DESC toroidal angle",
+    description="Covariant poloidal basis vector in (ρ, α, ζ) Clebsch coordinates, "
+    "derivative wrt DESC toroidal angle at fixed ρ,θ.",
     dim=3,
     params=[],
     transforms={},
@@ -3560,7 +3583,7 @@ def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
     units="m",
     units_long="meters",
     description="Tangent vector along (collinear to) field line, "
-    "derivative wrt DESC toroidal angle",
+    "derivative wrt DESC toroidal angle at fixed ρ,θ.",
     dim=3,
     params=[],
     transforms={},
@@ -3635,4 +3658,44 @@ def _d_ell_d_zeta_z(params, transforms, profiles, data, **kwargs):
     data["|e_zeta|r,a|_z|r,a"] = (
         dot(data["(e_zeta|r,a)_z|r,a"], data["e_zeta|r,a"]) / data["|e_zeta|r,a|"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="e_alpha|r,p",
+    label="\\mathbf{e}_{\\alpha} |_{\\rho, \\phi}",
+    units="m",
+    units_long="meters",
+    description="Covariant poloidal basis vector in (ρ, α, ϕ) Clebsch coordinates.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "alpha_t", "e_zeta", "alpha_z", "phi_t", "phi_z"],
+)
+def _e_alpha_rp(params, transforms, profiles, data, **kwargs):
+    data["e_alpha|r,p"] = (
+        (data["e_theta"].T * data["phi_z"] - data["e_zeta"].T * data["phi_t"])
+        / (data["alpha_t"] * data["phi_z"] - data["alpha_z"] * data["phi_t"])
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="|e_alpha|r,p|",
+    label="|\\mathbf{e}_{\\alpha} |_{\\rho, \\phi}|",
+    units="m",
+    units_long="meters",
+    description="Norm of covariant poloidal basis vector in (ρ, α, ϕ) Clebsch "
+    "coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_alpha|r,p"],
+)
+def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
+    data["|e_alpha|r,p|"] = jnp.linalg.norm(data["e_alpha|r,p"], axis=-1)
     return data

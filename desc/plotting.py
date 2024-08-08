@@ -2756,22 +2756,14 @@ def plot_boozer_surface(
 
     # default grids
     if grid_compute is None:
-        if eq_switch:
-            grid_kwargs = {
-                "rho": rho,
-                "M": 4 * thing.M,
-                "N": 4 * thing.N,
-                "NFP": thing.NFP,
-                "endpoint": False,
-            }
-        else:
-            grid_kwargs = {
-                "rho": rho,
-                "M": 50,
-                "N": 50,
-                "NFP": thing.NFP,
-                "endpoint": False,
-            }
+        # grid_compute only used for Equilibrium, not OmnigenousField
+        grid_kwargs = {
+            "rho": rho,
+            "M": 4 * getattr(thing, "M", 1),
+            "N": 4 * getattr(thing, "N", 1),
+            "NFP": thing.NFP,
+            "endpoint": False,
+        }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {
@@ -2816,7 +2808,7 @@ def plot_boozer_surface(
             warnings.simplefilter("ignore")
             data = thing.compute(
                 ["theta_B", "zeta_B", "|B|"],
-                grid=grid_compute,
+                grid=grid_plot,
                 helicity=thing.helicity,
                 iota=iota,
             )

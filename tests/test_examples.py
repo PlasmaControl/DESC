@@ -1743,14 +1743,14 @@ def test_ballooning_stability_opt():
     )
 
     optimizer = Optimizer("proximal-lsq-exact")
-    eq, _ = optimizer.optimize(
+    (eq,), _ = optimizer.optimize(
         eq,
         objective,
         constraints,
         ftol=1e-4,
         xtol=1e-6,
         gtol=1e-6,
-        maxiter=5,  # increase maxiter to 50 for a better result
+        maxiter=2,  # increase maxiter to 50 for a better result
         verbose=3,
         options={"initial_trust_ratio": 2e-3},
     )

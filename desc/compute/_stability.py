@@ -270,15 +270,15 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     to calculate the maximum growth rate against the
     infinite-n ideal ballooning mode. The equation being solved is
 
-    d / d z (g d X / d z) + c * X - lam * f * X = 0, g, f > 0
+    d/dζ(g dX/dζ) + c X = lam f X, g, f > 0,
 
     where
 
-    kappa = b dot grad b
-    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
-    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
-        * (b cross kappa) dot grad alpha/ B**2,
-    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta),
+    𝛋 = 𝐛 ⋅∇ 𝐛
+    g = a_N^3 * B_N * (b ⋅∇ζ) * |∇α|², / B,
+    c = a_N/B_N * (1/ b ⋅∇ζ) * dψ/dρ * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
+    f = a_N * B_N^3 *|∇α|² / B^3 * (1/ b ⋅∇ζ) ,
+
     are needed along a field line to solve the ballooning equation once.
 
     To obtain the parameters g, c, and f, we need a set of parameters
@@ -420,15 +420,14 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     to calculate the maximum growth rate against the
     infinite-n ideal ballooning mode. The equation being solved is
 
-    d / d z (g d X / d z) + c * X - lam * f * X = 0, g, f > 0
+    d/dζ(g dX/dζ) + c X = lam f X, g, f > 0
 
     where
 
-    kappa = b dot grad b
-    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
-    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
-        * (b cross kappa) dot grad alpha/ B**2,
-    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta),
+    𝛋 = 𝐛 ⋅∇ 𝐛
+    g = a_N^3 * B_N * (b ⋅∇ζ) * |∇α|², / B,
+    c = a_N/B_N * (1/ b ⋅∇ζ) * dψ/dρ * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
+    f = a_N * B_N^3 *|∇α|² / B^3 * (1/ b ⋅∇ζ) ,
     are needed along a field line to solve the ballooning equation once.
 
     To obtain the parameters g, c, and f, we need a set of parameters
@@ -573,7 +572,7 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     This function uses a finite-difference method to integrate the
     marginal stability ideal-ballooning equation
 
-    d / d z (g d X / d z) + c * X = 0, g, f > 0
+    d/dζ(g dX/dζ) + c X = 0, g > 0
 
     using the Newcomb's stability criterion
 

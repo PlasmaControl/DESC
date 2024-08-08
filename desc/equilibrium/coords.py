@@ -29,33 +29,34 @@ def map_coordinates(  # noqa: C901
     full_output=False,
     **kwargs,
 ):
-    """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+    """Transform coordinates given in ``inbasis`` to ``outbasis``.
 
-    First solves for the computational coordinates that correspond to inbasis, then
-    evaluates outbasis at those locations.
+    Solves for the computational coordinates that correspond to ``inbasis``,
+    then evaluates ``outbasis`` at those locations.
 
-    Speed can often be significantly improved by providing a reasonable initial guess.
-    The default is a nearest neighbor search on a grid.
+    Performance can often improve significantly given a reasonable initial guess.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to use.
-    coords : ndarray, shape(k,3)
+    coords : ndarray
+        Shape (k, 3).
         2D array of input coordinates. Each row is a different point in space.
     inbasis, outbasis : tuple of str
-        Labels for input and output coordinates, eg ("R", "phi", "Z") or
+        Labels for input and output coordinates, e.g. ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
         same as the compute function data key.
-    guess : None or ndarray, shape(k,3)
+    guess : jnp.ndarray
+        Shape (k, 3).
         Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-        corresponding to coords in inbasis. If None, heuristics are used based on
-        inbasis or a nearest neighbor search on a grid.
-        In most cases, this must be given to be compatible with JIT.
+        corresponding to ``coords`` in ``inbasis``. If not given, then heuristics
+        based on ``inbasis`` or a nearest neighbor search on a grid may be used.
+        In general, this must be given to be compatible with JIT.
     params : dict
         Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
     period : tuple of float
-        Assumed periodicity for each quantity in inbasis.
+        Assumed periodicity for each quantity in ``inbasis``.
         Use np.inf to denote no periodicity.
     tol : float
         Stopping tolerance.
@@ -70,13 +71,14 @@ def map_coordinates(  # noqa: C901
 
     Returns
     -------
-    out : ndarray, shape(k,3)
-        Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
-        for coordinates where root finding did not succeed, possibly because the
-        coordinate is not in the plasma volume.
+    out : jnp.ndarray
+        Shape (k, 3).
+        Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
+        returned for coordinates where root finding did not succeed, possibly
+        because the coordinate is not in the plasma volume.
     info : tuple
         2 element tuple containing residuals and number of iterations
-        for each point. Only returned if ``full_output`` is True
+        for each point. Only returned if ``full_output`` is True.
 
     """
     check_posint(maxiter, allow_none=False)
@@ -517,16 +519,14 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     warnif(
         not nested,
         RuntimeWarning,
-        (
-            "Flux surfaces are no longer nested, exiting early. "
-            + {
-                "auto": "Automatic continuation method failed, consider specifying "
-                "continuation steps manually.",
-                "manual": "Consider taking smaller perturbation/resolution steps "
-                "or reducing trust radius.",
-                None: "",
-            }[msg]
-        ),
+        "Flux surfaces are no longer nested, exiting early. "
+        + {
+            "auto": "Automatic continuation method failed, consider specifying "
+            "continuation steps manually.",
+            "manual": "Consider taking smaller perturbation/resolution steps "
+            "or reducing trust radius.",
+            None: "",
+        }[msg],
     )
     return nested
 

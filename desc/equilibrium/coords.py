@@ -357,7 +357,6 @@ def _map_PEST_coordinates(
             )
         )
     )
-    # Assume λ=0 for initial guess.
     theta_DESC, (res, niter) = vecroot(guess, theta_PEST, rho, zeta)
 
     out = jnp.column_stack([rho, jnp.atleast_1d(theta_DESC.squeeze()), zeta])
@@ -662,6 +661,9 @@ def get_rtz_grid(
         Equilibrium on which to perform coordinate mapping.
     radial : ndarray
         Sorted unique radial coordinates.
+        These coordinates are assumed to be a single variable function of rho.
+        Create a GitHub issue if you have a use-case where this assumption
+        cannot be made.
     poloidal : ndarray
         Sorted unique poloidal coordinates.
     toroidal : ndarray

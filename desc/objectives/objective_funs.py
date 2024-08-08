@@ -90,9 +90,7 @@ class ObjectiveFunction(IOAble):
                 for obj, const in zip(self.objectives, constants):
                     # get the xs that go to that objective
                     xi = [x for x, t in zip(xs, self.things) if t in obj.things]
-                    Ji_ = getattr(obj, op)(
-                        *xi, constants=const
-                    )  # jac wrt to just those things
+                    Ji_ = getattr(obj, op)(*xi, constants=const)  # jac wrt only xi
                     Ji = []  # jac wrt all things
                     for thing in self.things:
                         if thing in obj.things:

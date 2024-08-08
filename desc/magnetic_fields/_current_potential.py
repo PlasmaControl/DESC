@@ -669,11 +669,10 @@ class FourierCurrentPotentialField(
 
         Returns
         -------
-        coils : CoilSet or MixedCoilSet
+        coils : CoilSet
             DESC `CoilSet` of `SplineXYZCoil` coils that are a discretization of
             the surface current on the given winding surface.
-            A `MixedCoilSet` is returned if the number of spline points per
-            coil are not uniform across the coils.
+
         """
         check_posint(num_coils, "num_coils", False)
         check_posint(step, "step", False)
@@ -744,9 +743,10 @@ class FourierCurrentPotentialField(
         # Create CoilSet object
         ################################################################
         # local imports to avoid circular imports
-        from desc.coils import CoilSet, MixedCoilSet, SplineXYZCoil
+        from desc.coils import CoilSet, SplineXYZCoil
 
         coils = []
+        knot_numbers = []
         for j in range(len(contour_X)):
             if not jnp.isclose(helicity, 0):
                 # helical coils
@@ -788,31 +788,20 @@ class FourierCurrentPotentialField(
                 jnp.append(contour_Z[j][0::step], contour_Z[j][0]),
                 method=spline_method,
             )
+            knot_numbers.append(coil.N)
             coils.append(coil)
-        # TODO: interpolate the points so that they are all the same number of knots
-        # (and the same knots)
         # check_intersection is False here as these coils by construction
         # cannot intersect eachother (they are contours of the current potential
         # which cannot self-intersect by definition)
         # unless stell_sym is true, then the full coilset might have
         # self intersection depending on if the coils cross the
         # symmetry plane, in which case we will check
-        try:
-            if jnp.isclose(helicity, 0):
-                final_coilset = CoilSet(
-                    *coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
-                )
-            else:
-                final_coilset = CoilSet(*coils, check_intersection=False)
-        except ValueError:
-            # can't make a CoilSet so make a MixedCoilSet instead
-            final_coilset = (
-                MixedCoilSet(*coils, check_intersection=False)
-                if not jnp.isclose(helicity, 0)
-                else MixedCoilSet.from_symmetry(
-                    coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
-                )
+        if jnp.isclose(helicity, 0):
+            final_coilset = CoilSet(
+                *coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
             )
+        else:
+            final_coilset = CoilSet(*coils, check_intersection=False)
         return final_coilset
 
 
@@ -1445,7 +1434,7 @@ def _find_current_potential_contours(
         )
         contours_indices.append(this_contour[0])
     # from the indices, calculate the actual zeta and theta values of the contours
-    contours_theta_zeta = [
+    contours_theta_zeta_not_uniform = [
         np.array(
             [
                 np.interp(contour[:, 0], np.arange(zeta_full.size), zeta_full),
@@ -1453,6 +1442,19 @@ def _find_current_potential_contours(
             ]
         ).T
         for contour in contours_indices
+    ]
+    # make all the contours the same length by interpolating
+    # any shorter ones to match the length of the longest
+    Npts = np.max([c.shape[0] for c in contours_indices])
+    s = np.linspace(0, 2 * np.pi, Npts)
+    contours_theta_zeta = [
+        np.array(
+            [
+                np.interp(s, np.linspace(0, 2 * np.pi, c[:, 0].size), c[:, 0]),
+                np.interp(s, np.linspace(0, 2 * np.pi, c[:, 1].size), c[:, 1]),
+            ]
+        ).T
+        for c in contours_theta_zeta_not_uniform
     ]
     # reverse so that our coils start at zeta=0, this is just a choice
     contours_theta_zeta.reverse()

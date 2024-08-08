@@ -648,7 +648,9 @@ def to_sfl(
     return eq_sfl
 
 
-def get_rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=True):
+def get_rtz_grid(
+    eq, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+):
     """Return DESC grid in rtz (rho, theta, zeta) coordinates from given coordinates.
 
     Create a tensor-product grid from the given coordinates, and return the same grid
@@ -691,12 +693,15 @@ def get_rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=Tr
         "v": "theta_PEST",
         "a": "alpha",
         "z": "zeta",
+        "p": "phi",
     }
-    rtz_nodes = eq.map_coordinates(
+    rtz_nodes = map_coordinates(
+        eq,
         grid.nodes,
         inbasis=[inbasis[char] for char in coordinates],
         outbasis=("rho", "theta", "zeta"),
         period=period,
+        **kwargs,
     )
     desc_grid = Grid(
         nodes=rtz_nodes,
@@ -704,6 +709,7 @@ def get_rtz_grid(eq, radial, poloidal, toroidal, coordinates, period, jitable=Tr
         source_grid=grid,
         sort=False,
         jitable=jitable,
+        # Assumes that in basis radial coordinate is single variable function of rho.
         _unique_rho_idx=grid.unique_rho_idx,
         _inverse_rho_idx=grid.inverse_rho_idx,
     )

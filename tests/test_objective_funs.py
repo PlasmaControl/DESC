@@ -36,7 +36,6 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
-    BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
@@ -2286,7 +2285,6 @@ class TestObjectiveNaNGrad:
         ObjectiveFromUser,
         # TODO: add Omnigenity objective (see GH issue #943)
         Omnigenity,
-        BallooningStability,
     ]
     other_objectives = list(set(objectives) - set(specials))
 

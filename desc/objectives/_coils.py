@@ -1304,6 +1304,14 @@ class ToroidalFlux(_Objective):
     by making the coil currents zero. Instead, this objective ensures
     the coils create the necessary toroidal flux for the equilibrium field.
 
+    Will try to use the vector potential method to calculate the toroidal flux
+    (Φ = ∮ 𝐀 ⋅ 𝐝𝐥 over the perimeter of a constant zeta plane)
+    instead of the brute force method using the magnetic field
+    (Φ = ∯ 𝐁 ⋅ 𝐝𝐒 over a constant zeta XS). The vector potential method
+    is much more efficient, however not every ``MagneticField`` object
+    has a vector potential available to compute, so in those cases
+    the magnetic field method is used.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -1348,15 +1356,7 @@ class ToroidalFlux(_Objective):
         zeta=jnp.array(0.0), NFP=eq.NFP).
     name : str, optional
         Name of the objective function.
-    use_vector_potential : True
-        Whether to use the vector potential method to calculate the toroidal flux
-        (Φ = ∮ 𝐀 ⋅ 𝐝𝐥 over the perimeter of a constant zeta plane)
-        instead of the brute force method using the magnetic field
-        (Φ = ∯ 𝐁 ⋅ 𝐝𝐒 over a constant zeta XS). The vector potential method
-        is much more efficient, however not every ``MagneticField`` object
-        has a vector potential available to compute, so this option should be
-        set to False in those cases or if the magnetic field method is preferred.
-        #TODO: add eq_fixed option so this can be used in single stage
+
 
     """
 
@@ -1378,7 +1378,6 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
-        use_vector_potential=True,
     ):
         if target is None and bounds is None:
             target = eq.Psi
@@ -1386,7 +1385,7 @@ class ToroidalFlux(_Objective):
         self._field_grid = field_grid
         self._eval_grid = eval_grid
         self._eq = eq
-        self._use_vector_potential = use_vector_potential
+        # TODO: add eq_fixed option so this can be used in single stage
 
         super().__init__(
             things=[field],
@@ -1412,6 +1411,11 @@ class ToroidalFlux(_Objective):
 
         """
         eq = self._eq
+        self._use_vector_potential = True
+        try:
+            self._field.compute_magnetic_vector_potential([0, 0, 0])
+        except NotImplementedError:
+            self._use_vector_potential = False
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 L=eq.L_grid if not self._use_vector_potential else 0,

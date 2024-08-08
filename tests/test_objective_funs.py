@@ -30,6 +30,7 @@ from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
+    PoloidalMagneticField,
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
@@ -1109,14 +1110,11 @@ class TestObjectiveFunction:
         """Test calculation of toroidal flux from coils."""
         grid1 = LinearGrid(L=0, M=40, zeta=np.array(0.0))
 
-        def test(
-            eq, field, correct_value, rtol=1e-14, grid=None, use_vector_potential=True
-        ):
+        def test(eq, field, correct_value, rtol=1e-14, grid=None):
             obj = ToroidalFlux(
                 eq=eq,
                 field=field,
                 eval_grid=grid,
-                use_vector_potential=use_vector_potential,
             )
             obj.build(verbose=2)
             torflux = obj.compute_unscaled(*obj.xs(field))
@@ -1138,7 +1136,9 @@ class TestObjectiveFunction:
         eq.change_resolution(L_grid=20, M_grid=20)
 
         test(eq, field, psi_from_field)
-        test(eq, field, psi_from_field, rtol=1e-3, use_vector_potential=False)
+        test(eq, field, psi_from_field, rtol=1e-3)
+        # test on field with no vector potential
+        test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
 
 
 @pytest.mark.regression

@@ -1618,7 +1618,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
 
-    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+    def to_FourierPlanar(
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+    ):
         """Convert all coils to FourierPlanarCoil.
 
         Note that some types of coils may not be representable in this basis.
@@ -1636,6 +1638,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
             Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -1645,9 +1649,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
-        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
 
-    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+    ):
         """Convert all coils to FourierRZCoil representaion.
 
         Note that some types of coils may not be representable in this basis.
@@ -1666,6 +1678,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Whether the curve is stellarator-symmetric or not. Default is False.
         name : str
             Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
@@ -1674,9 +1688,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
-        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -1691,6 +1711,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             normalized arclength.
         name : str
             Name for the new CoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
@@ -1700,9 +1722,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
-        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+    def to_SplineXYZ(
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+    ):
         """Convert all coils to SplineXYZCoil representation.
 
         Parameters
@@ -1726,6 +1756,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             Name for the new CoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
@@ -1734,7 +1766,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
-        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
 
     def is_self_intersecting(self, grid=None, tol=None):
         """Check if any coils in the CoilSet intersect.
@@ -2023,7 +2061,9 @@ class MixedCoilSet(CoilSet):
 
         return B
 
-    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+    def to_FourierPlanar(
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=False
+    ):
         """Convert all coils to FourierPlanarCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -2041,6 +2081,8 @@ class MixedCoilSet(CoilSet):
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
             Name for the new MixedCoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
@@ -2050,9 +2092,11 @@ class MixedCoilSet(CoilSet):
 
         """
         coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
-    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+    ):
         """Convert all coils to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -2071,6 +2115,8 @@ class MixedCoilSet(CoilSet):
             Whether the curve is stellarator-symmetric or not. Default is False.
         name : str
             Name for the new MixedCoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
@@ -2079,9 +2125,9 @@ class MixedCoilSet(CoilSet):
 
         """
         coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -2096,6 +2142,8 @@ class MixedCoilSet(CoilSet):
             normalized arclength.
         name : str
             Name for the new MixedCoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
@@ -2105,9 +2153,11 @@ class MixedCoilSet(CoilSet):
 
         """
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+    def to_SplineXYZ(
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+    ):
         """Convert all coils to SplineXYZCoil representation.
 
         Parameters
@@ -2131,6 +2181,8 @@ class MixedCoilSet(CoilSet):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             Name for the new MixedCoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
@@ -2139,7 +2191,7 @@ class MixedCoilSet(CoilSet):
 
         """
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def __add__(self, other):
         if isinstance(other, (CoilSet, MixedCoilSet)):

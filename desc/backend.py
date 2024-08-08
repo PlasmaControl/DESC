@@ -250,38 +250,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         )
         return u
 
-    @gen_eigval.defjvp
-    def _gen_eigval_jvp(primals, tangents):
-
-        u = gen_eigval(primals[0])
-
-        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
-        def jvpfun(primals, tangents):
-            u, du = jax.jvp(_gen_eigval_cpu, (primals,), (tangents,))
-            return du.squeeze()
-
-        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
-        return u, du
-
-    @jit
-    def simspson_integrator(y, dx):
-        """Simpsons integrations scheme for high-order accurate integrals."""
-        if len(y[..., :]) % 2 == 1:
-            raise ValueError("n must be even")
-
-        S = (
-            dx
-            / 3
-            * (
-                y[..., 0]
-                + y[..., -1]
-                + 4 * jnp.sum(y[..., 1:-1:2], axis=-1)
-                + 2 * jnp.sum(y[..., 2:-2:2], axis=-1)
-            )
-        )
-
-        return S
-
     def root_scalar(
         fun,
         x0,

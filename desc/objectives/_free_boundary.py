@@ -139,11 +139,7 @@ class VacuumBoundaryError(_Objective):
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
-                rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=int(eq.NFP),
-                sym=False,
+                rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
             grid = self._grid
@@ -497,11 +493,7 @@ class BoundaryError(_Objective):
 
         if self._eval_grid is None:
             eval_grid = LinearGrid(
-                rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=int(eq.NFP),
-                sym=False,
+                rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
             eval_grid = self._eval_grid

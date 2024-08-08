@@ -159,14 +159,21 @@ Objective Functions
     desc.objectives.BootstrapRedlConsistency
     desc.objectives.BoundaryError
     desc.objectives.BScaleLength
+    desc.objectives.CoilCurrentLength
+    desc.objectives.CoilCurvature
+    desc.objectives.CoilLength
+    desc.objectives.CoilSetMinDistance
+    desc.objectives.CoilTorsion
     desc.objectives.CurrentDensity
     desc.objectives.Elongation
     desc.objectives.Energy
+    desc.objectives.FixAnisotropy
     desc.objectives.FixAtomicNumber
     desc.objectives.FixAxisR
     desc.objectives.FixAxisZ
     desc.objectives.FixBoundaryR
     desc.objectives.FixBoundaryZ
+    desc.objectives.FixCoilCurrent
     desc.objectives.FixCurrent
     desc.objectives.FixElectronDensity
     desc.objectives.FixElectronTemperature
@@ -180,6 +187,8 @@ Objective Functions
     desc.objectives.FixParameters
     desc.objectives.FixPressure
     desc.objectives.FixPsi
+    desc.objectives.FixSumCoilCurrent
+    desc.objectives.FixSumModesLambda
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
@@ -200,9 +209,11 @@ Objective Functions
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity
+    desc.objectives.PlasmaCoilSetMinDistance
     desc.objectives.PlasmaVesselDistance
     desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
+    desc.objectives.QuadraticFlux
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
@@ -210,8 +221,10 @@ Objective Functions
     desc.objectives.RotationalTransform
     desc.objectives.Shear
     desc.objectives.ToroidalCurrent
+    desc.objectives.ToroidalFlux
     desc.objectives.VacuumBoundaryError
     desc.objectives.Volume
+
 
 Optimize
 ********

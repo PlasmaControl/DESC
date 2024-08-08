@@ -228,7 +228,7 @@ class _MagneticField(IOAble, ABC):
 
     @abstractmethod
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -724,7 +724,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         return hasattr(self, attr) or hasattr(self._field, attr)
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -739,6 +739,9 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         source_grid : Grid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+
 
         Returns
         -------
@@ -772,7 +775,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         self._fields = fields
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -787,6 +790,8 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         source_grid : Grid, int or None or array-like, optional
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
 
         Returns
         -------
@@ -802,15 +807,23 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             source_grid = [None] * len(self._fields)
         if not isinstance(source_grid, (list, tuple)):
             source_grid = [source_grid]
+        if transforms is None:
+            transforms = [None] * len(self._fields)
+        if not isinstance(transforms, (list, tuple)):
+            transforms = [transforms]
         if len(source_grid) != len(self._fields):
             # ensure that if source_grid is shorter, that it is simply repeated so that
             # zip does not terminate early
             source_grid = source_grid * len(self._fields)
+        if len(transforms) != len(self._fields):
+            # ensure that if transforms is shorter, that it is simply repeated so that
+            # zip does not terminate early
+            transforms = transforms * len(self._fields)
 
         B = 0
-        for i, (field, g) in enumerate(zip(self._fields, source_grid)):
+        for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
             B += field.compute_magnetic_field(
-                coords, params[i % len(params)], basis, source_grid=g
+                coords, params[i % len(params)], basis, source_grid=g, transforms=tr
             )
 
         return B
@@ -883,7 +896,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         self._B0 = float(np.squeeze(new))
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -896,6 +909,9 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -947,7 +963,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         self._B0 = float(np.squeeze(new))
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -960,6 +976,9 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -1046,7 +1065,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         self._iota = float(np.squeeze(new))
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1059,6 +1078,9 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -1219,7 +1241,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         return tempdict
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1232,6 +1254,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -1455,7 +1480,7 @@ class ScalarPotentialField(_MagneticField):
         self._params = params
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1468,6 +1493,9 @@ class ScalarPotentialField(_MagneticField):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
 
         Returns
@@ -1857,9 +1885,15 @@ class OmnigenousField(Optimizable, IOAble):
             )
 
         if params is None:
-            params = get_params(names, obj=self)
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
-            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+            transforms = get_transforms(
+                names,
+                obj=self,
+                grid=grid,
+                jitable=kwargs.pop("jitable", False),
+                **kwargs,
+            )
         if data is None:
             data = {}
         profiles = {}

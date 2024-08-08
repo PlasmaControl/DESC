@@ -484,6 +484,49 @@ def _B_sup_zeta_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="B^zeta_a",
+    label="\\partial_{\\alpha} B^{\\zeta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant toroidal component of magnetic field, derivative wrt field"
+        " line poloidal label"
+    ),
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^zeta_t", "alpha_t"],
+)
+def _B_sup_zeta_a(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ζ
+    data["B^zeta_a"] = data["B^zeta_t"] / data["alpha_t"]
+    return data
+
+
+@register_compute_fun(
+    name="B^zeta_z|r,a",
+    label="\\partial_{\\zeta} B^{\\zeta} |_{\\rho, \\alpha}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant toroidal component of magnetic field, derivative along field"
+        " line"
+    ),
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^zeta_z", "B^zeta_a", "alpha_z"],
+)
+def _B_sup_zeta_z_ra(params, transforms, profiles, data, **kwargs):
+    data["B^zeta_z|r,a"] = data["B^zeta_z"] - data["B^zeta_a"] * data["alpha_z"]
+    return data
+
+
+@register_compute_fun(
     name="B_z",
     label="\\partial_{\\zeta} \\mathbf{B}",
     units="T",
@@ -2296,6 +2339,43 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|B|_a",
+    label="\\partial_{\\alpha} (|\\mathbf{B}|) |_{\\rho, \\zeta}",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative wrt field line angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_t", "alpha_t"],
+)
+def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ζ
+    data["|B|_a"] = data["|B|_t"] / data["alpha_t"]
+    return data
+
+
+@register_compute_fun(
+    name="|B|_z|r,a",
+    label="\\partial_{\\zeta} (|\\mathbf{B}|) |_{\\rho, \\alpha}",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative along field line",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_z", "|B|_a", "alpha_z"],
+)
+def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
+    data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_a"] * data["alpha_z"]
+    return data
+
+
+@register_compute_fun(
     name="|B|_rr",
     label="\\partial_{\\rho\\rho} |\\mathbf{B}|",
     units="T",
@@ -3322,7 +3402,7 @@ def _kappa(params, transforms, profiles, data, **kwargs):
     label="\\kappa_n",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Normal curvature vector of magnetic field lines",
+    description="Normal curvature of magnetic field lines",
     dim=1,
     params=[],
     transforms={},
@@ -3340,7 +3420,7 @@ def _kappa_n(params, transforms, profiles, data, **kwargs):
     label="\\kappa_g",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Geodesic curvature vector of magnetic field lines",
+    description="Geodesic curvature of magnetic field lines",
     dim=1,
     params=[],
     transforms={},

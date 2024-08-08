@@ -1440,7 +1440,7 @@ def test_regcoil_helical_coils_check_objective_method(
             obj,
             SurfaceCurrentRegularization(
                 surface_current_field=surface_current_field,
-                weight=1e-18,
+                weight=np.sqrt(1e-18),
                 source_grid=sgrid,
             ),
         ),
@@ -1475,7 +1475,7 @@ def test_regcoil_helical_coils_check_objective_method(
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=6e-3, rtol=1e-4)
-    np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=5e-3, rtol=1e-4)
+    np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=4e-3, rtol=1e-4)
 
 
 @pytest.mark.unit

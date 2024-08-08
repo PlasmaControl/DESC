@@ -1398,11 +1398,12 @@ def _find_current_potential_contours(
             if stell_sym
             else jnp.abs(net_poloidal_current) / nfp
         )
-        # TODO: for stell_sym, must pick these carefully
+        # For stell_sym, must pick these carefully
         # so that the coilset has coils that are in order
         # of ascending phi, otherwise we may get the
         # problem that the first coil is over the zeta=0 sym line
         # and the last coil is on the zeta=pi/NFP sym line
+        # use a small offset to avoid this issue
         offset = max_curr / num_coils / 2 if stell_sym else 0
         contours = jnp.linspace(
             offset,

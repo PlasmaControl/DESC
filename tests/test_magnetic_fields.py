@@ -441,7 +441,7 @@ class TestMagneticFields:
             NFP=surface.NFP,
         )
         coils = field.to_CoilSet(10, stell_sym=True).to_FourierXYZ(
-            N=2, grid=LinearGrid(N=8)
+            N=2, grid=LinearGrid(N=8), check_intersection=False
         )
 
         np.testing.assert_allclose(

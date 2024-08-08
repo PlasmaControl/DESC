@@ -1380,7 +1380,7 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
     chi_B = data["chi^2_B"]
     surface_current_field = initial_surface_current_field.copy()
 
-    assert np.all(chi_B < 1e-5)
+    np.testing.assert_array_less(chi_B, 1e-5)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T

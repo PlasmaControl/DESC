@@ -17,15 +17,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.singularities import compute_B_plasma
-from desc.utils import (
-    Timer,
-    check_posint,
-    copy_coeffs,
-    errorif,
-    setdefault,
-    svd_inv_null,
-    warnif,
-)
+from desc.utils import Timer, check_posint, copy_coeffs, errorif, setdefault, warnif
 
 from ._core import _MagneticField, biot_savart_general
 
@@ -1223,7 +1215,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     else:
         Bn_ext = jnp.zeros_like(B_GI_normal)
 
-    rhs = -(Bn_plasma + Bn_ext + B_GI_normal).T @ A
+    rhs = -(Bn_plasma + Bn_ext + B_GI_normal)
     alphas = np.atleast_1d(alpha)
     scan = alphas.size > 1
 
@@ -1235,6 +1227,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
     fields = []
 
     # calculate the Phi_mn which minimizes (chi^2_B + alpha*chi^2_K) for each alpha
+    # pre-calculate the SVD
+    u, s, vh = jnp.linalg.svd(A, full_matrices=False)
+    s_uT = (u * s).T
+    s_uT_b = s_uT @ rhs
+    vht = vh.T
     for alpha in alphas:
         printstring = f"Calculating Phi_SV for alpha = {alpha:1.5e}"
         if verbose > 0:
@@ -1246,9 +1243,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 + "#" * len(printstring)
             )
 
-        # calculate Phi_mn with SVD
-        Ainv_full, _ = svd_inv_null(A.T @ A + alpha * jnp.eye(A.shape[1]))
-        phi_mn_opt = Ainv_full @ rhs
+        # calculate Phi_mn with SVD inverse plus the regularization
+        phi_mn_opt = vht @ ((1 / (s**2 + alpha)) * s_uT_b)
 
         phi_mns.append(phi_mn_opt)
 

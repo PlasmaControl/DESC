@@ -737,9 +737,9 @@ class TestCoilSet:
 
         # MixedCoilSet
         coils1 = MixedCoilSet.linspaced_linear(coil, displacement=[0, 0, 2.5], n=4)
-        coils2 = coils1.to_SplineXYZ(grid=grid)
-        coils3 = coils1.to_FourierXYZ(grid=grid)
-        coils4 = coils1.to_FourierPlanar(grid=grid)
+        coils2 = coils1.to_SplineXYZ(grid=grid, check_intersection=False)
+        coils3 = coils1.to_FourierXYZ(grid=grid, check_intersection=False)
+        coils4 = coils1.to_FourierPlanar(grid=grid, check_intersection=False)
         assert isinstance(coils2, MixedCoilSet)
         assert isinstance(coils3, MixedCoilSet)
         assert isinstance(coils4, MixedCoilSet)
@@ -775,9 +775,9 @@ class TestCoilSet:
         # CoilSet
         coil = coils3[0]  # FourierXYZCoil
         coils5 = CoilSet.linspaced_linear(coil, displacement=[0, 0, 3.5], n=6)
-        coils6 = coils5.to_SplineXYZ(grid=grid)
-        coils7 = coils5.to_FourierRZ(grid=grid)
-        coils8 = coils5.to_FourierPlanar(grid=grid)
+        coils6 = coils5.to_SplineXYZ(grid=grid, check_intersection=False)
+        coils7 = coils5.to_FourierRZ(grid=grid, check_intersection=False)
+        coils8 = coils5.to_FourierPlanar(grid=grid, check_intersection=False)
         assert isinstance(coils6, CoilSet)
         assert isinstance(coils7, CoilSet)
         assert isinstance(coils8, CoilSet)

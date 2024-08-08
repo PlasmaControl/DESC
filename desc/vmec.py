@@ -1687,7 +1687,7 @@ class VMECIO:
                 axis=-1,
             )
             theta_star_k = theta + lmbda  # theta* = theta + lambda
-            err = theta_star - theta_star_k
+            err = theta_star - theta_star_k  # FIXME: mod by 2pi
             return err
 
         out = optimize.root(

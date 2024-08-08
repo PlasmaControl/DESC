@@ -36,7 +36,7 @@ def compute_coords(equil, Nr=10, Nt=8, Nz=None):
     # angle in PEST-like flux coordinates
 
     # find theta angles corresponding to desired theta* angles
-    v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
+    v_grid = Grid(equil._map_PEST_coordinates(t_grid.nodes))
     r_coords = equil.compute(["R", "Z"], grid=r_grid)
     v_coords = equil.compute(["R", "Z"], grid=v_grid)
 

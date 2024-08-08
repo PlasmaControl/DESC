@@ -2,13 +2,11 @@
 
 import copy
 import numbers
-import warnings
 from collections.abc import MutableSequence
 
 import numpy as np
 from scipy import special
 from scipy.constants import mu_0
-from termcolor import colored
 
 from desc.backend import execute_on_cpu, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
@@ -53,13 +51,7 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import (
-    compute_theta_coords,
-    is_nested,
-    map_clebsch_coords,
-    map_coordinates,
-    to_sfl,
-)
+from .coords import is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -361,10 +353,10 @@ class Equilibrium(IOAble, Optimizable):
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
-            if isinstance(p, PowerSeriesProfile) and p.sym != "even":
-                warnings.warn(
-                    colored(f"{profile} profile is not an even power series.", "yellow")
-                )
+            warnif(
+                isinstance(p, PowerSeriesProfile) and p.sym != "even",
+                msg=f"{profile} profile is not an even power series.",
+            )
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
@@ -830,7 +822,7 @@ class Equilibrium(IOAble, Optimizable):
         profiles : dict of Profile
             Profile objects for pressure, iota, current, etc. Defaults to attributes
             of self
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Data computed so far, generally output from other compute functions.
             Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
             v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
@@ -983,10 +975,9 @@ class Equilibrium(IOAble, Optimizable):
             for dep in deps:
                 req = data_index[p][dep]["resolution_requirement"]
                 coords = data_index[p][dep]["coordinates"]
-                msg = lambda direction: colored(
+                msg = lambda direction: (
                     f"Dependency {dep} may require more {direction}"
-                    " resolution to compute accurately.",
-                    "yellow",
+                    " resolution to compute accurately."
                 )
                 warnif(
                     # if need more radial resolution
@@ -1148,14 +1139,14 @@ class Equilibrium(IOAble, Optimizable):
         )
         return data
 
-    def map_coordinates(  # noqa: C901
+    def map_coordinates(
         self,
         coords,
         inbasis,
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=(np.inf, np.inf, np.inf),
+        period=None,
         tol=1e-6,
         maxiter=30,
         full_output=False,
@@ -1179,6 +1170,7 @@ class Equilibrium(IOAble, Optimizable):
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
             corresponding to coords in inbasis. If None, heuristics are used based on
             in basis and a nearest neighbor search on a coarse grid.
+            In most cases, this must be given to be compatible with JIT.
         params : dict
             Values of equilibrium parameters to use, eg eq.params_dict
         period : tuple of float
@@ -1186,7 +1178,7 @@ class Equilibrium(IOAble, Optimizable):
             Use np.inf to denote no periodicity.
         tol : float
             Stopping tolerance.
-        maxiter : int > 0
+        maxiter : int
             Maximum number of Newton iterations
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
@@ -1197,15 +1189,11 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        coords : ndarray, shape(k,3)
+        out : ndarray, shape(k,3)
             Coordinates mapped from inbasis to outbasis.
         info : tuple
             2 element tuple containing residuals and number of iterations
-            for each point. Only returned if ``full_output`` is True
-
-        Notes
-        -----
-        ``guess`` must be given for this function to be compatible with ``jit``.
+            for each point. Only returned if ``full_output`` is True.
 
         """
         return map_coordinates(
@@ -1237,7 +1225,7 @@ class Equilibrium(IOAble, Optimizable):
             Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
         tol : float
             Stopping tolerance.
-        maxiter : int > 0
+        maxiter : int
             Maximum number of Newton iterations.
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
@@ -1256,70 +1244,14 @@ class Equilibrium(IOAble, Optimizable):
             point. Only returned if ``full_output`` is True.
 
         """
-        return compute_theta_coords(
+        warnif(True, DeprecationWarning, msg="Use map_coordinates instead.")
+        return map_coordinates(
             self,
             flux_coords,
-            L_lmn=L_lmn,
-            tol=tol,
-            maxiter=maxiter,
-            full_output=full_output,
-            **kwargs,
-        )
-
-    def map_clebsch_coords(
-        self,
-        clebsch_coords,
-        iota,
-        L_lmn=None,
-        L_basis=None,
-        tol=1e-6,
-        maxiter=20,
-        full_output=False,
-        **kwargs,
-    ):
-        """Find θ for given Clebsch field line poloidal label α.
-
-        Parameters
-        ----------
-        eq : Equilibrium
-            Equilibrium to use.
-        clebsch_coords : ndarray
-            Shape (k, 3).
-            Clebsch field line coordinates [ρ, α, ζ]. Assumes ζ = ϕ.
-            Each row is a different point in space.
-        iota : ndarray
-            Shape (k, )
-            Rotational transform on each node.
-        L_lmn : ndarray
-            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
-        L_basis : Basis
-            Spectral basis for lambda. Defaults to ``eq.L_basis``.
-        tol : float
-            Stopping tolerance.
-        maxiter : int > 0
-            Maximum number of Newton iterations.
-        full_output : bool, optional
-            If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
-        kwargs : dict, optional
-            Additional keyword arguments to pass to ``root_scalar`` such as
-            ``maxiter_ls``, ``alpha``.
-
-        Returns
-        -------
-        coords : ndarray
-            Shape (k, 3).
-            DESC computational coordinates [ρ, θ, ζ].
-        info : tuple
-            2 element tuple containing residuals and number of iterations for each
-            point. Only returned if ``full_output`` is True.
-
-        """
-        return map_clebsch_coords(
-            clebsch_coords,
-            iota,
-            L_lmn=setdefault(L_lmn, self.L_lmn),
-            L_basis=setdefault(L_basis, self.L_basis),
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            params=setdefault({"L_lmn": L_lmn}, self.params_dict, L_lmn),
+            basis={"L_basis": self.L_basis},
             tol=tol,
             maxiter=maxiter,
             full_output=full_output,
@@ -2098,22 +2030,20 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 
-        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
-            warnings.warn(
-                colored(
-                    "Equilibrium has one or more spectral resolutions "
-                    + "greater than the corresponding collocation grid resolution! "
-                    + "This is not recommended and may result in poor convergence. "
-                    + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
-                    + "to avoid this warning.",
-                    "yellow",
-                )
-            )
-        if self.bdry_mode == "poincare":
-            raise NotImplementedError(
-                "Solving equilibrium with poincare XS as BC is not supported yet "
-                + "on master branch."
-            )
+        warnif(
+            self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid,
+            msg="Equilibrium has one or more spectral resolutions "
+            + "greater than the corresponding collocation grid resolution! "
+            + "This is not recommended and may result in poor convergence. "
+            + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
+            + "to avoid this warning.",
+        )
+        errorif(
+            self.bdry_mode == "poincare",
+            NotImplementedError,
+            "Solving equilibrium with poincare XS as BC is not supported yet "
+            + "on master branch.",
+        )
 
         things, result = optimizer.optimize(
             self,

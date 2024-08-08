@@ -346,7 +346,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(
+        self, N=10, grid=None, NFP=None, NFP_umbilic_factor=None, sym=False, name=""
+    ):
         """Convert Coil to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -373,11 +375,19 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         NFP = 1 or NFP
+        NFP_umbilic_factor = 1 or NFP_umbilic_factor
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1)
+            grid = LinearGrid(N=2 * N + 1, NFP_umbilic_factor=NFP_umbilic_factor)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCoil.from_values(
-            self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
+            self.current,
+            coords,
+            N=N,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            basis="xyz",
+            sym=sym,
+            name=name,
         )
 
     def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
@@ -429,6 +439,8 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         mode numbers associated with Z_n, defaults to modes_R
     NFP : int
         number of field periods
+    NFP_umbilic_factor : int
+        umbilic factor
     sym : bool
         whether to enforce stellarator symmetry
     name : str
@@ -534,6 +546,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             NFP_umbilic_factor=NFP_umbilic_factor,
             basis=basis,
             sym=sym,
+            name=name,
         )
         return FourierRZCoil(
             current=current,
@@ -1647,7 +1660,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
         return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
 
-    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(
+        self, N=10, grid=None, NFP=None, NFP_umbilic_factor=None, sym=False, name=""
+    ):
         """Convert all coils to FourierRZCoil representaion.
 
         Note that some types of coils may not be representable in this basis.
@@ -1673,8 +1688,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             New representation of the coilset parameterized by a Fourier series for R,Z.
 
         """
-        coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
-        return self.__class__(*coils, NFP=self.NFP, sym=self.sym, name=name)
+        coils = [
+            coil.to_FourierRZ(
+                N=N, grid=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, sym=sym
+            )
+            for coil in self
+        ]
+        return self.__class__(
+            *coils, NFP=self.NFP, NFP_umbilic_factor=3, sym=self.sym, name=name
+        )
 
     def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
         """Convert all coils to FourierXYZCoil representation.

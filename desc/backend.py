@@ -76,6 +76,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     repeat = jnp.repeat
     take = jnp.take
     scan = jax.lax.scan
+    rsqrt = jax.lax.rsqrt
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -811,3 +812,7 @@ else:  # pragma: no cover
         else:
             out = np.take(a, indices, axis, out, mode)
         return out
+
+    def rsqrt(x):
+        """Reciprocal square root."""
+        return 1 / np.sqrt(x)

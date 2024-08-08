@@ -5,7 +5,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import cond, fori_loop, jit, jnp, put, solve_triangular
+from desc.backend import cond, fori_loop, jit, jnp, put, rsqrt, solve_triangular
 from desc.utils import Index
 
 
@@ -563,11 +563,14 @@ def _givens_jax(a, b):
         where r = sqrt(a^2 + b^2)
         G2 = [[c, -s], [s, c]]
     """
-    r = jnp.sqrt(a**2 + b**2)
-    c = a / r
-    s = -b / r
-
-    G2 = jnp.array([[c, -s], [s, c]])
+    # Taken from jax._src.scipy.sparse.linalg._givens_rotation
+    b_zero = abs(b) == 0
+    a_lt_b = abs(a) < abs(b)
+    t = -jnp.where(a_lt_b, a, b) / jnp.where(a_lt_b, b, a)
+    r = rsqrt(1 + abs(t) ** 2).astype(t.dtype)
+    cs = jnp.where(b_zero, 1, jnp.where(a_lt_b, r * t, r))
+    sn = jnp.where(b_zero, 0, jnp.where(a_lt_b, r, r * t))
+    G2 = jnp.array([[cs, -sn], [sn, cs]])
     return G2.astype(float)
 
 
@@ -595,6 +598,7 @@ def update_qr_jax(A, w, q, r):
         return Q, R
 
     Q, R = fori_loop(0, n, body, (Q, R))
+    R = jnp.where(jnp.abs(R) < 1e-10, 0, R)
 
     return Q, R
 
@@ -623,6 +627,8 @@ def update_qr_jax_eco(A, w, q, r):
         return Q, R
 
     Q, R = fori_loop(0, n, body, (Q, R))
+    R = jnp.where(jnp.abs(R) < 1e-10, 0, R)
+
     Re = R.at[: R.shape[1], : R.shape[1]].get()
     Qe = Q.at[:, : R.shape[1]].get()
 

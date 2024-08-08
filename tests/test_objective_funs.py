@@ -2123,9 +2123,7 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(
-                ToroidalFlux(eq, ext_field, use_vector_potential=False), use_jit=False
-            )
+            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2437,9 +2435,7 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x(ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux A"
 
-        obj = ObjectiveFunction(
-            ToroidalFlux(eq, ext_field, use_vector_potential=False), use_jit=False
-        )
+        obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux B"

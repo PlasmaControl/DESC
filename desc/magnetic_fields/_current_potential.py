@@ -657,8 +657,6 @@ class FourierCurrentPotentialField(
             if the coils are modular (i.e. I=0), then this is the number of
             coils per field period. If the coils are stellarator-symmetric, then this
             is the number of coils per half field-period
-            #FIXME fix stell_sym implementation or add warning when it will fail
-            # i.e. when a coil crosses zeta=0 or zeta=pi/nfp lines
         step : int, optional
             Amount of points to skip by when saving the coil geometry spline
             by default 1, meaning that every point will be saved

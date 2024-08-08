@@ -59,11 +59,14 @@ else:
                 desc.__version__, np.__version__, y.dtype
             )
         )
+
+
 print(
     "Using device: {}, with {:.2f} GB available memory".format(
         desc_config.get("device"), desc_config.get("avail_mem")
     )
 )
+
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     jit = jax.jit
@@ -73,6 +76,13 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
     bincount = jnp.bincount
+    from functools import partial
+
+    import jax
+    import jax.numpy as jnp
+    import jaxlib
+    from jax import config as jax_config
+
     repeat = jnp.repeat
     take = jnp.take
     scan = jax.lax.scan
@@ -183,6 +193,62 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 
         leaves, treedef = jtu.tree_flatten(tree)
         return [treedef.unflatten(leaf) for leaf in zip(*leaves)]
+
+    _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
+
+    @jax.custom_jvp
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        eigvals only run on CPUs
+        """
+        u = jax.pure_callback(
+            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
+        )
+        return u
+
+    @eigvals.defjvp
+    def _eigvals_jvp(primals, tangents):
+
+        u = eigvals(primals[0])
+
+        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
+        def jvpfun(primals, tangents):
+            u, du = jax.jvp(_eigvals_cpu, (primals,), (tangents,))
+            return du.squeeze()
+
+        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
+        return u, du
+
+    _gen_eigval_cpu = jax.jit(jax.scipy.linalg.eigh, device=jax.devices("cpu")[0])
+
+    @jax.custom_jvp
+    def gen_eigval(A):
+        """
+        Generalize eigenvalue solver.
+
+        Returns the top n eigenvalues of the square matrix A. Calculation is
+        being performed on a CPU. If the CPU version can provide the top eigenvalue,
+        the calculation should be faster on a CPU.
+        Currently doesn't work because of the limitations of the jax functionality.
+        """
+        neigs, N, _ = jnp.shape(A)
+        u = jnp.zeros((N,))
+        i = jnp.arange(N)
+
+        u = u.at[i].set(
+            jax.pure_callback(
+                _gen_eigval_cpu,
+                jnp.zeros_like(A[i, :, :]),
+                A[i, :, :],
+                k=1,
+                sigma=0.42,
+                vectorized=True,
+            )
+        )
+        return u
 
     def root_scalar(
         fun,
@@ -399,6 +465,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
+    import numpy as np
+
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from scipy.integrate import odeint  # noqa: F401
@@ -673,6 +741,15 @@ else:  # pragma: no cover
         fun.defjvp = lambda *args, **kwargs: None
         fun.defjvps = lambda *args, **kwargs: None
         return fun
+
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        """
+        u = np.linalg.eigvals(A)
+        return u
 
     def root_scalar(
         fun,

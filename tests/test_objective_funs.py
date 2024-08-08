@@ -36,6 +36,7 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
@@ -2285,6 +2286,7 @@ class TestObjectiveNaNGrad:
         ObjectiveFromUser,
         # TODO: add Omnigenity objective (see GH issue #943)
         Omnigenity,
+        BallooningStability,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -2457,6 +2459,15 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_ballooning(self):
+        """Omnigenity."""
+        eq = get("HELIOTRON")
+        obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
 
 @pytest.mark.unit

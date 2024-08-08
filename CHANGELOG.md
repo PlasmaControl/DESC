@@ -1,6 +1,17 @@
 Changelog
 =========
 
+New Features
+
+- Add ``VectorPotentialField`` class to allow calculation of magnetic fields from a user-specified
+  vector potential function.
+- Add ``compute_magnetic_vector_potential`` methods to most ``MagneticField`` objects to allow vector potential
+  computation.
+- Add ability to save and load vector potential information from ``mgrid`` files.
+- Changes ``ToroidalFlux`` objective to default using a 1D loop integral of the vector potential
+to compute the toroidal flux when possible, as opposed to a 2D surface integral of the magnetic field dotted with ``n_zeta``.
+
+
 v0.12.1
 -------
 

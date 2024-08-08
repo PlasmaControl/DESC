@@ -907,6 +907,7 @@ def _get_grid_surface(grid, surface_label):
     else:
         spacing = grid.spacing[:, :2]
         has_endpoint_dupe = isinstance(grid, LinearGrid) and grid._toroidal_endpoint
+
     has_idx = hasattr(grid, f"num_{surface_label}") and hasattr(
         grid, f"_inverse_{surface_label}_idx"
     )

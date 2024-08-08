@@ -120,7 +120,12 @@ class QuasisymmetryBoozer(_Objective):
         N_booz = self.N_booz or 2 * eq.N
 
         if self._grid is None:
-            grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
+            grid = LinearGrid(
+                M=2 * M_booz,
+                N=2 * N_booz,
+                NFP=eq.NFP,
+                sym=False,
+            )
         else:
             grid = self._grid
 
@@ -336,7 +341,12 @@ class QuasisymmetryTwoTerm(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
         else:
             grid = self._grid
 
@@ -519,7 +529,12 @@ class QuasisymmetryTripleProduct(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
         else:
             grid = self._grid
 
@@ -1032,7 +1047,12 @@ class Isodynamicity(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
         else:
             grid = self._grid
 

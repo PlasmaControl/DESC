@@ -458,9 +458,8 @@ class Equilibrium(IOAble, Optimizable):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
-            )
+            + f" (L={self.L}, M={self.M}, N={self.N}, NFP={self.NFP},"
+            + f" spectral_indexing={self.spectral_indexing})"
         )
 
     def set_initial_guess(self, *args, ensure_nested=True):
@@ -588,13 +587,25 @@ class Equilibrium(IOAble, Optimizable):
         old_modes_L = self.L_basis.modes
 
         self.R_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+            self.L,
+            self.M,
+            self.N,
+            NFP=self.NFP,
+            sym="cos" if self.sym else self.sym,
         )
         self.Z_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            self.L,
+            self.M,
+            self.N,
+            NFP=self.NFP,
+            sym="sin" if self.sym else self.sym,
         )
         self.L_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            self.L,
+            self.M,
+            self.N,
+            NFP=self.NFP,
+            sym="sin" if self.sym else self.sym,
         )
 
         for profile in [
@@ -612,9 +623,17 @@ class Equilibrium(IOAble, Optimizable):
                 p.change_resolution(max(p.basis.L, self.L))
 
         self.surface.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+            self.L,
+            self.M,
+            self.N,
+            NFP=self.NFP,
+            sym=self.sym,
         )
-        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
+        self.axis.change_resolution(
+            self.N,
+            NFP=self.NFP,
+            sym=self.sym,
+        )
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -650,7 +669,11 @@ class Equilibrium(IOAble, Optimizable):
         )
         if rho is not None:
             assert (rho >= 0) and (rho <= 1)
-            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
+            surface = FourierRZToroidalSurface(
+                sym=self.sym,
+                NFP=self.NFP,
+                rho=rho,
+            )
             surface.change_resolution(self.M, self.N)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
@@ -694,6 +717,7 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
+
             return surface
 
         if zeta is not None:
@@ -748,7 +772,12 @@ class Equilibrium(IOAble, Optimizable):
         """
         assert kind in {"power_series", "spline", "fourier_zernike"}
         if grid is None:
-            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            grid = QuadratureGrid(
+                self.L_grid,
+                self.M_grid,
+                self.N_grid,
+                self.NFP,
+            )
         data = self.compute(name, grid=grid, **kwargs)
         f = data[name]
         f = grid.compress(f, surface_label="rho")
@@ -791,7 +820,14 @@ class Equilibrium(IOAble, Optimizable):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
+        axis = FourierRZCurve(
+            R_n,
+            Z_n,
+            modes_R,
+            modes_Z,
+            NFP=self.NFP,
+            sym=self.sym,
+        )
         return axis
 
     def compute(  # noqa: C901
@@ -1096,6 +1132,7 @@ class Equilibrium(IOAble, Optimizable):
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym,
+                endpoint=grid.endpoint,
             )
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
@@ -1398,6 +1435,13 @@ class Equilibrium(IOAble, Optimizable):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
+
+    @NFP.setter
+    def NFP(self, NFP):
+        assert (
+            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
+        ), f"NFP should be a positive integer, got {type(NFP)}"
+        self.change_resolution(NFP=NFP)
 
     @property
     def L(self):

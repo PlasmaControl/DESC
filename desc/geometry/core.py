@@ -18,7 +18,6 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import errorif
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -39,6 +38,30 @@ class Curve(IOAble, Optimizable, ABC):
             self.shift
         if not hasattr(self, "_rotmat"):
             self.rotmat
+
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute curve positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to curve, either the same for all curve or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            curve positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        x = self.compute("x", grid=grid, params=params, **kwargs)["x"]
+        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])
+        basis = kwargs.pop("basis", "xyz")
+        if basis.lower() == "rpz":
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        return x
 
     @optimizable_parameter
     @property
@@ -118,14 +141,31 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            NFP_umbilic_factor = (
+                self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
+            )
+            grid = LinearGrid(
+                N=2 * self.N + 5,
+                NFP=NFP,
+                NFP_umbilic_factor=NFP_umbilic_factor,
+                endpoint=False,
+            )
         elif isinstance(grid, numbers.Integral):
-            grid = LinearGrid(N=grid)
-        errorif(
-            not isinstance(grid, _Grid),
-            TypeError,
-            f"grid argument must be a Grid object or an integer, got type {type(grid)}",
-        )
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            NFP_umbilic_factor = (
+                self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
+            )
+            grid = LinearGrid(
+                N=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False
+            )
+        elif hasattr(grid, "NFP"):
+            NFP = grid.NFP
+        else:
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f"instead got type {type(grid)}",
+            )
 
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
@@ -537,7 +577,12 @@ class Surface(IOAble, Optimizable, ABC):
             ):
                 calc0d = False
             else:
-                grid0d = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
+                grid0d = QuadratureGrid(
+                    L=2 * self.L + 5,
+                    M=2 * self.M + 5,
+                    N=0,
+                    NFP=1,
+                )
                 grid0d._nodes[:, 2] = self.zeta
 
         if calc0d and override_grid:

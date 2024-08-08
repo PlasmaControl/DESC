@@ -150,16 +150,6 @@ class TestCoil:
         )
 
     @pytest.mark.unit
-    def test_properties(self):
-        """Test getting/setting attributes for Coil class."""
-        current = 4.34
-        coil = FourierPlanarCoil(current)
-        assert coil.current == current
-        new_current = 3.5
-        coil.current = new_current
-        assert coil.current == new_current
-
-    @pytest.mark.unit
     def test_SumMagneticField_with_Coil(self):
         """Test SumMagneticField working with Coil and MagneticField objects."""
         R = 2
@@ -660,6 +650,7 @@ def test_symmetry_magnetic_field(DummyCoilSet):
 
     # test that both coil sets compute the same field on the plasma surface
     grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
+
     with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
         data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
 

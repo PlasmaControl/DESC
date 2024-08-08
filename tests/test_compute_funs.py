@@ -11,6 +11,7 @@ from scipy.signal import convolve2d
 from desc.backend import jnp
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, rpz2xyz_vec
+from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import (
@@ -1053,8 +1054,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_rho = 110
     grid = LinearGrid(NFP=eq.NFP, rho=num_rho)
     drho = grid.nodes[1, 0]
-    data = eq.compute(["|B|", "grad(|B|^2)_rho"], grid=grid)
-    B2_r = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / drho
+    data = eq.compute(["|B|^2", "grad(|B|^2)_rho"], grid=grid)
+    B2_r = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / drho
     np.testing.assert_allclose(
         data["grad(|B|^2)_rho"][3:-2],
         B2_r[3:-2],
@@ -1066,8 +1067,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_theta = 90
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
-    data = eq.compute(["|B|", "grad(|B|^2)_theta"], grid=grid)
-    B2_t = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dtheta
+    data = eq.compute(["|B|^2", "grad(|B|^2)_theta"], grid=grid)
+    B2_t = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / dtheta
     np.testing.assert_allclose(
         data["grad(|B|^2)_theta"][2:-2],
         B2_t[2:-2],
@@ -1079,8 +1080,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_zeta = 90
     grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
-    data = eq.compute(["|B|", "grad(|B|^2)_zeta"], grid=grid)
-    B2_z = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dzeta
+    data = eq.compute(["|B|^2", "grad(|B|^2)_zeta"], grid=grid)
+    B2_z = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / dzeta
     np.testing.assert_allclose(
         data["grad(|B|^2)_zeta"][2:-2],
         B2_z[2:-2],
@@ -1813,3 +1814,35 @@ def test_surface_equilibrium_geometry():
                 rtol=3e-13,
                 atol=1e-13,
             )
+
+
+@pytest.mark.unit
+def test_parallel_grad():
+    """Test geometric and physical methods of computing parallel gradients agree."""
+    eq = get("W7-X")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 2, 4, 4, 4)
+    data = eq.compute(
+        [
+            "e_zeta|r,a",
+            "B",
+            "B^zeta",
+            "|B|_z|r,a",
+            "grad(|B|)",
+            "|e_zeta|r,a|_z|r,a",
+            "B^zeta_z|r,a",
+            "|B|",
+        ],
+    )
+    np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+    np.testing.assert_allclose(
+        data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+    )
+    np.testing.assert_allclose(
+        data["|e_zeta|r,a|_z|r,a"],
+        data["|B|_z|r,a"] / np.abs(data["B^zeta"])
+        - data["|B|"]
+        * data["B^zeta_z|r,a"]
+        * np.sign(data["B^zeta"])
+        / data["B^zeta"] ** 2,
+    )

@@ -1523,6 +1523,24 @@ def _alpha_t(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="alpha_tz",
+    label="\\partial_{\\theta \\zeta} \\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt poloidal and toroidal coordinates",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_PEST_tz", "phi_tz", "iota"],
+)
+def _alpha_tz(params, transforms, profiles, data, **kwargs):
+    data["alpha_tz"] = data["theta_PEST_tz"] - data["iota"] * data["phi_tz"]
+    return data
+
+
+@register_compute_fun(
     name="alpha_z",
     label="\\partial_\\zeta \\alpha",
     units="~",
@@ -1559,24 +1577,6 @@ def _alpha_rt(params, transforms, profiles, data, **kwargs):
         - data["iota"] * data["phi_rt"]
         - data["iota_r"] * data["phi_t"]
     )
-    return data
-
-
-@register_compute_fun(
-    name="alpha_tz",
-    label="\\partial_{\\theta \\zeta} \\alpha",
-    units="~",
-    units_long="None",
-    description="Field line label, derivative wrt poloidal and toroidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["theta_PEST_tz", "phi_tz", "iota"],
-)
-def _alpha_tz(params, transforms, profiles, data, **kwargs):
-    data["alpha_tz"] = data["theta_PEST_tz"] - data["iota"] * data["phi_tz"]
     return data
 
 
@@ -1653,7 +1653,7 @@ def _alpha_rtt(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta_PEST_zz", "iota", "phi_zz"],
+    data=["theta_PEST_zz", "phi_zz", "iota"],
 )
 def _alpha_zz(params, transforms, profiles, data, **kwargs):
     data["alpha_zz"] = data["theta_PEST_zz"] - data["iota"] * data["phi_zz"]
@@ -3488,8 +3488,8 @@ def _theta_PEST_z(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta \\zeta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate,"
-    "second derivative wrt toroidal coordinate",
+    description="PEST straight field line poloidal angular coordinate, second "
+    "derivative wrt toroidal coordinate",
     dim=1,
     params=[],
     transforms={},

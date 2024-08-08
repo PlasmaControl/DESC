@@ -9,6 +9,7 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from interpax import interp1d
 from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
@@ -217,6 +218,26 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<ne>_rho",
+    label="\\bar{n}_e",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Line-averaged electron density",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["ne"],
+)
+def _bar_ne(params, transforms, profiles, data, **kwargs):
+    data["<ne>_rho"] = jnp.sum(data["ne"] * transforms["grid"].spacing[:, 0]) / jnp.sum(
+        transforms["grid"].spacing[:, 0]
+    )
+    return data
+
+
+@register_compute_fun(
     name="ne",
     label="n_e",
     units="m^{-3}",
@@ -355,6 +376,44 @@ def _Ti_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="ni",
+    label="n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["ne", "Zeff"],
+)
+def _ni(params, transforms, profiles, data, **kwargs):
+    data["ni"] = data["ne"] / data["Zeff"]
+    return data
+
+
+@register_compute_fun(
+    name="ni_r",
+    label="\\partial_{\\rho} n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density, first radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["ne", "ne_r", "Zeff", "Zeff_r"],
+)
+def _ni_r(params, transforms, profiles, data, **kwargs):
+    data["ni_r"] = (data["ne_r"] * data["Zeff"] - data["ne"] * data["Zeff_r"]) / data[
+        "Zeff"
+    ] ** 2
+    return data
+
+
+@register_compute_fun(
     name="Zeff",
     label="Z_{eff}",
     units="~",
@@ -411,7 +470,7 @@ def _Zeff_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
-    data=["Te", "ne", "Ti", "Zeff"],
+    data=["ne", "ni", "Te", "Ti"],
 )
 def _p(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
@@ -420,7 +479,7 @@ def _p(params, transforms, profiles, data, **kwargs):
         )
     else:
         data["p"] = elementary_charge * (
-            data["ne"] * data["Te"] + data["Ti"] * data["ne"] / data["Zeff"]
+            data["ne"] * data["Te"] + data["ni"] * data["Ti"]
         )
     return data
 
@@ -436,7 +495,7 @@ def _p(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
-    data=["Te", "Te_r", "ne", "ne_r", "Ti", "Ti_r", "Zeff", "Zeff_r"],
+    data=["ne", "ne_r", "ni", "ni_r", "Te", "Te_r", "Ti", "Ti_r"],
 )
 def _p_r(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
@@ -447,9 +506,8 @@ def _p_r(params, transforms, profiles, data, **kwargs):
         data["p_r"] = elementary_charge * (
             data["ne_r"] * data["Te"]
             + data["ne"] * data["Te_r"]
-            + data["Ti_r"] * data["ne"] / data["Zeff"]
-            + data["Ti"] * data["ne_r"] / data["Zeff"]
-            - data["Ti"] * data["ne"] * data["Zeff_r"] / data["Zeff"] ** 2
+            + data["ni_r"] * data["Ti"]
+            + data["ni"] * data["Ti_r"]
         )
     return data
 
@@ -683,6 +741,27 @@ def _gradbeta_a(params, transforms, profiles, data, **kwargs):
         + data["beta_a_t"] * data["e^theta"].T
         + data["beta_a_z"] * data["e^zeta"].T
     ).T
+    return data
+
+
+@register_compute_fun(
+    name="iota_23",
+    label="\\iota_{2/3}",
+    units="~",
+    units_long="None",
+    description="Rotational transform (normalized by 2pi) at rho=2/3",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["rho", "iota"],
+    method="str: Interpolation method. Default 'cubic'.",
+)
+def _iota_23(params, transforms, profiles, data, **kwargs):
+    rho = transforms["grid"].compress(data["rho"], surface_label="rho")
+    iota = transforms["grid"].compress(data["iota"], surface_label="rho")
+    data["iota_23"] = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"))
     return data
 
 

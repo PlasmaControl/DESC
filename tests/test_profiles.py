@@ -408,7 +408,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -461,7 +460,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -507,3 +505,28 @@ class TestProfiles:
         assert np.all(data2["Te_r"] == data2["Ti_r"])
         np.testing.assert_allclose(data1["p"], data2["p"])
         np.testing.assert_allclose(data1["p_r"], data2["p_r"])
+
+    @pytest.mark.unit
+    def test_line_average(self):
+        """Test that line-averaged profiles are correct."""
+        ne0 = 3e19
+        Te0 = 2e3
+        ne = PowerSeriesProfile(2 * ne0 * np.array([1, -1]), modes=[0, 1])
+        Te = PowerSeriesProfile(2 * Te0 * np.array([1, -1]), modes=[0, 1])
+
+        with pytest.raises(UserWarning):
+            eq = Equilibrium(electron_density=ne, electron_temperature=Te)
+            data = eq.compute("<ne>_rho")
+            np.testing.assert_allclose(data["<ne>_rho"], ne0)
+
+    @pytest.mark.unit
+    def test_interpolation(self):
+        """Test that interpolated profile values are correct."""
+        iota0 = 0.2
+        diota = 1.2
+        iota = PowerSeriesProfile(np.array([iota0, diota]), modes=[0, 1])
+
+        with pytest.raises(UserWarning):
+            eq = Equilibrium(iota=iota)
+            data = eq.compute("iota_23")
+            np.testing.assert_allclose(data["iota_23"], iota0 + diota * (2 / 3))

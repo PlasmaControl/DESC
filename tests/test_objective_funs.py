@@ -2462,7 +2462,7 @@ class TestObjectiveNaNGrad:
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):
-        """Omnigenity."""
+        """BallooningStability."""
         eq = get("HELIOTRON")
         obj = ObjectiveFunction(BallooningStability(eq=eq))
         obj.build()

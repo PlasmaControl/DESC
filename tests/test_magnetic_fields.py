@@ -424,7 +424,7 @@ class TestMagneticFields:
             Z_lmn=jnp.array([0, -3]),
             modes_R=jnp.array([[0, 0], [1, 0]]),
             modes_Z=jnp.array([[0, 0], [-1, 0]]),
-            NFP=10,
+            NFP=5,
         )
         # make a current potential corresponding a purely poloidal current
         G = 1e4  # net poloidal current
@@ -438,10 +438,11 @@ class TestMagneticFields:
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
             modes_Z=surface._Z_basis.modes[:, 1:],
-            NFP=10,
+            NFP=surface.NFP,
         )
-
-        coils = field.to_CoilSet(10, step=20).to_FourierXYZ(N=2, grid=LinearGrid(N=8))
+        coils = field.to_CoilSet(10, stell_sym=True).to_FourierXYZ(
+            N=2, grid=LinearGrid(N=8)
+        )
 
         np.testing.assert_allclose(
             coils.compute_magnetic_field(

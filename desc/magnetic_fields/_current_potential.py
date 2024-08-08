@@ -804,10 +804,13 @@ class FourierCurrentPotentialField(
         # check_intersection is False here as these coils by construction
         # cannot intersect eachother (they are contours of the current potential
         # which cannot self-intersect by definition)
+        # unless stell_sym is true, then the full coilset might have
+        # self intersection depending on if the coils cross the
+        # symmetry plane, in which case we will check
         try:
             if jnp.isclose(helicity, 0):
                 final_coilset = CoilSet(
-                    *coils, NFP=nfp, sym=stell_sym, check_intersection=False
+                    *coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
                 )
             else:
                 final_coilset = CoilSet(*coils, check_intersection=False)
@@ -817,7 +820,7 @@ class FourierCurrentPotentialField(
                 MixedCoilSet(*coils, check_intersection=False)
                 if not jnp.isclose(helicity, 0)
                 else MixedCoilSet.from_symmetry(
-                    coils, NFP=nfp, sym=stell_sym, check_intersection=False
+                    coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
                 )
             )
         return final_coilset
@@ -1329,7 +1332,8 @@ def _find_current_potential_contours(
         whether to plot the contours, useful for debuggin or seeing why contour finding
         fails, by default False
     stell_sym : bool, optional
-        if the modular coilset has stellarator symmetry, by default False
+        if the modular coilset has stellarator symmetry, by default False.
+        Does nothing for helical coils.
 
     Returns
     -------
@@ -1399,7 +1403,7 @@ def _find_current_potential_contours(
         # of ascending phi, otherwise we may get the
         # problem that the first coil is over the zeta=0 sym line
         # and the last coil is on the zeta=pi/NFP sym line
-        offset = -max_curr / num_coils if stell_sym else 0
+        offset = max_curr / num_coils / 2 if stell_sym else 0
         contours = jnp.linspace(
             offset,
             max_curr + offset,

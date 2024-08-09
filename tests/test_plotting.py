@@ -840,7 +840,7 @@ def test_plot_b_mag():
 
     rhoa = rho * np.ones_like(zeta)
     c = np.vstack([rhoa, thetas, zeta]).T
-    coords = eq.compute_theta_coords(c)
+    coords = eq.map_coordinates(c, inbasis=("rho", "theta_PEST", "zeta"))
     grid = Grid(coords)
 
     # compute |B| normalized in the usual flux tube way

@@ -146,6 +146,7 @@ Magnetic Fields
     desc.magnetic_fields.VerticalMagneticField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
+    desc.magnetic_fields.run_regcoil
 
 Objective Functions
 *******************

@@ -67,6 +67,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     RotationalTransform,
     Shear,
+    SurfaceCurrentRegularization,
     ToroidalCurrent,
     ToroidalFlux,
     VacuumBoundaryError,
@@ -1951,6 +1952,7 @@ class TestComputeScalarResolution:
         PlasmaVesselDistance,
         QuadraticFlux,
         ToroidalFlux,
+        SurfaceCurrentRegularization,
         VacuumBoundaryError,
         # need to avoid blowup near the axis
         MercierStability,
@@ -2098,6 +2100,24 @@ class TestComputeScalarResolution:
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
             obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_surface_current_reg(self):
+        """SurfaceCurrentRegularization."""
+        field = FourierCurrentPotentialField(
+            I=1, G=1, Phi_mn=np.array([1, 1]), modes_Phi=np.array([[1, 1], [4, 4]])
+        )
+        M0 = 5
+        N0 = 5
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = LinearGrid(M=round(M0 * res), N=round(N0 * res))
+            obj = ObjectiveFunction(
+                SurfaceCurrentRegularization(field, source_grid=grid), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2277,6 +2297,7 @@ class TestObjectiveNaNGrad:
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
+        SurfaceCurrentRegularization,
         ToroidalFlux,
         VacuumBoundaryError,
         # we don't test these since they depend too much on what exactly the user wants
@@ -2402,6 +2423,16 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_surface_current_reg(self):
+        """SurfaceCurrentRegularization."""
+        field = FourierCurrentPotentialField()
+
+        obj = ObjectiveFunction(SurfaceCurrentRegularization(field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(field))
+        assert not np.any(np.isnan(g)), "surface current regularization"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

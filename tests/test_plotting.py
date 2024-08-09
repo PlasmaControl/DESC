@@ -41,6 +41,7 @@ from desc.plotting import (
     plot_grid,
     plot_logo,
     plot_qs_error,
+    plot_regcoil_outputs,
     plot_section,
     plot_surfaces,
     poincare_plot,
@@ -862,8 +863,126 @@ def test_plot_coefficients():
     return fig
 
 
+# TODO: change these plot tests as if they get split up, the regcoil stuff
+# has to run a bunch on different nodes for no reason. Should load in
+# a saved result instead.
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Bn_scan_regcoil(regcoil_helical_coils_scan):
+    """Test Bn scan plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_helical_coils_scan
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_scan_Bn"]
+    for key in figdata.keys():
+        if key != "fig_scan_Bn":
+            plt.close(figdata[key])
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Phi_scan_regcoil(regcoil_helical_coils_scan):
+    """Test Phi scan plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_helical_coils_scan
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_scan_Phi"]
+    for key in figdata.keys():
+        if key != "fig_scan_Phi":
+            plt.close(figdata[key])
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_chi2B_alpha_scan_regcoil(regcoil_helical_coils_scan):
+    """Test chi^2_B vs alpha plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_helical_coils_scan
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_chi^2_B_vs_alpha"]
+    for key in figdata.keys():
+        if key != "fig_chi^2_B_vs_alpha":
+            plt.close(figdata[key])
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_chi2B_chi2K_scan_regcoil(regcoil_helical_coils_scan):
+    """Test chi^2_B vs chi^2_K plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_helical_coils_scan
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_chi^2_B_vs_chi^2_K"]
+    for key in figdata.keys():
+        if key != "fig_chi^2_B_vs_chi^2_K":
+            plt.close(figdata[key])
+
+    return fig
+
+
+# TODO: can just call one single function to plot inside conftest,
+# then pass the dictionary and grab the fig for each of these tests?
+# Unsure though if pytest will try to close all the figs each time...
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Bn_regcoil(regcoil_modular_coils):
+    """Test Bn plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_modular_coils
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_Bn"]
+    for key in figdata.keys():
+        if key != "fig_Bn":
+            plt.close(figdata[key])
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Phi_regcoil(regcoil_modular_coils):
+    """Test Phi plot from run_regcoil method."""
+    (
+        data,
+        surface_current,
+        eq,
+    ) = regcoil_modular_coils
+    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
+    assert len(list(figdata.keys())) == len(list(axdata.keys()))
+    fig = figdata["fig_Phi"]
+    for key in figdata.keys():
+        if key != "fig_Phi":
+            plt.close(figdata[key])
+    return fig
+
+
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+@pytest.mark.unit
 def test_plot_logo():
     """Test plotting the DESC logo."""
     fig, ax = plot_logo()

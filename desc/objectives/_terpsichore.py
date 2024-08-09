@@ -13,7 +13,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compute.utils import get_transforms
 from desc.grid import LinearGrid
 from desc.transform import Transform
-from desc.utils import errorif
+from desc.utils import errorif, warnif
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 
 from ._generic import ExternalObjective
@@ -403,8 +403,8 @@ def _write_terps_input(  # noqa: C901
     f.write("C\n")
     f.write("C        MM  NMIN  NMAX   MMS NSMIN NSMAX NPROCS INSOL\n")
     f.write(
-        "         {:>2d}   {:>3d}   {:>3d}    55    -8    10    1     0\n".format(
-            M_booz_max, -N_booz_max, N_booz_max
+        "         {:>2d}   {:>3d}   {:>3d}    55   {:>3d}   {:>3d}    1     0\n".format(
+            M_booz_max, -N_booz_max, N_booz_max, N_min, N_max
         )
     )
     f.write("C\n")
@@ -492,7 +492,7 @@ def _write_terps_input(  # noqa: C901
         + "0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5  N\n"
     )
 
-    for n in range(-9, 10):
+    for n in range(N_min, N_max + 1):
         mode_str = "     "
         for m in range(56):
             if mode_family < 0 or n % 2 == mode_family:  # FIXME: modify for nfp != 2,3
@@ -539,6 +539,9 @@ def _pool_fun(k, path, exec, al0, sleep_time, stop_time):
         )
         growth_rate = _read_terps_output(path=fort16_path)
     except RuntimeError:
+        warnif(
+            True, UserWarning, "TERPSICHORE growth rate not found, using default value."
+        )
         growth_rate = abs(al0)  # default growth rate if it was unable to find one
 
     return np.atleast_1d(growth_rate)

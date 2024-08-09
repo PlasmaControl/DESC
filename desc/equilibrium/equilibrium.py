@@ -1258,7 +1258,7 @@ class Equilibrium(IOAble, Optimizable):
             flux_coords,
             inbasis=("rho", "theta_PEST", "zeta"),
             outbasis=("rho", "theta", "zeta"),
-            params=setdefault({"L_lmn": L_lmn}, self.params_dict, L_lmn is not None),
+            params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
             tol=tol,
             maxiter=maxiter,
             full_output=full_output,

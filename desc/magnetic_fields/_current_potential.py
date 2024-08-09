@@ -896,7 +896,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     alpha=0.0,
     source_grid=None,
     eval_grid=None,
-    current_helicity=0,
+    current_helicity=(1, 0),
     external_field=None,
     external_field_grid=None,
     verbose=1,
@@ -969,11 +969,15 @@ def run_regcoil(  # noqa: C901 fxn too complex
         at which the normal field is minimized.
         Defaults to
         `LinearGrid(M= 30, N= 30, NFP=eq.NFP)`
-    current_helicity : int, optional
-        Ratio used to determine if coils are modular (0) or helical (!=0)
-        defined as (G - G_ext) / (I * NFP)  = current_helicity
-        positive current_helicity corresponds to coils which rotate in the negative
-        poloidal direction as they rotate toroidally
+    current_helicity : tuple of size 2, optional
+        Tuple of (q,p) used to determine coil topology, where q is the
+        number of poloidal transits a coil makes in one field period and
+        p is the number of toroidal transits a coil makes in one field period.
+        if p is zero and q nonzero, it corresponds to modular coil topology.
+        If both p,q are nonzero, it corresponds to helical coils.
+        If p,q are both zero, it corresponds to windowpane coils.
+        The net toroidal current (when q is nonzero) is set as
+        I = p(G-G_ext)/q/NFP
     external_field: _MagneticField,
         DESC `_MagneticField` object giving the magnetic field
         provided by any coils/fields external to the winding surface.
@@ -997,7 +1001,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
         if True, will not include the contribution to the normal field from the
         plasma currents.
 
-
     Returns
     -------
     surface_current_field : FourierCurrentPotentialField or list of
@@ -1020,8 +1023,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
                     `alpha` was an array, corresponding to the list of regularization
                     parameters alpha.
             I : float, net toroidal current (in Amperes) on the winding surface.
-                Governed by the `current_helicity` parameter, and is zero for
-                modular coils (`current_helicity=0`).
+                Governed by the `current_helicity` parameters, and is zero for
+                modular coils (when `p=current_helicity[0]=0`).
             G : float, net poloidal current (in Amperes) on the winding surface.
                 Determined by the equilibrium toroidal magnetic field, as well as
                 the given external field.
@@ -1043,9 +1046,18 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
 
     """
-    assert (
-        int(current_helicity) == current_helicity
-    ), "current_helicity must be an integer!"
+    errorif(
+        len(current_helicity) != 2,
+        ValueError,
+        "current_helicity must be a length-two tuple",
+    )
+    [
+        errorif(int(hel) != hel, ValueError, "Helicity values must be integer")
+        for hel in current_helicity
+    ]
+    q = current_helicity[0]  # poloidal transits before coil returns to itself
+    p = current_helicity[1]  # toroidal transits before coil returns to itself
+
     # maybe it is an EquilibriaFamily
     errorif(hasattr(eq, "__len__"), ValueError, "Expected a single equilibrium")
 
@@ -1149,10 +1161,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # G needed by surface current is the total G minus the external contribution
     G = G_tot - G_ext
     # calculate I, net toroidal current on winding surface
-    if current_helicity == 0:  # modular coils
+    if p == 0:  # modular coils
         I = 0
+    elif p == 0 and q == 0:  # windowpane coils
+        I = G = 0
     else:  # helical coils
-        I = G / current_helicity / eq.NFP
+        I = p * G / eq.NFP
 
     def B_from_K_SV(phi_mn):
         """B from single value part of K from REGCOIL eqn 4."""

@@ -57,7 +57,7 @@ def map_coordinates(  # noqa: C901
         Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
     period : tuple of float
         Assumed periodicity for each quantity in ``inbasis``.
-        Use np.inf to denote no periodicity.
+        Use ``np.inf`` to denote no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -91,6 +91,7 @@ def map_coordinates(  # noqa: C901
     inbasis = tuple(inbasis)
     outbasis = tuple(outbasis)
 
+    # TODO: make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
         # TODO: get iota if not supplied using below logic
         if inbasis == ("rho", "alpha", "zeta") and "iota" in kwargs:
@@ -99,7 +100,7 @@ def map_coordinates(  # noqa: C901
                 kwargs.pop("iota"),
                 params["L_lmn"],
                 eq.L_basis,
-                guess,
+                guess[:, 1] if guess is not None else None,
                 tol,
                 maxiter,
                 full_output,
@@ -110,7 +111,7 @@ def map_coordinates(  # noqa: C901
                 coords,
                 params["L_lmn"],
                 eq.L_basis,
-                guess,
+                guess[:, 1] if guess is not None else None,
                 tol,
                 maxiter,
                 full_output,
@@ -270,7 +271,7 @@ def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
 
 # TODO: decide later whether to assume given phi instead of zeta.
 def _map_PEST_coordinates(
-    PEST_coords,
+    coords,
     L_lmn,
     L_basis,
     guess,
@@ -283,7 +284,7 @@ def _map_PEST_coordinates(
 
     Parameters
     ----------
-    PEST_coords : ndarray
+    coords : ndarray
         Shape (k, 3).
         Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
         Each row is a different point in space.
@@ -291,6 +292,9 @@ def _map_PEST_coordinates(
         Spectral coefficients for lambda.
     L_basis : Basis
         Spectral basis for lambda.
+    guess : jnp.ndarray
+        Shape (k, ).
+        Optional initial guess for the computational coordinates.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -312,7 +316,7 @@ def _map_PEST_coordinates(
         Only returned if ``full_output`` is True.
 
     """
-    rho, theta_PEST, zeta = PEST_coords.T
+    rho, theta_PEST, zeta = coords.T
     theta_PEST = theta_PEST % (2 * np.pi)
     # Assume λ=0 for initial guess.
     guess = setdefault(guess, theta_PEST)
@@ -368,7 +372,7 @@ def _map_PEST_coordinates(
 
 # TODO: decide later whether to assume given phi instead of zeta.
 def _map_clebsch_coordinates(
-    clebsch_coords,
+    coords,
     iota,
     L_lmn,
     L_basis,
@@ -382,18 +386,19 @@ def _map_clebsch_coordinates(
 
     Parameters
     ----------
-    clebsch_coords : ndarray
+    coords : ndarray
         Shape (k, 3).
         Clebsch field line coordinates [ρ, α, ζ]. Assumes ζ = ϕ.
         Each row is a different point in space.
     iota : ndarray
-        Shape (k, )
+        Shape (k, ).
         Rotational transform on each node.
     L_lmn : jnp.ndarray
         Spectral coefficients for lambda.
     L_basis : Basis
         Spectral basis for lambda.
-    guess : ndarray, shape(k,3)
+    guess : jnp.ndarray
+        Shape (k, ).
         Optional initial guess for the computational coordinates.
     tol : float
         Stopping tolerance.
@@ -416,7 +421,7 @@ def _map_clebsch_coordinates(
         Only returned if ``full_output`` is True.
 
     """
-    rho, alpha, zeta = clebsch_coords.T
+    rho, alpha, zeta = coords.T
     if guess is None:
         # Assume λ=0 for initial guess.
         guess = (alpha + iota * zeta) % (2 * np.pi)
@@ -516,7 +521,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         jnp.sign(data["sqrt(g)_PEST"][0]) == jnp.sign(data["sqrt(g)_PEST"])
     )
     warnif(
-        not nested,
+        not nested and msg is not None,
         RuntimeWarning,
         "Flux surfaces are no longer nested, exiting early. "
         + {
@@ -661,9 +666,6 @@ def get_rtz_grid(
         Equilibrium on which to perform coordinate mapping.
     radial : ndarray
         Sorted unique radial coordinates.
-        These coordinates are assumed to be a single variable function of rho.
-        Create a GitHub issue if you have a use-case where this assumption
-        cannot be made.
     poloidal : ndarray
         Sorted unique poloidal coordinates.
     toroidal : ndarray
@@ -705,19 +707,24 @@ def get_rtz_grid(
         period=period,
         **kwargs,
     )
+    idx = {}
+    if inbasis[coordinates[0]] == "rho":
+        # Should work as long as inbasis radial coordinate is
+        # single variable, monotonic increasing function of rho.
+        idx["_unique_rho_idx"] = grid.unique_rho_idx
+        idx["_inverse_rho_idx"] = grid.inverse_rho_idx
     desc_grid = Grid(
         nodes=rtz_nodes,
         coordinates="rtz",
         source_grid=grid,
         sort=False,
         jitable=jitable,
-        # Assumes that in basis radial coordinate is single variable function of rho.
-        _unique_rho_idx=grid.unique_rho_idx,
-        _inverse_rho_idx=grid.inverse_rho_idx,
+        **idx,
     )
     return desc_grid
 
 
+# TODO: deprecated, remove eventually
 def compute_theta_coords(
     eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
 ):

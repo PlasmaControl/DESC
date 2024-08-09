@@ -1180,7 +1180,7 @@ class Equilibrium(IOAble, Optimizable):
             Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
         period : tuple of float
             Assumed periodicity for each quantity in ``inbasis``.
-            Use np.inf to denote no periodicity.
+            Use ``np.inf`` to denote no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int
@@ -1258,8 +1258,7 @@ class Equilibrium(IOAble, Optimizable):
             flux_coords,
             inbasis=("rho", "theta_PEST", "zeta"),
             outbasis=("rho", "theta", "zeta"),
-            params=setdefault({"L_lmn": L_lmn}, self.params_dict, L_lmn),
-            basis={"L_basis": self.L_basis},
+            params=setdefault({"L_lmn": L_lmn}, self.params_dict, L_lmn is not None),
             tol=tol,
             maxiter=maxiter,
             full_output=full_output,

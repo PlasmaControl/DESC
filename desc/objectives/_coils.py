@@ -1414,7 +1414,7 @@ class ToroidalFlux(_Objective):
         self._use_vector_potential = True
         try:
             self._field.compute_magnetic_vector_potential([0, 0, 0])
-        except NotImplementedError:
+        except (NotImplementedError, ValueError):
             self._use_vector_potential = False
         if self._eval_grid is None:
             eval_grid = LinearGrid(

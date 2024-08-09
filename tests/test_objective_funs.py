@@ -44,6 +44,7 @@ from desc.objectives import (
     CoilLength,
     CoilSetMinDistance,
     CoilTorsion,
+    EffectiveRipple,
     Elongation,
     Energy,
     ForceBalance,
@@ -2283,8 +2284,8 @@ class TestObjectiveNaNGrad:
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
-        # TODO: add Omnigenity objective (see GH issue #943)
         Omnigenity,
+        EffectiveRipple,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -2457,6 +2458,19 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_effective_ripple(self):
+        """Make sure we can differentiate."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction([EffectiveRipple(eq)])
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+        # FIXME: Want to ensure nonzero gradient in test.
+        print(np.count_nonzero(g))
 
 
 @pytest.mark.unit

@@ -139,17 +139,12 @@ class _Coil(_MagneticField, Optimizable, ABC):
     ----------
     current : float
         Current through the coil, in Amperes.
-    current_scale : float
-        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-        Default = 1 (current in Amperes with no scaling).
-
     """
 
-    _io_attrs_ = _MagneticField._io_attrs_ + ["_current", "_current_scale"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
 
-    def __init__(self, current, current_scale=1, *args, **kwargs):
+    def __init__(self, current, *args, **kwargs):
         self._current = float(np.squeeze(current))
-        self._current_scale = float(np.squeeze(current_scale))
         super().__init__(*args, **kwargs)
 
     @optimizable_parameter
@@ -162,16 +157,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
-
-    @property
-    def current_scale(self):
-        """float: Current passing through the coil, in Amperes."""
-        return self._current_scale
-
-    @current_scale.setter
-    def current_scale(self, new):
-        assert jnp.isscalar(new) or new.size == 1
-        self._current_scale = float(np.squeeze(new))
 
     @property
     def num_coils(self):
@@ -272,10 +257,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             data["x"] = rpz2xyz(data["x"])
 
         B = biot_savart_quad(
-            coords,
-            data["x"],
-            data["x_s"] * data["ds"][:, None],
-            current * self.current_scale,
+            coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )
 
         if basis.lower() == "rpz":
@@ -449,9 +431,6 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         number of field periods
     sym : bool
         whether to enforce stellarator symmetry
-    current_scale : float
-        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-        Default = 1 (current in Amperes with no scaling).
     name : str
         name for this coil
 
@@ -498,25 +477,12 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         modes_Z=None,
         NFP=1,
         sym="auto",
-        current_scale=1,
         name="",
     ):
-        super().__init__(
-            current, current_scale, R_n, Z_n, modes_R, modes_Z, NFP, sym, name
-        )
+        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
     @classmethod
-    def from_values(
-        cls,
-        current,
-        coords,
-        N=10,
-        NFP=1,
-        current_scale=1,
-        basis="rpz",
-        sym=False,
-        name="",
-    ):
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
         """Fit coordinates to FourierRZCoil representation.
 
         Parameters
@@ -531,15 +497,13 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
-        current_scale : float
-            Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-            Default = 1 (current in Amperes with no scaling).
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "rpz"
         sym : bool
             Whether to enforce stellarator symmetry.
         name : str
             name for this coil
+
 
         Returns
         -------
@@ -552,7 +516,6 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         )
         return FourierRZCoil(
             current=current,
-            current_scale=current_scale,
             R_n=curve.R_n,
             Z_n=curve.Z_n,
             modes_R=curve.R_basis.modes[:, 2],
@@ -574,9 +537,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         fourier coefficients for X, Y, Z
     modes : array-like
         mode numbers associated with X_n etc.
-    current_scale : float
-        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-        Default = 1 (current in Amperes with no scaling).
     name : str
         name for this coil
 
@@ -624,15 +584,12 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         Y_n=[0, 0, 0],
         Z_n=[-2, 0, 0],
         modes=None,
-        current_scale=1,
         name="",
     ):
-        super().__init__(current, current_scale, X_n, Y_n, Z_n, modes, name)
+        super().__init__(current, X_n, Y_n, Z_n, modes, name)
 
     @classmethod
-    def from_values(
-        cls, current, coords, N=10, s=None, current_scale=1, basis="xyz", name=""
-    ):
+    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
         """Fit coordinates to FourierXYZCoil representation.
 
         Parameters
@@ -649,9 +606,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             Should be monotonic, 1D array of same length as
             coords
             if None, defaults to normalized arclength
-        current_scale : float
-            Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-            Default = 1 (current in Amperes with no scaling).
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
         Returns
@@ -663,7 +617,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
         return FourierXYZCoil(
             current=current,
-            current_scale=current_scale,
             X_n=curve.X_n,
             Y_n=curve.Y_n,
             Z_n=curve.Z_n,
@@ -693,9 +646,6 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         mode numbers associated with r_n
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
-    current_scale : float
-        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-        Default = 1 (current in Amperes with no scaling).
     name : str
         Name for this coil.
 
@@ -744,15 +694,12 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         r_n=2,
         modes=None,
         basis="xyz",
-        current_scale=1,
         name="",
     ):
-        super().__init__(
-            current, current_scale, center, normal, r_n, modes, basis, name
-        )
+        super().__init__(current, center, normal, r_n, modes, basis, name)
 
     @classmethod
-    def from_values(cls, current, coords, N=10, current_scale=1, basis="xyz", name=""):
+    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
         """Fit coordinates to FourierPlanarCoil representation.
 
         Parameters
@@ -764,9 +711,6 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
             corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new r representation.
-        current_scale : float
-            Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-            Default = 1 (current in Amperes with no scaling).
         basis : {"rpz", "xyz"}
             Basis for input coordinates. Defaults to "xyz".
         name : str
@@ -781,7 +725,6 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
         return FourierPlanarCoil(
             current=current,
-            current_scale=current_scale,
             center=curve.center,
             normal=curve.normal,
             r_n=curve.r_n,
@@ -821,9 +764,6 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
 
-    current_scale : float
-        Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-        Default = 1 (current in Amperes with no scaling).
     name : str
         name for this curve
 
@@ -839,10 +779,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Z,
         knots=None,
         method="cubic",
-        current_scale=1,
         name="",
     ):
-        super().__init__(current, current_scale, X, Y, Z, knots, method, name)
+        super().__init__(current, X, Y, Z, knots, method, name)
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -898,9 +837,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # coils curvature which is a 2nd derivative of the position, and doing that
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
-        B = biot_savart_hh(
-            coords, coil_pts_start, coil_pts_end, current * self.current_scale
-        )
+        B = biot_savart_hh(coords, coil_pts_start, coil_pts_end, current)
 
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
@@ -908,14 +845,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     @classmethod
     def from_values(
-        cls,
-        current,
-        coords,
-        knots=None,
-        method="cubic",
-        current_scale=1,
-        basis="xyz",
-        name="",
+        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -943,13 +873,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
-        current_scale : float
-            Scale of current, e.g. 1e3 for kilo-Amperes, 1e6 for Mega-Amperes, etc.
-            Default = 1 (current in Amperes with no scaling).
-        basis : {"rpz", "xyz"}
-            basis for input coordinates. Defaults to "xyz"
         name : str
             name for this curve
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "xyz"
 
         Returns
         -------
@@ -962,7 +889,6 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         )
         return SplineXYZCoil(
             current=current,
-            current_scale=current_scale,
             X=curve.X,
             Y=curve.Y,
             Z=curve.Z,
@@ -974,26 +900,19 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
 def _check_type(coil0, coil):
     errorif(
-        coil0.current_scale != coil.current_scale,
-        ValueError,
-        "Coils in a CoilSet must all have the same current scale, got scales "
-        + f"{coil0.current_scale} and {coil.current_scale}. "
-        + "Consider using a MixedCoilSet.",
-    )
-    errorif(
         not isinstance(coil, coil0.__class__),
         TypeError,
         (
-            "Coils in a CoilSet must all be the same type, got types "
-            + f"{type(coil0)} and {type(coil)}. Consider using a MixedCoilSet."
+            "coils in a CoilSet must all be the same type, got types "
+            + f"{type(coil0)}, {type(coil)}. Consider using a MixedCoilSet"
         ),
     )
     errorif(
         isinstance(coil0, CoilSet),
         TypeError,
         (
-            "Coils in a CoilSet must all be base Coil types, not CoilSet. "
-            + "Consider using a MixedCoilSet."
+            "coils in a CoilSet must all be base Coil types, not CoilSet. "
+            + "Consider using a MixedCoilSet"
         ),
     )
     attrs = {
@@ -1002,6 +921,7 @@ def _check_type(coil0, coil):
         FourierPlanarCoil: ["r_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
     }
+
     for attr in attrs[coil0.__class__]:
         a0 = getattr(coil0, attr)
         a1 = getattr(coil, attr)
@@ -1009,9 +929,9 @@ def _check_type(coil0, coil):
             not equals(a0, a1),
             ValueError,
             (
-                "Coils in a CoilSet must have the same parameterization, got a "
+                "coils in a CoilSet must have the same parameterization, got a "
                 + f"mismatch between attr {attr}, with values {a0} and {a1}."
-                + " Consider using a MixedCoilSet."
+                + " Consider using a MixedCoilSet"
             ),
         )
 
@@ -1041,7 +961,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
-    _io_attrs_.remove("_current_scale")
 
     def __init__(
         self,
@@ -1102,16 +1021,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             new = [new] * len(self)
         for coil, cur in zip(self.coils, new):
             coil.current = cur
-
-    @property
-    def current_scale(self):
-        """list: current scale of each coil."""
-        return self.coils[0].current_scale
-
-    @current_scale.setter
-    def current_scale(self, new):
-        for coil in self.coils:
-            coil.current_scale = new
 
     def _make_arraylike(self, x):
         if isinstance(x, dict):
@@ -1643,9 +1552,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             contour_Y = np.asarray(coords[0:, 1])
             contour_Z = np.asarray(coords[0:, 2])
 
-            currents = np.ones_like(contour_X) * float(
-                coil.current * coil.current_scale
-            )
+            currents = np.ones_like(contour_X) * float(coil.current)
             if endpoint:
                 currents[-1] = 0  # this last point must have 0 current
             else:  # close the curves if needed
@@ -1967,18 +1874,6 @@ class MixedCoilSet(CoilSet):
         self._name = str(name)
         if check_intersection:
             self.is_self_intersecting()
-
-    @property
-    def current_scale(self):
-        """list: current scale of each coil."""
-        return [coil.current_scale for coil in self.coils]
-
-    @current_scale.setter
-    def current_scale(self, new):
-        if jnp.isscalar(new):
-            new = [new] * len(self)
-        for coil, scale in zip(self.coils, new):
-            coil.current_scale = scale
 
     @property
     def num_coils(self):

@@ -349,26 +349,6 @@ class TestCoilSet:
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
-    def test_current_scale(self):
-        """Test different current scales give the same magnetic field."""
-        coil = FourierPlanarCoil()
-        coil.current = 1e7  # Amps
-        coils = CoilSet.linspaced_angular(coil, n=5)
-        grid = LinearGrid(N=32, endpoint=False)
-        transforms = get_transforms(["x", "x_s", "ds"], coil, grid=grid)
-        B_A = coils.compute_magnetic_field(
-            [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
-        )[0]
-
-        coils.current = 1  # Mega-Amps
-        coils.current_scale = 1e7
-        B_MA = coils.compute_magnetic_field(
-            [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
-        )[0]
-
-        np.testing.assert_allclose(B_A, B_MA)
-
-    @pytest.mark.unit
     def test_is_self_intersecting_warnings(self):
         """Test warning in from_symmetry for self-intersection."""
         N = 40

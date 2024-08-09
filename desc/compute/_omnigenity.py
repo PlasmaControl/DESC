@@ -490,7 +490,7 @@ def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

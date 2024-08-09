@@ -143,7 +143,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     b = jnp.asarray(b)
     xp = put(xp, unfixed_idx, Ainv_full @ b)
     xp = jnp.asarray(xp)
-    xp_scale = np.where(xp == 0, 1, xp)
+    xp_scale = np.where(jnp.abs(xp) < 1, 1, jnp.abs(xp))
     D = jnp.diag(xp_scale)
     Dinv = jnp.diag(1 / xp_scale)
 

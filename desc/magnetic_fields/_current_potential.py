@@ -1163,7 +1163,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         Bn, _ = current_potential_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
         )
-        return Bn
+        return Bn * ne_mag * eval_grid.weights
 
     def B_from_K_secular(I, G):
         """B from secular part of K, i.e. B^GI_{normal} from REGCOIL eqn 4."""
@@ -1175,7 +1175,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         Bn, _ = current_potential_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
         )
-        return Bn
+        return Bn * ne_mag * eval_grid.weights
 
     timer = Timer()
     # calculate the Jacobian matrix A for  Bn_SV = A*Phi_mn
@@ -1191,15 +1191,23 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # find the normal field from the secular part of the current potential
     B_GI_normal = B_from_K_secular(I, G)
     if not vacuum:
-        Bn_plasma = compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
+        Bn_plasma = (
+            compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
+            * ne_mag
+            * eval_grid.weights
+        )
     else:
         Bn_plasma = jnp.zeros_like(
             B_GI_normal
         )  # from plasma current, currently assume is 0
     # find external field's Bnormal contribution
     if external_field:
-        Bn_ext, _ = external_field.compute_Bnormal(
-            eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
+        Bn_ext, _ = (
+            external_field.compute_Bnormal(
+                eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
+            )
+            * ne_mag
+            * eval_grid.weights
         )
     else:
         Bn_ext = jnp.zeros_like(B_GI_normal)

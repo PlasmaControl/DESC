@@ -2771,7 +2771,7 @@ def plot_boozer_surface(
             "theta": 91,
             "zeta": 91,
             "NFP": thing.NFP,
-            "endpoint": True,
+            "endpoint": eq_switch,
         }
         grid_plot = _get_grid(**grid_kwargs)
 

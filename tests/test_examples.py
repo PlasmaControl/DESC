@@ -1283,7 +1283,7 @@ def test_regcoil_axisymmetric():
     eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
     # no phi_SV is needed since it is axisymmetric,
     # so phi_mn should be zero when running REGCOIL
-    # especially with a nonzero alpha
+    # especially with a nonzero lambda_regularization
     surf_winding = FourierRZToroidalSurface.constant_offset_surface(eq.surface, 2)
 
     surface_current_field = FourierCurrentPotentialField.from_surface(
@@ -1292,7 +1292,7 @@ def test_regcoil_axisymmetric():
     surface_current_field, data = run_regcoil(
         surface_current_field,
         eq,
-        alpha=0,
+        lambda_regularization=0,
         normalize=False,
         vacuum=True,
         verbose=2,
@@ -1319,13 +1319,13 @@ def test_regcoil_axisymmetric():
         M=2,
         N=2,
     )
-    # test with alpha large, should have no phi_mn
+    # test with lambda_regularization large, should have no phi_mn
     surface_current_field, data = run_regcoil(
         surface_current_field,
         eq=eq,
         eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
-        alpha=1e4,
+        lambda_regularization=1e4,
         vacuum=True,
     )
     phi_mn_opt = surface_current_field.Phi_mn
@@ -1345,7 +1345,7 @@ def test_regcoil_axisymmetric():
         eq=eq,
         eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
         source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
-        alpha=1e4,
+        lambda_regularization=1e4,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
         # G is providing, in the same direction

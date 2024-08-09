@@ -343,7 +343,7 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def regcoil_helical_coils_scan():
-    """Run regcoil for precise eq and surface, scan over alpha."""
+    """Run regcoil for precise eq and surface, scan over lambda_regularization."""
     eq = get("precise_QA")
     surf_winding = eq.surface.constant_offset_surface(
         offset=0.2,  # desired offset
@@ -359,7 +359,7 @@ def regcoil_helical_coils_scan():
         eq,
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
-        alpha=np.append(np.array([0.0]), np.logspace(-30, -1, 11)),
+        lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 11)),
         current_helicity=(1, -1),
         vacuum=True,
     )
@@ -383,7 +383,7 @@ def regcoil_modular_coils():
     N_egrid = 30
     M_sgrid = 50
     N_sgrid = 50
-    alpha = 1e-18
+    lambda_regularization = 1e-18
 
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
@@ -393,7 +393,7 @@ def regcoil_modular_coils():
         eq,
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
-        alpha=alpha,
+        lambda_regularization=lambda_regularization,
         vacuum=True,
     )
 

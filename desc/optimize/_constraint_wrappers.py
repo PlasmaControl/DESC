@@ -103,6 +103,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._A,
             self._b,
             self._Z,
+            self._D,
             self._unfixed_idx,
             self._project,
             self._recover,
@@ -533,7 +534,7 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        _, A, _, self._Z, self._unfixed_idx, _, _ = factorize_linear_constraints(
+        _, A, _, self._Z, _, self._unfixed_idx, _, _ = factorize_linear_constraints(
             self._constraint, linear_constraint
         )
 

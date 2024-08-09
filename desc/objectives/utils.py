@@ -33,6 +33,8 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         Combined RHS vector.
     Z : ndarray
         Null space operator for full combined A such that A @ Z == 0.
+    D : ndarray
+        Diagonal scaling matrix, based on the magnitude of the particular solution xp.
     unfixed_idx : ndarray
         Indices of x that correspond to non-fixed values.
     project, recover : function
@@ -200,7 +202,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
                 "or be due to floating point error.",
             )
 
-    return xp, A, b, Z, unfixed_idx, project, recover
+    return xp, A, b, Z, D, unfixed_idx, project, recover
 
 
 def softmax(arr, alpha):

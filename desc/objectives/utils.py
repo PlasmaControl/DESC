@@ -141,17 +141,20 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     b = jnp.asarray(b)
     xp = put(xp, unfixed_idx, Ainv_full @ b)
     xp = jnp.asarray(xp)
+    xp_scale = np.where(xp == 0, 1, xp)
+    D = jnp.diag(xp_scale)
+    Dinv = jnp.diag(1 / xp_scale)
 
     @jit
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
-        x_reduced = Z.T @ ((x - xp)[unfixed_idx])
+        x_reduced = Z.T @ Dinv @ ((x - xp)[unfixed_idx])
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     @jit
     def recover(x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
-        dx = put(jnp.zeros(objective.dim_x), unfixed_idx, Z @ x_reduced)
+        dx = put(jnp.zeros(objective.dim_x), unfixed_idx, D @ Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
     # check that all constraints are actually satisfiable

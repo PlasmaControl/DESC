@@ -1191,24 +1191,20 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # find the normal field from the secular part of the current potential
     B_GI_normal = B_from_K_secular(I, G)
     if not vacuum:
-        Bn_plasma = (
-            compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
-            * ne_mag
-            * eval_grid.weights
-        )
+        Bn_plasma = compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
+        Bn_plasma = Bn_plasma * ne_mag * eval_grid.weights
+
     else:
         Bn_plasma = jnp.zeros_like(
             B_GI_normal
         )  # from plasma current, currently assume is 0
     # find external field's Bnormal contribution
     if external_field:
-        Bn_ext, _ = (
-            external_field.compute_Bnormal(
-                eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
-            )
-            * ne_mag
-            * eval_grid.weights
+        Bn_ext, _ = external_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
         )
+        Bn_ext = Bn_ext * ne_mag * eval_grid.weights
+
     else:
         Bn_ext = jnp.zeros_like(B_GI_normal)
 

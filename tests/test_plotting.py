@@ -904,7 +904,7 @@ def test_plot_Phi_scan_regcoil(regcoil_helical_coils_scan):
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_chi2B_alpha_scan_regcoil(regcoil_helical_coils_scan):
+def test_plot_chi2B_lambda_regularization_scan_regcoil(regcoil_helical_coils_scan):
     """Test chi^2_B vs alpha plot from run_regcoil method."""
     (
         data,
@@ -913,9 +913,9 @@ def test_plot_chi2B_alpha_scan_regcoil(regcoil_helical_coils_scan):
     ) = regcoil_helical_coils_scan
     figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
     assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_chi^2_B_vs_alpha"]
+    fig = figdata["fig_chi^2_B_vs_lambda_regularization"]
     for key in figdata.keys():
-        if key != "fig_chi^2_B_vs_alpha":
+        if key != "fig_chi^2_B_vs_lambda_regularization":
             plt.close(figdata[key])
 
     return fig

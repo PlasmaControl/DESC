@@ -3731,18 +3731,20 @@ def plot_regcoil_outputs(
 
     - A scatter plot of the integrated squared quadratic flux on the plasma surface
     versus the REGCOIL regularization parameter. Corresponds to the keys
-    ``"fig_chi^2_B_vs_alpha", "ax_chi^2_B_vs_alpha"`` in the output
-    ``figdata, ax_data``
+    ``"fig_chi^2_B_vs_lambda_regularization", "ax_chi^2_B_vs_lambda_regularization"``
+    in the output ``figdata, ax_data``
     - A scatter plot of the squared quadratic flux integrated over the plasma surface
     versus the squared current density magnitude integrated over the winding surface.
     Corresponds to the keys ``"fig_chi^2_B_vs_chi^2_K"", "ax_chi^2_B_vs_chi^2_K""``
     in the output ``figdata, ax_data``
     - A composite plot of contours of the current potential on the winding surface for
-    each regularization parameter contained inside ``data["alpha"]``. Corresponds to
-    the keys ``"fig_scan_Phi", "ax_scan_Phi"`` in the output ``figdata, ax_data``
+    each regularization parameter contained inside ``data["lambda_regularization"]``.
+    Corresponds to the keys ``"fig_scan_Phi", "ax_scan_Phi"``
+    in the output ``figdata, ax_data``
     - A composite plot of contours of the normal field error on the plasma surface for
-    each regularization parameter contained inside ``data["alpha"]``. Corresponds to
-    the keys ``"fig_scan_Bn", "ax_scan_Bn"`` in the output ``figdata, ax_data``
+    each regularization parameter contained inside ``data["lambda_regularization"]``.
+    Corresponds to the keys ``"fig_scan_Bn", "ax_scan_Bn"``
+    in the output ``figdata, ax_data``
 
     Parameters
     ----------
@@ -3813,7 +3815,7 @@ def plot_regcoil_outputs(
     scan = isinstance(data["Phi_mn"], list)
     # TODO: add flags for each subplot, also add |K| plot
     Bn_tot = data["Bn_total"]
-    alphas = data["alpha"]
+    lambdas = data["lambda_regularization"]
     chi2Bs = data["chi^2_B"]
     chi2Ks = data["chi^2_K"]
     phi_mns = data["Phi_mn"]
@@ -3905,27 +3907,27 @@ def plot_regcoil_outputs(
         if return_data:
             return figdata, axdata, data
         return figdata, axdata
-    else:  # show composite scan over alpha plots
+    else:  # show composite scan over lambda_regularization plots
         # strongly based off of Landreman's REGCOIL plotting routine:
         # github.com/landreman/regcoil/blob/master/
         figsize = kwargs.pop("figsize", (16, 12))
         plt.figure(figsize=figsize)
         plt.rcParams.update({"font.size": 20})
-        plt.scatter(alphas, chi2Bs, s=markersize)
-        plt.xlabel(r"$\alpha$ (regularization parameter)")
+        plt.scatter(lambdas, chi2Bs, s=markersize)
+        plt.xlabel(r"$\lambda$ (regularization parameter)")
         plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
         plt.yscale("log")
         plt.xscale("log")
-        figdata["fig_chi^2_B_vs_alpha"] = plt.gcf()
-        axdata["ax_chi^2_B_vs_alpha"] = plt.gca()
+        figdata["fig_chi^2_B_vs_lambda_regularization"] = plt.gcf()
+        axdata["ax_chi^2_B_vs_lambda_regularization"] = plt.gca()
         plt.figure(figsize=figsize)
-        plt.scatter(alphas, chi2Ks, s=markersize)
+        plt.scatter(lambdas, chi2Ks, s=markersize)
         plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
-        plt.xlabel(r"$\alpha$ (regularization parameter)")
+        plt.xlabel(r"$\lambda$ (regularization parameter)")
         plt.yscale("log")
         plt.xscale("log")
-        figdata["fig_chi^2_K_vs_alpha"] = plt.gcf()
-        axdata["ax_chi^2_K_vs_alpha"] = plt.gca()
+        figdata["fig_chi^2_K_vs_lambda_regularization"] = plt.gcf()
+        axdata["ax_chi^2_K_vs_lambda_regularization"] = plt.gca()
         plt.figure(figsize=figsize)
         plt.scatter(chi2Ks, chi2Bs, s=markersize)
         plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
@@ -3935,11 +3937,11 @@ def plot_regcoil_outputs(
         figdata["fig_chi^2_B_vs_chi^2_K"] = plt.gcf()
         axdata["ax_chi^2_B_vs_chi^2_K"] = plt.gca()
 
-        nalpha = len(chi2Bs)
-        max_nalpha_for_contour_plots = 16
-        numPlots = min(nalpha, max_nalpha_for_contour_plots)
-        ialpha_to_plot = np.sort(list(set(map(int, np.linspace(1, nalpha, numPlots)))))
-        numPlots = len(ialpha_to_plot)
+        nlam = len(chi2Bs)
+        max_nlam_for_contour_plots = 16
+        numPlots = min(nlam, max_nlam_for_contour_plots)
+        ilam_to_plot = np.sort(list(set(map(int, np.linspace(1, nlam, numPlots)))))
+        numPlots = len(ilam_to_plot)
 
         numCols = int(np.ceil(np.sqrt(numPlots)))
         numRows = int(np.ceil(numPlots * 1.0 / numCols))
@@ -3950,7 +3952,7 @@ def plot_regcoil_outputs(
         plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
-            phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            phi_mn_opt = phi_mns[ilam_to_plot[whichPlot] - 1]
             # TODO replace these with plot 2d calls with the ax of each
             # subplot passed in
             field.Phi_mn = phi_mn_opt
@@ -3972,8 +3974,8 @@ def plot_regcoil_outputs(
             plt.ylabel("theta")
             plt.xlabel("zeta")
             plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
             plt.colorbar()
@@ -3995,9 +3997,9 @@ def plot_regcoil_outputs(
         plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
-            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            field.Phi_mn = phi_mns[ilam_to_plot[whichPlot] - 1]
             Bn = (
-                Bn_tot[ialpha_to_plot[whichPlot] - 1]
+                Bn_tot[ilam_to_plot[whichPlot] - 1]
                 if not recalc_eval_grid_quantites
                 else field.compute_Bnormal(
                     eq if not vacuum else eq.surface, eval_grid, source_grid
@@ -4018,8 +4020,8 @@ def plot_regcoil_outputs(
             plt.ylabel("theta")
             plt.xlabel("zeta")
             plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
             plt.colorbar()
@@ -4042,7 +4044,7 @@ def plot_regcoil_outputs(
         plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
-            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            field.Phi_mn = phi_mns[ilam_to_plot[whichPlot] - 1]
             K = field.compute("K", grid=source_grid, basis="xyz")["K"]
             K_mag = np.linalg.norm(K, axis=1)
 
@@ -4057,8 +4059,8 @@ def plot_regcoil_outputs(
             plt.ylabel("theta")
             plt.xlabel("zeta")
             plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
             plt.colorbar()

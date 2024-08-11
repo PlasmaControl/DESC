@@ -1,9 +1,5 @@
 """Tests for compute functions."""
 
-import copy
-import pickle
-import warnings
-
 import numpy as np
 import pytest
 from scipy.signal import convolve2d
@@ -23,12 +19,6 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid
 from desc.io import load
-from desc.magnetic_fields import (
-    CurrentPotentialField,
-    FourierCurrentPotentialField,
-    OmnigenousField,
-)
-from desc.utils import ResolutionWarning
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]

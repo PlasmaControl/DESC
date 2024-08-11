@@ -519,7 +519,7 @@ class BallooningStability(_Objective):
             ideal ballooning growth rate.
 
         """
-        from desc.equilibrium.coords import compute_theta_coords
+        from desc.equilibrium.coords import map_coordinates
 
         eq = self.things[0]
 
@@ -546,10 +546,8 @@ class BallooningStability(_Objective):
         iota = iota_data["iota"][0]
         rho, alpha, zeta = constants["fieldline_nodes"].T
         theta_PEST = alpha + iota * zeta
-        theta_coords = jnp.array([rho, theta_PEST, zeta]).T
-        desc_coords = compute_theta_coords(
-            eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-8, maxiter=40
-        )
+        nodes = jnp.array([rho, theta_PEST, zeta]).T
+        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
 
         sfl_grid = Grid(desc_coords, sort=False, jitable=True)
         transforms = get_transforms(

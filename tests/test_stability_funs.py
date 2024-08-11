@@ -10,7 +10,7 @@ import desc.io
 from desc.backend import jnp
 from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import compute_theta_coords
+from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.objectives import MagneticWell, MercierStability
 
@@ -392,7 +392,7 @@ def test_ballooning_geometry(tmpdir_factory):
         zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
         coords1[:, 2] = zeta
 
-        c1 = eq.compute_theta_coords(coords1)
+        c1 = eq.map_coordinates(coords1, inbasis=("rho", "theta_PEST", "zeta"))
         grid = Grid(c1, sort=False)
 
         data_keys = [
@@ -528,12 +528,10 @@ def test_ballooning_stability_eval():
         theta_PEST = theta_PEST.flatten()
         zeta_full = zeta_full.flatten()
 
-        theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
+        nodes = jnp.array([rho, theta_PEST, zeta_full]).T
 
         # Rootfinding theta for a given theta_PEST
-        desc_coords = compute_theta_coords(
-            eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
-        )
+        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
 
         sfl_grid = Grid(desc_coords, sort=False)
 
@@ -558,7 +556,7 @@ def test_ballooning_stability_eval():
 
 @pytest.mark.unit
 def test_compare_with_COBRAVMEC():
-    """Compare DESC ballooning solved with COBRAVMEC."""
+    """Compare marginal stability points from DESC ballooning solve with COBRAVMEC."""
 
     def find_root_simple(x, y):
         sign_changes = np.where(np.diff(np.sign(y)))[0]
@@ -644,12 +642,10 @@ def test_compare_with_COBRAVMEC():
         theta_PEST = theta_PEST.flatten()
         zeta_full = zeta_full.flatten()
 
-        theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
+        nodes = jnp.array([rho, theta_PEST, zeta_full]).T
 
         # Rootfinding theta for a given theta_PEST
-        desc_coords = compute_theta_coords(
-            eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
-        )
+        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
 
         sfl_grid = Grid(desc_coords, sort=False)
 

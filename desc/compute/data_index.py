@@ -105,7 +105,11 @@ def register_compute_fun(  # noqa: C901
         or `'desc.equilibrium.Equilibrium'`.
     resolution_requirement : str
         Resolution requirements in coordinates. I.e. "r" expects radial resolution
-        in the grid, "rtz" expects a grid with radial, poloidal, and toroidal resolution.
+        in the grid. Likewise, "rtz" is shorthand for "rho, theta, zeta" and indicates
+        the computation expects a grid with radial, poloidal, and toroidal resolution.
+        If the computation simply performs pointwise operations, instead of a
+        reduction (such as integration) over a coordinate, then an empty string may
+        be used to indicate no requirements.
     source_grid_requirement : dict
         Attributes of the source grid that the compute function requires.
         Also assumes dependencies were computed on such a grid.
@@ -172,10 +176,11 @@ def register_compute_fun(  # noqa: C901
                     if name in data_index[base_class]:
                         if p == data_index[base_class][name]["parameterization"]:
                             raise ValueError(
-                                f"Already registered function with parameterization {p} and name {name}."
+                                f"Already registered function with parameterization {p}"
+                                f" and name {name}."
                             )
-                        # if it was already registered from a parent class, we prefer
-                        # the child class.
+                        # if it was already registered from a parent class, we
+                        # prefer the child class.
                         inheritance_order = [base_class] + superclasses
                         if inheritance_order.index(p) > inheritance_order.index(
                             data_index[base_class][name]["parameterization"]

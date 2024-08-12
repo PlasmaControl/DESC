@@ -2873,7 +2873,7 @@ def _zeta(params, transforms, profiles, data, **kwargs):
     data=["zeta", "omega"],
 )
 def _phi(params, transforms, profiles, data, **kwargs):
-    data["phi"] = (data["zeta"] + data["omega"]) % (2 * jnp.pi)
+    data["phi"] = data["zeta"] + data["omega"]
     return data
 
 

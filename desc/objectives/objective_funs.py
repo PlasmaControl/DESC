@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
+from desc.backend import execute_on_cpu, jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -91,6 +91,7 @@ class ObjectiveFunction(IOAble):
             except AttributeError:
                 pass
 
+    @execute_on_cpu
     def build(self, use_jit=None, verbose=1):
         """Build the objective.
 

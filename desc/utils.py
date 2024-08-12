@@ -532,13 +532,19 @@ def errorif(cond, err=ValueError, msg=""):
     just AssertionError.
     """
     if cond:
-        raise err(msg)
+        raise err(colored(msg, "red"))
+
+
+class ResolutionWarning(UserWarning):
+    """Warning for insufficient resolution."""
+
+    pass
 
 
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
-        warnings.warn(msg, err)
+        warnings.warn(colored(msg, "yellow"), err)
 
 
 def check_nonnegint(x, name="", allow_none=True):

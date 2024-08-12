@@ -32,6 +32,7 @@ from .utils import cross, dot, safediv
     data=["B_theta"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    resolution_requirement="tz",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data["B_theta_mn"] = transforms["B"].fit(data["B_theta"])
@@ -53,6 +54,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data=["B_zeta"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    resolution_requirement="tz",
 )
 def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])
@@ -110,6 +112,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -131,6 +134,7 @@ def _w(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -152,6 +156,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -414,6 +419,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["eta"],
+    resolution_requirement="tz",
     parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _omni_angle(params, transforms, profiles, data, **kwargs):
@@ -423,41 +429,68 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="theta_B",
-    label="(\\theta_{B},\\zeta_{B})",
+    label="\\theta_{B}",
     units="rad",
     units_long="radians",
-    description="Boozer angular coordinates",
+    description="Boozer poloidal angle",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["alpha", "h"],
-    aliases=["zeta_B"],
     parameterization="desc.magnetic_fields._core.OmnigenousField",
     helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
     iota="float: Value of rotational transform on the Omnigenous surface. Default 1.0",
 )
-def _omni_map(params, transforms, profiles, data, **kwargs):
+def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
     iota = kwargs.get("iota", 1)
 
     # coordinate mapping matrix from (alpha,h) to (theta_B,zeta_B)
+    # need a bunch of wheres to avoid division by zero causing NaN in backward pass
+    # this is fine since the incorrect values get ignored later, except in OT or OH
+    # where fieldlines are exactly parallel to |B| contours, but this is a degenerate
+    # case of measure 0 so this kludge shouldn't affect things too much.
+    mat_OP = jnp.array(
+        [[N, iota / jnp.where(N == 0, 1, N)], [0, 1 / jnp.where(N == 0, 1, N)]]
+    )
+    mat_OT = jnp.array([[0, -1], [M, -1 / jnp.where(iota == 0, 1.0, iota)]])
+    den = jnp.where((N - M * iota) == 0, 1.0, (N - M * iota))
+    mat_OH = jnp.array([[N, M * iota / den], [M, M / den]])
     matrix = jnp.where(
         M == 0,
-        jnp.array([N, iota / N, 0, 1 / N]),  # OP
+        mat_OP,
         jnp.where(
             N == 0,
-            jnp.array([0, -1, M, -1 / iota]),  # OT
-            jnp.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),  # OH
+            mat_OT,
+            mat_OH,
         ),
-    ).reshape((2, 2))
+    )
 
     # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
     booz = matrix @ jnp.vstack((data["alpha"], data["h"]))
     data["theta_B"] = booz[0, :]
     data["zeta_B"] = booz[1, :]
     return data
+
+
+@register_compute_fun(
+    name="zeta_B",
+    label="\\zeta_{B}",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_B"],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
+)
+def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

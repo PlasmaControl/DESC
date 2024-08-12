@@ -705,6 +705,7 @@ def _iota(params, transforms, profiles, data, **kwargs):
         data["iota"] = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=0)
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
+        # Assumes ζ = ϕ − ω and θ = ϑ − λ.
         data["iota"] = transforms["grid"].replace_at_axis(
             safediv(data["iota_num"], data["iota_den"]),
             lambda: safediv(data["iota_num_r"], data["iota_den_r"]),
@@ -733,6 +734,7 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
         )
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
+        # Assumes ζ = ϕ − ω and θ = ϑ − λ.
         data["iota_r"] = transforms["grid"].replace_at_axis(
             safediv(
                 data["iota_num_r"] * data["iota_den"]
@@ -776,6 +778,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
         )
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
+        # Assumes ζ = ϕ − ω and θ = ϑ − λ.
         data["iota_rr"] = transforms["grid"].replace_at_axis(
             safediv(
                 data["iota_num_rr"] * data["iota_den"] ** 2
@@ -863,7 +866,7 @@ def _iota_num_current(params, transforms, profiles, data, **kwargs):
         iota = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=0)
         data["iota_num current"] = iota * data["iota_den"] - data["iota_num vacuum"]
     elif profiles["current"] is not None:
-        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+        # 4π² I = 4π² (μ₀ current / 2π) = 2π μ₀ current
         current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
         current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
         data["iota_num current"] = (
@@ -895,6 +898,7 @@ def _iota_num_current(params, transforms, profiles, data, **kwargs):
 )
 def _iota_num_vacuum(params, transforms, profiles, data, **kwargs):
     """Vacuum contribution to the numerator of rotational transform formula."""
+    # Assumes ζ = ϕ − ω and θ = ϑ − λ.
     iota_num_vacuum = transforms["grid"].replace_at_axis(
         safediv(
             data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"],
@@ -976,6 +980,7 @@ def _iota_num_r_current(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
 )
 def _iota_num_r_vacuum(params, transforms, profiles, data, **kwargs):
+    # Assumes ζ = ϕ − ω and θ = ϑ − λ.
     iota_num_vacuum = safediv(
         data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"],
         data["sqrt(g)"],
@@ -1095,11 +1100,11 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     Computes d2(𝛼+𝛽)/d𝜌2 as defined in the document attached to the description
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
+    Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     if profiles["iota"] is not None:
         data["iota_num_rr"] = jnp.nan * data["0"]
     elif profiles["current"] is not None:
-        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
         current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
         current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
         current_rr = profiles["current"].compute(
@@ -1108,6 +1113,7 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
         current_rrr = profiles["current"].compute(
             transforms["grid"], params["c_l"], dr=3
         )
+        # 4π² I = 4π² (μ₀ current / 2π) = 2π μ₀ current
         alpha_rr = (
             jnp.pi
             * mu_0
@@ -1224,6 +1230,7 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     Computes d3(𝛼+𝛽)/d𝜌3 as defined in the document attached to the description
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
+    Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     if profiles["iota"] is not None:
         data["iota_num_rrr"] = jnp.nan * data["0"]
@@ -1239,7 +1246,7 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
         current_rrrr = profiles["current"].compute(
             transforms["grid"], params["c_l"], dr=4
         )
-        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+        # 4π² I = 4π² (μ₀ current / 2π) = 2π μ₀ current
         alpha_rrr = (
             jnp.pi
             * mu_0
@@ -1343,14 +1350,14 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula.
 
     Computes 𝛾 as defined in the document attached to the description
-    of GitHub pull request #556.
+    of GitHub pull request #556. Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     gamma = safediv(
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"],
         data["sqrt(g)"],
     )
     # Assumes toroidal stream function behaves such that the magnetic axis limit
-    # of gamma is zero (as it would if omega = 0 identically).
+    # of γ is zero (as it would if ω = 0 identically).
     gamma = transforms["grid"].replace_at_axis(
         surface_integrals(transforms["grid"], gamma), 0
     )
@@ -1388,7 +1395,7 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, first radial derivative.
 
     Computes d𝛾/d𝜌 as defined in the document attached to the description
-    of GitHub pull request #556.
+    of GitHub pull request #556. Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     gamma = safediv(
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"],
@@ -1455,7 +1462,7 @@ def _iota_den_rr(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, second radial derivative.
 
     Computes d2𝛾/d𝜌2 as defined in the document attached to the description
-    of GitHub pull request #556.
+    of GitHub pull request #556. Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     gamma = safediv(
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"],
@@ -1550,7 +1557,7 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, third radial derivative.
 
     Computes d3𝛾/d𝜌3 as defined in the document attached to the description
-    of GitHub pull request #556.
+    of GitHub pull request #556. Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     gamma = safediv(
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"],
@@ -1616,9 +1623,12 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["iota_rr", "psi_rr"],
 )
 def _iota_psi(params, transforms, profiles, data, **kwargs):
-    # Existence of limit at magnetic axis requires ∂ᵨ iota = 0 at axis.
-    # Assume iota may be expanded as an even power series of ρ so that this
-    # condition is satisfied.
+    """∂ι/∂ψ.
+
+    Existence of limit at magnetic axis requires ∂ι/∂ρ = 0 at axis.
+    Assume ι may be expanded as an even power series of ρ so that this
+    condition is satisfied.
+    """
     data["iota_psi"] = transforms["grid"].replace_at_axis(
         safediv(data["iota_r"], data["psi_r"]),
         lambda: safediv(data["iota_rr"], data["psi_rr"]),

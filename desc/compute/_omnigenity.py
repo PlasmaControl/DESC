@@ -233,10 +233,10 @@ def _nu_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta", "lambda", "iota", "nu"],
+    data=["theta_PEST", "iota", "nu"],
 )
 def _theta_B(params, transforms, profiles, data, **kwargs):
-    data["theta_B"] = data["theta"] + data["lambda"] + data["iota"] * data["nu"]
+    data["theta_B"] = data["theta_PEST"] + data["iota"] * data["nu"]
     return data
 
 
@@ -251,10 +251,10 @@ def _theta_B(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["zeta", "nu"],
+    data=["phi", "nu"],
 )
 def _zeta_B(params, transforms, profiles, data, **kwargs):
-    data["zeta_B"] = data["zeta"] + data["nu"]
+    data["zeta_B"] = data["phi"] + data["nu"]
     return data
 
 
@@ -263,18 +263,20 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_{B}",
     units="~",
     units_long="None",
-    description="Jacobian determinant of Boozer coordinates",
+    description="Jacobian determinant from Boozer to DESC coordinates",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
+    data=["theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z", "nu_t", "nu_z", "iota"],
 )
 def _sqrtg_B(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
-        data["iota"] - data["lambda_z"]
-    ) * data["nu_t"]
+    data["sqrt(g)_B"] = (
+        data["theta_PEST_t"] * (data["phi_z"] + data["nu_z"])
+        - data["theta_PEST_z"] * (data["phi_t"] + data["nu_t"])
+        + data["iota"] * (data["nu_t"] * data["phi_z"] - data["nu_z"] * data["phi_t"])
+    )
     return data
 
 

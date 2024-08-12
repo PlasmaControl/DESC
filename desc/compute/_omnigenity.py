@@ -18,46 +18,50 @@ from .utils import cross, dot, safediv
 
 
 @register_compute_fun(
-    name="B_theta_mn",
-    label="B_{\\theta, m, n}",
+    name="B_vartheta_mn",
+    label="B_{\\vartheta, m, n}",
     units="T \\cdot m}",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant poloidal component of "
-    + "magnetic field",
+    "magnetic field in (ρ,ϑ,ϕ) coordinates or straight field line PEST coordinates. "
+    "ϕ increases counterclockwise  when viewed from above "
+    "(cylindrical R,ϕ plane with Z out of page).",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta"],
+    data=["B_vartheta"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     resolution_requirement="tz",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
-    data["B_theta_mn"] = transforms["B"].fit(data["B_theta"])
+    data["B_vartheta_mn"] = transforms["B"].fit(data["B_vartheta"])
     return data
 
 
 @register_compute_fun(
-    name="B_zeta_mn",
-    label="B_{\\zeta, m, n}",
+    name="B_phi_mn",
+    label="B_{\\phi, m, n}",
     units="T \\cdot m}",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant toroidal component of "
-    + "magnetic field",
+    "magnetic field in (ρ,ϑ,ϕ) coordinates or straight field line PEST coordinates. "
+    "ϕ increases counterclockwise  when viewed from above "
+    "(cylindrical R,ϕ plane with Z out of page).",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_zeta"],
+    data=["B_phi|r,v"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     resolution_requirement="tz",
 )
-def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
-    data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])
+def _B_phi_mn(params, transforms, profiles, data, **kwargs):
+    data["B_phi_mn"] = transforms["B"].fit(data["B_phi|r,v"])
     return data
 
 
@@ -73,7 +77,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_zeta_mn"],
+    data=["B_vartheta_mn", "B_phi_mn"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -87,9 +91,9 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     mask_t = (Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0)
     mask_z = (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
 
-    num_t = (mask_t @ sign(wn)) * data["B_theta_mn"]
+    num_t = (mask_t @ sign(wn)) * data["B_vartheta_mn"]
     den_t = mask_t @ jnp.abs(wm)
-    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"]
+    num_z = (mask_z @ sign(wm)) * data["B_phi_mn"]
     den_z = mask_z @ jnp.abs(NFP * wn)
 
     w_mn = jnp.where(mask_t.any(axis=0), mask_t.T @ safediv(num_t, den_t), w_mn)

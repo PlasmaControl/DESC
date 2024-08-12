@@ -1,7 +1,7 @@
 """Classes for magnetic field coils."""
 
 import numbers
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
@@ -935,6 +935,77 @@ def _check_type(coil0, coil):
             ),
         )
 
+
+class _FiniteBuildCoil(_Coil, Optimizable, ABC):
+    """Base class representing a magnetic field coil with finite build dimensions.
+
+    Subclasses should inherit from this class as well as a subclass of Coil.
+    Subclasses must implement the `compute_self_field` method.
+
+    Parameters
+    ----------
+    cross_section_dims : array-like
+        Dimensions of the coil cross section, with 1 or 2 dimensions depending on the cross section shape (circular or rectangular).
+
+    cross_section_shape : str
+        Shape of the coil cross section, either 'circular' or 'rectangular'.
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + ["cross_section_shape"] + ["_cross_section_dims"]
+
+    def __init__(self, cross_section_dims, cross_section_shape, *args, **kwargs):
+        if cross_section_shape == "circular":
+            assert len(cross_section_dims) == 1
+        elif cross_section_shape == "rectangular":
+            assert len(cross_section_dims) == 2
+        else:
+            raise ValueError(
+                "cross_section_shape must be 'circular' or 'rectangular', got "
+                f"{cross_section_shape}"
+            )
+        self.cross_section_shape = cross_section_shape
+        self._cross_section_dims = cross_section_dims
+        super().__init__(*args, **kwargs)
+
+    @optimizable_parameter
+    @property
+    def cross_section_dims(self):
+        """ndarray: Geometry of the coil, with 1 or 2 cross section dimensions depending on shape."""
+        return self._cross_section_dims
+
+    @cross_section_dims.setter
+    def cross_section_dims(self, new):
+        if self.cross_section_shape == "circular":
+            assert len(new) == 1
+        elif self.cross_section_shape == "rectangular":
+            assert len(new) == 2
+        self._cross_section_dims = new
+
+    @property
+    def cross_section_shape(self):
+        """str: Shape of the coil cross section, either 'circular' or 'rectangular'."""
+        return self._cross_section_shape
+
+    @abstractmethod
+    def compute_self_field(self, self_grid, params=None):
+        """Compute the field from the coil on the coil itself. The evaluation points are provided by the coil grid passed in.
+
+        Parameters
+        ----------
+        self_grid : Grid, int or None
+            Grid used to evaluate the field on the coil itself. If an integer, uses that many equally spaced points in the coil volume.
+        params : dict, optional
+            Parameters to pass to the coil object. This is where current could be overriden with a 'current' key.
+        """
+        pass
+
+class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
+
+    _io_attrs_ = _FiniteBuildCoil._io_attrs_ + FourierPlanarCoil._io_attrs_
+
+    #TODO: implement initialization of finite build coil
+    def __init__(self, cross_section_dims, cross_section_shape, *args, **kwargs):
+        super().__init__(cross_section_dims, cross_section_shape, *args, **kwargs)
 
 class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     """Set of coils of different geometry but shared parameterization and resolution.

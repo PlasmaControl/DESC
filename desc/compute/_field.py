@@ -1554,28 +1554,6 @@ def _B_sub_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B_theta_PEST",
-    label="B_{\\vartheta}",
-    units="T \\cdot m",
-    units_long="Tesla * meters",
-    description="Covariant poloidal component of magnetic field in (ρ,ϑ,ϕ) "
-    "coordinates or straight field line PEST coordinates. "
-    "ϕ increases counterclockwise  when viewed from above "
-    "(cylindrical R,ϕ plane with Z out of page).",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["B", "e_theta_PEST"],
-    aliases="B_vartheta",
-)
-def _B_sub_theta_pest(params, transforms, profiles, data, **kwargs):
-    data["B_theta_PEST"] = dot(data["B"], data["e_theta_PEST"])
-    return data
-
-
-@register_compute_fun(
     name="B_zeta",
     label="B_{\\zeta}",
     units="T \\cdot m",
@@ -1594,23 +1572,21 @@ def _B_sub_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="B_phi|r,v",
-    label="B_{\\phi} = B \\dot \\matbf{e}_{\\phi} |_{\\rho, \\vartheta}",
+    name="B_phi|r,t",
+    label="B_{\\phi} = B \\dot \\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
     units="T \\cdot m",
     units_long="Tesla * meters",
-    description="Covariant toroidal component of magnetic field in (ρ,ϑ,ϕ) "
-    "coordinates or straight field line PEST coordinates. "
-    "ϕ increases counterclockwise  when viewed from above "
-    "(cylindrical R,ϕ plane with Z out of page).",
+    description="Covariant toroidal component of magnetic field in (ρ,θ,ϕ) "
+    "coordinates.",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B", "e_phi|r,v"],
+    data=["B", "e_phi|r,t"],
 )
-def _B_sub_phi_rv(params, transforms, profiles, data, **kwargs):
-    data["B_phi|r,v"] = dot(data["B"], data["e_phi|r,v"])
+def _B_sub_phi_rt(params, transforms, profiles, data, **kwargs):
+    data["B_phi|r,t"] = dot(data["B"], data["e_phi|r,t"])
     return data
 
 

@@ -9,7 +9,14 @@ from desc.backend import execute_on_cpu, jit, jnp, tree_flatten, tree_unflatten,
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
-from desc.utils import Timer, flatten_list, is_broadcastable, setdefault, unique_list
+from desc.utils import (
+    Timer,
+    errorif,
+    flatten_list,
+    is_broadcastable,
+    setdefault,
+    unique_list,
+)
 
 
 class ObjectiveFunction(IOAble):
@@ -367,8 +374,19 @@ class ObjectiveFunction(IOAble):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
         things = things or self.things
-        assert len(things) == len(self.things)
-        assert all([type(t1) is type(t2) for t1, t2 in zip(things, self.things)])
+        errorif(
+            len(things) != len(self.things),
+            ValueError,
+            "Got the wrong number of things, "
+            f"expected {len(self.things)} got {len(things)}",
+        )
+        for t1, t2 in zip(things, self.things):
+            errorif(
+                not isinstance(t1, type(t2)),
+                TypeError,
+                f"got incompatible types between things {type(t1)} "
+                f"and self.things {type(t2)}",
+            )
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
 
@@ -1188,6 +1206,19 @@ class _Objective(IOAble, ABC):
     def xs(self, *things):
         """Return a tuple of args required by this objective from optimizable things."""
         things = things or self.things
+        errorif(
+            len(things) != len(self.things),
+            ValueError,
+            "Got the wrong number of things, "
+            f"expected {len(self.things)} got {len(things)}",
+        )
+        for t1, t2 in zip(things, self.things):
+            errorif(
+                not isinstance(t1, type(t2)),
+                TypeError,
+                f"got incompatible types between things {type(t1)} "
+                f"and self.things {type(t2)}",
+            )
         return tuple([t.params_dict for t in things])
 
     @property

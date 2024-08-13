@@ -123,6 +123,82 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     return B
 
 
+def finite_build_regularization_rect(a, b):
+    """Computes the regularization term for a rectangular finite-build coil.
+
+    The regularization term is used in the denominator of the regularized Biot-Savart
+    integral for the finite-build coil. This term ensures that the singularity at the coil
+    filament centerline is integrated correctly. The finite-build self-field is computed by
+    the procedure outlined in [1].
+
+    Parameters
+    ----------
+    a : float
+        Coil cross section dimension 1 (Order does not matter)
+    b : float
+        Coil cross section dimension 2
+
+    Returns
+    -------
+    float
+       Regularization term for the finite build Biot Savart denominator
+
+    [1] Landreman et. al, "Efficient calculation of self magnetic field, self-force,
+    and self-inductance for electromagnetic coils. II. Rectangular cross-section" (2023)
+    """
+
+    k = (
+        -(a ^ 4 - 6 * a ^ 2 * b ^ 2 + b ^ 4)
+        / (6 * a ^ 2 * b ^ 2)
+        * jnp.log(a / b + b / a)
+    )
+    +b * b / (6 * a * a) * jnp.log(b / a)
+    +a * a / (6 * b * b) * jnp.log(a / b)
+    +(4.0 * b) / (3 * a) * jnp.arctan(a / b)
+    +(4.0 * a) / (3 * b) * jnp.arctan(b / a)
+
+    delta = jnp.exp(-(25.0 / 6) + k)
+
+    return a * b * delta
+
+
+@jit #TODO upgrade this with singularity subtraction method
+def biot_savart_quad_regularized(eval_pts, coil_pts, tangents, current, regularization):
+    """Regularized Biot-Savart law for filamentary coil using numerical quadrature.
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    coil_pts : array-like shape(m,3)
+        Points in cartesian space defining coil
+    tangents : array-like, shape(m,3)
+        Tangent vectors to the coil at coil_pts. If the curve is given
+        by x(s) with curve parameter s, coil_pts = x, tangents = dx/ds*ds where
+        ds is the spacing between points.
+    current : float
+        Current through the coil (in Amps).
+    regularization : float
+        Regularization term for the Biot Savart denominator
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+
+    dl = tangents
+    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
+    R_mag = jnp.linalg.norm(R_vec, axis=-1)
+
+    vec = jnp.cross(dl[:, jnp.newaxis, :], R_vec, axis=-1)
+    denom = (R_mag**2 + regularization) ** (3 / 2)
+
+    # 1e-7 == mu_0/(4 pi)
+    B = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    return B
+
+
 class _Coil(_MagneticField, Optimizable, ABC):
     """Base class representing a magnetic field coil.
 

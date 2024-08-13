@@ -336,13 +336,15 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def print_value(self, x, constants=None):
+    def print_value(self, x, x0=None, constants=None):
         """Print the value(s) of the objective.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        x0 : ndarray, optional
+            Initial state vector before optimization.
         constants : list
             Constant parameters passed to sub-objectives.
 
@@ -351,12 +353,28 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         if self.compiled and self._compile_mode in {"scalar", "all"}:
             f = self.compute_scalar(x, constants=constants)
+            if x0 is not None:
+                f0 = self.compute_scalar(x0, constants=constants)
         else:
             f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
-        print("Total (sum of squares): {:10.3e}, ".format(f))
+            if x0 is not None:
+                f0 = (
+                    jnp.sum(self.compute_scaled_error(x0, constants=constants) ** 2) / 2
+                )
+        if x0 is not None:
+            print("Total (sum of squares): {:10.3e}  -->  {:10.3e}, ".format(f0, f))
+        else:
+            print("Total (sum of squares): {:10.3e}, ".format(f))
         params = self.unpack_state(x)
-        for par, obj, const in zip(params, self.objectives, constants):
-            obj.print_value(*par, constants=const)
+        if x0 is not None:
+            params0 = self.unpack_state(x0)
+            for par, par0, obj, const in zip(
+                params, params0, self.objectives, constants
+            ):
+                obj.print_value(par, par0, constants=const)
+        else:
+            for par, obj, const in zip(params, self.objectives, constants):
+                obj.print_value(*par, constants=const)
         return None
 
     def unpack_state(self, x, per_objective=True):
@@ -1075,18 +1093,37 @@ class _Objective(IOAble, ABC):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         # compute_unscaled is jitted so better to use than than bare compute
-        f = self.compute_unscaled(*args, **kwargs)
+        if len(args) == 2:
+            arg, arg0 = args
+            f = self.compute_unscaled(*arg, **kwargs)
+            f0 = self.compute_unscaled(*arg0, **kwargs)
+            self._print_value_fmt = self._print_value_fmt + "  -->  {:10.3e}"
+        else:
+            arg0 = None
+            f = self.compute_unscaled(*args, **kwargs)
+            f0 = None
+
         if self.linear:
             # probably a Fixed* thing, just need to know norm
             f = jnp.linalg.norm(self._shift(f))
-            print(self._print_value_fmt.format(f) + self._units)
+            f0 = jnp.linalg.norm(self._shift(f0)) if f0 is not None else f
+
+            print(self._print_value_fmt.format(f0, f) + self._units)
 
         elif self.scalar:
             # dont need min/max/mean of a scalar
-            print(self._print_value_fmt.format(f.squeeze()) + self._units)
+            fs = f.squeeze()
+            f0s = f0.squeeze() if f0 is not None else fs
+            print(self._print_value_fmt.format(f0s, fs) + self._units)
             if self._normalize and self._units != "(dimensionless)":
+                fs_norm = self._scale(self._shift(f)).squeeze()
+                f0s_norm = (
+                    self._scale(self._shift(f0)).squeeze()
+                    if f0 is not None
+                    else fs_norm
+                )
                 print(
-                    self._print_value_fmt.format(self._scale(self._shift(f)).squeeze())
+                    self._print_value_fmt.format(f0s_norm, fs_norm)
                     + "(normalized error)"
                 )
 
@@ -1106,42 +1143,70 @@ class _Objective(IOAble, ABC):
             fmin = jnp.min(f)
             fmean = jnp.mean(f * w) / jnp.mean(w)
 
+            if arg0 is not None:
+                f0 = jnp.abs(f0) if abserr else f0
+                f0max = jnp.max(f0)
+                f0min = jnp.min(f0)
+                f0mean = jnp.mean(f0 * w) / jnp.mean(w)
+            else:
+                f0 = f
+                f0max = fmax
+                f0min = fmin
+                f0mean = fmean
+
             print(
                 "Maximum "
                 + ("absolute " if abserr else "")
-                + self._print_value_fmt.format(fmax)
+                + self._print_value_fmt.format(f0max, fmax)
                 + self._units
             )
             print(
                 "Minimum "
                 + ("absolute " if abserr else "")
-                + self._print_value_fmt.format(fmin)
+                + self._print_value_fmt.format(f0min, fmin)
                 + self._units
             )
             print(
                 "Average "
                 + ("absolute " if abserr else "")
-                + self._print_value_fmt.format(fmean)
+                + self._print_value_fmt.format(f0mean, fmean)
                 + self._units
             )
 
             if self._normalize and self._units != "(dimensionless)":
+                if arg0 is not None:
+                    fmax_norm = fmax / jnp.mean(self.normalization)
+                    fmin_norm = fmin / jnp.mean(self.normalization)
+                    fmean_norm = fmean / jnp.mean(self.normalization)
+
+                    f0max_norm = f0max / jnp.mean(self.normalization)
+                    f0min_norm = f0min / jnp.mean(self.normalization)
+                    f0mean_norm = f0mean / jnp.mean(self.normalization)
+                else:
+                    f0max_norm = fmax / jnp.mean(self.normalization)
+                    f0min_norm = fmin / jnp.mean(self.normalization)
+                    f0mean_norm = fmean / jnp.mean(self.normalization)
+
+                    fmax_norm = jnp.inf
+                    fmin_norm = jnp.inf
+                    fmean_norm = jnp.inf
+
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmax / jnp.mean(self.normalization))
+                    + self._print_value_fmt.format(f0max_norm, fmax_norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmin / jnp.mean(self.normalization))
+                    + self._print_value_fmt.format(f0min_norm, fmin_norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmean / jnp.mean(self.normalization))
+                    + self._print_value_fmt.format(f0mean_norm, fmean_norm)
                     + "(normalized)"
                 )
 

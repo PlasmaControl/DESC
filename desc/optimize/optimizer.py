@@ -349,29 +349,44 @@ class Optimizer(IOAble):
             things[ind].params_dict = params
 
         if verbose > 0:
-            print("Start of solver")
-            # need to check index of things bc things0 contains copies of
-            # things, so they are not the same exact Python objects
-            objective.print_value(
-                objective.x(*[things0[things.index(t)] for t in objective.things])
-            )
-            for con in constraints:
-                arg_inds_for_this_con = [
-                    things.index(t) for t in things if t in con.things
-                ]
-                args_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
-                con.print_value(*con.xs(*args_for_this_con))
+            state_0 = [things0[things.index(t)] for t in objective.things]
+            state = [things[things.index(t)] for t in objective.things]
 
-            print("End of solver")
-            objective.print_value(
-                objective.x(*[things[things.index(t)] for t in objective.things])
+            print_pretty = (
+                True  # if True print before and end values next to each other
             )
-            for con in constraints:
-                arg_inds_for_this_con = [
-                    things.index(t) for t in things if t in con.things
-                ]
-                args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
-                con.print_value(*con.xs(*args_for_this_con))
+
+            if print_pretty:
+                objective.print_value(objective.x(*state), objective.x(*state_0))
+                for con in constraints:
+                    arg_inds_for_this_con = [
+                        things.index(t) for t in things if t in con.things
+                    ]
+                    args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
+                    args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+                    con.print_value(
+                        con.xs(*args_for_this_con), con.xs(*args0_for_this_con)
+                    )
+            else:
+                print("Start of solver")
+                # need to check index of things bc things0 contains copies of
+                # things, so they are not the same exact Python objects
+                objective.print_value(objective.x(*state_0))
+                for con in constraints:
+                    arg_inds_for_this_con = [
+                        things.index(t) for t in things if t in con.things
+                    ]
+                    args_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+                    con.print_value(*con.xs(*args_for_this_con))
+
+                print("End of solver")
+                objective.print_value(objective.x(*state))
+                for con in constraints:
+                    arg_inds_for_this_con = [
+                        things.index(t) for t in things if t in con.things
+                    ]
+                    args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
+                    con.print_value(*con.xs(*args_for_this_con))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

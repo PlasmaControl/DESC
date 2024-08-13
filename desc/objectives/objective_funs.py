@@ -849,7 +849,7 @@ class _Objective(IOAble, ABC):
         self._normalization = 1
         self._deriv_mode = deriv_mode
         self._name = name
-        self._use_jit = None
+        self._use_jit = True
         self._built = False
         self._loss_function = {
             "mean": jnp.mean,

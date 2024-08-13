@@ -357,6 +357,7 @@ class Optimizer(IOAble):
             )
 
             if print_pretty:
+                print("Start of solver   -->   End of solver")
                 objective.print_value(objective.x(*state), objective.x(*state_0))
                 for con in constraints:
                     arg_inds_for_this_con = [

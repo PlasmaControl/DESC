@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import pytest
 from numpy.random import default_rng
+from scipy.constants import mu_0
 from scipy.optimize import (
     BFGS,
     NonlinearConstraint,
@@ -32,6 +33,7 @@ from desc.objectives import (
     FixParameters,
     FixPressure,
     FixPsi,
+    FixSumCoilCurrent,
     ForceBalance,
     GenericObjective,
     MagneticWell,
@@ -1349,4 +1351,29 @@ def test_quad_flux_with_surface_current_field():
     # this should run without an error
     (field_modular_opt,), result = opt.optimize(
         field, objective=obj, constraints=constraints, maxiter=1, copy=True
+    )
+
+
+@pytest.mark.unit
+def test_optimize_coil_currents(DummyCoilSet):
+    """Tests optimization takes step sizes proportional to variable scales."""
+    eq = desc.examples.get("precise_QH")
+    coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+    grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
+    for coil in coils:
+        coil.current = current / coils.num_coils
+
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=coils, vacuum=True))
+    constraints = FixSumCoilCurrent(coils)
+    optimizer = Optimizer("lsq-exact")
+    [coils_opt], _ = optimizer.optimize(
+        things=coils,
+        objective=objective,
+        constraints=constraints,
+        verbose=2,
+    )
+    # check that optimized coil currents changed sufficiently from initial values
+    np.testing.assert_array_less(
+        1e5, np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current))
     )

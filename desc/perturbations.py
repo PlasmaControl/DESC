@@ -282,7 +282,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             weight = jnp.diag(weight)
         else:
             weight = weight[unfixed_idx, unfixed_idx]
-        W = jnp.diag(1 / jnp.diagonal(D)) @ Z.T @ weight @ Z @ D
+        W = Z.T @ weight @ Z
         scale_inv = W
         scale = jnp.linalg.inv(scale_inv)
 
@@ -291,7 +291,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac_scaled_error(x)
-        Jx_reduced = Jx[:, unfixed_idx] @ Z @ D @ scale
+        Jx_reduced = Jx[:, unfixed_idx] @ D @ Z @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
             f = objective.compute_scaled_error(x)
@@ -562,7 +562,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = 0
 
     # dx/dx_reduced
-    dxdx_reduced = jnp.eye(eq.dim_x)[:, unfixed_idx] @ Z @ D
+    dxdx_reduced = jnp.eye(eq.dim_x)[:, unfixed_idx] @ D @ Z
 
     # dx/dc
     dxdc = []
@@ -610,8 +610,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             timer.disp("dg computation")
 
         # projections onto optimization space
-        Fx_reduced = Fx[:, unfixed_idx] @ Z @ D
-        Gx_reduced = Gx[:, unfixed_idx] @ Z @ D
+        Fx_reduced = Fx[:, unfixed_idx] @ D @ Z
+        Gx_reduced = Gx[:, unfixed_idx] @ D @ Z
         Fc = Fx @ dxdc
         Gc = Gx @ dxdc
 

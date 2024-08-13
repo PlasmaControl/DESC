@@ -1372,8 +1372,10 @@ def test_optimize_coil_currents(DummyCoilSet):
         objective=objective,
         constraints=constraints,
         verbose=2,
+        copy=True,
     )
-    # check that optimized coil currents changed sufficiently from initial values
+    # check that optimized coil currents changed by more than 15% from initial values
     np.testing.assert_array_less(
-        1e5, np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current))
+        np.asarray(coils.current) * 0.15,
+        np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)),
     )

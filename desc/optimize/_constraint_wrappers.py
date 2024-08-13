@@ -114,9 +114,11 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
 
-        # equivalent matrix for A[unfixed_idx] @ Z @ D == A @ unfixed_idx_mat
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
         self._unfixed_idx_mat = (
-            jnp.eye(self._objective.dim_x)[:, self._unfixed_idx] @ self._Z @ self._D
+            jnp.eye(self._objective.dim_x)[:, self._unfixed_idx]
+            @ self._D[self._unfixed_idx][:, self._unfixed_idx]
+            @ self._Z
         )
 
         self._built = True
@@ -262,7 +264,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x, constants)
-        return df[self._unfixed_idx] @ self._Z @ self._D
+        return df @ self._unfixed_idx_mat
 
     def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -283,18 +285,20 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         df = self._objective.hess(x, constants)
         return (
-            jnp.diag(1 / jnp.diagonal(self._D))
-            @ self._Z.T
+            self._Z.T
+            @ jnp.diag(
+                1 / jnp.diagonal(self._D[self._unfixed_idx][:, self._unfixed_idx])
+            )
             @ df[self._unfixed_idx, :][:, self._unfixed_idx]
-            @ self._Z
-            @ self._D
+            @ self._D[self._unfixed_idx][:, self._unfixed_idx]
+            @ self._Z  # TODO: replace with self._unfixed_idx_mat
         )
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
         if self._objective._deriv_mode == "blocked":
             fun = getattr(self._objective, "jac_" + op)
-            return fun(x, constants)[:, self._unfixed_idx] @ self._Z @ self._D
+            return fun(x, constants) @ self._unfixed_idx_mat
 
         v = self._unfixed_idx_mat
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
@@ -408,7 +412,11 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
         df = getattr(self._objective, op)(v, x, constants)
-        return df[self._unfixed_idx] @ self._Z @ self._D
+        return (
+            df[self._unfixed_idx]
+            @ self._D[self._unfixed_idx][:, self._unfixed_idx]
+            @ self._Z
+        )
 
     def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.
@@ -625,15 +633,15 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._dimx_per_thing = [t.dim_x for t in self.things]
 
-        # equivalent matrix for A[unfixed_idx] @ Z @ D == A @ unfixed_idx_mat
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
         self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
         self._unfixed_idx_mat = jnp.split(
             self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
         )
         self._unfixed_idx_mat[self._eq_idx] = (
             self._unfixed_idx_mat[self._eq_idx][:, self._unfixed_idx]
+            @ self._D[self._unfixed_idx][:, self._unfixed_idx]
             @ self._Z
-            @ self._D
         )
         self._unfixed_idx_mat = np.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
@@ -1027,7 +1035,11 @@ class ProximalProjection(ObjectiveFunction):
     @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp_f(self, xf, dc, constants, op):
         Fx = getattr(self._constraint, "jac_" + op)(xf, constants)
-        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z @ self._D
+        Fx_reduced = (
+            Fx[:, self._unfixed_idx]
+            @ self._D[self._unfixed_idx][:, self._unfixed_idx]
+            @ self._Z  # TODO: replace with self._unfixed_idx_mat
+        )
         Fc = Fx @ (self._dxdc @ dc)
         Fxh = Fx_reduced
         cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)

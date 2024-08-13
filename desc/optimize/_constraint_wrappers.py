@@ -1060,16 +1060,20 @@ class ProximalProjection(ObjectiveFunction):
             vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
             xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
             out = []
-            for obj, const in zip(
-                self._objective.objectives, self._objective.constants
+            for k, (obj, const) in enumerate(
+                zip(self._objective.objectives, self._objective.constants)
             ):
-                xi = [x for x, t in zip(xgs, self._objective.things) if t in obj.things]
-                vi = [v for v, t in zip(vgs, self._objective.things) if t in obj.things]
+                thing_idx = self._objective._things_per_objective_idx[k]
+                xi = [xgs[i] for i in thing_idx]
+                vi = [vgs[i] for i in thing_idx]
+                assert len(xi) > 0
+                assert len(vi) > 0
+                assert len(xi) == len(vi)
                 if obj._deriv_mode == "rev":
-                    # obj might now allow fwd mode, so compute full rev mode jacobian
+                    # obj might not allow fwd mode, so compute full rev mode jacobian
                     # and do matmul manually. This is slightly inefficient, but usually
                     # when rev mode is used, dim_f <<< dim_x, so its not too bad.
-                    Ji = getattr(obj, "jac_" + op)(*xi, const)
+                    Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
                     outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
                         axis=0
                     )

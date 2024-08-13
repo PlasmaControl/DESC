@@ -1059,7 +1059,7 @@ def test_non_eq_optimization():
         use_softmin=True,
         surface_grid=grid,
         plasma_grid=grid,
-        alpha=5000,
+        softmin_alpha=5000,
     )
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-auglag")
@@ -1631,3 +1631,97 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+@pytest.mark.optimize
+def test_signed_PlasmaVesselDistance():
+    """Tests that signed distance works with surface optimization."""
+    eq = get("HELIOTRON")
+    eq.change_resolution(M=2, N=2)
+
+    surf = eq.surface.copy()
+    surf.change_resolution(M=1, N=1)
+
+    target_dist = -0.25
+
+    grid = LinearGrid(M=10, N=4, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+        eq_fixed=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (surf,), _ = optimizer.optimize(
+        (surf,), objective, verbose=3, maxiter=60, ftol=1e-8, xtol=1e-9
+    )
+
+    np.testing.assert_allclose(
+        obj.compute(*obj.xs(surf)), target_dist, atol=1e-2, err_msg="Using hardmin"
+    )
+
+    # with softmin
+    surf = eq.surface.copy()
+    surf.change_resolution(M=1, N=1)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+        use_softmin=True,
+        softmin_alpha=100,
+        eq_fixed=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (surf,), _ = optimizer.optimize(
+        (surf,),
+        objective,
+        verbose=3,
+        maxiter=60,
+        ftol=1e-8,
+        xtol=1e-9,
+    )
+
+    np.testing.assert_allclose(
+        obj.compute(*obj.xs(surf)), target_dist, atol=1e-2, err_msg="Using softmin"
+    )
+
+    # with changing eq
+    eq = Equilibrium(M=1, N=1)
+    surf = eq.surface.copy()
+    surf.change_resolution(M=1, N=1)
+    grid = LinearGrid(M=10, N=2, NFP=eq.NFP)
+
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (eq, surf), _ = optimizer.optimize(
+        (eq, surf),
+        objective,
+        constraints=(FixParameters(surf),),
+        verbose=3,
+        maxiter=60,
+        ftol=1e-8,
+        xtol=1e-9,
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), target_dist, atol=1e-2)

@@ -1693,7 +1693,7 @@ class VMECIO:
                 axis=-1,
             )
             theta_star_k = theta + lmbda  # theta* = theta + lambda
-            err = theta_star - theta_star_k
+            err = theta_star - theta_star_k  # FIXME: mod by 2pi
             return err
 
         out = optimize.root(
@@ -1757,7 +1757,9 @@ class VMECIO:
         # angle in PEST-like flux coordinates
 
         # find theta angles corresponding to desired theta* angles
-        v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
+        v_grid = Grid(
+            equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
+        )
         r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
         v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)
 

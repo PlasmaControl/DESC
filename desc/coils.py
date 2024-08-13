@@ -951,19 +951,23 @@ class _FiniteBuildCoil(_Coil, Optimizable, ABC):
         Shape of the coil cross section, either 'circular' or 'rectangular'.
     """
 
-    _io_attrs_ = _Coil._io_attrs_ + ["cross_section_shape"] + ["_cross_section_dims"]
+    _io_attrs_ = _Coil._io_attrs_ + ["_cross_section_shape"] + ["_cross_section_dims"]
 
     def __init__(self, cross_section_dims, cross_section_shape, *args, **kwargs):
         if cross_section_shape == "circular":
-            assert len(cross_section_dims) == 1
+            assert (
+                len(cross_section_dims) == 1
+            ), "Circular cross section coils can only have one radius dimension"
         elif cross_section_shape == "rectangular":
-            assert len(cross_section_dims) == 2
+            assert (
+                len(cross_section_dims) == 2
+            ), "Rectangular cross section coils can only have exactly two dimensions"
         else:
             raise ValueError(
                 "cross_section_shape must be 'circular' or 'rectangular', got "
                 f"{cross_section_shape}"
             )
-        self.cross_section_shape = cross_section_shape
+        self._cross_section_shape = cross_section_shape
         self._cross_section_dims = cross_section_dims
         super().__init__(*args, **kwargs)
 
@@ -975,10 +979,14 @@ class _FiniteBuildCoil(_Coil, Optimizable, ABC):
 
     @cross_section_dims.setter
     def cross_section_dims(self, new):
-        if self.cross_section_shape == "circular":
-            assert len(new) == 1
-        elif self.cross_section_shape == "rectangular":
-            assert len(new) == 2
+        if self._cross_section_shape == "circular":
+            assert (
+                len(new) == 1
+            ), "Circular cross section coils can only have one radius dimension"
+        elif self._cross_section_shape == "rectangular":
+            assert (
+                len(new) == 2
+            ), "Rectangular cross section coils can only have exactly two dimensions"
         self._cross_section_dims = new
 
     @property
@@ -999,13 +1007,66 @@ class _FiniteBuildCoil(_Coil, Optimizable, ABC):
         """
         pass
 
+
 class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
+    """Coil that lies in a plane, with a finite cross section.
+
+    Refer to FourierPlanarCoil for a description of the parameterization for the planar coil centerline.
+    In the case of rectangular cross sections, the coil cross section is assumed to remain aligned
+    with respect to the coil plane. The first dimension of the rectangular cross section is within the coil plane,
+    and the second dimension is in the coil plane normal direction.
+
+    Parameters
+    ----------
+    cross_section_dims : array-like
+        Dimensions of the coil cross section, with 1 or 2 dimensions depending on the cross section shape (circular or rectangular).
+    cross_section_shape : str
+        Shape of the coil cross section, either 'circular' or 'rectangular'.
+    current : float
+        Current through the coil, in Amperes.
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    r_n : array-like
+        Fourier coefficients for radius from center as function of polar angle
+    modes : array-like
+        mode numbers associated with r_n
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
+    name : str
+        Name for this coil.
+    """
 
     _io_attrs_ = _FiniteBuildCoil._io_attrs_ + FourierPlanarCoil._io_attrs_
 
-    #TODO: implement initialization of finite build coil
-    def __init__(self, cross_section_dims, cross_section_shape, *args, **kwargs):
-        super().__init__(cross_section_dims, cross_section_shape, *args, **kwargs)
+    def __init__(
+        self,
+        cross_section_dims=[0.1],
+        cross_section_shape="circular",
+        current=1,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        r_n=2,
+        modes=None,
+        basis="xyz",
+        name="",
+    ):
+        super().__init__(
+            cross_section_dims,
+            cross_section_shape,
+            current,
+            center,
+            normal,
+            r_n,
+            modes,
+            basis,
+            name,
+        )
+
+    def compute_self_field(self, self_grid, params=None):
+        return super().compute_self_field(self_grid, params)
+
 
 class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     """Set of coils of different geometry but shared parameterization and resolution.

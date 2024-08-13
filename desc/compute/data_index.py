@@ -246,6 +246,11 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.coils.FourierPlanarFiniteBuildCoil": [
+        "desc.coils.FourierPlanarCoil",
+        "desc.geometry.curve.FourierPlanarCurve",
+        "desc.geometry.core.Curve",
+    ],
     "desc.magnetic_fields._current_potential.CurrentPotentialField": [
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.core.Surface",

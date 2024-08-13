@@ -31,6 +31,7 @@ Coils
     desc.coils.FourierPlanarCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
+    desc.coils.FourierPlanarFiniteBuildCoil
 
 Compatibility
 *************

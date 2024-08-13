@@ -1,7 +1,5 @@
 """Wrappers for doing STELLOPT/SIMSOPT like optimization."""
 
-import functools
-
 import numpy as np
 
 from desc.backend import jit, jnp
@@ -972,7 +970,7 @@ class ProximalProjection(ObjectiveFunction):
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
+        jvpfun = lambda u: self._jvp_scaled(u, xf, xg, constants)
         return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
 
     def jvp_scaled_error(self, v, x, constants=None):
@@ -992,7 +990,7 @@ class ProximalProjection(ObjectiveFunction):
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
+        jvpfun = lambda u: self._jvp_scaled_error(u, xf, xg, constants)
         return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
 
     def jvp_unscaled(self, v, x, constants=None):
@@ -1012,10 +1010,9 @@ class ProximalProjection(ObjectiveFunction):
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
+        jvpfun = lambda u: self._jvp_unscaled(u, xf, xg, constants)
         return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
 
-    @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp_f(self, xf, dc, constants, op):
         Fx = getattr(self._constraint, "jac_" + op)(xf, constants)
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
@@ -1028,7 +1025,6 @@ class ProximalProjection(ObjectiveFunction):
         Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
         return Fxh_inv @ Fc
 
-    @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp(self, v, xf, xg, constants, op):
         # we're replacing stuff like this with jvps
         # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
@@ -1085,6 +1081,18 @@ class ProximalProjection(ObjectiveFunction):
                     out.append(outi)
             out = jnp.concatenate(out)
         return -out
+
+    @jit
+    def _jvp_scaled(self, v, xf, xg, constants):
+        return self._jvp(v, xf, xg, constants, "scaled")
+
+    @jit
+    def _jvp_scaled_error(self, v, xf, xg, constants):
+        return self._jvp(v, xf, xg, constants, "scaled_error")
+
+    @jit
+    def _jvp_unscaled(self, v, xf, xg, constants):
+        return self._jvp(v, xf, xg, constants, "unscaled")
 
     @property
     def constants(self):

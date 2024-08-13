@@ -143,9 +143,8 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     b = jnp.asarray(b)
     xp = put(xp, unfixed_idx, Ainv_full @ b)
     xp = jnp.asarray(xp)
-    x_scale = jnp.abs(Z.T @ xp[unfixed_idx])
-    x_scale = np.where(x_scale < 1, 1, x_scale)
-    D = jnp.diag(x_scale)
+    x_scale = jnp.abs(Z.T) @ jnp.abs(xp[unfixed_idx]) / jnp.sum(jnp.abs(Z.T), axis=1)
+    D = jnp.diag(np.where(x_scale < 1, 1, x_scale))
 
     @jit
     def project(x):

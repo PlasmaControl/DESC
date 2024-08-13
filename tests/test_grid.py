@@ -482,14 +482,14 @@ class TestGrid:
         N = 0
         NFP = 1
         grid_quad = QuadratureGrid(L, M, N, NFP)
-        roots, weights = special.js_roots(3, 2, 2)
+        roots, weights = special.js_roots(2, 2, 2)
         quadrature_nodes = np.stack(
             [
-                np.array([roots[0]] * 5 + [roots[1]] * 5 + [roots[2]] * 5),
+                np.array([roots[0]] * 5 + [roots[1]] * 5),
                 np.array(
-                    [0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5] * 3
+                    [0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5] * 2
                 ),
-                np.zeros(15),
+                np.zeros(10),
             ]
         ).T
         np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)

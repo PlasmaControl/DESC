@@ -1558,7 +1558,7 @@ def _alpha_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
-register_compute_fun(
+@register_compute_fun(
     name="alpha_tt",
     label="\\partial_{\\theta \\theta} \\alpha",
     units="~",
@@ -1571,8 +1571,6 @@ register_compute_fun(
     coordinates="rtz",
     data=["phi_tt", "iota", "theta_PEST_tt"],
 )
-
-
 def _alpha_tt(params, transforms, profiles, data, **kwargs):
     data["alpha_tt"] = data["theta_PEST_tt"] - data["iota"] * data["phi_tt"]
     return data

@@ -132,6 +132,8 @@ def register_compute_fun(  # noqa: C901
         source_grid_requirement = {}
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
+    if not isinstance(aliases, (tuple, list)):
+        aliases = [aliases]
 
     deps = {
         "params": params,
@@ -176,10 +178,11 @@ def register_compute_fun(  # noqa: C901
                     if name in data_index[base_class]:
                         if p == data_index[base_class][name]["parameterization"]:
                             raise ValueError(
-                                f"Already registered function with parameterization {p} and name {name}."
+                                f"Already registered function with parameterization {p}"
+                                f" and name {name}."
                             )
-                        # if it was already registered from a parent class, we prefer
-                        # the child class.
+                        # if it was already registered from a parent class, we
+                        # prefer the child class.
                         inheritance_order = [base_class] + superclasses
                         if inheritance_order.index(p) > inheritance_order.index(
                             data_index[base_class][name]["parameterization"]

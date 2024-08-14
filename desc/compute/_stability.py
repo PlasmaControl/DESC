@@ -256,12 +256,11 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "p_r",
         "phi",
         "iota",
-        "iota_r",
+        "shear",
         "psi",
         "psi_r",
         "rho",
     ],
-    source_grid_requirement={"coordinates": "raz"},
 )
 def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     """
@@ -309,7 +308,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
 
     iota = data["iota"]
-    shat = -rho / iota * data["iota_r"]
+    shear = data["shear"]
     psi = data["psi"]
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
@@ -327,8 +326,8 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
         rho**2
         * (
             data["g^aa"][None, :]
-            - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
-            + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
+            - 2 * sign_iota * shear / rho * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * data["g^rr"][None, :]
         ),
         (N_alpha, N_zeta0, N_zeta),
     )
@@ -348,7 +347,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
             * dpdpsi
             * (
                 data["cvdrift"][None, :]
-                - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
+                - shear / rho * zeta0[:, None] * data["cvdrift0"][None, :]
             ),
             (N_alpha, N_zeta0, N_zeta),
         )
@@ -407,12 +406,11 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
         "p_r",
         "phi",
         "iota",
-        "iota_r",
+        "shear",
         "psi",
         "psi_r",
         "rho",
     ],
-    source_grid_requirement={"coordinates": "raz"},
 )
 def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     """
@@ -459,7 +457,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
     iota = data["iota"]
-    shat = -rho / iota * data["iota_r"]
+    shear = data["shear"]
     psi = data["psi"]
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
@@ -477,8 +475,8 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         rho**2
         * (
             data["g^aa"][None, :]
-            - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
-            + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
+            - 2 * sign_iota * shear / rho * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * data["g^rr"][None, :]
         ),
         (N_alpha, N_zeta0, N_zeta),
     )
@@ -498,7 +496,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
             * dpdpsi
             * (
                 data["cvdrift"][None, :]
-                - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
+                - shear / rho * zeta0[:, None] * data["cvdrift0"][None, :]
             ),
             (N_alpha, N_zeta0, N_zeta),
         )
@@ -561,12 +559,11 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         "p_r",
         "phi",
         "iota",
-        "iota_r",
+        "shear",
         "psi",
         "psi_r",
         "rho",
     ],
-    source_grid_requirement={"coordinates": "raz"},
 )
 def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     """
@@ -622,7 +619,7 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
 
     iota = data["iota"]
-    shat = -rho / iota * data["iota_r"]
+    shear = data["shear"]
     psi = data["psi"]
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
@@ -641,8 +638,8 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
         rho**2
         * (
             data["g^aa"][None, :]
-            - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
-            + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
+            - 2 * sign_iota * shear / rho * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * data["g^rr"][None, :]
         ),
         (N_alpha, N_zeta0, N_zeta),
     )
@@ -661,7 +658,7 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
             * dpdpsi
             * (
                 data["cvdrift"][None, :]
-                - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
+                - shear / rho * zeta0[:, None] * data["cvdrift0"][None, :]
             ),
             (N_alpha, N_zeta0, N_zeta),
         )

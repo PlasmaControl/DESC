@@ -465,7 +465,7 @@ class BallooningStability(_Objective):
 
         # we need a uniform grid to get correct surface averages for iota
         iota_grid = LinearGrid(rho=self.rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        self._iota_keys = ["iota", "iota_r", "iota_rr"]  # might not need all of these
+        self._iota_keys = ["iota", "shear"]  # might not need all of these
         iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
         iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
 
@@ -559,8 +559,7 @@ class BallooningStability(_Objective):
         # using the wrong grid
         data = {
             "iota": iota_data["iota"][0] * jnp.ones_like(zeta),
-            "iota_r": iota_data["iota_r"][0] * jnp.ones_like(zeta),
-            "iota_rr": iota_data["iota_rr"][0] * jnp.ones_like(zeta),
+            "shear": iota_data["shear"][0] * jnp.ones_like(zeta),
             "a": len_data["a"],
         }
 

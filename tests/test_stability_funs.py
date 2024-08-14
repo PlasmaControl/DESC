@@ -392,7 +392,9 @@ def test_ballooning_geometry(tmpdir_factory):
         zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
         coords1[:, 2] = zeta
 
-        c1 = eq.map_coordinates(coords1, inbasis=("rho", "theta_PEST", "zeta"))
+        c1 = eq.map_coordinates(
+            coords1, inbasis=("rho", "theta_PEST", "zeta"), maxiter=20
+        )
         grid = Grid(c1, sort=False)
 
         data_keys = [
@@ -531,7 +533,9 @@ def test_ballooning_stability_eval():
         nodes = jnp.array([rho, theta_PEST, zeta_full]).T
 
         # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
+        desc_coords = map_coordinates(
+            eq, nodes, inbasis=("rho", "theta_PEST", "zeta"), maxiter=20
+        )
 
         sfl_grid = Grid(desc_coords, sort=False)
 
@@ -645,7 +649,9 @@ def test_compare_with_COBRAVMEC():
         nodes = jnp.array([rho, theta_PEST, zeta_full]).T
 
         # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
+        desc_coords = map_coordinates(
+            eq, nodes, inbasis=("rho", "theta_PEST", "zeta"), maxiter=20
+        )
 
         sfl_grid = Grid(desc_coords, sort=False)
 

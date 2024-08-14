@@ -57,8 +57,6 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
-    "gbdrift",
-    "cvdrift",
     "grad(alpha)",
     "g^aa",
     "g^ra",
@@ -277,8 +275,8 @@ class TestAxisLimits:
         # polynomial regression fit against which the axis limit is compared.
         weaker_tolerance = {
             "B0_rr": {"rtol": 5e-03},
-            "iota_r": {"atol": 1e-4},
-            "iota_num_rr": {"atol": 5e-3},
+            "iota_r": {"atol": 1e-6},
+            "iota_num_rr": {"atol": 5e-5},
             "alpha_r": {"rtol": 1e-3},
             "cvdrift0": {"atol": 1e-5},
             "grad(B)": {"rtol": 1e-4},

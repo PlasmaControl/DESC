@@ -422,7 +422,7 @@ class BallooningStability(_Objective):
         deriv_mode="rev",
         loss_function=None,
         rho=0.5,
-        alpha=jnp.linspace(0, jnp.pi, 8)[None, :],
+        alpha=jnp.linspace(0, jnp.pi, 8)[:, None],
         zetamax=3 * jnp.pi,
         nzeta=200,
         name="ideal-ball gamma",

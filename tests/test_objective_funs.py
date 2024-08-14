@@ -1499,8 +1499,7 @@ def test_plasma_vessel_distance_print(capsys):
         out = capsys.readouterr()
 
         corr_out = str(
-            "Precomputing transforms\n"
-            + "Maximum "
+            "Maximum "
             + print_fmt.format(np.max(d), np.max(d))
             + obj._units
             + "\n"
@@ -1547,7 +1546,7 @@ def test_plasma_vessel_distance_print(capsys):
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
-    obj.build()
+    obj.build(verbose=0)
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
     test(obj, eq, surface, d)

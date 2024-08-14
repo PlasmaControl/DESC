@@ -261,6 +261,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "psi_r",
         "rho",
     ],
+    source_grid_requirement={"coordinates": "raz"},
 )
 def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     """
@@ -411,6 +412,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
         "psi_r",
         "rho",
     ],
+    source_grid_requirement={"coordinates": "raz"},
 )
 def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     """
@@ -564,6 +566,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         "psi_r",
         "rho",
     ],
+    source_grid_requirement={"coordinates": "raz"},
 )
 def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     """

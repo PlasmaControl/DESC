@@ -5,7 +5,6 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from scipy.interpolate import interp1d
 
 from desc.basis import (
     DoubleFourierSeries,
@@ -824,14 +823,12 @@ def test_plot_b_mag():
     npol = 2
     nzgrid = 128
     alpha = 0
-    # compute and fit iota profile
+    # compute iota
     eq = get("W7-X")
-    data = eq.compute("iota")
-    fi = interp1d(data["rho"], data["iota"])
+    iota = eq.compute("iota", grid=LinearGrid(rho=np.sqrt(psi), NFP=eq.NFP))["iota"][0]
 
     # get flux tube coordinate system
     rho = np.sqrt(psi)
-    iota = fi(rho)
     zeta = np.linspace(
         -np.pi * npol / np.abs(iota), np.pi * npol / np.abs(iota), 2 * nzgrid + 1
     )

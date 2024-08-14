@@ -547,9 +547,14 @@ class BallooningStability(_Objective):
         rho, alpha, zeta = constants["fieldline_nodes"].T
         theta_PEST = alpha + iota * zeta
         nodes = jnp.array([rho, theta_PEST, zeta]).T
+
+        # Rootfinding theta for a given theta_PEST
         desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
 
-        sfl_grid = Grid(desc_coords, sort=False, jitable=True)
+        diff_arr = jnp.diff(desc_coords[:, :], axis=0)
+        nodes_spacing = jnp.concatenate([diff_arr, diff_arr[-1:, :]], axis=0)
+
+        sfl_grid = Grid(desc_coords, spacing=nodes_spacing, sort=False, jitable=True)
         transforms = get_transforms(
             self._data_keys, obj=eq, grid=sfl_grid, jitable=True
         )

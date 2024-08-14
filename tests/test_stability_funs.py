@@ -358,15 +358,8 @@ def test_ballooning_geometry(tmpdir_factory):
     alpha = 0
     ntor = 2.0
 
-    try:
-        eq0 = desc.examples.get("W7-X")[-1]
-    except TypeError:
-        eq0 = desc.examples.get("W7-X")
-
-    try:
-        eq1 = desc.examples.get("precise_QA")[-1]
-    except TypeError:
-        eq1 = desc.examples.get("precise_QA")
+    eq0 = desc.examples.get("W7-X")
+    eq1 = desc.examples.get("precise_QA")
 
     eq_list = [eq0, eq1]
     fac_list = [4, 4]
@@ -491,10 +484,7 @@ def test_ballooning_stability_eval():
     We calculated the ideal ballooning growth rate and Newcomb metric for
     the HELIOTRON case at different radii.
     """
-    try:
-        eq = desc.examples.get("HELIOTRON")[-1]
-    except TypeError:
-        eq = desc.examples.get("HELIOTRON")
+    eq = desc.examples.get("HELIOTRON")
 
     # Flux surfaces on which to evaluate ballooning stability
     surfaces = [0.01, 0.5, 1.0]
@@ -603,10 +593,7 @@ def test_compare_with_COBRAVMEC():
 
     root_COBRAVMEC = find_root_simple(rho1, gamma1)
 
-    try:
-        eq = desc.examples.get("HELIOTRON")[-1]
-    except TypeError:
-        eq = desc.examples.get("HELIOTRON")
+    eq = desc.examples.get("HELIOTRON")
 
     # Flux surfaces on which to evaluate ballooning stability
     surfaces = [0.98, 0.985, 0.99, 0.995, 1.0]

@@ -177,22 +177,8 @@ class ObjectiveFunction(IOAble):
                 [i for i, t in enumerate(unique_) if t in obj.things]
             )
 
-        def unflatten(unique):
-            assert len(unique) == len(unique_)
-            flat = [unique[i] for i in inds_]
-            return tree_unflatten(treedef_, flat)
-
-        def flatten(things):
-            flat, treedef = tree_flatten(
-                things, is_leaf=lambda x: isinstance(x, Optimizable)
-            )
-            assert treedef == treedef_
-            assert len(flat) == len(flat_)
-            unique, _ = unique_list(flat)
-            return unique
-
-        self._unflatten = unflatten
-        self._flatten = flatten
+        self._unflatten = _ThingUnflattener(len(unique_), inds_, treedef_)
+        self._flatten = _ThingFlattener(len(flat_), treedef_)
 
     @jit
     def compute_unscaled(self, x, constants=None):
@@ -1317,3 +1303,40 @@ class _Objective(IOAble, ABC):
         self._things = list(new)
         # can maybe improve this later to not rebuild if resolution is the same
         self._built = False
+
+
+# local functions assigned as attributes aren't hashable so they cause stuff to
+# recompile, so instead we define a hashable class to do the same thing.
+
+
+class _ThingUnflattener(IOAble):
+
+    _static_attrs = ["length", "inds", "treedef"]
+
+    def __init__(self, length, inds, treedef):
+        self.length = length
+        self.inds = inds
+        self.treedef = treedef
+
+    def __call__(self, unique):
+        assert len(unique) == self.length
+        flat = [unique[i] for i in self.inds]
+        return tree_unflatten(self.treedef, flat)
+
+
+class _ThingFlattener(IOAble):
+
+    _static_attrs = ["length", "treedef"]
+
+    def __init__(self, length, treedef):
+        self.length = length
+        self.treedef = treedef
+
+    def __call__(self, things):
+        flat, treedef = tree_flatten(
+            things, is_leaf=lambda x: isinstance(x, Optimizable)
+        )
+        assert treedef == self.treedef
+        assert len(flat) == self.length
+        unique, _ = unique_list(flat)
+        return unique

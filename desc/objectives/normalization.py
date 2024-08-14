@@ -41,14 +41,7 @@ def compute_scaling_factors(thing):
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
         scales["B_T"] = abs(thing.Psi) / scales["A"]
-        if thing.iota is not None:
-            iota_avg = np.mean(np.abs(thing.iota(np.linspace(0, 1, 20))))
-        else:
-            iota_avg = np.mean(np.abs(thing.get_profile("iota")(np.linspace(0, 1, 20))))
-        if np.isclose(iota_avg, 0):
-            scales["B_P"] = scales["B_T"]
-        else:
-            scales["B_P"] = scales["B_T"] * iota_avg
+        scales["B_P"] = scales["B_T"]
         scales["B"] = np.sqrt(scales["B_T"] ** 2 + scales["B_P"] ** 2)
         scales["I"] = scales["B_P"] * 2 * np.pi / mu_0
         scales["p"] = scales["B"] ** 2 / (2 * mu_0)

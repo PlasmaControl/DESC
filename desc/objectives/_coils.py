@@ -1510,10 +1510,12 @@ class SurfaceCurrentRegularization(_Objective):
 
     compute::
 
-        w*|K|
+        w*|K|*|N|
 
-    where K is the winding surface current density, and w is the
-    regularization parameter (the weight on this objective)
+    where K is the winding surface current density, w is the
+    regularization parameter (the weight on this objective),
+    and |N| is the magnitude of the surface normal i.e. the
+    surface jacobian |e_theta x e_zeta|
 
     This is intended to be used with a surface current::
 
@@ -1648,7 +1650,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         # source_grid.num_nodes for the regularization cost
         self._dim_f = source_grid.num_nodes
-        self._surface_data_keys = ["K"]
+        self._surface_data_keys = ["K", "|e_theta x e_zeta|"]
 
         timer = Timer()
         if verbose > 0:
@@ -1703,4 +1705,4 @@ class SurfaceCurrentRegularization(_Objective):
         )
 
         K_mag = safenorm(surface_data["K"], axis=-1)
-        return K_mag
+        return K_mag * surface_data["|e_theta x e_zeta|"]

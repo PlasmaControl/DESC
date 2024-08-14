@@ -222,6 +222,34 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
         return u, du
 
+    _gen_eigval_cpu = jax.jit(jax.scipy.linalg.eigh, device=jax.devices("cpu")[0])
+
+    @jax.custom_jvp
+    def gen_eigval(A):
+        """
+        Generalize eigenvalue solver.
+
+        Returns the top n eigenvalues of the square matrix A. Calculation is
+        being performed on a CPU. If the CPU version can provide the top eigenvalue,
+        the calculation should be faster on a CPU.
+        Currently doesn't work because of the limitations of the jax functionality.
+        """
+        neigs, N, _ = jnp.shape(A)
+        u = jnp.zeros((N,))
+        i = jnp.arange(N)
+
+        u = u.at[i].set(
+            jax.pure_callback(
+                _gen_eigval_cpu,
+                jnp.zeros_like(A[i, :, :]),
+                A[i, :, :],
+                k=1,
+                sigma=0.42,
+                vectorized=True,
+            )
+        )
+        return u
+
     def root_scalar(
         fun,
         x0,
@@ -714,7 +742,14 @@ else:  # pragma: no cover
         fun.defjvps = lambda *args, **kwargs: None
         return fun
 
-    eigvals = np.linalg.eigvals
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        """
+        u = np.linalg.eigvals(A)
+        return u
 
     def root_scalar(
         fun,

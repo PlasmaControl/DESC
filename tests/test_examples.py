@@ -20,7 +20,7 @@ from desc.coils import (
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.equilibrium.coords import map_coordinates
+from desc.equilibrium.coords import compute_theta_coords
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
@@ -1679,10 +1679,12 @@ def test_ballooning_stability_opt():
         theta_PEST = theta_PEST.flatten()
         zeta_full = zeta_full.flatten()
 
-        nodes = jnp.array([rho, theta_PEST, zeta_full]).T
+        theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
 
         # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
+        desc_coords = compute_theta_coords(
+            eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
+        )
 
         sfl_grid = Grid(desc_coords, sort=False)
 
@@ -1765,10 +1767,12 @@ def test_ballooning_stability_opt():
         theta_PEST = theta_PEST.flatten()
         zeta_full = zeta_full.flatten()
 
-        nodes = jnp.array([rho, theta_PEST, zeta_full]).T
+        theta_coords = jnp.array([rho, theta_PEST, zeta_full]).T
 
         # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
+        desc_coords = compute_theta_coords(
+            eq, theta_coords, L_lmn=eq.L_lmn, tol=1e-8, maxiter=25
+        )
 
         sfl_grid = Grid(desc_coords, sort=False)
 

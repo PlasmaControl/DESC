@@ -1,0 +1,87 @@
+DESC version 0.11.1+600.g2125bd4e9.dirty,using JAX backend, jax version=0.4.14, jaxlib version=0.4.14, dtype=float64
+Using device: CPU, with 1908.94 GB available memory
+Spectral indexing: ansi
+Spectral resolution (L,M,N)=(10,10,10)
+Node resolution (L,M,N)=(20,20,20)
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 1.49 sec
+Timer: Objective build = 4.69 sec
+Building objective: lcfs R
+Building objective: lcfs Z
+Building objective: fixed Psi
+Building objective: fixed pressure
+Building objective: fixed current
+Building objective: fixed sheet current
+Building objective: self_consistency R
+Building objective: self_consistency Z
+Building objective: lambda gauge
+Building objective: axis R self consistency
+Building objective: axis Z self consistency
+Timer: Objective build = 2.09 sec
+Timer: Linear constraint projection build = 4.58 sec
+Number of parameters: 1635
+Number of objectives: 9922
+Starting optimization
+Using method: lsq-exact
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality
+       0              1          5.894e-03                                    8.717e-01
+QR:  39.58285069465637
+QR:  16.49936008453369
+QR:  39.09225368499756
+       1              4          2.535e-03      3.359e-03      1.513e-01      2.307e+00
+QR:  2.8158674240112305
+       2              5          1.514e-04      2.384e-03      4.853e-02      3.162e-01
+QR:  2.776045799255371
+       3              6          1.398e-05      1.374e-04      3.380e-02      1.564e-01
+QR:  2.8213765621185303
+       4              7          9.906e-07      1.299e-05      2.334e-02      4.424e-02
+QR:  2.7739756107330322
+       5              8          4.917e-08      9.414e-07      1.382e-02      7.766e-03
+QR:  2.8709092140197754
+       6              9          8.415e-09      4.075e-08      1.352e-02      4.155e-03
+QR:  2.8318326473236084
+       7             10          5.846e-10      7.830e-09      7.161e-03      1.010e-03
+QR:  2.939405918121338
+       8             11          5.335e-10      5.109e-11      7.642e-03      7.996e-04
+QR:  2.7759273052215576
+       9             12          2.397e-12      5.311e-10      7.502e-04      3.237e-05
+QR:  19.42463970184326
+QR:  22.66442322731018
+      10             14          2.536e-13      2.143e-12      3.222e-04      1.046e-05
+Warning: Maximum number of iterations has been exceeded.
+         Current function value: 2.536e-13
+         Total delta_x: 1.031e-01
+         Iterations: 10
+         Function evaluations: 14
+         Jacobian evaluations: 11
+Timer: Solution time = 4.72 min
+Timer: Avg time per step = 25.7 sec
+Start of solver
+Total (sum of squares):  5.894e-03,
+Maximum absolute Force error:  7.982e+04 (N)
+Minimum absolute Force error:  1.125e-12 (N)
+Average absolute Force error:  2.562e+04 (N)
+Maximum absolute Force error:  5.015e-03 (normalized)
+Minimum absolute Force error:  7.069e-20 (normalized)
+Average absolute Force error:  1.610e-03 (normalized)
+R boundary error:  0.000e+00 (m)
+Z boundary error:  0.000e+00 (m)
+Fixed Psi error:  0.000e+00 (Wb)
+Fixed pressure profile error:  0.000e+00 (Pa)
+Fixed current profile error:  0.000e+00 (A)
+Fixed sheet current error:  0.000e+00 (~)
+End of solver
+Total (sum of squares):  2.536e-13,
+Maximum absolute Force error:  4.801e+00 (N)
+Minimum absolute Force error:  5.096e-06 (N)
+Average absolute Force error:  1.267e-01 (N)
+Maximum absolute Force error:  3.017e-07 (normalized)
+Minimum absolute Force error:  3.202e-13 (normalized)
+Average absolute Force error:  7.962e-09 (normalized)
+R boundary error:  0.000e+00 (m)
+Z boundary error:  0.000e+00 (m)
+Fixed Psi error:  0.000e+00 (Wb)
+Fixed pressure profile error:  0.000e+00 (Pa)
+Fixed current profile error:  0.000e+00 (A)
+Fixed sheet current error:  0.000e+00 (~)

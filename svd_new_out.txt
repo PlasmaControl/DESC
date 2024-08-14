@@ -1,0 +1,96 @@
+DESC version 0.11.1+600.g2125bd4e9.dirty,using JAX backend, jax version=0.4.14, jaxlib version=0.4.14, dtype=float64
+Using device: CPU, with 179.29 GB available memory
+Spectral indexing: ansi
+Spectral resolution (L,M,N)=(10,10,10)
+Node resolution (L,M,N)=(20,20,20)
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 1.62 sec
+Timer: Objective build = 4.71 sec
+Building objective: lcfs R
+Building objective: lcfs Z
+Building objective: fixed Psi
+Building objective: fixed pressure
+Building objective: fixed current
+Building objective: fixed sheet current
+Building objective: self_consistency R
+Building objective: self_consistency Z
+Building objective: lambda gauge
+Building objective: axis R self consistency
+Building objective: axis Z self consistency
+Timer: Objective build = 2.29 sec
+Timer: Linear constraint projection build = 4.78 sec
+Number of parameters: 1635
+Number of objectives: 9922
+Starting optimization
+Using method: lsq-exact
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality
+       0              1          5.894e-03                                    8.717e-01
+init SVD:  5.595107555389404
+SVD:  0.3101840019226074
+SVD:  0.2919440269470215
+       1              3          1.261e-03      4.633e-03      1.270e-01      1.662e+00
+init SVD:  5.570924282073975
+SVD:  0.0752408504486084
+       2              4          6.245e-05      1.199e-03      3.385e-02      2.529e-01
+init SVD:  5.5907557010650635
+SVD:  0.07500481605529785
+       3              5          6.382e-06      5.607e-05      2.447e-02      1.033e-01
+init SVD:  5.571263790130615
+SVD:  0.07488608360290527
+       4              6          3.628e-07      6.020e-06      1.802e-02      2.413e-02
+init SVD:  5.565975189208984
+SVD:  0.07528972625732422
+       5              7          1.849e-08      3.443e-07      1.107e-02      3.971e-03
+init SVD:  5.581035137176514
+SVD:  0.0754847526550293
+       6              8          1.640e-09      1.685e-08      8.119e-03      1.303e-03
+init SVD:  5.572343826293945
+SVD:  0.07513928413391113
+       7              9          6.162e-10      1.024e-09      7.606e-03      8.922e-04
+init SVD:  5.565074920654297
+SVD:  0.07505941390991211
+       8             10          1.497e-11      6.012e-10      2.666e-03      1.343e-04
+init SVD:  5.571868419647217
+SVD:  0.07536005973815918
+SVD:  0.07651829719543457
+       9             12          4.644e-12      1.032e-11      2.045e-03      8.266e-05
+init SVD:  5.567831993103027
+SVD:  0.07741618156433105
+      10             13          4.100e-12      5.446e-13      1.811e-03      8.348e-05
+Warning: Maximum number of iterations has been exceeded.
+         Current function value: 4.100e-12
+         Total delta_x: 9.343e-02
+         Iterations: 10
+         Function evaluations: 13
+         Jacobian evaluations: 11
+Timer: Solution time = 3.65 min
+Timer: Avg time per step = 19.9 sec
+Start of solver
+Total (sum of squares):  5.894e-03,
+Maximum absolute Force error:  7.982e+04 (N)
+Minimum absolute Force error:  1.125e-12 (N)
+Average absolute Force error:  2.562e+04 (N)
+Maximum absolute Force error:  5.015e-03 (normalized)
+Minimum absolute Force error:  7.069e-20 (normalized)
+Average absolute Force error:  1.610e-03 (normalized)
+R boundary error:  0.000e+00 (m)
+Z boundary error:  0.000e+00 (m)
+Fixed Psi error:  0.000e+00 (Wb)
+Fixed pressure profile error:  0.000e+00 (Pa)
+Fixed current profile error:  0.000e+00 (A)
+Fixed sheet current error:  0.000e+00 (~)
+End of solver
+Total (sum of squares):  4.100e-12,
+Maximum absolute Force error:  1.996e+01 (N)
+Minimum absolute Force error:  1.127e-04 (N)
+Average absolute Force error:  5.280e-01 (N)
+Maximum absolute Force error:  1.254e-06 (normalized)
+Minimum absolute Force error:  7.079e-12 (normalized)
+Average absolute Force error:  3.318e-08 (normalized)
+R boundary error:  0.000e+00 (m)
+Z boundary error:  0.000e+00 (m)
+Fixed Psi error:  0.000e+00 (Wb)
+Fixed pressure profile error:  0.000e+00 (Pa)
+Fixed current profile error:  0.000e+00 (A)
+Fixed sheet current error:  0.000e+00 (~)

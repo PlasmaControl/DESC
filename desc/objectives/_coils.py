@@ -700,8 +700,8 @@ class CoilCurrentLength(CoilLength):
         """
         lengths = super().compute(params, constants=constants)
         params = tree_leaves(params, is_leaf=lambda x: isinstance(x, dict))
-        currents = [param["current"] for param in params]
-        out = jnp.asarray(lengths) * jnp.asarray(currents)
+        currents = jnp.concatenate([param["current"] for param in params])
+        out = jnp.atleast_1d(lengths * currents)
         return out
 
 

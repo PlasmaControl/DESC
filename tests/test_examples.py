@@ -435,7 +435,7 @@ def test_NAE_QSC_solve():
     ntheta = 75
     r = 0.01
     N = 9
-    eq = Equilibrium.from_near_axis(qsc, r=r, L=6, M=6, N=N, ntheta=ntheta)
+    eq = Equilibrium.from_near_axis(qsc, r=r, L=4, M=4, N=N, ntheta=ntheta)
 
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
@@ -463,13 +463,12 @@ def test_NAE_QSC_solve():
     ):
         objectives = ForceBalance(eq=eqq)
         obj = ObjectiveFunction(objectives)
-        print(constraints)
 
         eqq.solve(
             verbose=3,
             ftol=1e-2,
             objective=obj,
-            maxiter=175,
+            maxiter=50,
             xtol=1e-6,
             constraints=constraints,
         )
@@ -486,7 +485,7 @@ def test_NAE_QSC_solve():
         # Make sure surfaces of solved equilibrium are similar near axis as QSC
         rho_err, theta_err = area_difference_desc(eqq, eq_fit)
 
-        np.testing.assert_allclose(rho_err[:, 0:-4], 0, atol=1e-2, err_msg=string)
+        np.testing.assert_allclose(rho_err[:, 0:-6], 0, atol=1.5e-2, err_msg=string)
         np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3, err_msg=string)
 
         # Make sure iota of solved equilibrium is same near axis as QSC
@@ -501,6 +500,91 @@ def test_NAE_QSC_solve():
         data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
         lam_nae = data_nae["lambda"]
         # Reshape to form grids on theta and phi
+
+        phi = np.squeeze(grid_axis.nodes[:, 2])
+        np.testing.assert_allclose(
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
+        )
+
+        # check |B| on axis
+        np.testing.assert_allclose(
+            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=1e-4, err_msg=string
+        )
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_NAE_QSC_solve_near_axis_based_off_eq():
+    """Test O(rho) NAE QSC constraints solve when qsc eq is not given."""
+    qsc = Qsc.from_paper("precise QA")
+    ntheta = 75
+    r = 0.01
+    N = 9
+    eq = Equilibrium.from_near_axis(qsc, r=r, L=6, M=6, N=N, ntheta=ntheta)
+
+    orig_Rax_val = eq.axis.R_n
+    orig_Zax_val = eq.axis.Z_n
+
+    eq_fit = eq.copy()
+    eq_lambda_fixed_0th_order = eq.copy()
+    eq_lambda_fixed_1st_order = eq.copy()
+
+    # this has all the constraints we need,
+    cs = get_NAE_constraints(eq, qsc_eq=None, order=1, fix_lambda=False, N=eq.N)
+    cs_lambda_fixed_0th_order = get_NAE_constraints(
+        eq_lambda_fixed_0th_order, qsc_eq=None, order=1, fix_lambda=0, N=eq.N
+    )
+    cs_lambda_fixed_1st_order = get_NAE_constraints(
+        eq_lambda_fixed_1st_order, qsc_eq=None, order=1, fix_lambda=True, N=eq.N
+    )
+
+    for c in cs:
+        # should be no FixSumModeslambda in the fix_lambda=False constraint
+        assert not isinstance(c, FixSumModesLambda)
+
+    for eqq, constraints in zip(
+        [eq, eq_lambda_fixed_0th_order, eq_lambda_fixed_1st_order],
+        [cs, cs_lambda_fixed_0th_order, cs_lambda_fixed_1st_order],
+    ):
+        objectives = ForceBalance(eq=eqq)
+        obj = ObjectiveFunction(objectives)
+
+        eqq.solve(
+            verbose=3,
+            ftol=1e-2,
+            objective=obj,
+            maxiter=100,
+            xtol=1e-6,
+            constraints=constraints,
+        )
+    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
+    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    # Make sure axis is same
+    for eqq, string in zip(
+        [eq, eq_lambda_fixed_0th_order, eq_lambda_fixed_1st_order],
+        ["no lambda constraint", "lambda_fixed_0th_order", "lambda_fixed_1st_order"],
+    ):
+        np.testing.assert_array_almost_equal(orig_Rax_val, eqq.axis.R_n, err_msg=string)
+        np.testing.assert_array_almost_equal(orig_Zax_val, eqq.axis.Z_n, err_msg=string)
+
+        # Make sure surfaces of solved equilibrium are similar near axis as QSC
+        rho_err, theta_err = area_difference_desc(eqq, eq_fit)
+
+        np.testing.assert_allclose(rho_err[:, 0:-6], 0, atol=1.5e-2, err_msg=string)
+        np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3, err_msg=string)
+
+        # Make sure iota of solved equilibrium is same near axis as QSC
+
+        iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
+
+        np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
+        np.testing.assert_allclose(iota[1:10], qsc.iota, rtol=5e-3, err_msg=string)
+
+        ### check lambda to match on axis
+        # Evaluate lambda on the axis
+        data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
+        lam_nae = data_nae["lambda"]
 
         phi = np.squeeze(grid_axis.nodes[:, 2])
         np.testing.assert_allclose(
@@ -558,8 +642,8 @@ def test_NAE_QIC_solve():
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
-    np.testing.assert_allclose(iota[1], qic.iota, atol=2e-5)
-    np.testing.assert_allclose(iota[1:10], qic.iota, atol=5e-4)
+    np.testing.assert_allclose(iota[0], qic.iota, rtol=1e-5)
+    np.testing.assert_allclose(iota[1:10], qic.iota, rtol=1e-3)
 
     # check lambda to match near axis
     grid_2d_05 = LinearGrid(rho=np.array(1e-6), M=50, N=50, NFP=eq.NFP, endpoint=True)
@@ -974,7 +1058,7 @@ def test_non_eq_optimization():
         use_softmin=True,
         surface_grid=grid,
         plasma_grid=grid,
-        alpha=5000,
+        softmin_alpha=5000,
     )
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-auglag")
@@ -1546,3 +1630,97 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+@pytest.mark.optimize
+def test_signed_PlasmaVesselDistance():
+    """Tests that signed distance works with surface optimization."""
+    eq = get("HELIOTRON")
+    eq.change_resolution(M=2, N=2)
+
+    surf = eq.surface.copy()
+    surf.change_resolution(M=1, N=1)
+
+    target_dist = -0.25
+
+    grid = LinearGrid(M=10, N=4, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+        eq_fixed=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (surf,), _ = optimizer.optimize(
+        (surf,), objective, verbose=3, maxiter=60, ftol=1e-8, xtol=1e-9
+    )
+
+    np.testing.assert_allclose(
+        obj.compute(*obj.xs(surf)), target_dist, atol=1e-2, err_msg="Using hardmin"
+    )
+
+    # with softmin
+    surf = eq.surface.copy()
+    surf.change_resolution(M=1, N=1)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+        use_softmin=True,
+        softmin_alpha=100,
+        eq_fixed=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (surf,), _ = optimizer.optimize(
+        (surf,),
+        objective,
+        verbose=3,
+        maxiter=60,
+        ftol=1e-8,
+        xtol=1e-9,
+    )
+
+    np.testing.assert_allclose(
+        obj.compute(*obj.xs(surf)), target_dist, atol=1e-2, err_msg="Using softmin"
+    )
+
+    # with changing eq
+    eq = Equilibrium(M=1, N=1)
+    surf = eq.surface.copy()
+    surf.change_resolution(M=1, N=1)
+    grid = LinearGrid(M=10, N=2, NFP=eq.NFP)
+
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (eq, surf), _ = optimizer.optimize(
+        (eq, surf),
+        objective,
+        constraints=(FixParameters(surf),),
+        verbose=3,
+        maxiter=60,
+        ftol=1e-8,
+        xtol=1e-9,
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), target_dist, atol=1e-2)

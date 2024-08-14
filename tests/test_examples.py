@@ -623,7 +623,7 @@ def test_NAE_QIC_solve():
     )
 
     # check |B| on axis
-    B_nae = eq.compute(["|B|"], grid=grid_axis)
+    B_nae = eq.compute(["|B|"], grid=grid_axis)["|B|"]
     np.testing.assert_allclose(B_nae, qic.B0, atol=1e-3)
 
 

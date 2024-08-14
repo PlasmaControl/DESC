@@ -464,7 +464,7 @@ class BallooningStability(_Objective):
 
         # we need a uniform grid to get correct surface averages for iota
         iota_grid = LinearGrid(rho=self.rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        self._iota_keys = ["iota", "shear"]  # might not need all of these
+        self._iota_keys = ["iota", "iota_r", "shear"]  # might not need all of these
         iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
         iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
 
@@ -550,10 +550,7 @@ class BallooningStability(_Objective):
         # Rootfinding theta for a given theta_PEST
         desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
 
-        diff_arr = jnp.diff(desc_coords[:, :], axis=0)
-        nodes_spacing = jnp.concatenate([diff_arr, diff_arr[-1:, :]], axis=0)
-
-        sfl_grid = Grid(desc_coords, spacing=nodes_spacing, sort=False, jitable=True)
+        sfl_grid = Grid(desc_coords, sort=False, jitable=True)
         transforms = get_transforms(
             self._data_keys, obj=eq, grid=sfl_grid, jitable=True
         )
@@ -563,6 +560,7 @@ class BallooningStability(_Objective):
         # using the wrong grid
         data = {
             "iota": iota_data["iota"][0] * jnp.ones_like(zeta),
+            "iota_r": iota_data["iota"][0] * jnp.ones_like(zeta),
             "shear": iota_data["shear"][0] * jnp.ones_like(zeta),
             "a": len_data["a"],
         }

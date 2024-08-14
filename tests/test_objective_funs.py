@@ -1538,7 +1538,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1613,7 +1613,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1690,7 +1690,7 @@ def test_boundary_error_print(capsys):
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(

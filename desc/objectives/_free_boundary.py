@@ -251,11 +251,12 @@ class VacuumBoundaryError(_Objective):
         Bsq_err = (bsq_in - bsq_out) * g
         return jnp.concatenate([Bn_err, Bsq_err])
 
-    def print_value(self, *args, **kwargs):
+    def print_value(self, x, x0=None, **kwargs):
         """Print the value of the objective."""
         # this objective is really 2 residuals concatenated so its helpful to print
         # them individually
-        f = self.compute_unscaled(*args, **kwargs)
+        f = self.compute_unscaled(*x, **kwargs)
+        f0 = self.compute_unscaled(*x0, **kwargs) if x0 is not None else f
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -265,35 +266,44 @@ class VacuumBoundaryError(_Objective):
 
         abserr = jnp.all(self.target == 0)
 
-        def _print(fmt, fmax, fmin, fmean, norm, units):
+        def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit):
 
             print(
-                "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
+                "Maximum "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0max, fmax)
+                + unit
             )
             print(
-                "Minimum " + ("absolute " if abserr else "") + fmt.format(fmin) + units
+                "Minimum "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0min, fmin)
+                + unit
             )
             print(
-                "Average " + ("absolute " if abserr else "") + fmt.format(fmean) + units
+                "Average "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0mean, fmean)
+                + unit
             )
 
             if self._normalize and units != "(dimensionless)":
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmax / norm)
+                    + fmt.format(f0max / norm, fmax / norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmin / norm)
+                    + fmt.format(f0min / norm, fmin / norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmean / norm)
+                    + fmt.format(f0mean / norm, fmean / norm)
                     + "(normalized)"
                 )
 
@@ -306,14 +316,21 @@ class VacuumBoundaryError(_Objective):
         norms = [self.normalization[0], self.normalization[nn]]
         for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
+            f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
             fi = jnp.abs(fi) if abserr else fi
+            f0i = jnp.abs(f0i) if abserr else f0i
             wi = w[i * nn : (i + 1) * nn]
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
             fmean = jnp.mean(fi * wi) / jnp.mean(wi)
-            _print(fmt, fmax, fmin, fmean, norm, unit)
+
+            f0max = jnp.max(f0i)
+            f0min = jnp.min(f0i)
+            f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
+            fmt = fmt + "  -->  {:10.3e} " if x0 is not None else fmt
+            _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
 
 
 class BoundaryError(_Objective):
@@ -699,11 +716,12 @@ class BoundaryError(_Objective):
         else:
             return jnp.concatenate([Bn_err, Bsq_err])
 
-    def print_value(self, *args, **kwargs):
+    def print_value(self, x, x0=None, **kwargs):
         """Print the value of the objective."""
         # this objective is really 3 residuals concatenated so its helpful to print
         # them individually
-        f = self.compute_unscaled(*args, **kwargs)
+        f = self.compute_unscaled(*x, **kwargs)
+        f0 = self.compute_unscaled(*x0, **kwargs) if x0 is not None else f
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -713,35 +731,44 @@ class BoundaryError(_Objective):
 
         abserr = jnp.all(self.target == 0)
 
-        def _print(fmt, fmax, fmin, fmean, norm, units):
+        def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit):
 
             print(
-                "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
+                "Maximum "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0max, fmax)
+                + unit
             )
             print(
-                "Minimum " + ("absolute " if abserr else "") + fmt.format(fmin) + units
+                "Minimum "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0min, fmin)
+                + unit
             )
             print(
-                "Average " + ("absolute " if abserr else "") + fmt.format(fmean) + units
+                "Average "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0mean, fmean)
+                + unit
             )
 
             if self._normalize and units != "(dimensionless)":
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmax / norm)
+                    + fmt.format(f0max / norm, fmax / norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmin / norm)
+                    + fmt.format(f0min / norm, fmin / norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmean / norm)
+                    + fmt.format(f0mean / norm, fmean / norm)
                     + "(normalized)"
                 )
 
@@ -765,14 +792,21 @@ class BoundaryError(_Objective):
             norms = [self.normalization[0], self.normalization[nn]]
         for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
+            f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
             fi = jnp.abs(fi) if abserr else fi
+            f0i = jnp.abs(fi) if abserr else f0i
             wi = w[i * nn : (i + 1) * nn]
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
             fmean = jnp.mean(fi * wi) / jnp.mean(wi)
-            _print(fmt, fmax, fmin, fmean, norm, unit)
+
+            f0max = jnp.max(f0i)
+            f0min = jnp.min(f0i)
+            f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
+            fmt = fmt + "  -->  {:10.3e}" if x0 is not None else fmt
+            _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
 
 
 class BoundaryErrorNESTOR(_Objective):

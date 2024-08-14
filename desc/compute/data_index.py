@@ -132,6 +132,8 @@ def register_compute_fun(  # noqa: C901
         source_grid_requirement = {}
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
+    if not isinstance(aliases, (tuple, list)):
+        aliases = [aliases]
 
     deps = {
         "params": params,

@@ -31,7 +31,10 @@ def _s(params, transforms, profiles, data, **kwargs):
     label="ds",
     units="~",
     units_long="None",
-    description="Spacing of curve parameter",
+    description=(
+        "Quadrature weights for integration along the curve, "
+        + " i.e. an alias for ``grid.spacing[:,2]``"
+    ),
     dim=1,
     params=[],
     transforms={"grid": []},

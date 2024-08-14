@@ -1653,7 +1653,7 @@ def test_ballooning_stability_opt():
     assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
 
     # Field lines on which to evaluate ballooning stability
-    alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
+    alpha = jnp.linspace(0, np.pi, Nalpha)
 
     # Number of toroidal transits of the field line
     ntor = int(2)
@@ -1699,9 +1699,7 @@ def test_ballooning_stability_opt():
     eq_ball_weight = 1.0e2
 
     for i, rho in enumerate(surfaces_ball):
-        shift_arr = np.random.default_rng().uniform(-0.1, 0.1, Nalpha - 1)
         alpha = np.reshape(np.linspace(0, np.pi, Nalpha + 1)[:Nalpha], (-1, 1))
-        alpha[1:, :] = alpha[1:, :] + np.reshape(shift_arr, (-1, 1))
 
         objs_ball[rho] = BallooningStability(
             eq=eq,
@@ -1774,6 +1772,9 @@ def test_ballooning_stability_opt():
 
         lam2_optimized[i] = data["ideal_ball_gamma2"]
 
+    import pdb
+
+    pdb.set_trace()
     assert lam2_optimized < lam2_initial
 
 

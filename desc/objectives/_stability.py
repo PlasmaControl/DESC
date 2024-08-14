@@ -551,6 +551,7 @@ class BallooningStability(_Objective):
         desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
 
         sfl_grid = Grid(desc_coords, sort=False, jitable=True)
+
         transforms = get_transforms(
             self._data_keys, obj=eq, grid=sfl_grid, jitable=True
         )
@@ -560,7 +561,7 @@ class BallooningStability(_Objective):
         # using the wrong grid
         data = {
             "iota": iota_data["iota"][0] * jnp.ones_like(zeta),
-            "iota_r": iota_data["iota"][0] * jnp.ones_like(zeta),
+            "iota_r": iota_data["iota_r"][0] * jnp.ones_like(zeta),
             "shear": iota_data["shear"][0] * jnp.ones_like(zeta),
             "a": len_data["a"],
         }

@@ -382,11 +382,9 @@ class BallooningStability(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations.
+        Must be broadcastable to Objective.dim_f.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -397,6 +395,7 @@ class BallooningStability(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
+        Not used since the growth rate is always normalized.
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
@@ -423,7 +422,7 @@ class BallooningStability(_Objective):
         deriv_mode="rev",
         loss_function=None,
         rho=0.5,
-        alpha=jnp.array([[0.0], [0.2], [0.4], [0.6], [0.8], [1.0], [1.2], [1.4]]),
+        alpha=jnp.linspace(0, jnp.pi, 8)[None, :],
         zetamax=3 * jnp.pi,
         nzeta=200,
         name="ideal-ball gamma",

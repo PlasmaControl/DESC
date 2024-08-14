@@ -742,14 +742,7 @@ else:  # pragma: no cover
         fun.defjvps = lambda *args, **kwargs: None
         return fun
 
-    def eigvals(A):
-        """
-        Eigenvalue solver.
-
-        Returns the eigenvalues of the square matrix A.
-        """
-        u = np.linalg.eigvals(A)
-        return u
+    eigvals = np.linalg.eigvals
 
     def root_scalar(
         fun,

@@ -133,8 +133,10 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         A = A[unfixed_rows][:, unfixed_idx]
         b = b[unfixed_rows]
 
-    # unscaled particular solution to get scale of x
     unfixed_idx = indices_idx
+    fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
+
+    # unscaled particular solution to get scale of x
     if A.size:
         A_inv, Z = svd_inv_null(A)
     else:
@@ -152,6 +154,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         A_inv = A.T
         Z = np.eye(A.shape[1])
     xp = put(xp, unfixed_idx, A_inv @ b)
+    xp = put(xp, fixed_idx, (jnp.diag(1 / jnp.diagonal(D)) @ xp)[fixed_idx])
 
     # cast to jnp arrays
     xp = jnp.asarray(xp)

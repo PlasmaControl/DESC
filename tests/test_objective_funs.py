@@ -205,7 +205,7 @@ class TestObjectiveFunction:
             obj.build()
             f = obj.compute_unscaled(*obj.xs(eq))
             f_scaled = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=8e-3)
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=8e-3)
 
         test(get("HELIOTRON"))

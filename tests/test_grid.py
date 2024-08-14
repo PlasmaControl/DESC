@@ -819,6 +819,9 @@ def test_custom_jitable_grid_indexing():
     with pytest.raises(AttributeError):
         _ = grid2.inverse_zeta_idx
 
+    assert not hasattr(grid1, "weights")
+    assert not hasattr(grid1, "spacing")
+    assert not hasattr(grid1, "source_grid")
     assert not hasattr(grid2, "num_rho")
     assert not hasattr(grid2, "num_theta")
     assert not hasattr(grid2, "num_zeta")

@@ -12,7 +12,6 @@ expensive computations.
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz_vec
 from .utils import cross, dot, safediv
 
 
@@ -27,18 +26,15 @@ from .utils import cross, dot, safediv
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B", "|B|", "phi"],
-    basis="basis",
+    data=["B", "|B|"],
 )
 def _b(params, transforms, profiles, data, **kwargs):
     data["b"] = (data["B"].T / data["|B|"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["b"] = rpz2xyz_vec(data["b"], phi=data["phi"])
     return data
 
 
 @register_compute_fun(
-    name="e^rho",  # ∇ρ is the same in DESC and field line coordinates.
+    name="e^rho",  # ∇ρ is the same in any coordinate system.
     label="\\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -48,15 +44,12 @@ def _b(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta/sqrt(g)", "e_zeta", "phi"],
-    basis="basis",
+    data=["e_theta/sqrt(g)", "e_zeta"],
 )
 def _e_sup_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞^ρ | ρ=0 }.
     data["e^rho"] = cross(data["e_theta/sqrt(g)"], data["e_zeta"])
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho"] = rpz2xyz_vec(data["e^rho"], phi=data["phi"])
     return data
 
 
@@ -71,9 +64,8 @@ def _e_sup_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r", "sqrt(g)", "sqrt(g)_r", "phi"],
+    data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r", "sqrt(g)", "sqrt(g)_r"],
     axis_limit_data=["e_theta_rr", "sqrt(g)_rr"],
-    basis="basis",
 )
 def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
     a = cross(data["e_theta_r"], data["e_zeta"])
@@ -94,8 +86,6 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
             - a.T * safediv(data["sqrt(g)_rr"], (2 * data["sqrt(g)_r"] ** 2))
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_r"] = rpz2xyz_vec(data["e^rho_r"], phi=data["phi"])
     return data
 
 
@@ -121,9 +111,7 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_r",
         "sqrt(g)_rr",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_rho_rr(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_theta"], data["e_zeta"])
@@ -148,8 +136,6 @@ def _e_sup_rho_rr(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_rr"] = rpz2xyz_vec(data["e^rho_rr"], phi=data["phi"])
     return data
 
 
@@ -178,9 +164,7 @@ def _e_sup_rho_rr(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_r",
         "sqrt(g)_rt",
         "sqrt(g)_t",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_rho_rt(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_theta"], data["e_zeta"])
@@ -207,8 +191,6 @@ def _e_sup_rho_rt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_rt"] = rpz2xyz_vec(data["e^rho_rt"], phi=data["phi"])
     return data
 
 
@@ -237,9 +219,7 @@ def _e_sup_rho_rt(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_r",
         "sqrt(g)_rz",
         "sqrt(g)_z",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_rho_rz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_theta"], data["e_zeta"])
@@ -266,8 +246,6 @@ def _e_sup_rho_rz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_rz"] = rpz2xyz_vec(data["e^rho_rz"], phi=data["phi"])
     return data
 
 
@@ -282,9 +260,8 @@ def _e_sup_rho_rz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "e_zeta", "e_theta_t", "e_zeta_t", "sqrt(g)", "sqrt(g)_t", "phi"],
+    data=["e_theta", "e_zeta", "e_theta_t", "e_zeta_t", "sqrt(g)", "sqrt(g)_t"],
     axis_limit_data=["e_theta_r", "e_theta_rt", "sqrt(g)_r", "sqrt(g)_rt"],
-    basis="basis",
 )
 def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
     data["e^rho_t"] = transforms["grid"].replace_at_axis(
@@ -309,8 +286,6 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
             )
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_t"] = rpz2xyz_vec(data["e^rho_t"], phi=data["phi"])
     return data
 
 
@@ -336,9 +311,7 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_t",
         "sqrt(g)_tt",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_rho_tt(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_theta"], data["e_zeta"])
@@ -363,8 +336,6 @@ def _e_sup_rho_tt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_tt"] = rpz2xyz_vec(data["e^rho_tt"], phi=data["phi"])
     return data
 
 
@@ -393,9 +364,7 @@ def _e_sup_rho_tt(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_t",
         "sqrt(g)_tz",
         "sqrt(g)_z",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_rho_tz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_theta"], data["e_zeta"])
@@ -422,8 +391,6 @@ def _e_sup_rho_tz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_tz"] = rpz2xyz_vec(data["e^rho_tz"], phi=data["phi"])
     return data
 
 
@@ -438,9 +405,8 @@ def _e_sup_rho_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "e_zeta", "e_theta_z", "e_zeta_z", "sqrt(g)", "sqrt(g)_z", "phi"],
+    data=["e_theta", "e_zeta", "e_theta_z", "e_zeta_z", "sqrt(g)", "sqrt(g)_z"],
     axis_limit_data=["e_theta_r", "e_theta_rz", "sqrt(g)_r", "sqrt(g)_rz"],
-    basis="basis",
 )
 def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
     data["e^rho_z"] = transforms["grid"].replace_at_axis(
@@ -467,8 +433,6 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
             * safediv(data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_z"] = rpz2xyz_vec(data["e^rho_z"], phi=data["phi"])
     return data
 
 
@@ -494,9 +458,7 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_z",
         "sqrt(g)_zz",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_theta"], data["e_zeta"])
@@ -521,8 +483,6 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^rho_zz"] = rpz2xyz_vec(data["e^rho_zz"], phi=data["phi"])
     return data
 
 
@@ -537,13 +497,10 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^theta*sqrt(g)", "sqrt(g)", "phi"],
-    basis="basis",
+    data=["e^theta*sqrt(g)", "sqrt(g)"],
 )
 def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     data["e^theta"] = (data["e^theta*sqrt(g)"].T / data["sqrt(g)"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta"] = rpz2xyz_vec(data["e^theta"], phi=data["phi"])
     return data
 
 
@@ -558,19 +515,16 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_zeta", "phi"],
+    data=["e_rho", "e_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
-    basis="basis",
 )
 def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞^θ √g | ρ=0 }.
     data["e^theta*sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta*sqrt(g)"] = rpz2xyz_vec(data["e^theta*sqrt(g)"], phi=data["phi"])
     return data
 
 
@@ -585,8 +539,7 @@ def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_zeta", "e_rho", "e_zeta_r", "e_rho_r", "sqrt(g)", "sqrt(g)_r", "phi"],
-    basis="basis",
+    data=["e_zeta", "e_rho", "e_zeta_r", "e_rho_r", "sqrt(g)", "sqrt(g)_r"],
 )
 def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
     data["e^theta_r"] = (
@@ -599,8 +552,6 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
         * data["sqrt(g)_r"]
         / data["sqrt(g)"] ** 2
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_r"] = rpz2xyz_vec(data["e^theta_r"], phi=data["phi"])
     return data
 
 
@@ -626,9 +577,7 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_r",
         "sqrt(g)_rr",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_theta_rr(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_zeta"], data["e_rho"])
@@ -653,9 +602,6 @@ def _e_sup_theta_rr(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_rr"] = rpz2xyz_vec(data["e^theta_rr"], phi=data["phi"])
-
     return data
 
 
@@ -684,9 +630,7 @@ def _e_sup_theta_rr(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_r",
         "sqrt(g)_rt",
         "sqrt(g)_t",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_theta_rt(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_zeta"], data["e_rho"])
@@ -713,8 +657,6 @@ def _e_sup_theta_rt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_rt"] = rpz2xyz_vec(data["e^theta_rt"], phi=data["phi"])
     return data
 
 
@@ -743,9 +685,7 @@ def _e_sup_theta_rt(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_r",
         "sqrt(g)_rz",
         "sqrt(g)_z",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_zeta"], data["e_rho"])
@@ -772,8 +712,6 @@ def _e_sup_theta_rz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_rz"] = rpz2xyz_vec(data["e^theta_rz"], phi=data["phi"])
     return data
 
 
@@ -789,8 +727,7 @@ def _e_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_zeta", "e_rho", "e_zeta_t", "e_rho_t", "sqrt(g)", "sqrt(g)_t", "phi"],
-    basis="basis",
+    data=["e_zeta", "e_rho", "e_zeta_t", "e_rho_t", "sqrt(g)", "sqrt(g)_t"],
 )
 def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
     data["e^theta_t"] = (
@@ -803,8 +740,6 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
         * data["sqrt(g)_t"]
         / data["sqrt(g)"] ** 2
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_t"] = rpz2xyz_vec(data["e^theta_t"], phi=data["phi"])
     return data
 
 
@@ -830,9 +765,7 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_t",
         "sqrt(g)_tt",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_zeta"], data["e_rho"])
@@ -857,8 +790,6 @@ def _e_sup_theta_tt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_tt"] = rpz2xyz_vec(data["e^theta_tt"], phi=data["phi"])
     return data
 
 
@@ -887,9 +818,7 @@ def _e_sup_theta_tt(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_t",
         "sqrt(g)_tz",
         "sqrt(g)_z",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_zeta"], data["e_rho"])
@@ -916,8 +845,6 @@ def _e_sup_theta_tz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_tz"] = rpz2xyz_vec(data["e^theta_tz"], phi=data["phi"])
     return data
 
 
@@ -933,8 +860,7 @@ def _e_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_zeta", "e_rho", "e_zeta_z", "e_rho_z", "sqrt(g)", "sqrt(g)_z", "phi"],
-    basis="basis",
+    data=["e_zeta", "e_rho", "e_zeta_z", "e_rho_z", "sqrt(g)", "sqrt(g)_z"],
 )
 def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
     data["e^theta_z"] = (
@@ -947,8 +873,6 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
         * data["sqrt(g)_z"]
         / data["sqrt(g)"] ** 2
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_z"] = rpz2xyz_vec(data["e^theta_z"], phi=data["phi"])
     return data
 
 
@@ -974,9 +898,7 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_z",
         "sqrt(g)_zz",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_zeta"], data["e_rho"])
@@ -1001,13 +923,11 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^theta_zz"] = rpz2xyz_vec(data["e^theta_zz"], phi=data["phi"])
     return data
 
 
 @register_compute_fun(
-    name="e^zeta",  # ∇ζ is the same in DESC and field line coordinates.
+    name="e^zeta",  # ∇ζ is the same in any coordinate system.
     label="\\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
@@ -1017,15 +937,12 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_theta/sqrt(g)", "phi"],
-    basis="basis",
+    data=["e_rho", "e_theta/sqrt(g)"],
 )
 def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞^ζ | ρ=0 }.
     data["e^zeta"] = cross(data["e_rho"], data["e_theta/sqrt(g)"])
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta"] = rpz2xyz_vec(data["e^zeta"], phi=data["phi"])
     return data
 
 
@@ -1040,9 +957,8 @@ def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_rho_r", "e_theta", "e_theta_r", "sqrt(g)", "sqrt(g)_r", "phi"],
+    data=["e_rho", "e_rho_r", "e_theta", "e_theta_r", "sqrt(g)", "sqrt(g)_r"],
     axis_limit_data=["e_theta_rr", "sqrt(g)_rr"],
-    basis="basis",
 )
 def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
     b = cross(data["e_rho"], data["e_theta_r"])
@@ -1063,8 +979,6 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
             - b.T * safediv(data["sqrt(g)_rr"], (2 * data["sqrt(g)_r"] ** 2))
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_r"] = rpz2xyz_vec(data["e^zeta_r"], phi=data["phi"])
     return data
 
 
@@ -1090,9 +1004,7 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_r",
         "sqrt(g)_rr",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_rho"], data["e_theta"])
@@ -1117,8 +1029,6 @@ def _e_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_rr"] = rpz2xyz_vec(data["e^zeta_rr"], phi=data["phi"])
     return data
 
 
@@ -1147,9 +1057,7 @@ def _e_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_r",
         "sqrt(g)_rt",
         "sqrt(g)_t",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_rho"], data["e_theta"])
@@ -1176,8 +1084,6 @@ def _e_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_rt"] = rpz2xyz_vec(data["e^zeta_rt"], phi=data["phi"])
     return data
 
 
@@ -1206,9 +1112,7 @@ def _e_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_r",
         "sqrt(g)_rz",
         "sqrt(g)_z",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_rho"], data["e_theta"])
@@ -1235,8 +1139,6 @@ def _e_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_rz"] = rpz2xyz_vec(data["e^zeta_rz"], phi=data["phi"])
     return data
 
 
@@ -1252,9 +1154,8 @@ def _e_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_rho_t", "e_theta", "e_theta_t", "sqrt(g)", "sqrt(g)_t", "phi"],
+    data=["e_rho", "e_rho_t", "e_theta", "e_theta_t", "sqrt(g)", "sqrt(g)_t"],
     axis_limit_data=["e_theta_r", "e_theta_rt", "sqrt(g)_r", "sqrt(g)_rt"],
-    basis="basis",
 )
 def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     data["e^zeta_t"] = transforms["grid"].replace_at_axis(
@@ -1281,8 +1182,6 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
             * safediv(data["sqrt(g)_rt"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_t"] = rpz2xyz_vec(data["e^zeta_t"], phi=data["phi"])
     return data
 
 
@@ -1308,9 +1207,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_t",
         "sqrt(g)_tt",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_rho"], data["e_theta"])
@@ -1335,8 +1232,6 @@ def _e_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_tt"] = rpz2xyz_vec(data["e^zeta_tt"], phi=data["phi"])
     return data
 
 
@@ -1365,9 +1260,7 @@ def _e_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_t",
         "sqrt(g)_tz",
         "sqrt(g)_z",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_rho"], data["e_theta"])
@@ -1394,8 +1287,6 @@ def _e_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_tz"] = rpz2xyz_vec(data["e^zeta_tz"], phi=data["phi"])
     return data
 
 
@@ -1411,9 +1302,8 @@ def _e_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_rho_z", "e_theta", "e_theta_z", "sqrt(g)", "sqrt(g)_z", "phi"],
+    data=["e_rho", "e_rho_z", "e_theta", "e_theta_z", "sqrt(g)", "sqrt(g)_z"],
     axis_limit_data=["e_theta_r", "e_theta_rz", "sqrt(g)_r", "sqrt(g)_rz"],
-    basis="basis",
 )
 def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     data["e^zeta_z"] = transforms["grid"].replace_at_axis(
@@ -1440,8 +1330,6 @@ def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
             * safediv(data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_z"] = rpz2xyz_vec(data["e^zeta_z"], phi=data["phi"])
     return data
 
 
@@ -1467,9 +1355,7 @@ def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_z",
         "sqrt(g)_zz",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     temp = cross(data["e_rho"], data["e_theta"])
@@ -1494,35 +1380,33 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e^zeta_zz"] = rpz2xyz_vec(data["e^zeta_zz"], phi=data["phi"])
     return data
 
 
 @register_compute_fun(
-    name="e_phi",
-    label="\\mathbf{e}_{\\phi}",
+    name="e_phi|r,t",
+    label="\\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
     units="m",
     units_long="meters",
-    description="Covariant cylindrical toroidal basis vector",
+    description="Covariant toroidal basis vector in (ρ,θ,ϕ) coordinates",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_zeta", "phi_z", "phi"],
+    data=["e_zeta", "phi_z"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.core.Surface",
     ],
-    basis="basis",
+    aliases=["e_phi"],
+    # Our usual notation implies e_phi = (∂X/∂ϕ)|R,Z = R ϕ̂, but we need to alias e_phi
+    # to e_phi|r,t = (∂X/∂ϕ)|ρ,θ for compatibility with older versions of the code.
 )
-def _e_sub_phi(params, transforms, profiles, data, **kwargs):
-    # dX/dphi at const r,t = dX/dz * dz/dphi = dX/dz / (dphi/dz)
-    data["e_phi"] = (data["e_zeta"].T / data["phi_z"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_phi"] = rpz2xyz_vec(data["e_phi"], phi=data["phi"])
+def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):
+    # (∂X/∂ϕ)|ρ,θ = (∂X/∂ζ)|ρ,θ / (∂ϕ/∂ζ)|ρ,θ
+    data["e_phi|r,t"] = (data["e_zeta"].T / data["phi_z"]).T
     return data
 
 
@@ -1537,19 +1421,17 @@ def _e_sub_phi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_r", "Z_r", "omega_r", "phi"],
+    data=["R", "R_r", "Z_r", "omega_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
 )
 def _e_sub_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞ᵨ | ρ=0 }.
     data["e_rho"] = jnp.array([data["R_r"], data["R"] * data["omega_r"], data["Z_r"]]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho"] = rpz2xyz_vec(data["e_rho"], phi=data["phi"])
+
     return data
 
 
@@ -1564,12 +1446,11 @@ def _e_sub_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_r", "R_rr", "Z_rr", "omega_r", "omega_rr", "phi"],
+    data=["R", "R_r", "R_rr", "Z_rr", "omega_r", "omega_rr"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
 )
 def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
     # e_rho_r = a^i e_i, where the a^i are the components specified below and the
@@ -1582,8 +1463,7 @@ def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
             data["Z_rr"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_r"] = rpz2xyz_vec(data["e_rho_r"], phi=data["phi"])
+
     return data
 
 
@@ -1610,13 +1490,11 @@ def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
         "omega_r",
         "omega_rr",
         "omega_rrr",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
 )
 def _e_sub_rho_rr(params, transforms, profiles, data, **kwargs):
     data["e_rho_rr"] = jnp.array(
@@ -1629,8 +1507,7 @@ def _e_sub_rho_rr(params, transforms, profiles, data, **kwargs):
             data["Z_rrr"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rr"] = rpz2xyz_vec(data["e_rho_rr"], phi=data["phi"])
+
     return data
 
 
@@ -1658,13 +1535,11 @@ def _e_sub_rho_rr(params, transforms, profiles, data, **kwargs):
         "omega_rr",
         "omega_rrr",
         "omega_rrrr",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
 )
 def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
     data["e_rho_rrr"] = jnp.array(
@@ -1686,8 +1561,7 @@ def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
             data["Z_rrrr"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rrr"] = rpz2xyz_vec(data["e_rho_rrr"], phi=data["phi"])
+
     return data
 
 
@@ -1722,13 +1596,11 @@ def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
         "omega_rrrt",
         "omega_rt",
         "omega_t",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
     aliases=["e_theta_rrr"],
 )
 def _e_sub_rho_rrt(params, transforms, profiles, data, **kwargs):
@@ -1770,8 +1642,7 @@ def _e_sub_rho_rrt(params, transforms, profiles, data, **kwargs):
             data["Z_rrrt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rrt"] = rpz2xyz_vec(data["e_rho_rrt"], phi=data["phi"])
+
     return data
 
 
@@ -1806,9 +1677,7 @@ def _e_sub_rho_rrt(params, transforms, profiles, data, **kwargs):
         "omega_rrrz",
         "omega_rz",
         "omega_z",
-        "phi",
     ],
-    basis="basis",
     aliases=["e_zeta_rrr"],
 )
 def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
@@ -1854,8 +1723,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
             data["Z_rrrz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rrz"] = rpz2xyz_vec(data["e_rho_rrz"], phi=data["phi"])
+
     return data
 
 
@@ -1886,14 +1754,12 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
         "omega_rrt",
         "omega_rt",
         "omega_t",
-        "phi",
     ],
     aliases=["x_rrt", "x_rtr", "x_trr", "e_theta_rr"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
 )
 def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
     data["e_rho_rt"] = jnp.array(
@@ -1911,8 +1777,7 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
             data["Z_rrt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rt"] = rpz2xyz_vec(data["e_rho_rt"], phi=data["phi"])
+
     return data
 
 
@@ -1949,13 +1814,11 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
         "omega_rrtt",
         "omega_t",
         "omega_tt",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
     aliases=["e_theta_rrt"],
 )
 def _e_sub_rho_rtt(params, transforms, profiles, data, **kwargs):
@@ -1996,8 +1859,7 @@ def _e_sub_rho_rtt(params, transforms, profiles, data, **kwargs):
             data["Z_rrtt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rtt"] = rpz2xyz_vec(data["e_rho_rtt"], phi=data["phi"])
+
     return data
 
 
@@ -2040,9 +1902,7 @@ def _e_sub_rho_rtt(params, transforms, profiles, data, **kwargs):
         "omega_t",
         "omega_tz",
         "omega_z",
-        "phi",
     ],
-    basis="basis",
     aliases=["e_theta_rrz", "e_zeta_rrt"],
 )
 def _e_sub_rho_rtz(params, transforms, profiles, data, **kwargs):
@@ -2136,8 +1996,7 @@ def _e_sub_rho_rtz(params, transforms, profiles, data, **kwargs):
             data["Z_rrtz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rtz"] = rpz2xyz_vec(data["e_rho_rtz"], phi=data["phi"])
+
     return data
 
 
@@ -2168,9 +2027,7 @@ def _e_sub_rho_rtz(params, transforms, profiles, data, **kwargs):
         "omega_rrz",
         "omega_rz",
         "omega_z",
-        "phi",
     ],
-    basis="basis",
     aliases=["e_zeta_rr"],
 )
 def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
@@ -2190,8 +2047,7 @@ def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
             data["Z_rrz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rz"] = rpz2xyz_vec(data["e_rho_rz"], phi=data["phi"])
+
     return data
 
 
@@ -2228,9 +2084,7 @@ def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
         "omega_rrzz",
         "omega_z",
         "omega_zz",
-        "phi",
     ],
-    basis="basis",
     aliases=["e_zeta_rrz"],
 )
 def _e_sub_rho_rzz(params, transforms, profiles, data, **kwargs):
@@ -2292,8 +2146,7 @@ def _e_sub_rho_rzz(params, transforms, profiles, data, **kwargs):
             data["Z_rrzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_rzz"] = rpz2xyz_vec(data["e_rho_rzz"], phi=data["phi"])
+
     return data
 
 
@@ -2308,12 +2161,11 @@ def _e_sub_rho_rzz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_r", "R_rt", "R_t", "Z_rt", "omega_r", "omega_rt", "omega_t", "phi"],
+    data=["R", "R_r", "R_rt", "R_t", "Z_rt", "omega_r", "omega_rt", "omega_t"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
     aliases=["e_theta_r"],
 )
 def _e_sub_rho_t(params, transforms, profiles, data, **kwargs):
@@ -2328,8 +2180,7 @@ def _e_sub_rho_t(params, transforms, profiles, data, **kwargs):
             data["Z_rt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_t"] = rpz2xyz_vec(data["e_rho_t"], phi=data["phi"])
+
     return data
 
 
@@ -2360,13 +2211,11 @@ def _e_sub_rho_t(params, transforms, profiles, data, **kwargs):
         "omega_rtt",
         "omega_t",
         "omega_tt",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
     aliases=["e_theta_rt"],
 )
 def _e_sub_rho_tt(params, transforms, profiles, data, **kwargs):
@@ -2386,8 +2235,7 @@ def _e_sub_rho_tt(params, transforms, profiles, data, **kwargs):
             data["Z_rtt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_tt"] = rpz2xyz_vec(data["e_rho_tt"], phi=data["phi"])
+
     return data
 
 
@@ -2422,9 +2270,7 @@ def _e_sub_rho_tt(params, transforms, profiles, data, **kwargs):
         "omega_t",
         "omega_tz",
         "omega_z",
-        "phi",
     ],
-    basis="basis",
     aliases=["e_theta_rz", "e_zeta_rt"],
 )
 def _e_sub_rho_tz(params, transforms, profiles, data, **kwargs):
@@ -2454,8 +2300,7 @@ def _e_sub_rho_tz(params, transforms, profiles, data, **kwargs):
             data["Z_rtz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_tz"] = rpz2xyz_vec(data["e_rho_tz"], phi=data["phi"])
+
     return data
 
 
@@ -2470,8 +2315,7 @@ def _e_sub_rho_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_r", "R_rz", "R_z", "Z_rz", "omega_r", "omega_rz", "omega_z", "phi"],
-    basis="basis",
+    data=["R", "R_r", "R_rz", "R_z", "Z_rz", "omega_r", "omega_rz", "omega_z"],
     aliases=["e_zeta_r"],
 )
 def _e_sub_rho_z(params, transforms, profiles, data, **kwargs):
@@ -2484,8 +2328,7 @@ def _e_sub_rho_z(params, transforms, profiles, data, **kwargs):
             data["Z_rz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_z"] = rpz2xyz_vec(data["e_rho_z"], phi=data["phi"])
+
     return data
 
 
@@ -2516,9 +2359,7 @@ def _e_sub_rho_z(params, transforms, profiles, data, **kwargs):
         "omega_rzz",
         "omega_z",
         "omega_zz",
-        "phi",
     ],
-    basis="basis",
     aliases=["e_zeta_rz"],
 )
 def _e_sub_rho_zz(params, transforms, profiles, data, **kwargs):
@@ -2538,8 +2379,7 @@ def _e_sub_rho_zz(params, transforms, profiles, data, **kwargs):
             data["Z_rzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_rho_zz"] = rpz2xyz_vec(data["e_rho_zz"], phi=data["phi"])
+
     return data
 
 
@@ -2554,19 +2394,17 @@ def _e_sub_rho_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_t", "Z_t", "omega_t", "phi"],
+    data=["R", "R_t", "Z_t", "omega_t"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
-    basis="basis",
 )
 def _e_sub_theta(params, transforms, profiles, data, **kwargs):
     data["e_theta"] = jnp.array(
         [data["R_t"], data["R"] * data["omega_t"], data["Z_t"]]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta"] = rpz2xyz_vec(data["e_theta"], phi=data["phi"])
+
     return data
 
 
@@ -2581,9 +2419,8 @@ def _e_sub_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "sqrt(g)", "phi"],
+    data=["e_theta", "sqrt(g)"],
     axis_limit_data=["e_theta_r", "sqrt(g)_r"],
-    basis="basis",
 )
 def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
@@ -2592,30 +2429,83 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
         safediv(data["e_theta"].T, data["sqrt(g)"]).T,
         lambda: safediv(data["e_theta_r"].T, data["sqrt(g)_r"]).T,
     )
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta/sqrt(g)"] = rpz2xyz_vec(data["e_theta/sqrt(g)"], phi=data["phi"])
     return data
 
 
 @register_compute_fun(
     name="e_theta_PEST",
-    label="\\mathbf{e}_{\\theta_{PEST}}",
+    label="\\mathbf{e}_{\\vartheta} |_{\\rho, \\phi} = \\mathbf{e}_{\\theta_{PEST}}",
     units="m",
     units_long="meters",
-    description="Covariant straight field line (PEST) poloidal basis vector",
+    description="Covariant poloidal basis vector in (ρ,ϑ,ϕ) coordinates or"
+    " straight field line PEST coordinates. ϕ increases counterclockwise"
+    " when viewed from above (cylindrical R,ϕ plane with Z out of page).",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "theta_PEST_t", "phi"],
-    basis="basis",
+    data=["e_theta", "theta_PEST_t", "e_zeta", "theta_PEST_z", "phi_t", "phi_z"],
+    aliases=["e_vartheta"],
 )
-def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
-    # dX/dv at const r,z = dX/dt * dt/dv = dX/dt / dv/dt
-    data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_PEST"] = rpz2xyz_vec(data["e_theta_PEST"], phi=data["phi"])
+def _e_sub_vartheta_rp(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ϕ
+    data["e_theta_PEST"] = (
+        (data["e_theta"].T * data["phi_z"] - data["e_zeta"].T * data["phi_t"])
+        / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e_phi|r,v",
+    label="\\mathbf{e}_{\\phi} |_{\\rho, \\vartheta}",
+    units="m",
+    units_long="meters",
+    description="Covariant toroidal basis vector in (ρ,ϑ,ϕ) coordinates or"
+    " straight field line PEST coordinates. ϕ increases counterclockwise"
+    " when viewed from above (cylindrical R,ϕ plane with Z out of page).",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "theta_PEST_t", "e_zeta", "theta_PEST_z", "phi_t", "phi_z"],
+)
+def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
+    # constant ρ and ϑ
+    data["e_phi|r,v"] = (
+        (
+            data["e_zeta"].T * data["theta_PEST_t"]
+            - data["e_theta"].T * data["theta_PEST_z"]
+        )
+        / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e_rho|v,p",
+    label="\\mathbf{e}_{\\rho} |_{\\vartheta, \\phi}",
+    units="m",
+    units_long="meters",
+    description="Covariant radial basis vector in (ρ,ϑ,ϕ) coordinates or"
+    " straight field line PEST coordinates. ϕ increases counterclockwise"
+    " when viewed from above (cylindrical R,ϕ plane with Z out of page).",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_vartheta", "e_phi|r,v", "theta_PEST_r", "phi_r"],
+)
+def _e_sub_rho_vp(params, transforms, profiles, data, **kwargs):
+    # constant ϑ and ϕ
+    data["e_rho|v,p"] = (
+        data["e_rho"]
+        - data["e_vartheta"] * data["theta_PEST_r"][:, jnp.newaxis]
+        - data["e_phi|r,v"] * data["phi_r"][:, jnp.newaxis]
+    )
     return data
 
 
@@ -2650,13 +2540,11 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
         "omega_rtt",
         "omega_ttt",
         "omega_rttt",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="basis",
     aliases=["e_rho_ttt"],
 )
 def _e_sub_theta_rtt(params, transforms, profiles, data, **kwargs):
@@ -2699,8 +2587,7 @@ def _e_sub_theta_rtt(params, transforms, profiles, data, **kwargs):
             data["Z_rttt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rtt"] = rpz2xyz_vec(data["e_theta_rtt"], phi=data["phi"])
+
     return data
 
 
@@ -2743,9 +2630,7 @@ def _e_sub_theta_rtt(params, transforms, profiles, data, **kwargs):
         "omega_rtz",
         "omega_z",
         "omega_rz",
-        "phi",
     ],
-    basis="basis",
     aliases=["e_rho_ttz", "e_zeta_rtt"],
 )
 def _e_sub_theta_rtz(params, transforms, profiles, data, **kwargs):
@@ -2807,8 +2692,7 @@ def _e_sub_theta_rtz(params, transforms, profiles, data, **kwargs):
             data["Z_rttz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rtz"] = rpz2xyz_vec(data["e_theta_rtz"], phi=data["phi"])
+
     return data
 
 
@@ -2851,9 +2735,7 @@ def _e_sub_theta_rtz(params, transforms, profiles, data, **kwargs):
         "omega_zz",
         "omega_rz",
         "omega_rzz",
-        "phi",
     ],
-    basis="basis",
     aliases=["e_rho_tzz", "e_zeta_rtz"],
 )
 def _e_sub_theta_rzz(params, transforms, profiles, data, **kwargs):
@@ -2918,8 +2800,7 @@ def _e_sub_theta_rzz(params, transforms, profiles, data, **kwargs):
             data["Z_rtzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_rzz"] = rpz2xyz_vec(data["e_theta_rzz"], phi=data["phi"])
+
     return data
 
 
@@ -2934,12 +2815,11 @@ def _e_sub_theta_rzz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_t", "R_tt", "Z_tt", "omega_t", "omega_tt", "phi"],
+    data=["R", "R_t", "R_tt", "Z_tt", "omega_t", "omega_tt"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
-    basis="basis",
 )
 def _e_sub_theta_t(params, transforms, profiles, data, **kwargs):
     data["e_theta_t"] = jnp.array(
@@ -2949,8 +2829,6 @@ def _e_sub_theta_t(params, transforms, profiles, data, **kwargs):
             data["Z_tt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_t"] = rpz2xyz_vec(data["e_theta_t"], phi=data["phi"])
     return data
 
 
@@ -2977,13 +2855,11 @@ def _e_sub_theta_t(params, transforms, profiles, data, **kwargs):
         "omega_t",
         "omega_tt",
         "omega_ttt",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
-    basis="basis",
 )
 def _e_sub_theta_tt(params, transforms, profiles, data, **kwargs):
     data["e_theta_tt"] = jnp.array(
@@ -2996,8 +2872,7 @@ def _e_sub_theta_tt(params, transforms, profiles, data, **kwargs):
             data["Z_ttt"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_tt"] = rpz2xyz_vec(data["e_theta_tt"], phi=data["phi"])
+
     return data
 
 
@@ -3028,13 +2903,11 @@ def _e_sub_theta_tt(params, transforms, profiles, data, **kwargs):
         "omega_ttz",
         "omega_tz",
         "omega_z",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    basis="basis",
     aliases=["e_zeta_tt"],
 )
 def _e_sub_theta_tz(params, transforms, profiles, data, **kwargs):
@@ -3054,8 +2927,7 @@ def _e_sub_theta_tz(params, transforms, profiles, data, **kwargs):
             data["Z_ttz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_tz"] = rpz2xyz_vec(data["e_theta_tz"], phi=data["phi"])
+
     return data
 
 
@@ -3070,12 +2942,11 @@ def _e_sub_theta_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_t", "R_tz", "R_z", "Z_tz", "omega_t", "omega_tz", "omega_z", "phi"],
+    data=["R", "R_t", "R_tz", "R_z", "Z_tz", "omega_t", "omega_tz", "omega_z"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    basis="basis",
     aliases=["e_zeta_t"],
 )
 def _e_sub_theta_z(params, transforms, profiles, data, **kwargs):
@@ -3088,8 +2959,7 @@ def _e_sub_theta_z(params, transforms, profiles, data, **kwargs):
             data["Z_tz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_z"] = rpz2xyz_vec(data["e_theta_z"], phi=data["phi"])
+
     return data
 
 
@@ -3120,13 +2990,11 @@ def _e_sub_theta_z(params, transforms, profiles, data, **kwargs):
         "omega_tzz",
         "omega_z",
         "omega_zz",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    basis="basis",
     aliases=["e_zeta_tz"],
 )
 def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
@@ -3146,8 +3014,7 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
             data["Z_tzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_theta_zz"] = rpz2xyz_vec(data["e_theta_zz"], phi=data["phi"])
+
     return data
 
 
@@ -3162,19 +3029,17 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_z", "Z_z", "omega_z", "phi"],
+    data=["R", "R_z", "Z_z", "omega_z"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    basis="basis",
 )
 def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
     data["e_zeta"] = jnp.array(
         [data["R_z"], data["R"] * (1 + data["omega_z"]), data["Z_z"]]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta"] = rpz2xyz_vec(data["e_zeta"], phi=data["phi"])
+
     return data
 
 
@@ -3209,9 +3074,7 @@ def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
         "omega_rzz",
         "omega_zzz",
         "omega_rzzz",
-        "phi",
     ],
-    basis="basis",
 )
 def _e_sub_zeta_rzz(params, transforms, profiles, data, **kwargs):
     data["e_zeta_rzz"] = jnp.array(
@@ -3265,8 +3128,7 @@ def _e_sub_zeta_rzz(params, transforms, profiles, data, **kwargs):
             data["Z_rzzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_rzz"] = rpz2xyz_vec(data["e_zeta_rzz"], phi=data["phi"])
+
     return data
 
 
@@ -3281,12 +3143,11 @@ def _e_sub_zeta_rzz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "R_z", "R_zz", "Z_zz", "omega_z", "omega_zz", "phi"],
+    data=["R", "R_z", "R_zz", "Z_zz", "omega_z", "omega_zz"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    basis="basis",
 )
 def _e_sub_zeta_z(params, transforms, profiles, data, **kwargs):
     data["e_zeta_z"] = jnp.array(
@@ -3296,8 +3157,7 @@ def _e_sub_zeta_z(params, transforms, profiles, data, **kwargs):
             data["Z_zz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_z"] = rpz2xyz_vec(data["e_zeta_z"], phi=data["phi"])
+
     return data
 
 
@@ -3324,13 +3184,11 @@ def _e_sub_zeta_z(params, transforms, profiles, data, **kwargs):
         "omega_z",
         "omega_zz",
         "omega_zzz",
-        "phi",
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    basis="basis",
 )
 def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     data["e_zeta_zz"] = jnp.array(
@@ -3351,8 +3209,28 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
             data["Z_zzz"],
         ]
     ).T
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        data["e_zeta_zz"] = rpz2xyz_vec(data["e_zeta_zz"], phi=data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="grad(phi)",
+    label="\\nabla \\phi",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Gradient of cylindrical toroidal angle ϕ.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R", "0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+)
+def _grad_phi(params, transforms, profiles, data, **kwargs):
+    data["grad(phi)"] = jnp.column_stack([data["0"], 1 / data["R"], data["0"]])
     return data
 
 
@@ -3541,7 +3419,7 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "e_phi", "phi_t"],
+    data=["e_theta", "e_phi|r,t", "phi_t"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
@@ -3549,7 +3427,7 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):
-    data["e_theta|r,p"] = data["e_theta"] - (data["e_phi"].T * data["phi_t"]).T
+    data["e_theta|r,p"] = data["e_theta"] - (data["e_phi|r,t"].T * data["phi_t"]).T
     return data
 
 
@@ -3558,7 +3436,7 @@ def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\rho} |_{\\alpha, \\zeta}",
     units="m",
     units_long="meters",
-    description="Tangent vector along radial field line label",
+    description="Covariant radial basis vector in (ρ, α, ζ) Clebsch coordinates.",
     dim=3,
     params=[],
     transforms={},
@@ -3568,7 +3446,9 @@ def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):
 )
 def _e_rho_az(params, transforms, profiles, data, **kwargs):
     # constant α and ζ
-    data["e_rho|a,z"] = data["e_rho"] - (data["e_alpha"].T * data["alpha_r"]).T
+    data["e_rho|a,z"] = (
+        data["e_rho"] - data["e_alpha"] * data["alpha_r"][:, jnp.newaxis]
+    )
     return data
 
 
@@ -3577,7 +3457,7 @@ def _e_rho_az(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\alpha}",
     units="m",
     units_long="meters",
-    description="Tangent vector along poloidal field line label",
+    description="Covariant poloidal basis vector in (ρ, α, ζ) Clebsch coordinates.",
     dim=3,
     params=[],
     transforms={},
@@ -3587,7 +3467,7 @@ def _e_rho_az(params, transforms, profiles, data, **kwargs):
 )
 def _e_alpha(params, transforms, profiles, data, **kwargs):
     # constant ρ and ζ
-    data["e_alpha"] = (data["e_theta"].T / data["alpha_t"]).T
+    data["e_alpha"] = data["e_theta"] / data["alpha_t"][:, jnp.newaxis]
     return data
 
 
@@ -3596,8 +3476,8 @@ def _e_alpha(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta} \\mathbf{e}_{\\alpha}",
     units="m",
     units_long="meters",
-    description="Tangent vector along poloidal field line label, derivative wrt"
-    " DESC poloidal angle",
+    description="Covariant poloidal basis vector in (ρ, α, ζ) Clebsch coordinates,"
+    " derivative wrt DESC poloidal angle",
     dim=3,
     params=[],
     transforms={},
@@ -3607,9 +3487,9 @@ def _e_alpha(params, transforms, profiles, data, **kwargs):
 )
 def _e_alpha_t(params, transforms, profiles, data, **kwargs):
     data["e_alpha_t"] = (
-        (data["e_theta_t"].T * data["alpha_t"] + data["e_theta"].T * data["alpha_tt"])
-        / data["alpha_t"] ** 2
-    ).T
+        data["e_theta_t"] / data["alpha_t"][:, jnp.newaxis]
+        - data["e_theta"] * (data["alpha_tt"] / data["alpha_t"] ** 2)[:, jnp.newaxis]
+    )
     return data
 
 
@@ -3618,7 +3498,8 @@ def _e_alpha_t(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} \\mathbf{e}_{\\alpha}",
     units="m",
     units_long="meters",
-    description="Tangent vector along poloidal field line label, toroidal derivative",
+    description="Covariant poloidal basis vector in (ρ, α, ζ) Clebsch coordinates, "
+    "derivative wrt DESC toroidal angle at fixed ρ,θ.",
     dim=3,
     params=[],
     transforms={},
@@ -3628,9 +3509,9 @@ def _e_alpha_t(params, transforms, profiles, data, **kwargs):
 )
 def _e_alpha_z(params, transforms, profiles, data, **kwargs):
     data["e_alpha_z"] = (
-        (data["e_theta_z"].T * data["alpha_t"] - data["e_theta"].T * data["alpha_tz"])
-        / data["alpha_t"] ** 2
-    ).T
+        data["e_theta_z"] / data["alpha_t"][:, jnp.newaxis]
+        - data["e_theta"] * (data["alpha_tz"] / data["alpha_t"] ** 2)[:, jnp.newaxis]
+    )
     return data
 
 
@@ -3649,9 +3530,9 @@ def _e_alpha_z(params, transforms, profiles, data, **kwargs):
     data=["e_zeta", "e_alpha", "alpha_z"],
 )
 def _e_zeta_ra(params, transforms, profiles, data, **kwargs):
-    # ∂ℓ/∂ζ (constant ρ and α) = ∂ℓ/∂ζ (constant ρ and θ)
-    #                          - ∂ℓ/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
-    data["e_zeta|r,a"] = data["e_zeta"] - (data["e_alpha"].T * data["alpha_z"]).T
+    data["e_zeta|r,a"] = (
+        data["e_zeta"] - data["e_alpha"] * data["alpha_z"][:, jnp.newaxis]
+    )
     return data
 
 
@@ -3660,7 +3541,8 @@ def _e_zeta_ra(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
     units="m",
     units_long="meters",
-    description="Tangent vector along (collinear to) field line, poloidal derivative",
+    description="Tangent vector along (collinear to) field line, "
+    "derivative wrt DESC poloidal angle",
     dim=3,
     params=[],
     transforms={},
@@ -3669,11 +3551,9 @@ def _e_zeta_ra(params, transforms, profiles, data, **kwargs):
     data=["e_zeta_t", "e_alpha", "alpha_z", "e_alpha_t", "alpha_tz"],
 )
 def _e_zeta_ra_t(params, transforms, profiles, data, **kwargs):
-    data["(e_zeta|r,a)_t"] = (
-        data["e_zeta_t"]
-        - (
-            data["e_alpha_t"].T * data["alpha_z"] + data["e_alpha"].T * data["alpha_tz"]
-        ).T
+    data["(e_zeta|r,a)_t"] = data["e_zeta_t"] - (
+        data["e_alpha_t"] * data["alpha_z"][:, jnp.newaxis]
+        + data["e_alpha"] * data["alpha_tz"][:, jnp.newaxis]
     )
     return data
 
@@ -3693,7 +3573,7 @@ def _e_zeta_ra_t(params, transforms, profiles, data, **kwargs):
     data=["(e_zeta|r,a)_t", "alpha_t"],
 )
 def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
-    data["(e_zeta|r,a)_a"] = (data["(e_zeta|r,a)_t"].T / data["alpha_t"]).T
+    data["(e_zeta|r,a)_a"] = data["(e_zeta|r,a)_t"] / data["alpha_t"][:, jnp.newaxis]
     return data
 
 
@@ -3702,7 +3582,8 @@ def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha})",
     units="m",
     units_long="meters",
-    description="Tangent vector along (collinear to) field line, toroidal derivative",
+    description="Tangent vector along (collinear to) field line, "
+    "derivative wrt DESC toroidal angle at fixed ρ,θ.",
     dim=3,
     params=[],
     transforms={},
@@ -3711,17 +3592,15 @@ def _e_zeta_ra_a(params, transforms, profiles, data, **kwargs):
     data=["e_zeta_z", "e_alpha", "alpha_z", "e_alpha_z", "alpha_zz"],
 )
 def _e_zeta_ra_z(params, transforms, profiles, data, **kwargs):
-    data["(e_zeta|r,a)_z"] = (
-        data["e_zeta_z"]
-        - (
-            data["e_alpha_z"].T * data["alpha_z"] + data["e_alpha"].T * data["alpha_zz"]
-        ).T
+    data["(e_zeta|r,a)_z"] = data["e_zeta_z"] - (
+        data["e_alpha_z"] * data["alpha_z"][:, jnp.newaxis]
+        + data["e_alpha"] * data["alpha_zz"][:, jnp.newaxis]
     )
     return data
 
 
 @register_compute_fun(
-    name="(e_zeta_z)|r,a",
+    name="(e_zeta|r,a)_z|r,a",
     label="\\partial_{\\zeta} (\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}) "
     "|_{\\rho, \\alpha}",
     units="m",
@@ -3735,8 +3614,9 @@ def _e_zeta_ra_z(params, transforms, profiles, data, **kwargs):
     data=["(e_zeta|r,a)_z", "(e_zeta|r,a)_a", "alpha_z"],
 )
 def _e_zeta_z_ra(params, transforms, profiles, data, **kwargs):
-    data["(e_zeta_z)|r,a"] = (
-        data["(e_zeta|r,a)_z"] - (data["(e_zeta|r,a)_a"].T * data["alpha_z"]).T
+    data["(e_zeta|r,a)_z|r,a"] = (
+        data["(e_zeta|r,a)_z"]
+        - data["(e_zeta|r,a)_a"] * data["alpha_z"][:, jnp.newaxis]
     )
     return data
 
@@ -3748,7 +3628,7 @@ def _e_zeta_z_ra(params, transforms, profiles, data, **kwargs):
     units="m",
     units_long="meters",
     description="Differential length along field line",
-    dim=3,
+    dim=1,
     params=[],
     transforms={},
     profiles=[],
@@ -3761,21 +3641,61 @@ def _d_ell_d_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="(|e_zeta|_z)|r,a",
+    name="|e_zeta|r,a|_z|r,a",
     label="\\partial_{\\zeta} |\\mathbf{e}_{\\zeta} |_{\\rho, \\alpha}| "
     "|_{\\rho, \\alpha}",
     units="m",
     units_long="meters",
     description="Differential length along field line, derivative along field line",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|e_zeta|r,a|", "(e_zeta|r,a)_z|r,a", "e_zeta|r,a"],
+)
+def _d_ell_d_zeta_z(params, transforms, profiles, data, **kwargs):
+    data["|e_zeta|r,a|_z|r,a"] = (
+        dot(data["(e_zeta|r,a)_z|r,a"], data["e_zeta|r,a"]) / data["|e_zeta|r,a|"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e_alpha|r,p",
+    label="\\mathbf{e}_{\\alpha} |_{\\rho, \\phi}",
+    units="m",
+    units_long="meters",
+    description="Covariant poloidal basis vector in (ρ, α, ϕ) Clebsch coordinates.",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|e_zeta|r,a|", "(e_zeta_z)|r,a", "e_zeta|r,a"],
+    data=["e_theta", "alpha_t", "e_zeta", "alpha_z", "phi_t", "phi_z"],
 )
-def _d_ell_d_zeta_z(params, transforms, profiles, data, **kwargs):
-    data["(|e_zeta|_z)|r,a"] = (
-        dot(data["(e_zeta_z)|r,a"], data["e_zeta|r,a"]) / data["|e_zeta|r,a|"]
-    )
+def _e_alpha_rp(params, transforms, profiles, data, **kwargs):
+    data["e_alpha|r,p"] = (
+        (data["e_theta"].T * data["phi_z"] - data["e_zeta"].T * data["phi_t"])
+        / (data["alpha_t"] * data["phi_z"] - data["alpha_z"] * data["phi_t"])
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="|e_alpha|r,p|",
+    label="|\\mathbf{e}_{\\alpha} |_{\\rho, \\phi}|",
+    units="m",
+    units_long="meters",
+    description="Norm of covariant poloidal basis vector in (ρ, α, ϕ) Clebsch "
+    "coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_alpha|r,p"],
+)
+def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
+    data["|e_alpha|r,p|"] = jnp.linalg.norm(data["e_alpha|r,p"], axis=-1)
     return data

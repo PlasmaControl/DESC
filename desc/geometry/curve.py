@@ -6,12 +6,13 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.compute import rpz2xyz, xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute.geom_utils import rotation_matrix
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, warnif
 
 from .core import Curve
 
@@ -230,7 +231,7 @@ class FourierRZCurve(Curve):
         return curve
 
     @classmethod
-    def from_values(cls, coords, N=10, NFP=1, basis="rpz", name="", sym=False):
+    def from_values(cls, coords, N=10, NFP=1, sym=False, basis="rpz", name=""):
         """Fit coordinates to FourierRZCurve representation.
 
         Parameters
@@ -243,8 +244,12 @@ class FourierRZCurve(Curve):
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
+        sym : bool
+            Whether to enforce stellarator symmetry.
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "rpz"
+        name : str
+            Name for this curve.
 
         Returns
         -------
@@ -287,7 +292,15 @@ class FourierRZCurve(Curve):
         transform = Transform(grid, basis, build_pinv=True)
         R_n = transform.fit(R)
         Z_n = transform.fit(Z)
-        return FourierRZCurve(R_n=R_n, Z_n=Z_n, NFP=NFP, name=name, sym=sym)
+        return FourierRZCurve(
+            R_n=R_n,
+            Z_n=Z_n,
+            modes_R=basis.modes[:, 2],
+            modes_Z=basis.modes[:, 2],
+            NFP=NFP,
+            sym=sym,
+            name=name,
+        )
 
 
 def _unclose_curve(X, Y, Z):
@@ -489,17 +502,18 @@ class FourierXYZCurve(Curve):
         Parameters
         ----------
         coords: ndarray, shape (num_coords,3)
-            coordinates to fit a FourierXYZCurve object, with each column
+            Coordinates to fit a FourierXYZCurve object, with each column
             corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new X,Y,Z representation.
         s : ndarray or "arclength"
-            arbitrary curve parameter to use for the fitting.
+            Arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
             coords. if None, defaults linearly spaced in [0,2pi)
             Alternative, can pass "arclength" to use normalized distance between points.
         basis : {"rpz", "xyz"}
-            basis for input coordinates. Defaults to "xyz"
+            Basis for input coordinates. Defaults to "xyz".
+
         Returns
         -------
         curve : FourierXYZCurve
@@ -547,7 +561,9 @@ class FourierXYZCurve(Curve):
         X_n = transform.fit(X)
         Y_n = transform.fit(Y)
         Z_n = transform.fit(Z)
-        return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
+        return FourierXYZCurve(
+            X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name
+        )
 
 
 class FourierPlanarCurve(Curve):
@@ -577,7 +593,7 @@ class FourierPlanarCurve(Curve):
     _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
-    # The curve is computed in this frame and then shifted/rotated to the correct frame.
+    # Curve is computed in reference frame, then displaced/rotated to the desired frame.
     def __init__(
         self,
         center=[10, 0, 0],
@@ -601,9 +617,9 @@ class FourierPlanarCurve(Curve):
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
+        self._basis = basis
         self.normal = normal
         self.center = center
-        self._basis = basis
 
     @property
     def r_basis(self):
@@ -637,7 +653,7 @@ class FourierPlanarCurve(Curve):
         else:
             raise ValueError(
                 "center should be a 3 element vector in "
-                + self._basis
+                + self.basis
                 + " coordinates, got {}".format(new)
             )
 
@@ -654,7 +670,7 @@ class FourierPlanarCurve(Curve):
         else:
             raise ValueError(
                 "normal should be a 3 element vector in "
-                + self._basis
+                + self.basis
                 + " coordinates, got {}".format(new)
             )
 
@@ -673,6 +689,23 @@ class FourierPlanarCurve(Curve):
                 f"r_n should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.r_basis.num_modes} modes."
             )
+
+    @property
+    def basis(self):
+        """Coordinate system for center and normal vectors."""
+        return self._basis
+
+    @basis.setter
+    def basis(self, new):
+        assert new.lower() in ["xyz", "rpz"]
+        if new != self.basis:
+            if new == "xyz":
+                self.normal = rpz2xyz_vec(self.normal, phi=self.center[1])
+                self.center = rpz2xyz(self.center)
+            else:
+                self.center = xyz2rpz(self.center)
+                self.normal = xyz2rpz_vec(self.normal, phi=self.center[1])
+            self._basis = new
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -717,7 +750,10 @@ class FourierPlanarCurve(Curve):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
@@ -737,8 +773,79 @@ class FourierPlanarCurve(Curve):
             transforms=transforms,
             data=data,
             override_grid=override_grid,
-            basis_in=self._basis,
+            basis_in=self.basis,
             **kwargs,
+        )
+
+    @classmethod
+    def from_values(cls, coords, N=10, basis="xyz", name=""):
+        """Fit coordinates to FourierPlanarCurve representation.
+
+        Parameters
+        ----------
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierPlanarCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new r representation.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierPlanarCurve
+            New representation of the curve parameterized by a Fourier series for r.
+
+        """
+        # convert to xyz basis
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        coords = np.atleast_2d(coords)
+
+        # center
+        center = np.mean(coords, axis=0)
+        coords = coords - center  # shift to origin
+
+        # normal
+        U, _, _ = np.linalg.svd(coords.T)
+        normal = U[:, -1].T  # left singular vector of the least singular value
+
+        # axis and angle of rotation
+        Z_axis = np.array([0, 0, 1])
+        axis = np.cross(Z_axis, normal)
+        angle = np.arccos(np.dot(Z_axis, normal))
+        rotmat = rotation_matrix(axis, angle)
+        coords = coords @ rotmat  # rotate to X-Y plane
+
+        warnif(
+            np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points
+            UserWarning,
+            "Curve values are not planar! Using the projection onto a plane.",
+        )
+
+        # polar radius and angle
+        r = np.sqrt(coords[:, 0] ** 2 + coords[:, 1] ** 2)
+        s = np.arctan2(coords[:, 1], coords[:, 0])
+        s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
+        idx = np.argsort(s)  # sort angle to be monotonically increasing
+        r = r[idx]
+        s = s[idx]
+
+        # Fourier transform
+        basis = FourierSeries(N, NFP=1, sym=False)
+        grid_fit = LinearGrid(zeta=s, NFP=1)
+        transform_fit = Transform(grid_fit, basis, build_pinv=True)
+        r_n = transform_fit.fit(r)
+
+        return FourierPlanarCurve(
+            center=center,
+            normal=normal,
+            r_n=r_n,
+            modes=basis.modes[:, 2],
+            basis="xyz",
+            name=name,
         )
 
 
@@ -822,7 +929,7 @@ class SplineXYZCurve(Curve):
             knots = knots[:-1] if closed_flag else knots
 
         self._knots = knots
-        self.method = method
+        self._method = method
 
     @optimizable_parameter
     @property
@@ -925,8 +1032,48 @@ class SplineXYZCurve(Curve):
                 + f"instead got unknown method {new} "
             )
 
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+        """
+        return super().compute(
+            names=names,
+            grid=grid,
+            params=params,
+            transforms=transforms,
+            data=data,
+            method=self._method,
+            **kwargs,
+        )
+
     @classmethod
-    def from_values(cls, coords, knots=None, method="cubic", name="", basis="xyz"):
+    def from_values(cls, coords, knots=None, method="cubic", basis="xyz", name=""):
         """Create SplineXYZCurve from coordinate values.
 
         Parameters
@@ -937,7 +1084,7 @@ class SplineXYZCurve(Curve):
             endpoint is included (ie, X[0] == X[-1]), then the final point will be
             dropped.
         knots : ndarray
-            arbitrary curve parameter values to use for spline knots,
+            Arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
             the input coordinates come from
@@ -953,10 +1100,10 @@ class SplineXYZCurve(Curve):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
-        name : str
-            name for this curve
         basis : {"rpz", "xyz"}
-            basis for input coordinates. Defaults to "xyz"
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
 
         Returns
         -------
@@ -967,5 +1114,10 @@ class SplineXYZCurve(Curve):
         if basis == "rpz":
             coords = rpz2xyz(coords)
         return SplineXYZCurve(
-            coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name
+            X=coords[:, 0],
+            Y=coords[:, 1],
+            Z=coords[:, 2],
+            knots=knots,
+            method=method,
+            name=name,
         )

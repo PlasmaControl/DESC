@@ -18,6 +18,7 @@ from desc.compute.bounce_integral import (
     _composite_linspace,
     _filter_nonzero_measure,
     _filter_not_nan,
+    _get_extrema,
     _poly_der,
     _poly_root,
     _poly_val,
@@ -27,7 +28,6 @@ from desc.compute.bounce_integral import (
     automorphism_sin,
     bounce_integral,
     bounce_points,
-    get_extrema,
     get_pitch,
     grad_affine_bijection,
     grad_automorphism_arcsin,
@@ -214,7 +214,7 @@ def test_poly_val():
 
 @pytest.mark.unit
 def test_get_extrema():
-    """Test that these pitch intersect extrema of |B|."""
+    """Test computation of extrema of |B|."""
     start = -np.pi
     end = -2 * start
     k = np.linspace(start, end, 5)
@@ -222,13 +222,15 @@ def test_get_extrema():
         k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
     )
     B_z_ra = B.derivative()
-    extrema_scipy = np.sort(B(B_z_ra.roots(extrapolate=False)))
-    rtol = 1e-7
-    extrema = get_extrema(k, B.c, B_z_ra.c, relative_shift=rtol)
-    eps = 100 * np.finfo(float).eps
-    extrema = np.sort(_filter_not_nan(extrema))
+    extrema, B_extrema = _get_extrema(k, B.c, B_z_ra.c)
+    extrema, B_extrema = map(_filter_not_nan, (extrema, B_extrema))
+    idx = np.argsort(extrema)
+
+    extrema_scipy = np.sort(B_z_ra.roots(extrapolate=False))
+    B_extrema_scipy = B(extrema_scipy)
     assert extrema.size == extrema_scipy.size
-    np.testing.assert_allclose(extrema, extrema_scipy, rtol=rtol + eps)
+    np.testing.assert_allclose(extrema[idx], extrema_scipy)
+    np.testing.assert_allclose(B_extrema[idx], B_extrema_scipy)
 
 
 @pytest.mark.unit
@@ -747,15 +749,18 @@ def test_drift():
         integrand=integrand_num,
         f=[cvdrift, gbdrift],
         pitch=pitch[:, np.newaxis],
+        num_wells=1,  # don't need to specify but will reduce memory and improve speed
     )
     drift_numerical_den = bounce_integrate(
         integrand=integrand_den,
         f=[],
         pitch=pitch[:, np.newaxis],
+        num_wells=1,
+        weight=np.ones(zeta.size),
     )
 
-    drift_numerical_num = np.squeeze(drift_numerical_num[drift_numerical_num != 0])
-    drift_numerical_den = np.squeeze(drift_numerical_den[drift_numerical_den != 0])
+    drift_numerical_num = np.squeeze(drift_numerical_num)
+    drift_numerical_den = np.squeeze(drift_numerical_den)
     drift_numerical = drift_numerical_num / drift_numerical_den
     msg = "There should be one bounce integral per pitch in this example."
     assert drift_numerical.size == drift_analytic.size, msg
@@ -767,7 +772,11 @@ def test_drift():
 
     # Test if differentiable.
     def dummy_fun(pitch):
-        return jnp.sum(bounce_integrate(integrand_num, [cvdrift, gbdrift], pitch))
+        return jnp.sum(
+            bounce_integrate(
+                integrand_num, [cvdrift, gbdrift], pitch, weight=np.ones(zeta.size)
+            )
+        )
 
     assert np.isclose(grad(dummy_fun)(1.0), 650, rtol=1e-3)
 

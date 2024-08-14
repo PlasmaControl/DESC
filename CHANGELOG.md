@@ -1,14 +1,85 @@
 Changelog
 =========
 
+v0.12.1
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.12.0...v0.12.1)
+
+- Optimizers now default to use QR factorization for least squares which is much faster
+especially on GPU.
+- Fix bug when reading VMEC input ZAXIS as ZAXIS_CS
+- Some fixes/improvements for computing quantities along a fieldline.
+- Adds compute quantities for PEST coordinate system basis vectors
+- Many init methods now default to running on CPU, even when GPU is enabled, as CPU was found
+to be much faster for these cases.
+- New objectives `desc.objectives.FixNearAxis{R,Z,Lambda}` for fixing near axis behavior.
+- Adds ``from_values`` method that was present in ``FourierRZCurve`` but missing in ``FourierRZCoil``
+- Adds new ``from_values`` method for ``FourierPlanarCurve`` and ``FourierPlanarCoil``
+
+
+v0.12.0
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.11.1...v0.12.0)
+
 New Features
 
-- Add method ``from_values`` to ``FourierRZCurve`` to allow fitting of data points
-to a ``FourierRZCurve`` object, and ``to_FourierRZCurve`` methods to ``Curve`` class.
-- Adds the objective `CoilsetMinDistance`, which returns the minimum distance to another
-coil for each coil in a coilset.
-- Adds the objective `PlasmaCoilsetMinDistance`, which returns the minimum distance to the
-plasma surface for each coil in a coilset.
+- Coil optimization is now possible in DESC using various filamentary coils. This includes
+a number of new objectives:
+    - ``desc.objectives.QuadraticFlux``
+    - ``desc.objectives.ToroidalFlux``
+    - ``desc.objectives.CoilLength``
+    - ``desc.objectives.CoilCurvature``
+    - ``desc.objectives.CoilTorsion``
+    - ``desc.objectives.CoilCurrentLength``
+    - ``desc.objectives.CoilSetMinDistance``
+    - ``desc.objectives.PlasmaCoilSetMinDistance``
+    - ``desc.objectives.FixCoilCurrent``
+    - ``desc.objectives.FixSumCoilCurrent``
+- Add Normal Field Error ``"B*n"`` as a plot quantity to ``desc.plotting.{plot_2d, plot_3d}``.
+- New function ``desc.plotting.poincare_plot`` for creating Poincare plots by tracing
+field lines from coils or other external fields.
+- New profile type ``desc.profiles.TwoPowerProfile``.
+- Add ``desc.geometry.FourierRZCurve.from_values`` method to fit curve with data.
+- Add ``desc.geometry.FourierRZToroidalSurface.from_shape_parameters`` method for generating a surface
+with specified elongation, triangularity, squareness, etc.
+- New class ``desc.magnetic_fields.MagneticFieldFromUser`` for user defined B(R,phi,Z).
+- All vector variables are now computed in toroidal (R,phi,Z) coordinates by default.
+Cartesian (X,Y,Z) coordinates can be requested with the compute keyword ``basis='xyz'``.
+- Add method ``desc.coils.CoilSet.is_self_intersecting``, which checks if any coils
+intersect each other in the coilset.
+
+Minor changes
+
+- Improved heuristic initial guess for ``Equilibrium.map_coordinates``.
+- Add documentation for default grid and target/bounds for objectives.
+- Add documentation for compute function keyword arguments.
+- Loading a coilset from a MAKEGRID file will now return a nested ``MixedCoilSet`` if there
+are coil groups present in the MAKEGRID file.
+- Users must now pass in spacing/weights to custom ``Grid``s (the previous defaults were
+often wrong, leading to incorrect results)
+- The ``normal`` and ``center`` parameters of a ``FourierPlanarCurve`` can now be specified
+in either cartesian or cylindrical coordinates, as determined by the ``basis`` parameter.
+- Misc small changes to reduce compile time and memory consumption (more coming soon!)
+- Linear constraint factorization has been refactored to improve efficiency and reduce
+floating point error.
+- ``desc.objectives.{GenericObjective, ObjectiveFromUser}`` can now work with other objects
+besides an ``Equilibrium`` (such as surfaces, curves, etc.)
+- Improve warning for missing attributes when loading desc objects.
+
+Bug Fixes
+
+- Several small fixes to ensure things that should be ``int``s are ``int``s
+- Fix incorrect toroidal components of surface basis vectors.
+- Fix a regression in performance in evaluating Zernike polynomials.
+- Fix errors in ``Equilibrium.map_coordinates`` for prescribed current equilibria.
+- Fix definition of ``b0`` in VMEC output.
+- Fix a bug where calling ``Equilibrium.compute(..., data=data)`` would lead to excessive
+recalculation and potentially wrong results.
+- Fixes a bug causing NaN in reverse mode AD for ``Omnigenity`` objective.
+- Fix a bug where ``"A(z)"`` would be zero if the grid doesn't contain nodes at rho=1.
+
 
 v0.11.1
 -------

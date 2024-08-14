@@ -10,7 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import execute_on_cpu, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
@@ -170,6 +170,7 @@ class Equilibrium(IOAble, Optimizable):
         "_N_grid",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         Psi=1.0,
@@ -539,6 +540,7 @@ class Equilibrium(IOAble, Optimizable):
             new = copy.copy(self)
         return new
 
+    @execute_on_cpu
     def change_resolution(
         self,
         L=None,
@@ -624,6 +626,7 @@ class Equilibrium(IOAble, Optimizable):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
+    @execute_on_cpu
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
 
@@ -828,7 +831,10 @@ class Equilibrium(IOAble, Optimizable):
             Profile objects for pressure, iota, current, etc. Defaults to attributes
             of self
         data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
@@ -873,12 +879,26 @@ class Equilibrium(IOAble, Optimizable):
                 jitable=False,
             )
 
+        method = kwargs.pop("method", "auto")
         if params is None:
-            params = get_params(names, obj=self, has_axis=grid.axis.size)
+            params = get_params(
+                names,
+                obj=self,
+                has_axis=grid.axis.size,
+                basis=kwargs.get("basis", "rpz"),
+            )
         if profiles is None:
-            profiles = get_profiles(names, obj=self, grid=grid)
+            profiles = get_profiles(
+                names, obj=self, grid=grid, basis=kwargs.get("basis", "rpz")
+            )
         if transforms is None:
-            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+            transforms = get_transforms(
+                names,
+                obj=self,
+                grid=grid,
+                method=method,
+                **kwargs,
+            )
         if data is None:
             data = {}
 
@@ -1008,8 +1028,16 @@ class Equilibrium(IOAble, Optimizable):
                 self,
                 list(dep0d),
                 params=params,
-                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
-                profiles=get_profiles(dep0d, obj=self, grid=grid0d),
+                transforms=get_transforms(
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep0d, obj=self, grid=grid0d, basis=kwargs.get("basis", "rpz")
+                ),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
                 data=data0d_seed,
@@ -1042,8 +1070,16 @@ class Equilibrium(IOAble, Optimizable):
                 self,
                 list(dep1dr),
                 params=params,
-                transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
-                profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
+                transforms=get_transforms(
+                    dep1dr,
+                    obj=self,
+                    grid=grid1dr,
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep1dr, obj=self, grid=grid1dr, basis=kwargs.get("basis", "rpz")
+                ),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
                 data=data1dr_seed | data0d_seed,
@@ -1076,8 +1112,16 @@ class Equilibrium(IOAble, Optimizable):
                 self,
                 list(dep1dz),
                 params=params,
-                transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
-                profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
+                transforms=get_transforms(
+                    dep1dz,
+                    obj=self,
+                    grid=grid1dz,
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep1dz, obj=self, grid=grid1dz, basis=kwargs.get("basis", "rpz")
+                ),
                 # If a dependency of something is already computed, use it
                 # instead of recomputing it on a potentially bad grid.
                 data=data1dz_seed | data0d_seed,
@@ -1259,6 +1303,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
+    @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
@@ -1953,7 +1998,7 @@ class Equilibrium(IOAble, Optimizable):
             idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
-            L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
+            L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
 
         inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
         inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]

@@ -107,6 +107,220 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="B^phi",
+    label="B^{\\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B0", "phi_z", "lambda_t", "phi_t", "lambda_z"],
+)
+def _B_sup_phi(params, transforms, profiles, data, **kwargs):
+    data["B^phi"] = data["B0"] * (
+        data["phi_z"] * (data["lambda_t"] + 1) - data["phi_t"] * data["lambda_z"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_r",
+    label="\\partial_{\\rho} B^{\\phi} |_{\\theta, \\zeta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ρ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B0",
+        "phi_z",
+        "lambda_t",
+        "phi_t",
+        "lambda_z",
+        "B0_r",
+        "phi_rz",
+        "lambda_rt",
+        "phi_rt",
+        "lambda_rz",
+    ],
+)
+def _B_sup_phi_r(params, transforms, profiles, data, **kwargs):
+    data["B^phi_r"] = data["B0_r"] * (
+        data["phi_z"] * (data["lambda_t"] + 1) - data["phi_t"] * data["lambda_z"]
+    ) + data["B0"] * (
+        data["phi_rz"] * (data["lambda_t"] + 1)
+        + data["phi_z"] * data["lambda_rt"]
+        - data["phi_rt"] * data["lambda_z"]
+        - data["phi_t"] * data["lambda_rz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_t",
+    label="\\partial_{\\theta} B^{\\phi} |_{\\rho, \\zeta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt θ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B0",
+        "phi_z",
+        "lambda_t",
+        "phi_t",
+        "lambda_z",
+        "B0_t",
+        "phi_tz",
+        "lambda_tt",
+        "phi_tt",
+        "lambda_tz",
+    ],
+)
+def _B_sup_phi_t(params, transforms, profiles, data, **kwargs):
+    data["B^phi_t"] = data["B0_t"] * (
+        data["phi_z"] * (data["lambda_t"] + 1) - data["phi_t"] * data["lambda_z"]
+    ) + data["B0"] * (
+        data["phi_tz"] * (data["lambda_t"] + 1)
+        + data["phi_z"] * data["lambda_tt"]
+        - data["phi_tt"] * data["lambda_z"]
+        - data["phi_t"] * data["lambda_tz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_z",
+    label="\\partial_{\\zeta} B^{\\phi} |_{\\rho, \\theta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ζ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B0",
+        "phi_z",
+        "lambda_t",
+        "phi_t",
+        "lambda_z",
+        "B0_z",
+        "phi_zz",
+        "lambda_tz",
+        "phi_tz",
+        "lambda_zz",
+    ],
+)
+def _B_sup_phi_z(params, transforms, profiles, data, **kwargs):
+    data["B^phi_z"] = data["B0_z"] * (
+        data["phi_z"] * (data["lambda_t"] + 1) - data["phi_t"] * data["lambda_z"]
+    ) + data["B0"] * (
+        data["phi_zz"] * (data["lambda_t"] + 1)
+        + data["phi_z"] * data["lambda_tz"]
+        - data["phi_tz"] * data["lambda_z"]
+        - data["phi_t"] * data["lambda_zz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_v|r,p",
+    label="\\partial_{\\vartheta} B^{\\phi} |_{\\rho, \\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ϑ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_t", "B^phi_z", "theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z"],
+)
+def _B_sup_phi_v_rp(params, transforms, profiles, data, **kwargs):
+    data["B^phi_v|r,p"] = (
+        data["B^phi_t"] * data["phi_z"] - data["B^phi_z"] * data["phi_t"]
+    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_p|r,v",
+    label="\\partial_{\\phi} B^{\\phi} |_{\\rho, \\vartheta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ϕ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_t", "B^phi_z", "theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z"],
+)
+def _B_sup_phi_p_rv(params, transforms, profiles, data, **kwargs):
+    data["B^phi_p|r,v"] = (
+        data["B^phi_z"] * data["theta_PEST_t"] - data["B^phi_t"] * data["theta_PEST_z"]
+    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_r|v,p",
+    label="\\partial_{\\rho} B^{\\phi} |_{\\vartheta, \\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ρ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_r", "B^phi_v|r,p", "B^phi_p|r,v", "theta_PEST_r", "phi_r"],
+)
+def _B_sup_phi_r_vp(params, transforms, profiles, data, **kwargs):
+    data["B^phi_r|v,p"] = (
+        data["B^phi_r"]
+        - data["B^phi_v|r,p"] * data["theta_PEST_r"]
+        - data["B^phi_p|r,v"] * data["phi_r"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|B|_r|v,p",
+    label="\\partial_{\\rho} |\\mathbf{B}| |_{\\vartheta, \\phi}",
+    units="T",
+    units_long="Tesla",
+    description="Magnetic field norm, derivative wrt ρ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(|B|)", "e_rho|v,p"],
+)
+def _B_norm_r_vp(params, transforms, profiles, data, **kwargs):
+    data["|B|_r|v,p"] = dot(data["grad(|B|)"], data["e_rho|v,p"])
+    return data
+
+
+@register_compute_fun(
     name="B",
     label="\\mathbf{B}",
     units="T",
@@ -128,7 +342,7 @@ def _B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_R",
-    label="B_{R}",
+    label="B_{R} = \\mathbf{B} \\cdot \\hat{R}",
     units="T",
     units_long="Tesla",
     description="Radial component of magnetic field in lab frame",
@@ -146,7 +360,7 @@ def _B_R(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_phi",
-    label="B_{\\phi}",
+    label="B_{\\phi} = \\mathbf{B} \\cdot \\hat{\\phi}",
     units="T",
     units_long="Tesla",
     description="Toroidal component of magnetic field in lab frame",
@@ -155,16 +369,16 @@ def _B_R(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B"],
+    data=["B^phi", "R"],
 )
 def _B_phi(params, transforms, profiles, data, **kwargs):
-    data["B_phi"] = data["B"][:, 1]
+    data["B_phi"] = data["R"] * data["B^phi"]
     return data
 
 
 @register_compute_fun(
     name="B_Z",
-    label="B_{Z}",
+    label="B_{Z} = \\mathbf{B} \\cdot \\hat{Z}",
     units="T",
     units_long="Tesla",
     description="Vertical component of magnetic field in lab frame",
@@ -2371,8 +2585,7 @@ def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
     data=["|B|_z", "|B|_a", "alpha_z"],
 )
 def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
-    # ∂|B|/∂ζ (constant ρ and α) = ∂|B|/∂ζ (constant ρ and θ)
-    #                            - ∂|B|/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
+    # Same as grad(|B|) dot e_zeta|r,a but avoids radial derivatives.
     data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_a"] * data["alpha_z"]
     return data
 

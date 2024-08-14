@@ -9,7 +9,7 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from quadax import cumulative_trapezoid
+from quadax import cumulative_simpson
 from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
@@ -142,10 +142,10 @@ def _chi_r(params, transforms, profiles, data, **kwargs):
     resolution_requirement="r",
 )
 def _chi(params, transforms, profiles, data, **kwargs):
-    chi_r = transforms["grid"].compress(data["chi_r"])
-    # TODO: switch to cumulative_simpson once added to quadax.
-    chi = cumulative_trapezoid(
-        chi_r, transforms["grid"].compress(data["rho"]), initial=0
+    chi = cumulative_simpson(
+        y=transforms["grid"].compress(data["chi_r"]),
+        x=transforms["grid"].compress(data["rho"]),
+        initial=0,
     )
     data["chi"] = transforms["grid"].expand(chi)
     return data

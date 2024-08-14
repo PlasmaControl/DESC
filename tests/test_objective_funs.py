@@ -1414,37 +1414,53 @@ def test_profile_objective_print(capsys):
     )
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
-    def test(obj, values, normalize=False):
-        obj.print_value(obj.xs(eq))
+    def test(obj, values, print_init=False, normalize=False):
+        if print_init:
+            # print the initial value too. For this test, it is the
+            # same as the final value
+            obj.print_value(obj.xs(eq), obj.xs(eq))
+            print_fmt = obj._print_value_fmt + "  -->  {:10.3e}"
+        else:
+            obj.print_value(obj.xs(eq))
+            print_fmt = obj._print_value_fmt
         out = capsys.readouterr()
 
         corr_out = str(
             "Precomputing transforms\n"
             + "Maximum "
-            + obj._print_value_fmt.format(np.max(values))
+            + print_fmt.format(np.max(values), np.max(values))
             + obj._units
             + "\n"
             + "Minimum "
-            + obj._print_value_fmt.format(np.min(values))
+            + print_fmt.format(np.min(values), np.min(values))
             + obj._units
             + "\n"
             + "Average "
-            + obj._print_value_fmt.format(np.mean(values))
+            + print_fmt.format(np.mean(values), np.mean(values))
             + obj._units
             + "\n"
         )
         if normalize:
             corr_out += str(
                 "Maximum "
-                + obj._print_value_fmt.format(np.max(values / obj.normalization))
+                + print_fmt.format(
+                    np.max(values / obj.normalization),
+                    np.max(values / obj.normalization),
+                )
                 + "(normalized)"
                 + "\n"
                 + "Minimum "
-                + obj._print_value_fmt.format(np.min(values / obj.normalization))
+                + print_fmt.format(
+                    np.min(values / obj.normalization),
+                    np.min(values / obj.normalization),
+                )
                 + "(normalized)"
                 + "\n"
                 + "Average "
-                + obj._print_value_fmt.format(np.mean(values / obj.normalization))
+                + print_fmt.format(
+                    np.mean(values / obj.normalization),
+                    np.mean(values / obj.normalization),
+                )
                 + "(normalized)"
                 + "\n"
             )
@@ -1454,7 +1470,7 @@ def test_profile_objective_print(capsys):
     iota = eq.compute("iota", grid=grid)["iota"]
     obj = RotationalTransform(eq=eq, target=1, grid=grid)
     obj.build()
-    test(obj, iota)
+    test(obj, iota, print_init=True)
     shear = eq.compute("shear", grid=grid)["shear"]
     obj = Shear(eq=eq, target=1, grid=grid)
     obj.build()
@@ -1462,7 +1478,7 @@ def test_profile_objective_print(capsys):
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
     obj.build()
-    test(obj, curr, normalize=True)
+    test(obj, curr, print_init=True, normalize=True)
     pres = eq.compute("p", grid=grid)["p"]
     obj = Pressure(eq=eq, target=1, grid=grid)
     obj.build()
@@ -1472,6 +1488,51 @@ def test_profile_objective_print(capsys):
 @pytest.mark.unit
 def test_plasma_vessel_distance_print(capsys):
     """Test that the PlasmaVesselDistance objective prints correctly."""
+
+    def test(obj, eq, surface, d, print_init=False):
+        if print_init:
+            obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
+            print_fmt = obj._print_value_fmt + "  -->  {:10.3e}"
+        else:
+            obj.print_value(obj.xs(eq, surface))
+            print_fmt = obj._print_value_fmt
+        out = capsys.readouterr()
+
+        corr_out = str(
+            "Precomputing transforms\n"
+            + "Maximum "
+            + print_fmt.format(np.max(d), np.max(d))
+            + obj._units
+            + "\n"
+            + "Minimum "
+            + print_fmt.format(np.min(d), np.min(d))
+            + obj._units
+            + "\n"
+            + "Average "
+            + print_fmt.format(np.mean(d), np.mean(d))
+            + obj._units
+            + "\n"
+            + "Maximum "
+            + print_fmt.format(
+                np.max(d / obj.normalization), np.max(d / obj.normalization)
+            )
+            + "(normalized)"
+            + "\n"
+            + "Minimum "
+            + print_fmt.format(
+                np.min(d / obj.normalization), np.min(d / obj.normalization)
+            )
+            + "(normalized)"
+            + "\n"
+            + "Average "
+            + print_fmt.format(
+                np.mean(d / obj.normalization), np.mean(d / obj.normalization)
+            )
+            + "(normalized)"
+            + "\n"
+        )
+        assert out.out == corr_out
+
     R0 = 10.0
     a_p = 1.0
     a_s = 2.0
@@ -1489,38 +1550,8 @@ def test_plasma_vessel_distance_print(capsys):
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
-
-    obj.print_value(obj.xs(eq, surface))
-    out = capsys.readouterr()
-
-    corr_out = str(
-        "Precomputing transforms\n"
-        + "Maximum "
-        + obj._print_value_fmt.format(np.max(d))
-        + obj._units
-        + "\n"
-        + "Minimum "
-        + obj._print_value_fmt.format(np.min(d))
-        + obj._units
-        + "\n"
-        + "Average "
-        + obj._print_value_fmt.format(np.mean(d))
-        + obj._units
-        + "\n"
-        + "Maximum "
-        + obj._print_value_fmt.format(np.max(d / obj.normalization))
-        + "(normalized)"
-        + "\n"
-        + "Minimum "
-        + obj._print_value_fmt.format(np.min(d / obj.normalization))
-        + "(normalized)"
-        + "\n"
-        + "Average "
-        + obj._print_value_fmt.format(np.mean(d / obj.normalization))
-        + "(normalized)"
-        + "\n"
-    )
-    assert out.out == corr_out
+    test(obj, eq, surface, d)
+    test(obj, eq, surface, d, print_init=True)
 
 
 @pytest.mark.unit

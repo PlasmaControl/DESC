@@ -1090,36 +1090,37 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "compute_unscaled")
 
-    def print_value(self, val, val0=None, **kwargs):
+    def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""
         # compute_unscaled is jitted so better to use than than bare compute
-        if val0 is not None:
-            f = self.compute_unscaled(*val, **kwargs)
-            f0 = self.compute_unscaled(*val0, **kwargs)
+        if args0 is not None:
+            f = self.compute_unscaled(*args, **kwargs)
+            f0 = self.compute_unscaled(*args0, **kwargs)
             print_value_fmt = self._print_value_fmt + "  -->  {:10.3e}"
         else:
-            f = self.compute_unscaled(*val, **kwargs)
-            f0 = None
+            f = self.compute_unscaled(*args, **kwargs)
+            f0 = f
+            # In this case, print_value_fmt only has 1 value,
+            # but the format string is still used with 2 arguments given.
+            # This is a bit of a hack, but it works. the format() only replaces
+            # the first value in the {} string, so the second one is unused.
+            # That is why we set f0 to f.
             print_value_fmt = self._print_value_fmt
 
         if self.linear:
             # probably a Fixed* thing, just need to know norm
             f = jnp.linalg.norm(self._shift(f))
-            f0 = jnp.linalg.norm(self._shift(f0)) if f0 is not None else f
+            f0 = jnp.linalg.norm(self._shift(f0))
             print(print_value_fmt.format(f0, f) + self._units)
 
         elif self.scalar:
             # dont need min/max/mean of a scalar
             fs = f.squeeze()
-            f0s = f0.squeeze() if f0 is not None else fs
+            f0s = f0.squeeze()
             print(print_value_fmt.format(f0s, fs) + self._units)
             if self._normalize and self._units != "(dimensionless)":
                 fs_norm = self._scale(self._shift(f)).squeeze()
-                f0s_norm = (
-                    self._scale(self._shift(f0)).squeeze()
-                    if val0 is not None
-                    else fs_norm
-                )
+                f0s_norm = self._scale(self._shift(f0)).squeeze()
                 print(print_value_fmt.format(f0s_norm, fs_norm) + "(normalized error)")
         else:
             # try to do weighted mean if possible
@@ -1137,10 +1138,10 @@ class _Objective(IOAble, ABC):
             fmin = jnp.min(f)
             fmean = jnp.mean(f * w) / jnp.mean(w)
 
-            f0 = jnp.abs(f0) if abserr else f0 if val0 is not None else f
-            f0max = jnp.max(f0) if val0 is not None else fmax
-            f0min = jnp.min(f0) if val0 is not None else fmin
-            f0mean = jnp.mean(f0 * w) / jnp.mean(w) if val0 is not None else fmean
+            f0 = jnp.abs(f0) if abserr else f0
+            f0max = jnp.max(f0)
+            f0min = jnp.min(f0)
+            f0mean = jnp.mean(f0 * w) / jnp.mean(w)
 
             print(
                 "Maximum "
@@ -1166,21 +1167,9 @@ class _Objective(IOAble, ABC):
                 fmin_norm = fmin / jnp.mean(self.normalization)
                 fmean_norm = fmean / jnp.mean(self.normalization)
 
-                f0max_norm = (
-                    f0max / jnp.mean(self.normalization)
-                    if val0 is not None
-                    else fmax_norm
-                )
-                f0min_norm = (
-                    f0min / jnp.mean(self.normalization)
-                    if val0 is not None
-                    else fmin_norm
-                )
-                f0mean_norm = (
-                    f0mean / jnp.mean(self.normalization)
-                    if val0 is not None
-                    else fmean_norm
-                )
+                f0max_norm = f0max / jnp.mean(self.normalization)
+                f0min_norm = f0min / jnp.mean(self.normalization)
+                f0mean_norm = f0mean / jnp.mean(self.normalization)
 
                 print(
                     "Maximum "

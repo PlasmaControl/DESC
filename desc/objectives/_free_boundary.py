@@ -251,12 +251,12 @@ class VacuumBoundaryError(_Objective):
         Bsq_err = (bsq_in - bsq_out) * g
         return jnp.concatenate([Bn_err, Bsq_err])
 
-    def print_value(self, x, x0=None, **kwargs):
+    def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""
         # this objective is really 2 residuals concatenated so its helpful to print
         # them individually
-        f = self.compute_unscaled(*x, **kwargs)
-        f0 = self.compute_unscaled(*x0, **kwargs) if x0 is not None else f
+        f = self.compute_unscaled(*args, **kwargs)
+        f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -329,7 +329,7 @@ class VacuumBoundaryError(_Objective):
             f0max = jnp.max(f0i)
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
-            fmt = fmt + "  -->  {:10.3e} " if x0 is not None else fmt
+            fmt = fmt + "  -->  {:10.3e} " if args0 is not None else fmt
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
 
 
@@ -716,12 +716,12 @@ class BoundaryError(_Objective):
         else:
             return jnp.concatenate([Bn_err, Bsq_err])
 
-    def print_value(self, x, x0=None, **kwargs):
+    def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""
         # this objective is really 3 residuals concatenated so its helpful to print
         # them individually
-        f = self.compute_unscaled(*x, **kwargs)
-        f0 = self.compute_unscaled(*x0, **kwargs) if x0 is not None else f
+        f = self.compute_unscaled(*args, **kwargs)
+        f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -805,7 +805,7 @@ class BoundaryError(_Objective):
             f0max = jnp.max(f0i)
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
-            fmt = fmt + "  -->  {:10.3e}" if x0 is not None else fmt
+            fmt = fmt + "  -->  {:10.3e}" if args0 is not None else fmt
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
 
 

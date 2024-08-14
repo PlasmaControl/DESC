@@ -1415,7 +1415,7 @@ def test_profile_objective_print(capsys):
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
     def test(obj, values, normalize=False):
-        obj.print_value(*obj.xs(eq))
+        obj.print_value(obj.xs(eq))
         out = capsys.readouterr()
 
         corr_out = str(
@@ -1490,7 +1490,7 @@ def test_plasma_vessel_distance_print(capsys):
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
 
-    obj.print_value(*obj.xs(eq, surface))
+    obj.print_value(obj.xs(eq, surface))
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1538,7 +1538,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1613,7 +1613,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1690,7 +1690,7 @@ def test_boundary_error_print(capsys):
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(

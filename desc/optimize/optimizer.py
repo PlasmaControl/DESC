@@ -378,7 +378,7 @@ class Optimizer(IOAble):
                         things.index(t) for t in things if t in con.things
                     ]
                     args_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
-                    con.print_value(*con.xs(*args_for_this_con))
+                    con.print_value(con.xs(*args_for_this_con))
 
                 print("End of solver")
                 objective.print_value(objective.x(*state))
@@ -387,7 +387,7 @@ class Optimizer(IOAble):
                         things.index(t) for t in things if t in con.things
                     ]
                     args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
-                    con.print_value(*con.xs(*args_for_this_con))
+                    con.print_value(con.xs(*args_for_this_con))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

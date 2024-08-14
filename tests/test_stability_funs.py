@@ -273,7 +273,7 @@ def test_mercier_print(capsys):
     mercier_obj = MercierStability(eq=eq, grid=grid)
     mercier_obj.build()
     np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
-    mercier_obj.print_value(*mercier_obj.xs(eq))
+    mercier_obj.print_value(mercier_obj.xs(eq))
     out = capsys.readouterr()
 
     corr_out = str(
@@ -320,7 +320,7 @@ def test_magwell_print(capsys):
     f = obj.compute(*obj.xs(eq))
     np.testing.assert_allclose(f, magwell)
 
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(obj.xs(eq))
     out = capsys.readouterr()
 
     corr_out = str(

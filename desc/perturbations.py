@@ -291,7 +291,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac_scaled_error(x)
-        Jx_reduced = Jx @ D[:, unfixed_idx] @ Z @ scale
+        Jx_reduced = Jx @ jnp.diag(D)[:, unfixed_idx] @ Z @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
             f = objective.compute_scaled_error(x)
@@ -562,7 +562,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = 0
 
     # dx/dx_reduced
-    dxdx_reduced = jnp.eye(eq.dim_x) @ D[:, unfixed_idx] @ Z
+    dxdx_reduced = jnp.diag(D)[:, unfixed_idx] @ Z
 
     # dx/dc
     dxdc = []
@@ -610,8 +610,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             timer.disp("dg computation")
 
         # projections onto optimization space
-        Fx_reduced = Fx @ D[:, unfixed_idx] @ Z
-        Gx_reduced = Gx @ D[:, unfixed_idx] @ Z
+        Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
+        Gx_reduced = Gx @ jnp.diag(D)[:, unfixed_idx] @ Z
         Fc = Fx @ dxdc
         Gc = Gx @ dxdc
 

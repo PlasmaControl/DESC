@@ -34,7 +34,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     Z : ndarray
         Null space operator for full combined A such that A @ Z == 0.
     D : ndarray
-        Diagonal scaling matrix, based on the magnitude of the particular solution xp.
+        Scale of the full state vector x, based on the particular solution xp.
     unfixed_idx : ndarray
         Indices of x that correspond to non-fixed values.
     project, recover : function
@@ -143,18 +143,17 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         A_inv = A.T
         Z = np.eye(A.shape[1])
     xp = put(xp, unfixed_idx, A_inv @ b)
-    x_scale = np.where(np.abs(xp) < 1, 1, np.abs(xp))  # TODO: adjust threshold?
-    D = np.diag(x_scale)
+    D = np.where(np.abs(xp) < 1, 1, np.abs(xp))  # TODO: adjust threshold?
 
     # scaled system
-    A = A @ D[unfixed_idx][:, unfixed_idx]
+    A = A * D[None, unfixed_idx]
     if A.size:
         A_inv, Z = svd_inv_null(A)
     else:
         A_inv = A.T
         Z = np.eye(A.shape[1])
     xp = put(xp, unfixed_idx, A_inv @ b)
-    xp = put(xp, fixed_idx, (jnp.diag(1 / jnp.diagonal(D)) @ xp)[fixed_idx])
+    xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
 
     # cast to jnp arrays
     xp = jnp.asarray(xp)
@@ -166,18 +165,18 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     @jit
     def project(x_full):
         """Project a full state vector into the reduced optimization vector."""
-        x_reduced = Z.T @ (jnp.diag(1 / jnp.diagonal(D)) @ x_full - xp)[unfixed_idx]
+        x_reduced = Z.T @ ((1 / D) * x_full - xp)[unfixed_idx]
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     @jit
     def recover(x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
         dx = put(jnp.zeros(objective.dim_x), unfixed_idx, Z @ x_reduced)
-        x_full = D @ (xp + dx)
+        x_full = D * (xp + dx)
         return jnp.atleast_1d(jnp.squeeze(x_full))
 
     # check that all constraints are actually satisfiable
-    params = objective.unpack_state(D @ xp, False)
+    params = objective.unpack_state(D * xp, False)
     for con in constraint.objectives:
         xpi = [params[i] for i, t in enumerate(objective.things) if t in con.things]
         y1 = con.compute_unscaled(*xpi)

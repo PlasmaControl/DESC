@@ -115,9 +115,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._dim_x_reduced = self._Z.shape[1]
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
-        self._unfixed_idx_mat = (
-            jnp.eye(self._objective.dim_x) @ self._D[:, self._unfixed_idx] @ self._Z
-        )
+        self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
         timer.stop("Linear constraint projection build")
@@ -284,9 +282,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.hess(x, constants)
         return (
             self._Z.T
-            @ jnp.diag(1 / jnp.diagonal(self._D[self._unfixed_idx, :]))
+            * (1 / self._D[None, self._unfixed_idx])
             @ df
-            @ self._D[:, self._unfixed_idx]
+            * self._D[None, self._unfixed_idx]
             @ self._Z  # TODO: replace with self._unfixed_idx_mat
         )
 
@@ -632,7 +630,7 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._unfixed_idx_mat[self._eq_idx] = (
             self._unfixed_idx_mat[self._eq_idx][:, self._unfixed_idx]
-            @ self._D[self._unfixed_idx][:, self._unfixed_idx]
+            * self._D[None, self._unfixed_idx]
             @ self._Z
         )
         self._unfixed_idx_mat = np.concatenate(
@@ -1027,7 +1025,7 @@ class ProximalProjection(ObjectiveFunction):
     @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp_f(self, xf, dc, constants, op):
         Fx = getattr(self._constraint, "jac_" + op)(xf, constants)
-        Fx_reduced = Fx @ self._D[:, self._unfixed_idx] @ self._Z
+        Fx_reduced = Fx * self._D[None, self._unfixed_idx] @ self._Z
         Fc = Fx @ (self._dxdc @ dc)
         Fxh = Fx_reduced
         cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)

@@ -6,7 +6,15 @@ Functions in this module should not depend on any other submodules in desc.objec
 import numpy as np
 
 from desc.backend import cond, jit, jnp, logsumexp, put
-from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
+from desc.utils import (
+    Index,
+    errorif,
+    flatten_list,
+    get_instance,
+    svd_inv_null,
+    unique_list,
+    warnif,
+)
 
 
 def factorize_linear_constraints(  # noqa: C901
@@ -145,14 +153,20 @@ def factorize_linear_constraints(  # noqa: C901
     unfixed_idx = indices_idx
     fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
 
-    # get x_scale if not provided
+    # compute x_scale if not provided
     if x_scale == "auto":
         if things is None:
             things = objective.things
-        elif not isinstance(things, list):
-            things = [things]
-        x_scale = objective.x(*[things[things.index(t)] for t in objective.things])
-    D = np.where(np.abs(x_scale) < 1e1, 1, np.abs(x_scale))  # TODO: adjust threshold?
+        else:
+            things = [things] if not isinstance(things, list) else things
+            things = [get_instance(things, type(t)) for t in objective.things]
+        x_scale = objective.x(*things)
+    errorif(
+        x_scale.shape != xp.shape,
+        ValueError,
+        "x_scale must be the same size as the full state vector.",
+    )
+    D = np.where(np.abs(x_scale) < 1e1, 1, np.abs(x_scale))
 
     # null space & particular solution
     A = A * D[None, unfixed_idx]

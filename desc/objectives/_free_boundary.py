@@ -796,7 +796,7 @@ class BoundaryError(_Objective):
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
             fi = jnp.abs(fi) if abserr else fi
-            f0i = jnp.abs(fi) if abserr else f0i
+            f0i = jnp.abs(f0i) if abserr else fi
             wi = w[i * nn : (i + 1) * nn]
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)

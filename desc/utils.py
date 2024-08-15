@@ -184,6 +184,13 @@ class _Indexable:
     def __getitem__(self, index):
         return index
 
+    @staticmethod
+    def get(stuff, axis, ndim):
+        slices = [slice(None)] * ndim
+        slices[axis] = stuff
+        slices = tuple(slices)
+        return slices
+
 
 """
 Helper object for building indexes for indexed update functions.

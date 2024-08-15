@@ -745,7 +745,8 @@ class Grid(_Grid):
             Use np.inf to denote no periodicity.
         NFP : int
             Number of field periods (Default = 1).
-            Only makes sense to change from 1 if ``period[2]==2π``.
+            Only makes sense to change from 1 if last coordinate is periodic
+            with some constant divided by ``NFP``.
 
         Returns
         -------

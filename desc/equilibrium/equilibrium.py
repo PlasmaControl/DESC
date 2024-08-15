@@ -1161,8 +1161,6 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to use.
         coords : ndarray
             Shape (k, 3).
             2D array of input coordinates. Each row is a different point in space.
@@ -1252,7 +1250,11 @@ class Equilibrium(IOAble, Optimizable):
             point. Only returned if ``full_output`` is True.
 
         """
-        warnif(True, DeprecationWarning, msg="Use map_coordinates instead.")
+        warnif(
+            True,
+            DeprecationWarning,
+            "Use map_coordinates instead of compute_theta_coords.",
+        )
         return map_coordinates(
             self,
             flux_coords,

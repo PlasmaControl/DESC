@@ -6,19 +6,19 @@ from desc.backend import eigh_tridiagonal, jnp
 from desc.utils import errorif
 
 
-def affine_bijection_to_disc(x, a, b):
+def bijection_to_disc(x, a, b):
     """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
     y = 2 * (x - a) / (b - a) - 1
     return y
 
 
-def affine_bijection(x, a, b):
+def bijection_from_disc(x, a, b):
     """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
     y = (x + 1) / 2 * (b - a) + a
     return y
 
 
-def grad_affine_bijection(a, b):
+def grad_bijection_from_disc(a, b):
     """Gradient of affine bijection."""
     dy_dx = (b - a) / 2
     return dy_dx
@@ -159,6 +159,7 @@ def leggausslob(deg):
     # Designate two degrees for endpoints.
     deg = int(deg) + 2
 
+    # Golub-Welsh algorithm for eigenvalues of orthogonal polynomials
     n = jnp.arange(2, deg - 1)
     x = eigh_tridiagonal(
         jnp.zeros(deg - 2),

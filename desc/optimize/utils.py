@@ -5,7 +5,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import cond, fori_loop, jit, jnp, put, rsqrt, solve_triangular
+from desc.backend import cond, jit, jnp, put, solve_triangular
 from desc.utils import Index
 
 
@@ -551,85 +551,3 @@ def solve_triangular_regularized(R, b, lower=False):
     Rs = R * dri[:, None]
     b = dri * b
     return solve_triangular(Rs, b, unit_diagonal=True, lower=lower)
-
-
-# TODO: add references to the docstrings
-def _givens_jax(a, b):
-    """Compute Givens rotation matrix.
-
-    Compute the Givens rotation matrix G2 that zeros out the second element
-    of a 2-vector.
-        G2*[a; b] = [r; 0]
-        where r = sqrt(a^2 + b^2)
-        G2 = [[c, -s], [s, c]]
-    """
-    # Taken from jax._src.scipy.sparse.linalg._givens_rotation
-    b_zero = abs(b) == 0
-    a_lt_b = abs(a) < abs(b)
-    t = -jnp.where(a_lt_b, a, b) / jnp.where(a_lt_b, b, a)
-    r = rsqrt(1 + abs(t) ** 2).astype(t.dtype)
-    cs = jnp.where(b_zero, 1, jnp.where(a_lt_b, r * t, r))
-    sn = jnp.where(b_zero, 0, jnp.where(a_lt_b, r, r * t))
-    G2 = jnp.array([[cs, -sn], [sn, cs]])
-    return G2.astype(float)
-
-
-@jit
-def update_qr_jax(A, w, q, r):
-    """Update QR factorization with a diagonal matrix w at the bottom."""
-    m, n = A.shape
-    Q = jnp.eye(m + n)
-    Q = Q.at[:m, :m].set(q)
-
-    R = jnp.vstack([r, w])
-
-    def body_inner(i, jQR):
-        j, Q, R = jQR
-        i = m + j - i
-        a, b = R[i - 1, j], R[i, j]
-        G2 = _givens_jax(a, b)
-        R = R.at[jnp.array([i - 1, i])].set(G2 @ R[jnp.array([i - 1, i])])
-        Q = Q.at[:, jnp.array([i - 1, i])].set(Q[:, jnp.array([i - 1, i])] @ G2.T)
-        return j, Q, R
-
-    def body(j, QR):
-        Q, R = QR
-        j, Q, R = fori_loop(0, m, body_inner, (j, Q, R))
-        return Q, R
-
-    Q, R = fori_loop(0, n, body, (Q, R))
-    R = jnp.where(jnp.abs(R) < 1e-10, 0, R)
-
-    return Q, R
-
-
-@jit
-def update_qr_jax_eco(A, w, q, r):
-    """Update QR factorization with a diagonal matrix w at the bottom."""
-    m, n = A.shape
-    Q = jnp.eye(m + n)
-    Q = Q.at[:m, :m].set(q)
-
-    R = jnp.vstack([r, w])
-
-    def body_inner(i, jQR):
-        j, Q, R = jQR
-        i = m + j - i
-        a, b = R[i - 1, j], R[i, j]
-        G2 = _givens_jax(a, b)
-        R = R.at[jnp.array([i - 1, i])].set(G2 @ R[jnp.array([i - 1, i])])
-        Q = Q.at[:, jnp.array([i - 1, i])].set(Q[:, jnp.array([i - 1, i])] @ G2.T)
-        return j, Q, R
-
-    def body(j, QR):
-        Q, R = QR
-        j, Q, R = fori_loop(0, m, body_inner, (j, Q, R))
-        return Q, R
-
-    Q, R = fori_loop(0, n, body, (Q, R))
-    R = jnp.where(jnp.abs(R) < 1e-10, 0, R)
-
-    Re = R.at[: R.shape[1], : R.shape[1]].get()
-    Qe = Q.at[:, : R.shape[1]].get()
-
-    return Qe, Re

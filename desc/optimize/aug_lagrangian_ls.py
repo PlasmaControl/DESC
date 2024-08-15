@@ -371,18 +371,13 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             B_h = jnp.dot(J_a.T, J_a)
         elif tr_method == "qr":
             # try full newton step
-            tall = J_a.shape[0] >= J_a.shape[1]
+            tall = J.shape[0] >= J.shape[1]
             if tall:
-                Q, R = qr(J_a)
-                p_newton = solve_triangular_regularized(
-                    R[: R.shape[1], : R.shape[1]], -Q[:, : R.shape[1]].T @ L_a
-                )
+                Q, R = qr(J, mode="economic")
+                p_newton = solve_triangular_regularized(R, -Q.T @ f)
             else:
-                Q, R = qr(J_a.T)
-                p_newton = Q[:, : R.shape[1]] @ solve_triangular_regularized(
-                    R[: R.shape[1], : R.shape[1]].T, L_a, lower=True
-                )
-                Q, R = qr(J_a)
+                Q, R = qr(J.T, mode="economic")
+                p_newton = Q @ solve_triangular_regularized(R.T, -f, lower=True)
 
         actual_reduction = -1
         Lactual_reduction = -1
@@ -405,7 +400,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
-                    Q, R, p_newton, L_a, J_a, trust_radius, alpha
+                    p_newton, L_a, J_a, trust_radius, alpha
                 )
 
             step = d * step_h  # Trust-region solution in the original space.

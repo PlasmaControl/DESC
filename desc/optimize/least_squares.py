@@ -271,12 +271,12 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             B_h = jnp.dot(J_a.T, J_a)
         elif tr_method == "qr":
             # try full newton step
-            tall = J.shape[0] >= J.shape[1]
+            tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
-                Q, R = qr(J, mode="economic")
+                Q, R = qr(J_a, mode="economic")
                 p_newton = solve_triangular_regularized(R, -Q.T @ f)
             else:
-                Q, R = qr(J.T, mode="economic")
+                Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -f, lower=True)
 
         actual_reduction = -1

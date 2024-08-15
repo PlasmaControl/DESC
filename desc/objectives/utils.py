@@ -166,7 +166,7 @@ def factorize_linear_constraints(  # noqa: C901
         ValueError,
         "x_scale must be the same size as the full state vector.",
     )
-    D = np.where(np.abs(x_scale) < 1e1, 1, np.abs(x_scale))
+    D = np.where(np.abs(x_scale) < 2e1, 1, np.abs(x_scale))
 
     # null space & particular solution
     A = A * D[None, unfixed_idx]

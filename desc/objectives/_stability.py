@@ -496,6 +496,8 @@ class BallooningStability(_Objective):
             "len_transforms": len_transforms,
             "len_profiles": len_profiles,
             "fieldline_nodes": fieldline_nodes,
+            "N_alpha": len(self.alpha),
+            "N_zeta": self.nzeta,
             "quad_weights": 1.0,
         }
         super().build(use_jit=use_jit, verbose=verbose)
@@ -547,15 +549,36 @@ class BallooningStability(_Objective):
         theta_PEST = alpha + iota * zeta
         nodes = jnp.array([rho, theta_PEST, zeta]).T
 
+        N_alpha = constants["N_alpha"]
+        N_zeta = constants["N_zeta"]
+
         # Rootfinding theta for a given theta_PEST
         desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
 
-        sfl_grid = Grid(desc_coords, sort=False, jitable=True)
+        import pdb
 
-        transforms = get_transforms(
-            self._data_keys, obj=eq, grid=sfl_grid, jitable=True
-        )
-        profiles = get_profiles(self._data_keys, obj=eq, grid=sfl_grid)
+        pdb.set_trace()
+
+        sfl_grid_list = [
+            Grid(
+                desc_coords[i * N_zeta : (i + 1) * N_zeta, :], sort=False, jitable=True
+            )
+            for i in range(N_alpha)
+        ]
+        transforms_list = [
+            get_transforms(self._data_keys, obj=eq, grid=sfl_grid, jitable=True)
+            for sfl_grid in sfl_grid_list
+        ]
+        profiles_list = [
+            get_profiles(self._data_keys, obj=eq, grid=sfl_grid)
+            for sfl_grid in sfl_grid_list
+        ]
+
+        # --no-verify sfl_grid = Grid(desc_coords[:N], sort=False, jitable=True)
+        # --no-verify transforms = get_transforms(
+        # --no-verify     self._data_keys, obj=eq, grid=sfl_grid, jitable=True
+        # --no-verify )
+        # --no-verify profiles = get_profiles(self._data_keys, obj=eq, grid=sfl_grid)
 
         # we prime the data dict with the correct iota values so we don't recompute them
         # using the wrong grid
@@ -566,14 +589,26 @@ class BallooningStability(_Objective):
             "a": len_data["a"],
         }
 
+        ## now compute ballooning stuff
+        # --no-verify data = compute_fun(
+        # --no-verify     "desc.equilibrium.equilibrium.Equilibrium",
+        # --no-verify     self._data_keys,
+        # --no-verify     params=params,
+        # --no-verify     transforms=transforms,
+        # --no-verify     profiles=profiles,
+        # --no-verify     data=data,
+        # --no-verify )
+
         # now compute ballooning stuff
-        data = compute_fun(
+        vectorized_compute = jnp.vectorize(
+            compute_fun, signature="(),(),(),(),(),()->()"
+        )
+        data = vectorized_compute(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=transforms,
-            profiles=profiles,
+            transforms=transforms_list,
+            profiles=profiles_list,
             data=data,
         )
-
         return data["ideal_ball_gamma2"]

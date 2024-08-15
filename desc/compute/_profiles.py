@@ -83,10 +83,10 @@ def _psi_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["rho"],
+    data=["1"],
 )
 def _psi_rr(params, transforms, profiles, data, **kwargs):
-    data["psi_rr"] = params["Psi"] * jnp.ones_like(data["rho"]) / jnp.pi
+    data["psi_rr"] = data["1"] * params["Psi"] / jnp.pi
     return data
 
 

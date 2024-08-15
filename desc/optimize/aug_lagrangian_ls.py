@@ -374,10 +374,10 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
                 Q, R = qr(J_a, mode="economic")
-                p_newton = solve_triangular_regularized(R, -Q.T @ f)
+                p_newton = solve_triangular_regularized(R, -Q.T @ L_a)
             else:
                 Q, R = qr(J_a.T, mode="economic")
-                p_newton = Q @ solve_triangular_regularized(R.T, -f, lower=True)
+                p_newton = Q @ solve_triangular_regularized(R.T, -L_a, lower=True)
 
         actual_reduction = -1
         Lactual_reduction = -1

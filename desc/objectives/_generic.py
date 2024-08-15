@@ -363,7 +363,7 @@ class ObjectiveFromUser(_Objective):
     """
 
     _units = "(Unknown)"
-    _print_value_fmt = "Custom objective value: {:10.3e}"
+    _print_value_fmt = "Custom objective value: {:10.3e} "
 
     def __init__(
         self,

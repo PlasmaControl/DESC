@@ -1419,7 +1419,7 @@ def test_profile_objective_print(capsys):
             # print the initial value too. For this test, it is the
             # same as the final value
             obj.print_value(obj.xs(eq), obj.xs(eq))
-            print_fmt = obj._print_value_fmt + "  -->  {:10.3e}"
+            print_fmt = obj._print_value_fmt + "  -->  {:10.3e} "
         else:
             obj.print_value(obj.xs(eq))
             print_fmt = obj._print_value_fmt
@@ -1493,12 +1493,12 @@ def test_plasma_vessel_distance_print(capsys):
         if print_init:
             if isinstance(obj, ObjectiveFunction):
                 obj.print_value(obj.x(eq, surface), obj.x(eq, surface))
-                print_fmt = obj.objectives[0]._print_value_fmt + "  -->  {:10.3e}"
+                print_fmt = obj.objectives[0]._print_value_fmt + "  -->  {:10.3e} "
                 unit = obj.objectives[0]._units
                 norm = obj.objectives[0].normalization
             else:
                 obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
-                print_fmt = obj._print_value_fmt + "  -->  {:10.3e}"
+                print_fmt = obj._print_value_fmt + "  -->  {:10.3e} "
                 unit = obj._units
                 norm = obj.normalization
         else:

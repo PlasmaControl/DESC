@@ -1096,7 +1096,7 @@ class _Objective(IOAble, ABC):
         if args0 is not None:
             f = self.compute_unscaled(*args, **kwargs)
             f0 = self.compute_unscaled(*args0, **kwargs)
-            print_value_fmt = self._print_value_fmt + "  -->  {:10.3e}"
+            print_value_fmt = self._print_value_fmt + "  -->  {:10.3e} "
         else:
             f = self.compute_unscaled(*args, **kwargs)
             f0 = f

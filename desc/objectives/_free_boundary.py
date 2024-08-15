@@ -266,25 +266,25 @@ class VacuumBoundaryError(_Objective):
 
         abserr = jnp.all(self.target == 0)
 
-        def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit):
+        def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units):
 
             print(
                 "Maximum "
                 + ("absolute " if abserr else "")
                 + fmt.format(f0max, fmax)
-                + unit
+                + units
             )
             print(
                 "Minimum "
                 + ("absolute " if abserr else "")
                 + fmt.format(f0min, fmin)
-                + unit
+                + units
             )
             print(
                 "Average "
                 + ("absolute " if abserr else "")
                 + fmt.format(f0mean, fmean)
-                + unit
+                + units
             )
 
             if self._normalize and units != "(dimensionless)":
@@ -314,7 +314,7 @@ class VacuumBoundaryError(_Objective):
         units = ["(T*m^2)", "(T^2*m^2)"]
         nn = f.size // 2
         norms = [self.normalization[0], self.normalization[nn]]
-        for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
+        for i, (fmt, norm, units) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
@@ -330,7 +330,7 @@ class VacuumBoundaryError(_Objective):
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
             fmt = fmt + "  -->  {:10.3e} " if args0 is not None else fmt
-            _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
+            _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units)
 
 
 class BoundaryError(_Objective):

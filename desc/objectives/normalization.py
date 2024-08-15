@@ -38,19 +38,17 @@ def compute_scaling_factors(thing):
 
         scales["R0"] = R00
         scales["a"] = np.sqrt(np.abs(R10 * Z10))
+        scales["Psi"] = abs(thing.Psi)
+        scales["n"] = 1e19
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
-        scales["B_T"] = abs(thing.Psi) / scales["A"]
-        scales["B_P"] = scales["B_T"]
-        scales["B"] = np.sqrt(scales["B_T"] ** 2 + scales["B_P"] ** 2)
-        scales["I"] = scales["B_P"] * 2 * np.pi / mu_0
+        scales["B"] = scales["Psi"] / scales["A"]
+        scales["I"] = scales["B"] * 2 * np.pi / mu_0
         scales["p"] = scales["B"] ** 2 / (2 * mu_0)
         scales["W"] = scales["p"] * scales["V"]
         scales["J"] = scales["B"] / scales["a"] / mu_0
         scales["F"] = scales["p"] / scales["a"]
         scales["f"] = scales["F"] * scales["V"]
-        scales["Psi"] = abs(thing.Psi)
-        scales["n"] = 1e19
         scales["T"] = scales["p"] / (scales["n"] * elementary_charge)
 
     elif isinstance(thing, FourierRZToroidalSurface):

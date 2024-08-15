@@ -42,7 +42,7 @@ def compute_scaling_factors(thing):
         scales["n"] = 1e19
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
-        scales["B"] = scales["Psi"] / scales["A"]
+        scales["B"] = scales["Psi"] / scales["A"] * np.sqrt(2)
         scales["I"] = scales["B"] * 2 * np.pi / mu_0
         scales["p"] = scales["B"] ** 2 / (2 * mu_0)
         scales["W"] = scales["p"] * scales["V"]

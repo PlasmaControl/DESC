@@ -9,7 +9,9 @@ from desc.backend import cond, jit, jnp, logsumexp, put
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
-def factorize_linear_constraints(objective, constraint):  # noqa: C901
+def factorize_linear_constraints(  # noqa: C901
+    objective, constraint, things=None, x_scale="auto"
+):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -22,6 +24,13 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
+    things : Optimizable or tuple/list of Optimizable
+        Things to optimize. Defaults to ``objective.things``.
+        Only used if ``x_scale='auto'``.
+    x_scale : array_like or ``'auto'``, optional
+        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+        to reformulating the problem in scaled variables ``xs = x / x_scale``.
+        If set to ``'auto'``, the scale is determined from the initial state vector.
 
     Returns
     -------
@@ -136,16 +145,16 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     unfixed_idx = indices_idx
     fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
 
-    # unscaled particular solution to get scale of x
-    if A.size:
-        A_inv, Z = svd_inv_null(A)
-    else:
-        A_inv = A.T
-        Z = np.eye(A.shape[1])
-    xp = put(xp, unfixed_idx, A_inv @ b)
-    D = np.where(np.abs(xp) < 1, 1, np.abs(xp))  # TODO: adjust threshold?
+    # get x_scale if not provided
+    if x_scale == "auto":
+        if things is None:
+            things = objective.things
+        elif not isinstance(things, list):
+            things = [things]
+        x_scale = objective.x(*[things[things.index(t)] for t in objective.things])
+    D = np.where(np.abs(x_scale) < 1e1, 1, np.abs(x_scale))  # TODO: adjust threshold?
 
-    # scaled system
+    # null space & particular solution
     A = A * D[None, unfixed_idx]
     if A.size:
         A_inv, Z = svd_inv_null(A)

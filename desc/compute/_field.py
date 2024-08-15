@@ -2276,12 +2276,12 @@ def _B_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["|B|", "sqrt(g)"],
 )
-def _B0(params, transforms, profiles, data, **kwargs):
-    # indices of the innermost flux surface
-    idx = jnp.where(transforms["grid"].inverse_rho_idx == 0)[0]
+def _B_mag_axis(params, transforms, profiles, data, **kwargs):
+    # mask of indices of the innermost flux surface
+    mask = transforms["grid"].inverse_rho_idx == 0
     data["<|B|>_axis"] = jnp.sum(
-        data["|B|"][idx] * data["sqrt(g)"][idx] * transforms["grid"].weights[idx]
-    ) / jnp.sum(data["sqrt(g)"][idx] * transforms["grid"].weights[idx])
+        mask * data["|B|"] * data["sqrt(g)"] * transforms["grid"].weights
+    ) / jnp.sum(mask * data["sqrt(g)"] * transforms["grid"].weights)
     return data
 
 

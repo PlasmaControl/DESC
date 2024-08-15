@@ -429,22 +429,21 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="theta_B",
-    label="(\\theta_{B},\\zeta_{B})",
+    label="\\theta_{B}",
     units="rad",
     units_long="radians",
-    description="Boozer angular coordinates",
+    description="Boozer poloidal angle",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["alpha", "h"],
-    aliases=["zeta_B"],
     parameterization="desc.magnetic_fields._core.OmnigenousField",
     helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
     iota="float: Value of rotational transform on the Omnigenous surface. Default 1.0",
 )
-def _omni_map(params, transforms, profiles, data, **kwargs):
+def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
     iota = kwargs.get("iota", 1)
 
@@ -474,6 +473,24 @@ def _omni_map(params, transforms, profiles, data, **kwargs):
     data["theta_B"] = booz[0, :]
     data["zeta_B"] = booz[1, :]
     return data
+
+
+@register_compute_fun(
+    name="zeta_B",
+    label="\\zeta_{B}",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_B"],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
+)
+def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

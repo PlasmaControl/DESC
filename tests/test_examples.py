@@ -1700,7 +1700,7 @@ def test_signed_PlasmaVesselDistance():
     eq = Equilibrium(M=1, N=1)
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
-    grid = LinearGrid(M=10, N=4, NFP=eq.NFP)
+    grid = LinearGrid(M=20, N=8, NFP=eq.NFP)
 
     obj = PlasmaVesselDistance(
         surface=surf,
@@ -1710,7 +1710,7 @@ def test_signed_PlasmaVesselDistance():
         plasma_grid=grid,
         use_signed_distance=True,
     )
-    objective = ObjectiveFunction((obj,))
+    objective = ObjectiveFunction(obj)
 
     optimizer = Optimizer("lsq-exact")
     (eq, surf), _ = optimizer.optimize(

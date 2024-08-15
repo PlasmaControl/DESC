@@ -127,7 +127,7 @@ class HeatingPower(_Objective):
                 NFP=eq.NFP,
             )
         self._dim_f = 1
-        self._data_keys = ["W_p", "a", "R0", "<ne>_rho", "B0", "iota_23"]
+        self._data_keys = ["W_p", "a", "R0", "<ne>_rho", "<|B|>_axis", "iota_23"]
 
         timer = Timer()
         if verbose > 0:
@@ -184,7 +184,7 @@ class HeatingPower(_Objective):
                 * data["a"] ** 2.28  # m
                 * data["R0"] ** 0.64  # m
                 * (data["<ne>_rho"] / 1e19) ** 0.54  # 1e19/m^3
-                * data["B0"] ** 0.84  # T
+                * data["<|B|>_axis"] ** 0.84  # T
                 * data["iota_23"] ** 0.41
                 * constants["f_ren"]
                 * constants["H_ISS04"]

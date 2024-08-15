@@ -7,14 +7,14 @@ import numpy as np
 import pytest
 from jax import grad
 from matplotlib import pyplot as plt
-from orthax.chebyshev import chebgauss, chebweight
-from orthax.legendre import leggauss
+from numpy.polynomial.chebyshev import chebgauss, chebweight
+from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1, roots_chebyu
 from tests.test_plotting import tol_1d
 
-from desc.backend import flatnonzero, jnp
+from desc.backend import jnp
 from desc.compute._quad_utils import (
     automorphism_arcsin,
     automorphism_sin,
@@ -33,52 +33,18 @@ from desc.compute.bounce_integral import (
     _get_extrema,
     _interp_to_argmin_B_hard,
     _interp_to_argmin_B_soft,
-    _poly_der,
-    _poly_val,
     bounce_integral,
     bounce_points,
     get_pitch,
     plot_field_line,
     required_names,
 )
-from desc.compute.utils import dot, take_mask
+from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.utils import only1
-
-
-@partial(np.vectorize, signature="(m)->()")
-def _last_value(a):
-    """Return the last non-nan value in ``a``."""
-    a = a[::-1]
-    idx = np.squeeze(flatnonzero(~np.isnan(a), size=1, fill_value=0))
-    return a[idx]
-
-
-@pytest.mark.unit
-def test_mask_operations():
-    """Test custom masked array operation."""
-    rows = 5
-    cols = 7
-    a = np.random.rand(rows, cols)
-    nan_idx = np.random.choice(rows * cols, size=(rows * cols) // 2, replace=False)
-    a.ravel()[nan_idx] = np.nan
-    taken = take_mask(a, ~np.isnan(a))
-    last = _last_value(taken)
-    for i in range(rows):
-        desired = a[i, ~np.isnan(a[i])]
-        assert np.array_equal(
-            taken[i],
-            np.pad(desired, (0, cols - desired.size), constant_values=np.nan),
-            equal_nan=True,
-        )
-        assert np.array_equal(
-            last[i],
-            desired[-1] if desired.size else np.nan,
-            equal_nan=True,
-        )
 
 
 @pytest.mark.unit
@@ -115,53 +81,6 @@ def test_reshape_convention():
     assert 'meshgrid(a, b, c, indexing="ij")' in inspect.getsource(
         Grid.create_meshgrid
     ), err_msg
-
-
-@pytest.mark.unit
-def test_poly_der():
-    """Test vectorized computation of polynomial derivative."""
-    quintic = 6
-    c = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(c.shape).size == c.ndim
-    derivative = _poly_der(c)
-    for j in range(c.shape[1]):
-        for k in range(c.shape[2]):
-            np.testing.assert_allclose(
-                actual=derivative[:, j, k], desired=np.polyder(c[:, j, k])
-            )
-
-
-@pytest.mark.unit
-def test_poly_val():
-    """Test vectorized computation of polynomial evaluation."""
-
-    def test(x, c):
-        val = _poly_val(x=x, c=c)
-        if val.ndim != max(x.ndim, c.ndim - 1):
-            raise ValueError(f"Incompatible shapes {x.shape} and {c.shape}.")
-        for index in np.ndindex(c.shape[1:]):
-            idx = (..., *index)
-            np.testing.assert_allclose(
-                actual=val[idx],
-                desired=np.poly1d(c[idx])(x[idx]),
-                err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
-            )
-
-    quartic = 5
-    c = np.arange(-60, 60).reshape(quartic, 3, -1) * np.pi
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(c.shape).size == c.ndim
-    x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
-    test(x, c)
-
-    x = np.stack([x, x * 2], axis=0)
-    x = np.stack([x, x * 2, x * 3, x * 4], axis=0)
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(x.shape).size == x.ndim
-    assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
-    assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
-    test(x, c)
 
 
 @pytest.mark.unit

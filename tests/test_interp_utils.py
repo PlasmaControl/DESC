@@ -23,6 +23,8 @@ from desc.compute._interp_utils import (
     interp_rfft,
     interp_rfft2,
     poly_root,
+    polyder_vec,
+    polyval_vec,
 )
 from desc.compute._quad_utils import bijection_to_disc
 from desc.compute.bounce_integral import _filter_not_nan
@@ -74,6 +76,47 @@ def test_poly_root():
     unique_root = np.unique(np.roots(c))
     assert root.size == unique_root.size
     np.testing.assert_allclose(root, unique_root)
+
+
+@pytest.mark.unit
+def test_polyder_vec():
+    """Test vectorized computation of polynomial derivative."""
+    quintic = 6
+    c = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
+    # make sure broadcasting won't hide error in implementation
+    assert np.unique(c.shape).size == c.ndim
+    derivative = polyder_vec(c)
+    desired = np.vectorize(np.polyder, signature="(m)->(n)")(c.T).T
+    np.testing.assert_allclose(derivative, desired)
+
+
+@pytest.mark.unit
+def test_polyval_vec():
+    """Test vectorized computation of polynomial evaluation."""
+
+    def test(x, c):
+        val = polyval_vec(x=x, c=c)
+        np.testing.assert_allclose(
+            val,
+            np.vectorize(np.polyval, signature="(m),(n)->(n)")(
+                np.moveaxis(c, 0, -1), x[..., np.newaxis]
+            ).squeeze(axis=-1),
+        )
+
+    quartic = 5
+    c = np.arange(-60, 60).reshape(quartic, 3, -1) * np.pi
+    # make sure broadcasting won't hide error in implementation
+    assert np.unique(c.shape).size == c.ndim
+    x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
+    test(x, c)
+
+    x = np.stack([x, x * 2], axis=0)
+    x = np.stack([x, x * 2, x * 3, x * 4], axis=0)
+    # make sure broadcasting won't hide error in implementation
+    assert np.unique(x.shape).size == x.ndim
+    assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
+    assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
+    test(x, c)
 
 
 class TestFastInterp:

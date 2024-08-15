@@ -3,6 +3,7 @@
 from functools import partial
 
 from orthax.chebyshev import chebvander
+from orthax.polynomial import polyvander
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.compute._quad_utils import bijection_from_disc
@@ -516,9 +517,77 @@ def poly_root(
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
         r = jnp.where(
-            (jnp.abs(r.imag) <= eps) & (a_min <= r) & (r <= a_max), r.real, sentinel
+            # Order operations default to real part on complex numbers.
+            (jnp.abs(r.imag) <= eps) & (a_min <= r) & (r <= a_max),
+            r.real,
+            sentinel,
         )
 
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
     return _filter_distinct(r, sentinel, eps) if distinct else r
+
+
+def polyder_vec(c):
+    """Coefficients for the derivatives of the given set of polynomials.
+
+    Parameters
+    ----------
+    c : jnp.ndarray
+        First axis should store coefficients of a polynomial. For a polynomial given by
+        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
+        ``c[n-i]``.
+
+    Returns
+    -------
+    poly : jnp.ndarray
+        Coefficients of polynomial derivative, ignoring the arbitrary constant. That is,
+        ``poly[i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁻¹,  where n is
+        ``c.shape[0]-1``.
+
+    """
+    poly = (c[:-1].T * jnp.arange(c.shape[0] - 1, 0, -1)).T
+    return poly
+
+
+def polyval_vec(x, c):
+    """Evaluate the set of polynomials ``c`` at the points ``x``.
+
+    Note this function is not the same as ``np.polynomial.polynomial.polyval(x,c)``.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Real coordinates at which to evaluate the set of polynomials.
+    c : jnp.ndarray
+        First axis should store coefficients of a polynomial. For a polynomial given by
+        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
+        ``c[n-i]``.
+
+    Returns
+    -------
+    val : jnp.ndarray
+        Polynomial with given coefficients evaluated at given points.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        val = _poly_val(x, c)
+        if val.ndim != max(x.ndim, c.ndim - 1):
+            raise ValueError(f"Incompatible shapes {x.shape} and {c.shape}.")
+        for index in np.ndindex(c.shape[1:]):
+            idx = (..., *index)
+            np.testing.assert_allclose(
+                actual=val[idx],
+                desired=np.poly1d(c[idx])(x[idx]),
+                err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
+            )
+
+    """
+    # Better than Horner's method as we expect to evaluate low order polynomials.
+    # No need to use fast multipoint evaluation techniques for the same reason.
+    val = jnp.linalg.vecdot(
+        polyvander(x, c.shape[0] - 1), jnp.moveaxis(jnp.flipud(c), 0, -1)
+    )
+    return val

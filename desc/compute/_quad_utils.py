@@ -2,7 +2,7 @@
 
 from orthax.legendre import legder, legval
 
-from desc.backend import eigh_tridiagonal, jnp
+from desc.backend import eigh_tridiagonal, jnp, put
 from desc.utils import errorif
 
 
@@ -166,7 +166,7 @@ def leggausslob(deg):
         jnp.sqrt((n**2 - 1) / (4 * n**2 - 1)),
         eigvals_only=True,
     )
-    c0 = jnp.zeros(deg).at[-1].set(1)
+    c0 = put(jnp.zeros(deg), -1, 1)
 
     # improve (single multiplicity) roots by one application of Newton
     c = legder(c0)

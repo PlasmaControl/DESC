@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
 
 from desc.backend import flatnonzero, imap, jnp, put
-from desc.compute._interp_utils import poly_root
+from desc.compute._interp_utils import poly_root, polyder_vec, polyval_vec
 from desc.compute._quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -34,69 +34,6 @@ def _filter_nonzero_measure(bp1, bp2):
     """Return only bounce points such that |bp2 - bp1| > 0."""
     mask = (bp2 - bp1) != 0
     return bp1[mask], bp2[mask]
-
-
-def _poly_der(c):
-    """Coefficients for the derivatives of the given set of polynomials.
-
-    Parameters
-    ----------
-    c : jnp.ndarray
-        First axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
-        ``c[n-i]``.
-
-    Returns
-    -------
-    poly : jnp.ndarray
-        Coefficients of polynomial derivative, ignoring the arbitrary constant. That is,
-        ``poly[i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁻¹,  where n is
-        ``c.shape[0]-1``.
-
-    """
-    poly = (c[:-1].T * jnp.arange(c.shape[0] - 1, 0, -1)).T
-    return poly
-
-
-def _poly_val(x, c):
-    """Evaluate the set of polynomials ``c`` at the points ``x``.
-
-    Note this function is not the same as ``np.polynomial.polynomial.polyval(x,c)``.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Coordinates at which to evaluate the set of polynomials.
-    c : jnp.ndarray
-        First axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
-        ``c[n-i]``.
-
-    Returns
-    -------
-    val : jnp.ndarray
-        Polynomial with given coefficients evaluated at given points.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        val = _poly_val(x, c)
-        if val.ndim != max(x.ndim, c.ndim - 1):
-            raise ValueError(f"Incompatible shapes {x.shape} and {c.shape}.")
-        for index in np.ndindex(c.shape[1:]):
-            idx = (..., *index)
-            np.testing.assert_allclose(
-                actual=val[idx],
-                desired=np.poly1d(c[idx])(x[idx]),
-                err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
-            )
-
-    """
-    # Better than Horner's method as we expect to evaluate low order polynomials.
-    X = x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1)
-    val = jnp.einsum("...i,i...", X, c)
-    return val
 
 
 def plot_field_line(
@@ -403,7 +340,7 @@ def bounce_points(
     assert intersect.shape == (P, S, N, degree)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
-    B_z_ra = _poly_val(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
+    B_z_ra = polyval_vec(x=intersect, c=B_z_ra_c[..., jnp.newaxis]).reshape(P, S, -1)
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = intersect.reshape(P, S, -1) >= 0
     # Following discussion on page 3 and 5 of https://doi.org/10.1063/1.873749,
@@ -520,7 +457,7 @@ def _get_extrema(knots, B_c, B_z_ra_c, sentinel=jnp.nan):
         c=B_z_ra_c, a_min=jnp.array([0.0]), a_max=jnp.diff(knots), sentinel=sentinel
     )
     assert extrema.shape == (S, N, degree - 1)
-    B_extrema = _poly_val(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
+    B_extrema = polyval_vec(x=extrema, c=B_c[..., jnp.newaxis]).reshape(S, -1)
     # Transform out of local power basis expansion.
     extrema = (extrema + knots[:-1, jnp.newaxis]).reshape(S, -1)
     return extrema, B_extrema
@@ -927,7 +864,7 @@ def bounce_integral(
     # Compute local splines.
     B_c = CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=check).c
     B_c = jnp.moveaxis(B_c, source=1, destination=-1)
-    B_z_ra_c = _poly_der(B_c)
+    B_z_ra_c = polyder_vec(B_c)
     degree = 3
     assert B_c.shape[0] == degree + 1
     assert B_z_ra_c.shape[0] == degree

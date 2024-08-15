@@ -1491,45 +1491,70 @@ def test_plasma_vessel_distance_print(capsys):
 
     def test(obj, eq, surface, d, print_init=False):
         if print_init:
-            obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
-            print_fmt = obj._print_value_fmt + "  -->  {:10.3e}"
+            if isinstance(obj, ObjectiveFunction):
+                obj.print_value(obj.x(eq, surface), obj.x(eq, surface))
+                print_fmt = obj.objectives[0]._print_value_fmt + "  -->  {:10.3e}"
+                unit = obj.objectives[0]._units
+                norm = obj.objectives[0].normalization
+            else:
+                obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
+                print_fmt = obj._print_value_fmt + "  -->  {:10.3e}"
+                unit = obj._units
+                norm = obj.normalization
         else:
-            obj.print_value(obj.xs(eq, surface))
-            print_fmt = obj._print_value_fmt
+            if isinstance(obj, ObjectiveFunction):
+                obj.print_value(obj.x(eq, surface))
+                print_fmt = obj.objectives[0]._print_value_fmt
+                unit = obj.objectives[0]._units
+                norm = obj.objectives[0].normalization
+            else:
+                obj.print_value(obj.xs(eq, surface))
+                print_fmt = obj._print_value_fmt
+                unit = obj._units
+                norm = obj.normalization
         out = capsys.readouterr()
 
         corr_out = str(
             "Maximum "
             + print_fmt.format(np.max(d), np.max(d))
-            + obj._units
+            + unit
             + "\n"
             + "Minimum "
             + print_fmt.format(np.min(d), np.min(d))
-            + obj._units
+            + unit
             + "\n"
             + "Average "
             + print_fmt.format(np.mean(d), np.mean(d))
-            + obj._units
+            + unit
             + "\n"
             + "Maximum "
-            + print_fmt.format(
-                np.max(d / obj.normalization), np.max(d / obj.normalization)
-            )
+            + print_fmt.format(np.max(d / norm), np.max(d / norm))
             + "(normalized)"
             + "\n"
             + "Minimum "
-            + print_fmt.format(
-                np.min(d / obj.normalization), np.min(d / obj.normalization)
-            )
+            + print_fmt.format(np.min(d / norm), np.min(d / norm))
             + "(normalized)"
             + "\n"
             + "Average "
-            + print_fmt.format(
-                np.mean(d / obj.normalization), np.mean(d / obj.normalization)
-            )
+            + print_fmt.format(np.mean(d / norm), np.mean(d / norm))
             + "(normalized)"
             + "\n"
         )
+        if isinstance(obj, ObjectiveFunction):
+            f = obj.compute_scalar(obj.x(eq, surface))
+            if print_init:
+                corr_out = (
+                    str(
+                        "Total (sum of squares): {:10.3e}  -->  {:10.3e}, \n".format(
+                            f, f
+                        )
+                    )
+                    + corr_out
+                )
+            else:
+                corr_out = (
+                    str("Total (sum of squares): {:10.3e}, \n".format(f)) + corr_out
+                )
         assert out.out == corr_out
 
     R0 = 10.0
@@ -1549,6 +1574,16 @@ def test_plasma_vessel_distance_print(capsys):
     obj.build(verbose=0)
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
+    test(obj, eq, surface, d)
+    test(obj, eq, surface, d, print_init=True)
+
+    obj = ObjectiveFunction(
+        PlasmaVesselDistance(
+            eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+        )
+    )
+    obj.build(verbose=0)
+    d = obj.compute_unscaled(obj.x(eq, surface))
     test(obj, eq, surface, d)
     test(obj, eq, surface, d, print_init=True)
 

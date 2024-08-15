@@ -36,7 +36,7 @@ def _flatten_matrix(y):
 
 
 def _alpha_sequence(alpha_0, iota, num_period, period=2 * jnp.pi):
-    """Get sequence of poloidal coordinates (α₀, α₁, …, αₘ₋₁) of field line.
+    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
 
     Parameters
     ----------
@@ -52,15 +52,14 @@ def _alpha_sequence(alpha_0, iota, num_period, period=2 * jnp.pi):
 
     Returns
     -------
-    alpha : jnp.ndarray
-        Shape (iota.size, m).
-        Sequence of poloidal coordinates (α₀, α₁, …, αₘ₋₁) that specify field line.
+    alphas : jnp.ndarray
+        Shape (iota.size, num_period).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
 
     """
     # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    return (alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_period)) % (
-        2 * jnp.pi
-    )
+    alphas = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_period)
+    return alphas
 
 
 class FourierChebyshevBasis:
@@ -139,7 +138,9 @@ class FourierChebyshevBasis:
         """
         x = fourier_pts(M)
         y = cheb_pts(N, lobatto, domain)
-        coords = [kwargs.pop("rho"), x, y] if "rho" in kwargs else [x, y]
+        coords = (
+            [jnp.atleast_1d(kwargs.pop("rho")), x, y] if "rho" in kwargs else [x, y]
+        )
         coords = list(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
         coords = jnp.column_stack(coords)
         return coords
@@ -205,7 +206,10 @@ class FourierChebyshevBasis:
         # Always add new axis to broadcast against Chebyshev coefficients.
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
         cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2), axis=-1)
-        assert cheb.shape[-2:] == (x.shape[-1], self.N)
+        assert cheb.shape[-2:] == (
+            x.shape[-2],
+            self.N,
+        ), f"{cheb.shape}; {x.shape}; {self.N}"
         return _PiecewiseChebyshevBasis(cheb, self.domain)
 
 
@@ -283,8 +287,8 @@ class _PiecewiseChebyshevBasis:
 
         y = _filter_distinct(y, sentinel=-2, eps=eps)
         # Pick sentinel above such that only distinct roots are considered intersects.
-        is_intersect = (jnp.abs(jnp.imag(y)) <= eps) & (jnp.abs(jnp.real(y)) <= 1)
-        y = jnp.where(is_intersect, jnp.real(y), 0)  # ensure y is in domain of arcos
+        is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) <= 1)
+        y = jnp.where(is_intersect, y.real, 0)  # ensure y is in domain of arcos
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₁ᴺ⁻¹ aₙ(x) sin(n arcos y)
         s = jnp.linalg.vecdot(
@@ -638,10 +642,12 @@ def _bounce_quadrature(bp1, bp2, x, w, m, n, integrand, f, b_sup_z, B, T, pitch)
     b_sup_z : jnp.ndarray
         Shape (L, 1, m, n).
         Set of 2D Fourier spectral coefficients of B^ζ/|B|.
-    B : jnp.ndarray
+    B : _PiecewiseChebyshevBasis
         Set of 1D Chebyshev spectral coefficients of |B| along field line.
-    T : jnp.ndarray
+        {|B|_α : ζ |B|(α, ζ) | α ∈ A } .
+    T : _PiecewiseChebyshevBasis
         Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ θ(α, ζ) | α ∈ A }.
     pitch : jnp.ndarray
         Shape (P, L, 1).
         λ values to evaluate the bounce integral at each field line.
@@ -680,18 +686,20 @@ def _bounce_quadrature(bp1, bp2, x, w, m, n, integrand, f, b_sup_z, B, T, pitch)
     assert result.shape == (P, L, num_well)
 
 
+def required_names():
+    """Return names in ``data_index`` required to compute bounce integrals."""
+    return ["B^zeta", "|B|"]
+
+
 # TODO: Assumes zeta = phi
-# input is
-# that clebsch = FourierChebyshevBasis.nodes(M, N, rho=grid.compress(data["rho"]))
-# then get desc_from_clebsch = map_coordinates(clebsch)
 def bounce_integral(
     grid,
     data,
     M,
     N,
     desc_from_clebsch,
-    alpha_0,
-    num_transit,
+    alpha_0=0.0,
+    num_transit=50,
     quad=leggauss(21),
     automorphism=(automorphism_sin, grad_automorphism_sin),
     B_ref=1.0,
@@ -731,7 +739,7 @@ def bounce_integral(
     desc_from_clebsch : jnp.ndarray
         Shape (L * M * N, 3).
         DESC coordinate grid (ρ, θ, ζ) sourced from the Clebsch coordinate
-        tensor-product grid (ρ, α, ζ) returned by ``FourierChebyshevBasis.nodes(M, N)``.
+        tensor-product grid (ρ, α, ζ) returned by ``FourierChebyshevBasis.nodes(M,N)``.
     alpha_0 : float
         Starting field line poloidal label.
         TODO: Allow multiple starting labels for near-rational surfaces.
@@ -757,7 +765,14 @@ def bounce_integral(
     bounce_integrate : callable
         This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
         specified field line for every λ value in ``pitch``.
-
+    alphas : jnp.ndarray
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+    B : _PiecewiseChebyshevBasis
+        Set of 1D Chebyshev spectral coefficients of |B| along field line.
+        {|B|_α : ζ |B|(α, ζ) | α ∈ A } .
+    T : _PiecewiseChebyshevBasis
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ θ(α, ζ) | α ∈ A }.
     """
     # Resolution of periodic DESC coordinate tensor-product grid.
     L, m, n = grid.num_rho, grid.num_theta, grid.num_zeta
@@ -783,9 +798,9 @@ def bounce_integral(
         ).reshape(L, M, N),
     )
     # Peel off field lines.
-    alpha = _alpha_sequence(alpha_0, grid.compress(data["iota"]), num_transit)
-    T = T.compute_cheb(alpha)
-    B = B.compute_cheb(alpha)
+    alphas = _alpha_sequence(alpha_0, grid.compress(data["iota"]), num_transit)
+    T = T.compute_cheb(alphas)
+    B = B.compute_cheb(alphas)
     assert T.cheb.shape == B.cheb.shape == (L, num_transit, N)
 
     x, w = quad
@@ -849,7 +864,7 @@ def bounce_integral(
         # Compute bounce points.
         pitch = jnp.atleast_3d(pitch)
         P = pitch.shape[0]
-        assert pitch.shape[1:] == B.cheb.shape[:-1]
+        assert pitch.shape[1:] == B.cheb.shape[:-1], f"{pitch.shape}; {B.cheb.shape}"
         bp1, bp2 = B.bounce_points(*B.intersect(1 / pitch), num_well)
         num_well = bp1.shape[-1]
         assert bp1.shape == bp2.shape == (P, L, num_well)
@@ -859,4 +874,4 @@ def bounce_integral(
         )
         return result
 
-    return bounce_integrate
+    return bounce_integrate, (alphas, B, T)

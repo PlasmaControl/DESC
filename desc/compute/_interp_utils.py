@@ -66,15 +66,14 @@ def harmonic(a, M, axis=-1):
     is_even = (M % 2) == 0
     # cos(mx) coefficients
     an = 2.0 * (
-        jnp.real(a)
-        .at[Index.get(0, axis, a.ndim)]
+        a.real.at[Index.get(0, axis, a.ndim)]
         .divide(2.0)
         .at[Index.get(-1, axis, a.ndim)]
         .divide(1.0 + is_even)
     )
     # sin(mx) coefficients
     bn = -2.0 * take(
-        jnp.imag(a),
+        a.imag,
         jnp.arange(1, a.shape[axis] - is_even),
         axis,
         unique_indices=True,
@@ -178,7 +177,8 @@ def irfft_non_uniform(xq, a, n, axis=-1):
     a = jnp.swapaxes(a[..., jnp.newaxis], axis % a.ndim, -1)
     m = jnp.fft.rfftfreq(n, d=1 / n)
     basis = jnp.exp(-1j * m * xq[..., jnp.newaxis])
-    fq = jnp.real(jnp.linalg.vecdot(basis, a))
+    fq = jnp.linalg.vecdot(basis, a).real
+    # TODO: Test JAX does this optimization automatically.
     # ℜ〈 basis, a 〉= cos(m xq)⋅ℜ(a) − sin(m xq)⋅ℑ(a)
     return fq
 
@@ -260,17 +260,20 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
         )
     ).reshape(*xq.shape[:-1], m.size * n.size)
 
-    fq = jnp.real(jnp.linalg.vecdot(basis, a))
+    fq = jnp.linalg.vecdot(basis, a).real
     return fq
 
 
 def cheb_from_dct(a, axis=-1):
-    """Get Chebyshev coefficients from DCT.
+    """Get Discrete Chebyshev Transform from Discrete Cosine Transform.
 
     Parameters
     ----------
     a : jnp.ndarray
-        DCT coefficients ``a=dct(f,type=2,axis=axis,norm="forward")``.
+        Discrete Cosine Transform coefficients, e.g.
+        ``a=dct(f,type=2,axis=axis,norm="forward")``.
+        The discrete cosine transformation used by scipy is defined here.
+        docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html#scipy.fft.dct
     axis : int
         Axis along which to transform.
 
@@ -280,14 +283,12 @@ def cheb_from_dct(a, axis=-1):
         Chebyshev coefficients along ``axis``.
 
     """
-    # See link below for DCT definition.
-    # docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html#scipy.fft.dct
     cheb = a.copy().at[Index.get(0, axis, a.ndim)].divide(2.0)
     return cheb
 
 
 def interp_dct(xq, f, lobatto=False, axis=-1):
-    """Interpolate ``f`` to ``xq`` with DCT.
+    """Interpolate ``f`` to ``xq`` with Discrete Chebyshev Transform.
 
     Parameters
     ----------
@@ -317,7 +318,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
 
 
 def idct_non_uniform(xq, a, n, axis=-1):
-    """Evaluate DCT coefficients ``a`` at ``xq`` ∈ [-1, 1].
+    """Evaluate Discrete Cosine Transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
 
     Parameters
     ----------
@@ -325,7 +326,10 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Real query points where interpolation is desired.
         Shape of ``xq`` must broadcast with ``a`` except along ``axis``.
     a : jnp.ndarray
-        DCT coefficients.
+        Discrete Cosine Transform coefficients, e.g.
+        ``a=dct(f,type=2,axis=axis,norm="forward")``.
+        The discrete cosine transformation used by scipy is defined here.
+        docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html#scipy.fft.dct
     n : int
         Spectral resolution of ``a``.
     axis : int
@@ -512,9 +516,7 @@ def poly_root(
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
         r = jnp.where(
-            (jnp.abs(jnp.imag(r)) <= eps) & (a_min <= r) & (r <= a_max),
-            jnp.real(r),
-            sentinel,
+            (jnp.abs(r.imag) <= eps) & (a_min <= r) & (r <= a_max), r.real, sentinel
         )
 
     if sort or distinct:

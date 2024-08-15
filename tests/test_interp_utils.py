@@ -13,9 +13,7 @@ from numpy.polynomial.chebyshev import (
 from scipy.fft import dct as sdct
 from scipy.fft import idct as sidct
 
-from desc.backend import dct as jdct
-from desc.backend import idct as jidct
-from desc.backend import jnp, rfft
+from desc.backend import dct, idct, jnp, rfft
 from desc.compute._interp_utils import (
     cheb_from_dct,
     cheb_pts,
@@ -28,7 +26,6 @@ from desc.compute._interp_utils import (
 )
 from desc.compute._quad_utils import bijection_to_disc
 from desc.compute.bounce_integral import _filter_not_nan
-from desc.compute.fourier_bounce_integral import FourierChebyshevBasis
 
 
 @pytest.mark.unit
@@ -79,8 +76,8 @@ def test_poly_root():
     np.testing.assert_allclose(root, unique_root)
 
 
-class TestInterp:
-    """Test RFFT and DCT interpolation."""
+class TestFastInterp:
+    """Test fast interpolation."""
 
     @pytest.mark.unit
     @pytest.mark.parametrize("N", [2, 6, 7])
@@ -94,11 +91,9 @@ class TestInterp:
         )
 
     @pytest.mark.unit
-    def test_rfftfreq(self):
-        """Test rfft frequency."""
-        M = 8
-        np.testing.assert_allclose(np.fft.rfftfreq(M, d=1 / M), np.arange(M // 2 + 1))
-        M = 9
+    @pytest.mark.parametrize("M", [1, 8, 9])
+    def test_rfftfreq(self, M):
+        """Make sure numpy uses Nyquist interpolant frequencies."""
         np.testing.assert_allclose(np.fft.rfftfreq(M, d=1 / M), np.arange(M // 2 + 1))
 
     @staticmethod
@@ -186,6 +181,14 @@ class TestInterp:
         # recover Chebyshev interpolation, avoiding Gibbs and Runge.
         return x
 
+    @staticmethod
+    def _f_non_periodic(z):
+        return np.sin(np.sqrt(2) * z) * np.cos(1 / (2 + z)) * np.cos(z**2) * z
+
+    @staticmethod
+    def _f_algebraic(z):
+        return z**3 - 10 * z**6 - z - np.e + z**4
+
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "f, M, lobatto",
@@ -232,7 +235,7 @@ class TestInterp:
             # JAX has yet to implement type 1 DCT.
             fq_2 = norm * sidct(sdct(f(m), type=dct_type), n=n.size, type=dct_type)
         else:
-            fq_2 = norm * jidct(jdct(f(m), type=dct_type), n=n.size, type=dct_type)
+            fq_2 = norm * idct(dct(f(m), type=dct_type), n=n.size, type=dct_type)
         np.testing.assert_allclose(fq_1, f(n), atol=1e-14)
         # JAX is much less accurate than scipy.
         np.testing.assert_allclose(fq_2, f(n), atol=1e-6)
@@ -243,14 +246,6 @@ class TestInterp:
         ax.plot(n, fq_2)
         return fig
 
-    @staticmethod
-    def _f_non_periodic(z):
-        return np.sin(np.sqrt(2) * z) * np.cos(1 / (2 + z)) * np.cos(z**2) * z
-
-    @staticmethod
-    def _f_algebraic(z):
-        return z**3 - 10 * z**6 - z - np.e + z**4
-
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "f, M",
@@ -259,14 +254,14 @@ class TestInterp:
     def test_interp_dct(self, f, M):
         """Test non-uniform DCT interpolation."""
         c0 = chebinterpolate(f, M - 1)
-        assert not np.allclose(c0, cheb_from_dct(jdct(f(chebpts1(M)), 2) / M)), (
+        assert not np.allclose(c0, cheb_from_dct(dct(f(chebpts1(M)), 2) / M)), (
             "Interpolation should fail because cosine basis is in different domain. "
             "Use better test function."
         )
         # test interpolation
         z = cheb_pts(M)
         fz = f(z)
-        np.testing.assert_allclose(c0, cheb_from_dct(jdct(fz, 2) / M), atol=1e-13)
+        np.testing.assert_allclose(c0, cheb_from_dct(dct(fz, 2) / M), atol=1e-13)
         if np.allclose(self._f_algebraic(z), fz):
             np.testing.assert_allclose(
                 cheb2poly(c0), np.array([-np.e, -1, 0, 1, 1, 0, -10]), atol=1e-13
@@ -276,21 +271,3 @@ class TestInterp:
         xq = bijection_to_disc(xq, 0, xq.size)
         fq = chebval(xq, c0, tensor=False)
         np.testing.assert_allclose(fq, interp_dct(xq, fz), atol=1e-13)
-
-
-# todo:
-@pytest.mark.unit
-def test_fcb_interp():
-    """Test interpolation for this basis function."""
-    M, N = 1, 5
-    xy0 = FourierChebyshevBasis.nodes(M, N)
-    f0 = jnp.mean(xy0.reshape(M, N, 2), axis=-1)
-    fcb = FourierChebyshevBasis(f0, M, N)
-    f1 = fcb.evaluate(1, fcb.N * 10)
-    xy1 = FourierChebyshevBasis.nodes(1, fcb.N * 10)
-
-    fig, ax = plt.subplots()
-    ax.plot(xy0[:, 1], f0[0, :], linestyle="--")
-    ax.plot(xy1[:, 1], f1[0, :], marker="x")
-    plt.show()
-    return fig

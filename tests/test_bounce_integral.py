@@ -39,6 +39,7 @@ from desc.compute.bounce_integral import (
     bounce_points,
     get_pitch,
     plot_field_line,
+    required_names,
 )
 from desc.compute.utils import dot, take_mask
 from desc.equilibrium import Equilibrium
@@ -461,23 +462,10 @@ def test_bounce_integral_checks():
         eq, rho, alpha, knots, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )
     data = eq.compute(
-        [
-            "B^zeta",
-            "B^zeta_z|r,a",
-            "|B|",
-            "|B|_z|r,a",
-            "min_tz |B|",
-            "max_tz |B|",
-            "g_zz",
-        ],
-        grid=grid,
+        required_names() + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
     )
     bounce_integrate, spline = bounce_integral(
-        data,
-        knots,
-        check=True,
-        plot=False,
-        quad=leggauss(3),  # not checking quadrature accuracy in this test
+        data, knots, check=True, plot=False, quad=leggauss(3)
     )
     pitch = get_pitch(
         grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
@@ -510,8 +498,9 @@ def test_bounce_integral_checks():
 @pytest.mark.unit
 @pytest.mark.parametrize("func", [_interp_to_argmin_B_soft, _interp_to_argmin_B_hard])
 def test_interp_to_argmin_B(func):
-    """Test argmin interpolation."""
+    """Test argmin interpolation."""  # noqa: D202
 
+    # Test functions chosen with purpose; don't change unless plotted and compared.
     def f(z):
         return np.cos(3 * z) * np.sin(2 * np.cos(z)) + np.cos(1.2 * z)
 
@@ -654,11 +643,8 @@ def test_drift():
     )
 
     data = eq.compute(
-        [
-            "B^zeta",
-            "B^zeta_z|r,a",
-            "|B|",
-            "|B|_z|r,a",
+        required_names()
+        + [
             "cvdrift",
             "gbdrift",
             "grad(psi)",

@@ -814,6 +814,11 @@ def _bounce_quadrature(
     return result
 
 
+def required_names():
+    """Return names in ``data_index`` required to compute bounce integrals."""
+    return ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
+
+
 def bounce_integral(
     data,
     knots,
@@ -853,7 +858,7 @@ def bounce_integral(
     data : dict of jnp.ndarray
         Data evaluated on grid.
         Shape (S * knots.size, ) or (S, knots.size).
-        Should contain ``B^zeta``, ``B^zeta_z|r,a``, ``|B|``, and ``|B|_z|r,a``.
+        Should contain all names in ``required_names()``.
     knots : jnp.ndarray
         Shape (knots.size, ).
         Field line following coordinate values where arrays in ``data`` and ``f``
@@ -1067,7 +1072,6 @@ def _interp_to_argmin_B_hard(f, bp1, bp2, knots, B_c, B_z_ra_c, method):
     """Compute ``f`` at deepest point in the magnetic well.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E |B|(ζ). Returns f(A).
-
     """
     ext, B = _get_extrema(knots, B_c, B_z_ra_c, sentinel=0)
     assert ext.shape[0] == B.shape[0] == bp1.shape[1] == bp2.shape[1]

@@ -1700,7 +1700,7 @@ def test_signed_PlasmaVesselDistance():
     eq = Equilibrium(M=1, N=1)
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
-    grid = LinearGrid(M=10, N=2, NFP=eq.NFP)
+    grid = LinearGrid(M=10, N=4, NFP=eq.NFP)
 
     obj = PlasmaVesselDistance(
         surface=surf,
@@ -1723,4 +1723,9 @@ def test_signed_PlasmaVesselDistance():
         xtol=1e-9,
     )
 
-    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), target_dist, atol=1e-2)
+    np.testing.assert_allclose(
+        obj.compute(*obj.xs(eq, surf)),
+        target_dist,
+        atol=1e-2,
+        err_msg="allowing eq to change",
+    )

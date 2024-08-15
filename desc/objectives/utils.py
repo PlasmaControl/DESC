@@ -51,7 +51,7 @@ def factorize_linear_constraints(  # noqa: C901
     Z : ndarray
         Null space operator for full combined A such that A @ Z == 0.
     D : ndarray
-        Scale of the full state vector x, based on the particular solution xp.
+        Scale of the full state vector x, as set by the parameter ``x_scale``.
     unfixed_idx : ndarray
         Indices of x that correspond to non-fixed values.
     project, recover : function

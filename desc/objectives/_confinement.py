@@ -5,6 +5,7 @@ from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.utils import Timer, errorif
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
@@ -145,6 +146,10 @@ class HeatingPower(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["W"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 

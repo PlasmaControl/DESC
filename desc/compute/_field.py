@@ -2275,13 +2275,17 @@ def _B_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|B|", "sqrt(g)"],
+    axis_limit_data=["sqrt(g)_r"],
 )
 def _B_mag_axis(params, transforms, profiles, data, **kwargs):
     # mask of indices of the innermost flux surface
     mask = transforms["grid"].inverse_rho_idx == 0
+    sqrt_g = transforms["grid"].replace_at_axis(
+        data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
+    )
     data["<|B|>_axis"] = jnp.sum(
-        mask * data["|B|"] * data["sqrt(g)"] * transforms["grid"].weights
-    ) / jnp.sum(mask * data["sqrt(g)"] * transforms["grid"].weights)
+        mask * data["|B|"] * sqrt_g * transforms["grid"].weights
+    ) / jnp.sum(mask * sqrt_g * transforms["grid"].weights)
     return data
 
 

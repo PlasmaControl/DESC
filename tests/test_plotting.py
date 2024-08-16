@@ -371,7 +371,7 @@ class TestPlotFSA:
             rho=rho,
             M=eq.M_grid,
             N=eq.N_grid,
-            with_sqrt_g=False,  # Test that does not compute data_index["<|B|>"]
+            with_sqrt_g=False,  # test that does not compute data_index["<|B|>"]
             return_data=True,
         )
         data = eq.compute(names=name, grid=grid)

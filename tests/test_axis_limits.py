@@ -91,7 +91,6 @@ not_implemented_limits = {
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
-    "iota_23",  # only defined at rho=2/3
     "cvdrift0",
 }
 

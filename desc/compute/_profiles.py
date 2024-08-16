@@ -227,12 +227,15 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["ne"],
+    data=["ne", "|e_theta x e_zeta|"],
     resolution_requirement="r",
 )
 def _bar_ne(params, transforms, profiles, data, **kwargs):
-    data["<ne>_rho"] = jnp.sum(data["ne"] * transforms["grid"].spacing[:, 0]) / jnp.sum(
-        transforms["grid"].spacing[:, 0]
+    data["<ne>_rho"] = jnp.dot(
+        surface_averages(
+            transforms["grid"], data["ne"], data["|e_theta x e_zeta|"], expand_out=False
+        ),
+        transforms["grid"].compress(transforms["grid"].spacing[:, 0]),
     )
     return data
 

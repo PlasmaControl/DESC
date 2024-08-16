@@ -85,13 +85,13 @@ def harmonic(a, M, axis=-1):
     return h
 
 
-def harmonic_basis(x, M):
+def harmonic_vander(x, M):
     """Nyquist trigonometric interpolant basis evaluated at ``x``.
 
     Parameters
     ----------
     x : jnp.ndarray
-        Points to evaluate.
+        Points at which to evaluate pseudo-Vandermonde matrix.
     M : int
         Spectral resolution.
 
@@ -99,7 +99,7 @@ def harmonic_basis(x, M):
     -------
     basis : jnp.ndarray
         Shape (*x.shape, M).
-        Basis evaluated at points ``x``.
+        Pseudo-Vandermonde matrix of degree ``M-1`` and sample points ``x``.
         Last axis ordered as [1, cos(x), ..., cos(mx), sin(x), sin(2x), ..., sin(mx)].
 
     """
@@ -128,7 +128,7 @@ def interp_rfft(xq, f, axis=-1):
     ----------
     xq : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with ``f`` except along ``axis``.
+        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(f.shape,axis)``.
     f : jnp.ndarray
         Real function values on uniform 2π periodic grid to interpolate.
     axis : int
@@ -153,7 +153,7 @@ def irfft_non_uniform(xq, a, n, axis=-1):
     ----------
     xq : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with ``a`` except along ``axis``.
+        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
         Fourier coefficients ``a=rfft(f,axis=axis,norm="forward")``.
     n : int
@@ -175,7 +175,7 @@ def irfft_non_uniform(xq, a, n, axis=-1):
         .at[Index.get(-1, axis, a.ndim)]
         .divide(1.0 + ((n % 2) == 0))
     )
-    a = jnp.swapaxes(a[..., jnp.newaxis], axis % a.ndim, -1)
+    a = jnp.moveaxis(a, axis, -1)
     m = jnp.fft.rfftfreq(n, d=1 / n)
     basis = jnp.exp(-1j * m * xq[..., jnp.newaxis])
     fq = jnp.linalg.vecdot(basis, a).real
@@ -193,7 +193,7 @@ def interp_rfft2(xq, f, axes=(-2, -1)):
         Shape (..., 2).
         Real query points where interpolation is desired.
         Last axis must hold coordinates for a given point.
-        Shape of ``xq`` must broadcast ``f`` except along ``axes``.
+        Shape ``xq.shape[:-1]`` must broadcast with shape ``np.delete(f.shape,axes)``.
     f : jnp.ndarray
         Shape (..., f.shape[-2], f.shape[-1]).
         Real function values on uniform (2π × 2π) periodic tensor-product grid to
@@ -223,7 +223,7 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
         Shape (..., 2).
         Real query points where interpolation is desired.
         Last axis must hold coordinates for a given point.
-        Shape of ``xq`` must broadcast ``a`` except along ``axes``.
+        Shape ``xq.shape[:-1]`` must broadcast with shape ``np.delete(a.shape,axes)``.
     a : jnp.ndarray
         Shape (..., a.shape[-2], a.shape[-1]).
         Fourier coefficients ``a=rfft2(f,axes=axes,norm="forward")``.
@@ -240,7 +240,6 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
         Real function value at query points.
 
     """
-    errorif(axes != (-2, -1), NotImplementedError)  # need to swap axes before reshape
     assert xq.shape[-1] == 2
     assert a.ndim >= 2
     a = (
@@ -249,7 +248,9 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
         .divide(2.0)
         .at[Index.get(-1, axes[-1], a.ndim)]
         .divide(1.0 + ((N % 2) == 0))
-    ).reshape(*a.shape[:-2], 1, -1)
+    )
+    a = jnp.moveaxis(a, source=axes, destination=(-2, -1))
+    a = a.reshape(*a.shape[:-2], -1)
 
     m = jnp.fft.fftfreq(M, d=1 / M)
     n = jnp.fft.rfftfreq(N, d=1 / N)
@@ -295,7 +296,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
     ----------
     xq : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with ``f`` except along ``axis``.
+        Shape of ``xq`` must broadcast with shape ``np.delete(f.shape,axis)``.
     f : jnp.ndarray
         Real function values on Chebyshev points to interpolate.
     lobatto : bool
@@ -310,27 +311,26 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
         Real function value at query points.
 
     """
+    lobatto = bool(lobatto)
     errorif(lobatto, NotImplementedError)
     assert f.ndim >= 1
-    lobatto = bool(lobatto)
-    a = dct(f, type=2 - lobatto, axis=axis) / (f.shape[axis] - lobatto)
+    a = cheb_from_dct(
+        dct(f, type=2 - lobatto, axis=axis) / (f.shape[axis] - lobatto), axis
+    )
     fq = idct_non_uniform(xq, a, f.shape[axis], axis)
     return fq
 
 
 def idct_non_uniform(xq, a, n, axis=-1):
-    """Evaluate Discrete Cosine Transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
+    """Evaluate Discrete Chebyshev Transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
 
     Parameters
     ----------
     xq : jnp.ndarray
         Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with ``a`` except along ``axis``.
+        Shape of ``xq`` must broadcast with shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
-        Discrete Cosine Transform coefficients, e.g.
-        ``a=dct(f,type=2,axis=axis,norm="forward")``.
-        The discrete cosine transformation used by scipy is defined here.
-        docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html#scipy.fft.dct
+        Discrete Chebyshev Transform coefficients.
     n : int
         Spectral resolution of ``a``.
     axis : int
@@ -343,9 +343,9 @@ def idct_non_uniform(xq, a, n, axis=-1):
 
     """
     assert a.ndim >= 1
-    a = cheb_from_dct(a, axis)
-    a = jnp.swapaxes(a[..., jnp.newaxis], axis % a.ndim, -1)
+    a = jnp.moveaxis(a, axis, -1)
     basis = chebvander(xq, n - 1)
+    # Could instead use Clenshaw recursion with ``fq=chebval(xq,a,tensor=False)``.
     fq = jnp.linalg.vecdot(basis, a)
     return fq
 

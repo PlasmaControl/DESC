@@ -541,63 +541,15 @@ def _elliptic_incomplete(k2):
     return I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7
 
 
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_drift():
-    """Test bounce-averaged drift with analytical expressions."""
-    eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
-    psi_boundary = eq.Psi / (2 * np.pi)
-    psi = 0.25 * psi_boundary
-    rho = np.sqrt(psi / psi_boundary)
-    np.testing.assert_allclose(rho, 0.5)
-
-    # Make a set of nodes along a single fieldline.
-    grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-    data = eq.compute(["iota"], grid=grid_fsa)
-    iota = grid_fsa.compress(data["iota"]).item()
-    alpha = 0
-    zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-    grid = get_rtz_grid(
-        eq, rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
-    )
-
-    data = eq.compute(
-        required_names()
-        + [
-            "cvdrift",
-            "gbdrift",
-            "grad(psi)",
-            "grad(alpha)",
-            "shear",
-            "iota",
-            "psi",
-            "a",
-        ],
-        grid=grid,
-    )
-    np.testing.assert_allclose(data["psi"], psi)
-    np.testing.assert_allclose(data["iota"], iota)
-    assert np.all(data["B^zeta"] > 0)
-    data["iota"] = grid.compress(data["iota"]).item()
-    data["shear"] = grid.compress(data["shear"]).item()
-
-    B_ref = 2 * np.abs(psi_boundary) / data["a"] ** 2
-    bounce_integrate, _ = bounce_integral(
-        data,
-        knots=zeta,
-        B_ref=B_ref,
-        L_ref=data["a"],
-        quad=leggauss(28),  # converges to absolute and relative tolerance of 1e-7
-        check=True,
-    )
-
-    B = data["|B|"] / B_ref
+def _drift_analytic(data):
+    """Compute analytic approximation for bounce-averaged binormal drift."""
+    B = data["|B|"] / data["B ref"]
     B0 = np.mean(B)
     # epsilon should be changed to dimensionless, and computed in a way that
     # is independent of normalization length scales, like "effective r/R0".
-    epsilon = data["a"] * rho  # Aspect ratio of the flux surface.
+    epsilon = data["a"] * data["rho"]  # Aspect ratio of the flux surface.
     np.testing.assert_allclose(epsilon, 0.05)
-    theta_PEST = alpha + data["iota"] * zeta
+    theta_PEST = data["alpha"] + data["iota"] * data["zeta"]
     # same as 1 / (1 + epsilon cos(theta)) assuming epsilon << 1
     B_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
     np.testing.assert_allclose(B, B_analytic, atol=3e-3)
@@ -611,7 +563,7 @@ def test_drift():
     np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
 
     # Comparing coefficient calculation here with coefficients from compute/_metric
-    normalization = -np.sign(psi) * B_ref * data["a"] ** 2
+    normalization = -np.sign(data["psi"]) * data["B ref"] * data["a"] ** 2
     cvdrift = data["cvdrift"] * normalization
     gbdrift = data["gbdrift"] * normalization
     dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * data["|B|"] ** 2)
@@ -620,7 +572,7 @@ def test_drift():
         -np.sign(data["iota"])
         * data["shear"]
         * dot(data["grad(psi)"], data["grad(alpha)"])
-        / B_ref
+        / data["B ref"]
     )
     gds21_analytic = -data["shear"] * (
         data["shear"] * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
@@ -671,6 +623,71 @@ def test_drift():
     ) / G0
     drift_analytic_den = I_0 / G0
     drift_analytic = drift_analytic_num / drift_analytic_den
+    return drift_analytic, cvdrift, gbdrift, pitch
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_drift():
+    """Test bounce-averaged drift with analytical expressions."""
+    eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
+    psi_boundary = eq.Psi / (2 * np.pi)
+    psi = 0.25 * psi_boundary
+    rho = np.sqrt(psi / psi_boundary)
+    np.testing.assert_allclose(rho, 0.5)
+
+    # Make a set of nodes along a single fieldline.
+    grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
+    data = eq.compute(["iota"], grid=grid_fsa)
+    iota = grid_fsa.compress(data["iota"]).item()
+    alpha = 0
+    zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
+    grid = get_rtz_grid(
+        eq,
+        rho,
+        alpha,
+        zeta,
+        coordinates="raz",
+        period=(np.inf, 2 * np.pi, np.inf),
+        iota=np.array([iota]),
+    )
+    data = eq.compute(
+        required_names()
+        + [
+            "cvdrift",
+            "gbdrift",
+            "grad(psi)",
+            "grad(alpha)",
+            "shear",
+            "iota",
+            "psi",
+            "a",
+        ],
+        grid=grid,
+    )
+    np.testing.assert_allclose(data["psi"], psi)
+    np.testing.assert_allclose(data["iota"], iota)
+    assert np.all(data["B^zeta"] > 0)
+    B_ref = 2 * np.abs(psi_boundary) / data["a"] ** 2
+    data["B ref"] = B_ref
+    data["rho"] = rho
+    data["alpha"] = alpha
+    data["zeta"] = zeta
+    data["psi"] = grid.compress(data["psi"])
+    data["iota"] = grid.compress(data["iota"])
+    data["shear"] = grid.compress(data["shear"])
+
+    # Compute analytic approximation.
+    drift_analytic, cvdrift, gbdrift, pitch = _drift_analytic(data)
+    # Compute numerical result.
+    bounce_integrate, _ = bounce_integral(
+        data,
+        knots=zeta,
+        B_ref=B_ref,
+        L_ref=data["a"],
+        quad=leggauss(28),  # converges to absolute and relative tolerance of 1e-7
+        check=True,
+    )
 
     def integrand_num(cvdrift, gbdrift, B, pitch):
         g = jnp.sqrt(1 - pitch * B)

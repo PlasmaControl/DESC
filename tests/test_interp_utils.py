@@ -18,7 +18,7 @@ from desc.compute._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     harmonic,
-    harmonic_basis,
+    harmonic_vander,
     interp_dct,
     interp_rfft,
     interp_rfft2,
@@ -143,7 +143,7 @@ class TestFastInterp:
     def _interp_rfft_harmonic(xq, f):
         M = f.shape[-1]
         fq = jnp.linalg.vecdot(
-            harmonic_basis(xq, M), harmonic(rfft(f, norm="forward"), M)
+            harmonic_vander(xq, M), harmonic(rfft(f, norm="forward"), M)
         )
         return fq
 

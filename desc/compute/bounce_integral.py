@@ -6,7 +6,7 @@ import numpy as np
 from interpax import CubicHermiteSpline, PPoly, interp1d
 from jax.nn import softmax
 from matplotlib import pyplot as plt
-from orthax.legendre import leggauss
+from numpy.polynomial.legendre import leggauss
 
 from desc.backend import flatnonzero, imap, jnp, put
 from desc.compute._interp_utils import poly_root, polyder_vec, polyval_vec

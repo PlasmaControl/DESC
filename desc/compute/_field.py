@@ -2276,7 +2276,7 @@ def _B_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["|B|", "sqrt(g)"],
     axis_limit_data=["sqrt(g)_r"],
-    resolution_requirement="z",
+    resolution_requirement="tz",
 )
 def _B_mag_axis(params, transforms, profiles, data, **kwargs):
     # mask of indices of the innermost flux surface

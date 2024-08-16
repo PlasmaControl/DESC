@@ -9,10 +9,10 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
-class HeatingPower(_Objective):
+class HeatingPowerISS04(_Objective):
     """Heating power required by the ISS04 energy confinement time scaling.
 
-    tau_E^ISS04 = 0.134 a^2.28 R^0.64 P^-0.61 n_e^0.54 B^0.84 iota^0.41 (s)
+    tau_E = W_p / P = 0.134 a^2.28 R^0.64 P^-0.61 n_e^0.54 B^0.84 iota^0.41 (s)
 
     References
     ----------
@@ -37,11 +37,10 @@ class HeatingPower(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
+        this should also be set to True.
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or

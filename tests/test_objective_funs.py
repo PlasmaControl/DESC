@@ -49,7 +49,7 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
-    HeatingPower,
+    HeatingPowerISS04,
     Isodynamicity,
     LinearObjectiveFromUser,
     MagneticWell,
@@ -2032,7 +2032,7 @@ class TestComputeScalarResolution:
         CoilSetMinDistance,
         CoilTorsion,
         GenericObjective,
-        HeatingPower,
+        HeatingPowerISS04,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -2094,7 +2094,7 @@ class TestComputeScalarResolution:
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_heating_power(self):
-        """HeatingPower."""
+        """HeatingPowerISS04."""
         eq = self.eq.copy()
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
@@ -2109,7 +2109,7 @@ class TestComputeScalarResolution:
                 N=int(self.eq.N * res),
                 NFP=self.eq.NFP,
             )
-            obj = ObjectiveFunction(HeatingPower(eq=eq, grid=grid))
+            obj = ObjectiveFunction(HeatingPowerISS04(eq=eq, grid=grid))
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2383,7 +2383,7 @@ class TestObjectiveNaNGrad:
         CoilSetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
-        HeatingPower,
+        HeatingPowerISS04,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -2434,7 +2434,7 @@ class TestObjectiveNaNGrad:
 
     @pytest.mark.unit
     def test_objective_no_nangrad_heating_power(self):
-        """HeatingPower."""
+        """HeatingPowerISS04."""
         eq = Equilibrium(
             L=2,
             M=2,
@@ -2443,7 +2443,7 @@ class TestObjectiveNaNGrad:
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
             current=PowerSeriesProfile([1, 0, -1]),
         )
-        obj = ObjectiveFunction(HeatingPower(eq))
+        obj = ObjectiveFunction(HeatingPowerISS04(eq))
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "heating power"

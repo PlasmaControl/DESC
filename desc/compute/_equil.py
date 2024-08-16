@@ -823,7 +823,12 @@ def _beta_voltor(params, transforms, profiles, data, **kwargs):
 def _P_ISS04(params, transforms, profiles, data, **kwargs):
     rho = transforms["grid"].compress(data["rho"], surface_label="rho")
     iota = transforms["grid"].compress(data["iota"], surface_label="rho")
-    iota_23 = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"))
+    kwargs = {}
+    if "iota_r" in data:
+        kwargs["fx"] = transforms["grid"].compress(
+            data["iota_r"]
+        )  # noqa: unused dependency
+    iota_23 = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"), **kwargs)
     data["P_ISS04"] = 1e6 * (  # MW -> W
         jnp.abs(data["W_p"] / 1e6)  # J -> MJ
         / (

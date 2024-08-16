@@ -452,7 +452,7 @@ def test_correct_indexing_passed_modes():
     constraint.build()
 
     xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective, constraint, things=eq
+        objective, constraint
     )
 
     x1 = objective.x(eq)
@@ -515,7 +515,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     constraint.build()
 
     xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective, constraint, things=eq
+        objective, constraint
     )
 
     x1 = objective.x(eq)
@@ -575,7 +575,7 @@ def test_correct_indexing_passed_modes_axis():
     constraint.build()
 
     xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective, constraint, things=eq
+        objective, constraint
     )
 
     x1 = objective.x(eq)
@@ -704,7 +704,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     constraint.build()
 
     xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective, constraint, things=eq
+        objective, constraint
     )
 
     x1 = objective.x(eq)

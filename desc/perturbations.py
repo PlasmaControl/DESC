@@ -186,7 +186,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, _, _, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective, constraint, things=eq
+        objective, constraint
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -388,9 +388,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             con.update_target(eq_new)
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
-    _, _, _, _, _, _, _, recover = factorize_linear_constraints(
-        objective, constraint, things=[eq_new]
-    )
+    _, _, _, _, _, _, _, recover = factorize_linear_constraints(objective, constraint)
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
@@ -548,7 +546,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     constraint.build(verbose=verbose)
 
     _, _, _, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective_f, constraint, things=eq
+        objective_f, constraint
     )
 
     # state vector
@@ -752,9 +750,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             con.update_target(eq_new)
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
-    _, _, _, _, _, _, _, recover = factorize_linear_constraints(
-        objective_f, constraint, things=[eq_new]
-    )
+    _, _, _, _, _, _, _, recover = factorize_linear_constraints(objective_f, constraint)
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced

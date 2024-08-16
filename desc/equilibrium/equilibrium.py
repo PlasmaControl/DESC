@@ -732,6 +732,8 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         name : str
             Name of the quantity to compute.
+            If list is given, then two names are expected: the quantity to spline
+            and its radial derivative.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
@@ -748,10 +750,16 @@ class Equilibrium(IOAble, Optimizable):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
-        f = data[name]
-        f = grid.compress(f, surface_label="rho")
-        x = grid.nodes[grid.unique_rho_idx, 0]
-        p = SplineProfile(f, x, name=name)
+        if isinstance(name, str):
+            f = data[name]
+            df = None
+            method = "cubic2"
+        else:
+            f = data[name[0]]
+            df = grid.compress(data[name[1]], surface_label="rho")
+            method = "cubic"
+        x, f = map(grid.compress, (grid.nodes[:, 0], f))
+        p = SplineProfile(f, df=df, knots=x, method=method, name=name)
         if kind == "power_series":
             p = p.to_powerseries(order=min(self.L, len(x)), xs=x, sym=True)
         if kind == "fourier_zernike":
@@ -1161,8 +1169,6 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to use.
         coords : ndarray
             Shape (k, 3).
             2D array of input coordinates. Each row is a different point in space.

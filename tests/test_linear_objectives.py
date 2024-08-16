@@ -33,6 +33,9 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixNearAxisLambda,
+    FixNearAxisR,
+    FixNearAxisZ,
     FixOmniMap,
     FixOmniWell,
     FixParameters,
@@ -852,21 +855,27 @@ def test_FixNAE_util_correct_objectives():
     eq = Equilibrium()
     qsc = Qsc.from_paper("precise QA")
     cs = get_NAE_constraints(eq, qsc)
-    assert _is_any_instance(cs, FixAxisR)
-    assert _is_any_instance(cs, FixAxisZ)
+    for c in cs:
+        c.build()
     assert _is_any_instance(cs, FixPsi)
-    assert _is_any_instance(cs, FixSumModesR)
-    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_NAE_constraints(eq, qsc, fix_lambda=1)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
+    assert _is_any_instance(cs, FixNearAxisLambda)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
     eq = Equilibrium(electron_temperature=1, electron_density=1, iota=1)
     cs = get_NAE_constraints(eq, qsc)
-    assert _is_any_instance(cs, FixAxisR)
-    assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
-    assert _is_any_instance(cs, FixSumModesR)
-    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
     assert _is_any_instance(cs, FixElectronDensity)
     assert _is_any_instance(cs, FixElectronTemperature)
     assert _is_any_instance(cs, FixIonTemperature)

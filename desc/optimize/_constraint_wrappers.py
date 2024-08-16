@@ -406,7 +406,7 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
         df = getattr(self._objective, op)(v, x, constants)
-        return df[:, self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
+        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.

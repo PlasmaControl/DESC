@@ -260,7 +260,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x, constants)
-        return df @ self._unfixed_idx_mat
+        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -290,7 +290,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         if self._objective._deriv_mode == "blocked":
             fun = getattr(self._objective, "jac_" + op)
-            return fun(x, constants) @ self._unfixed_idx_mat
+            return fun(x, constants)[:, self._unfixed_idx] @ (
+                self._Z * self._D[self._unfixed_idx, None]
+            )
 
         v = self._unfixed_idx_mat
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
@@ -404,7 +406,7 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
         df = getattr(self._objective, op)(v, x, constants)
-        return df @ self._unfixed_idx_mat
+        return df[:, self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.

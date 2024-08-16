@@ -556,8 +556,12 @@ def get_transforms(
                 )
             transforms[c] = c_transform
         elif c == "B":  # used for Boozer transform
+            # assume grid is a meshgrid but only care about a single surface
+            theta = grid.nodes[grid.unique_theta_idx, 1]
+            zeta = grid.nodes[grid.unique_zeta_idx, 2]
+            grid_B = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
             transforms["B"] = Transform(
-                grid,
+                grid_B,
                 DoubleFourierSeries(
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
@@ -570,8 +574,12 @@ def get_transforms(
                 method=method,
             )
         elif c == "w":  # used for Boozer transform
+            # assume grid is a meshgrid but only care about a single surface
+            theta = grid.nodes[grid.unique_theta_idx, 1]
+            zeta = grid.nodes[grid.unique_zeta_idx, 2]
+            grid_w = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
             transforms["w"] = Transform(
-                grid,
+                grid_w,
                 DoubleFourierSeries(
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),

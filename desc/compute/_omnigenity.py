@@ -26,16 +26,24 @@ from .utils import cross, dot, safediv
     + "magnetic field",
     dim=1,
     params=[],
-    transforms={"B": [[0, 0, 0]]},
+    transforms={"B": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
     data=["B_theta"],
+    resolution_requirement="tz",
+    source_grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
-    resolution_requirement="tz",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
-    data["B_theta_mn"] = transforms["B"].fit(data["B_theta"])
+    grid = transforms["grid"]
+    B_theta = data["B_theta"].reshape(
+        (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
+    )
+    B_theta = jnp.moveaxis(B_theta, 1, 0).reshape((grid.num_rho, -1))
+    B_theta_mn = vmap(transforms["B"].fit)(B_theta)
+    # modes stored as shape(rho, mn) flattened
+    data["B_theta_mn"] = B_theta_mn.flatten()
     return data
 
 
@@ -52,12 +60,20 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["B_zeta"],
+    resolution_requirement="tz",
+    source_grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
-    resolution_requirement="tz",
 )
 def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
-    data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])
+    grid = transforms["grid"]
+    B_zeta = data["B_zeta"].reshape(
+        (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
+    )
+    B_zeta = jnp.moveaxis(B_zeta, 1, 0).reshape((grid.num_rho, -1))
+    B_zeta_mn = vmap(transforms["B"].fit)(B_zeta)
+    # modes stored as shape(rho, mn) flattened
+    data["B_zeta_mn"] = B_zeta_mn.flatten()
     return data
 
 
@@ -70,15 +86,16 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     + "Boozer Coordinates'",
     dim=1,
     params=[],
-    transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
+    transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
     data=["B_theta_mn", "B_zeta_mn"],
+    source_grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w_mn(params, transforms, profiles, data, **kwargs):
-    w_mn = jnp.zeros((transforms["w"].basis.num_modes,))
+    w_mn = jnp.zeros((transforms["grid"].num_rho, transforms["w"].basis.num_modes))
     Bm = transforms["B"].basis.modes[:, 1]
     Bn = transforms["B"].basis.modes[:, 2]
     wm = transforms["w"].basis.modes[:, 1]
@@ -87,15 +104,19 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     mask_t = (Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0)
     mask_z = (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
 
-    num_t = (mask_t @ sign(wn)) * data["B_theta_mn"]
+    num_t = (mask_t @ sign(wn)) * data["B_theta_mn"].reshape(
+        (transforms["grid"].num_rho, -1)
+    )
     den_t = mask_t @ jnp.abs(wm)
-    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"]
+    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"].reshape(
+        (transforms["grid"].num_rho, -1)
+    )
     den_z = mask_z @ jnp.abs(NFP * wn)
 
-    w_mn = jnp.where(mask_t.any(axis=0), mask_t.T @ safediv(num_t, den_t), w_mn)
-    w_mn = jnp.where(mask_z.any(axis=0), mask_z.T @ safediv(num_z, den_z), w_mn)
+    w_mn = jnp.where(mask_t.any(axis=0), (mask_t.T @ safediv(num_t, den_t).T).T, w_mn)
+    w_mn = jnp.where(mask_z.any(axis=0), (mask_z.T @ safediv(num_z, den_z).T).T, w_mn)
 
-    data["w_Boozer_mn"] = w_mn
+    data["w_Boozer_mn"] = w_mn.flatten()
     return data
 
 
@@ -108,16 +129,22 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     + "'Transformation from VMEC to Boozer Coordinates'",
     dim=1,
     params=[],
-    transforms={"w": [[0, 0, 0]]},
+    transforms={"w": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
+    source_grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w(params, transforms, profiles, data, **kwargs):
-    data["w_Boozer"] = transforms["w"].transform(data["w_Boozer_mn"])
+    grid = transforms["grid"]
+    w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
+    w = vmap(transforms["w"].transform)(w_mn)  # shape(rho, theta*zeta)
+    w = w.reshape((grid.num_rho, grid.num_theta, grid.num_zeta))
+    w = jnp.moveaxis(w, 0, 1)
+    data["w_Boozer"] = w.flatten(order="F")
     return data
 
 
@@ -130,16 +157,24 @@ def _w(params, transforms, profiles, data, **kwargs):
     + "'Transformation from VMEC to Boozer Coordinates', poloidal derivative",
     dim=1,
     params=[],
-    transforms={"w": [[0, 1, 0]]},
+    transforms={"w": [[0, 1, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
+    source_grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w_t(params, transforms, profiles, data, **kwargs):
-    data["w_Boozer_t"] = transforms["w"].transform(data["w_Boozer_mn"], dt=1)
+    grid = transforms["grid"]
+    w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
+    # need to close over dt which can't be vmapped
+    fun = lambda x: transforms["w"].transform(x, dt=1)
+    w_t = vmap(fun)(w_mn)  # shape(rho, theta*zeta)
+    w_t = w_t.reshape((grid.num_rho, grid.num_theta, grid.num_zeta))
+    w_t = jnp.moveaxis(w_t, 0, 1)
+    data["w_Boozer_t"] = w_t.flatten(order="F")
     return data
 
 
@@ -152,16 +187,24 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     + "'Transformation from VMEC to Boozer Coordinates', toroidal derivative",
     dim=1,
     params=[],
-    transforms={"w": [[0, 0, 1]]},
+    transforms={"w": [[0, 0, 1]], "grid": []},
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
+    source_grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w_z(params, transforms, profiles, data, **kwargs):
-    data["w_Boozer_z"] = transforms["w"].transform(data["w_Boozer_mn"], dz=1)
+    grid = transforms["grid"]
+    w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
+    # need to close over dz which can't be vmapped
+    fun = lambda x: transforms["w"].transform(x, dz=1)
+    w_z = vmap(fun)(w_mn)  # shape(rho, theta*zeta)
+    w_z = w_z.reshape((grid.num_rho, grid.num_theta, grid.num_zeta))
+    w_z = jnp.moveaxis(w_z, 0, 1)
+    data["w_Boozer_z"] = w_z.flatten(order="F")
     return data
 
 
@@ -286,21 +329,42 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     description="Boozer harmonics of magnetic field",
     dim=1,
     params=[],
-    transforms={"B": [[0, 0, 0]]},
+    transforms={"B": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
     data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
+    resolution_requirement="tz",
+    source_grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
-    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
-    data["|B|_mn"] = (
-        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["|B|"]))
-        / transforms["B"].grid.num_nodes
+    grid = transforms["grid"]
+
+    def fun(rho, theta_B, zeta_B, sqrtg_B, B):
+        # this fits Boozer modes on a single surface
+        nodes = jnp.array([rho, theta_B, zeta_B]).T
+        B_mn = (
+            norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+            # fft matrix is only orthogonal for uniform nodes, should this really
+            # be a proper least squares fit?
+            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B * B))
+            / transforms["B"].grid.num_nodes
+        )
+        return B_mn
+
+    def reshape(x):
+        x = x.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+        x = jnp.moveaxis(x, 1, 0)
+        return x.reshape((grid.num_rho, -1))
+
+    rho, theta_B, zeta_B, sqrtg_B, B = map(
+        reshape,
+        (data["rho"], data["theta_B"], data["zeta_B"], data["sqrt(g)_B"], data["|B|"]),
     )
+    B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B, B)
+    data["|B|_mn"] = B_mn.flatten()
     return data
 
 

@@ -9,7 +9,6 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from interpax import interp1d
 from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
@@ -741,27 +740,6 @@ def _gradbeta_a(params, transforms, profiles, data, **kwargs):
         + data["beta_a_t"] * data["e^theta"].T
         + data["beta_a_z"] * data["e^zeta"].T
     ).T
-    return data
-
-
-@register_compute_fun(
-    name="iota_23",
-    label="\\iota_{2/3}",
-    units="~",
-    units_long="None",
-    description="Rotational transform (normalized by 2pi) at rho=2/3",
-    dim=0,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="",
-    data=["rho", "iota"],
-    method="str: Interpolation method. Default 'cubic'.",
-)
-def _iota_23(params, transforms, profiles, data, **kwargs):
-    rho = transforms["grid"].compress(data["rho"], surface_label="rho")
-    iota = transforms["grid"].compress(data["iota"], surface_label="rho")
-    data["iota_23"] = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"))
     return data
 
 

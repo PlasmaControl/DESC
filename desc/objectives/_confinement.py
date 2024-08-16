@@ -51,8 +51,6 @@ class HeatingPower(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    f_ren : float, optional
-        ISS04 renormalization factor. Default = 1.
     H_ISS04 : float, optional
         ISS04 confinement enhancement factor. Default = 1.
     gamma : float, optional
@@ -79,7 +77,6 @@ class HeatingPower(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        f_ren=1,
         H_ISS04=1,
         gamma=0,
         grid=None,
@@ -87,7 +84,6 @@ class HeatingPower(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        self._f_ren = f_ren
         self._H_ISS04 = H_ISS04
         self._gamma = gamma
         self._grid = grid
@@ -128,7 +124,7 @@ class HeatingPower(_Objective):
                 NFP=eq.NFP,
             )
         self._dim_f = 1
-        self._data_keys = ["W_p", "a", "R0", "<ne>_rho", "<|B|>_axis", "iota_23"]
+        self._data_keys = ["P_ISS04"]
 
         timer = Timer()
         if verbose > 0:
@@ -138,7 +134,6 @@ class HeatingPower(_Objective):
         self._constants = {
             "profiles": get_profiles(self._data_keys, obj=eq, grid=self._grid),
             "transforms": get_transforms(self._data_keys, obj=eq, grid=self._grid),
-            "f_ren": self._f_ren,
             "H_ISS04": self._H_ISS04,
             "gamma": self._gamma,
         }
@@ -180,31 +175,18 @@ class HeatingPower(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
             gamma=constants["gamma"],
+            H_ISS04=constants["H_ISS04"],
         )
-
-        P = (
-            (data["W_p"] / -1e6)  # MJ
-            / (
-                0.134
-                * data["a"] ** 2.28  # m
-                * data["R0"] ** 0.64  # m
-                * (data["<ne>_rho"] / 1e19) ** 0.54  # 1e19/m^3
-                * data["<|B|>_axis"] ** 0.84  # T
-                * data["iota_23"] ** 0.41
-                * constants["f_ren"]
-                * constants["H_ISS04"]
-            )
-        ) ** (1 / 0.39)
-        return P * 1e6  # W
+        return data["P_ISS04"]
 
     @property
-    def f_ren(self):
+    def H_ISS04(self):
         """float: Confinement enhancement factor."""
-        return self._f_ren
+        return self._H_ISS04
 
-    @f_ren.setter
-    def f_ren(self, new):
-        self._f_ren = new
+    @H_ISS04.setter
+    def H_ISS04(self, new):
+        self._H_ISS04 = new
 
     @property
     def gamma(self):

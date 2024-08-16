@@ -518,15 +518,3 @@ class TestProfiles:
             eq = Equilibrium(electron_density=ne, electron_temperature=Te)
             data = eq.compute("<ne>_rho")
             np.testing.assert_allclose(data["<ne>_rho"], ne0)
-
-    @pytest.mark.unit
-    def test_interpolation(self):
-        """Test that interpolated profile values are correct."""
-        iota0 = 0.2
-        diota = 1.2
-        iota = PowerSeriesProfile(np.array([iota0, diota]), modes=[0, 1])
-
-        with pytest.raises(UserWarning):
-            eq = Equilibrium(iota=iota)
-            data = eq.compute("iota_23")
-            np.testing.assert_allclose(data["iota_23"], iota0 + diota * (2 / 3))

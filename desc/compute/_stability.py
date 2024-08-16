@@ -464,7 +464,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     phi = data["phi"]
 
-    N_alpha = int(8)
+    N_alpha = int(1)
     N_zeta = int(len(phi) / N_alpha)
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))

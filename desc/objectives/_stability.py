@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jnp, scan
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid
@@ -496,7 +496,7 @@ class BallooningStability(_Objective):
             "len_transforms": len_transforms,
             "len_profiles": len_profiles,
             "fieldline_nodes": fieldline_nodes,
-            "N_alpha": len(self.alpha),
+            "N_alpha": int(8),
             "N_zeta": self.nzeta,
             "quad_weights": 1.0,
         }
@@ -549,37 +549,6 @@ class BallooningStability(_Objective):
         theta_PEST = alpha + iota * zeta
         nodes = jnp.array([rho, theta_PEST, zeta]).T
 
-        N_alpha = constants["N_alpha"]
-        N_zeta = constants["N_zeta"]
-
-        # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
-
-        import pdb
-
-        pdb.set_trace()
-
-        sfl_grid_list = [
-            Grid(
-                desc_coords[i * N_zeta : (i + 1) * N_zeta, :], sort=False, jitable=True
-            )
-            for i in range(N_alpha)
-        ]
-        transforms_list = [
-            get_transforms(self._data_keys, obj=eq, grid=sfl_grid, jitable=True)
-            for sfl_grid in sfl_grid_list
-        ]
-        profiles_list = [
-            get_profiles(self._data_keys, obj=eq, grid=sfl_grid)
-            for sfl_grid in sfl_grid_list
-        ]
-
-        # --no-verify sfl_grid = Grid(desc_coords[:N], sort=False, jitable=True)
-        # --no-verify transforms = get_transforms(
-        # --no-verify     self._data_keys, obj=eq, grid=sfl_grid, jitable=True
-        # --no-verify )
-        # --no-verify profiles = get_profiles(self._data_keys, obj=eq, grid=sfl_grid)
-
         # we prime the data dict with the correct iota values so we don't recompute them
         # using the wrong grid
         data = {
@@ -589,26 +558,86 @@ class BallooningStability(_Objective):
             "a": len_data["a"],
         }
 
-        ## now compute ballooning stuff
-        # --no-verify data = compute_fun(
-        # --no-verify     "desc.equilibrium.equilibrium.Equilibrium",
-        # --no-verify     self._data_keys,
-        # --no-verify     params=params,
-        # --no-verify     transforms=transforms,
-        # --no-verify     profiles=profiles,
-        # --no-verify     data=data,
-        # --no-verify )
+        N_alpha = constants["N_alpha"]
+        N_zeta = constants["N_zeta"]
 
-        # now compute ballooning stuff
-        vectorized_compute = jnp.vectorize(
-            compute_fun, signature="(),(),(),(),(),()->()"
+        # Rootfinding theta for a given theta_PEST
+        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
+
+        # DIFFERENT WAYS THAT DON'T WORK!
+        # --no-verify def compute_single_alpha(carry, idx):
+        # --no-verify     eq, desc_coords, N_zeta, data_keys, data = carry
+        # --no-verify     sfl_grid = Grid(desc_coords[idx*N_zeta:(idx+1)*N_zeta, :]
+        # --no-verify                               , sort=False, jitable=True)
+        # --no-verify     transforms = get_transforms(
+        # --no-verify         data_keys, obj=eq, grid=sfl_grid, jitable=True
+        # --no-verify     )
+        # --no-verify     profiles = get_profiles(data_keys, obj=eq, grid=sfl_grid)
+        # --no-verify     data_ball = compute_fun(
+        # --no-verify         "desc.equilibrium.equilibrium.Equilibrium",
+        # --no-verify         data_keys,
+        # --no-verify         params=params,
+        # --no-verify         transforms=transforms,
+        # --no-verify         profiles=profiles,
+        # --no-verify         data=data,
+        # --no-verify         )
+        # --no-verify     return carry, 1
+
+        # --no-verify initial_carry=(eq,desc_coords,N_zeta,[self._data_keys],data)
+        # --no-verify _,results=fori_loop(0,N_alpha,compute_single_alpha,initial_carry)
+
+        #         @partial(jit, static_argnames=('N_alpha', 'N_zeta', 'data_keys'))
+        #         def compute_single_alpha(eq, desc_coords, N_zeta, data_keys, data):
+        #                   def _compute(idx):
+        # --no-verify       sfl_grid = Grid(desc_coords[idx*N_zeta:(idx+1)*N_zeta, :],
+        # --no-verify                      sort=False, jitable=True)
+        # --no-verify        transforms = get_transforms(
+        # --no-verify            data_keys, obj=eq, grid=sfl_grid, jitable=True
+        # --no-verify        )
+        # --no-verify        profiles = get_profiles(data_keys, obj=eq, grid=sfl_grid)
+        # --no-verify        data = compute_fun(
+        # --no-verify            "desc.equilibrium.equilibrium.Equilibrium",
+        # --no-verify            data_keys,
+        # --no-verify            params=params,
+        # --no-verify            transforms=transforms,
+        # --no-verify            profiles=profiles,
+        # --no-verify            data=data,
+        # --no-verify        )
+        # --no-verify        return data["ideal_ball_gamma2"]
+        # --no-verify    return _compute
+        # --no-verifycompute_fn = compute_single_alpha(eq, desc_coords, N_zeta,
+        # --no-verify                          params, self._data_keys)
+        # --no-verify
+        # --no-verify results=
+        # --no-verify fori_loop(0,N_alpha,lambda i,_:compute_fn(i),jnp.zeros(N_alpha))
+
+        def compute_all_alphas(eq, desc_coords, data, N_alpha, N_zeta, data_keys):
+            def compute_single_alpha(_, idx):
+                sfl_grid = Grid(
+                    desc_coords[idx * N_zeta : (idx + 1) * N_zeta, :],
+                    sort=False,
+                    jitable=True,
+                )
+                transforms = get_transforms(
+                    data_keys, obj=eq, grid=sfl_grid, jitable=True
+                )
+                profiles = get_profiles(data_keys, obj=eq, grid=sfl_grid)
+                data_ball = compute_fun(
+                    "desc.equilibrium.equilibrium.Equilibrium",
+                    data_keys,
+                    params=params,
+                    transforms=transforms,
+                    profiles=profiles,
+                    data=data,
+                )
+                return None, data_ball["ideal_ball_gamma2"]
+
+            _, results = scan(compute_single_alpha, None, jnp.arange(N_alpha))
+            return results
+
+        # Usage
+        results = compute_all_alphas(
+            eq, desc_coords, data, N_alpha, N_zeta, self._data_keys
         )
-        data = vectorized_compute(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=transforms_list,
-            profiles=profiles_list,
-            data=data,
-        )
-        return data["ideal_ball_gamma2"]
+
+        return results

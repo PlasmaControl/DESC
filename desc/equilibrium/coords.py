@@ -138,7 +138,7 @@ def map_coordinates(  # noqa: C901
 
     # do surface average to get iota once
     if "iota" in profiles and profiles["iota"] is None:
-        profiles["iota"] = eq.get_profile("iota", params=params)
+        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
         params["i_l"] = profiles["iota"].params
 
     @functools.partial(jit, static_argnums=1)

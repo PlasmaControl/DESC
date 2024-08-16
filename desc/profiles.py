@@ -823,11 +823,10 @@ class SplineProfile(_Profile):
 
         if values is None:
             values = [0, 0, 0]
-        values = np.atleast_1d(values)
+        values = jnp.atleast_1d(values)
         if knots is None:
-            knots = np.linspace(0, 1, values.size)
-        else:
-            knots = np.atleast_1d(knots)
+            knots = jnp.linspace(0, 1, values.size)
+        knots = jnp.atleast_1d(knots)
         self._knots = knots
         self._params = values
         self._params_derivative = df

@@ -218,7 +218,7 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<ne>_rho",
-    label="\\bar{n}_e",
+    label="\\bar{n}_e = \\int n_e d\\rho",  # simple radial average〈nₑ〉ᵨ = ∫ nₑ dρ
     units="m^{-3}",
     units_long="1 / cubic meters",
     description="Line-averaged electron density",
@@ -228,6 +228,7 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["ne"],
+    resolution_requirement="r",
 )
 def _bar_ne(params, transforms, profiles, data, **kwargs):
     data["<ne>_rho"] = jnp.sum(data["ne"] * transforms["grid"].spacing[:, 0]) / jnp.sum(

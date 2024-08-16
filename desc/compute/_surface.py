@@ -1,7 +1,9 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz, xyz2rpz, xyz2rpz_vec
+from .geom_utils import rpz2xyz
+
+# TODO: review when zeta no longer equals phi
 
 
 @register_compute_fun(
@@ -21,15 +23,15 @@ from .geom_utils import rpz2xyz, xyz2rpz, xyz2rpz_vec
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
     Z = transforms["Z"].transform(params["Z_lmn"])
+    # TODO: change when zeta no longer equals phi
     phi = transforms["grid"].nodes[:, 2]
     coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz(coords)
+    # default basis for "x" is rpz, the conversion will be done
+    # in the main _compute function
     data["x"] = coords
     return data
 
@@ -47,13 +49,10 @@ def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["x"],
     parameterization="desc.geometry.core.Surface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _X_Surface(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        # if basis is rpz, then "x" is rpz and we must convert to xyz
-        coords = rpz2xyz(coords)
+    coords = rpz2xyz(coords)
     data["X"] = coords[:, 0]
     return data
 
@@ -71,13 +70,10 @@ def _X_Surface(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["x"],
     parameterization="desc.geometry.core.Surface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _Y_Surface(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        # if basis is rpz, then "x" is rpz and we must convert to xyz
-        coords = rpz2xyz(coords)
+    coords = rpz2xyz(coords)
     data["Y"] = coords[:, 1]
     return data
 
@@ -95,13 +91,9 @@ def _Y_Surface(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["x"],
     parameterization="desc.geometry.core.Surface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _R_Surface(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords = xyz2rpz(coords)
     data["R"] = coords[:, 0]
     return data
 
@@ -119,13 +111,9 @@ def _R_Surface(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["x"],
     parameterization="desc.geometry.core.Surface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _phi_Surface(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords = xyz2rpz(coords)
     data["phi"] = coords[:, 1]
     return data
 
@@ -141,15 +129,11 @@ def _phi_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "phi"],
+    data=["e_rho"],
     parameterization="desc.geometry.core.Surface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
     coords_r = data["e_rho"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords_r = xyz2rpz_vec(coords_r, phi=data["phi"])
     data["phi_r"] = coords_r[:, 1]
     return data
 
@@ -165,15 +149,11 @@ def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "phi"],
+    data=["e_theta"],
     parameterization="desc.geometry.core.Surface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
     coords_t = data["e_theta"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords_t = xyz2rpz_vec(coords_t, phi=data["phi"])
     data["phi_t"] = coords_t[:, 1]
     return data
 
@@ -189,15 +169,11 @@ def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_zeta", "phi"],
+    data=["e_zeta"],
     parameterization="desc.geometry.core.Surface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
     coords_z = data["e_zeta"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords_z = xyz2rpz_vec(coords_z, phi=data["phi"])
     data["phi_z"] = coords_z[:, 1]
     return data
 
@@ -236,7 +212,6 @@ def _Z_Surface(params, transforms, profiles, data, **kwargs):
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _e_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -259,7 +234,6 @@ def _e_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _e_rho_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -283,7 +257,6 @@ def _e_rho_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _e_rho_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -306,7 +279,6 @@ def _e_rho_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     aliases=["e_theta_r"],
 )
 def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -333,7 +305,6 @@ def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     aliases=["e_zeta_r"],
 )
 def _e_rho_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -358,7 +329,6 @@ def _e_rho_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     aliases=["e_rho_rt"],
 )
 def _e_theta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -386,7 +356,6 @@ def _e_theta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **k
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     aliases=["e_rho_rz"],
 )
 def _e_zeta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -577,15 +546,12 @@ def _K_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _x_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
     Z = transforms["Z"].transform(params["Z_lmn"])
     phi = transforms["grid"].nodes[:, 2]
     coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz(coords)
     data["x"] = coords
     return data
 
@@ -605,7 +571,6 @@ def _x_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _e_zeta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -628,7 +593,6 @@ def _e_zeta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwarg
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     aliases=["e_zeta_t"],
 )
 def _e_theta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -652,7 +616,6 @@ def _e_theta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
 )
 def _e_zeta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))

@@ -2384,6 +2384,8 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         dictionary of the data plotted, only returned if ``return_data=True``
 
     """
+    from desc.coils import _Coil
+
     lw = kwargs.pop("lw", 5)
     ls = kwargs.pop("ls", "solid")
     figsize = kwargs.pop("figsize", (10, 10))
@@ -2393,6 +2395,12 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         len(kwargs) != 0,
         ValueError,
         f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+    )
+    errorif(
+        not isinstance(coils, _Coil),
+        ValueError,
+        "Expected `coils` to be object of type `_Coil`, instead got type"
+        f" {type(coils)}",
     )
 
     if not isinstance(lw, (list, tuple)):

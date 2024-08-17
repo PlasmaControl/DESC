@@ -64,7 +64,7 @@ class ObjectiveFunction(IOAble):
         self._name = name
 
     def _set_derivatives(self):
-        """Set up derivatives of the objective functions."""
+        """Choose derivative mode based on mode of sub-objectives."""
         if self._deriv_mode == "auto":
             if all((obj._deriv_mode == "fwd") for obj in self.objectives):
                 self._deriv_mode = "batched"
@@ -394,7 +394,7 @@ class ObjectiveFunction(IOAble):
             Derivative(self.compute_scalar, mode="hess")(x, constants).squeeze()
         )
 
-    def _jac(self, op, x, constants=None):
+    def _jac_blocked(self, op, x, constants=None):
         # could also do something similar for grad and hess, but probably not
         # worth it. grad is already super cheap to eval all at once, and blocked
         # hess would only be block diag which may miss important interactions.
@@ -405,6 +405,9 @@ class ObjectiveFunction(IOAble):
         xs = jnp.split(x, xs_splits)
         J = []
         assert len(self.objectives) == len(self.constants)
+        # basic idea is we compute the jacobian of each objective wrt each thing
+        # one by one, and assemble into big block matrix
+        # if objective doesn't depend on a given thing, that part is set to 0.
         for k, (obj, const) in enumerate(zip(self.objectives, constants)):
             # get the xs that go to that objective
             thing_idx = self._things_per_objective_idx[k]
@@ -412,13 +415,16 @@ class ObjectiveFunction(IOAble):
             Ji_ = getattr(obj, op)(*xi, constants=const)  # jac wrt to just those things
             Ji = []  # jac wrt all things
             for i, thing in enumerate(self.things):
-                if i in thing_idx:
+                if i in thing_idx:  # dfi/dxj != 0
                     Ji += [Ji_[thing_idx.index(i)]]
-                else:
+                else:  # dfi/dxj == 0
                     Ji += [jnp.zeros((obj.dim_f, thing.dim_x))]
-            Ji = jnp.hstack(Ji)
+            Ji = jnp.hstack(Ji)  # something like [df1/dx1, df1/dx2, 0]
             J += [Ji]
-        return jnp.vstack(J)
+        # something like [df1/dx1, df1/dx2, 0]
+        #                [df2/dx1, 0, df2/dx3]   # noqa:E800
+        J = jnp.vstack(J)
+        return J
 
     @jit
     def jac_scaled(self, x, constants=None):
@@ -431,7 +437,7 @@ class ObjectiveFunction(IOAble):
         if self._deriv_mode == "looped":
             J = Derivative(self.compute_scaled, mode="looped")(x, constants)
         if self._deriv_mode == "blocked":
-            J = self._jac("jac_scaled", x, constants)
+            J = self._jac_blocked("jac_scaled", x, constants)
 
         return jnp.atleast_2d(J.squeeze())
 
@@ -446,7 +452,7 @@ class ObjectiveFunction(IOAble):
         if self._deriv_mode == "looped":
             J = Derivative(self.compute_scaled_error, mode="looped")(x, constants)
         if self._deriv_mode == "blocked":
-            J = self._jac("jac_scaled_error", x, constants)
+            J = self._jac_blocked("jac_scaled_error", x, constants)
 
         return jnp.atleast_2d(J.squeeze())
 
@@ -461,7 +467,7 @@ class ObjectiveFunction(IOAble):
         if self._deriv_mode == "looped":
             J = Derivative(self.compute_unscaled, mode="looped")(x, constants)
         if self._deriv_mode == "blocked":
-            J = self._jac("jac_unscaled", x, constants)
+            J = self._jac_blocked("jac_unscaled", x, constants)
 
         return jnp.atleast_2d(J.squeeze())
 
@@ -847,7 +853,7 @@ class _Objective(IOAble, ABC):
         self._things = flatten_list([things], True)
 
     def _set_derivatives(self):
-        """Set up derivatives of the objective wrt each argument."""
+        """Choose derivative mode based on size of inputs/outputs."""
         if self._deriv_mode == "auto":
             # choose based on shape of jacobian. fwd mode is more memory efficient
             # so we prefer that unless the jacobian is really wide

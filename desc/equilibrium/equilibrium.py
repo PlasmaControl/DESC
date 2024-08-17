@@ -163,7 +163,7 @@ class Equilibrium(IOAble, Optimizable):
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_K_FE"
+        "_K_FE",
     ]
 
     @execute_on_cpu
@@ -426,22 +426,13 @@ class Equilibrium(IOAble, Optimizable):
         # FE basis
         if self.basis != "fourierzernike":
             Rprime_basis = FiniteElementBasis(
-                L=self.L_grid,
-                M=self.M_grid,
-                N=self.N_grid,
-                K=self._K_FE
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, K=self._K_FE
             )
             Zprime_basis = FiniteElementBasis(
-                L=self.L_grid,
-                M=self.M_grid,
-                N=self.N_grid,
-                K=self._K_FE
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, K=self._K_FE
             )
             Lprime_basis = FiniteElementBasis(
-                L=self.L_grid,
-                M=self.M_grid,
-                N=self.N_grid,
-                K=self._K_FE
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, K=self._K_FE
             )
             Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
                 self.R_lmn,
@@ -468,6 +459,11 @@ class Equilibrium(IOAble, Optimizable):
         Allows for backwards-compatibility with equilibria saved/ran with older
         DESC versions.
         """
+        if not hasattr(self, "_K_FE"):
+            # call the property to set it to a proper value
+            # instead of None
+            self.K_FE
+
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
@@ -1509,6 +1505,17 @@ class Equilibrium(IOAble, Optimizable):
         """int: Maximum toroidal fourier mode number."""
         return self._N
 
+    @property
+    def K_FE(self):
+        """int: Order of the finite elements in each tetrahedron."""
+        return self.__dict__.setdefault("_K_FE", 1)
+
+    @K_FE.setter
+    def K_FE(self, new):
+        """int: Order of the finite elements in each tetrahedron."""
+        check_nonnegint(new)
+        self._K_FE = int(new)
+
     @optimizable_parameter
     @property
     def R_lmn(self):
@@ -1526,7 +1533,6 @@ class Equilibrium(IOAble, Optimizable):
         #     + f"got {len(R_lmn)} for basis with {self.R_basis.num_modes} modes",
         # )
         self._R_lmn = R_lmn
-        
 
     @optimizable_parameter
     @property
@@ -2119,7 +2125,7 @@ class Equilibrium(IOAble, Optimizable):
             `OptimizeResult` for a description of other attributes.
 
         """
-        print('Constraints are here = ', constraints)
+        print("Constraints are here = ", constraints)
         if constraints is None:
             constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):

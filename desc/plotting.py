@@ -16,7 +16,7 @@ from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
-from desc.coils import CoilSet
+from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
 from desc.equilibrium.coords import map_coordinates
@@ -2384,8 +2384,6 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         dictionary of the data plotted, only returned if ``return_data=True``
 
     """
-    from desc.coils import _Coil
-
     lw = kwargs.pop("lw", 5)
     ls = kwargs.pop("ls", "solid")
     figsize = kwargs.pop("figsize", (10, 10))
@@ -2399,8 +2397,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     errorif(
         not isinstance(coils, _Coil),
         ValueError,
-        "Expected `coils` to be object of type `_Coil`, instead got type"
-        f" {type(coils)}",
+        "Expected `coils` to be of type `_Coil`, instead got type" f" {type(coils)}",
     )
 
     if not isinstance(lw, (list, tuple)):

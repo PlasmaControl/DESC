@@ -266,8 +266,11 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
         self._L_grid = setdefault(L_grid, 2 * self.L)
-        self._M_grid = setdefault(M_grid, 2 * self.M)
-        self._N_grid = setdefault(N_grid, 2 * self.N)
+        self._M_grid = setdefault(M_grid, 4)
+        if self._N == 0:
+            self._N_grid = setdefault(N_grid, 0)
+        else:
+            self._N_grid = setdefault(N_grid, 4)
         self._K_FE = setdefault(K_FE, 1)
 
         # bases
@@ -388,13 +391,28 @@ class Equilibrium(IOAble, Optimizable):
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
 
+        self.basis = np.char.lower(basis)
         if ("R_lmn" in kwargs) or ("Z_lmn" in kwargs):
             assert ("R_lmn" in kwargs) and ("Z_lmn" in kwargs), "Must give both R and Z"
             self.R_lmn = kwargs.pop("R_lmn")
             self.Z_lmn = kwargs.pop("Z_lmn")
             self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
         else:
-            self.set_initial_guess(ensure_nested=ensure_nested)
+            # if self.basis != "fourierzernike":
+            #     # Convert surface to fourier zernike for initial guess.
+            #     R_lmn, Z_lmn, _ = convert_FE_to_spectral(
+            #         R_lmn,
+            #         Z_lmn,
+            #         np.zeros(R_lmn.shape),
+            #         fourier_basis_R,
+            #         fourier_basis_Z,
+            #         fourier_basis_R,
+            #         self._R_basis,
+            #         self._Z_basis,
+            #         self._R_basis,
+            #         rho
+            # )  
+            self.set_initial_guess(ensure_nested=ensure_nested)  #, basis=basis)
         if check_orientation:
             ensure_positive_jacobian(self)
         if kwargs.get("check_kwargs", True):
@@ -406,7 +424,7 @@ class Equilibrium(IOAble, Optimizable):
 
         # Now that initial guess is initialized, convert to the
         # FE basis
-        if np.char.lower(basis) != "fourierzernike":
+        if self.basis != "fourierzernike":
             Rprime_basis = FiniteElementBasis(
                 L=self.L_grid,
                 M=self.M_grid,
@@ -467,7 +485,10 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(self._L_grid)
         self._M_grid = int(self._M_grid)
         self._N_grid = int(self._N_grid)
-        self._K_FE = int(self._K_FE)
+        if hasattr(self, "_K_FE") and self._K_FE is not None:
+            self._K_FE = int(self._K_FE)
+        else:
+            self._K_FE = 1
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -637,7 +658,7 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(setdefault(L_grid, self.L_grid))
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
-        self._K_FE = int(setdefault(K_FE, self.K_FE))
+        self._K_FE = int(setdefault(K_FE, self._K_FE))
         self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = bool(setdefault(sym, self.sym))
 
@@ -646,9 +667,9 @@ class Equilibrium(IOAble, Optimizable):
         old_modes_L = self.L_basis.modes
 
         if self.basis == "FiniteElementBasis":
-            self.R_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self.K_FE)
-            self.Z_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self.K_FE)
-            self.L_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self.K_FE)
+            self.R_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self._K_FE)
+            self.Z_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self._K_FE)
+            self.L_basis.change_resolution(self.L_grid, self.M_grid, self.N_grid, self._K_FE)
         else:
             self.R_basis.change_resolution(
                 self.L,

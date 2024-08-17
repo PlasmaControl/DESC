@@ -266,7 +266,7 @@ class _FE_Basis(IOAble, ABC):
             self._idx[I_LMN] = {}
             self._idx[I_LMN][Q] = idx
 
-    def get_idx(self, I_LMN=0, Q=0, error=True):
+    def get_idx(self, I_LMN=0, Q=0, dummy=0, error=True):
         """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
         Parameters
@@ -331,6 +331,16 @@ class _FE_Basis(IOAble, ABC):
     @abstractmethod
     def change_resolution(self):
         """Change resolution of the basis to the given resolutions."""
+
+    @property
+    def K(self):
+        """int: Maximum spline order."""
+        return self.__dict__.setdefault("_K", 0)
+
+    @K.setter
+    def K(self, K):
+        assert int(K) == K, "Spline order must be an integer!"
+        self._K = int(K)    
 
     @property
     def L(self):
@@ -1164,6 +1174,11 @@ class FiniteElementBasis(_FE_Basis):
             self.mesh = FiniteElementMesh2D(L, M, K=K, rho_range=rho_range)
             self.I_LMN = 2 * (M - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) / 2.0)
+        elif L == 0:
+            # swapping in N -> L everywhere
+            self.mesh = FiniteElementMesh2D(N, M, K=K, rho_range=np.linspace(0, 2 * np.pi, N))
+            self.I_LMN = 2 * (M - 1) * (N - 1)
+            self.Q = int((K + 1) * (K + 2) / 2.0)
         else:
             self.mesh = FiniteElementMesh3D(L, M, N, K=K, rho_range=rho_range)
             self.I_LMN = 6 * (M - 1) * (N - 1) * (L - 1)
@@ -1226,36 +1241,40 @@ class FiniteElementBasis(_FE_Basis):
             basis_functions = self.mesh.find_intervals_corresponding_to_points(t, derivatives[1])
         elif self.N == 0:
             # Tessellate the domain and find the basis functions for rho, theta
-
-
-            # My attempt to make the code in the 2D case jax friendly, without
-            # having to change over the find_triangle function.
-
-
-
             def g_numpy(x):
-              # Calling function that is defined with numpy
-              return self.mesh.find_triangles_corresponding_to_points(x, derivatives[:2]).astype(x.dtype)
-
+                # Calling function that is defined with numpy
+                return self.mesh.find_triangles_corresponding_to_points(
+                    x, derivatives[:2]).astype(x.dtype)
+            abstract_eval = lambda x: jnp.zeros((r.size,len(modes)))
+            new_g = jaxify(g_numpy, abstract_eval)
+            Rho_Theta = jnp.array([jnp.ravel(r), jnp.ravel(t)]).T
+            basis_functions = new_g(Rho_Theta)
+        elif self.L == 0:
+            def g_numpy(x):
+                # Calling function that is defined with numpy
+                return self.mesh.find_triangles_corresponding_to_points(
+                    x, derivatives[:2]).astype(x.dtype)
 
             abstract_eval = lambda x: jnp.zeros((r.size,len(modes)))
             new_g = jaxify(g_numpy, abstract_eval)
 
-            Rho_Theta = jnp.array([jnp.ravel(r), jnp.ravel(t)]).T
-            basis_functions = new_g(Rho_Theta)
-
-
-            # Still throwing up an unhashable error. From what I can tell, potentially
-            # might need to use Partial?
+            Theta_Zeta = jnp.array([jnp.ravel(t), jnp.ravel(z)]).T
+            basis_functions = new_g(Theta_Zeta)
         else:
-            # Rho_Theta_Zeta = np.array([np.ravel(r), np.ravel(t), np.ravel(z)]).T
-            basis_functions = self.mesh.find_tetrahedra_corresponding_to_points(nodes, derivatives)
+            def g_numpy(x):
+                # Calling function that is defined with numpy
+                return self.mesh.find_tetrahedra_corresponding_to_points(
+                    x, derivatives).astype(x.dtype)
+
+            abstract_eval = lambda x: jnp.zeros((r.size,len(modes)))
+            new_g = jaxify(g_numpy, abstract_eval)
+            basis_functions = new_g(nodes)
 
         inds = i * self.Q + q
         basis_functions = np.reshape(basis_functions, (len(t), -1))
         return basis_functions[:, inds]
 
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L, M, N, K):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -1272,11 +1291,25 @@ class FiniteElementBasis(_FE_Basis):
         None
 
         """
-        if L != self.L or M != self.M or N != self.N:
+        if L != self.L or M != self.M or N != self.N or K != self.K:
             self.L = L
             self.M = M
             self.N = N
-            self._modes = self._get_modes(self.L, self.M, self.N)
+            self.K = K
+            if L == 0 and N == 0:
+                self.I_LMN = M - 1
+                self.Q = K + 1
+            elif N == 0:
+                self.I_LMN = 2 * (M - 1) * (L - 1)
+                self.Q = int((K + 1) * (K + 2) / 2.0)
+            elif L == 0:
+                self.I_LMN = 2 * (M - 1) * (N - 1)
+                self.Q = int((K + 1) * (K + 2) / 2.0)
+            else:
+                self.I_LMN = 6 * (M - 1) * (N - 1) * (L - 1)
+                self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
+            self.nmodes = self.I_LMN * self.Q
+            self._modes = self._get_modes()
             self._set_up()
 
 
@@ -2099,13 +2132,13 @@ class FiniteElementMesh3D:
         basis = fem.CellBasis(mesh, element)
 
         # Setting up integrals
-        from skfem.helpers import dot
+        # from skfem.helpers import dot
 
-        @fem.BilinearForm
-        def assembly(u, v, _):
-            return dot(u, v)
+        # @fem.BilinearForm
+        # def assembly(u, v, _):
+        #     return dot(u, v)
 
-        self.assembly_matrix = assembly.assemble(basis).todense()
+        # self.assembly_matrix = assembly.assemble(basis).todense()
         # print('FE_assembly = ', self.assembly_matrix)
 
         # We wish to compute the tetrahedral elements for all 6MNL tetrahedra:
@@ -2704,63 +2737,69 @@ class FiniteElementMesh3D:
         good_inds = np.logical_and(
             np.logical_and(
                 np.logical_and(
-                    np.logical_or(Det1 > 0.0, np.isclose(Det1, 0.0)),
-                    np.logical_or(Det2 > 0.0, np.isclose(Det2, 0.0)),
+                    np.logical_or(Det1 > 0.0, jnp.isclose(Det1, 0.0)),
+                    np.logical_or(Det2 > 0.0, jnp.isclose(Det2, 0.0)),
                 ),
-                np.logical_or(Det3 > 0.0, np.isclose(Det3, 0.0)),
+                np.logical_or(Det3 > 0.0, jnp.isclose(Det3, 0.0)),
             ),
-            np.logical_or(Det4 > 0.0, np.isclose(Det4, 0.0)),
+            np.logical_or(Det4 > 0.0, jnp.isclose(Det4, 0.0)),
         )
         # print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
 
         # Deal with points right at a vertex between four quadrilaterals (12 tets)
-        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 12))
+        duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(good_inds, axis=-1) == 12)[0])
+        # duplicates = duplicates[0]
         for i in duplicates:
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
 
         # Deal with points right at a vertex between two quadrilaterals (8 tets)
-        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 8))
+        duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(good_inds, axis=-1) == 8)[0])
+        # duplicates = duplicates[0]
         for i in duplicates:
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
 
         # Deal with points right at a vertex
-        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 6))
+        duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(good_inds, axis=-1) == 6)[0])
+        # duplicates = duplicates[0]
         for i in duplicates:
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
 
         # Deal with points shared on an edge by 4 tets
-        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 4))
+        duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(good_inds, axis=-1) == 4)[0])
+        # duplicates = duplicates[0]
         for i in duplicates:
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
 
         # Deal with points shared on an edge by 3 tets
-        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 3))
+        duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(good_inds, axis=-1) == 3)[0])
+        # duplicates = duplicates[0]
         for i in duplicates:
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
 
         # Deal with points shared on an edge by 2 tets (+ finish the vertex case)
-        duplicates = np.ravel(np.where(np.count_nonzero(good_inds, axis=-1) == 2))
+        duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(good_inds, axis=-1) == 2)[0])
+        # duplicates = duplicates[0]
         for i in duplicates:
-            max_col = np.argmax(good_inds[i, :])
+            max_col = jnp.argmax(good_inds[i, :])
             good_inds[i, max_col] = False
 
         true_rows, true_cols = np.where(good_inds)
@@ -2780,7 +2819,7 @@ class FiniteElementMesh3D:
 
 
 class FiniteElementMesh2D:
-    """Class representing a 2D mesh in (rho, theta).
+    """Class representing a 2D mesh in (rho, theta) or (theta, phi).
 
     This class represents a set of I_LMN = 2ML triangles obtained by tessellation
     of a UNIFORM rectangular L x M mesh in the (rho, theta) plane.
@@ -2843,13 +2882,13 @@ class FiniteElementMesh2D:
         basis = fem.CellBasis(mesh, element)
 
         # record the nodal assembly matrix if need to check these integrals
-        from skfem.helpers import dot
+        # from skfem.helpers import dot
 
-        @fem.BilinearForm
-        def assembly(u, v, _):
-            return dot(u, v)
+        # @fem.BilinearForm
+        # def assembly(u, v, _):
+        #     return dot(u, v)
 
-        self.assembly_matrix = assembly.assemble(basis).todense()
+        # self.assembly_matrix = assembly.assemble(basis).todense()
 
         # print('Assembly matrix shape = ', self.assembly_matrix.shape)
 
@@ -4223,7 +4262,7 @@ class IntervalFiniteElement:
         for i in range(self.Q):
             basis_functions[:, i] = self.lagrange_polynomial(eta, self.eta_nodes, i)
 
-        if t_deriv == 1:
+        if derivatives == 1:
             dbasis_deta = np.zeros(basis_functions.shape)
             dbasis_deta[:, 0] = -0.5
             dbasis_deta[:, 1] = 0.5
@@ -4235,7 +4274,7 @@ class IntervalFiniteElement:
             dbasis_dtheta = dbasis_deta * self.deta_dtheta
             basis_functions = dbasis_dtheta  # overwrite basis_functions
 
-        elif t_deriv == 2:
+        elif derivatives == 2:
             d2basis_deta2 = np.zeros(basis_functions.shape)
             d2basis_deta2[:, 0] = 0.0
             d2basis_deta2[:, 1] = 0.0
@@ -4397,13 +4436,13 @@ class FiniteElementMesh1D:
         vertices = np.ravel(basis.doflocs)
 
         # record the nodal assembly matrix if need to check these integrals
-        from skfem.helpers import dot
+        # from skfem.helpers import dot
 
-        @fem.BilinearForm
-        def assembly(u, v, _):
-            return dot(u, v)
+        # @fem.BilinearForm
+        # def assembly(u, v, _):
+        #     return dot(u, v)
 
-        self.assembly_matrix = assembly.assemble(basis).todense()
+        # self.assembly_matrix = assembly.assemble(basis).todense()
 
         # K + 1 here so that integral of basis_function * basis_function
         # is nonsingular, which requires a higher order integration

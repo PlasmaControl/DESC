@@ -291,25 +291,72 @@ class BoundaryRSelfConsistency(_Objective):
         eq = self.things[0]
         modes = eq.surface.R_basis.modes
         idx = np.arange(eq.surface.R_basis.num_modes)
-
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
         Js = []
         surf = eq.surface.rho if self._surface_label is None else self._surface_label
-        for i, (l, m, n) in enumerate(eq.R_basis.modes):
-            if eq.bdry_mode == "lcfs":
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                Js.append(j.flatten())
-            else:
-                raise NotImplementedError(
-                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
-                )
-        Js = np.array(Js)
-        # Broadcasting at once is faster. We need to use np.arange to avoid
-        # setting the value to the whole row.
-        self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
-            surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
-        )
+        from desc.geometry.surface import convert_spectral_to_FE
+
+        if not hasattr(eq, "basis"):
+            eq.basis = "FourierZernike"
+
+        # Look at Rory's email: Need to construct the matrix A such that
+        # A @ [R_lmn, Z_lmn] - [R^b_lmn, Z^b_lmn] = 0
+        if eq.basis == 'spline':
+            # convert the surface R_lmn to spline basis R_iq
+            from desc.basis import FiniteElementBasis, DoubleFourierSeries
+            # Really M and N here should be a grid resolution, not the Fourier resolution
+            FE_R_basis = FiniteElementBasis(
+                L=0, M=eq._M_grid, N=eq._N_grid, K=eq._K_FE
+            )
+            FE_Z_basis = FiniteElementBasis(
+                L=0, M=eq._M_grid, N=eq._N_grid, K=eq._K_FE
+            )
+            modes_R = eq._R_basis._get_modes()
+            modes_Z = eq._Z_basis._get_modes()
+
+            # Convert the R_lmn, Z_lmn
+            R_lmn, Z_lmn, _ = convert_spectral_to_FE(
+                    eq.surface.R_lmn,
+                    eq.surface.Z_lmn,
+                    np.zeros(eq.surface.R_lmn.shape),
+                    eq.surface._R_basis,
+                    eq.surface._Z_basis,
+                    eq.surface._R_basis,
+                    eq._R_basis,
+                    eq._Z_basis,
+                    eq._R_basis,
+                    eq.surface.rho
+            )
+            modes = eq.R_basis.modes
+            idx = np.arange(eq.R_basis.num_modes)
+            self._dim_f = idx.size
+            self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+            for i, (k, q) in enumerate(eq.R_basis.modes):
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes == [k, q]).all(axis=1))
+                    Js.append(j.flatten())
+                else:
+                    raise NotImplementedError(
+                        "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                    )
+            Js = np.array(Js)
+            self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = 1.0
+        else:
+            for i, (l, m, n) in enumerate(eq.R_basis.modes):
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                    Js.append(j.flatten())
+                else:
+                    raise NotImplementedError(
+                        "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                    )
+            Js = np.array(Js)
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
+                surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
+            )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -397,20 +444,97 @@ class BoundaryZSelfConsistency(_Objective):
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
         Js = []
         surf = eq.surface.rho if self._surface_label is None else self._surface_label
-        for i, (l, m, n) in enumerate(eq.Z_basis.modes):
-            if eq.bdry_mode == "lcfs":
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                Js.append(j.flatten())
-            else:
-                raise NotImplementedError(
-                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
-                )
-        Js = np.array(Js)
-        # Broadcasting at once is faster. We need to use np.arange to avoid
-        # setting the value to the whole row.
-        self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
-            surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
-        )
+        from desc.geometry.surface import convert_spectral_to_FE
+
+        if not hasattr(eq, "basis"):
+            eq.basis = "FourierZernike"
+
+        # Look at Rory's email: Need to construct the matrix A such that
+        # A @ [R_lmn, Z_lmn] - [R^b_lmn, Z^b_lmn] = 0
+        if eq.basis == 'spline':
+            # convert the surface R_lmn to spline basis R_iq
+            from desc.basis import FiniteElementBasis, DoubleFourierSeries
+            # Really M and N here should be a grid resolution, not the Fourier resolution
+            FE_R_basis = FiniteElementBasis(
+                L=0, M=eq._M_grid, N=eq._N_grid, K=eq._K_FE
+            )
+            FE_Z_basis = FiniteElementBasis(
+                L=0, M=eq._M_grid, N=eq._N_grid, K=eq._K_FE
+            )
+            # modes_R = eq._R_basis._get_modes()
+            # modes_Z = eq._Z_basis._get_modes()
+
+            ##### Need to map the 3D splines onto a set of 
+            ##### 2D splines on the surface, which seems
+            ##### nontrivial since there are more 3D splines.
+            ##### Maybe can just evaluate the 3D splines at 
+            ##### rho, and then throw out any that are all zeros?
+            ##### Even though barycentric coordinates look like a + br + ct + dz,
+            ##### The a, b, c, d are different between the triangles
+            ##### and the tetrahedra. So need to make this map properly by
+            # 1. Evaluate r = rho, so a* + ct + dz. 
+            # 2. Convert from tet barycentric coords to tri barycentric coords
+            # 3. Initialize tri basis functions on that. 
+            ##### Maybe easiest way is to have a function in FEMesh3D
+            ##### that takes rho argument and returns Mesh2D object? 
+            ##### Then, after converting the boundary conditions using this Mesh2D
+            ##### object, can just assign ones to the A matrix. 
+            # Convert the R_lmn, Z_lmn
+            # R_lmn, Z_lmn, _ = convert_spectral_to_FE(
+            #         eq.surface.R_lmn,
+            #         eq.surface.Z_lmn,
+            #         np.zeros(eq.surface.R_lmn.shape),
+            #         eq.surface._R_basis,
+            #         eq.surface._Z_basis,
+            #         eq.surface._R_basis,
+            #         eq._R_basis,
+            #         eq._Z_basis,
+            #         eq._R_basis,
+            #         eq.surface.rho
+            # )
+            modes = eq.Z_basis.modes
+            idx = np.arange(eq.Z_basis.num_modes)
+            self._dim_f = idx.size
+            self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+            for i, (k, q) in enumerate(eq.Z_basis.modes):
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes == [k, q]).all(axis=1))
+                    Js.append(j.flatten())
+                else:
+                    raise NotImplementedError(
+                        "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                    )
+            Js = np.array(Js)
+            self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = 1.0
+        else:
+            for i, (l, m, n) in enumerate(eq.Z_basis.modes):
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                    Js.append(j.flatten())
+                else:
+                    raise NotImplementedError(
+                        "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                    )
+            Js = np.array(Js)
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
+                surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
+            )
+        # for i, (l, m, n) in enumerate(eq.Z_basis.modes):
+        #     if eq.bdry_mode == "lcfs":
+        #         j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+        #         Js.append(j.flatten())
+        #     else:
+        #         raise NotImplementedError(
+        #             "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+        #         )
+        # Js = np.array(Js)
+        # # Broadcasting at once is faster. We need to use np.arange to avoid
+        # # setting the value to the whole row.
+        # self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
+        #     surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
+        # )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -486,16 +610,61 @@ class AxisRSelfConsistency(_Objective):
         ns = eq.axis.R_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        from desc.geometry.surface import convert_spectral_to_FE
+        if not hasattr(eq, "basis"):
+            eq.basis = "FourierZernike"
 
-        for i, (l, m, n) in enumerate(eq.R_basis.modes):
-            if m != 0:
-                continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
+        # Look at Rory's email: Need to construct the matrix A such that
+        # A @ [R_lmn, Z_lmn] - [R^b_lmn, Z^b_lmn] = 0
+        if eq.basis == 'spline':
+            # convert the surface R_lmn to spline basis R_iq
+            from desc.basis import FiniteElementBasis, DoubleFourierSeries
+            FE_R_basis = FiniteElementBasis(
+                L=0, M=0, N=eq._N_grid, K=eq._K_FE
+            )
+            FE_Z_basis = FiniteElementBasis(
+                L=0, M=0, N=eq._N_grid, K=eq._K_FE
+            )
+            modes_R = eq._R_basis._get_modes()
+            modes_Z = eq._Z_basis._get_modes()
+
+            # Convert the R_lmn, Z_lmn
+            R_lmn, Z_lmn, _ = convert_spectral_to_FE(
+                    eq.axis.R_lmn,
+                    eq.axis.Z_lmn,
+                    np.zeros(eq.axis.R_lmn.shape),
+                    eq.axis._R_basis,
+                    eq.axis._Z_basis,
+                    eq.axis._R_basis,
+                    FE_R_basis,
+                    FE_Z_basis,
+                    FE_R_basis,
+                    0.0
+            )
+            modes = FE_R_basis.modes
+            idx = np.arange(FE_R_basis.num_modes)
+            self._dim_f = idx.size
+            self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+            for i, (k, q) in enumerate(eq.R_basis.modes):
+                j = np.argwhere((modes == [k, q]).all(axis=1))
+                if m != 0:
+                    continue
+                if (l // 2) % 2 == 0:
+                    j = np.argwhere(n == ns)
+                    self._A[j, i] = 1
+                else:
+                    j = np.argwhere(n == ns)
+                    self._A[j, i] = -1
+        else:
+            for i, (l, m, n) in enumerate(eq.R_basis.modes):
+                if m != 0:
+                    continue
+                if (l // 2) % 2 == 0:
+                    j = np.argwhere(n == ns)
+                    self._A[j, i] = 1
+                else:
+                    j = np.argwhere(n == ns)
+                    self._A[j, i] = -1
 
         super().build(use_jit=use_jit, verbose=verbose)
 

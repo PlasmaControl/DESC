@@ -45,6 +45,7 @@ def convert_spectral_to_FE(
     Rprime_basis,
     Zprime_basis,
     Lprime_basis,
+    rho=1,
 ):
     """Converts between double Fourier and double FE representation.
 
@@ -106,6 +107,8 @@ def convert_spectral_to_FE(
         ).T
     elif N == 0:
         quadpoints = np.hstack((quadpoints_mesh, np.zeros((I * nquad, 1))))
+    elif L == 0:
+        quadpoints = np.hstack((np.ones((I * nquad, 1)) * rho, quadpoints_mesh))
     else:
         quadpoints = quadpoints_mesh 
 
@@ -113,6 +116,7 @@ def convert_spectral_to_FE(
     # as in the 2D case.
     # Actually only need to do this once since assembly matrix is the
     # same for R, Z, and L variables and same for the Fourier-Zernike basis
+    print(quadpoints.shape, L, M, N)
     Fourier_basis_pre_evaluated = R_basis.evaluate(nodes=quadpoints)
     t2 = time.time()
     print("Time to evaluate Fourier basis = ", t2 - t1)
@@ -122,7 +126,6 @@ def convert_spectral_to_FE(
     t2 = time.time()
     print("Time to evaluate FE basis = ", t2 - t1)
     t1 = time.time()
-    print(FE_basis_pre_evaluated.shape)
     
     # All the elements are identical so only need to integrate 
     # over a single complete set of the basis functions
@@ -133,7 +136,7 @@ def convert_spectral_to_FE(
     print("Time to evaluate FE2 = ", t2 - t1)
     t1 = time.time()
     FE_assembly_matrix = mesh.integrate(FE2).reshape(Q, Q)
-    print('A = ', FE_assembly_matrix)
+    # print('A = ', FE_assembly_matrix)
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)
 
@@ -216,7 +219,8 @@ def convert_spectral_to_FE(
     print("Time to solve Ax = b, ", t2 - t1)
     return Rprime_lmn, Zprime_lmn, Lprime_lmn
 
-
+#################### Need version of this class that works 
+# using a (theta, phi) 2D spline representation. 
 class FourierRZToroidalSurface(Surface):
     """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
 
@@ -244,7 +248,10 @@ class FourierRZToroidalSurface(Surface):
         ensure that this surface has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
-
+    basis : string, default "Fourier"
+        Basis representation of the surface. Other option is "Spline".
+    K : int, default = None
+        Order used for splines if basis = "Spline".
     """
 
     _io_attrs_ = Surface._io_attrs_ + [
@@ -270,6 +277,10 @@ class FourierRZToroidalSurface(Surface):
         rho=1,
         name="",
         check_orientation=True,
+        basis="Fourier",
+        M_grid=None,
+        N_grid=None,
+        K=None,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
@@ -300,10 +311,18 @@ class FourierRZToroidalSurface(Surface):
         self._L = 0
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
+        M_grid = check_nonnegint(M_grid, "M_grid")
+        N_grid = check_nonnegint(N_grid, "N_grid")
+        K = check_nonnegint(K, "K")
         NFP = check_posint(NFP, "NFP", False)
         self._M = setdefault(M, max(MR, MZ))
         self._N = setdefault(N, max(NR, NZ))
+        # Default to 4 x 4 angular grid
+        self._M_grid = setdefault(M_grid, 4)
+        self._N_grid = setdefault(N_grid, 4)
+        self._K = setdefault(K, 1)
         self._NFP = NFP
+        self.basis = basis
 
         if sym == "auto":
             if np.all(
@@ -315,12 +334,46 @@ class FourierRZToroidalSurface(Surface):
             else:
                 sym = False
 
-        self._R_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
-        )
-        self._Z_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
-        )
+        if basis == "Fourier":
+            self._R_basis = DoubleFourierSeries(
+                M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+            )
+            self._Z_basis = DoubleFourierSeries(
+                M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+            )
+        else:
+            #
+            from desc.basis import FiniteElementBasis
+
+            fourier_basis_R = DoubleFourierSeries(
+                M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+            )
+            fourier_basis_Z = DoubleFourierSeries(
+                M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+            )
+            # Really M and N here should be a grid resolution, not the Fourier resolution
+            self._R_basis = FiniteElementBasis(
+                L=0, M=self._M_grid, N=self._N_grid, K=self._K
+            )
+            self._Z_basis = FiniteElementBasis(
+                L=0, M=self._M_grid, N=self._N_grid, K=self._K
+            )
+            modes_R = self._R_basis._get_modes()
+            modes_Z = self._Z_basis._get_modes()
+
+            # Convert the R_lmn, Z_lmn
+            R_lmn, Z_lmn, _ = convert_spectral_to_FE(
+                    R_lmn,
+                    Z_lmn,
+                    np.zeros(R_lmn.shape),
+                    fourier_basis_R,
+                    fourier_basis_Z,
+                    fourier_basis_R,
+                    self._R_basis,
+                    self._Z_basis,
+                    self._R_basis,
+                    rho
+            )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
@@ -379,6 +432,9 @@ class FourierRZToroidalSurface(Surface):
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
+        M_grid = kwargs.pop("M_grid", None)
+        N_grid = kwargs.pop("N_grid", None)
+        K = kwargs.pop("K", None)
         NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
@@ -390,32 +446,59 @@ class FourierRZToroidalSurface(Surface):
             M, N = args
         elif len(args) == 3:
             _, M, N = args
+        elif len(args) == 4:
+            _, _, _, K = args
+        elif len(args) == 5:
+            _, _, _, K, M_grid = args
+        elif len(args) == 6:
+            _, _, _, K, M_grid, N_grid = args
 
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
+        M_grid = check_nonnegint(M_grid, "M_grid")
+        N_grid = check_nonnegint(N_grid, "N_grid")
+        K = check_nonnegint(K, "K")
         NFP = check_posint(NFP, "NFP")
         self._NFP = int(NFP if NFP is not None else self.NFP)
         self._sym = sym if sym is not None else self.sym
+        if not hasattr(self, "_K"):
+            self._K = 2
+        if not hasattr(self, "basis"):
+            self.basis = "Fourier"
 
         if (
             ((N is not None) and (N != self.N))
             or ((M is not None) and (M != self.M))
+            or ((K is not None) and (K != self._K))
+            or ((M_grid is not None) and (M_grid != self._M_grid))
+            or ((N_grid is not None) and (N_grid != self._N_grid))
             or (NFP is not None)
         ):
             M = int(M if M is not None else self.M)
             N = int(N if N is not None else self.N)
+            if hasattr(self, "_M_grid"):
+                M_grid = int(M_grid if M_grid is not None else self._M_grid)
+                N_grid = int(N_grid if N_grid is not None else self._N_grid)
+                K = int(K if K is not None else self._K)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
-            )
-            self.Z_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
-            )
+            if self.basis == "Fourier":
+                self.R_basis.change_resolution(
+                    M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+                )
+                self.Z_basis.change_resolution(
+                    M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                )
+            else:
+                self.R_basis.change_resolution(0, M_grid, N_grid, K)
+                self.Z_basis.change_resolution(0, M_grid, N_grid, K)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
             self._M = M
             self._N = N
+            self._M_grid = M_grid
+            self._N_grid = N_grid
+            self._K = K
 
     @optimizable_parameter
     @property
@@ -449,8 +532,8 @@ class FourierRZToroidalSurface(Surface):
                 + f"basis with {self.Z_basis.num_modes} modes."
             )
 
-    def get_coeffs(self, m, n=0):
-        """Get Fourier coefficients for given mode number(s)."""
+    def get_coeffs(self, m, n=0):  # (m, n) treated as (i, q) for splines
+        """Get Fourier/Spline coefficients for given mode number(s)."""
         n = np.atleast_1d(n).astype(int)
         m = np.atleast_1d(m).astype(int)
 
@@ -471,7 +554,7 @@ class FourierRZToroidalSurface(Surface):
         return R, Z
 
     def set_coeffs(self, m, n=0, R=None, Z=None):
-        """Set specific Fourier coefficients."""
+        """Set specific Fourier/Spline coefficients."""
         m, n, R, Z = (
             np.atleast_1d(m),
             np.atleast_1d(n),
@@ -488,7 +571,7 @@ class FourierRZToroidalSurface(Surface):
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     @classmethod
-    def from_input_file(cls, path):
+    def from_input_file(cls, path, basis="Fourier"):
         """Create a surface from Fourier coefficients in a DESC or VMEC input file.
 
         Parameters
@@ -518,6 +601,7 @@ class FourierRZToroidalSurface(Surface):
             inputs["surface"][:, 1:3].astype(int),
             inputs["NFP"],
             inputs["sym"],
+            basis=basis
         )
         return surf
 
@@ -533,6 +617,7 @@ class FourierRZToroidalSurface(Surface):
         NFP=1,
         sym=True,
         positive_iota=True,
+        basis="Fourier",
     ):
         """Create a surface from a near-axis model for quasi-poloidal symmetry.
 
@@ -592,7 +677,8 @@ class FourierRZToroidalSurface(Surface):
         modes_Z = np.array([[-1, 0], [0, -2], [-1, 1], [1, -2], [-1, 2]])
 
         surf = cls(
-            R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z, NFP=NFP, sym=sym
+            R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z, NFP=NFP, sym=sym,
+            basis=basis
         )
         return surf
 
@@ -609,6 +695,7 @@ class FourierRZToroidalSurface(Surface):
         check_orientation=True,
         rcond=None,
         w=None,
+        basis="Fourier",
     ):
         """Create a surface from given R,Z coordinates in real space.
 
@@ -719,6 +806,7 @@ class FourierRZToroidalSurface(Surface):
             NFP,
             sym,
             check_orientation=check_orientation,
+            basis=basis
         )
         return surf
 
@@ -735,6 +823,7 @@ class FourierRZToroidalSurface(Surface):
         twist=0.0,
         NFP=1,
         sym=True,
+        basis="Fourier",
     ):
         """Create a surface using a generalized Miller parameterization.
 
@@ -822,11 +911,12 @@ class FourierRZToroidalSurface(Surface):
         # no m=1, n=0 mode, but by construction this should be right handed
         # so we can skip that check.
         return cls.from_values(
-            np.array([R, zeta, Z]).T, theta, NFP=NFP, sym=sym, check_orientation=False
+            np.array([R, zeta, Z]).T, theta, NFP=NFP, sym=sym, check_orientation=False,
+            basis=basis
         )
 
     def constant_offset_surface(
-        self, offset, grid=None, M=None, N=None, full_output=False
+        self, offset, grid=None, M=None, N=None, full_output=False, basis="Fourier"
     ):
         """Create a FourierRZSurface with constant offset from the base surface (self).
 
@@ -941,6 +1031,7 @@ class FourierRZToroidalSurface(Surface):
             N=N,
             NFP=base_surface.NFP,
             sym=base_surface.sym,
+            basis=basis
         )
         if full_output:
             return offset_surface, data, (res, niter)

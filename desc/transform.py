@@ -79,9 +79,9 @@ class Transform(IOAble):
         self._built_pinv = False
         self._derivatives = self._get_derivatives(derivs)
         self._sort_derivatives()
-        self._method = method
+        self._method = "jitable"
         # assign according to logic in setter function
-        self.method = method
+        self.method = "jitable"
         if build:
             self.build()
         if build_pinv:

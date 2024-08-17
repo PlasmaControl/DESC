@@ -256,22 +256,23 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if order > 0:
         if (weight is None) or (weight == "auto"):
             w = jnp.ones((eq.dim_x,))
-            if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
-                w = put(
-                    w,
-                    eq.x_idx["R_lmn"],
-                    (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
-                )
-                w = put(
-                    w,
-                    eq.x_idx["Z_lmn"],
-                    (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
-                )
-                w = put(
-                    w,
-                    eq.x_idx["L_lmn"],
-                    (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
-                )
+            #### Ignore weights for now when using the spline basis
+            # if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
+            #     w = put(
+            #         w,
+            #         eq.x_idx["R_lmn"],
+            #         (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
+            #     )
+            #     w = put(
+            #         w,
+            #         eq.x_idx["Z_lmn"],
+            #         (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
+            #     )
+            #     w = put(
+            #         w,
+            #         eq.x_idx["L_lmn"],
+            #         (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
+            #     )
             weight = w
         weight = jnp.atleast_1d(jnp.asarray(weight))
         assert (

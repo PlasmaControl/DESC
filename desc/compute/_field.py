@@ -1572,6 +1572,25 @@ def _B_sub_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="B_phi|r,t",
+    label="B_{\\phi} = B \\dot \\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant toroidal component of magnetic field in (ρ,θ,ϕ) "
+    "coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B", "e_phi|r,t"],
+)
+def _B_sub_phi_rt(params, transforms, profiles, data, **kwargs):
+    data["B_phi|r,t"] = dot(data["B"], data["e_phi|r,t"])
+    return data
+
+
+@register_compute_fun(
     name="B_rho_r",
     label="\\partial_{\\rho} B_{\\rho}",
     units="T \\cdot m",

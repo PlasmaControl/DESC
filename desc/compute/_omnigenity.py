@@ -23,7 +23,7 @@ from .utils import cross, dot, safediv
     units="T \\cdot m}",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant poloidal component of "
-    + "magnetic field",
+    "magnetic field.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
@@ -39,25 +39,27 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: do math to change definition of nu so that we can just use B_zeta_mn here
 @register_compute_fun(
-    name="B_zeta_mn",
-    label="B_{\\zeta, m, n}",
+    name="B_phi_mn",
+    label="B_{\\phi, m, n}",
     units="T \\cdot m}",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant toroidal component of "
-    + "magnetic field",
+    "magnetic field in (ρ,θ,ϕ) coordinates.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_zeta"],
+    data=["B_phi|r,t"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     resolution_requirement="tz",
+    aliases="B_zeta_mn",  # TODO: remove when phi != zeta
 )
-def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
-    data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])
+def _B_phi_mn(params, transforms, profiles, data, **kwargs):
+    data["B_phi_mn"] = transforms["B"].fit(data["B_phi|r,t"])
     return data
 
 
@@ -73,7 +75,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_zeta_mn"],
+    data=["B_theta_mn", "B_phi_mn"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -89,7 +91,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
 
     num_t = (mask_t @ sign(wn)) * data["B_theta_mn"]
     den_t = mask_t @ jnp.abs(wm)
-    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"]
+    num_z = (mask_z @ sign(wm)) * data["B_phi_mn"]
     den_z = mask_z @ jnp.abs(NFP * wn)
 
     w_mn = jnp.where(mask_t.any(axis=0), mask_t.T @ safediv(num_t, den_t), w_mn)

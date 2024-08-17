@@ -56,6 +56,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     resolution_requirement="tz",
+    aliases="B_zeta_mn",  # TODO: remove when phi != zeta
 )
 def _B_phi_mn(params, transforms, profiles, data, **kwargs):
     data["B_phi_mn"] = transforms["B"].fit(data["B_phi|r,t"])

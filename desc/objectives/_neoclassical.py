@@ -255,6 +255,9 @@ class EffectiveRipple(_Objective):
             data=data,
             **self._hyperparameters,
         )
+        import pdb
+
+        pdb.set_trace()
         return grid.compress(data["effective ripple"])
 
 

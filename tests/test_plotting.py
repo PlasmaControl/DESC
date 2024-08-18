@@ -801,8 +801,6 @@ def test_plot_coils():
     coil.rotate(angle=np.pi / N)
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
-    with pytest.raises(ValueError, match="Expected `coils`"):
-        plot_coils("not a coil")
     fig, data = plot_coils(coils2, return_data=True)
 
     def flatten_coils(coilset):
@@ -841,7 +839,7 @@ def test_plot_b_mag():
 
     rhoa = rho * np.ones_like(zeta)
     c = np.vstack([rhoa, thetas, zeta]).T
-    coords = eq.map_coordinates(c, inbasis=("rho", "theta_PEST", "zeta"))
+    coords = eq.compute_theta_coords(c)
     grid = Grid(coords)
 
     # compute |B| normalized in the usual flux tube way

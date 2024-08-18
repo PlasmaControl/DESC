@@ -352,7 +352,12 @@ class Optimizer(IOAble):
             state_0 = [things0[things.index(t)] for t in objective.things]
             state = [things[things.index(t)] for t in objective.things]
 
-            print("Start of solver   -->   End of solver")
+            # put a divider
+            print("\n{:-<55}".format(""))
+            print("{:*<55}".format(""))
+            print("{:-<55}\n".format(""))
+
+            print("{:45}Start   -->   End".format(" "))
             objective.print_value(objective.x(*state), objective.x(*state_0))
             for con in constraints:
                 arg_inds_for_this_con = [
@@ -361,6 +366,10 @@ class Optimizer(IOAble):
                 args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
                 args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
                 con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
+
+            print("\n{:-<55}".format(""))
+            print("{:*<55}".format(""))
+            print("{:-<55}\n".format(""))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

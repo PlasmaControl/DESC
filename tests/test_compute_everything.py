@@ -217,9 +217,9 @@ def test_compute_everything():
             ## can't be calculated here due to recent mods.
             if p == "desc.equilibrium.equilibrium.Equilibrium":
                 stability_keys = [
-                    "ideal_ball_gamma1",
-                    "ideal_ball_gamma2",
-                    "Newcomb_metric",
+                    "ideal ball gamma1",
+                    "ideal ball gamma2",
+                    "Newcomb metric",
                 ]
                 dict1 = {}
                 dict1[p] = things[p].compute(stability_keys, sfl_grid, basis="rpz")
@@ -274,9 +274,9 @@ def test_compute_everything():
             ## can't be calculated here due to recent mods.
             if p == "desc.equilibrium.equilibrium.Equilibrium":
                 stability_keys = [
-                    "ideal_ball_gamma1",
-                    "ideal_ball_gamma2",
-                    "Newcomb_metric",
+                    "ideal ball gamma1",
+                    "ideal ball gamma2",
+                    "Newcomb metric",
                 ]
                 dict1 = {}
                 dict1[p] = things[p].compute(stability_keys, sfl_grid, basis="xyz")

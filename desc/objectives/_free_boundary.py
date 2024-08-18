@@ -16,7 +16,7 @@ from desc.singularities import (
     FFTInterpolator,
     virtual_casing_biot_savart,
 )
-from desc.utils import Timer, errorif, warnif
+from desc.utils import Timer, errorif, print_result_width, warnif
 
 from .normalization import compute_scaling_factors
 
@@ -82,7 +82,7 @@ class VacuumBoundaryError(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary Error: {:10.3e} "
+    _print_value_fmt = "Boundary Error: "
     _units = "(T*m^2, T^2*m^2)"
     _coordinates = "rtz"
 
@@ -265,6 +265,7 @@ class VacuumBoundaryError(_Objective):
             w = constants["quad_weights"]
 
         abserr = jnp.all(self.target == 0)
+        pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
 
         def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units):
 
@@ -308,8 +309,8 @@ class VacuumBoundaryError(_Objective):
                 )
 
         formats = [
-            "Boundary normal field error: {:10.3e} ",
-            "Boundary magnetic pressure error: {:10.3e} ",
+            "Boundary normal field error: ",
+            "Boundary magnetic pressure error: ",
         ]
         units = ["(T*m^2)", "(T^2*m^2)"]
         nn = f.size // 2
@@ -329,7 +330,11 @@ class VacuumBoundaryError(_Objective):
             f0max = jnp.max(f0i)
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
-            fmt = fmt + "  -->  {:10.3e} " if args0 is not None else fmt
+            fmt = (
+                f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e}  -->  {:10.3e}"
+                if args0 is not None
+                else fmt + "{:10.3e}"
+            )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units)
 
 
@@ -430,7 +435,7 @@ class BoundaryError(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary Error: {:10.3e} "
+    _print_value_fmt = "Boundary Error: "
     _units = "(T*m^2, T^2*m^2, T*m^2)"
 
     _coordinates = "rtz"
@@ -730,6 +735,7 @@ class BoundaryError(_Objective):
             w = constants["quad_weights"]
 
         abserr = jnp.all(self.target == 0)
+        pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
 
         def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit):
 
@@ -773,9 +779,9 @@ class BoundaryError(_Objective):
                 )
 
         formats = [
-            "Boundary normal field error: {:10.3e} ",
-            "Boundary magnetic pressure error: {:10.3e} ",
-            "Boundary field jump error: {:10.3e} ",
+            "Boundary normal field error: ",
+            "Boundary magnetic pressure error: ",
+            "Boundary field jump error: ",
         ]
         units = ["(T*m^2)", "(T^2*m^2)", "(T*m^2)"]
         if self._sheet_current:
@@ -805,7 +811,11 @@ class BoundaryError(_Objective):
             f0max = jnp.max(f0i)
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
-            fmt = fmt + "  -->  {:10.3e}" if args0 is not None else fmt
+            fmt = (
+                f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e}  -->  {:10.3e}"
+                if args0 is not None
+                else fmt + "{:10.3e}"
+            )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
 
 
@@ -866,7 +876,7 @@ class BoundaryErrorNESTOR(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary magnetic pressure error: {:10.3e} "
+    _print_value_fmt = "Boundary magnetic pressure error: "
     _units = "(T^2*m^2)"
     _coordinates = "rtz"
 

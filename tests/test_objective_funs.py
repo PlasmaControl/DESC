@@ -76,6 +76,7 @@ from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.utils import print_result_width
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -1605,67 +1606,68 @@ def test_boundary_error_print(capsys):
     f2 = f[n:]
     obj.print_value(obj.xs())
     out = capsys.readouterr()
+    pre_width = len("Maximum absolute ")
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
     )
@@ -1684,63 +1686,63 @@ def test_boundary_error_print(capsys):
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
     )
@@ -1761,93 +1763,93 @@ def test_boundary_error_print(capsys):
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization[n])
-        )
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization[n])
-        )
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization[n])
-        )
+        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.max(f3))
+        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f3))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.min(f3))
+        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f3))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.mean(f3))
+        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f3))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(
-            np.max(f3 / obj.normalization[-1])
-        )
+        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.max(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(
-            np.min(f3 / obj.normalization[-1])
-        )
+        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.min(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary field jump error: {:10.3e} ".format(
-            np.mean(f3 / obj.normalization[-1])
-        )
+        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
     )

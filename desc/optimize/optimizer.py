@@ -19,6 +19,7 @@ from desc.utils import (
     flatten_list,
     get_instance,
     is_any_instance,
+    print_result_width,
     unique_list,
     warnif,
 )
@@ -353,11 +354,12 @@ class Optimizer(IOAble):
             state = [things[things.index(t)] for t in objective.things]
 
             # put a divider
-            print("\n{:-<55}".format(""))
-            print("{:*<55}".format(""))
-            print("{:-<55}\n".format(""))
+            w_divider = 50
+            print("\n{:-<{}}".format("", print_result_width + w_divider))
+            print("{:*<{}}".format("", print_result_width + w_divider))
+            print("{:-<{}}\n".format("", print_result_width + w_divider))
 
-            print("{:45}Start   -->   End".format(" "))
+            print(f"{'Start  -->   End':>{print_result_width+21}}")
             objective.print_value(objective.x(*state), objective.x(*state_0))
             for con in constraints:
                 arg_inds_for_this_con = [
@@ -367,9 +369,9 @@ class Optimizer(IOAble):
                 args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
                 con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
 
-            print("\n{:-<55}".format(""))
-            print("{:*<55}".format(""))
-            print("{:-<55}\n".format(""))
+            print("\n{:-<{}}".format("", print_result_width + w_divider))
+            print("{:*<{}}".format("", print_result_width + w_divider))
+            print("{:-<{}}\n".format("", print_result_width + w_divider))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

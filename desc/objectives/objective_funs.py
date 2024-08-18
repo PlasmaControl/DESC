@@ -9,7 +9,14 @@ from desc.backend import execute_on_cpu, jit, jnp, tree_flatten, tree_unflatten,
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
-from desc.utils import Timer, flatten_list, is_broadcastable, setdefault, unique_list
+from desc.utils import (
+    Timer,
+    flatten_list,
+    is_broadcastable,
+    print_result_width,
+    setdefault,
+    unique_list,
+)
 
 
 class ObjectiveFunction(IOAble):
@@ -362,9 +369,15 @@ class ObjectiveFunction(IOAble):
                     jnp.sum(self.compute_scaled_error(x0, constants=constants) ** 2) / 2
                 )
         if x0 is not None:
-            print("Total (sum of squares): {:10.3e}  -->  {:10.3e}, ".format(f0, f))
+            print(
+                f"{'Total (sum of squares)':<{print_result_width}}"
+                + "{:10.3e}  -->  {:10.3e}, ".format(f0, f)
+            )
         else:
-            print("Total (sum of squares): {:10.3e}, ".format(f))
+            print(
+                f"{'Total (sum of squares)':<{print_result_width}}"
+                + "{:10.3e}, ".format(f)
+            )
         params = self.unpack_state(x)
         if x0 is not None:
             params0 = self.unpack_state(x0)
@@ -1096,7 +1109,10 @@ class _Objective(IOAble, ABC):
         if args0 is not None:
             f = self.compute_unscaled(*args, **kwargs)
             f0 = self.compute_unscaled(*args0, **kwargs)
-            print_value_fmt = self._print_value_fmt + "  -->  {:10.3e} "
+            print_value_fmt = (
+                f"{self._print_value_fmt:<{print_result_width}}"
+                + "{:10.3e}  -->  {:10.3e} "
+            )
         else:
             f = self.compute_unscaled(*args, **kwargs)
             f0 = f
@@ -1105,7 +1121,9 @@ class _Objective(IOAble, ABC):
             # This is a bit of a hack, but it works. the format() only replaces
             # the first value in the {} string, so the second one is unused.
             # That is why we set f0 to f.
-            print_value_fmt = self._print_value_fmt
+            print_value_fmt = (
+                f"{self._print_value_fmt:<{print_result_width}}" + "{:10.3e} "
+            )
 
         if self.linear:
             # probably a Fixed* thing, just need to know norm
@@ -1143,6 +1161,17 @@ class _Objective(IOAble, ABC):
             f0min = jnp.min(f0)
             f0mean = jnp.mean(f0 * w) / jnp.mean(w)
 
+            pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
+            if args0 is not None:
+                print_value_fmt = (
+                    f"{self._print_value_fmt:<{print_result_width-pre_width}}"
+                    + "{:10.3e}  -->  {:10.3e} "
+                )
+            else:
+                print_value_fmt = (
+                    f"{self._print_value_fmt:<{print_result_width-pre_width}}"
+                    + "{:10.3e} "
+                )
             print(
                 "Maximum "
                 + ("absolute " if abserr else "")

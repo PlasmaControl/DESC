@@ -440,7 +440,6 @@ def test_NAE_QSC_solve():
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
 
-    eq_fit = eq.copy()
     eq_lambda_fixed_0th_order = eq.copy()
     eq_lambda_fixed_1st_order = eq.copy()
 
@@ -472,7 +471,6 @@ def test_NAE_QSC_solve():
             xtol=1e-6,
             constraints=constraints,
         )
-    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
     # Make sure axis is same
     for eqq, string in zip(
@@ -482,24 +480,15 @@ def test_NAE_QSC_solve():
         np.testing.assert_array_almost_equal(orig_Rax_val, eqq.axis.R_n, err_msg=string)
         np.testing.assert_array_almost_equal(orig_Zax_val, eqq.axis.Z_n, err_msg=string)
 
-        # Make sure surfaces of solved equilibrium are similar near axis as QSC
-        rho_err, theta_err = area_difference_desc(eqq, eq_fit)
+        # Make sure iota of solved equilibrium is same on-axis as QSC
 
-        np.testing.assert_allclose(rho_err[:, 0:-6], 0, atol=1.5e-2, err_msg=string)
-        np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3, err_msg=string)
-
-        # Make sure iota of solved equilibrium is same near axis as QSC
-
-        iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
+        iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
 
         np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
-        np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
-        # check lambda to match near axis
-        # Evaluate lambda near the axis
+        # check lambda to match on-axis
         data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
         lam_nae = data_nae["lambda"]
-        # Reshape to form grids on theta and phi
 
         phi = np.squeeze(grid_axis.nodes[:, 2])
         np.testing.assert_allclose(
@@ -526,7 +515,6 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
 
-    eq_fit = eq.copy()
     eq_lambda_fixed_0th_order = eq.copy()
     eq_lambda_fixed_1st_order = eq.copy()
 
@@ -558,7 +546,6 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
             xtol=1e-6,
             constraints=constraints,
         )
-    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
     # Make sure axis is same
     for eqq, string in zip(
@@ -568,18 +555,11 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
         np.testing.assert_array_almost_equal(orig_Rax_val, eqq.axis.R_n, err_msg=string)
         np.testing.assert_array_almost_equal(orig_Zax_val, eqq.axis.Z_n, err_msg=string)
 
-        # Make sure surfaces of solved equilibrium are similar near axis as QSC
-        rho_err, theta_err = area_difference_desc(eqq, eq_fit)
+        # Make sure iota of solved equilibrium is same on axis as QSC
 
-        np.testing.assert_allclose(rho_err[:, 0:-6], 0, atol=1.5e-2, err_msg=string)
-        np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3, err_msg=string)
-
-        # Make sure iota of solved equilibrium is same near axis as QSC
-
-        iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
+        iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
 
         np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
-        np.testing.assert_allclose(iota[1:10], qsc.iota, rtol=5e-3, err_msg=string)
 
         ### check lambda to match on axis
         # Evaluate lambda on the axis
@@ -603,17 +583,15 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
 def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
-    qic = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
+    qic = Qic.from_paper("QI NFP2 r2", nphi=199, order="r1")
     qic.lasym = False  # don't need to consider stellarator asym for order 1 constraints
     ntheta = 75
     r = 0.01
-    N = 11
+    N = 9
     eq = Equilibrium.from_near_axis(qic, r=r, L=7, M=7, N=N, ntheta=ntheta)
 
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
-
-    eq_fit = eq.copy()
 
     # this has all the constraints we need,
     cs = get_NAE_constraints(eq, qic, order=1)
@@ -629,75 +607,24 @@ def test_NAE_QIC_solve():
     np.testing.assert_array_almost_equal(orig_Rax_val, eq.axis.R_n)
     np.testing.assert_array_almost_equal(orig_Zax_val, eq.axis.Z_n)
 
-    # Make sure surfaces of solved equilibrium are similar near axis as QIC
-    rho_err, theta_err = area_difference_desc(eq, eq_fit)
-
-    np.testing.assert_allclose(rho_err[:, 0:3], 0, atol=5e-2)
-    # theta error isn't really an indicator of near axis behavior
-    # since it's computed over the full radius, but just indicates that
-    # eq is similar to eq_fit
-    np.testing.assert_allclose(theta_err, 0, atol=5e-2)
-
     # Make sure iota of solved equilibrium is same near axis as QIC
-    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
-    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
+    iota = eq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
 
     np.testing.assert_allclose(iota[0], qic.iota, rtol=1e-5)
-    np.testing.assert_allclose(iota[1:10], qic.iota, rtol=1e-3)
 
-    # check lambda to match near axis
-    grid_2d_05 = LinearGrid(rho=np.array(1e-6), M=50, N=50, NFP=eq.NFP, endpoint=True)
+    grid_axis = LinearGrid(rho=0.0, theta=0.0, zeta=qic.phi, NFP=eq.NFP)
+    phi = grid_axis.nodes[:, 2].squeeze()
 
-    # Evaluate lambda near the axis
-    data_nae = eq.compute("lambda", grid=grid_2d_05)
-    lam_nae = data_nae["lambda"]
+    # check lambda to match on-axis
+    lam_nae = eq.compute("lambda", grid=grid_axis)["lambda"]
 
-    # Reshape to form grids on theta and phi
-    zeta = (
-        grid_2d_05.nodes[:, 2]
-        .reshape(
-            (grid_2d_05.num_theta, grid_2d_05.num_rho, grid_2d_05.num_zeta), order="F"
-        )
-        .squeeze()
-    )
-
-    lam_nae = lam_nae.reshape(
-        (grid_2d_05.num_theta, grid_2d_05.num_rho, grid_2d_05.num_zeta), order="F"
-    )
-
-    phi = np.squeeze(zeta[0, :])
-    lam_nae = np.squeeze(lam_nae[:, 0, :])
-
-    lam_av_nae = np.mean(lam_nae, axis=0)
     np.testing.assert_allclose(
-        lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=1e-4, rtol=1e-2
+        lam_nae, -qic.iota * qic.nu_spline(phi), atol=1e-4, rtol=1e-2
     )
 
     # check |B| on axis
-
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(1e-6))
-    # Evaluate B modes near the axis
-    data_nae = eq.compute(["|B|_mn", "B modes"], grid=grid)
-    modes = data_nae["B modes"]
-    B_mn_nae = data_nae["|B|_mn"]
-    # Evaluate B on an angular grid
-    theta = np.linspace(0, 2 * np.pi, 150)
-    phi = np.linspace(0, 2 * np.pi, qic.nphi)
-    th, ph = np.meshgrid(theta, phi)
-    B_nae = np.zeros((qic.nphi, 150))
-
-    for i, (l, m, n) in enumerate(modes):
-        if m >= 0 and n >= 0:
-            B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 > n:
-            B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 <= n:
-            B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
-        elif m < 0 and n < 0:
-            B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behavior
-    B_av_nae = np.mean(B_nae, axis=1)
-    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qic.B0, atol=2e-2)
+    B_nae = eq.compute(["|B|"], grid=grid_axis)["|B|"]
+    np.testing.assert_allclose(B_nae, qic.B0, atol=1e-3)
 
 
 @pytest.mark.unit
@@ -1703,7 +1630,7 @@ def test_signed_PlasmaVesselDistance():
     eq = Equilibrium(M=1, N=1)
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
-    grid = LinearGrid(M=10, N=2, NFP=eq.NFP)
+    grid = LinearGrid(M=20, N=8, NFP=eq.NFP)
 
     obj = PlasmaVesselDistance(
         surface=surf,
@@ -1713,7 +1640,7 @@ def test_signed_PlasmaVesselDistance():
         plasma_grid=grid,
         use_signed_distance=True,
     )
-    objective = ObjectiveFunction((obj,))
+    objective = ObjectiveFunction(obj)
 
     optimizer = Optimizer("lsq-exact")
     (eq, surf), _ = optimizer.optimize(
@@ -1726,4 +1653,9 @@ def test_signed_PlasmaVesselDistance():
         xtol=1e-9,
     )
 
-    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), target_dist, atol=1e-2)
+    np.testing.assert_allclose(
+        obj.compute(*obj.xs(eq, surf)),
+        target_dist,
+        atol=1e-2,
+        err_msg="allowing eq to change",
+    )

@@ -2654,3 +2654,33 @@ def test_asymmetric_normalization():
         assert np.all(np.isfinite(val))
     for val in scales_eq.values():
         assert np.all(np.isfinite(val))
+
+
+def test_objective_print_widths():
+    """Test that the objective's name is shorter than max."""
+    from desc.objectives.objective_funs import _Objective
+
+    subclasses = _Objective.__subclasses__()
+    max_prewidth = len("Maximum Absolute ")
+    max_width = print_result_width - max_prewidth
+    # check every subclass of _Objective class
+    for subclass in subclasses:
+        try:
+            assert len(subclass._print_value_fmt) <= max_width, (
+                f"{subclass.__name__} is too long for print_result_width.\n"
+                + "Note to Devs: If this is a new objective, please make sure the "
+                + "name is short enough to fit in the print_result_width. Either "
+                + "change the name or increase the print_result_width in the "
+                + "desc/utils.py file. The former is preferred."
+            )
+        except AttributeError:
+            # if the subclass has subclasses, check those
+            subsubclasses = subclass.__subclasses__()
+            for subsubclass in subsubclasses:
+                assert len(subsubclass._print_value_fmt) <= max_width, (
+                    f"{subsubclass.__name__} is too long for print_result_width.\n"
+                    + "Note to Devs: If this is a new objective, please make sure the "
+                    + "name is short enough to fit in the print_result_width. Either "
+                    + "change the name or increase the print_result_width in the "
+                    + "desc/utils.py file. The former is preferred."
+                )

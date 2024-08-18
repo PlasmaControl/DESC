@@ -1685,9 +1685,6 @@ def test_ballooning_stability_opt():
 
         lam2_optimized[i] = np.max(data["ideal ball gamma2"])
 
-    import pdb
-
-    pdb.set_trace()
     assert lam2_optimized < lam2_initial
 
 

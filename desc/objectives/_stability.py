@@ -419,7 +419,7 @@ class BallooningStability(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        deriv_mode="auto",
+        deriv_mode="rev",
         loss_function=None,
         rho=0.5,
         alpha=jnp.linspace(0, jnp.pi, 8),

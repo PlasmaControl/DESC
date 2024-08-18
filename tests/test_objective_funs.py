@@ -1414,16 +1414,22 @@ def test_profile_objective_print(capsys):
         iota=PowerSeriesProfile([1, 0, 0.5]), pressure=PowerSeriesProfile([1, 0, -1])
     )
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
+    pre_width = len("Maximum ")
 
     def test(obj, values, print_init=False, normalize=False):
         if print_init:
             # print the initial value too. For this test, it is the
             # same as the final value
             obj.print_value(obj.xs(eq), obj.xs(eq))
-            print_fmt = obj._print_value_fmt + "  -->  {:10.3e} "
+            print_fmt = (
+                f"{obj._print_value_fmt:<{print_result_width-pre_width}}"
+                + "{:10.3e}  -->  {:10.3e} "
+            )
         else:
             obj.print_value(obj.xs(eq))
-            print_fmt = obj._print_value_fmt
+            print_fmt = (
+                f"{obj._print_value_fmt:<{print_result_width-pre_width}}" + "{:10.3e} "
+            )
         out = capsys.readouterr()
 
         corr_out = str(
@@ -1489,44 +1495,57 @@ def test_profile_objective_print(capsys):
 @pytest.mark.unit
 def test_plasma_vessel_distance_print(capsys):
     """Test that the PlasmaVesselDistance objective prints correctly."""
+    pre_width = len("Maximum ")
 
     def test(obj, eq, surface, d, print_init=False):
         if print_init:
             if isinstance(obj, ObjectiveFunction):
                 obj.print_value(obj.x(eq, surface), obj.x(eq, surface))
-                print_fmt = obj.objectives[0]._print_value_fmt + "  -->  {:10.3e} "
-                unit = obj.objectives[0]._units
+                print_fmt = (
+                    f"{obj.objectives[0]._print_value_fmt:<{print_result_width-pre_width}}"  # noqa: E501
+                    + "{:10.3e}  -->  {:10.3e} "
+                )
+                units = obj.objectives[0]._units
                 norm = obj.objectives[0].normalization
             else:
                 obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
-                print_fmt = obj._print_value_fmt + "  -->  {:10.3e} "
-                unit = obj._units
+                print_fmt = (
+                    f"{obj._print_value_fmt:<{print_result_width-pre_width}}"
+                    + "{:10.3e}  -->  {:10.3e} "
+                )
+                units = obj._units
                 norm = obj.normalization
         else:
             if isinstance(obj, ObjectiveFunction):
                 obj.print_value(obj.x(eq, surface))
-                print_fmt = obj.objectives[0]._print_value_fmt
-                unit = obj.objectives[0]._units
+                print_fmt = (
+                    f"{obj.objectives[0]._print_value_fmt:<{print_result_width-pre_width}}"  # noqa: E501
+                    + "{:10.3e} "
+                )
+                units = obj.objectives[0]._units
                 norm = obj.objectives[0].normalization
             else:
                 obj.print_value(obj.xs(eq, surface))
-                print_fmt = obj._print_value_fmt
-                unit = obj._units
+                print_fmt = (
+                    f"{obj._print_value_fmt:<{print_result_width-pre_width}}"
+                    + "{:10.3e} "
+                )
+                units = obj._units
                 norm = obj.normalization
         out = capsys.readouterr()
 
         corr_out = str(
             "Maximum "
             + print_fmt.format(np.max(d), np.max(d))
-            + unit
+            + units
             + "\n"
             + "Minimum "
             + print_fmt.format(np.min(d), np.min(d))
-            + unit
+            + units
             + "\n"
             + "Average "
             + print_fmt.format(np.mean(d), np.mean(d))
-            + unit
+            + units
             + "\n"
             + "Maximum "
             + print_fmt.format(np.max(d / norm), np.max(d / norm))
@@ -1546,15 +1565,18 @@ def test_plasma_vessel_distance_print(capsys):
             if print_init:
                 corr_out = (
                     str(
-                        "Total (sum of squares): {:10.3e}  -->  {:10.3e}, \n".format(
-                            f, f
-                        )
+                        f"{'Total (sum of squares): ':<{print_result_width}}"
+                        + "{:10.3e}  -->  {:10.3e}, \n".format(f, f)
                     )
                     + corr_out
                 )
             else:
                 corr_out = (
-                    str("Total (sum of squares): {:10.3e}, \n".format(f)) + corr_out
+                    str(
+                        f"{'Total (sum of squares): ':<{print_result_width}}"
+                        + "{:10.3e}, \n".format(f)
+                    )
+                    + corr_out
                 )
         assert out.out == corr_out
 

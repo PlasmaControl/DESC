@@ -370,12 +370,12 @@ class ObjectiveFunction(IOAble):
                 )
         if x0 is not None:
             print(
-                f"{'Total (sum of squares)':<{print_result_width}}"
+                f"{'Total (sum of squares): ':<{print_result_width}}"
                 + "{:10.3e}  -->  {:10.3e}, ".format(f0, f)
             )
         else:
             print(
-                f"{'Total (sum of squares)':<{print_result_width}}"
+                f"{'Total (sum of squares): ':<{print_result_width}}"
                 + "{:10.3e}, ".format(f)
             )
         params = self.unpack_state(x)

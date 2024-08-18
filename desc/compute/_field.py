@@ -3150,7 +3150,7 @@ def _gradB2(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|grad(|B|^2)|/2mu0",
-    label="|\\nabla |B|^{2}/(2\\mu_0)|",
+    label="|\\nabla |B|^{2}|/(2\\mu_0)",
     units="N \\cdot m^{-3}",
     units_long="Newton / cubic meter",
     description="Magnitude of magnetic pressure gradient",

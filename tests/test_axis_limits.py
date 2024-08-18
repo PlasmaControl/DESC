@@ -23,7 +23,8 @@ from desc.objectives import GenericObjective, ObjectiveFunction
 # functions tend toward zero as the magnetic axis is approached and that
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
-zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
+zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t"}
+
 # "current Redl" needs special treatment because it is generally not defined for all
 # configurations (giving NaN values), except it is always 0 at the magnetic axis
 not_continuous_limits = {"current Redl"}

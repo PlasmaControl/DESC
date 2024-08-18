@@ -2554,8 +2554,6 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        # FIXME: Want to ensure nonzero gradient in test.
-        print(np.count_nonzero(g))
 
 
 @pytest.mark.unit

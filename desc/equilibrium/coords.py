@@ -138,14 +138,8 @@ def map_coordinates(  # noqa: C901
 
     # do surface average to get iota once
     if "iota" in profiles and profiles["iota"] is None:
-        profiles["iota"] = (
-            kwargs.pop("iota")
-            if "iota" in kwargs
-            else eq.get_profile("iota", params=params)
-        )
+        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
         params["i_l"] = profiles["iota"].params
-    else:
-        kwargs.pop("iota", None)
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
@@ -250,11 +244,8 @@ def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
     elif poloidal == "alpha":
         alpha = coords[:, inbasis.index("alpha")]
         rho = jnp.atleast_1d(rho)
-        grid = Grid(
-            nodes=jnp.column_stack([rho, jnp.zeros_like(rho), jnp.zeros_like(rho)]),
-            sort=False,
-            jitable=True,
-        )
+        zero = jnp.zeros_like(rho)
+        grid = Grid(nodes=jnp.column_stack([rho, zero, zero]), sort=False, jitable=True)
         iota = profiles["iota"].compute(grid)
         theta = (alpha + iota * zeta) % (2 * jnp.pi)
 
@@ -689,7 +680,7 @@ def get_rtz_grid(
         rtz : rho, theta, zeta
     period : tuple of float
         Assumed periodicity for each quantity in inbasis.
-        Use np.inf to denote no periodicity.
+        Use ``np.inf`` to denote no periodicity.
     jitable : bool, optional
         If false the returned grid has additional attributes.
         Required to be false to retain nodes at magnetic axis.
@@ -703,6 +694,8 @@ def get_rtz_grid(
     grid = Grid.create_meshgrid(
         [radial, poloidal, toroidal], coordinates=coordinates, period=period
     )
+    if "iota" in kwargs:
+        kwargs["iota"] = grid.expand(kwargs["iota"])
     inbasis = {
         "r": "rho",
         "t": "theta",

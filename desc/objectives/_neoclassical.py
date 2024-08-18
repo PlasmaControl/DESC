@@ -7,8 +7,6 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
-from ..backend import jnp
-from ..profiles import SplineProfile
 from .objective_funs import _Objective
 from .utils import _parse_callable_target_bounds
 
@@ -207,14 +205,16 @@ class EffectiveRipple(_Objective):
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
 
         Returns
         -------
-        effective_ripple : ndarray
+        result : ndarray
+            Effective ripple as a function of the flux surface label.
 
         """
         if constants is None:
@@ -227,15 +227,13 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        iota = self._grid_1dr.compress(data["iota"])
-        iota_r = self._grid_1dr.compress(data["iota_r"])
         grid = eq.get_rtz_grid(
             self._rho,
             self._alpha,
             self._zeta,
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
-            iota=SplineProfile(iota, df=iota_r, knots=self._rho, name="iota", jnp=jnp),
+            iota=self._grid_1dr.compress(data["iota"]),
             params=params,
         )
         data = {

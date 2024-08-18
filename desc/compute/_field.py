@@ -117,11 +117,11 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "phi_z", "lambda_t", "phi_t", "lambda_z"],
+    data=["B0", "phi_z", "theta_PEST_t", "phi_t", "theta_PEST_z"],
 )
 def _B_sup_phi(params, transforms, profiles, data, **kwargs):
     data["B^phi"] = data["B0"] * (
-        data["phi_z"] * (data["lambda_t"] + 1) - data["phi_t"] * data["lambda_z"]
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
     )
     return data
 
@@ -141,24 +141,24 @@ def _B_sup_phi(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "phi_z",
-        "lambda_t",
+        "theta_PEST_t",
         "phi_t",
-        "lambda_z",
+        "theta_PEST_z",
         "B0_r",
         "phi_rz",
-        "lambda_rt",
+        "theta_PEST_rt",
         "phi_rt",
-        "lambda_rz",
+        "theta_PEST_rz",
     ],
 )
 def _B_sup_phi_r(params, transforms, profiles, data, **kwargs):
     data["B^phi_r"] = data["B0_r"] * (
-        data["phi_z"] * (data["lambda_t"] + 1) - data["phi_t"] * data["lambda_z"]
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
     ) + data["B0"] * (
-        data["phi_rz"] * (data["lambda_t"] + 1)
-        + data["phi_z"] * data["lambda_rt"]
-        - data["phi_rt"] * data["lambda_z"]
-        - data["phi_t"] * data["lambda_rz"]
+        data["phi_rz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_rt"]
+        - data["phi_rt"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_rz"]
     )
     return data
 
@@ -178,24 +178,24 @@ def _B_sup_phi_r(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "phi_z",
-        "lambda_t",
+        "theta_PEST_t",
         "phi_t",
-        "lambda_z",
+        "theta_PEST_z",
         "B0_t",
         "phi_tz",
-        "lambda_tt",
+        "theta_PEST_tt",
         "phi_tt",
-        "lambda_tz",
+        "theta_PEST_tz",
     ],
 )
 def _B_sup_phi_t(params, transforms, profiles, data, **kwargs):
     data["B^phi_t"] = data["B0_t"] * (
-        data["phi_z"] * (data["lambda_t"] + 1) - data["phi_t"] * data["lambda_z"]
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
     ) + data["B0"] * (
-        data["phi_tz"] * (data["lambda_t"] + 1)
-        + data["phi_z"] * data["lambda_tt"]
-        - data["phi_tt"] * data["lambda_z"]
-        - data["phi_t"] * data["lambda_tz"]
+        data["phi_tz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_tt"]
+        - data["phi_tt"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_tz"]
     )
     return data
 
@@ -215,24 +215,24 @@ def _B_sup_phi_t(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "phi_z",
-        "lambda_t",
+        "theta_PEST_t",
         "phi_t",
-        "lambda_z",
+        "theta_PEST_z",
         "B0_z",
         "phi_zz",
-        "lambda_tz",
+        "theta_PEST_tz",
         "phi_tz",
-        "lambda_zz",
+        "theta_PEST_zz",
     ],
 )
 def _B_sup_phi_z(params, transforms, profiles, data, **kwargs):
     data["B^phi_z"] = data["B0_z"] * (
-        data["phi_z"] * (data["lambda_t"] + 1) - data["phi_t"] * data["lambda_z"]
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
     ) + data["B0"] * (
-        data["phi_zz"] * (data["lambda_t"] + 1)
-        + data["phi_z"] * data["lambda_tz"]
-        - data["phi_tz"] * data["lambda_z"]
-        - data["phi_t"] * data["lambda_zz"]
+        data["phi_zz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_tz"]
+        - data["phi_tz"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_zz"]
     )
     return data
 

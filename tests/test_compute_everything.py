@@ -219,7 +219,7 @@ def test_compute_everything():
                 stability_keys = [
                     "ideal ball gamma1",
                     "ideal ball gamma2",
-                    "Newcomb metric",
+                    "Newcomb ball metric",
                 ]
                 dict1 = {}
                 dict1[p] = things[p].compute(stability_keys, sfl_grid, basis="rpz")
@@ -276,7 +276,7 @@ def test_compute_everything():
                 stability_keys = [
                     "ideal ball gamma1",
                     "ideal ball gamma2",
-                    "Newcomb metric",
+                    "Newcomb ball metric",
                 ]
                 dict1 = {}
                 dict1[p] = things[p].compute(stability_keys, sfl_grid, basis="xyz")

@@ -264,16 +264,12 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     pitch = _get_pitch(
         g, data["min_tz |B|"], data["max_tz |B|"], kwargs.get("num_pitch", 125)
     )
-    ripple = simpson(
-        y=_poloidal_mean(g, imap(d_ripple, pitch).reshape(-1, g.num_rho, g.num_alpha)),
-        x=pitch,
-        axis=0,
-    )
+    ripple = simpson(y=imap(d_ripple, pitch).squeeze(axis=1), x=pitch, axis=0)
     data["effective ripple"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (data["max_tz |B|"] * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * g.expand(ripple)
+        * g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))
         / data["<L|r,a>"]
     )
     return data

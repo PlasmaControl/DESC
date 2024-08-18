@@ -614,7 +614,7 @@ class PowerSeriesProfile(_Profile):
 
     def set_params(self, l, a=None):
         """Set specific power series coefficients."""
-        l, a = np.atleast_1d(l), np.atleast_1d(a)
+        l, a = np.atleast_1d(l, a)
         a = np.broadcast_to(a, l.shape)
         for ll, aa in zip(l, a):
             idx = self.basis.get_idx(ll, 0, 0)
@@ -800,10 +800,10 @@ class SplineProfile(_Profile):
     ----------
     values: array-like
         Array containing values of the dependent variable.
-    knots : int or ndarray
+    knots : array-like
         1-D array containing values of the independent variable.
         Values must be real, finite, and in strictly increasing order in [0, 1].
-        If an integer, uses that many uniformly spaced points.
+        If not given, assumes values is uniformly spaced in [0, 1].
     method : str
         Method of interpolation. Default is cubic2.
         - `'nearest'`: nearest neighbor interpolation

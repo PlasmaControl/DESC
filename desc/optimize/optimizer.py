@@ -356,7 +356,7 @@ class Optimizer(IOAble):
             # put a divider
             w_divider = 50
             print("\n{:-<{}}".format("", print_result_width + w_divider))
-            print("{:*<{}}".format("", print_result_width + w_divider))
+            print("{:+<{}}".format("", print_result_width + w_divider))
             print("{:-<{}}\n".format("", print_result_width + w_divider))
 
             print(f"{'Start  -->   End':>{print_result_width+21}}")
@@ -370,7 +370,7 @@ class Optimizer(IOAble):
                 con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
 
             print("\n{:-<{}}".format("", print_result_width + w_divider))
-            print("{:*<{}}".format("", print_result_width + w_divider))
+            print("{:+<{}}".format("", print_result_width + w_divider))
             print("{:-<{}}\n".format("", print_result_width + w_divider))
 
         if copy:

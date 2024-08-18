@@ -684,4 +684,4 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
         raise ValueError("trees must be nested lists of dicts")
 
 
-print_result_width = 60
+print_result_width = 50

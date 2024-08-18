@@ -331,9 +331,9 @@ class VacuumBoundaryError(_Objective):
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
             fmt = (
-                f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e}  -->  {:10.3e}"
+                f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
                 if args0 is not None
-                else fmt + "{:10.3e}"
+                else f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e} "
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units)
 
@@ -812,9 +812,9 @@ class BoundaryError(_Objective):
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
             fmt = (
-                f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e}  -->  {:10.3e}"
+                f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
                 if args0 is not None
-                else fmt + "{:10.3e}"
+                else f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e} "
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
 

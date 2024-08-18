@@ -454,7 +454,8 @@ class AxisRSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
-    _print_value_fmt = "R axis self consistency error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "R axis self consistency error: {:10.3e} "
 
     def __init__(
         self,
@@ -541,7 +542,8 @@ class AxisZSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
-    _print_value_fmt = "Z axis self consistency error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Z axis self consistency error: {:10.3e} "
 
     def __init__(
         self,

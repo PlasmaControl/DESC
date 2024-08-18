@@ -1803,7 +1803,7 @@ def _gradrho(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<|grad(rho)|>",  # same as S(r) / V_r(r)
-    label="\\langle \\vert \\nabla \\rho \\vert \\rangle|",
+    label="\\langle \\vert \\nabla \\rho \\vert \\rangle",
     units="m^{-1}",
     units_long="inverse meters",
     description="Magnitude of contravariant radial basis vector, flux surface average",

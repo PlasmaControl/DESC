@@ -1431,7 +1431,6 @@ def _e_sub_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞ᵨ | ρ=0 }.
     data["e_rho"] = jnp.array([data["R_r"], data["R"] * data["omega_r"], data["Z_r"]]).T
-
     return data
 
 

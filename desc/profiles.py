@@ -823,9 +823,10 @@ class SplineProfile(_Profile):
 
         if values is None:
             values = [0, 0, 0]
+        values = jnp.atleast_1d(values)
         if knots is None:
             knots = jnp.linspace(0, 1, values.size)
-        knots, values = jnp.atleast_1d(knots, values)
+        knots = jnp.atleast_1d(knots)
         self._knots = knots
         self._params = values
         self._method = method

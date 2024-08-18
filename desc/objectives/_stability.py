@@ -561,6 +561,7 @@ class BallooningStability(_Objective):
             zeta,
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
+            params=params,
         )
 
         data = compute_fun(

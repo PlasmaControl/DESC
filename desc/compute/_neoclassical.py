@@ -390,13 +390,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         # The integrand is piecewise continuous and likely poorly approximated by a
         # polynomial. Composite quadrature should perform better than higher order
         # methods.
-        Gamma_c = trapezoid(
-            y=_poloidal_mean(
-                g, imap(d_Gamma_c, pitch).reshape(-1, g.num_rho, g.num_alpha)
-            ),
-            x=pitch,
-            axis=0,
-        )
+        Gamma_c = trapezoid(y=imap(d_Gamma_c, pitch).squeeze(axis=1), x=pitch, axis=0)
     else:
 
         def d_Gamma_c(pitch, B_sup_z, B, B_z_ra, cvdrift0, gbdrift):
@@ -433,9 +427,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         Gamma_c = _vec_quadax(romberg, divmax=jnp.log2(num_pitch + 1))(
             d_Gamma_c, pitch, *args
         )
-        Gamma_c = _poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha))
 
-    data["Gamma_c"] = jnp.pi / (8 * 2**0.5) * g.expand(Gamma_c) / data["<L|r,a>"]
+    data["Gamma_c"] = (
+        jnp.pi
+        / (8 * 2**0.5)
+        * g.expand(_poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha)))
+        / data["<L|r,a>"]
+    )
     return data
 
 
@@ -486,15 +484,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         "As a reference, there are typically <= 5 wells per toroidal transit."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
-    adaptive=(
-        "bool : Whether to adaptively integrate over the velocity coordinate. "
-        "If true, then num_pitch specifies an upper bound on the maximum number "
-        "of function evaluations."
-    ),
 )
-@partial(
-    jit, static_argnames=["num_quad", "num_pitch", "num_wells", "batch", "adaptive"]
-)
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_wells", "batch"])
 def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Nemov et al.
 
@@ -513,8 +504,7 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     knots = g.compress(g.nodes[:, 2], surface_label="zeta")
     quad = leggauss(kwargs.get("num_quad", 31))
     num_pitch = kwargs.get("num_pitch", 125)
-    adaptive = kwargs.get("adaptive", False)
-    pitch = _get_pitch(g, data["min_tz |B|"], data["max_tz |B|"], num_pitch, adaptive)
+    pitch = _get_pitch(g, data["min_tz |B|"], data["max_tz |B|"], num_pitch)
 
     # The derivative (∂/∂ψ)|ϑ,ϕ belongs to flux coordinates which satisfy
     # α = ϑ − χ(ψ) ϕ where α is the poloidal label of ψ,α Clebsch coordinates.
@@ -596,11 +586,11 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     # The integrand is piecewise continuous and likely poorly approximated by a
     # polynomial. Composite quadrature should perform better than higher order
     # methods.
-    Gamma_c = trapezoid(
-        y=_poloidal_mean(g, imap(d_Gamma_c, pitch).reshape(-1, g.num_rho, g.num_alpha)),
-        x=pitch,
-        axis=0,
+    Gamma_c = trapezoid(y=imap(d_Gamma_c, pitch).squeeze(axis=1), x=pitch, axis=0)
+    data["Gamma_c Nemov"] = (
+        jnp.pi
+        / (8 * 2**0.5)
+        * g.expand(_poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha)))
+        / data["<L|r,a>"]
     )
-
-    data["Gamma_c Nemov"] = jnp.pi / (8 * 2**0.5) * g.expand(Gamma_c) / data["<L|r,a>"]
     return data

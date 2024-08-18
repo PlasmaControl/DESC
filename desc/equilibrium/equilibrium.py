@@ -755,8 +755,8 @@ class Equilibrium(IOAble, Optimizable):
             f = grid.compress(data[name])
             p = SplineProfile(f, knots, name=name)
         else:
-            f, dfdr = map(grid.compress, (data[name[0]], data[name[1]]))
-            p = HermiteSplineProfile(knots, f, dfdr, name=name)
+            f, df = map(grid.compress, (data[name[0]], data[name[1]]))
+            p = HermiteSplineProfile(f, df, knots, name=name)
         if kind == "power_series":
             p = p.to_powerseries(order=min(self.L, grid.num_rho), xs=knots, sym=True)
         if kind == "fourier_zernike":

@@ -37,7 +37,7 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import Optimizer
 from desc.perturbations import perturb
-from desc.profiles import PowerSeriesProfile, SplineProfile
+from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -750,20 +750,17 @@ class Equilibrium(IOAble, Optimizable):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
+        knots = grid.compress(grid.nodes[:, 0])
         if isinstance(name, str):
-            f = data[name]
-            df = None
-            method = "cubic2"
+            f = grid.compress(data[name])
+            p = SplineProfile(f, knots, name=name)
         else:
-            f = data[name[0]]
-            df = grid.compress(data[name[1]], surface_label="rho")
-            method = "cubic"
-        x, f = map(grid.compress, (grid.nodes[:, 0], f))
-        p = SplineProfile(f, df=df, knots=x, method=method, name=name)
+            f, dfdr = map(grid.compress, (data[name[0]], data[name[1]]))
+            p = HermiteSplineProfile(knots, f, dfdr, name=name)
         if kind == "power_series":
-            p = p.to_powerseries(order=min(self.L, len(x)), xs=x, sym=True)
+            p = p.to_powerseries(order=min(self.L, grid.num_rho), xs=knots, sym=True)
         if kind == "fourier_zernike":
-            p = p.to_fourierzernike(L=min(self.L, len(x)), xs=x)
+            p = p.to_fourierzernike(L=min(self.L, grid.num_rho), xs=knots)
         return p
 
     def get_axis(self):

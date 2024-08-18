@@ -299,7 +299,7 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, **kwargs):
     along a field line
     """
     source_grid = transforms["grid"].source_grid
-    # Vectorize in rho later
+    # Vectorize in rho later. 1D grid elements will cause problems
     rho = data["rho"]
 
     psi_b = params["Psi"] / (2 * jnp.pi)
@@ -313,8 +313,8 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, **kwargs):
     iota = data["iota"]
     shear = data["shear"]
     psi = data["psi"]
-    sign_psi = jnp.sign(psi[-1])
-    sign_iota = jnp.sign(iota[-1])
+    sign_psi = jnp.sign(psi)
+    sign_iota = jnp.sign(iota)
 
     phi = source_grid.nodes[:, 2]
 
@@ -463,8 +463,8 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     iota = data["iota"]
     shear = data["shear"]
     psi = data["psi"]
-    sign_psi = jnp.sign(psi[-1])
-    sign_iota = jnp.sign(iota[-1])
+    sign_psi = jnp.sign(psi)
+    sign_iota = jnp.sign(iota)
 
     phi = source_grid.nodes[:, 2]
 
@@ -625,8 +625,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     iota = data["iota"]
     shear = data["shear"]
     psi = data["psi"]
-    sign_psi = jnp.sign(psi[-1])
-    sign_iota = jnp.sign(iota[-1])
+    sign_psi = jnp.sign(psi)
+    sign_iota = jnp.sign(iota)
 
     phi = source_grid.nodes[:, 2]
 

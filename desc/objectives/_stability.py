@@ -547,9 +547,9 @@ class BallooningStability(_Objective):
         # we prime the data dict with the correct iota values so we don't recompute them
         # using the wrong grid
         data = {
-            "iota": iota_data["iota"][0] * jnp.ones_like(zeta),
-            "iota_r": iota_data["iota_r"][0] * jnp.ones_like(zeta),
-            "shear": iota_data["shear"][0] * jnp.ones_like(zeta),
+            "iota": iota_data["iota"][0],
+            "iota_r": iota_data["iota_r"][0],
+            "shear": iota_data["shear"][0],
             "a": len_data["a"],
         }
 
@@ -561,7 +561,14 @@ class BallooningStability(_Objective):
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data = eq.compute(self._data_keys, grid=grid)["ideal ball gamma2"]
+        data = compute_fun(
+            eq,
+            self._data_keys,
+            params,
+            get_transforms(self._data_keys, eq, grid, jitable=True),
+            profiles=get_profiles(self._data_keys, eq, grid),
+            data=data,
+        )["ideal ball gamma2"]
 
         # Shifted ReLU operation
         data = (data + self.lambda_0) * (data >= self.lambda_0)

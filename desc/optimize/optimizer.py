@@ -203,6 +203,7 @@ class Optimizer(IOAble):
         options = {} if options is None else options
         _, method = _parse_method(self.method)
 
+        timer.start("Initializing the optimization")
         # parse and combine constraints into linear & nonlinear objective functions
         linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
         objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
@@ -297,9 +298,12 @@ class Optimizer(IOAble):
                         nonlinear_constraint.dim_f - num_equality
                     )
                 )
+        timer.stop("Initializing the optimization")
+        if verbose > 1:
+            timer.disp("Initializing the optimization")
 
         if verbose > 0:
-            print("Starting optimization")
+            print("\nStarting optimization")
             print("Using method: " + str(self.method))
 
         timer.start("Solution time")

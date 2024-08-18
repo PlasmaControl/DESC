@@ -10,8 +10,7 @@ import desc.io
 from desc.backend import jnp
 from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import map_coordinates
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.objectives import MagneticWell, MercierStability
 
 DEFAULT_RANGE = (0.05, 1)
@@ -365,7 +364,6 @@ def test_ballooning_geometry(tmpdir_factory):
     fac_list = [4, 4]
 
     for eq, fac in zip(eq_list, fac_list):
-        print(eq)
         eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
 
         data_eq = eq.compute(eq_keys)
@@ -376,22 +374,13 @@ def test_ballooning_geometry(tmpdir_factory):
         iotas = fi(np.sqrt(psi))
         shears = fs(np.sqrt(psi))
 
+        rho = np.sqrt(psi)
         N = int((2 * eq.M_grid * eq.N_grid) * ntor * int(fac) + 1)
-        coords1 = np.zeros((N, 3))
-        coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
-        coords1[:, 1] = alpha * np.ones(N, dtype=int) + iotas * np.linspace(
-            -ntor * np.pi, ntor * np.pi, N
-        )
         zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
-        coords1[:, 2] = zeta
-
-        c1 = eq.map_coordinates(
-            coords1, inbasis=("rho", "theta_PEST", "zeta"), maxiter=20
-        )
-        grid = Grid(c1, sort=False)
 
         data_keys = [
             "p_r",
+            "psi",
             "psi_r",
             "sqrt(g)_PEST",
             "|grad(psi)|^2",
@@ -416,14 +405,22 @@ def test_ballooning_geometry(tmpdir_factory):
             "B^zeta",
         ]
 
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+        )
+
         data = eq.compute(data_keys, grid=grid)
 
-        psib = data_eq["psi"][-1]
-        sign_psi = psib / np.abs(psib)
+        psi_s = data_eq["psi"][-1]
+        sign_psi = psi_s / np.abs(psi_s)
         sign_iota = iotas / np.abs(iotas)
         # normalizations
         Lref = data_eq["a"]
-        Bref = 2 * np.abs(psib) / Lref**2
+        Bref = 2 * np.abs(psi) / Lref**2
 
         modB = data["|B|"]
         x = Lref * np.sqrt(psi)
@@ -481,23 +478,20 @@ def test_ballooning_geometry(tmpdir_factory):
 def test_ballooning_stability_eval():
     """Cross-compare all the stability functions.
 
-    We calculated the ideal ballooning growth rate and Newcomb metric for
-    the HELIOTRON case at different radii.
+    We calculated the ideal ballooning growth rate and Newcomb ball
+    metric for the HELIOTRON case at different radii.
     """
     eq = desc.examples.get("HELIOTRON")
 
     # Flux surfaces on which to evaluate ballooning stability
-    surfaces = [0.01, 0.5, 1.0]
+    surfaces = [0.01, 0.8, 1.0]
 
     grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
     eq_data_keys = ["iota"]
 
     data = eq.compute(eq_data_keys, grid=grid)
-    iota = data["iota"]
 
-    Nalpha = int(8)  # Number of field lines
-
-    assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
+    Nalpha = int(8)
 
     # Field lines on which to evaluate ballooning stability
     alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
@@ -512,29 +506,22 @@ def test_ballooning_stability_eval():
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
 
     for i in range(len(surfaces)):
-        rho = surfaces[i] * np.ones((N0 * Nalpha,))
+        rho = np.array([surfaces[i]])
 
-        theta_PEST = alpha[:, None] + iota[0] * zeta
-        zeta_full = jnp.tile(zeta, Nalpha)
-
-        theta_PEST = theta_PEST.flatten()
-        zeta_full = zeta_full.flatten()
-
-        nodes = jnp.array([rho, theta_PEST, zeta_full]).T
-
-        # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(
-            eq, nodes, inbasis=("rho", "theta_PEST", "zeta"), maxiter=20
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        sfl_grid = Grid(desc_coords, sort=False)
+        data_keys = ["ideal ball gamma1", "ideal ball gamma2", "Newcomb ball metric"]
+        data = eq.compute(data_keys, grid=grid)
 
-        data_keys = ["ideal_ball_gamma1", "ideal_ball_gamma2", "Newcomb_metric"]
-        data = eq.compute(data_keys, grid=sfl_grid)
-
-        lam1 = data["ideal_ball_gamma1"]
-        lam2 = data["ideal_ball_gamma2"]
-        Newcomb_metric = data["Newcomb_metric"]
+        lam1 = np.max(data["ideal ball gamma1"])
+        lam2 = np.max(data["ideal ball gamma2"])
+        Newcomb_metric = data["Newcomb ball metric"]
 
         np.testing.assert_allclose(lam1, lam2, atol=5e-3, rtol=1e-8)
 
@@ -599,10 +586,6 @@ def test_compare_with_COBRAVMEC():
     surfaces = [0.98, 0.985, 0.99, 0.995, 1.0]
 
     grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
-    eq_data_keys = ["iota"]
-
-    data = eq.compute(eq_data_keys, grid=grid)
-    iota = data["iota"]
 
     Nalpha = int(8)  # Number of field lines
 
@@ -625,27 +608,20 @@ def test_compare_with_COBRAVMEC():
     )
 
     for i in range(len(surfaces)):
-        rho = surfaces[i] * np.ones((N0 * Nalpha,))
+        rho = surfaces[i]
 
-        theta_PEST = alpha[:, None] + iota[0] * zeta
-        zeta_full = jnp.tile(zeta, Nalpha)
-
-        theta_PEST = theta_PEST.flatten()
-        zeta_full = zeta_full.flatten()
-
-        nodes = jnp.array([rho, theta_PEST, zeta_full]).T
-
-        # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(
-            eq, nodes, inbasis=("rho", "theta_PEST", "zeta"), maxiter=20
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        sfl_grid = Grid(desc_coords, sort=False)
+        data_keys = ["ideal ball gamma2"]
+        data = eq.compute(data_keys, grid=grid)
 
-        data_keys = ["ideal_ball_gamma2"]
-        data = eq.compute(data_keys, grid=sfl_grid)
-
-        lam2_array[i] = data["ideal_ball_gamma2"]
+        lam2_array[i] = np.max(data["ideal ball gamma2"])
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
 

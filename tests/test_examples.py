@@ -20,10 +20,9 @@ from desc.coils import (
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.equilibrium.coords import map_coordinates
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
@@ -1573,11 +1572,8 @@ def test_ballooning_stability_opt():
     eq_data_keys = ["iota"]
 
     data = eq.compute(eq_data_keys, grid=grid)
-    iota = data["iota"]
 
     Nalpha = int(8)  # Number of field lines
-
-    assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
 
     # Field lines on which to evaluate ballooning stability
     alpha = jnp.linspace(0, np.pi, Nalpha)
@@ -1595,25 +1591,20 @@ def test_ballooning_stability_opt():
         len(surfaces),
     )
     for i in range(len(surfaces)):
-        rho = surfaces[i] * np.ones((N0 * Nalpha,))
+        rho = surfaces[i]
 
-        theta_PEST = alpha[:, None] + iota[0] * zeta
-        zeta_full = jnp.tile(zeta, Nalpha)
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+        )
 
-        theta_PEST = theta_PEST.flatten()
-        zeta_full = zeta_full.flatten()
+        data_keys = ["ideal ball gamma2"]
+        data = eq.compute(data_keys, grid=grid)
 
-        nodes = jnp.array([rho, theta_PEST, zeta_full]).T
-
-        # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
-
-        sfl_grid = Grid(desc_coords, sort=False)
-
-        data_keys = ["ideal_ball_gamma2"]
-        data = eq.compute(data_keys, grid=sfl_grid)
-
-        lam2_initial[i] = data["ideal_ball_gamma2"]
+        lam2_initial[i] = np.max(data["ideal ball gamma2"])
 
     # Flux surfaces on which to evaluate ballooning stability
     surfaces_ball = surfaces
@@ -1626,7 +1617,7 @@ def test_ballooning_stability_opt():
     eq_ball_weight = 1.0e2
 
     for i, rho in enumerate(surfaces_ball):
-        alpha = np.reshape(np.linspace(0, np.pi, Nalpha + 1)[:Nalpha], (-1, 1))
+        alpha = np.linspace(0, np.pi, Nalpha)
 
         objs_ball[rho] = BallooningStability(
             eq=eq,
@@ -1679,25 +1670,20 @@ def test_ballooning_stability_opt():
         len(surfaces),
     )
     for i in range(len(surfaces)):
-        rho = surfaces[i] * np.ones((N0 * Nalpha,))
+        rho = surfaces[i]
 
-        theta_PEST = alpha[:, None] + iota[0] * zeta
-        zeta_full = jnp.tile(zeta, Nalpha)
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+        )
 
-        theta_PEST = theta_PEST.flatten()
-        zeta_full = zeta_full.flatten()
+        data_keys = ["ideal ball gamma2"]
+        data = eq.compute(data_keys, grid=grid)
 
-        nodes = jnp.array([rho, theta_PEST, zeta_full]).T
-
-        # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
-
-        sfl_grid = Grid(desc_coords, sort=False)
-
-        data_keys = ["ideal_ball_gamma2"]
-        data = eq.compute(data_keys, grid=sfl_grid)
-
-        lam2_optimized[i] = data["ideal_ball_gamma2"]
+        lam2_optimized[i] = np.max(data["ideal ball gamma2"])
 
     import pdb
 

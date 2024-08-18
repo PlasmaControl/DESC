@@ -2,10 +2,10 @@
 
 import numpy as np
 
-from desc.backend import jnp, scan
+from desc.backend import jnp
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.utils import Timer, warnif
 
 from .normalization import compute_scaling_factors
@@ -409,7 +409,7 @@ class BallooningStability(_Objective):
 
     _coordinates = "r"
     _units = "(normalized)"
-    _print_value_fmt = "Ideal-ballooning Stability: {:10.3e} "
+    _print_value_fmt = "Ideal-ballooning objective: {:10.3e} "
 
     def __init__(
         self,
@@ -419,13 +419,15 @@ class BallooningStability(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        deriv_mode="rev",
+        deriv_mode="auto",
         loss_function=None,
         rho=0.5,
-        alpha=jnp.linspace(0, jnp.pi, 8)[:, None],
+        alpha=jnp.linspace(0, jnp.pi, 8),
         zetamax=3 * jnp.pi,
         nzeta=200,
-        name="ideal-ball gamma",
+        lambda_0=0.0,
+        scaling_weight=1.0,
+        name="ideal ball gamma",
     ):
         if target is None and bounds is None:
             target = 0
@@ -434,6 +436,8 @@ class BallooningStability(_Objective):
         self.alpha = alpha
         self.zetamax = zetamax
         self.nzeta = nzeta
+        self.lambda_0 = lambda_0
+        self.scaling_weight = scaling_weight
 
         super().__init__(
             things=eq,
@@ -476,13 +480,9 @@ class BallooningStability(_Objective):
 
         # make a set of nodes along a single fieldline
         zeta = np.linspace(-self.zetamax, self.zetamax, self.nzeta)
-        rho, alpha, zeta = np.reshape(
-            np.broadcast_arrays(self.rho, self.alpha, zeta), (3, -1)
-        )
-        fieldline_nodes = np.array([rho, alpha, zeta]).T
 
         self._dim_f = 1
-        self._data_keys = ["ideal_ball_gamma2"]
+        self._data_keys = ["ideal ball gamma2"]
 
         self._args = get_params(
             self._iota_keys + self._len_keys + self._data_keys,
@@ -495,9 +495,9 @@ class BallooningStability(_Objective):
             "iota_profiles": iota_profiles,
             "len_transforms": len_transforms,
             "len_profiles": len_profiles,
-            "fieldline_nodes": fieldline_nodes,
-            "N_alpha": int(8),
-            "N_zeta": self.nzeta,
+            "rho": self.rho,
+            "alpha": self.alpha,
+            "zeta": zeta,
             "quad_weights": 1.0,
         }
         super().build(use_jit=use_jit, verbose=verbose)
@@ -520,8 +520,6 @@ class BallooningStability(_Objective):
             ideal ballooning growth rate.
 
         """
-        from desc.equilibrium.coords import map_coordinates
-
         eq = self.things[0]
 
         if constants is None:
@@ -544,10 +542,7 @@ class BallooningStability(_Objective):
         )
 
         # Now we compute theta_DESC for given theta_PEST
-        iota = iota_data["iota"][0]
-        rho, alpha, zeta = constants["fieldline_nodes"].T
-        theta_PEST = alpha + iota * zeta
-        nodes = jnp.array([rho, theta_PEST, zeta]).T
+        rho, alpha, zeta = constants["rho"], constants["alpha"], constants["zeta"]
 
         # we prime the data dict with the correct iota values so we don't recompute them
         # using the wrong grid
@@ -558,86 +553,19 @@ class BallooningStability(_Objective):
             "a": len_data["a"],
         }
 
-        N_alpha = constants["N_alpha"]
-        N_zeta = constants["N_zeta"]
-
-        # Rootfinding theta for a given theta_PEST
-        desc_coords = map_coordinates(eq, nodes, inbasis=("rho", "theta_PEST", "zeta"))
-
-        # DIFFERENT WAYS THAT DON'T WORK!
-        # --no-verify def compute_single_alpha(carry, idx):
-        # --no-verify     eq, desc_coords, N_zeta, data_keys, data = carry
-        # --no-verify     sfl_grid = Grid(desc_coords[idx*N_zeta:(idx+1)*N_zeta, :]
-        # --no-verify                               , sort=False, jitable=True)
-        # --no-verify     transforms = get_transforms(
-        # --no-verify         data_keys, obj=eq, grid=sfl_grid, jitable=True
-        # --no-verify     )
-        # --no-verify     profiles = get_profiles(data_keys, obj=eq, grid=sfl_grid)
-        # --no-verify     data_ball = compute_fun(
-        # --no-verify         "desc.equilibrium.equilibrium.Equilibrium",
-        # --no-verify         data_keys,
-        # --no-verify         params=params,
-        # --no-verify         transforms=transforms,
-        # --no-verify         profiles=profiles,
-        # --no-verify         data=data,
-        # --no-verify         )
-        # --no-verify     return carry, 1
-
-        # --no-verify initial_carry=(eq,desc_coords,N_zeta,[self._data_keys],data)
-        # --no-verify _,results=fori_loop(0,N_alpha,compute_single_alpha,initial_carry)
-
-        #         @partial(jit, static_argnames=('N_alpha', 'N_zeta', 'data_keys'))
-        #         def compute_single_alpha(eq, desc_coords, N_zeta, data_keys, data):
-        #                   def _compute(idx):
-        # --no-verify       sfl_grid = Grid(desc_coords[idx*N_zeta:(idx+1)*N_zeta, :],
-        # --no-verify                      sort=False, jitable=True)
-        # --no-verify        transforms = get_transforms(
-        # --no-verify            data_keys, obj=eq, grid=sfl_grid, jitable=True
-        # --no-verify        )
-        # --no-verify        profiles = get_profiles(data_keys, obj=eq, grid=sfl_grid)
-        # --no-verify        data = compute_fun(
-        # --no-verify            "desc.equilibrium.equilibrium.Equilibrium",
-        # --no-verify            data_keys,
-        # --no-verify            params=params,
-        # --no-verify            transforms=transforms,
-        # --no-verify            profiles=profiles,
-        # --no-verify            data=data,
-        # --no-verify        )
-        # --no-verify        return data["ideal_ball_gamma2"]
-        # --no-verify    return _compute
-        # --no-verifycompute_fn = compute_single_alpha(eq, desc_coords, N_zeta,
-        # --no-verify                          params, self._data_keys)
-        # --no-verify
-        # --no-verify results=
-        # --no-verify fori_loop(0,N_alpha,lambda i,_:compute_fn(i),jnp.zeros(N_alpha))
-
-        def compute_all_alphas(eq, desc_coords, data, N_alpha, N_zeta, data_keys):
-            def compute_single_alpha(_, idx):
-                sfl_grid = Grid(
-                    desc_coords[idx * N_zeta : (idx + 1) * N_zeta, :],
-                    sort=False,
-                    jitable=True,
-                )
-                transforms = get_transforms(
-                    data_keys, obj=eq, grid=sfl_grid, jitable=True
-                )
-                profiles = get_profiles(data_keys, obj=eq, grid=sfl_grid)
-                data_ball = compute_fun(
-                    "desc.equilibrium.equilibrium.Equilibrium",
-                    data_keys,
-                    params=params,
-                    transforms=transforms,
-                    profiles=profiles,
-                    data=data,
-                )
-                return None, data_ball["ideal_ball_gamma2"]
-
-            _, results = scan(compute_single_alpha, None, jnp.arange(N_alpha))
-            return results
-
-        # Usage
-        results = compute_all_alphas(
-            eq, desc_coords, data, N_alpha, N_zeta, self._data_keys
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
         )
+
+        data = eq.compute(self._data_keys, grid=grid)["ideal ball gamma2"]
+
+        # Shifted ReLU operation
+        data = (data + self.lambda_0) * (data >= self.lambda_0)
+
+        results = jnp.sum(data) + self.scaling_weight * jnp.max(data)
 
         return results

@@ -234,10 +234,10 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="ideal_ball_gamma1",
+    name="ideal ball gamma1",
     label="\\gamma^2",
-    units=" ",
-    units_long=" ",
+    units="~",
+    units_long="None",
     description="ideal ballooning growth rate" + "requires data along a field line",
     dim=1,
     params=["Psi"],
@@ -261,8 +261,9 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "psi_r",
         "rho",
     ],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
-def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
+def _ideal_ballooning_gamma1(params, transforms, profiles, data, **kwargs):
     """
     Ideal-ballooning growth rate finder.
 
@@ -297,15 +298,17 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     - phi: coordinate describing the position in the toroidal angle
     along a field line
     """
+    source_grid = transforms["grid"].source_grid
+    # Vectorize in rho later
     rho = data["rho"]
 
     psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
-    N_zeta0 = int(11)
+    N_zeta0 = int(15)
     # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
+    zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
     iota = data["iota"]
     shear = data["shear"]
@@ -313,9 +316,9 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
 
-    phi = data["phi"]
+    phi = source_grid.nodes[:, 2]
 
-    N_alpha = int(8)
+    N_alpha = int(source_grid.num_alpha)
     N_zeta = int(len(phi) / N_alpha)
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))
@@ -376,15 +379,13 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
 
     lam = jnp.real(jnp.max(w, axis=(2,)))
 
-    lam = jnp.max(lam)
-
-    data["ideal_ball_gamma1"] = lam
+    data["ideal ball gamma1"] = lam
 
     return data
 
 
 @register_compute_fun(
-    name="ideal_ball_gamma2",
+    name="ideal ball gamma2",
     label="\\gamma^2",
     units=" ",
     units_long=" ",
@@ -411,8 +412,9 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
         "psi_r",
         "rho",
     ],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
-def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
+def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     """
     Ideal-ballooning growth rate finder.
 
@@ -446,6 +448,8 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     - phi: coordinate describing the position in the toroidal angle
     along a field line
     """
+    source_grid = transforms["grid"].source_grid
+    # Vectorize in rho later
     rho = data["rho"]
 
     psi_b = params["Psi"] / (2 * jnp.pi)
@@ -462,9 +466,9 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
 
-    phi = data["phi"]
+    phi = source_grid.nodes[:, 2]
 
-    N_alpha = int(1)
+    N_alpha = int(source_grid.num_alpha)
     N_zeta = int(len(phi) / N_alpha)
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))
@@ -529,18 +533,16 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     lam = jnp.real(jnp.max(w, axis=(2,)))
 
-    lam = jnp.max(lam)
-
-    data["ideal_ball_gamma2"] = lam
+    data["ideal ball gamma2"] = lam
 
     return data
 
 
 @register_compute_fun(
-    name="Newcomb_metric",
+    name="Newcomb ball metric",
     label="\\mathrm{Nwecomb-metric}",
-    units=" ",
-    units_long=" ",
+    units="~",
+    units_long="None",
     description="A measure of Newcomb's distance from marginality",
     dim=1,
     params=["Psi"],
@@ -564,8 +566,9 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         "psi_r",
         "rho",
     ],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
-def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
+def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     """
     Ideal-ballooning growth rate proxy.
 
@@ -607,16 +610,17 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     as a metric of stability else use the zero-crossing point on the X-axis
     as the metric
     """
+    source_grid = transforms["grid"].source_grid
+    # Vectorize in rho later
     rho = data["rho"]
 
     psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
-    # a_N is 0.4
     B_N = 2 * psi_b / a_N**2
 
-    N_zeta0 = int(11)
+    N_zeta0 = int(15)
     # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-jnp.pi / 2, jnp.pi / 2, N_zeta0)
+    zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
     iota = data["iota"]
     shear = data["shear"]
@@ -624,10 +628,9 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
 
-    phi = data["phi"]
+    phi = source_grid.nodes[:, 2]
 
-    # Count the number of 0s in phi (= number of field lines)
-    N_alpha = int(8)
+    N_alpha = int(source_grid.num_alpha)
     N_zeta = int(len(phi) / N_alpha)
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))
@@ -738,6 +741,6 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
 
     data3 = 2 - data2
 
-    data["Newcomb_metric"] = data3
+    data["Newcomb ball metric"] = data3
 
     return data

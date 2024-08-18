@@ -426,7 +426,8 @@ class BallooningStability(_Objective):
         zetamax=3 * jnp.pi,
         nzeta=200,
         lambda_0=0.0,
-        scaling_weight=1.0,
+        weight_0=0.0,
+        weight_1=1.0,
         name="ideal ball gamma",
     ):
         if target is None and bounds is None:
@@ -437,7 +438,8 @@ class BallooningStability(_Objective):
         self.zetamax = zetamax
         self.nzeta = nzeta
         self.lambda_0 = lambda_0
-        self.scaling_weight = scaling_weight
+        self.weight_0 = weight_0
+        self.weight_1 = weight_1
 
         super().__init__(
             things=eq,
@@ -573,6 +575,6 @@ class BallooningStability(_Objective):
         # Shifted ReLU operation
         data = (data + self.lambda_0) * (data >= self.lambda_0)
 
-        results = jnp.sum(data) + self.scaling_weight * jnp.max(data)
+        results = self.weight_0 * jnp.sum(data) + self.weight_1 * jnp.max(data)
 
         return results

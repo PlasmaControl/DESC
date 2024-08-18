@@ -39,7 +39,7 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import Optimizer
 from desc.perturbations import perturb
-from desc.profiles import PowerSeriesProfile, SplineProfile
+from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -740,6 +740,8 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         name : str
             Name of the quantity to compute.
+            If list is given, then two names are expected: the quantity to spline
+            and its radial derivative.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
@@ -756,14 +758,17 @@ class Equilibrium(IOAble, Optimizable):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
-        f = data[name]
-        f = grid.compress(f, surface_label="rho")
-        x = grid.nodes[grid.unique_rho_idx, 0]
-        p = SplineProfile(f, x, name=name)
+        knots = grid.compress(grid.nodes[:, 0])
+        if isinstance(name, str):
+            f = grid.compress(data[name])
+            p = SplineProfile(f, knots, name=name)
+        else:
+            f, df = map(grid.compress, (data[name[0]], data[name[1]]))
+            p = HermiteSplineProfile(f, df, knots, name=name)
         if kind == "power_series":
-            p = p.to_powerseries(order=min(self.L, len(x)), xs=x, sym=True)
+            p = p.to_powerseries(order=min(self.L, grid.num_rho), xs=knots, sym=True)
         if kind == "fourier_zernike":
-            p = p.to_fourierzernike(L=min(self.L, len(x)), xs=x)
+            p = p.to_fourierzernike(L=min(self.L, grid.num_rho), xs=knots)
         return p
 
     def get_axis(self):
@@ -1168,9 +1173,9 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        coords : ndarray, shape(k,3)
-            2D array of input coordinates. Each row is a different
-            point in space.
+        coords : ndarray
+            Shape (k, 3).
+            2D array of input coordinates. Each row is a different point in space.
         inbasis, outbasis : tuple of str
             Labels for input and output coordinates, eg ("R", "phi", "Z") or
             ("rho", "alpha", "zeta") or any combination thereof. Labels should be the

@@ -6,7 +6,6 @@ import warnings
 import numpy as np
 import pytest
 
-from desc.backend import jnp
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
 from desc.examples import get
@@ -17,7 +16,7 @@ from desc.geometry import (
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
@@ -187,21 +186,9 @@ def test_compute_everything():
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 
-    zeta = np.linspace(-jnp.pi, jnp.pi, 101)
-    theta_PEST = jnp.tile(zeta, 8)
-    zeta_full = theta_PEST.copy()
-    rho = jnp.ones_like(theta_PEST)
-
-    theta_coords = jnp.array(
-        [rho.flatten(), theta_PEST.flatten(), zeta_full.flatten()]
-    ).T
-
-    sfl_grid = Grid(theta_coords, sort=False)
-
     with open("tests/inputs/master_compute_data_rpz.pkl", "rb") as file:
         master_data_rpz = pickle.load(file)
     this_branch_data_rpz = {}
-    this_branch_data_xyz = {}
     update_master_data_rpz = False
     error_rpz = False
 
@@ -213,37 +200,15 @@ def test_compute_everything():
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         for p in things:
-            ## Stability quantities computed in field-aligned coordinates
-            ## can't be calculated here due to recent mods.
-            if p == "desc.equilibrium.equilibrium.Equilibrium":
-                stability_keys = [
-                    "ideal ball gamma1",
-                    "ideal ball gamma2",
-                    "Newcomb ball metric",
-                ]
-                dict1 = {}
-                dict1[p] = things[p].compute(stability_keys, sfl_grid, basis="rpz")
-
-                data_index_copy = {}
-                data_index_copy[p] = data_index[p].copy()
-
-                for key in stability_keys:
-                    data_index[p].pop(key, None)
-
-                this_branch_data_rpz[p] = things[p].compute(
-                    list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
-                )
-
-                dict1[p].update(this_branch_data_rpz[p])
-                this_branch_data_rpz[p] = dict1[p].copy()
-
-                data_index[p] = data_index_copy[p].copy()
-            else:
-                this_branch_data_rpz[p] = things[p].compute(
-                    list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
-                )
-
-            names = data_index[p].keys()
+            names = {
+                name
+                for name in data_index[p]
+                # Skip these quantities as they should be covered in other tests.
+                if not data_index[p][name]["source_grid_requirement"]
+            }
+            this_branch_data_rpz[p] = things[p].compute(
+                list(names), **grid.get(p, {}), basis="rpz"
+            )
             # make sure we can compute everything
             assert this_branch_data_rpz[p].keys() == names, (
                 f"Parameterization: {p}. Can't compute "
@@ -261,7 +226,6 @@ def test_compute_everything():
             # test compute in XYZ basis
             if p in no_xyz_things:
                 continue
-
             # remove quantities that are not implemented in the XYZ basis
             # TODO: generalize this instead of hard-coding for "grad(B)" & dependencies
             names_xyz = (
@@ -269,40 +233,15 @@ def test_compute_everything():
                 if "grad(B)" in names
                 else names
             )
-
-            ## Stability quantities computed in field-aligned coordinates
-            ## can't be calculated here due to recent mods.
-            if p == "desc.equilibrium.equilibrium.Equilibrium":
-                stability_keys = [
-                    "ideal ball gamma1",
-                    "ideal ball gamma2",
-                    "Newcomb ball metric",
-                ]
-                dict1 = {}
-                dict1[p] = things[p].compute(stability_keys, sfl_grid, basis="xyz")
-
-                for key in stability_keys:
-                    names_xyz.remove(key)
-
-                this_branch_data_xyz[p] = things[p].compute(
-                    list(names_xyz), **grid.get(p, {}), basis="xyz"
-                )
-
-                dict1[p].update(this_branch_data_xyz[p])
-                this_branch_data_xyz[p] = dict1[p].copy()
-
-                names_xyz.update(stability_keys)
-            else:
-                this_branch_data_xyz[p] = things[p].compute(
-                    list(names_xyz), **grid.get(p, {}), basis="xyz"
-                )
-
-            assert this_branch_data_xyz[p].keys() == names_xyz, (
+            this_branch_data_xyz = things[p].compute(
+                list(names_xyz), **grid.get(p, {}), basis="xyz"
+            )
+            assert this_branch_data_xyz.keys() == names_xyz, (
                 f"Parameterization: {p}. Can't compute "
                 + f"{names_xyz - this_branch_data_xyz.keys()}."
             )
             _compare_against_rpz(
-                p, this_branch_data_xyz[p], this_branch_data_rpz[p], _xyz_to_rpz
+                p, this_branch_data_xyz, this_branch_data_rpz[p], _xyz_to_rpz
             )
 
     if not error_rpz and update_master_data_rpz:

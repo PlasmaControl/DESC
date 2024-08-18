@@ -856,7 +856,7 @@ class SplineProfile(_Profile):
         )
         self._params = jnp.asarray(new)
 
-    def compute(self, grid, params=None, dr=0, dt=0, dz=0, params_derivative=None):
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
 
         Parameters
@@ -868,9 +868,6 @@ class SplineProfile(_Profile):
             values given by the params attribute
         dr, dt, dz : int
             derivative order in rho, theta, zeta
-        params_derivative : array-like
-            spline derivative values to use. If not given, uses the
-            values given by the params_derivative attribute
 
         Returns
         -------

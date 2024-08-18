@@ -16,7 +16,7 @@ from desc.singularities import (
     FFTInterpolator,
     virtual_casing_biot_savart,
 )
-from desc.utils import Timer, errorif, print_result_width, warnif
+from desc.utils import PRINT_WIDTH, Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
 
@@ -331,9 +331,9 @@ class VacuumBoundaryError(_Objective):
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
             fmt = (
-                f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
+                f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
                 if args0 is not None
-                else f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e} "
+                else f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units)
 
@@ -812,9 +812,9 @@ class BoundaryError(_Objective):
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
             fmt = (
-                f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
+                f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
                 if args0 is not None
-                else f"{fmt:<{print_result_width-pre_width}}" + "{:10.3e} "
+                else f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
 

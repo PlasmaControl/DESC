@@ -74,9 +74,10 @@ from desc.objectives import (
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
+from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.utils import print_result_width
+from desc.utils import PRINT_WIDTH
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -1422,14 +1423,12 @@ def test_profile_objective_print(capsys):
             # same as the final value
             obj.print_value(obj.xs(eq), obj.xs(eq))
             print_fmt = (
-                f"{obj._print_value_fmt:<{print_result_width-pre_width}}"
+                f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                 + "{:10.3e}  -->  {:10.3e} "
             )
         else:
             obj.print_value(obj.xs(eq))
-            print_fmt = (
-                f"{obj._print_value_fmt:<{print_result_width-pre_width}}" + "{:10.3e} "
-            )
+            print_fmt = f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
         out = capsys.readouterr()
 
         corr_out = str(
@@ -1502,7 +1501,7 @@ def test_plasma_vessel_distance_print(capsys):
             if isinstance(obj, ObjectiveFunction):
                 obj.print_value(obj.x(eq, surface), obj.x(eq, surface))
                 print_fmt = (
-                    f"{obj.objectives[0]._print_value_fmt:<{print_result_width-pre_width}}"  # noqa: E501
+                    f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
                     + "{:10.3e}  -->  {:10.3e} "
                 )
                 units = obj.objectives[0]._units
@@ -1510,7 +1509,7 @@ def test_plasma_vessel_distance_print(capsys):
             else:
                 obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
                 print_fmt = (
-                    f"{obj._print_value_fmt:<{print_result_width-pre_width}}"
+                    f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                     + "{:10.3e}  -->  {:10.3e} "
                 )
                 units = obj._units
@@ -1519,7 +1518,7 @@ def test_plasma_vessel_distance_print(capsys):
             if isinstance(obj, ObjectiveFunction):
                 obj.print_value(obj.x(eq, surface))
                 print_fmt = (
-                    f"{obj.objectives[0]._print_value_fmt:<{print_result_width-pre_width}}"  # noqa: E501
+                    f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
                     + "{:10.3e} "
                 )
                 units = obj.objectives[0]._units
@@ -1527,8 +1526,7 @@ def test_plasma_vessel_distance_print(capsys):
             else:
                 obj.print_value(obj.xs(eq, surface))
                 print_fmt = (
-                    f"{obj._print_value_fmt:<{print_result_width-pre_width}}"
-                    + "{:10.3e} "
+                    f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
                 )
                 units = obj._units
                 norm = obj.normalization
@@ -1565,7 +1563,7 @@ def test_plasma_vessel_distance_print(capsys):
             if print_init:
                 corr_out = (
                     str(
-                        f"{'Total (sum of squares): ':<{print_result_width}}"
+                        f"{'Total (sum of squares): ':<{PRINT_WIDTH}}"
                         + "{:10.3e}  -->  {:10.3e}, \n".format(f, f)
                     )
                     + corr_out
@@ -1573,7 +1571,7 @@ def test_plasma_vessel_distance_print(capsys):
             else:
                 corr_out = (
                     str(
-                        f"{'Total (sum of squares): ':<{print_result_width}}"
+                        f"{'Total (sum of squares): ':<{PRINT_WIDTH}}"
                         + "{:10.3e}, \n".format(f)
                     )
                     + corr_out
@@ -1633,62 +1631,62 @@ def test_boundary_error_print(capsys):
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary normal field error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary magnetic pressure error: ':<{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
@@ -1708,62 +1706,62 @@ def test_boundary_error_print(capsys):
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
@@ -1785,92 +1783,92 @@ def test_boundary_error_print(capsys):
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary normal field error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary magnetic pressure error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f3))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f3))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f3))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.max(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.min(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + f"{'Boundary field jump error: ':{print_result_width-pre_width}}"
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
         + "{:10.3e} ".format(np.mean(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
@@ -2658,19 +2656,17 @@ def test_asymmetric_normalization():
 
 def test_objective_print_widths():
     """Test that the objective's name is shorter than max."""
-    from desc.objectives.objective_funs import _Objective
-
     subclasses = _Objective.__subclasses__()
     max_prewidth = len("Maximum Absolute ")
-    max_width = print_result_width - max_prewidth
+    max_width = PRINT_WIDTH - max_prewidth
     # check every subclass of _Objective class
     for subclass in subclasses:
         try:
             assert len(subclass._print_value_fmt) <= max_width, (
-                f"{subclass.__name__} is too long for print_result_width.\n"
+                f"{subclass.__name__} is too long for PRINT_WIDTH.\n"
                 + "Note to Devs: If this is a new objective, please make sure the "
-                + "name is short enough to fit in the print_result_width. Either "
-                + "change the name or increase the print_result_width in the "
+                + "name is short enough to fit in the PRINT_WIDTH. Either "
+                + "change the name or increase the PRINT_WIDTH in the "
                 + "desc/utils.py file. The former is preferred."
             )
         except AttributeError:
@@ -2678,9 +2674,9 @@ def test_objective_print_widths():
             subsubclasses = subclass.__subclasses__()
             for subsubclass in subsubclasses:
                 assert len(subsubclass._print_value_fmt) <= max_width, (
-                    f"{subsubclass.__name__} is too long for print_result_width.\n"
+                    f"{subsubclass.__name__} is too long for PRINT_WIDTH.\n"
                     + "Note to Devs: If this is a new objective, please make sure the "
-                    + "name is short enough to fit in the print_result_width. Either "
-                    + "change the name or increase the print_result_width in the "
+                    + "name is short enough to fit in the PRINT_WIDTH. Either "
+                    + "change the name or increase the PRINT_WIDTH in the "
                     + "desc/utils.py file. The former is preferred."
                 )

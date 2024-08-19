@@ -10,6 +10,10 @@ from desc.backend import jnp, put
 from desc.io import IOAble
 from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
 
+jac32 = False
+
+jacdtype = jnp.float32 if jac32 else jnp.float64
+
 
 class Transform(IOAble):
     """Transforms from spectral coefficients to real space values.
@@ -485,32 +489,47 @@ class Transform(IOAble):
         if self.method in ["direct1", "jitable"]:
             A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
             if isinstance(A, dict):
+                A = {
+                    key: jnp.asarray(value, dtype=jacdtype) for key, value in A.items()
+                }
+            else:
+                A = jnp.asarray(A, dtype=jacdtype)
+
+            if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
             return A @ c
 
         elif self.method == "direct2":
-            A = self.matrices["fft"].get(dr, {}).get(dt, {})
-            B = self.matrices["direct2"].get(dz, {})
+            A = jnp.asarray(
+                self.matrices["fft"].get(dr, {}).get(dt, {}), dtype=jacdtype
+            )
+            B = jnp.asarray(self.matrices["direct2"].get(dz, {}), dtype=jacdtype)
             if isinstance(A, dict) or isinstance(B, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
-            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
-            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,), dtype=jacdtype)
+            c_mtrx = put(c_mtrx, self.fft_index, c.astype(c_mtrx.dtype)).reshape(
+                (-1, self.num_n_modes)
+            )
             cc = A @ c_mtrx
             return (cc @ B.T).flatten(order="F")
 
         elif self.method == "fft":
-            A = self.matrices["fft"].get(dr, {}).get(dt, {})
+            A = jnp.asarray(
+                self.matrices["fft"].get(dr, {}).get(dt, {}), dtype=jacdtype
+            )
             if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
             # reshape coefficients
-            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
-            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,), dtype=jacdtype)
+            c_mtrx = put(c_mtrx, self.fft_index, c.astype(jacdtype)).reshape(
+                (-1, self.num_n_modes)
+            )
             # differentiate
             c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
             # re-format in complex notation

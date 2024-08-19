@@ -162,6 +162,8 @@ def _compute(
         data = {}
 
     for name in names:
+        # --no-verify jax.debug.print("{x}", x=name)
+
         if name in data:
             # don't compute something that's already been computed
             continue
@@ -194,6 +196,8 @@ def _compute(
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+        # --no-verify jax.debug.print("{x}", x=str(data[name].dtype))
+
     return data
 
 

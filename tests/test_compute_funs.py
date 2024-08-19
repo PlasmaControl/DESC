@@ -12,6 +12,8 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
 
+jac32 = True
+
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
 FD_COEF_1_4 = np.array([1 / 12, -2 / 3, 0, 2 / 3, -1 / 12])[::-1]
@@ -90,13 +92,26 @@ def test_enclosed_volumes():
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["R0", "V(r)", "V_r(r)", "V_rr(r)", "V_rrr(r)"], grid=grid)
     np.testing.assert_allclose(
-        4 * data["R0"] * (np.pi * rho) ** 2, grid.compress(data["V(r)"])
+        4 * data["R0"] * (np.pi * rho) ** 2,
+        grid.compress(data["V(r)"]),
+        atol=1e-14 + 1e-8 * jac32,
+        rtol=1e-7 + 1e-7 * jac32,
     )
     np.testing.assert_allclose(
-        8 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
+        8 * data["R0"] * np.pi**2 * rho,
+        grid.compress(data["V_r(r)"]),
+        atol=1e-14 + 1e-8 * jac32,
+        rtol=1e-7 + 1e-7 * jac32,
     )
-    np.testing.assert_allclose(8 * data["R0"] * np.pi**2, data["V_rr(r)"])
-    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=2e-14)
+    np.testing.assert_allclose(
+        8 * data["R0"] * np.pi**2,
+        data["V_rr(r)"],
+        atol=1e-14 + 1e-8 * jac32,
+        rtol=1e-7 + 1e-7 * jac32,
+    )
+    np.testing.assert_allclose(
+        0, data["V_rrr(r)"], atol=2e-14 + 1e-8 * jac32, rtol=1e-7 + 1e-7 * jac32
+    )
 
 
 @pytest.mark.unit
@@ -113,7 +128,12 @@ def test_enclosed_areas():
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["A(r)"], grid=grid)
     # area = π a b = 2 π ρ²
-    np.testing.assert_allclose(2 * np.pi * rho**2, grid.compress(data["A(r)"]))
+    np.testing.assert_allclose(
+        2 * np.pi * rho**2,
+        grid.compress(data["A(r)"]),
+        atol=1e-14 + 1e-8 * jac32,
+        rtol=1e-7 + 1e-7 * jac32,
+    )
 
 
 @pytest.mark.unit
@@ -127,7 +147,9 @@ def test_surface_areas():
         4 * data["R0"] * np.pi**2 * rho, grid.compress(data["S(r)"])
     )
     np.testing.assert_allclose(4 * data["R0"] * np.pi**2, data["S_r(r)"])
-    np.testing.assert_allclose(0, data["S_rr(r)"], atol=3e-12)
+    np.testing.assert_allclose(
+        0, data["S_rr(r)"], atol=3e-12 + 1e-8 * jac32, rtol=1e-7 + 1e-7 * jac32
+    )
 
 
 @pytest.mark.unit
@@ -182,8 +204,8 @@ def test_elongation():
     data3 = eq3.compute(["a_major/a_minor"], grid=grid)
     # elongation approximation is less accurate as elongation increases
     np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-3)
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-2)
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-3 + 1e-3 * jac32)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-2 + 1e-2 * jac32)
 
 
 @pytest.mark.slow

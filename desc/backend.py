@@ -31,7 +31,11 @@ else:
             import jaxlib
             from jax import config as jax_config
 
+            # --no-verify from jax import config as jax_config
+            # --no-verify jax_config.update("jax_enable_x64", True)
             jax_config.update("jax_enable_x64", True)
+            # standard promotion needed for int64 and float32 operation
+            jax.config.update("jax_numpy_dtype_promotion", "standard")
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "
@@ -66,7 +70,9 @@ print(
 )
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
-    jit = jax.jit
+    # --no-verify jit = jax.jit
+    # --no-verify jit = lambda func, *args, **kwargs: func
+    jit = lambda func, *args, **kwargs: func
     fori_loop = jax.lax.fori_loop
     cond = jax.lax.cond
     switch = jax.lax.switch
@@ -89,6 +95,46 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         tree_unflatten,
         treedef_is_leaf,
     )
+
+    def _as32bit(x):
+        try:
+            if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
+                return jnp.astype(x, jnp.float32)
+            return x
+        except TypeError:
+            return x
+
+    def _as64bit(x):
+        try:
+            if jnp.issubdtype(jnp.asarray(x).dtype, jnp.inexact):
+                return jnp.astype(x, jnp.float64)
+            return x
+        except TypeError:
+            return x
+
+    def _print_type(x):
+        print(x.dtype)
+
+    def in32bit(fun, *args, **kwargs):
+        """Perform a function call in 32 bit and cast back to 64."""
+        args = jax.tree_map(_as32bit, args)
+        kwargs = jax.tree_map(_as32bit, kwargs)
+
+        ## --no-verify print("Printing input precision...")
+        jax.tree_map(_print_type, args)
+        jax.tree_map(_print_type, kwargs)
+        print("Input precision done!")
+
+        # --no-verify with jax.numpy_dtype_promotion("strict"):
+        # --no-verify    out = fun(*args, **kwargs)
+
+        out = fun(*args, **kwargs)
+
+        # --no-verify print("Printing output precision...")
+        jax.tree_map(_print_type, out)
+        print("output precision done!")
+
+        return jax.tree_map(_as64bit, out)
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".

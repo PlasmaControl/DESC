@@ -6,20 +6,10 @@ Functions in this module should not depend on any other submodules in desc.objec
 import numpy as np
 
 from desc.backend import cond, jit, jnp, logsumexp, put
-from desc.utils import (
-    Index,
-    errorif,
-    flatten_list,
-    get_instance,
-    svd_inv_null,
-    unique_list,
-    warnif,
-)
+from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
-def factorize_linear_constraints(  # noqa: C901
-    objective, constraint, things=None, x_scale="auto"
-):
+def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -32,9 +22,6 @@ def factorize_linear_constraints(  # noqa: C901
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
-    things : Optimizable or tuple/list of Optimizable
-        Things to optimize. Defaults to ``objective.things``.
-        Only used if ``x_scale='auto'``.
     x_scale : array_like or ``'auto'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -155,12 +142,7 @@ def factorize_linear_constraints(  # noqa: C901
 
     # compute x_scale if not provided
     if x_scale == "auto":
-        if things is None:
-            things = objective.things
-        else:
-            things = [things] if not isinstance(things, list) else things
-            things = [get_instance(things, type(t)) for t in objective.things]
-        x_scale = objective.x(*things)
+        x_scale = objective.x(*objective.things)
     errorif(
         x_scale.shape != xp.shape,
         ValueError,

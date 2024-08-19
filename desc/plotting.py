@@ -2228,6 +2228,13 @@ def plot_comparison(
 ):
     """Plot comparison between flux surfaces of multiple equilibria.
 
+    NOTE: supplied objects must have either all the same NFP, or if
+    there are differing NFPs, the non-axisymmetric objects must have the
+    same NFP and the rest of the objects must be axisymmetric. i.e
+    can plot a tokamak and an NFP=2 stellarator, but cannot plot
+    a NFP=2 and NFP=3 stellarator as there is some ambiguity on the
+    choice of phi
+
     Parameters
     ----------
     eqs : array-like of Equilibrium or EquilibriaFamily

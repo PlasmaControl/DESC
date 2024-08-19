@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
-from desc.compute import data_index
+from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
@@ -22,7 +22,7 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
 )
-from desc.utils import ResolutionWarning
+from desc.utils import ResolutionWarning, errorif
 
 
 def _compare_against_master(
@@ -46,6 +46,34 @@ def _compare_against_master(
             update_master_data = True
 
     return error, update_master_data
+
+
+def _xyz_to_rpz(data, name):
+    if name in ["x", "center"]:
+        res = xyz2rpz(data[name])
+    else:
+        res = xyz2rpz_vec(data[name], phi=data["phi"])
+    return res
+
+
+def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
+    for name in data:
+        if data_index[p][name]["dim"] != 3:
+            continue
+        res = coordinate_conversion_func(data, name) - data_rpz[name]
+        errorif(
+            not np.all(
+                (
+                    np.isclose(res, 0, rtol=1e-8, atol=1e-8)
+                    | np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=1e-8, atol=1e-8)[
+                        :, np.newaxis
+                    ]
+                )
+                | (~np.isfinite(data_rpz[name]))
+            ),
+            AssertionError,
+            msg=f"Parameterization: {p}. Name: {name}. Residual {res}",
+        )
 
 
 @pytest.mark.unit
@@ -160,14 +188,9 @@ def test_compute_everything():
 
     with open("tests/inputs/master_compute_data_rpz.pkl", "rb") as file:
         master_data_rpz = pickle.load(file)
-    with open("tests/inputs/master_compute_data_xyz.pkl", "rb") as file:
-        master_data_xyz = pickle.load(file)
     this_branch_data_rpz = {}
-    this_branch_data_xyz = {}
     update_master_data_rpz = False
-    update_master_data_xyz = False
     error_rpz = False
-    error_xyz = False
 
     # some things can't compute "phi" and therefore can't convert to XYZ basis
     no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
@@ -210,20 +233,15 @@ def test_compute_everything():
                 if "grad(B)" in names
                 else names
             )
-
-            this_branch_data_xyz[p] = things[p].compute(
+            this_branch_data_xyz = things[p].compute(
                 list(names_xyz), **grid.get(p, {}), basis="xyz"
             )
-            assert this_branch_data_xyz[p].keys() == names_xyz, (
+            assert this_branch_data_xyz.keys() == names_xyz, (
                 f"Parameterization: {p}. Can't compute "
-                + f"{names_xyz - this_branch_data_xyz[p].keys()}."
+                + f"{names_xyz - this_branch_data_xyz.keys()}."
             )
-            error_xyz, update_master_data_xyz = _compare_against_master(
-                p,
-                this_branch_data_xyz,
-                master_data_xyz,
-                error_xyz,
-                update_master_data_xyz,
+            _compare_against_rpz(
+                p, this_branch_data_xyz, this_branch_data_rpz[p], _xyz_to_rpz
             )
 
     if not error_rpz and update_master_data_rpz:
@@ -231,8 +249,4 @@ def test_compute_everything():
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file
             pickle.dump(this_branch_data_rpz, file)
-    if not error_xyz and update_master_data_xyz:
-        with open("tests/inputs/master_compute_data_xyz.pkl", "wb") as file:
-            pickle.dump(this_branch_data_xyz, file)
     assert not error_rpz
-    assert not error_xyz

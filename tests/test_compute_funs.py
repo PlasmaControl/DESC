@@ -1541,6 +1541,7 @@ def test_clebsch_sfl_funs():
                 "B^zeta_z|r,a",
                 "|B|",
                 "sqrt(g)_Clebsch",
+                "sqrt(g)_PEST",
                 "psi_r",
                 "grad(psi)",
                 "grad(alpha)",
@@ -1561,11 +1562,12 @@ def test_clebsch_sfl_funs():
             / data["B^zeta"] ** 2,
         )
         np.testing.assert_allclose(
-            data["B^zeta"], data["psi_r"] / data["sqrt(g)_Clebsch"]
-        )
-        np.testing.assert_allclose(
             data["B"], cross(data["grad(psi)"], data["grad(alpha)"])
         )
+        np.testing.assert_allclose(
+            data["B^zeta"], data["psi_r"] / data["sqrt(g)_Clebsch"]
+        )
+        np.testing.assert_allclose(data["B^phi"], data["psi_r"] / data["sqrt(g)_PEST"])
         np.testing.assert_allclose(data["B^phi"], dot(data["B"], data["grad(phi)"]))
         np.testing.assert_allclose(data["B_phi"], data["B"][:, 1])
 

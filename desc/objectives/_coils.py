@@ -124,11 +124,11 @@ class _CoilObjective(_Objective):
 
         # get individual coils from coilset
         coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
-        for coil in coils:
+        for c in coils:
             errorif(
-                not isinstance(coil, _Coil),
+                not isinstance(c, _Coil),
                 TypeError,
-                f"Expected object of type Coil, got {type(coil)}",
+                f"Expected object of type Coil, got {type(c)}",
             )
         self._num_coils = len(coils)
 

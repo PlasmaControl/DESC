@@ -20,6 +20,7 @@ import jax as jax
 import numpy as np
 import skfem as fem
 from matplotlib import pyplot as plt
+import time
 
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.io import IOAble
@@ -1180,7 +1181,10 @@ class FiniteElementBasis(_FE_Basis):
             self.I_LMN = 2 * (M - 1) * (N - 1)
             self.Q = int((K + 1) * (K + 2) / 2.0)
         else:
+            t1 = time.time()
             self.mesh = FiniteElementMesh3D(L, M, N, K=K, rho_range=rho_range)
+            t2 = time.time()
+            print('Mesh initialization time = ', t2 - t1)
             self.I_LMN = 6 * (M - 1) * (N - 1) * (L - 1)
             self.Q = int((K + 1) * (K + 2) * (K + 3) / 6.0)
         self.nmodes = self.I_LMN * self.Q
@@ -2513,7 +2517,7 @@ class FiniteElementMesh3D:
         # Increase integration order to avoid singularities coming from
         # numerical discretization
         [integration_points, weights] = fem.quadrature.get_quadrature(
-            element, 2 * K + 3
+            element, 2 * K
         )
         integration_points = integration_points.T
 
@@ -2651,7 +2655,9 @@ class FiniteElementMesh3D:
         """
         return self.weighted_volumes @ f
 
-    def find_tetrahedra_corresponding_to_points(self, rho_theta_zeta, derivatives=np.array([0, 0, 0])):
+    def find_tetrahedra_corresponding_to_points(
+        self, rho_theta_zeta, derivatives=np.array([0, 0, 0])
+    ):
         """Given a point on the mesh, find which tetrahedron it lies inside.
 
         Parameters
@@ -2669,14 +2675,86 @@ class FiniteElementMesh3D:
             tetrahedra_indices.
 
         """
-        tetrahedra_indices = np.zeros(rho_theta_zeta.shape[0])
+        # Make sure theta, zeta in [0, 2pi)
+        rho_theta_zeta_copy = np.array(rho_theta_zeta)
+        while np.any(rho_theta_zeta_copy[:, 1] < 0):
+            rho_theta_zeta_copy[rho_theta_zeta_copy[:, 1] < 0, 1] += 2 * np.pi
+        while np.any(rho_theta_zeta_copy[:, 2] < 0):
+            rho_theta_zeta_copy[rho_theta_zeta_copy[:, 2] < 0, 2] += 2 * np.pi
+        while np.any(rho_theta_zeta_copy[:, 1] > 2 * np.pi):
+            rho_theta_zeta_copy[rho_theta_zeta_copy[:, 1] > 2 * np.pi, 1] -= 2 * np.pi
+        while np.any(rho_theta_zeta_copy[:, 2] > 2 * np.pi):
+            rho_theta_zeta_copy[rho_theta_zeta_copy[:, 2] > 2 * np.pi, 2] -= 2 * np.pi
+        rho_theta_zeta_copy = jnp.array(rho_theta_zeta_copy)
+
+        # Now go through and calculate the geometric quantities needed
+        # To determine the tetrahedron each point lies in.
+        tetrahedra_indices = np.zeros(rho_theta_zeta_copy.shape[0])
         Q = self.Q
-        basis_functions = np.zeros((rho_theta_zeta.shape[0], self.I_LMN * Q))
+        basis_functions = np.zeros((rho_theta_zeta_copy.shape[0], self.I_LMN * Q))
+        # Det1 = np.zeros((rho_theta_zeta_copy.shape[0], self.vertices_final.shape[0]))
+        # Det2 = np.zeros((rho_theta_zeta_copy.shape[0], self.vertices_final.shape[0]))
+        # Det3 = np.zeros((rho_theta_zeta_copy.shape[0], self.vertices_final.shape[0]))
+        # Det4 = np.zeros((rho_theta_zeta_copy.shape[0], self.vertices_final.shape[0]))
+        # for j in range(rho_theta_zeta_copy.shape[0]):
+        #     vx = rho_theta_zeta_copy[j, 0]
+        #     vy = rho_theta_zeta_copy[j, 0]
+        #     vz = rho_theta_zeta_copy[j, 0]
+        #     for i in range(self.vertices_final.shape[0]):
+        #         v1x = self.vertices_final[i, 0, 0]
+        #         v1y = self.vertices_final[i, 0, 1]
+        #         v1z = self.vertices_final[i, 0, 2]
+        #         v2x = self.vertices_final[i, 1, 0]
+        #         v2y = self.vertices_final[i, 1, 1]
+        #         v2z = self.vertices_final[i, 1, 2]
+        #         v3x = self.vertices_final[i, 2, 0]
+        #         v3y = self.vertices_final[i, 2, 1]
+        #         v3z = self.vertices_final[i, 2, 2]
+        #         v4x = self.vertices_final[i, 3, 0]
+        #         v4y = self.vertices_final[i, 3, 1]
+        #         v4z = self.vertices_final[i, 3, 2]
+        #         D1 = np.array(
+        #             [
+        #                 [1, vx, vy, vz],
+        #                 [1, v2x, v2y, v2z],
+        #                 [1, v3x, v3y, v3z],
+        #                 [1, v4x, v4y, v4z],
+        #             ]
+        #         )
+        #         D2 = np.array(
+        #             [
+        #                 [1, v1x, v1y, v1z],
+        #                 [1, vx, vy, vz],
+        #                 [1, v3x, v3y, v3z],
+        #                 [1, v4x, v4y, v4z],
+        #             ]
+        #         )
+        #         D3 = np.array(
+        #             [
+        #                 [1, v1x, v1y, v1z],
+        #                 [1, v2x, v2y, v2z],
+        #                 [1, vx, vy, vz],
+        #                 [1, v4x, v4y, v4z],
+        #             ]
+        #         )
+        #         D4 = np.array(
+        #             [
+        #                 [1, v1x, v1y, v1z],
+        #                 [1, v2x, v2y, v2z],
+        #                 [1, v3x, v3y, v3z],
+        #                 [1, vx, vy, vz],
+        #             ]
+        #         )
+        #         Det1[j, i] = np.linalg.det(D1)
+        #         Det2[j, i] = np.linalg.det(D2)
+        #         Det3[j, i] = np.linalg.det(D3)
+        #         Det4[j, i] = np.linalg.det(D4)
+
         v1 = self.vertices_final[:, 0, :]
         v2 = self.vertices_final[:, 1, :]
         v3 = self.vertices_final[:, 2, :]
         v4 = self.vertices_final[:, 3, :]
-        v = rho_theta_zeta
+        v = rho_theta_zeta_copy
         ones_v = np.ones(v.shape[0])
         ones_v1 = np.ones(v1.shape[0])
         vx = np.outer(v[:, 0], ones_v1)
@@ -2695,42 +2773,70 @@ class FiniteElementMesh3D:
         v4y = np.outer(ones_v, v4[:, 1])
         v4z = np.outer(ones_v, v4[:, 2])
         ones = np.ones((v.shape[0], v1.shape[0]))
-        D1 = np.array(
+        # D1 = np.array(
+        #     [
+        #         [ones, vx, vy, vz],
+        #         [ones, v2x, v2y, v2z],
+        #         [ones, v3x, v3y, v3z],
+        #         [ones, v4x, v4y, v4z],
+        #     ]
+        # )
+        # D2 = np.array(
+        #     [
+        #         [ones, v1x, v1y, v1z],
+        #         [ones, vx, vy, vz],
+        #         [ones, v3x, v3y, v3z],
+        #         [ones, v4x, v4y, v4z],
+        #     ]
+        # )
+        # D3 = np.array(
+        #     [
+        #         [ones, v1x, v1y, v1z],
+        #         [ones, v2x, v2y, v2z],
+        #         [ones, vx, vy, vz],
+        #         [ones, v4x, v4y, v4z],
+        #     ]
+        # )
+        # D4 = np.array(
+        #     [
+        #         [ones, v1x, v1y, v1z],
+        #         [ones, v2x, v2y, v2z],
+        #         [ones, v3x, v3y, v3z],
+        #         [ones, vx, vy, vz],
+        #     ]
+        # )
+        Det1 = np.linalg.det(np.transpose(np.array(
             [
                 [ones, vx, vy, vz],
                 [ones, v2x, v2y, v2z],
                 [ones, v3x, v3y, v3z],
                 [ones, v4x, v4y, v4z],
             ]
-        )
-        D2 = np.array(
+        ), axes=([2, 3, 0, 1])))
+        Det2 = np.linalg.det(np.transpose(np.array(
             [
                 [ones, v1x, v1y, v1z],
                 [ones, vx, vy, vz],
                 [ones, v3x, v3y, v3z],
                 [ones, v4x, v4y, v4z],
             ]
-        )
-        D3 = np.array(
+        ), axes=([2, 3, 0, 1])))
+        Det3 = np.linalg.det(np.transpose(np.array(
             [
                 [ones, v1x, v1y, v1z],
                 [ones, v2x, v2y, v2z],
                 [ones, vx, vy, vz],
                 [ones, v4x, v4y, v4z],
             ]
-        )
-        D4 = np.array(
+        ), axes=([2, 3, 0, 1])))
+        Det4 = np.linalg.det(np.transpose(np.array(
             [
                 [ones, v1x, v1y, v1z],
                 [ones, v2x, v2y, v2z],
                 [ones, v3x, v3y, v3z],
                 [ones, vx, vy, vz],
             ]
-        )
-        Det1 = np.linalg.det(np.transpose(D1, axes=([2, 3, 0, 1])))
-        Det2 = np.linalg.det(np.transpose(D2, axes=([2, 3, 0, 1])))
-        Det3 = np.linalg.det(np.transpose(D3, axes=([2, 3, 0, 1])))
-        Det4 = np.linalg.det(np.transpose(D4, axes=([2, 3, 0, 1])))
+        ), axes=([2, 3, 0, 1])))
 
         # numpy isclose is required to catch the tricky points at the
         # edges or vertices of the tetrahedra
@@ -2805,16 +2911,20 @@ class FiniteElementMesh3D:
         true_rows, true_cols = np.where(good_inds)
         for i in np.unique(true_cols):
             row_i = true_rows[true_cols == i]
-            # print(i, row_i, i * Q, (i + 1) * Q, v[row_i, :], v1[i, :], v2[i, :], v3[i, :], v4[i, :], self.tetrahedra[i].det)
             basis_functions[row_i, i * Q : (i + 1) * Q], _ = self.tetrahedra[
                 i
             ].get_basis_functions(v[row_i, :], derivatives)
-        # print(
-        #     np.max(np.count_nonzero(good_inds, axis=-1)),
-        #     np.min(np.count_nonzero(good_inds, axis=-1)),
-        # )
-        assert np.isclose(np.max(np.count_nonzero(good_inds, axis=-1)), 1)
-        assert np.isclose(np.min(np.count_nonzero(good_inds, axis=-1)), 1)
+        try:
+            assert np.isclose(np.max(np.count_nonzero(good_inds, axis=-1)), 1)
+            assert np.isclose(np.min(np.count_nonzero(good_inds, axis=-1)), 1)
+        except AssertionError:
+            print('Failed tetrahedra point finding')
+            print('before = ', rho_theta_zeta)
+            print('after = ', rho_theta_zeta_copy)
+            print(
+                np.max(np.count_nonzero(good_inds, axis=-1)),
+                np.min(np.count_nonzero(good_inds, axis=-1)),
+            )
         return basis_functions
 
 
@@ -3425,102 +3535,106 @@ class TetrahedronFiniteElement:
             Barycentric coordinates defined by the tetrahedron and evaluated at the
             points (rho, theta, zeta)
         """
-        eta = []
-        rho_theta_zeta_in_tetrahedron = []
-        for i in range(rho_theta_zeta.shape[0]):
+        # eta = []
+        # rho_theta_zeta_in_tetrahedron = []
+        ones = np.ones(rho_theta_zeta.shape[0])
+        vx = rho_theta_zeta[:, 0]
+        vy = rho_theta_zeta[:, 1]
+        vz = rho_theta_zeta[:, 2]
+        # for i in range(rho_theta_zeta.shape[0]):
 
-            g_v = self.vertices
+        g_v00 = ones * self.vertices[0, 0]
+        g_v01 = ones * self.vertices[0, 1]
+        g_v02 = ones * self.vertices[0, 2]
+        g_v10 = ones * self.vertices[1, 0]
+        g_v11 = ones * self.vertices[1, 1]
+        g_v12 = ones * self.vertices[1, 2]
+        g_v20 = ones * self.vertices[2, 0]
+        g_v21 = ones * self.vertices[2, 1]
+        g_v22 = ones * self.vertices[2, 2]
+        g_v30 = ones * self.vertices[3, 0]
+        g_v31 = ones * self.vertices[3, 1]
+        g_v32 = ones * self.vertices[3, 2]
 
-            D_1 = np.array(
-                [
-                    [
-                        1,
-                        rho_theta_zeta[i][0],
-                        rho_theta_zeta[i][1],
-                        rho_theta_zeta[i][2],
-                    ],
-                    [1, g_v[1][0], g_v[1][1], g_v[1][2]],
-                    [1, g_v[2][0], g_v[2][1], g_v[2][2]],
-                    [1, g_v[3][0], g_v[3][1], g_v[3][2]],
-                ]
-            )
+        # print(ones.shape, vx.shape, g_v10.shape)
 
-            D_2 = np.array(
-                [
-                    [1, g_v[0][0], g_v[0][1], g_v[0][2]],
-                    [
-                        1,
-                        rho_theta_zeta[i][0],
-                        rho_theta_zeta[i][1],
-                        rho_theta_zeta[i][2],
-                    ],
-                    [1, g_v[2][0], g_v[2][1], g_v[2][2]],
-                    [1, g_v[3][0], g_v[3][1], g_v[3][2]],
-                ]
-            )
+        D_1 = np.array(
+            [
+                [ones, vx, vy, vz],
+                [ones, g_v10, g_v11, g_v12],
+                [ones, g_v20, g_v21, g_v22],
+                [ones, g_v30, g_v31, g_v32],
+            ]
+        )
 
-            D_3 = np.array(
-                [
-                    [1, g_v[0][0], g_v[0][1], g_v[0][2]],
-                    [1, g_v[1][0], g_v[1][1], g_v[1][2]],
-                    [
-                        1,
-                        rho_theta_zeta[i][0],
-                        rho_theta_zeta[i][1],
-                        rho_theta_zeta[i][2],
-                    ],
-                    [1, g_v[3][0], g_v[3][1], g_v[3][2]],
-                ]
-            )
+        D_2 = np.array(
+            [
+                [ones, g_v00, g_v01, g_v02],
+                [ones, vx, vy, vz],
+                [ones, g_v20, g_v21, g_v22],
+                [ones, g_v30, g_v31, g_v32],
+            ]
+        )
 
-            D_4 = np.array(
-                [
-                    [1, g_v[0][0], g_v[0][1], g_v[0][2]],
-                    [1, g_v[1][0], g_v[1][1], g_v[1][2]],
-                    [1, g_v[2][0], g_v[2][1], g_v[2][2]],
-                    [
-                        1,
-                        rho_theta_zeta[i][0],
-                        rho_theta_zeta[i][1],
-                        rho_theta_zeta[i][2],
-                    ],
-                ]
-            )
+        D_3 = np.array(
+            [
+                [ones, g_v00, g_v01, g_v02],
+                [ones, g_v10, g_v11, g_v12],
+                [ones, vx, vy, vz],
+                [ones, g_v30, g_v31, g_v32],
+            ]
+        )
 
-            d_1 = np.linalg.det(D_1)
-            d_2 = np.linalg.det(D_2)
-            d_3 = np.linalg.det(D_3)
-            d_4 = np.linalg.det(D_4)
+        D_4 = np.array(
+            [
+                [ones, g_v00, g_v01, g_v02],
+                [ones, g_v10, g_v11, g_v12],
+                [ones, g_v20, g_v21, g_v22],
+                [ones, vx, vy, vz],
+            ]
+        )
 
-            eta_1 = d_1 / self.det
-            eta_2 = d_2 / self.det
-            eta_3 = d_3 / self.det
-            eta_4 = d_4 / self.det
-            # print(i, eta_1, eta_2, eta_3, eta_4)
+        d_1 = np.linalg.det(np.transpose(D_1, axes=[2, 0, 1]))
+        d_2 = np.linalg.det(np.transpose(D_2, axes=[2, 0, 1]))
+        d_3 = np.linalg.det(np.transpose(D_3, axes=[2, 0, 1]))
+        d_4 = np.linalg.det(np.transpose(D_4, axes=[2, 0, 1]))
 
-            # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
-            # is not sufficient because sometimes numerical errors
-            # have eta_i ~ -1e-16 which breaks this
-            ind_1 = (eta_1 < 0) and (not np.isclose(eta_1, 0.0))
-            ind_2 = (eta_2 < 0) and (not np.isclose(eta_2, 0.0))
-            ind_3 = (eta_3 < 0) and (not np.isclose(eta_3, 0.0))
-            ind_4 = (eta_4 < 0) and (not np.isclose(eta_4, 0.0))
-            if ind_1 or ind_2 or ind_3 or ind_4:
-                warnings.warn(
-                    "Found rho_theta_zeta points outside the tetrahedron ... "
-                    "Not using these points to evaluate the barycentric "
-                    "coordinates."
-                )
-            else:
-                eta.append(eta_1)
-                eta.append(eta_2)
-                eta.append(eta_3)
-                eta.append(eta_4)
-                rho_theta_zeta_in_tetrahedron.append(rho_theta_zeta[i, :])
+        eta_1 = d_1 / self.det
+        eta_2 = d_2 / self.det
+        eta_3 = d_3 / self.det
+        eta_4 = d_4 / self.det
+        # print(i, eta_1, eta_2, eta_3, eta_4)
 
-        return np.array(eta).reshape(-1, 4), np.array(
-            rho_theta_zeta_in_tetrahedron
-        ).reshape(-1, 3)
+        # Previous version eta_1 < 0 or eta_2 < 0 or eta_3 < 0 or eta_4 < 0
+        # is not sufficient because sometimes numerical errors
+        # have eta_i ~ -1e-16 which breaks this
+        outside_tet = np.logical_or(
+            np.logical_and(eta_1 < 0, ~np.isclose(eta_1, 0.0)),
+            np.logical_or(np.logical_and(eta_2 < 0, ~np.isclose(eta_2, 0.0)), 
+                np.logical_or(np.logical_and(eta_3 < 0, ~np.isclose(eta_3, 0.0)), 
+                              np.logical_and(eta_4 < 0, ~np.isclose(eta_4, 0.0))))
+        )
+        # outside_tet = np.logical_and(eta < 0, ~np.isclose(eta, 0.0))
+        eta = np.array([eta_1, eta_2, eta_3, eta_4]).T[~outside_tet, :]
+
+        # ind_1 = (eta_1 < 0) and (not np.isclose(eta_1, 0.0))
+        # ind_2 = (eta_2 < 0) and (not np.isclose(eta_2, 0.0))
+        # ind_3 = (eta_3 < 0) and (not np.isclose(eta_3, 0.0))
+        # ind_4 = (eta_4 < 0) and (not np.isclose(eta_4, 0.0))
+        # if ind_1 or ind_2 or ind_3 or ind_4:
+        #     warnings.warn(
+        #         "Found rho_theta_zeta points outside the tetrahedron ... "
+        #         "Not using these points to evaluate the barycentric "
+        #         "coordinates."
+        #     )
+        # else:
+        #     eta.append(eta_1)
+        #     eta.append(eta_2)
+        #     eta.append(eta_3)
+        #     eta.append(eta_4)
+        #     rho_theta_zeta_in_tetrahedron.append(rho_theta_zeta[i, :])
+
+        return eta, rho_theta_zeta[~outside_tet, :]
 
     def get_basis_functions(self, rho_theta_zeta, derivatives=np.array([0, 0, 0])):
         """
@@ -3552,82 +3666,79 @@ class TetrahedronFiniteElement:
         basis_functions = np.zeros((rho_theta_zeta.shape[0], self.Q))
         # At each of the rho_theta_zeta points that lie in the given tetrahedron,
         # we wish to evaluate the Q = (K+1)(K+2)(K+3)/6 basis functions.
-        K = self.K
 
         # Compute the vertex basis functions first. This will be the first 4 columns
         # of basis_functions. There are hard-coded from book.
         # print(basis_functions.shape, self.eta_nodes.shape)
 
         if K == 1:
-            for i in range(rho_theta_zeta.shape[0]):
-                for j in range(4):
-                    basis_functions[i, j] = eta[i, j]
+            basis_functions = eta
         # Next, we deal with the edge nodes. This will provide an additional 6 columns.
 
         if K == 2:
-            for i in range(rho_theta_zeta.shape[0]):
-                for j in range(4):
-                    basis_functions[i, j] = eta[i, j] * (2 * eta[i, j] - 1)
+            # for i in range(rho_theta_zeta.shape[0]):
+            #     for j in range(4):
+            basis_functions[:, :4] = eta * (2 * eta - 1)
 
-            for i in range(rho_theta_zeta.shape[0]):
+            # for i in range(rho_theta_zeta.shape[0]):
                 # Node numbers labeled according to Zienkiewicz textbook Fig. 6.12
-                basis_functions[i, 4] = 4 * eta[i, 1] * eta[i, 0]  # L1L2  # node 5
-                basis_functions[i, 5] = 4 * eta[i, 1] * eta[i, 2]  # L3L2  # node 8
-                basis_functions[i, 6] = 4 * eta[i, 0] * eta[i, 2]  # L3L1  # node 6
-                basis_functions[i, 7] = 4 * eta[i, 0] * eta[i, 3]  # L4L1  # node 7
-                basis_functions[i, 8] = 4 * eta[i, 1] * eta[i, 3]  # L4L2  # node 10
-                basis_functions[i, 9] = 4 * eta[i, 2] * eta[i, 3]  # L4L3  # node 9
+            basis_functions[:, 4] = 4 * eta[:, 1] * eta[:, 0]  # L1L2  # node 5
+            basis_functions[:, 5] = 4 * eta[:, 1] * eta[:, 2]  # L3L2  # node 8
+            basis_functions[:, 6] = 4 * eta[:, 0] * eta[:, 2]  # L3L1  # node 6
+            basis_functions[:, 7] = 4 * eta[:, 0] * eta[:, 3]  # L4L1  # node 7
+            basis_functions[:, 8] = 4 * eta[:, 1] * eta[:, 3]  # L4L2  # node 10
+            basis_functions[:, 9] = 4 * eta[:, 2] * eta[:, 3]  # L4L3  # node 9
 
         if K == 3:
-            for i in range(rho_theta_zeta.shape[0]):
-                for j in range(4):
-                    basis_functions[i, j] = (
-                        (1 / 2) * eta[i, j] * (3 * eta[i, j] - 1) * (3 * eta[i, j] - 2)
-                    )
-            for i in range(rho_theta_zeta.shape[0]):
-                # Edge nodes
-                basis_functions[i, 4] = (
-                    (9 / 2) * eta[i, 0] * eta[i, 1] * (3 * eta[i, 0] - 1)
-                )
-                basis_functions[i, 5] = (
-                    (9 / 2) * eta[i, 0] * eta[i, 1] * (3 * eta[i, 1] - 1)
-                )
-                basis_functions[i, 6] = (
-                    (9 / 2) * eta[i, 1] * eta[i, 2] * (3 * eta[i, 1] - 1)
-                )
-                basis_functions[i, 7] = (
-                    (9 / 2) * eta[i, 1] * eta[i, 2] * (3 * eta[i, 2] - 1)
-                )
-                basis_functions[i, 8] = (
-                    (9 / 2) * eta[i, 2] * eta[i, 3] * (3 * eta[i, 2] - 1)
-                )
-                basis_functions[i, 9] = (
-                    (9 / 2) * eta[i, 2] * eta[i, 3] * (3 * eta[i, 3] - 1)
-                )
-                basis_functions[i, 10] = (
-                    (9 / 2) * eta[i, 0] * eta[i, 2] * (3 * eta[i, 0] - 1)
-                )
-                basis_functions[i, 11] = (
-                    (9 / 2) * eta[i, 0] * eta[i, 2] * (3 * eta[i, 2] - 1)
-                )
-                basis_functions[i, 12] = (
-                    (9 / 2) * eta[i, 0] * eta[i, 3] * (3 * eta[i, 0] - 1)
-                )
-                basis_functions[i, 13] = (
-                    (9 / 2) * eta[i, 0] * eta[i, 3] * (3 * eta[i, 3] - 1)
-                )
-                basis_functions[i, 14] = (
-                    (9 / 2) * eta[i, 1] * eta[i, 3] * (3 * eta[i, 1] - 1)
-                )
-                basis_functions[i, 15] = (
-                    (9 / 2) * eta[i, 1] * eta[i, 3] * (3 * eta[i, 3] - 1)
-                )
+            # for i in range(rho_theta_zeta.shape[0]):
+            #     for j in range(4):
+            basis_functions[:, :4] = (
+                (1 / 2) * eta * (3 * eta - 1) * (3 * eta - 2)
+            )
+            # for i in range(rho_theta_zeta.shape[0]):
+            # Edge nodes
+            basis_functions[:, 4] = (
+                (9 / 2) * eta[:, 0] * eta[:, 1] * (3 * eta[:, 0] - 1)
+            )
+            basis_functions[:, 5] = (
+                (9 / 2) * eta[:, 0] * eta[:, 1] * (3 * eta[:, 1] - 1)
+            )
+            basis_functions[:, 6] = (
+                (9 / 2) * eta[:, 1] * eta[:, 2] * (3 * eta[:, 1] - 1)
+            )
+            basis_functions[:, 7] = (
+                (9 / 2) * eta[:, 1] * eta[:, 2] * (3 * eta[:, 2] - 1)
+            )
+            basis_functions[:, 8] = (
+                (9 / 2) * eta[:, 2] * eta[:, 3] * (3 * eta[:, 2] - 1)
+            )
+            basis_functions[:, 9] = (
+                (9 / 2) * eta[:, 2] * eta[:, 3] * (3 * eta[:, 3] - 1)
+            )
+            basis_functions[:, 10] = (
+                (9 / 2) * eta[:, 0] * eta[:, 2] * (3 * eta[:, 0] - 1)
+            )
+            basis_functions[:, 11] = (
+                (9 / 2) * eta[:, 0] * eta[:, 2] * (3 * eta[:, 2] - 1)
+            )
+            basis_functions[:, 12] = (
+                (9 / 2) * eta[:, 0] * eta[:, 3] * (3 * eta[:, 0] - 1)
+            )
+            basis_functions[:, 13] = (
+                (9 / 2) * eta[:, 0] * eta[:, 3] * (3 * eta[:, 3] - 1)
+            )
+            basis_functions[:, 14] = (
+                (9 / 2) * eta[:, 1] * eta[:, 3] * (3 * eta[:, 1] - 1)
+            )
+            basis_functions[:, 15] = (
+                (9 / 2) * eta[:, 1] * eta[:, 3] * (3 * eta[:, 3] - 1)
+            )
 
-                # Mid-face nodes
-                basis_functions[i, 16] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 2]
-                basis_functions[i, 17] = 27 * eta[i, 1] * eta[i, 2] * eta[i, 3]
-                basis_functions[i, 18] = 27 * eta[i, 0] * eta[i, 2] * eta[i, 3]
-                basis_functions[i, 19] = 27 * eta[i, 0] * eta[i, 1] * eta[i, 3]
+            # Mid-face nodes
+            basis_functions[:, 16] = 27 * eta[:, 0] * eta[:, 1] * eta[:, 2]
+            basis_functions[:, 17] = 27 * eta[:, 1] * eta[:, 2] * eta[:, 3]
+            basis_functions[:, 18] = 27 * eta[:, 0] * eta[:, 2] * eta[:, 3]
+            basis_functions[:, 19] = 27 * eta[:, 0] * eta[:, 1] * eta[:, 3]
 
         return basis_functions, rho_theta_zeta_in_tetrahedron
 

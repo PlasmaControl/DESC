@@ -87,7 +87,7 @@ def convert_spectral_to_FE(
     # Assume uniform grid
     t1 = time.time()
 
-    N = R_basis.N
+    N = Rprime_basis.N
     I = Rprime_basis.I_LMN
     Q = Rprime_basis.Q
     L = Rprime_basis.L
@@ -116,7 +116,6 @@ def convert_spectral_to_FE(
     # as in the 2D case.
     # Actually only need to do this once since assembly matrix is the
     # same for R, Z, and L variables and same for the Fourier-Zernike basis
-    print(quadpoints.shape, L, M, N)
     Fourier_basis_pre_evaluated = R_basis.evaluate(nodes=quadpoints)
     t2 = time.time()
     print("Time to evaluate Fourier basis = ", t2 - t1)
@@ -142,22 +141,9 @@ def convert_spectral_to_FE(
 
     t1 = time.time()
     # Evaluate sum_lmn R_lmn * FourierZernike_lmn
-  
     R_sum_pre_evaluated = Fourier_basis_pre_evaluated[:,0:np.ravel(R_lmn).shape[0]] @ np.ravel(R_lmn)
-    # print(" Fourier_basis_pre_evaluated  = ", Fourier_basis_pre_evaluated.shape )
-    # print("R_lmn", np.ravel(R_lmn).shape)
-    # print("Z_lmn", np.ravel(Z_lmn).shape)
-    # print("L_lmn", np.ravel(L_lmn).shape)
-    # print(" R_sum_pre_evaluated  = ", R_sum_pre_evaluated.shape )
-    # Next is Z_sum_pre_evaluated, but need to fix dimension 
-
-   # print(" Fourier_basis_pre_evaluated_Z=",  Fourier_basis_pre_evaluated[:,0:np.ravel(Z_lmn).shape[0]].shape)
     Z_sum_pre_evaluated = Fourier_basis_pre_evaluated[:,0:np.ravel(Z_lmn).shape[0]] @ np.ravel(Z_lmn)
-
-    
-    # Finally, we have is L_sum_pre_evaluated, but need to fix dimension 
-    L_sum_pre_evaluated = Fourier_basis_pre_evaluated[:,0:np.ravel(L_lmn).shape[0]] @ np.ravel(L_lmn)  
- 
+    L_sum_pre_evaluated = Fourier_basis_pre_evaluated[:,0:np.ravel(L_lmn).shape[0]] @ np.ravel(L_lmn)
 
     # Multiply FE and summed FourierZernike basis elements
     ZZ = Z_sum_pre_evaluated[:, np.newaxis] * FE_basis_pre_evaluated

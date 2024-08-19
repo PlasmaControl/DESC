@@ -450,6 +450,40 @@ class Equilibrium(IOAble, Optimizable):
             self.Z_lmn = Zprime_lmn
             self.L_lmn = Lprime_lmn
 
+    def change_basis(self, basis='FiniteElementBasis', L_grid=4, M_grid=4, N_grid=4, K_FE=2):
+        self.basis = basis
+        self.L_grid = L_grid
+        self.M_grid = M_grid 
+        self.N_grid = N_grid 
+        self._K_FE = K_FE
+        if self.basis != "fourierzernike":
+            Rprime_basis = FiniteElementBasis(
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, K=self._K_FE
+            )
+            Zprime_basis = FiniteElementBasis(
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, K=self._K_FE
+            )
+            Lprime_basis = FiniteElementBasis(
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, K=self._K_FE
+            )
+            Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
+                self.R_lmn,
+                self.Z_lmn,
+                self.L_lmn,
+                self._R_basis,
+                self._Z_basis,
+                self._L_basis,
+                Rprime_basis,
+                Zprime_basis,
+                Lprime_basis,
+            )
+            self._R_basis = Rprime_basis
+            self._Z_basis = Zprime_basis
+            self._L_basis = Lprime_basis
+            self.R_lmn = Rprime_lmn
+            self.Z_lmn = Zprime_lmn
+            self.L_lmn = Lprime_lmn
+
     def _set_up(self):
         """Set unset attributes after loading.
 

@@ -4,9 +4,8 @@ import copy
 import inspect
 
 import numpy as np
-from termcolor import colored
 
-from desc.backend import cond, fori_loop, jnp, put
+from desc.backend import cond, execute_on_cpu, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from ..utils import errorif, warnif
@@ -43,7 +42,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         Type of object to compute for, eg Equilibrium, Curve, etc.
     names : str or array-like of str
         Name(s) of the quantity(s) to compute.
-    params : dict of ndarray
+    params : dict[str, jnp.ndarray]
         Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc.
         Defaults to attributes of self.
     transforms : dict of Transform
@@ -51,7 +50,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     profiles : dict of Profile
         Profile objects for pressure, iota, current, etc. Defaults to attributes
         of self
-    data : dict of ndarray
+    data : dict[str, jnp.ndarray]
         Data computed so far, generally output from other compute functions.
         Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
         v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
@@ -202,6 +201,7 @@ def _compute(
     return data
 
 
+@execute_on_cpu
 def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
     """Get list of keys needed to compute ``keys`` given already computed data.
 
@@ -215,7 +215,7 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
         Basis of computed quantities.
-    data : dict of ndarray
+    data : dict[str, jnp.ndarray]
         Data computed so far, generally output from other compute functions
 
     Returns
@@ -290,7 +290,7 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
         Name(s) of the quantity(s) to compute.
     deps : set[str]
         Dependencies gathered so far.
-    data : dict of ndarray or None
+    data : dict[str, jnp.ndarray]
         Data computed so far, generally output from other compute functions.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
@@ -361,6 +361,7 @@ def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
     return out
 
 
+@execute_on_cpu
 def get_derivs(keys, obj, has_axis=False, basis="rpz"):
     """Get dict of derivative orders needed to compute a given quantity.
 
@@ -377,7 +378,7 @@ def get_derivs(keys, obj, has_axis=False, basis="rpz"):
 
     Returns
     -------
-    derivs : dict of list of int
+    derivs : dict[list, str]
         Orders of derivatives needed to compute key.
         Keys for R, Z, L, etc
 
@@ -450,6 +451,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     return profiles
 
 
+@execute_on_cpu
 def get_params(keys, obj, has_axis=False, basis="rpz"):
     """Get parameters needed to compute a given quantity.
 
@@ -466,7 +468,7 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
 
     Returns
     -------
-    params : list of str or dict of ndarray
+    params : list[str] or dict[str, jnp.ndarray]
         Parameters needed to compute key.
         If eq is None, returns a list of the names of params needed
         otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
@@ -490,6 +492,7 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
     return temp_params
 
 
+@execute_on_cpu
 def get_transforms(
     keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
 ):
@@ -624,13 +627,13 @@ def has_dependencies(parameterization, qty, params, transforms, profiles, data):
         Type of thing we're checking dependencies for. eg desc.equilibrium.Equilibrium
     qty : str
         Name of something from the data index.
-    params : dict of ndarray
+    params : dict[str, jnp.ndarray]
         Dictionary of parameters we have.
-    transforms : dict of Transform
+    transforms : dict[str, Transform]
         Dictionary of transforms we have.
-    profiles : dict of Profile
+    profiles : dict[str, Profile]
         Dictionary of profiles we have.
-    data : dict of ndarray
+    data : dict[str, jnp.ndarray]
         Dictionary of what we've computed so far.
 
     Returns
@@ -988,8 +991,10 @@ def line_integrals(
         line_label != "poloidal" and isinstance(grid, ConcentricGrid),
         msg="ConcentricGrid should only be used for poloidal line integrals.",
     )
-    msg = colored("Correctness not guaranteed on grids with duplicate nodes.", "yellow")
-    warnif(isinstance(grid, LinearGrid) and grid.endpoint, msg=msg)
+    warnif(
+        isinstance(grid, LinearGrid) and grid.endpoint,
+        msg="Correctness not guaranteed on grids with duplicate nodes.",
+    )
     # Generate a new quantity q_prime which is zero everywhere
     # except on the fixed surface, on which q_prime takes the value of q.
     # Then forward the computation to surface_integrals().
@@ -1075,11 +1080,8 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
     surface_label = grid.get_label(surface_label)
     warnif(
         surface_label == "poloidal" and isinstance(grid, ConcentricGrid),
-        msg=colored(
-            "Integrals over constant poloidal surfaces"
-            " are poorly defined for ConcentricGrid.",
-            "yellow",
-        ),
+        msg="Integrals over constant poloidal surfaces"
+        " are poorly defined for ConcentricGrid.",
     )
     unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = _get_grid_surface(
         grid, surface_label

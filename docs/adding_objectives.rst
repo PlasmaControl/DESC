@@ -7,39 +7,37 @@ and ``compute``. The base class ``_Objective`` provides a number of other method
 generally do not need to be re-implemented for subclasses.
 
 ``__init__`` should generally just assign attributes and store inputs. It should not do
-any expensive calculations, these should be in ``build`` or ``compute``. The main arguments
-are summarized in the example below.
+any expensive calculations, these should be in ``build`` or ``compute``. The main
+arguments are summarized in the example below.
 
-``build`` is called before optimization with the ``Equilibrium`` to be optimized.
-It is used to precompute things like transform matrices that convert between spectral
-coefficients and real space values.
-In the build method, we first ensure that a ``Grid`` is assigned, using default values
-from the equilibrium if necessary. The grid defines the points in flux coordinates where
-we evaluate the residuals.
-Next, we define the physics quantities we need to evaluate the objective (``_data_keys``),
-and the number of residuals that will be returned by ``compute`` (``_dim_f``).
-Next, we use some helper functions to build the required ``Transform`` and ``Profile``
-objects needed to compute the desired physics quantities. These ``transforms`` and
-``profiles`` are then packaged into ``constants``, which will be passed to the ``compute``
-method. Other "constant" values that are needed to compute the given quantity such as
-hyperparameters or other objects that will not be optimized should also be included in
-``constants``.
-Finally, we call the base class ``build`` method to do some checking of array sizes and
-other misc. stuff.
+``build`` is called before optimization with the ``Equilibrium`` to be optimized. It is
+used to precompute things like transform matrices that convert between spectral
+coefficients and real space values. In the build method, we first ensure that a ``Grid``
+is assigned, using default values from the equilibrium if necessary. The grid defines
+the points in flux coordinates where we evaluate the residuals. Next, we define the
+physics quantities we need to evaluate the objective (``_data_keys``), and the number of
+residuals that will be returned by ``compute`` (``_dim_f``). Next, we use some helper
+functions to build the required ``Transform`` and ``Profile`` objects needed to compute
+the desired physics quantities. These ``transforms`` and ``profiles`` are then packaged
+into ``constants``, which will be passed to the ``compute`` method. Other "constant"
+values that are needed to compute the given quantity such as hyperparameters or other
+objects that will not be optimized should also be included in ``constants``. Finally, we
+call the base class ``build`` method to do some checking of array sizes and other
+miscellaneous stuff.
 
 ``compute`` is where the actual calculation of the residual takes place. Objectives
-generally return a vector of residuals that are minimized in a least squares sense, though
-the exact method will depend on the optimization algorithm. The main thing here is
-calling ``compute_fun`` to get physics quantities, and then performing any post-processing
-we want such as averaging, combining, etc.
+generally return a vector of residuals that are minimized in a least squares sense,
+though the exact method will depend on the optimization algorithm. The main thing here
+is calling ``compute_fun`` to get physics quantities, and then performing any
+post-processing we want such as averaging, combining, etc.
 
-A full example objective with comments describing key points is given below:
+A full example objective with comments describing the key points is given below:
 ::
 
     from desc.objectives.objective_funs import _Objective
     from desc.objectives.normalization import compute_scaling_factors
     from desc.compute import get_profiles, get_transforms
-    from desc.compute import compute as compute_fun
+    from desc.compute.utils import _compute as compute_fun
 
 
     class QuasisymmetryTripleProduct(_Objective):  # need to subclass from ``desc.objectives._Objective``
@@ -190,7 +188,7 @@ A full example objective with comments describing key points is given below:
             if constants is None:
                 constants = self.constants
 
-            # here we get the physics quantities from ``desc.compute.compute``
+            # here we get the physics quantities from ``desc.compute.utils._compute``
             data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,                 # quantities we want
@@ -207,18 +205,32 @@ A full example objective with comments describing key points is given below:
             # and to make the objective value independent of grid resolution.
             return f
 
+Converting to Cartesian coordinates
+-----------------------------------
+
+The above example of quasi-symmetry is a scalar quantity that is independent of the
+coordinate system. ``desc.compute.utils._compute`` always returns all vector quantities
+in toroidal coordinates :math:`(R,\phi,Z)`. If you would prefer to work in Cartesian
+coordinates :math:`(X,Y,Z)` for any intermediate computations within your new objective,
+you will have to manually convert these vectors using the geometry utility functions
+``rpz2xyz`` and/or ``rpz2xyz_vec``. See the ``PlasmaVesselDistance`` objective for an
+example of this.
+
 Adapting Existing Objectives with Different Loss Funtions
 ---------------------------------------------------------
 
-If your desired objective is already implemented in DESC, but not in the correct form, a few different
-loss functions are available through the the `loss_function` kwarg when instantiating an Objective objective to
-modify the objective cost in order to adapt the objective to your desired purpose.
-For example, the DESC `RotationalTransform` objective with `target=iota_target` by default forms the residual
-by taking the target and subtracting it from the profile at the points in the grid, resulting in a residual of
-the form $\iota_{err} = \sum_{i} (\iota_i-iota_target)^2$, i.e. the residual is the sum of squared pointwise error
-between the current rotational transform profile and the target passed into the objective.
-If the desired objective instead is to optimize to target an average rotational transform of `iota_target`, we can adapt
-the `RotationalTransform` object by passing in `loss_function="mean"`.
-The options available for the `loss_function` kwarg are `[None,"mean","min","max"]`, with `None` meaning using the usual
-default objective cost, while `"mean"` takes the average of the raw objective values (before subtracting the target/bounds or normalization),
-`"min"` takes the minimum, and `"max"` takes the maximum.
+If your desired objective is already implemented in DESC, but not in the correct form,
+a few different loss functions are available through the the ``loss_function`` kwarg
+when instantiating an Objective objective to modify the objective cost in order to adapt
+the objective to your desired purpose. For example, the DESC ``RotationalTransform``
+objective with ``target=iota_target`` by default forms the residual by taking the target
+and subtracting it from the profile at the points in the grid, resulting in a residual
+of the form :math:`\iota_{err} = \sum_{i} (\iota_i - iota_target)^2`, i.e. the residual
+is the sum of squared pointwise error between the current rotational transform profile
+and the target passed into the objective. If the desired objective instead is to
+optimize to target an average rotational transform of `iota_target`, we can adapt the
+``RotationalTransform`` object by passing in ``loss_function="mean"``. The options
+available for the ``loss_function`` kwarg are ``[None,"mean","min","max"]``, with
+``None`` meaning using the usual default objective cost, while ``"mean"`` takes the
+average of the raw objective values (before subtracting the target/bounds or
+normalization), ``"min"`` takes the minimum, and ``"max"`` takes the maximum.

@@ -457,8 +457,8 @@ def combination_permutation(m, n, equals=True):
 def multinomial_coefficients(m, n):
     """Number of ways to place n objects into m bins."""
     k = combination_permutation(m, n)
-    num = factorial(n)
-    den = factorial(k).prod(axis=-1)
+    num = factorial(n, exact=True)
+    den = factorial(k, exact=True).prod(axis=-1)
     return num / den
 
 
@@ -532,13 +532,19 @@ def errorif(cond, err=ValueError, msg=""):
     just AssertionError.
     """
     if cond:
-        raise err(msg)
+        raise err(colored(msg, "red"))
+
+
+class ResolutionWarning(UserWarning):
+    """Warning for insufficient resolution."""
+
+    pass
 
 
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
-        warnings.warn(msg, err)
+        warnings.warn(colored(msg, "yellow"), err)
 
 
 def check_nonnegint(x, name="", allow_none=True):

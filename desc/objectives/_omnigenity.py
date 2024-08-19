@@ -666,7 +666,7 @@ class Omnigenity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",  # FIXME: get it working with rev mode (see GH issue #943)
+        deriv_mode="auto",
         eq_grid=None,
         field_grid=None,
         M_booz=None,
@@ -891,20 +891,26 @@ class Omnigenity(_Objective):
             # update theta_B and zeta_B with new iota from the equilibrium
             M, N = constants["helicity"]
             iota = jnp.mean(eq_data["iota"])
+            # see comment in desc.compute._omnigenity for the explanation of these
+            # wheres
+            mat_OP = jnp.array(
+                [[N, iota / jnp.where(N == 0, 1, N)], [0, 1 / jnp.where(N == 0, 1, N)]]
+            )
+            mat_OT = jnp.array([[0, -1], [M, -1 / jnp.where(iota == 0, 1.0, iota)]])
+            den = jnp.where((N - M * iota) == 0, 1.0, (N - M * iota))
+            mat_OH = jnp.array([[N, M * iota / den], [M, M / den]])
             matrix = jnp.where(
                 M == 0,
-                jnp.array([N, iota / N, 0, 1 / N]),  # OP
+                mat_OP,
                 jnp.where(
                     N == 0,
-                    jnp.array([0, -1, M, -1 / iota]),  # OT
-                    jnp.array(
-                        [N, M * iota / (N - M * iota), M, M / (N - M * iota)]  # OH
-                    ),
+                    mat_OT,
+                    mat_OH,
                 ),
-            ).reshape((2, 2))
+            )
             booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
-            field_data["theta_B"] = booz[0, :]
-            field_data["zeta_B"] = booz[1, :]
+            theta_B = booz[0, :]
+            zeta_B = booz[1, :]
         else:
             field_data = compute_fun(
                 "desc.magnetic_fields._core.OmnigenousField",
@@ -915,13 +921,15 @@ class Omnigenity(_Objective):
                 helicity=constants["helicity"],
                 iota=jnp.mean(eq_data["iota"]),
             )
+            theta_B = field_data["theta_B"]
+            zeta_B = field_data["zeta_B"]
 
         # additional computations that cannot be part of the regular compute API
         nodes = jnp.vstack(
             (
-                jnp.zeros_like(field_data["theta_B"]),
-                field_data["theta_B"],
-                field_data["zeta_B"],
+                jnp.zeros_like(theta_B),
+                theta_B,
+                zeta_B,
             )
         ).T
         B_eta_alpha = jnp.matmul(

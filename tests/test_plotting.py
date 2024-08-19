@@ -20,7 +20,11 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    SplineMagneticField,
+    ToroidalMagneticField,
+)
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -39,8 +43,10 @@ from desc.plotting import (
     plot_qs_error,
     plot_section,
     plot_surfaces,
+    poincare_plot,
 )
 from desc.utils import isalmostequal
+from desc.vmec import VMECIO
 
 tol_1d = 7.8
 tol_2d = 15
@@ -286,7 +292,8 @@ class TestPlot3D:
     def test_3d_plot_Bn(self):
         """Test 3d plotting of Bn on equilibrium surface."""
         eq = get("precise_QA")
-        eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
         fig = plot_3d(
             eq,
             "B*n",
@@ -801,6 +808,8 @@ def test_plot_coils():
     coil.rotate(angle=np.pi / N)
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
     fig, data = plot_coils(coils2, return_data=True)
 
     def flatten_coils(coilset):
@@ -839,7 +848,7 @@ def test_plot_b_mag():
 
     rhoa = rho * np.ones_like(zeta)
     c = np.vstack([rhoa, thetas, zeta]).T
-    coords = eq.compute_theta_coords(c)
+    coords = eq.map_coordinates(c, inbasis=("rho", "theta_PEST", "zeta"))
     grid = Grid(coords)
 
     # compute |B| normalized in the usual flux tube way
@@ -867,4 +876,24 @@ def test_plot_coefficients():
 def test_plot_logo():
     """Test plotting the DESC logo."""
     fig, ax = plot_logo()
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_poincare():
+    """Test making a poincare plot."""
+    # TODO: tracing from spline field seems a lot slower than from a coilset, we
+    # can probably make this test a lot faster if we make some example coilsets
+    extcur = [4700.0, 1000.0]
+    ext_field = SplineMagneticField.from_mgrid(
+        "tests/inputs/mgrid_test.nc", extcur=extcur
+    )
+    with pytest.warns(UserWarning, match="VMEC output"):
+        eq = VMECIO.load("tests/inputs/wout_test_freeb.nc")
+    grid_trace = LinearGrid(rho=np.linspace(0, 1, 9))
+    r0 = eq.compute("R", grid=grid_trace)["R"]
+    z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+    fig, ax = poincare_plot(ext_field, r0, z0, ntransit=50, NFP=eq.NFP)
     return fig

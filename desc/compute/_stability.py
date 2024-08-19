@@ -681,7 +681,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     X = X.at[i, j, k].set(phi[k])
 
     Y = jnp.zeros((N_alpha, N_zeta0))
-    eps = 5e-3  # slope of the test function
+    eps = 5e-3  # slope of the test functio
     Yp = eps * jnp.ones((N_alpha, N_zeta0))
 
     @jit

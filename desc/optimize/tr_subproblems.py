@@ -421,7 +421,7 @@ def trust_region_step_exact_qr(
         p_newton = solve_triangular_regularized(R, -Q.T @ f)
     else:
         Q, R = qr(J.T, mode="economic")
-        p_newton = Q @ solve_triangular_regularized(R.T, f, lower=True)
+        p_newton = Q @ solve_triangular_regularized(R.T, -f, lower=True)
 
     def truefun(*_):
         return p_newton, False, 0.0

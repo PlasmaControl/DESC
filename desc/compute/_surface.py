@@ -119,66 +119,6 @@ def _phi_Surface(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="phi_r",
-    label="\\partial_{\\rho} \\phi",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angle in lab frame, derivative wrt radial coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
-    coords_r = data["e_rho"]
-    data["phi_r"] = coords_r[:, 1]
-    return data
-
-
-@register_compute_fun(
-    name="phi_t",
-    label="\\partial_{\\theta} \\phi",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angle in lab frame, derivative wrt poloidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_theta"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
-    coords_t = data["e_theta"]
-    data["phi_t"] = coords_t[:, 1]
-    return data
-
-
-@register_compute_fun(
-    name="phi_z",
-    label="\\partial_{\\zeta} \\phi",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angle in lab frame, derivative wrt toroidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_zeta"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
-    coords_z = data["e_zeta"]
-    data["phi_z"] = coords_z[:, 1]
-    return data
-
-
-@register_compute_fun(
     name="Z",
     label="Z",
     units="m",

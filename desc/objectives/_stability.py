@@ -469,7 +469,12 @@ class BallooningStability(_Objective):
         eq = self.things[0]
 
         # we need a uniform grid to get correct surface averages for iota
-        iota_grid = LinearGrid(rho=self.rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        iota_grid = LinearGrid(
+            rho=self.rho,
+            M=jnp.maximum(eq.M_grid, 16),
+            N=jnp.maximum(eq.N_grid, 16),
+            NFP=eq.NFP,
+        )
         self._iota_keys = ["iota", "iota_r", "shear"]  # might not need all of these
         iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
         iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
@@ -528,7 +533,7 @@ class BallooningStability(_Objective):
             constants = self.constants
         # we first compute iota on a uniform grid to get correct averaging etc.
         iota_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            eq,
             self._iota_keys,
             params=params,
             transforms=constants["iota_transforms"],
@@ -536,7 +541,7 @@ class BallooningStability(_Objective):
         )
 
         len_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            eq,
             self._len_keys,
             params=params,
             transforms=constants["len_transforms"],

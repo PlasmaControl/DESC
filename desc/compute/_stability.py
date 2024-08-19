@@ -606,6 +606,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     If zero crossing is at -inf (root finder failed), use the Y coordinate
     as a metric of stability else use the zero-crossing point on the X-axis
     as the metric
+    This idea is explained further in Appendix D of
+    [Gaur _et al._](https://doi.org/10.1017/S0022377823000107)
     """
     source_grid = transforms["grid"].source_grid
     # Vectorize in rho later

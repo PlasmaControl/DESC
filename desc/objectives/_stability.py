@@ -471,8 +471,8 @@ class BallooningStability(_Objective):
         # we need a uniform grid to get correct surface averages for iota
         iota_grid = LinearGrid(
             rho=self.rho,
-            M=jnp.maximum(eq.M_grid, 16),
-            N=jnp.maximum(eq.N_grid, 16),
+            M=jnp.maximum(eq.M_grid, 16).astype(jnp.int32),
+            N=jnp.maximum(eq.N_grid, 16).astype(jnp.int32),
             NFP=eq.NFP,
         )
         self._iota_keys = ["iota", "iota_r", "shear"]  # might not need all of these

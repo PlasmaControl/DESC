@@ -51,7 +51,7 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import is_nested, map_coordinates, to_sfl
+from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -755,8 +755,8 @@ class Equilibrium(IOAble, Optimizable):
             f = grid.compress(data[name])
             p = SplineProfile(f, knots, name=name)
         else:
-            f, df = map(grid.compress, (data[name[0]], data[name[1]]))
-            p = HermiteSplineProfile(f, df, knots, name=name)
+            f, dfdr = map(grid.compress, (data[name[0]], data[name[1]]))
+            p = HermiteSplineProfile(knots, f, dfdr, name=name)
         if kind == "power_series":
             p = p.to_powerseries(order=min(self.L, grid.num_rho), xs=knots, sym=True)
         if kind == "fourier_zernike":
@@ -1219,6 +1219,43 @@ class Equilibrium(IOAble, Optimizable):
             maxiter,
             full_output,
             **kwargs,
+        )
+
+    def get_rtz_grid(
+        self, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+    ):
+        """Return DESC grid in (rho, theta, zeta) coordinates from given coordinates.
+
+        Create a tensor-product grid from the given coordinates, and return the same
+        grid in DESC coordinates.
+
+        Parameters
+        ----------
+        radial : ndarray
+            Sorted unique radial coordinates.
+        poloidal : ndarray
+            Sorted unique poloidal coordinates.
+        toroidal : ndarray
+            Sorted unique toroidal coordinates.
+        coordinates : str
+            Input coordinates that are specified by the arguments, respectively.
+            raz : rho, alpha, zeta
+            rvp : rho, theta_PEST, phi
+            rtz : rho, theta, zeta
+        period : tuple of float
+            Assumed periodicity for each quantity in inbasis.
+            Use np.inf to denote no periodicity.
+        jitable : bool, optional
+            If false the returned grid has additional attributes.
+            Required to be false to retain nodes at magnetic axis.
+
+        Returns
+        -------
+        desc_grid : Grid
+            DESC coordinate grid for the given coordinates.
+        """
+        return get_rtz_grid(
+            self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
     def compute_theta_coords(

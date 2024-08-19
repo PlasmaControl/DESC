@@ -2,13 +2,11 @@
 
 import copy
 import numbers
-import warnings
 from collections.abc import MutableSequence
 
 import numpy as np
 from scipy import special
 from scipy.constants import mu_0
-from termcolor import colored
 
 from desc.backend import execute_on_cpu, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
@@ -53,13 +51,7 @@ from desc.utils import (
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import (
-    compute_theta_coords,
-    get_rtz_grid,
-    is_nested,
-    map_coordinates,
-    to_sfl,
-)
+from .coords import is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
@@ -361,10 +353,10 @@ class Equilibrium(IOAble, Optimizable):
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
-            if isinstance(p, PowerSeriesProfile) and p.sym != "even":
-                warnings.warn(
-                    colored(f"{profile} profile is not an even power series.", "yellow")
-                )
+            warnif(
+                isinstance(p, PowerSeriesProfile) and p.sym != "even",
+                msg=f"{profile} profile is not an even power series.",
+            )
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
@@ -835,7 +827,7 @@ class Equilibrium(IOAble, Optimizable):
         profiles : dict of Profile
             Profile objects for pressure, iota, current, etc. Defaults to attributes
             of self
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Data computed so far, generally output from other compute functions.
             Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
             v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
@@ -988,10 +980,9 @@ class Equilibrium(IOAble, Optimizable):
             for dep in deps:
                 req = data_index[p][dep]["resolution_requirement"]
                 coords = data_index[p][dep]["coordinates"]
-                msg = lambda direction: colored(
+                msg = lambda direction: (
                     f"Dependency {dep} may require more {direction}"
-                    " resolution to compute accurately.",
-                    "yellow",
+                    " resolution to compute accurately."
                 )
                 warnif(
                     # if need more radial resolution
@@ -1153,23 +1144,25 @@ class Equilibrium(IOAble, Optimizable):
         )
         return data
 
-    def map_coordinates(  # noqa: C901
+    def map_coordinates(
         self,
         coords,
         inbasis,
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=(np.inf, np.inf, np.inf),
+        period=None,
         tol=1e-6,
         maxiter=30,
         full_output=False,
         **kwargs,
     ):
-        """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+        """Transform coordinates given in ``inbasis`` to ``outbasis``.
 
-        First solves for the computational coordinates that correspond to inbasis, then
-        evaluates outbasis at those locations.
+        Solves for the computational coordinates that correspond to ``inbasis``,
+        then evaluates ``outbasis`` at those locations.
+
+        Performance can often improve significantly given a reasonable initial guess.
 
         Parameters
         ----------
@@ -1177,22 +1170,24 @@ class Equilibrium(IOAble, Optimizable):
             Shape (k, 3).
             2D array of input coordinates. Each row is a different point in space.
         inbasis, outbasis : tuple of str
-            Labels for input and output coordinates, eg ("R", "phi", "Z") or
+            Labels for input and output coordinates, e.g. ("R", "phi", "Z") or
             ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
-            same as the compute function data key
-        guess : None or ndarray, shape(k,3)
+            same as the compute function data key.
+        guess : jnp.ndarray
+            Shape (k, 3).
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-            corresponding to coords in inbasis. If None, heuristics are used based on
-            in basis and a nearest neighbor search on a coarse grid.
+            corresponding to ``coords`` in ``inbasis``. If not given, then heuristics
+            based on ``inbasis`` or a nearest neighbor search on a grid may be used.
+            In general, this must be given to be compatible with JIT.
         params : dict
-            Values of equilibrium parameters to use, eg eq.params_dict
+            Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
         period : tuple of float
-            Assumed periodicity for each quantity in inbasis.
-            Use np.inf to denote no periodicity.
+            Assumed periodicity for each quantity in ``inbasis``.
+            Use ``np.inf`` to denote no periodicity.
         tol : float
             Stopping tolerance.
-        maxiter : int > 0
-            Maximum number of Newton iterations
+        maxiter : int
+            Maximum number of Newton iterations.
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
             the root finding and the second is the number of iterations.
@@ -1202,15 +1197,14 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        coords : ndarray, shape(k,3)
-            Coordinates mapped from inbasis to outbasis.
+        out : jnp.ndarray
+            Shape (k, 3).
+            Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
+            returned for coordinates where root finding did not succeed, possibly
+            because the coordinate is not in the plasma volume.
         info : tuple
             2 element tuple containing residuals and number of iterations
-            for each point. Only returned if ``full_output`` is True
-
-        Notes
-        -----
-        ``guess`` must be given for this function to be compatible with ``jit``.
+            for each point. Only returned if ``full_output`` is True.
 
         """
         return map_coordinates(
@@ -1227,62 +1221,23 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def get_rtz_grid(
-        self, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
-    ):
-        """Return DESC coordinate grid from given coordinates.
-
-        Create a meshgrid from the given coordinates, and return the
-        paired DESC coordinate grid.
-
-        Parameters
-        ----------
-        radial : ndarray
-            Sorted unique radial coordinates.
-        poloidal : ndarray
-            Sorted unique poloidal coordinates.
-        toroidal : ndarray
-            Sorted unique toroidal coordinates.
-        coordinates : str
-            Input coordinates that are specified by the arguments, respectively.
-            raz : rho, alpha, zeta
-            rpz : rho, theta_PEST, zeta
-            rtz : rho, theta, zeta
-        period : tuple of float
-            Assumed periodicity for each quantity in inbasis.
-            Use np.inf to denote no periodicity.
-        jitable : bool, optional
-            If false the returned grid has additional attributes.
-            Required to be false to retain nodes at magnetic axis.
-
-        Returns
-        -------
-        desc_grid : Grid
-            DESC coordinate grid for the given coordinates.
-
-        """
-        return get_rtz_grid(
-            self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
-        )
-
     def compute_theta_coords(
         self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
     ):
-        """Find theta_DESC for given straight field line theta_PEST.
+        """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to use
-        flux_coords : ndarray, shape(k,3)
-            2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-            point in space.
+        flux_coords : ndarray
+            Shape (k, 3).
+            Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
+            Each row is a different point in space.
         L_lmn : ndarray
-            spectral coefficients for lambda. Defaults to eq.L_lmn
+            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
         tol : float
             Stopping tolerance.
-        maxiter : int > 0
-            maximum number of Newton iterations
+        maxiter : int
+            Maximum number of Newton iterations.
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
             the root finding and the second is the number of iterations.
@@ -1292,18 +1247,23 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        coords : ndarray, shape(k,3)
-            coordinates [rho,theta,zeta].
+        coords : ndarray
+            Shape (k, 3).
+            DESC computational coordinates [ρ, θ, ζ].
         info : tuple
-            2 element tuple containing residuals and number of iterations
-            for each point. Only returned if ``full_output`` is True
+            2 element tuple containing residuals and number of iterations for each
+            point. Only returned if ``full_output`` is True.
+
         """
-        return compute_theta_coords(
+        warnif(True, DeprecationWarning, msg="Use map_coordinates instead.")
+        return map_coordinates(
             self,
             flux_coords,
-            L_lmn=L_lmn,
-            maxiter=maxiter,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
             tol=tol,
+            maxiter=maxiter,
             full_output=full_output,
             **kwargs,
         )
@@ -2080,22 +2040,20 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 
-        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
-            warnings.warn(
-                colored(
-                    "Equilibrium has one or more spectral resolutions "
-                    + "greater than the corresponding collocation grid resolution! "
-                    + "This is not recommended and may result in poor convergence. "
-                    + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
-                    + "to avoid this warning.",
-                    "yellow",
-                )
-            )
-        if self.bdry_mode == "poincare":
-            raise NotImplementedError(
-                "Solving equilibrium with poincare XS as BC is not supported yet "
-                + "on master branch."
-            )
+        warnif(
+            self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid,
+            msg="Equilibrium has one or more spectral resolutions "
+            + "greater than the corresponding collocation grid resolution! "
+            + "This is not recommended and may result in poor convergence. "
+            + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
+            + "to avoid this warning.",
+        )
+        errorif(
+            self.bdry_mode == "poincare",
+            NotImplementedError,
+            "Solving equilibrium with poincare XS as BC is not supported yet "
+            + "on master branch.",
+        )
 
         things, result = optimizer.optimize(
             self,

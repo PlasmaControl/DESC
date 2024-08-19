@@ -1611,8 +1611,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     # the above logic takes care of the correct phi range
     # if defaults are requested. Setting NFP here instead
     # can create reshaping issues when phi is supplied and gets
-    # truncated by 2pi/NFP. See PR #
-    # TODO: put PR number
+    # truncated by 2pi/NFP. See PR #1204
     grid_kwargs = {
         "rho": rho,
         "NFP": 1,

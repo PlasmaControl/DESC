@@ -166,18 +166,18 @@ def get_fixed_xsection_constraints(
         A list of the linear constraints used in fixed-boundary problems.
 
     """
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
     constraints = (
-        FixSectionR(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixSectionZ(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixSectionLambda(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixSectionR(**kwargs),
+        FixSectionZ(**kwargs),
+        FixSectionLambda(**kwargs),
+        FixPsi(**kwargs),
     )
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
-                constraints += (
-                    con(eq=eq, normalize=normalize, normalize_target=normalize),
-                )
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
 
     return constraints
 

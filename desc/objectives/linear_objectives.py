@@ -1084,11 +1084,8 @@ class FixBoundaryZ(FixParameters):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixSectionR(_FixedObjective):
-    """Boundary condition on the R boundary parameters at cross-section.
-
-    Notice this objective is not for consistency. Rather it is used to fix parameter
-    Rp_lmn (which optiizable bydefault) to a given value.
+class FixSectionR(FixParameters):
+    """Boundary condition on the R cross-section parameters.
 
     Parameters
     ----------
@@ -1096,10 +1093,11 @@ class FixSectionR(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Rb_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1113,20 +1111,11 @@ class FixSectionR(_FixedObjective):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
-    surface_label : float, optional
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str, optional
         Name of the objective function.
 
-
-    Notes
-    -----
-    If specifying particular modes to fix, the rows of the resulting constraint `A`
-    matrix and `target` vector will be re-sorted according to the ordering of
-    `basis.modes` which may be different from the order that was passed in.
     """
 
-    _target_arg = "Rp_lmn"
     _units = "(m)"
     _print_value_fmt = "R cross-section error: {:10.3e} "
 
@@ -1139,14 +1128,17 @@ class FixSectionR(_FixedObjective):
         normalize=True,
         normalize_target=True,
         modes=True,
-        surface_label=None,
         name="poincare R",
     ):
-        self._modes = modes
-        self._target_from_user = setdefault(bounds, target)
-        self._surface_label = surface_label
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.xsection.R_basis.get_idx(*mode))
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Rp_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1167,75 +1159,14 @@ class FixSectionR(_FixedObjective):
 
         """
         eq = self.things[0]
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-        elif self._modes is True:  # all modes
-            modes = eq.xsection.R_basis.modes
-            idx = np.arange(eq.xsection.R_basis.num_modes)
-            modes_idx = idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.xsection.R_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.xsection.R_basis.modes
-            # and eq.xsection.R_lmn,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.xsection.R_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the surface, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = idx.size
-        # Rp_lmn -> Rp optimization space
-        self._A = np.eye(eq.xsection.R_basis.num_modes)[idx, :]
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.xsection.R_lmn[idx], None, modes_idx
-        )
-
         if self._normalize:
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
-
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
-        """Compute boundary R errors.
 
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            boundary R errors.
-
-        """
-        return jnp.dot(self._A, params["Rp_lmn"])
-
-
-class FixSectionZ(_FixedObjective):
-    """Boundary condition on the Z boundary parameters at cross-section.
+class FixSectionZ(FixParameters):
+    """Boundary condition on the Z cross-section parameters.
 
     Parameters
     ----------
@@ -1243,157 +1174,11 @@ class FixSectionZ(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    modes : ndarray, optional
-        Basis modes numbers [l,m,n] of boundary modes to fix.
-        len(target) = len(weight) = len(modes).
-        If True/False uses all/none of the surface modes.
-    surface_label : float, optional
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
-    name : str, optional
-        Name of the objective function.
-
-
-    Notes
-    -----
-    If specifying particular modes to fix, the rows of the resulting constraint `A`
-    matrix and `target` vector will be re-sorted according to the ordering of
-    `basis.modes` which may be different from the order that was passed in.
-    """
-
-    _target_arg = "Zp_lmn"
-    _units = "(m)"
-    _print_value_fmt = "Z cross-section error: {:10.3e} "
-
-    def __init__(
-        self,
-        eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        modes=True,
-        surface_label=None,
-        name="poincare Z",
-    ):
-        self._modes = modes
-        self._target_from_user = setdefault(bounds, target)
-        self._surface_label = surface_label
-        super().__init__(
-            things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-        elif self._modes is True:  # all modes
-            modes = eq.xsection.Z_basis.modes
-            idx = np.arange(eq.xsection.Z_basis.num_modes)
-            modes_idx = idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.xsection.Z_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.xsection.Z_basis.modes
-            # and eq.xsection.Z_lmn,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.xsection.Z_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the surface, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = idx.size
-        # Zp_lmn -> Zp optimization space
-        self._A = np.eye(eq.xsection.Z_basis.num_modes)[idx, :]
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.xsection.Z_lmn[idx], None, modes_idx
-        )
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute boundary Z errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            boundary Z errors.
-
-        """
-        return jnp.dot(self._A, params["Zp_lmn"])
-
-
-class FixSectionLambda(_FixedObjective):
-    """Boundary condition on the Lambda boundary parameters at cross-section.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Rb_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1407,22 +1192,13 @@ class FixSectionLambda(_FixedObjective):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
-    surface_label : float, optional
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str, optional
         Name of the objective function.
 
-
-    Notes
-    -----
-    If specifying particular modes to fix, the rows of the resulting constraint `A`
-    matrix and `target` vector will be re-sorted according to the ordering of
-    `basis.modes` which may be different from the order that was passed in.
     """
 
-    _target_arg = "Lp_lmn"
-    _units = " "
-    _print_value_fmt = "Lambda cross-section error: {:10.3e} "
+    _units = "(m)"
+    _print_value_fmt = "Z cross-section error: {:10.3e} "
 
     def __init__(
         self,
@@ -1433,14 +1209,17 @@ class FixSectionLambda(_FixedObjective):
         normalize=True,
         normalize_target=True,
         modes=True,
-        surface_label=None,
-        name="poincare Lambda",
+        name="poincare Z",
     ):
-        self._modes = modes
-        self._target_from_user = setdefault(bounds, target)
-        self._surface_label = surface_label
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.xsection.Z_basis.get_idx(*mode))
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Zp_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1461,71 +1240,91 @@ class FixSectionLambda(_FixedObjective):
 
         """
         eq = self.things[0]
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-        elif self._modes is True:  # all modes
-            modes = eq.xsection.L_basis.modes
-            idx = np.arange(eq.xsection.L_basis.num_modes)
-            modes_idx = idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.xsection.L_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.xsection.L_basis.modes
-            # and eq.xsection.L_lmn,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.xsection.L_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the surface, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = idx.size
-        # Lp_lmn -> Lp optimization space
-        self._A = np.eye(eq.xsection.L_basis.num_modes)[idx, :]
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.xsection.L_lmn[idx], None, modes_idx
-        )
-
         if self._normalize:
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
-
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
-        """Compute boundary Lambda errors.
+
+class FixSectionLambda(FixParameters):
+    """Boundary condition on the Lambda cross-section parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Rb_lmn``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(m)"
+    _print_value_fmt = "Lambda cross-section error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="poincare Lambda",
+    ):
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.xsection.L_basis.get_idx(*mode))
+        super().__init__(
+            thing=eq,
+            params={"Lp_lmn": indices},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            boundary Lambda errors.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
 
         """
-        return jnp.dot(self._A, params["Lp_lmn"])
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixLambdaGauge(_Objective):

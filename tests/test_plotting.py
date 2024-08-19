@@ -551,6 +551,18 @@ class TestPlotComparison:
         fig, ax = plot_comparison(eqf, theta=0)
         return fig
 
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_comparison_different_NFPs(self):
+        """Test plotting comparison of flux surfaces with differing NFPs."""
+        eq = get("SOLOVEV")
+        eq_nonax = get("HELIOTRON")
+        eq_nonax2 = get("ESTELL")
+        with pytest.raises(ValueError, match="differing field periods"):
+            fig, ax = plot_comparison([eq_nonax, eq_nonax2], theta=0)
+        fig, ax = plot_comparison([eq, eq_nonax], theta=0)
+        return fig
+
 
 class TestPlotGrid:
     """Tests for the plot_grid function."""

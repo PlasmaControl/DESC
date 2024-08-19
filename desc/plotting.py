@@ -1607,9 +1607,15 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     phi = np.atleast_1d(phi)
     nphi = len(phi)
 
+    # do not need NFP supplied to these grids as
+    # the above logic takes care of the correct phi range
+    # if defaults are requested. Setting NFP here instead
+    # can create reshaping issues when phi is supplied and gets
+    # truncated by 2pi/NFP. See PR #
+    # TODO: put PR number
     grid_kwargs = {
         "rho": rho,
-        "NFP": nfp,
+        "NFP": 1,
         "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
         "zeta": phi,
     }
@@ -1628,7 +1634,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     )
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
-        "NFP": nfp,
+        "NFP": 1,
         "theta": theta,
         "zeta": phi,
     }
@@ -2263,6 +2269,28 @@ def plot_comparison(
                                  )
 
     """
+    NFPs = np.array([thing.NFP for thing in eqs])
+    Ns = np.array([thing.N for thing in eqs])
+    if not np.allclose(NFPs, NFPs[0]) and np.any(Ns == 0):
+        # if all NFPs are not equal, maybe there are some axisymmetric
+        # objects. We can try to change those to match the NFP of the first
+        # of the nonaxisymmetric objects
+        eqs = [thing.copy() for thing in eqs]  # make copy so we dont modify originals
+        NFP_nonax = int(NFPs[NFPs > 1][0])
+        [
+            thing.change_resolution(NFP=NFP_nonax if thing.N == 0 else thing.NFP)
+            for thing in eqs
+        ]
+    # if after above, the NFPs are still not all equal, means there are multiple
+    # nonaxisymmetric objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error.
+    errorif(
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP),
+        ValueError,
+        "supplied objects must have the same number of field periods, "
+        "or if there are differing field periods, the ones which differ must be"
+        " axisymmetric.",
+    )
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
     color = parse_argname_change(color, kwargs, "colors", "color")
     ls = parse_argname_change(ls, kwargs, "linestyles", "ls")

@@ -2852,7 +2852,15 @@ class FiniteElementMesh3D:
         )
         # print(np.max(np.count_nonzero(good_inds, axis=-1)), np.min(np.count_nonzero(good_inds, axis=-1)))
 
-        # Deal with points right at a vertex between four quadrilaterals (12 tets)
+        # Deal with points right at a vertex between eight quadrilaterals (3 tets each)
+        duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(good_inds, axis=-1) == 24)[0])
+        # duplicates = duplicates[0]
+        for i in duplicates:
+            for j in range(12):
+                max_col = jnp.argmax(good_inds[i, :])
+                good_inds[i, max_col] = False
+
+        # Deal with points right at a vertex between four quadrilaterals (3 tets eact)
         duplicates = jnp.ravel(jnp.where(jnp.count_nonzero(good_inds, axis=-1) == 12)[0])
         # duplicates = duplicates[0]
         for i in duplicates:

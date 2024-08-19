@@ -514,6 +514,9 @@ class TestPlotBoundary:
         eq1 = get("SOLOVEV")
         eq2 = get("DSHAPE")
         eq3 = get("W7-X")
+        eq4 = get("ESTELL")
+        with pytest.raises(ValueError, match="differing field periods"):
+            fig, ax = plot_boundaries([eq3, eq4], theta=0)
         fig, ax, data = plot_boundaries((eq1, eq2, eq3), return_data=True)
         assert "R" in data.keys()
         assert "Z" in data.keys()

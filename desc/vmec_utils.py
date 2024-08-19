@@ -625,7 +625,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         trans["B"] = B_transform
         trans["w"] = w_transform
 
-        profiles = get_profiles(data_keys, obj=eq, grid=grid, jitable=True)
+        profiles = get_profiles(data_keys, obj=eq, grid=grid)
         # compute data
         d = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -644,7 +644,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         # needed transforms other than the "B" and "w" are already
         # computed from the compute_data call above
         # and we have those transforms in transforms_sin
-        profiles = get_profiles(data_keys_sin, obj=eq, grid=grid, jitable=True)
+        profiles = get_profiles(data_keys_sin, obj=eq, grid=grid)
         # compute data
         d = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",

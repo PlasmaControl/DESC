@@ -12,7 +12,7 @@ from .objective_funs import _Objective
 class HeatingPowerISS04(_Objective):
     """Heating power required by the ISS04 energy confinement time scaling.
 
-    tau_E = W_p / P = 0.134 a^2.28 R^0.64 P^-0.61 n_e^0.54 B^0.84 iota^0.41 (s)
+    𝜏_E = W_p / P = 0.134 H_ISS04 a^2.28 R^0.64 P^-0.61 n_e^0.54 B^0.84 𝜄^0.41 (s)
 
     References
     ----------
@@ -143,7 +143,7 @@ class HeatingPowerISS04(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["W"]
+            self._normalization = scales["W_p"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 

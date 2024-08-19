@@ -670,6 +670,7 @@ def _splinexyz_helper(f, transforms, s_query_pts, method, derivative):
     f = jnp.asarray(f)
     transforms["intervals"] = jnp.asarray(transforms["intervals"])
     has_break_points = len(transforms["intervals"][0])
+    s_query_pts = s_query_pts + transforms["knots"][0]  # make sure it is periodic
 
     def inner_body(f, knots, period=None):
         """Interpolation for spline curves."""

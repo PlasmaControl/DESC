@@ -451,7 +451,7 @@ def test_correct_indexing_passed_modes():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -461,8 +461,8 @@ def test_correct_indexing_passed_modes():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -514,7 +514,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -524,8 +524,8 @@ def test_correct_indexing_passed_modes_and_passed_target():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -574,7 +574,7 @@ def test_correct_indexing_passed_modes_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -584,8 +584,8 @@ def test_correct_indexing_passed_modes_axis():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -703,7 +703,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -713,8 +713,8 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 

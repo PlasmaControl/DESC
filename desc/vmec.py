@@ -208,7 +208,9 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(cls, eq, path, surfs=128, verbose=1):  # noqa: C901 - FIXME - simplify
+    def save(  # noqa: C901 - FIXME - simplify
+        cls, eq, path, surfs=128, verbose=1, M_nyq=None, N_nyq=None
+    ):
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
@@ -224,6 +226,10 @@ class VMECIO:
             * 0: no output
             * 1: status of quantities computed
             * 2: as above plus timing information
+        M_nyq, N_nyq: int
+            The max poloidal and toroidal modenumber to use in the
+            Nyquist spectrum that the derived quantities are Fourier
+            fit with. Defaults to M+4 and N+2.
 
         Returns
         -------
@@ -242,8 +248,9 @@ class VMECIO:
         NFP = eq.NFP
         M = eq.M
         N = eq.N
-        M_nyq = M + 4
-        N_nyq = N + 2 if N > 0 else 0
+        M_nyq = M + 4 if M_nyq is None else M_nyq
+        N_nyq = N + 2 if N_nyq is None else N_nyq
+        N_nyq = 0 if N is None else N_nyq
 
         # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
         s_full = np.linspace(0, 1, surfs)

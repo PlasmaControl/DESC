@@ -448,6 +448,7 @@ class FourierSeries(_Basis):
             self.NFP_umbilic_factor,
             derivatives[2],
         )
+
         if unique:
             toroidal = toroidal[zoutidx][:, noutidx]
 

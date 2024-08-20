@@ -150,6 +150,16 @@ class TestCoil:
         )
 
     @pytest.mark.unit
+    def test_properties(self):
+        """Test getting/setting attributes for Coil class."""
+        current = 4.34
+        coil = FourierPlanarCoil(current)
+        assert coil.current == current
+        new_current = 3.5
+        coil.current = new_current
+        assert coil.current == new_current
+
+    @pytest.mark.unit
     def test_SumMagneticField_with_Coil(self):
         """Test SumMagneticField working with Coil and MagneticField objects."""
         R = 2

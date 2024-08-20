@@ -133,13 +133,20 @@ class FourierRZCurve(Curve):
         """Number of field periods."""
         return self._NFP
 
+    # --no-verify @property
+    # --no-verify def NFP_umbilic_factor(self):
+    # --no-verify     """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
+    # --no-verify     return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+
+    # --no-verify @property
+    # --no-verify def _NFP_umbilic_factor(self):
+    # --no-verify    """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
+    # --no-verify    self._NFP_umbilic_factor = self.NFP_umbilic_factor
+
     @property
     def NFP_umbilic_factor(self):
-        """Field period umbilic factor."""
-        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
-
-    def _set_up(self):
-        self._NFP_umbilic_factor = self.NFP_umbilic_factor
+        """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
+        self._NFP_umbilic_factor
 
     @property
     def N(self):

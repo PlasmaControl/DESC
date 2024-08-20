@@ -138,7 +138,11 @@ def test_compute_everything():
         ),
         # coils
         "desc.coils.FourierRZCoil": FourierRZCoil(
-            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
+            R_n=[10, 1, 0.2],
+            Z_n=[-2, -0.2],
+            modes_R=[0, 1, 2],
+            modes_Z=[-1, -2],
+            NFP=2,
         ),
         "desc.coils.FourierXYZCoil": FourierXYZCoil(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
@@ -200,6 +204,7 @@ def test_compute_everything():
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         for p in things:
+            print(things[p])
             names = {
                 name
                 for name in data_index[p]

@@ -1797,7 +1797,7 @@ class VMECIO:
         t_nodes = t_grid.nodes
         t_nodes[:, 0] = t_nodes[:, 0] ** 2
 
-        sym = "lmnc" not in vmec_data.key()
+        sym = "lmnc" not in vmec_data.keys()
 
         v_nodes = cls.compute_theta_coords(
             vmec_data["lmns"],

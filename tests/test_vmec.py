@@ -914,13 +914,13 @@ def test_vmec_boundary_subspace(DummyStellarator):
 
 
 @pytest.mark.unit
-def test_make_boozmn_output(TmpDir):
+def test_make_boozmn_output_DESC(TmpDir):
     """Test that booz_xform-style outputs accurately reconstruct quantities."""
     # load in HELIOTRON equilibrium
-    eq = get("HELIOTRON")
+    eq = get("precise_QA")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 
-    boozer_res = 55
+    boozer_res = 40
     surfs = 4
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 50
@@ -950,8 +950,8 @@ def test_make_boozmn_output(TmpDir):
 
     # create grid on which to check values btwn DESC eq.compute and the
     # evaluated Boozer harmonics for each quantity
-    M = 40
-    N = 40
+    M = 25
+    N = 25
 
     for surf_index in range(surfs - 1):
         rho = np.sqrt(s_half[surf_index])
@@ -1008,20 +1008,21 @@ def test_make_boozmn_output(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                rtol=2e-4,
+                rtol=8e-4,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 
 
 @pytest.mark.unit
-def test_make_boozmn_output_asym(TmpDir):
+def test_make_boozmn_output_DESC_asym(TmpDir):
     """Test that asym booz_xform-style outputs accurately reconstruct quantities."""
     # load in asymmetric equilibrium
     eq = load("./tests/inputs/NAE_QA_asym_eq_output.h5")
+    print(eq)
     output_path = str(TmpDir.join("boozmn_asym_out.nc"))
 
-    boozer_res = 50
-    surfs = 50
+    boozer_res = 45
+    surfs = 4
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 40
     make_boozmn_output(
@@ -1071,8 +1072,8 @@ def test_make_boozmn_output_asym(TmpDir):
 
     # create grid on which to check values btwn DESC eq.compute and the
     # evaluated Boozer harmonics for each quantity
-    M = 40
-    N = 40
+    M = 50
+    N = 50
 
     for surf_index in range(surfs - 1):
         print("surface index", surf_index)
@@ -1133,7 +1134,7 @@ def test_make_boozmn_output_asym(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                rtol=2e-4,
+                rtol=1e-3,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 

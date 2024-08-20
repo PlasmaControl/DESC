@@ -6,7 +6,7 @@ from orthax.chebyshev import chebroots
 from orthax.legendre import leggauss
 
 from desc.backend import dct, idct, irfft, jnp, rfft, rfft2
-from desc.compute._interp_utils import (
+from desc.integrals._interp_utils import (
     _filter_distinct,
     cheb_from_dct,
     cheb_pts,
@@ -17,17 +17,23 @@ from desc.compute._interp_utils import (
     irfft2_non_uniform,
     irfft_non_uniform,
 )
-from desc.compute._quad_utils import (
+from desc.integrals._quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     bijection_to_disc,
     grad_automorphism_sin,
 )
-from desc.compute.bounce_integral import _filter_nonzero_measure, _fix_inversion
-from desc.compute.utils import take_mask
-from desc.utils import errorif, warnif
+from desc.integrals.bounce_integral import _fix_inversion, filter_bounce_points
+from desc.utils import (
+    atleast_2d_end,
+    atleast_3d_mid,
+    atleast_nd,
+    errorif,
+    setdefault,
+    take_mask,
+    warnif,
+)
 
-# TODO: There are better techniques to find eigenvalues of Chebyshev colleague matrix.
 _chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
@@ -36,7 +42,7 @@ def _flatten_matrix(y):
     return y.reshape(*y.shape[:-2], -1)
 
 
-def alpha_sequence(alpha_0, iota, num_period, period=2 * jnp.pi):
+def alpha_sequence(alpha_0, iota, num_transit, period=2 * jnp.pi):
     """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
 
     Parameters
@@ -46,34 +52,21 @@ def alpha_sequence(alpha_0, iota, num_period, period=2 * jnp.pi):
     iota : jnp.ndarray
         Shape (iota.size, ).
         Rotational transform normalized by 2π.
-    num_period : float
-        Number of periods to follow field line.
+    num_transit : float
+        Number of ``period``s to follow field line.
     period : float
         Toroidal period after which to update label.
 
     Returns
     -------
     alphas : jnp.ndarray
-        Shape (iota.size, num_period).
+        Shape (iota.size, num_transit).
         Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
 
     """
     # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    alphas = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_period)
+    alphas = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_transit)
     return alphas
-
-
-def _subtract(c, k):
-    # subtract k from last axis of c, obeying numpy broadcasting
-    c_0 = c[..., 0] - k
-    c = jnp.concatenate(
-        [
-            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
-            c_0[..., jnp.newaxis],
-        ],
-        axis=-1,
-    )
-    return c
 
 
 class FourierChebyshevBasis:
@@ -113,19 +106,14 @@ class FourierChebyshevBasis:
             Domain for y coordinates. Default is [0, 2π].
 
         """
-        errorif(domain[0] > domain[-1], msg="Got inverted y coordinate domain.")
+        lobatto = bool(lobatto)
         errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
+        self.lobatto = lobatto
+        errorif(domain[0] > domain[-1], msg="Got inverted domain.")
+        self.domain = domain
         self.M = f.shape[-2]
         self.N = f.shape[-1]
-        self.lobatto = bool(lobatto)
-        self.domain = domain
-        self._c = (
-            rfft(
-                dct(f, type=2 - self.lobatto, axis=-1) / (self.N - self.lobatto),
-                axis=-2,
-            )
-            / self.M
-        )
+        self._c = self._fast_transform(f, lobatto)
 
     @staticmethod
     def nodes(M, N, lobatto=False, domain=(0, 2 * jnp.pi), **kwargs):
@@ -145,19 +133,23 @@ class FourierChebyshevBasis:
 
         Returns
         -------
-        coords : jnp.ndarray
+        coord : jnp.ndarray
             Shape (M * N, 2).
             Grid of (x, y) points for optimal interpolation.
 
         """
         x = fourier_pts(M)
         y = cheb_pts(N, lobatto, domain)
-        coords = (
-            [jnp.atleast_1d(kwargs.pop("rho")), x, y] if "rho" in kwargs else [x, y]
-        )
-        coords = list(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
-        coords = jnp.column_stack(coords)
-        return coords
+        coord = [jnp.atleast_1d(kwargs.pop("rho")), x, y] if "rho" in kwargs else [x, y]
+        coord = list(map(jnp.ravel, jnp.meshgrid(*coord, indexing="ij")))
+        coord = jnp.column_stack(coord)
+        return coord
+
+    @staticmethod
+    def _fast_transform(f, lobatto):
+        M = f.shape[-2]
+        N = f.shape[-1]
+        return rfft(dct(f, type=2 - lobatto, axis=-1), axis=-2) / (M * (N - lobatto))
 
     def evaluate(self, M, N):
         """Evaluate Fourier-Chebyshev series.
@@ -176,12 +168,9 @@ class FourierChebyshevBasis:
             Fourier-Chebyshev series evaluated at ``FourierChebyshevBasis.nodes(M, N)``.
 
         """
-        fq = idct(
-            irfft(self._c, n=M, axis=-2) * M,
-            type=2 - self.lobatto,
-            n=N,
-            axis=-1,
-        ) * (N - self.lobatto)
+        fq = idct(irfft(self._c, n=M, axis=-2), type=2 - self.lobatto, n=N, axis=-1) * (
+            M * (N - self.lobatto)
+        )
         return fq
 
     def harmonics(self):
@@ -213,7 +202,7 @@ class FourierChebyshevBasis:
 
         Returns
         -------
-        cheb : _PiecewiseChebyshevBasis
+        cheb : PiecewiseChebyshevBasis
             Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
 
         """
@@ -221,10 +210,23 @@ class FourierChebyshevBasis:
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
         cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2), axis=-1)
         assert cheb.shape[-2:] == (x.shape[-2], self.N)
-        return _PiecewiseChebyshevBasis(cheb, self.domain)
+        return PiecewiseChebyshevBasis(cheb, self.domain)
 
 
-class _PiecewiseChebyshevBasis:
+def _subtract(c, k):
+    # subtract k from last axis of c, obeying numpy broadcasting
+    c_0 = c[..., 0] - k
+    c = jnp.concatenate(
+        [
+            c_0[..., jnp.newaxis],
+            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
+        ],
+        axis=-1,
+    )
+    return c
+
+
+class PiecewiseChebyshevBasis:
     """Chebyshev series.
 
     { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
@@ -233,8 +235,10 @@ class _PiecewiseChebyshevBasis:
     Attributes
     ----------
     cheb : jnp.ndarray
-        Shape (..., N).
+        Shape (..., M, N).
         Chebyshev coefficients αₙ(x) for fₓ(y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
+    M : int
+        Number of function in this basis set.
     N : int
         Chebyshev spectral resolution.
     domain : (float, float)
@@ -250,25 +254,38 @@ class _PiecewiseChebyshevBasis:
         Parameters
         ----------
         cheb : jnp.ndarray
-            Shape (..., N).
+            Shape (..., M, N).
             Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
 
         """
-        self.cheb = cheb
-        self.N = cheb.shape[-1]
+        errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         self.domain = domain
+        self.cheb = jnp.atleast_2d(cheb)
 
-    def _chebcast(self, arr):
+    @property
+    def M(self):
+        """Number of function in this basis set."""
+        return self.cheb.shape[-2]
+
+    @property
+    def N(self):
+        """Chebyshev spectral resolution."""
+        return self.cheb.shape[-1]
+
+    @staticmethod
+    def _chebcast(cheb, arr):
         # Input should not have rightmost dimension of cheb that iterates coefficients,
-        # but may have additional leftmost dimensions for batch operations.
+        # but may have additional leftmost dimension for batch operation.
         errorif(
-            arr.ndim > self.cheb.ndim,
+            arr.ndim > cheb.ndim,
             NotImplementedError,
-            msg=f"Got ndim {arr.ndim} > cheb.ndim {self.cheb.ndim}.",
+            msg=f"Only one additional axis for batch dimension is allowed. "
+            f"Got {arr.ndim - cheb.ndim + 1} additional axes.",
         )
-        return self.cheb if arr.ndim < self.cheb.ndim else self.cheb[jnp.newaxis]
+        # Don't add additional axis unless necessary to appease JIT compilation.
+        return cheb if arr.ndim < cheb.ndim else cheb[jnp.newaxis]
 
-    def intersect(self, k=0, eps=_eps):
+    def intersect(self, k, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
 
         Parameters
@@ -295,15 +312,17 @@ class _PiecewiseChebyshevBasis:
             Boolean array into ``y`` indicating whether element is an intersect.
 
         """
-        c = _subtract(self._chebcast(k), k)
+        k = jnp.atleast_1d(k)
+        c = _subtract(self._chebcast(self.cheb, k), k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
         y = _chebroots_vec(c)
         assert y.shape == (*c.shape[:-1], self.N - 1)
 
-        y = _filter_distinct(y, sentinel=-2, eps=eps)
-        # Pick sentinel above such that only distinct roots are considered intersects.
-        is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) <= 1)
-        y = jnp.where(is_intersect, y.real, 0)  # ensure y is in domain of arcos
+        # Intersects must satisfy y ∈ [-1, 1].
+        # Pick sentinel such that only distinct roots are considered intersects.
+        y = _filter_distinct(y, sentinel=-2.0, eps=eps)
+        is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) <= 1.0)
+        y = jnp.where(is_intersect, y.real, 1.0)  # ensure y is in domain of arcos
 
         # TODO: Multipoint evaluation with FFT.
         #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
@@ -317,7 +336,7 @@ class _PiecewiseChebyshevBasis:
         is_decreasing = s <= 0
         is_increasing = s >= 0
 
-        y = bijection_from_disc(y, self.domain[0], self.domain[-1])
+        y = bijection_from_disc(y, *self.domain)
         return y, is_decreasing, is_increasing, is_intersect
 
     def bounce_points(
@@ -357,13 +376,15 @@ class _PiecewiseChebyshevBasis:
         -------
         bp1, bp2 : (jnp.ndarray, jnp.ndarray)
             Shape (*y.shape[:-2], num_well).
-            The field line-following coordinates of bounce points for a given pitch
-            along a field line. The pairs ``bp1`` and ``bp2`` form left and right
-            integration boundaries, respectively, for the bounce integrals.
+            The field line-following coordinates of bounce points.
+            The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
+            respectively, for the bounce integrals.
 
         """
+        errorif(self.N < 2, NotImplementedError, f"Got self.N = {self.N} < 2.")
+
         # Flatten so that last axis enumerates intersects of a pitch along a field line.
-        y = _flatten_matrix(self._isomorphism_1d(y))
+        y = _flatten_matrix(self._isomorphism_to_C1(y))
         is_decreasing = _flatten_matrix(is_decreasing)
         is_increasing = _flatten_matrix(is_increasing)
         is_intersect = _flatten_matrix(is_intersect)
@@ -375,171 +396,17 @@ class _PiecewiseChebyshevBasis:
         is_bp1 = is_decreasing & is_intersect
         is_bp2 = is_increasing & _fix_inversion(is_intersect, is_increasing)
 
-        sentinel = self.domain[0] - 1
+        sentinel = self.domain[0] - 1.0
         bp1 = take_mask(y, is_bp1, size=num_well, fill_value=sentinel)
         bp2 = take_mask(y, is_bp2, size=num_well, fill_value=sentinel)
 
         mask = (bp1 > sentinel) & (bp2 > sentinel)
         # Set outside mask to same value so integration is over set of measure zero.
-        bp1 = jnp.where(mask, bp1, 0)
-        bp2 = jnp.where(mask, bp2, 0)
+        bp1 = jnp.where(mask, bp1, 0.0)
+        bp2 = jnp.where(mask, bp2, 0.0)
         return bp1, bp2
 
-    def plot_field_line(
-        self,
-        start,
-        stop,
-        num=1000,
-        bp1=np.array([]),
-        bp2=np.array([]),
-        pitch=np.array([]),
-        title=r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$",
-        title_id=None,
-        transparency_pitch=0.3,
-        show=True,
-    ):
-        """Plot the field line given spline of |B|.
-
-        Parameters
-        ----------
-        start : float
-            Minimum ζ on plot.
-        stop : float
-            Maximum ζ on plot.
-        num : int
-            Number of ζ points to plot. Pick a big number.
-        bp1 : np.ndarray
-            Bounce points with (∂|B|/∂ζ)|ρ,α <= 0.
-        bp2 : np.ndarray
-            Bounce points with (∂|B|/∂ζ)|ρ,α >= 0.
-        pitch : np.ndarray
-            λ value.
-        title : str
-            Plot title.
-        title_id : str
-            Identifier string to append to plot title.
-        transparency_pitch : float
-            Transparency of pitch lines.
-        show : bool
-            Whether to show the plot. Default is true.
-
-        Returns
-        -------
-        fig, ax : matplotlib figure and axes.
-
-        """
-        errorif(start is None or stop is None)
-        legend = {}
-
-        def add(lines):
-            if not hasattr(lines, "__iter__"):
-                lines = [lines]
-            for line in lines:
-                label = line.get_label()
-                if label not in legend:
-                    legend[label] = line
-
-        fig, ax = plt.subplots()
-        z = np.linspace(start=start, stop=stop, num=num)
-        add(ax.plot(z, self.eval1d(z), label=r"$\vert B \vert (\zeta)$"))
-
-        if pitch is not None:
-            b = 1 / np.atleast_1d(pitch)
-            for val in b:
-                add(
-                    ax.axhline(
-                        val,
-                        color="tab:purple",
-                        alpha=transparency_pitch,
-                        label=r"$1 / \lambda$",
-                    )
-                )
-            bp1, bp2 = np.atleast_2d(bp1, bp2)
-            for i in range(bp1.shape[0]):
-                bp1_i, bp2_i = _filter_nonzero_measure(bp1[i], bp2[i])
-                add(
-                    ax.scatter(
-                        bp1_i,
-                        np.full_like(bp1_i, b[i]),
-                        marker="v",
-                        color="tab:red",
-                        label="bp1",
-                    )
-                )
-                add(
-                    ax.scatter(
-                        bp2_i,
-                        np.full_like(bp2_i, b[i]),
-                        marker="^",
-                        color="tab:green",
-                        label="bp2",
-                    )
-                )
-
-        ax.set_xlabel(r"Field line $\zeta$")
-        ax.set_ylabel(r"$\vert B \vert \sim 1 / \lambda$")
-        ax.legend(legend.values(), legend.keys(), loc="lower right")
-        if title_id is not None:
-            title = f"{title}. id = {title_id}."
-        ax.set_title(title)
-        plt.tight_layout()
-        if show:
-            plt.show()
-            plt.close()
-        return fig, ax
-
-    def check_bounce_points(
-        self, bp1, bp2, pitch, plot=True, start=None, stop=None, **kwargs
-    ):
-        """Check that bounce points are computed correctly."""
-        pitch = jnp.atleast_3d(pitch)
-        errorif(not (pitch.ndim == bp1.ndim == bp2.ndim == 3), NotImplementedError)
-        errorif(bp1.shape != bp2.shape)
-
-        P, L, num_wells = bp1.shape
-        msg_1 = "Bounce points have an inversion."
-        err_1 = jnp.any(bp1 > bp2, axis=-1)
-        msg_2 = "Discontinuity detected."
-        err_2 = jnp.any(bp1[..., 1:] < bp2[..., :-1], axis=-1)
-
-        for l in range(L):
-            for p in range(P):
-                B_mid = self.eval1d((bp1[p, l] + bp2[p, l]) / 2)
-                err_3 = jnp.any(B_mid > 1 / pitch[p, l] + self._eps)
-                if err_1[p, l] or err_2[p, l] or err_3:
-                    bp1_p, bp2_p = _filter_nonzero_measure(bp1[p, l], bp2[p, l])
-                    B_mid = B_mid[(bp1[p, l] - bp2[p, l]) != 0]
-                    if plot:
-                        self.plot_field_line(
-                            start=start,
-                            stop=stop,
-                            pitch=pitch[p, l],
-                            bp1=bp1_p,
-                            bp2=bp2_p,
-                            title_id=f"{p},{l}",
-                            **kwargs,
-                        )
-                    print("bp1:", bp1_p)
-                    print("bp2:", bp2_p)
-                    assert not err_1[p, l], msg_1
-                    assert not err_2[p, l], msg_2
-                    msg_3 = (
-                        f"Detected B midpoint = {B_mid}>{1 / pitch[p, l] + self._eps} ="
-                        " 1/pitch. You need to use more knots."
-                    )
-                    assert not err_3, msg_3
-            if plot:
-                self.plot_field_line(
-                    start=start,
-                    stop=stop,
-                    pitch=pitch[:, l],
-                    bp1=bp1[:, l],
-                    bp2=bp2[:, l],
-                    title_id=str(l),
-                    **kwargs,
-                )
-
-    def eval1d(self, z):
+    def eval1d(self, z, cheb=None):
         """Evaluate piecewise Chebyshev spline at coordinates z.
 
         The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ²
@@ -552,6 +419,9 @@ class _PiecewiseChebyshevBasis:
         z : jnp.ndarray
             Shape (..., *cheb.shape[:-2], z.shape[-1]).
             Isomorphic coordinates along field line [0, ∞).
+        cheb : jnp.ndarray
+            Shape (..., M, N).
+            Chebyshev coefficients to use. If not given, uses ``self.cheb``.
 
         Returns
         -------
@@ -560,19 +430,21 @@ class _PiecewiseChebyshevBasis:
             Chebyshev basis evaluated at z.
 
         """
-        x_idx, y = self._isomorphism_2d(z)
+        cheb = self._chebcast(setdefault(cheb, self.cheb), z)
+        N = cheb.shape[-1]
+        x_idx, y = self._isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[1])
         # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
-        # are held in self.cheb with shape (..., num cheb series, N).
-        cheb = jnp.take_along_axis(self._chebcast(z), x_idx[..., jnp.newaxis], axis=-2)
-        f = idct_non_uniform(y, cheb, self.N)
+        # are held in cheb with shape (..., num cheb series, N).
+        cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
+        f = idct_non_uniform(y, cheb, N)
         assert f.shape == z.shape
         return f
 
-    def _isomorphism_1d(self, y):
+    def _isomorphism_to_C1(self, y):
         """Return coordinates z ∈ ℂ isomorphic to (x, y) ∈ ℂ².
 
-        Maps row x of y to z = α(x) + y where α(x) = x * |domain|.
+        Maps row x of y to z = y + f(x) where f(x) = x * |domain|.
 
         Parameters
         ----------
@@ -588,15 +460,13 @@ class _PiecewiseChebyshevBasis:
 
         """
         assert y.ndim >= 2
-        period = self.domain[-1] - self.domain[0]
-        zeta_shift = period * jnp.arange(y.shape[-2])
-        z = zeta_shift[:, jnp.newaxis] + y
-        return z
+        z_shift = jnp.arange(y.shape[-2]) * (self.domain[-1] - self.domain[0])
+        return y + z_shift[:, jnp.newaxis]
 
-    def _isomorphism_2d(self, z):
+    def _isomorphism_to_C2(self, z):
         """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
 
-        Returns index x and value y such that z = α(x) + y where α(x) = x * |domain|.
+        Returns index x and value y such that z = f(x) + y where f(x) = x * |domain|.
 
         Parameters
         ----------
@@ -605,13 +475,201 @@ class _PiecewiseChebyshevBasis:
 
         Returns
         -------
-        x_index, y_value : (jnp.ndarray, jnp.ndarray)
+        x_idx, y_val : (jnp.ndarray, jnp.ndarray)
             Shape z.shape.
             Isomorphic coordinates.
 
         """
-        x_index, y_value = jnp.divmod(z, self.domain[-1] - self.domain[0])
-        return x_index.astype(int), y_value
+        x_idx, y_val = jnp.divmod(z - self.domain[0], self.domain[-1] - self.domain[0])
+        return x_idx.astype(int), y_val + self.domain[0]
+
+    def _check_shape(self, bp1, bp2, pitch):
+        """Return shapes that broadcast with (P, *self.cheb.shape[:-2], W)."""
+        # Ensure pitch batch dim exists and add back dim to broadcast with wells.
+        pitch = atleast_nd(self.cheb.ndim - 1, pitch)[..., jnp.newaxis]
+        # Same but back dim already exists.
+        bp1, bp2 = atleast_nd(self.cheb.ndim, bp1, bp2)
+        # Cheb has shape    (..., M, N) and others
+        #     have shape (P, ..., W)
+        errorif(not (bp1.ndim == bp2.ndim == pitch.ndim == self.cheb.ndim))
+        return bp1, bp2, pitch
+
+    def check_bounce_points(self, bp1, bp2, pitch, plot=True, **kwargs):
+        """Check that bounce points are computed correctly.
+
+        Parameters
+        ----------
+        bp1, bp2 : jnp.ndarray
+            Shape must broadcast with (P, *self.cheb.shape[:-2], W).
+            The field line-following coordinates of bounce points.
+            The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
+            respectively, for the bounce integrals.
+        pitch : jnp.ndarray
+            Shape must broadcast with (P, *self.cheb.shape[:-2]).
+            λ values to evaluate the bounce integral.
+        plot : bool
+            Whether to plot stuff. Default is true.
+        kwargs : dict
+            Keyword arguments into ``plot_field_line``.
+
+        """
+        assert bp1.shape == bp2.shape
+        mask = (bp1 - bp2) != 0.0
+        bp1 = jnp.where(mask, bp1, jnp.nan)
+        bp2 = jnp.where(mask, bp2, jnp.nan)
+        bp1, bp2, pitch = self._check_shape(bp1, bp2, pitch)
+
+        err_1 = jnp.any(bp1 > bp2, axis=-1)
+        err_2 = jnp.any(bp1[..., 1:] < bp2[..., :-1], axis=-1)
+        B_m = self.eval1d((bp1 + bp2) / 2)
+        assert B_m.shape == bp1.shape
+        err_3 = jnp.any(B_m > 1 / pitch + self._eps, axis=-1)
+        if not (plot or jnp.any(err_1 | err_2 | err_3)):
+            return
+
+        # Ensure l axis exists for iteration in below loop.
+        cheb = atleast_nd(3, self.cheb)
+        mask, bp1, bp2, B_m = atleast_3d_mid(mask, bp1, bp2, B_m)
+        err_1, err_2, err_3 = atleast_2d_end(err_1, err_2, err_3)
+
+        print(np.sum(mask))
+
+        for l in np.ndindex(cheb.shape[:-2]):
+            for p in range(pitch.shape[0]):
+                if not (err_1[p, l] or err_2[p, l] or err_3[p, l]):
+                    continue
+                _bp1 = bp1[p, l][mask[p, l]]
+                _bp2 = bp2[p, l][mask[p, l]]
+                if plot:
+                    self.plot_field_line(
+                        cheb[l],
+                        pitch=pitch[p, l],
+                        bp1=_bp1,
+                        bp2=_bp2,
+                        title_id=f"{p},{l}",
+                        **kwargs,
+                    )
+                print("      bp1    |    bp2")
+                print(jnp.column_stack([_bp1, _bp2]))
+                assert not err_1[p, l], "Bounce points have an inversion.\n"
+                assert not err_2[p, l], "Detected discontinuity.\n"
+                assert not err_3[p, l], (
+                    "Detected |B| > 1/λ in well. Increase Chebyshev resolution.\n"
+                    f"{B_m[p, l][mask[p, l]]} > {1 / pitch[p, l] + self._eps}"
+                )
+            if plot:
+                self.plot_field_line(
+                    cheb[l],
+                    pitch=pitch[:, l],
+                    bp1=bp1[:, l],
+                    bp2=bp2[:, l],
+                    title_id=str(l),
+                    **kwargs,
+                )
+
+    def plot_field_line(
+        self,
+        cheb,
+        bp1=jnp.array([[]]),
+        bp2=jnp.array([[]]),
+        pitch=jnp.array([]),
+        num=1000,
+        title=r"Computed bounce points for $\vert B \vert$ and pitch $\lambda$",
+        title_id=None,
+        transparency_pitch=0.5,
+        show=True,
+    ):
+        """Plot the field line given spline of |B|.
+
+        Parameters
+        ----------
+        cheb : jnp.ndarray
+            Piecewise Chebyshev coefficients of |B| along the field line.
+        num : int
+            Number of ζ points to plot. Pick a big number.
+        bp1 : jnp.ndarray
+            Bounce points with (∂|B|/∂ζ)|ρ,α <= 0.
+        bp2 : jnp.ndarray
+            Bounce points with (∂|B|/∂ζ)|ρ,α >= 0.
+        pitch : jnp.ndarray
+            λ value.
+        title : str
+            Plot title.
+        title_id : str
+            Identifier string to append to plot title.
+        transparency_pitch : float
+            Transparency of pitch lines.
+        show : bool
+            Whether to show the plot. Default is true.
+
+        Returns
+        -------
+        fig, ax : matplotlib figure and axes.
+
+        """
+        legend = {}
+
+        def add(lines):
+            for line in setdefault(lines, [lines], hasattr(lines, "__iter__")):
+                label = line.get_label()
+                if label not in legend:
+                    legend[label] = line
+
+        fig, ax = plt.subplots()
+        z = jnp.linspace(
+            start=self.domain[0],
+            stop=self.domain[0] + (self.domain[1] - self.domain[0]) * self.M,
+            num=num,
+        )
+        add(ax.plot(z, self.eval1d(z, cheb), label=r"$\vert B \vert (\zeta)$"))
+
+        if pitch is not None:
+            b = 1 / jnp.atleast_1d(pitch)
+            for val in b:
+                add(
+                    ax.axhline(
+                        val,
+                        color="tab:purple",
+                        alpha=transparency_pitch,
+                        label=r"$1 / \lambda$",
+                    )
+                )
+            bp1, bp2 = jnp.atleast_2d(bp1, bp2)
+            for i in range(bp1.shape[0]):
+                if bp1.shape == bp2.shape:
+                    _bp1, _bp2 = filter_bounce_points(bp1[i], bp2[i])
+                else:
+                    _bp1, _bp2 = bp1[i], bp2[i]
+                add(
+                    ax.scatter(
+                        _bp1,
+                        jnp.full_like(_bp1, b[i]),
+                        marker="v",
+                        color="tab:red",
+                        label="bp1",
+                    )
+                )
+                add(
+                    ax.scatter(
+                        _bp2,
+                        jnp.full_like(_bp2, b[i]),
+                        marker="^",
+                        color="tab:green",
+                        label="bp2",
+                    )
+                )
+
+        ax.set_xlabel(r"Field line $\zeta$")
+        ax.set_ylabel(r"$\vert B \vert \sim 1 / \lambda$")
+        ax.legend(legend.values(), legend.keys(), loc="lower right")
+        if title_id is not None:
+            title = f"{title}. ID={title_id}."
+        ax.set_title(title)
+        plt.tight_layout()
+        if show:
+            plt.show()
+            plt.close()
+        return fig, ax
 
 
 def _bounce_quadrature(bp1, bp2, x, w, m, n, integrand, f, b_sup_z, B, T, pitch):
@@ -655,12 +713,12 @@ def _bounce_quadrature(bp1, bp2, x, w, m, n, integrand, f, b_sup_z, B, T, pitch)
     b_sup_z : jnp.ndarray
         Shape (L, 1, m, n).
         Set of 2D Fourier spectral coefficients of B^ζ/|B|.
-    B : _PiecewiseChebyshevBasis
+    B : PiecewiseChebyshevBasis
         Set of 1D Chebyshev spectral coefficients of |B| along field line.
-        {|B|_α : ζ |B|(α, ζ) | α ∈ A } .
-    T : _PiecewiseChebyshevBasis
+        {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A }.
+    T : PiecewiseChebyshevBasis
         Set of 1D Chebyshev spectral coefficients of θ along field line.
-        {θ_α : ζ θ(α, ζ) | α ∈ A }.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A }.
     pitch : jnp.ndarray
         Shape (P, L, 1).
         λ values to evaluate the bounce integral at each field line.
@@ -702,7 +760,7 @@ def _bounce_quadrature(bp1, bp2, x, w, m, n, integrand, f, b_sup_z, B, T, pitch)
 
 def required_names():
     """Return names in ``data_index`` required to compute bounce integrals."""
-    return ["B^zeta", "|B|"]
+    return ["B^zeta", "|B|", "iota"]
 
 
 # TODO: Assumes zeta = phi (alpha sequence)
@@ -784,10 +842,10 @@ def bounce_integral(
             Poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
         B : _PiecewiseChebyshevBasis
             Set of 1D Chebyshev spectral coefficients of |B| along field line.
-            {|B|_α : ζ |B|(α, ζ) | α ∈ A } .
+            {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A }.
         T : _PiecewiseChebyshevBasis
             Set of 1D Chebyshev spectral coefficients of θ along field line.
-            {θ_α : ζ θ(α, ζ) | α ∈ A }.
+            {θ_α : ζ ↦ θ(α, ζ) | α ∈ A }.
 
     """
     # Resolution of periodic DESC coordinate tensor-product grid.
@@ -824,7 +882,7 @@ def bounce_integral(
     if automorphism is not None:
         auto, grad_auto = automorphism
         w = w * grad_auto(x)
-        # Recall affine_bijection(auto(x), ζ_b₁, ζ_b₂) = ζ.
+        # Recall bijection_from_disc(auto(x), ζ_b₁, ζ_b₂) = ζ.
         x = auto(x)
 
     def bounce_integrate(integrand, f, pitch, weight=None, num_well=None):
@@ -885,6 +943,8 @@ def bounce_integral(
             or B.cheb.shape[0] == 1
         )
         bp1, bp2 = B.bounce_points(*B.intersect(1 / pitch), num_well)
+        if check:
+            B.check_bounce_points(bp1, bp2, pitch, plot=True)
         P = pitch.shape[0]
         num_well = bp1.shape[-1]
         assert bp1.shape == bp2.shape == (P, L, num_well)

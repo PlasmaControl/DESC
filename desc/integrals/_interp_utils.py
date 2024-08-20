@@ -6,8 +6,8 @@ from orthax.chebyshev import chebvander
 from orthax.polynomial import polyvander
 
 from desc.backend import dct, jnp, rfft, rfft2, take
-from desc.compute._quad_utils import bijection_from_disc
 from desc.compute.utils import safediv
+from desc.integrals._quad_utils import bijection_from_disc
 from desc.utils import Index, errorif
 
 
@@ -314,8 +314,8 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
     lobatto = bool(lobatto)
     errorif(lobatto, NotImplementedError)
     assert f.ndim >= 1
-    a = cheb_from_dct(
-        dct(f, type=2 - lobatto, axis=axis) / (f.shape[axis] - lobatto), axis
+    a = cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis) / (
+        f.shape[axis] - lobatto
     )
     fq = idct_non_uniform(xq, a, f.shape[axis], axis)
     return fq
@@ -345,7 +345,7 @@ def idct_non_uniform(xq, a, n, axis=-1):
     assert a.ndim >= 1
     a = jnp.moveaxis(a, axis, -1)
     basis = chebvander(xq, n - 1)
-    # Could instead use Clenshaw recursion with ``fq=chebval(xq,a,tensor=False)``.
+    # Could use Clenshaw recursion with fq = chebval(xq, a, tensor=False).
     fq = jnp.linalg.vecdot(basis, a)
     return fq
 

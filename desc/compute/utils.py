@@ -2,14 +2,13 @@
 
 import copy
 import inspect
-from functools import partial
 
 import numpy as np
 
-from desc.backend import cond, execute_on_cpu, flatnonzero, fori_loop, jnp, put, take
+from desc.backend import cond, execute_on_cpu, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 
-from ..utils import errorif, setdefault, warnif
+from ..utils import errorif, warnif
 from .data_index import allowed_kwargs, data_index
 
 # map from profile name to equilibrium parameter name
@@ -1580,41 +1579,3 @@ def surface_min(grid, x, surface_label="rho"):
     # The above implementation was benchmarked to be more efficient than
     # alternatives without explicit loops in GitHub pull request #501.
     return grid.expand(mins, surface_label)
-
-
-@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
-def take_mask(a, mask, size=None, fill_value=None):
-    """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
-
-    Parameters
-    ----------
-    a : jnp.ndarray
-        The source array.
-    mask : jnp.ndarray
-        Boolean mask to index into ``a``. Should have same shape as ``a``.
-    size : int
-        Elements of ``a`` at the first size True indices of ``mask`` will be returned.
-        If there are fewer elements than size indicates, the returned array will be
-        padded with ``fill_value``. The size default is ``mask.size``.
-    fill_value : Any
-        When there are fewer than the indicated number of elements, the remaining
-        elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
-        the largest negative value for signed types, the largest positive value for
-        unsigned types, and True for booleans.
-
-    Returns
-    -------
-    result : jnp.ndarray
-        Shape (size, ).
-
-    """
-    assert a.shape == mask.shape
-    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
-    return take(
-        a,
-        idx,
-        mode="fill",
-        fill_value=fill_value,
-        unique_indices=True,
-        indices_are_sorted=True,
-    )

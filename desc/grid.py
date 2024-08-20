@@ -742,7 +742,7 @@ class Grid(_Grid):
             rtz : rho, theta, zeta
         period : tuple of float
             Assumed periodicity for each coordinate.
-            Use np.inf to denote no periodicity.
+            Use ``np.inf`` to denote no periodicity.
         NFP : int
             Number of field periods (Default = 1).
             Only makes sense to change from 1 if last coordinate is periodic

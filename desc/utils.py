@@ -2,13 +2,14 @@
 
 import operator
 import warnings
+from functools import partial
 from itertools import combinations_with_replacement, permutations
 
 import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import fori_loop, jit, jnp
+from desc.backend import flatnonzero, fori_loop, jit, jnp, take
 
 
 class Timer:
@@ -689,3 +690,73 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
     # invalid tree structure
     else:
         raise ValueError("trees must be nested lists of dicts")
+
+
+@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
+def take_mask(a, mask, size=None, fill_value=None):
+    """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        The source array.
+    mask : jnp.ndarray
+        Boolean mask to index into ``a``. Should have same shape as ``a``.
+    size : int
+        Elements of ``a`` at the first size True indices of ``mask`` will be returned.
+        If there are fewer elements than size indicates, the returned array will be
+        padded with ``fill_value``. The size default is ``mask.size``.
+    fill_value : Any
+        When there are fewer than the indicated number of elements, the remaining
+        elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
+        the largest negative value for signed types, the largest positive value for
+        unsigned types, and True for booleans.
+
+    Returns
+    -------
+    result : jnp.ndarray
+        Shape (size, ).
+
+    """
+    assert a.shape == mask.shape
+    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
+    return take(
+        a,
+        idx,
+        mode="fill",
+        fill_value=fill_value,
+        unique_indices=True,
+        indices_are_sorted=True,
+    )
+
+
+# TODO: Eventually remove and use numpy's stuff.
+# https://github.com/numpy/numpy/issues/25805
+def atleast_nd(ndmin, *arys):
+    """Adds dimensions to front if necessary."""
+    if ndmin == 1:
+        return jnp.atleast_1d(*arys)
+    if ndmin == 2:
+        return jnp.atleast_2d(*arys)
+    tup = tuple(jnp.array(ary, ndmin=ndmin) for ary in arys)
+    if len(tup) == 1:
+        tup = tup[0]
+    return tup
+
+
+def atleast_3d_mid(*arys):
+    """Like np.atleast3d but if adds dim at axis 1 for 2d arrays."""
+    arys = jnp.atleast_2d(*arys)
+    tup = tuple(ary[:, jnp.newaxis] if ary.ndim == 2 else ary for ary in arys)
+    if len(tup) == 1:
+        tup = tup[0]
+    return tup
+
+
+def atleast_2d_end(*arys):
+    """Like np.atleast2d but if adds dim at axis 1 for 1d arrays."""
+    arys = jnp.atleast_1d(*arys)
+    tup = tuple(ary[:, jnp.newaxis] if ary.ndim == 1 else ary for ary in arys)
+    if len(tup) == 1:
+        tup = tup[0]
+    return tup

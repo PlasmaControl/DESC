@@ -14,7 +14,7 @@ from scipy.fft import dct as sdct
 from scipy.fft import idct as sidct
 
 from desc.backend import dct, idct, jnp, rfft
-from desc.compute._interp_utils import (
+from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     harmonic,
@@ -26,8 +26,14 @@ from desc.compute._interp_utils import (
     polyder_vec,
     polyval_vec,
 )
-from desc.compute._quad_utils import bijection_to_disc
-from desc.compute.bounce_integral import _filter_not_nan
+from desc.integrals._quad_utils import bijection_to_disc
+
+
+def filter_not_nan(a):
+    """Filter out nan from ``a`` while asserting nan is padded at right."""
+    is_nan = jnp.isnan(a)
+    assert jnp.array_equal(is_nan, jnp.sort(is_nan, axis=-1))
+    return a[~is_nan]
 
 
 @pytest.mark.unit
@@ -64,7 +70,7 @@ def test_poly_root():
     root = poly_root(c.T, sort=True, distinct=True)
     for j in range(c.shape[0]):
         unique_roots = np.unique(np.roots(c[j]))
-        root_filter = _filter_not_nan(root[j], check=True)
+        root_filter = filter_not_nan(root[j])
         assert root_filter.size == unique_roots.size, j
         np.testing.assert_allclose(
             actual=root_filter,
@@ -72,7 +78,7 @@ def test_poly_root():
             err_msg=str(j),
         )
     c = np.array([0, 1, -1, -8, 12])
-    root = _filter_not_nan(poly_root(c, sort=True, distinct=True), check=True)
+    root = filter_not_nan(poly_root(c, sort=True, distinct=True))
     unique_root = np.unique(np.roots(c))
     assert root.size == unique_root.size
     np.testing.assert_allclose(root, unique_root)

@@ -15,7 +15,12 @@ from scipy.special import ellipe, ellipkm1, roots_chebyu
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp
-from desc.compute._quad_utils import (
+from desc.compute.utils import dot
+from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
+from desc.examples import get
+from desc.grid import Grid, LinearGrid
+from desc.integrals._quad_utils import (
     automorphism_arcsin,
     automorphism_sin,
     bijection_from_disc,
@@ -26,24 +31,18 @@ from desc.compute._quad_utils import (
     leggausslob,
     tanh_sinh,
 )
-from desc.compute.bounce_integral import (
+from desc.integrals.bounce_integral import (
     _composite_linspace,
-    _filter_nonzero_measure,
-    _filter_not_nan,
     _get_extrema,
     _interp_to_argmin_B_hard,
     _interp_to_argmin_B_soft,
     bounce_integral,
     bounce_points,
+    filter_bounce_points,
     get_pitch,
     plot_field_line,
     required_names,
 )
-from desc.compute.utils import dot
-from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import get_rtz_grid
-from desc.examples import get
-from desc.grid import Grid, LinearGrid
 from desc.utils import only1
 
 
@@ -94,7 +93,8 @@ def test_get_extrema():
     )
     B_z_ra = B.derivative()
     extrema, B_extrema = _get_extrema(k, B.c, B_z_ra.c)
-    extrema, B_extrema = map(_filter_not_nan, (extrema, B_extrema))
+    mask = ~np.isnan(extrema)
+    extrema, B_extrema = extrema[mask], B_extrema[mask]
     idx = np.argsort(extrema)
 
     extrema_scipy = np.sort(B_z_ra.roots(extrapolate=False))
@@ -130,7 +130,7 @@ class TestBouncePoints:
         pitch = 2.0
         intersect = B.solve(1 / pitch, extrapolate=False)
         bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
-        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
+        bp1, bp2 = filter_bounce_points(bp1, bp2)
         assert bp1.size and bp2.size
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
@@ -146,7 +146,7 @@ class TestBouncePoints:
         pitch = 2.0
         intersect = B.solve(1 / pitch, extrapolate=False)
         bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
-        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
+        bp1, bp2 = filter_bounce_points(bp1, bp2)
         assert bp1.size and bp2.size
         np.testing.assert_allclose(bp1, intersect[1:-1:2])
         np.testing.assert_allclose(bp2, intersect[0::2][1:])
@@ -164,7 +164,7 @@ class TestBouncePoints:
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3] + 1e-13
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
-        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
+        bp1, bp2 = filter_bounce_points(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[1], 1.982767, rtol=1e-6)
@@ -188,7 +188,7 @@ class TestBouncePoints:
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
-        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
+        bp1, bp2 = filter_bounce_points(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
@@ -198,21 +198,6 @@ class TestBouncePoints:
     @pytest.mark.unit
     def test_extrema_first_and_before_bp1():
         """Test that bounce points are computed correctly."""
-        # In theory, this test should only pass if distinct=True when computing the
-        # intersections in bounce points. However, we can get lucky due to floating
-        # point errors, and it may also pass when distinct=False.
-        # If a regression fails this test, this note will save many hours of debugging.
-        # If the filter in place to return only the distinct roots is too coarse,
-        # in particular atol < 1e-15, then this test will error. In the resulting
-        # plot that the error will produce the red bounce point on the first hump
-        # disappears. The true sequence is green, double red, green, red, green.
-        # The first green was close to the double red and hence the first of the
-        # double red root pair was erased as it was falsely detected as a duplicate.
-        # The second of the double red root pair is correctly erased. All that is
-        # left is the green. Now the bounce_points method assumes the intermediate
-        # value theorem holds for the continuous spline, so when fed these sequence
-        # of roots, the correct action is to ignore the first green root since
-        # otherwise the interior of the bounce points would be hills and not valleys.
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -227,7 +212,7 @@ class TestBouncePoints:
             pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True, plot=False
         )
         plot_field_line(B, pitch, bp1, bp2, start=k[2])
-        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
+        bp1, bp2 = filter_bounce_points(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], 0.835319, rtol=1e-6)
@@ -250,7 +235,7 @@ class TestBouncePoints:
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1] + 1e-13
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
-        bp1, bp2 = _filter_nonzero_measure(bp1, bp2)
+        bp1, bp2 = filter_bounce_points(bp1, bp2)
         assert bp1.size and bp2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -709,10 +694,7 @@ def test_drift():
         num_well=1,
         weight=np.ones(zeta.size),
     )
-
-    drift_numerical_num = np.squeeze(drift_numerical_num)
-    drift_numerical_den = np.squeeze(drift_numerical_den)
-    drift_numerical = drift_numerical_num / drift_numerical_den
+    drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
     msg = "There should be one bounce integral per pitch in this example."
     assert drift_numerical.size == drift_analytic.size, msg
     np.testing.assert_allclose(drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2)

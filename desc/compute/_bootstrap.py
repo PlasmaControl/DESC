@@ -31,7 +31,9 @@ from .utils import surface_averages_map
     coordinates="r",
     data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
     axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
-    n_gauss="n_gauss",
+    resolution_requirement="tz",
+    n_gauss="int: Number of quadrature points to use for estimating trapped fraction. "
+    + "Default 20.",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     """Evaluate the effective trapped particle fraction.
@@ -207,9 +209,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         (0.1 + 0.6 * Zeff)
         * (X32e - X32e**4)
         / (Zeff * (0.77 + 0.63 * (1 + (Zeff - 1) ** 1.1)))
-        + 0.7
-        / (1 + 0.2 * Zeff)
-        * (X32e**2 - X32e**4 - 1.2 * (X32e**3 - X32e**4))
+        + 0.7 / (1 + 0.2 * Zeff) * (X32e**2 - X32e**4 - 1.2 * (X32e**3 - X32e**4))
         + 1.3 / (1 + 0.5 * Zeff) * (X32e**4)
     )
 
@@ -223,9 +223,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     # Redl eq (15):
     F32ei = (
         -(0.4 + 1.93 * Zeff) / (Zeff * (0.8 + 0.6 * Zeff)) * (X32ei - X32ei**4)
-        + 5.5
-        / (1.5 + 2 * Zeff)
-        * (X32ei**2 - X32ei**4 - 0.8 * (X32ei**3 - X32ei**4))
+        + 5.5 / (1.5 + 2 * Zeff) * (X32ei**2 - X32ei**4 - 0.8 * (X32ei**3 - X32ei**4))
         - 1.3 / (1 + 0.5 * Zeff) * (X32ei**4)
     )
 
@@ -337,7 +335,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         "Zeff",
         "rho",
     ],
-    helicity="helicity",
+    helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
 )
 def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
@@ -399,7 +397,8 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     profiles=["current"],
     coordinates="r",
     data=["rho", "psi_r", "p_r", "current", "<|B|^2>", "<J*B> Redl"],
-    degree="degree",
+    degree="int: Degree of polynomial used for fitting current profile. "
+    + "Default grid.num_rho-1",
 )
 def _current_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the current profile consistent with the Redl bootstrap current.
@@ -425,9 +424,11 @@ def _current_Redl(params, transforms, profiles, data, **kwargs):
     degree = kwargs.get(
         "degree",
         min(
-            profiles["current"].basis.L
-            if profiles["current"] is not None
-            else transforms["grid"].num_rho - 1,
+            (
+                profiles["current"].basis.L
+                if profiles["current"] is not None
+                else transforms["grid"].num_rho - 1
+            ),
             transforms["grid"].num_rho - 1,
         ),
     )

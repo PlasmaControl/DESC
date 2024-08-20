@@ -1,17 +1,18 @@
 """Classes for parameterized 3D space curves."""
 
-import numbers
+import warnings
 
 import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.compute import rpz2xyz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute.geom_utils import rotation_matrix
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, isposint
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, warnif
 
 from .core import Curve
 
@@ -87,7 +88,7 @@ class FourierRZCurve(Curve):
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
         assert issubclass(modes_W.dtype.type, np.integer)
-        assert isposint(NFP)
+        NFP = check_posint(NFP, "NFP")
 
         if sym == "auto":
             if (
@@ -129,7 +130,7 @@ class FourierRZCurve(Curve):
 
     @property
     def sym(self):
-        """Whether this curve has stellarator symmetry."""
+        """bool: Whether or not the curve is stellarator symmetric."""
         return self._sym
 
     @property
@@ -152,13 +153,6 @@ class FourierRZCurve(Curve):
         """Number of field periods."""
         return self._NFP
 
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
-
     @property
     def N(self):
         """Maximum mode number."""
@@ -166,6 +160,8 @@ class FourierRZCurve(Curve):
 
     def change_resolution(self, N=None, NFP=None, sym=None):
         """Change the maximum toroidal resolution."""
+        N = check_nonnegint(N, "N")
+        NFP = check_posint(NFP, "NFP")
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))
@@ -173,7 +169,7 @@ class FourierRZCurve(Curve):
             and (sym != self.sym)
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
-            self._sym = sym if sym is not None else self.sym
+            self._sym = bool(sym) if sym is not None else self.sym
             N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
@@ -287,7 +283,9 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
-        inputs = InputReader().parse_inputs(path)[-1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
             R_n=inputs["axis"][:, 1],
             Z_n=inputs["axis"][:, 2],
@@ -297,6 +295,78 @@ class FourierRZCurve(Curve):
             sym=inputs["sym"],
         )
         return curve
+
+    @classmethod
+    def from_values(cls, coords, N=10, NFP=1, sym=False, basis="rpz", name=""):
+        """Fit coordinates to FourierRZCurve representation.
+
+        Parameters
+        ----------
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierRZCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new R,Z representation.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "rpz"
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierRZCurve
+            New representation of the curve parameterized by Fourier series for R,Z.
+
+        """
+        if basis == "rpz":
+            coords_rpz = coords
+            coords_xyz = rpz2xyz(coords)
+        else:
+            coords_rpz = xyz2rpz(coords)
+            coords_xyz = coords
+        R = coords_rpz[:, 0]
+        phi = coords_rpz[:, 1]
+
+        X = coords_xyz[:, 0]
+        Y = coords_xyz[:, 1]
+        Z = coords_rpz[:, 2]
+
+        # easiest to check closure in XYZ coordinates
+        X, Y, Z, _, _, _, input_curve_was_closed = _unclose_curve(X, Y, Z)
+        if input_curve_was_closed:
+            R = R[0:-1]
+            phi = phi[0:-1]
+            Z = coords_rpz[0:-1, 2]
+        # check if any phi are negative, and make them positive instead
+        # so we can more easily check if it is monotonic
+        inds_negative = np.where(phi < 0)
+        phi = phi.at[inds_negative].set(phi[inds_negative] + 2 * np.pi)
+
+        # assert the curve is not doubling back on itself in phi,
+        # which can't be represented with a curve parameterized by phi
+        errorif(
+            not np.all(np.diff(phi) > 0), ValueError, "Supplied phi must be monotonic"
+        )
+
+        grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
+        basis = FourierSeries(N=N, NFP=NFP, sym=sym)
+        transform = Transform(grid, basis, build_pinv=True)
+        R_n = transform.fit(R)
+        Z_n = transform.fit(Z)
+        return FourierRZCurve(
+            R_n=R_n,
+            Z_n=Z_n,
+            modes_R=basis.modes[:, 2],
+            modes_Z=basis.modes[:, 2],
+            NFP=NFP,
+            sym=sym,
+            name=name,
+        )
 
 
 def _unclose_curve(X, Y, Z):
@@ -388,6 +458,7 @@ class FourierXYZCurve(Curve):
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
+        N = check_nonnegint(N, "N")
         if (N is not None) and (N != self.N):
             N = int(N)
             Xmodes_old = self.X_basis.modes
@@ -496,18 +567,19 @@ class FourierXYZCurve(Curve):
 
         Parameters
         ----------
-        coords: ndarray
-            coordinates to fit a FourierXYZCurve object with.
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierXYZCurve object, with each column
+            corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new X,Y,Z representation.
-            default is 10
         s : ndarray or "arclength"
-            arbitrary curve parameter to use for the fitting.
+            Arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
             coords. if None, defaults linearly spaced in [0,2pi)
             Alternative, can pass "arclength" to use normalized distance between points.
         basis : {"rpz", "xyz"}
-            basis for input coordinates. Defaults to "xyz"
+            Basis for input coordinates. Defaults to "xyz".
+
         Returns
         -------
         curve : FourierXYZCurve
@@ -555,7 +627,9 @@ class FourierXYZCurve(Curve):
         X_n = transform.fit(X)
         Y_n = transform.fit(Y)
         Z_n = transform.fit(Z)
-        return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
+        return FourierXYZCurve(
+            X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name
+        )
 
 
 class FourierPlanarCurve(Curve):
@@ -568,33 +642,31 @@ class FourierPlanarCurve(Curve):
     Parameters
     ----------
     center : array-like, shape(3,)
-        x,y,z coordinates of center of curve
+        Coordinates of center of curve, in system determined by basis.
     normal : array-like, shape(3,)
-        x,y,z components of normal vector to planar surface
+        Components of normal vector to planar surface, in system determined by basis.
     r_n : array-like
         Fourier coefficients for radius from center as function of polar angle
     modes : array-like
         mode numbers associated with r_n
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        name for this curve
+        Name for this curve.
 
     """
 
-    _io_attrs_ = Curve._io_attrs_ + [
-        "_r_n",
-        "_center",
-        "_normal",
-        "_r_basis",
-    ]
+    _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
-    # The curve is computed in this frame and then shifted/rotated to the correct frame.
+    # Curve is computed in reference frame, then displaced/rotated to the desired frame.
     def __init__(
         self,
         center=[10, 0, 0],
         normal=[0, 1, 0],
         r_n=2,
         modes=None,
+        basis="xyz",
         name="",
     ):
         super().__init__(name)
@@ -605,11 +677,13 @@ class FourierPlanarCurve(Curve):
             modes = np.asarray(modes)
         assert issubclass(modes.dtype.type, np.integer)
         assert r_n.size == modes.size, "r_n size and modes must be the same size"
+        assert basis.lower() in ["xyz", "rpz"]
 
         N = np.max(abs(modes))
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
+        self._basis = basis
         self.normal = normal
         self.center = center
 
@@ -625,6 +699,7 @@ class FourierPlanarCurve(Curve):
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
+        N = check_nonnegint(N, "N")
         if (N is not None) and (N != self.N):
             N = int(N)
             modes_old = self.r_basis.modes
@@ -643,7 +718,9 @@ class FourierPlanarCurve(Curve):
             self._center = np.asarray(new)
         else:
             raise ValueError(
-                "center should be a 3 element vector [cx, cy, cz], got {}".format(new)
+                "center should be a 3 element vector in "
+                + self.basis
+                + " coordinates, got {}".format(new)
             )
 
     @optimizable_parameter
@@ -658,7 +735,9 @@ class FourierPlanarCurve(Curve):
             self._normal = np.asarray(new) / np.linalg.norm(new)
         else:
             raise ValueError(
-                "normal should be a 3 element vector [nx, ny, nz], got {}".format(new)
+                "normal should be a 3 element vector in "
+                + self.basis
+                + " coordinates, got {}".format(new)
             )
 
     @optimizable_parameter
@@ -676,6 +755,23 @@ class FourierPlanarCurve(Curve):
                 f"r_n should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.r_basis.num_modes} modes."
             )
+
+    @property
+    def basis(self):
+        """Coordinate system for center and normal vectors."""
+        return self._basis
+
+    @basis.setter
+    def basis(self, new):
+        assert new.lower() in ["xyz", "rpz"]
+        if new != self.basis:
+            if new == "xyz":
+                self.normal = rpz2xyz_vec(self.normal, phi=self.center[1])
+                self.center = rpz2xyz(self.center)
+            else:
+                self.center = xyz2rpz(self.center)
+                self.normal = xyz2rpz_vec(self.normal, phi=self.center[1])
+            self._basis = new
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -695,6 +791,128 @@ class FourierPlanarCurve(Curve):
             idx = self.r_basis.get_idx(0, 0, nn)
             if rr is not None:
                 self.r_n = put(self.r_n, idx, rr)
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        override_grid=True,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        return super().compute(
+            names=names,
+            grid=grid,
+            params=params,
+            transforms=transforms,
+            data=data,
+            override_grid=override_grid,
+            basis_in=self.basis,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_values(cls, coords, N=10, basis="xyz", name=""):
+        """Fit coordinates to FourierPlanarCurve representation.
+
+        Parameters
+        ----------
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierPlanarCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new r representation.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierPlanarCurve
+            New representation of the curve parameterized by a Fourier series for r.
+
+        """
+        # convert to xyz basis
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        coords = np.atleast_2d(coords)
+
+        # center
+        center = np.mean(coords, axis=0)
+        coords = coords - center  # shift to origin
+
+        # normal
+        U, _, _ = np.linalg.svd(coords.T)
+        normal = U[:, -1].T  # left singular vector of the least singular value
+
+        # axis and angle of rotation
+        Z_axis = np.array([0, 0, 1])
+        axis = np.cross(Z_axis, normal)
+        angle = np.arccos(np.dot(Z_axis, normal))
+        rotmat = rotation_matrix(axis, angle)
+        coords = coords @ rotmat  # rotate to X-Y plane
+
+        warnif(
+            np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points
+            UserWarning,
+            "Curve values are not planar! Using the projection onto a plane.",
+        )
+
+        # polar radius and angle
+        r = np.sqrt(coords[:, 0] ** 2 + coords[:, 1] ** 2)
+        s = np.arctan2(coords[:, 1], coords[:, 0])
+        s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
+        idx = np.argsort(s)  # sort angle to be monotonically increasing
+        r = r[idx]
+        s = s[idx]
+
+        # Fourier transform
+        basis = FourierSeries(N, NFP=1, sym=False)
+        grid_fit = LinearGrid(zeta=s, NFP=1)
+        transform_fit = Transform(grid_fit, basis, build_pinv=True)
+        r_n = transform_fit.fit(r)
+
+        return FourierPlanarCurve(
+            center=center,
+            normal=normal,
+            r_n=r_n,
+            modes=basis.modes[:, 2],
+            basis="xyz",
+            name=name,
+        )
 
 
 class SplineXYZCurve(Curve):
@@ -777,7 +995,7 @@ class SplineXYZCurve(Curve):
             knots = knots[:-1] if closed_flag else knots
 
         self._knots = knots
-        self.method = method
+        self._method = method
 
     @optimizable_parameter
     @property
@@ -835,7 +1053,7 @@ class SplineXYZCurve(Curve):
     @knots.setter
     def knots(self, new):
         if len(new) == len(self.knots):
-            knots = jnp.atleast_1d(new)
+            knots = jnp.atleast_1d(jnp.asarray(new))
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
@@ -880,17 +1098,59 @@ class SplineXYZCurve(Curve):
                 + f"instead got unknown method {new} "
             )
 
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+        """
+        return super().compute(
+            names=names,
+            grid=grid,
+            params=params,
+            transforms=transforms,
+            data=data,
+            method=self._method,
+            **kwargs,
+        )
+
     @classmethod
-    def from_values(cls, coords, knots=None, method="cubic", name="", basis="xyz"):
+    def from_values(cls, coords, knots=None, method="cubic", basis="xyz", name=""):
         """Create SplineXYZCurve from coordinate values.
 
         Parameters
         ----------
-        coords: ndarray
-            Points for X, Y, Z describing the curve. If the endpoint is included
-            (ie, X[0] == X[-1]), then the final point will be dropped.
+        coords: ndarray, shape (num_coords,3)
+            Points for X, Y, Z (or R, phi, Z) describing the curve with each column
+            corresponding to xyz or rpz depending on the basis argument. If the
+            endpoint is included (ie, X[0] == X[-1]), then the final point will be
+            dropped.
         knots : ndarray
-            arbitrary curve parameter values to use for spline knots,
+            Arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
             the input coordinates come from
@@ -906,10 +1166,10 @@ class SplineXYZCurve(Curve):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
-        name : str
-            name for this curve
         basis : {"rpz", "xyz"}
-            basis for input coordinates. Defaults to "xyz"
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
 
         Returns
         -------
@@ -920,5 +1180,10 @@ class SplineXYZCurve(Curve):
         if basis == "rpz":
             coords = rpz2xyz(coords)
         return SplineXYZCurve(
-            coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name
+            X=coords[:, 0],
+            Y=coords[:, 1],
+            Z=coords[:, 2],
+            knots=knots,
+            method=method,
+            name=name,
         )

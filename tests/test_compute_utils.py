@@ -69,7 +69,17 @@ class TestComputeUtils:
             Surface integral of the input over each surface in the grid.
 
         """
-        _, _, spacing, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
+        _, _, spacing, _, _ = _get_grid_surface(grid, grid.get_label(surface_label))
+        if surface_label == "rho":
+            has_endpoint_dupe = False
+        elif surface_label == "theta":
+            has_endpoint_dupe = (grid.nodes[grid.unique_theta_idx[0], 1] == 0) & (
+                grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
+            )
+        else:
+            has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
+                grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
+            )
         weights = (spacing.prod(axis=1) * np.nan_to_num(q).T).T
 
         surfaces = {}
@@ -108,6 +118,8 @@ class TestComputeUtils:
             )
 
         eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         lg = LinearGrid(L=L, M=M, N=N, NFP=eq.NFP, endpoint=False)
         lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=eq.NFP, endpoint=True)
         cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=True)
@@ -117,6 +129,27 @@ class TestComputeUtils:
             if label != "theta":
                 # theta integrals are poorly defined on concentric grids
                 test_b_theta(label, cg_sym, eq)
+
+    @pytest.mark.unit
+    def test_unknown_unique_grid_integral(self):
+        """Test that averages are invariant to whether grids have unique_idx."""
+        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, endpoint=False)
+        q = jnp.arange(lg.num_nodes) ** 2
+        result = surface_integrals(lg, q, surface_label="rho")
+        del lg._unique_rho_idx
+        np.testing.assert_allclose(
+            surface_integrals(lg, q, surface_label="rho"), result
+        )
+        result = surface_averages(lg, q, surface_label="theta")
+        del lg._unique_poloidal_idx
+        np.testing.assert_allclose(
+            surface_averages(lg, q, surface_label="theta"), result
+        )
+        result = surface_variance(lg, q, surface_label="zeta")
+        del lg._unique_zeta_idx
+        np.testing.assert_allclose(
+            surface_variance(lg, q, surface_label="zeta"), result
+        )
 
     @pytest.mark.unit
     def test_surface_integrals_transform(self):
@@ -300,6 +333,8 @@ class TestComputeUtils:
     def test_surface_averages_identity_op(self):
         """Test flux surface averages of surface functions are identity operations."""
         eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["p", "sqrt(g)"], grid=grid)
         pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
@@ -312,6 +347,8 @@ class TestComputeUtils:
         Meaning average(a + b) = average(a) + average(b).
         """
         eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["|B|", "|B|_t", "sqrt(g)"], grid=grid)
         a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
@@ -367,6 +404,8 @@ class TestComputeUtils:
 
         # test on grids with a single rho surface
         eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         rho = np.array((1 - 1e-4) * np.random.default_rng().random() + 1e-4)
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["|B|", "sqrt(g)"], grid=grid)

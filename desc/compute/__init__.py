@@ -26,6 +26,8 @@ data : dict of ndarray
 # just need to import all the submodules here to register everything in the
 # data_index
 
+from desc.utils import flatten_list
+
 from . import (
     _basis_vectors,
     _bootstrap,
@@ -35,12 +37,12 @@ from . import (
     _field,
     _geometry,
     _metric,
+    _omnigenity,
     _profiles,
-    _qs,
     _stability,
     _surface,
 )
-from .data_index import data_index
+from .data_index import all_kwargs, allowed_kwargs, data_index
 from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from .utils import (
     compute,
@@ -61,10 +63,10 @@ def _build_data_index():
     for p in data_index:
         for key in data_index[p]:
             full = {
-                "data": get_data_deps(key, p, has_axis=False),
-                "transforms": get_derivs(key, p, has_axis=False),
-                "params": get_params(key, p, has_axis=False),
-                "profiles": get_profiles(key, p, has_axis=False),
+                "data": get_data_deps(key, p, has_axis=False, basis="rpz"),
+                "transforms": get_derivs(key, p, has_axis=False, basis="rpz"),
+                "params": get_params(key, p, has_axis=False, basis="rpz"),
+                "profiles": get_profiles(key, p, has_axis=False, basis="rpz"),
             }
             data_index[p][key]["full_dependencies"] = full
 
@@ -79,9 +81,9 @@ def _build_data_index():
             else:
                 full_with_axis = {
                     "data": full_with_axis_data,
-                    "transforms": get_derivs(key, p, has_axis=True),
-                    "params": get_params(key, p, has_axis=True),
-                    "profiles": get_profiles(key, p, has_axis=True),
+                    "transforms": get_derivs(key, p, has_axis=True, basis="rpz"),
+                    "params": get_params(key, p, has_axis=True, basis="rpz"),
+                    "profiles": get_profiles(key, p, has_axis=True, basis="rpz"),
                 }
                 for _key, val in full_with_axis.items():
                     if full[_key] == val:
@@ -92,3 +94,30 @@ def _build_data_index():
 
 
 _build_data_index()
+
+
+def set_tier(name, p):
+    """Determine how deep in the dependency tree a given name is.
+
+    tier of 0 means no dependencies on other data,
+    tier of 1 means it depends on only tier 0 stuff,
+    tier of 2 means it depends on tier 0 and tier 1, etc etc.
+
+    Designed such that if you compute things in the order determined by tiers,
+    all dependencies will always be computed in the correct order.
+    """
+    if "tier" in data_index[p][name]:
+        return
+    if len(data_index[p][name]["full_with_axis_dependencies"]["data"]) == 0:
+        data_index[p][name]["tier"] = 0
+    else:
+        thistier = 0
+        for name1 in data_index[p][name]["full_with_axis_dependencies"]["data"]:
+            set_tier(name1, p)
+            thistier = max(thistier, data_index[p][name1]["tier"])
+        data_index[p][name]["tier"] = thistier + 1
+
+
+for par in data_index.keys():
+    for name in data_index[par]:
+        set_tier(name, par)

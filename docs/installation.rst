@@ -10,7 +10,7 @@ In general, to install JAX with GPU support, please refer to the `JAX installati
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`__.
 Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
 
-**NOTE: DESC requires python>=3.8.**
+**NOTE: DESC requires python>=3.9.**
 **If you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used.**
 
 On Your Local Machine
@@ -39,7 +39,7 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.8, <=3.11'
+    conda create --name desc-env 'python>=3.9, <=3.12'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
@@ -91,7 +91,7 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.8, <=3.11'
+    conda create --name desc-env 'python>=3.9, <=3.12'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
@@ -123,14 +123,14 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 Perlmutter (NERSC)
 ++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 11-02-2023
+These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 18-06-2024
 
 Set up the correct cuda environment for jax installation
 
 .. code-block:: sh
 
-    module load cudatoolkit/11.7
-    module load cudnn/8.9.1_cuda11
+    module load cudatoolkit/12.2
+    module load cudnn/8.9.3_cuda12
     module load python
 
 Check that you have loaded these modules
@@ -139,13 +139,25 @@ Check that you have loaded these modules
 
     module list
 
-Create a conda environment for DESC
+Create a conda environment for DESC (`following these instructions <https://docs.nersc.gov/development/languages/python/using-python-perlmutter/#jax>`__ )
 
 .. code-block:: sh
 
     conda create -n desc-env python=3.9
     conda activate desc-env
-    pip install --no-cache-dir "jax[cuda11_cudnn82]==0.4.7" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    pip install --no-cache-dir "jax==0.4.23" "jaxlib[cuda12_cudnn89]==0.4.23" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+For Perlmutter installation, please change the scipy version from
+
+.. code-block:: sh
+
+    scipy >= 1.7.0, < 2.0.0
+
+to
+
+.. code-block:: sh
+
+    scipy >= 1.7.0, <= 1.11.3
 
 Clone and install DESC
 
@@ -163,13 +175,16 @@ Clone and install DESC
 Della and Stellar Clusters (Princeton)
 ++++++++++++++++++++++++++++++++++++++
 
-First, install JAX (we base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters:
+First, install JAX for the latest version of `jaxlib` available on the Princeton clusters.
+
+We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__, if the below instructions do not work please
+check the link to install JAX with the most up-to-date recommendations from the Princeton computing services:
 
 .. code-block:: sh
 
-    module load anaconda3/2023.3
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env "jax==0.4.14" "jaxlib==0.4.14=cuda112*" -c conda-forge
+    conda create --name desc-env 'python==3.11'
     conda activate desc-env
+    pip install -U "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 Then, install DESC,
 
@@ -184,7 +199,7 @@ Then, install DESC,
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Second option was tested and confirmed to work on the Della cluster as of 12-2-23 and Stellar cluster at Princeton as of 11-14-2023.
+Tested and confirmed to work on the Della cluster as of 6-20-24 and Stellar cluster at Princeton as of 6-20-24.
 
 On Clusters with IBM Power Architecture
 ***************************************
@@ -204,7 +219,7 @@ Commit `a2fe711ffa3f` (an older version of the `master` branch) was tested to wo
 
     module load anaconda3/2020.11 cudatoolkit/11.1 cudnn/cuda-11.1/8.0.4
 
-    conda create --name desc-env python=3.8
+    conda create --name desc-env python=3.10
     conda activate desc-env
     # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
     conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0,<1.25.0" psutil "scipy>=1.5.0,<1.11.0" termcolor
@@ -273,3 +288,12 @@ Try ensuring you've activated the conda environment that DESC is in ( ``conda ac
 **Solution**:
 
 You likely are not running python from the environment in which you've installed DESC. Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.
+
+**Problem**: I'm attempting to install jax with pip on a cluster, I get an error ``ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+desc-opt 0.9.2+587.gc0b44414.dirty...`` with a list of incompatiblities.
+
+**Solution**:
+
+This may be caused by a version of DESC already having been installed in your base conda environment.
+
+Try removing the ``DESC`` folder completely, ensuring that ``pip list`` in your base conda environment no longer lists ``desc-opt`` as a package, then redo the installation instructions.

@@ -1,9 +1,9 @@
 """Utility functions needed for converting VMEC inputs/outputs."""
 
 import numpy as np
-from scipy.linalg import block_diag, null_space
+from scipy.linalg import null_space
 
-from desc.backend import sign
+from desc.backend import block_diag, sign
 from desc.basis import zernike_radial
 
 
@@ -299,7 +299,7 @@ def fourier_to_zernike(m, n, x_mn, basis):
     surfs = x_mn.shape[0]
     rho = np.sqrt(np.linspace(0, 1, surfs))
 
-    As = zernike_radial(rho, basis.modes[:, 0], basis.modes[:, 1])
+    As = zernike_radial(rho[:, np.newaxis], basis.modes[:, 0], basis.modes[:, 1])
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):
@@ -343,7 +343,7 @@ def zernike_to_fourier(x_lmn, basis, rho):
     n = mn[:, 1]
 
     x_mn = np.zeros((rho.size, m.size))
-    As = zernike_radial(rho, basis.modes[:, 0], basis.modes[:, 1])
+    As = zernike_radial(rho[:, np.newaxis], basis.modes[:, 0], basis.modes[:, 1])
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):

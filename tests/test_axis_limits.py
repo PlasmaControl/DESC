@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import dot, surface_integrals_map
+from desc.compute.utils import _grow_seeds, dot, surface_integrals_map
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
@@ -57,7 +57,10 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
+    "gbdrift",
+    "cvdrift",
     "grad(alpha)",
+    "cvdrift0",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -85,8 +88,10 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
+    "cvdrift0",
 }
 
 
@@ -108,40 +113,11 @@ def add_all_aliases(names):
 zero_limits = add_all_aliases(zero_limits)
 not_finite_limits = add_all_aliases(not_finite_limits)
 not_implemented_limits = add_all_aliases(not_implemented_limits)
-
-
-def grow_seeds(
-    seeds, search_space, parameterization="desc.equilibrium.equilibrium.Equilibrium"
-):
-    """Traverse the dependency DAG for keys in search space dependent on seeds.
-
-    Parameters
-    ----------
-    seeds : set
-        Keys to find paths toward.
-    search_space : iterable
-        Additional keys to consider returning.
-    parameterization: str or list of str
-        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
-        or `desc.equilibrium.Equilibrium`.
-
-    Returns
-    -------
-    out : set
-        All keys in search space with any path in the dependency DAG to any seed.
-
-    """
-    out = seeds.copy()
-    for key in search_space:
-        deps = data_index[parameterization][key]["full_with_axis_dependencies"]["data"]
-        if not seeds.isdisjoint(deps):
-            out.add(key)
-    return out
-
-
-not_implemented_limits = grow_seeds(
+not_implemented_limits = _grow_seeds(
+    "desc.equilibrium.equilibrium.Equilibrium",
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
+    has_axis=True,
 )
 
 
@@ -161,9 +137,9 @@ def _skip_this(eq, name):
 def assert_is_continuous(
     eq,
     names=data_index["desc.equilibrium.equilibrium.Equilibrium"].keys(),
-    delta=5e-5,
-    rtol=1e-4,
-    atol=1e-6,
+    delta=1e-4,
+    rtol=1e-5,
+    atol=5e-7,
     desired_at_axis=None,
     kwargs=None,
 ):
@@ -215,7 +191,7 @@ def assert_is_continuous(
 
     num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)
-    grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     axis = grid.nodes[:, 0] == 0
     assert axis.any() and not axis.all()
     integrate = surface_integrals_map(grid, expand_out=False)
@@ -230,11 +206,12 @@ def assert_is_continuous(
             continue
         else:
             assert np.isfinite(data[name]).all(), name
+
         if (
             data_index[p][name]["coordinates"] == ""
             or data_index[p][name]["coordinates"] == "z"
         ):
-            # can't check continuity of global scalar or function of toroidal angle
+            # can't check radial continuity of scalar or function of toroidal angle
             continue
         # make single variable function of rho
         if data_index[p][name]["coordinates"] == "r":
@@ -295,18 +272,22 @@ class TestAxisLimits:
         # The need for a weaker tolerance on these keys may be due to a subpar
         # polynomial regression fit against which the axis limit is compared.
         weaker_tolerance = {
-            "B0_rr": {"rtol": 5e-03},
-            "iota_r": {"atol": 1e-4},
-            "iota_num_rr": {"atol": 5e-3},
-            "alpha_r": {"rtol": 1e-3},
+            "iota_r": {"atol": 1e-6},
+            "iota_num_rr": {"atol": 5e-5},
+            "grad(B)": {"rtol": 1e-4},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
-        # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)
-        kwargs = dict(weaker_tolerance, **zero_map)
+        kwargs = weaker_tolerance | zero_map
         # fixed iota
-        assert_is_continuous(get("W7-X"), kwargs=kwargs)
+        eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("NCSX"), kwargs=kwargs)
+        eq = get("NCSX")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -339,8 +320,14 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 1], B[0, 1])
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
-        test(get("W7-X"))
-        test(get("NCSX"))
+        eq = get("W7-X")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
+        eq = get("NCSX")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
 
 
 def _reverse_mode_unsafe_names():
@@ -380,18 +367,20 @@ def _reverse_mode_unsafe_names():
             unsafe_names.append(name)
 
     unsafe_names = sorted(unsafe_names)
-    print("Unsafe names: ", unsafe_names)
     return unsafe_names
 
 
+@pytest.mark.slow
+@pytest.mark.regression
 @pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
 def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""
     eq = get("ESTELL")
     grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
-    eq.change_resolution(2, 2, 2, 4, 4, 4)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 2, 4, 4, 4)
 
-    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), verbose=0)
+    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), use_jit=False)
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))

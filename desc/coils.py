@@ -6,9 +6,20 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import fori_loop, jit, jnp, scan, tree_stack, tree_unstack, vmap
+from desc.backend import (
+    fori_loop,
+    jit,
+    jnp,
+    scan,
+    tree_leaves,
+    tree_stack,
+    tree_unstack,
+    vmap,
+)
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
+from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import safenorm
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -127,13 +138,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
     Parameters
     ----------
     current : float
-        current passing through the coil, in Amperes
+        Current through the coil, in Amperes.
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
 
     def __init__(self, current, *args, **kwargs):
-        self._current = float(current)
+        self._current = float(np.squeeze(current))
         super().__init__(*args, **kwargs)
 
     @optimizable_parameter
@@ -145,10 +156,39 @@ class _Coil(_MagneticField, Optimizable, ABC):
     @current.setter
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        self._current = float(new)
+        self._current = float(np.squeeze(new))
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return 1
+
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        x = self.compute("x", grid=grid, params=params, **kwargs)["x"]
+        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
+        basis = kwargs.pop("basis", "xyz")
+        if basis.lower() == "rpz":
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        return x
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -166,6 +206,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+
 
         Returns
         -------
@@ -181,7 +224,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis.lower() == "rpz":
             phi = coords[:, 1]
             coords = rpz2xyz(coords)
@@ -189,10 +232,30 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
+        if source_grid is None:
+            # NFP=1 to ensure points span the entire length of the coil
+            # multiply resolution by NFP to ensure Biot-Savart integration is accurate
+            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
 
-        data = self.compute(
-            ["x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
-        )
+        if not params or not transforms:
+            data = self.compute(
+                ["x", "x_s", "ds"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
+        else:
+            data = compute_fun(
+                self,
+                names=["x", "x_s", "ds"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+            )
+            data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
+            data["x"] = rpz2xyz(data["x"])
+
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )
@@ -236,6 +299,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """
         if (grid is None) and (s is not None) and (not isinstance(s, str)):
             grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCoil.from_values(
             self.current, coords, N=N, s=s, basis="xyz", name=name
@@ -279,6 +344,73 @@ class _Coil(_MagneticField, Optimizable, ABC):
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCoil.from_values(
             self.current, coords, knots=knots, method=method, name=name, basis="xyz"
+        )
+
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+        """Convert Coil to FourierRZCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the coil will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
+        name : str
+            Name for this coil.
+
+        Returns
+        -------
+        curve : FourierRZCoil
+            New representation of the coil parameterized by Fourier series for R,Z.
+
+        """
+        NFP = 1 or NFP
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierRZCoil.from_values(
+            self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
+        )
+
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+        """Convert Coil to FourierPlanarCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coil.
+
+        Returns
+        -------
+        coil : FourierPlanarCoil
+            New representation of the coil parameterized by Fourier series for minor
+            radius r in a plane specified by a center position and normal vector.
+
+        """
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
+        return FourierPlanarCoil.from_values(
+            self.current, coords, N=N, basis=basis, name=name
         )
 
 
@@ -355,6 +487,50 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             current, R_n, Z_n, W_n, modes_R, modes_Z, modes_W, NFP, sym, name
         )
 
+    @classmethod
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
+        """Fit coordinates to FourierRZCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            coordinates to fit a FourierRZCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new R,Z representation.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "rpz"
+        sym : bool
+            Whether to enforce stellarator symmetry.
+        name : str
+            name for this coil
+
+
+        Returns
+        -------
+        coil : FourierRZCoil
+            New representation of the coil parameterized by Fourier series for R,Z.
+
+        """
+        curve = super().from_values(
+            coords=coords, N=N, NFP=NFP, basis=basis, sym=sym, name=name
+        )
+        return FourierRZCoil(
+            current=current,
+            R_n=curve.R_n,
+            Z_n=curve.Z_n,
+            modes_R=curve.R_basis.modes[:, 2],
+            modes_Z=curve.Z_basis.modes[:, 2],
+            NFP=NFP,
+            sym=curve.sym,
+            name=name,
+        )
+
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
     """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle s.
@@ -362,7 +538,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     Parameters
     ----------
     current : float
-        current through coil, in Amperes
+        Current through the coil, in Amperes.
     X_n, Y_n, Z_n: array-like
         fourier coefficients for X, Y, Z
     modes : array-like
@@ -425,7 +601,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         Parameters
         ----------
         current : float
-            Current through the coil, in Amps.
+            Current through the coil, in Amperes.
         coords: ndarray
             Coordinates to fit a FourierXYZCoil object with.
         N : int
@@ -444,12 +620,13 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             New representation of the coil parameterized by Fourier series for X,Y,Z.
 
         """
-        curve = super().from_values(coords, N, s, basis)
-        return cls(
-            current,
+        curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
+        return FourierXYZCoil(
+            current=current,
             X_n=curve.X_n,
             Y_n=curve.Y_n,
             Z_n=curve.Z_n,
+            modes=curve.X_basis.modes[:, 2],
             name=name,
         )
 
@@ -464,17 +641,19 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     Parameters
     ----------
     current : float
-        current through the coil, in Amperes
+        Current through the coil, in Amperes.
     center : array-like, shape(3,)
-        x,y,z coordinates of center of coil
+        Coordinates of center of curve, in system determined by basis.
     normal : array-like, shape(3,)
-        x,y,z components of normal vector to planar surface
+        Components of normal vector to planar surface, in system determined by basis.
     r_n : array-like
-        fourier coefficients for radius from center as function of polar angle
+        Fourier coefficients for radius from center as function of polar angle
     modes : array-like
         mode numbers associated with r_n
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        name for this coil
+        Name for this coil.
 
     Examples
     --------
@@ -520,9 +699,45 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         normal=[0, 1, 0],
         r_n=2,
         modes=None,
+        basis="xyz",
         name="",
     ):
-        super().__init__(current, center, normal, r_n, modes, name)
+        super().__init__(current, center, normal, r_n, modes, basis, name)
+
+    @classmethod
+    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
+        """Fit coordinates to FourierPlanarCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierPlanarCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new r representation.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierPlanarCoil
+            New representation of the coil parameterized by a Fourier series for r.
+
+        """
+        curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
+        return FourierPlanarCoil(
+            current=current,
+            center=curve.center,
+            normal=curve.normal,
+            r_n=curve.r_n,
+            modes=curve.r_basis.modes[:, 2],
+            basis="xyz",
+            name=name,
+        )
 
 
 class SplineXYZCoil(_Coil, SplineXYZCurve):
@@ -531,7 +746,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     Parameters
     ----------
     current : float
-        current through coil, in Amperes
+        Current through the coil, in Amperes.
     X, Y, Z: array-like
         Points for X, Y, Z describing the curve. If the endpoint is included
         (ie, X[0] == X[-1]), then the final point will be dropped.
@@ -575,7 +790,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -593,6 +808,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -607,7 +824,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "rpz":
             coords = rpz2xyz(coords)
         if params is None:
@@ -641,7 +858,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Parameters
         ----------
         current : float
-            Current through the coil, in Amps.
+            Current through the coil, in Amperes.
         coords: ndarray
             Points for X, Y, Z describing the curve. If the endpoint is included
             (ie, X[0] == X[-1]), then the final point will be dropped.
@@ -673,9 +890,11 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             New representation of the coil parameterized by splines in X,Y,Z.
 
         """
-        curve = super().from_values(coords, knots, method, basis=basis)
-        return cls(
-            current,
+        curve = super().from_values(
+            coords=coords, knots=knots, method=method, basis=basis, name=name
+        )
+        return SplineXYZCoil(
+            current=current,
             X=curve.X,
             Y=curve.Y,
             Z=curve.Z,
@@ -706,7 +925,7 @@ def _check_type(coil0, coil):
         FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
-        SplineXYZCoil: ["method", "N"],
+        SplineXYZCoil: ["method", "N", "knots"],
     }
 
     for attr in attrs[coil0.__class__]:
@@ -717,7 +936,8 @@ def _check_type(coil0, coil):
             ValueError,
             (
                 "coils in a CoilSet must have the same parameterization, got a "
-                + f"mismatch between attr {attr}, with values {a0} and {a1}"
+                + f"mismatch between attr {attr}, with values {a0} and {a1}."
+                + " Consider using a MixedCoilSet"
             ),
         )
 
@@ -740,24 +960,37 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         assuming 'virtual' coils from the other half field period. Default = False.
     name : str
         Name of this CoilSet.
+    check_intersection: bool
+        Whether or not to check the coils in the coilset for intersections.
 
     """
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
+    _io_attrs_.remove("_current")
 
-    def __init__(self, *coils, NFP=1, sym=False, name=""):
+    def __init__(
+        self,
+        *coils,
+        NFP=1,
+        sym=False,
+        name="",
+        check_intersection=True,
+    ):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
-        self._NFP = NFP
-        self._sym = sym
+        self._NFP = int(NFP)
+        self._sym = bool(sym)
         self._name = str(name)
+
+        if check_intersection:
+            self.is_self_intersecting()
 
     @property
     def name(self):
         """str: Name of the curve."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
@@ -767,6 +1000,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def coils(self):
         """list: coils in the coilset."""
         return self._coils
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return len(self) * (int(self.sym) + 1) * self.NFP
 
     @property
     def NFP(self):
@@ -836,16 +1074,19 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if params is None:
-            params = [get_params(names, coil) for coil in self]
+            params = [
+                get_params(names, coil, basis=kwargs.get("basis", "rpz"))
+                for coil in self
+            ]
         if data is None:
             data = [{}] * len(self)
+
         # if user supplied initial data for each coil we also need to vmap over that.
         data = vmap(
             lambda d, x: self[0].compute(
                 names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
             )
         )(tree_stack(data), tree_stack(params))
-
         return tree_unstack(data)
 
     def translate(self, *args, **kwargs):
@@ -860,8 +1101,66 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        basis = kwargs.pop("basis", "xyz")
+        if params is None:
+            params = [get_params("x", coil, basis=basis) for coil in self]
+        data = self.compute("x", grid=grid, params=params, basis=basis, **kwargs)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+        if basis.lower() == "rpz":
+            xyz = rpz2xyz(x)
+        else:
+            xyz = x
+
+        # if stellarator symmetric, add reflected coils from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
+
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        rpz = xyz2rpz(xyz)
+
+        # if field period symmetry, add rotated coils from other field periods
+        if self.NFP > 1:
+            rpz0 = rpz
+            for k in range(1, self.NFP):
+                rpz = jnp.vstack(
+                    (rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0]))
+                )
+
+        # ensure phi in [0, 2pi)
+        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
+
+        if basis.lower() == "xyz":
+            x = rpz2xyz(rpz)
+        else:
+            x = rpz
+        return x
+
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -876,6 +1175,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid : Grid, int or None, optional
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -884,9 +1185,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
-            params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
+            params = [
+                get_params(["x_s", "x", "s", "ds"], coil, basis=basis) for coil in self
+            ]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
 
@@ -940,22 +1243,22 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def linspaced_angular(
         cls, coil, current=None, axis=[0, 0, 1], angle=2 * np.pi, n=10, endpoint=False
     ):
-        """Create a coil set by repeating a coil n times rotationally.
+        """Create a CoilSet by repeating a coil at equal spacing around the torus.
 
         Parameters
         ----------
         coil : Coil
-            base coil to repeat
+            Base coil to repeat.
         current : float or array-like, shape(n,)
-            current in (each) coil, overrides coil.current
+            Current through (each) coil, in Amperes. Overrides coil.current.
         axis : array-like, shape(3,)
-            axis to rotate about
+            Axis to rotate about, in X,Y,Z coordinates.
         angle : float
-            total rotational extent of coil set
+            Total rotational extent of the final coil, in radians.
         n : int
-            number of copies of original coil
+            Number of copies of original coil.
         endpoint : bool
-            whether to include a coil at final angle
+            Whether to include a coil at final rotation angle. Default = False.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -975,20 +1278,21 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def linspaced_linear(
         cls, coil, current=None, displacement=[2, 0, 0], n=4, endpoint=False
     ):
-        """Create a coil group by repeating a coil n times in a straight line.
+        """Create a CoilSet by repeating a coil at equal spacing in a straight line.
 
         Parameters
         ----------
         coil : Coil
-            base coil to repeat
+            Base coil to repeat.
         current : float or array-like, shape(n,)
-            current in (each) coil
+            Current through (each) coil, in Amperes. Overrides coil.current.
         displacement : array-like, shape(3,)
-            total displacement of the final coil
+            Total displacement of the final coil, relative to the initial coil position,
+            in X,Y,Z coordinates.
         n : int
-            number of copies of original coil
+            Number of copies of original coil.
         endpoint : bool
-            whether to include a coil at final point
+            Whether to include a coil at final displacement location. Default = False.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -1017,7 +1321,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Parameters
         ----------
-        coils : Coil, CoilGroup, Coilset
+        coils : Coil, CoilSet
             Coil or collection of coils in one field period or half field period.
         NFP : int (optional)
             Number of field periods for enforcing field period symmetry.
@@ -1036,24 +1340,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         if not isinstance(coils, CoilSet):
-            coils = CoilSet(coils)
-
-        [_check_type(coil, coils[0]) for coil in coils]
-
-        # check toroidal extent of coils to be repeated
-        maxphi = 2 * np.pi / NFP / (sym + 1)
-        data = coils.compute("phi")
-        for i, cdata in enumerate(data):
-            errorif(
-                np.any(cdata["phi"] > maxphi),
-                ValueError,
-                f"coil {i} exceeds the toroidal extent for NFP={NFP} and sym={sym}",
-            )
-            warnif(
-                sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
-                UserWarning,
-                f"coil {i} is on the symmetry plane phi=0",
-            )
+            try:
+                coils = CoilSet(coils)
+            except (TypeError, ValueError):
+                # likely there are multiple coil types,
+                # so make a MixedCoilSet
+                coils = MixedCoilSet(coils)
+        if not isinstance(coils, MixedCoilSet):
+            # only need to check this for a CoilSet, not MixedCoilSet
+            [_check_type(coil, coils[0]) for coil in coils]
 
         coilset = []
         if sym:
@@ -1082,6 +1377,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
+        If the MAKEGRID contains more than one coil group (denoted by the number listed
+        after the current on the last line defining a given coil), this function will
+        attempt to return only a single CoilSet of all of the coils in the file.
+
         Parameters
         ----------
         coil_file : str or path-like
@@ -1102,9 +1401,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
               both endpoints
 
         """
-        coils = []  # list of SplineXYZCoils
-        coilinds = [2]  # always start at the 3rd line after periods
-        names = []
+        coils = []  # list of SplineXYZCoils, ignoring coil groups
+        coilinds = [2]  # List of line indices where coils are at in the file.
+        # always start at the 3rd line after periods
+        coilnames = []  # the coilgroup each coil belongs to
+        # corresponds to each coil in the coilinds list
 
         # read in the coils file
         headind = -1
@@ -1114,6 +1415,31 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 if line.find("periods") != -1:
                     headind = i  # skip anything that is above the periods line
                     coilinds[0] += headind
+                    if len(lines[3 + headind].split()) != 4:
+                        raise OSError(
+                            "4th line in file must be the start of the first coil! "
+                            + "Expected a line of length 4 (after .split()), "
+                            + f"instead got length {lines[3+headind].split()}"
+                        )
+                    header_lines_not_as_expected = np.array(
+                        [
+                            len(lines[0 + headind].split()) != 2,
+                            len(lines[1 + headind].split()) != 2,
+                            len(lines[2 + headind].split()) != 2,
+                        ]
+                    )
+                    if np.any(header_lines_not_as_expected):
+                        wronglines = lines[
+                            np.where(header_lines_not_as_expected)[0] + headind
+                        ]
+                        raise OSError(
+                            "First 3 lines in file starting with the periods line "
+                            + "must be the header lines,"
+                            + " each of length 2 (after .split())! "
+                            + f"Line(s) {wronglines}"
+                            + " are not length 2"
+                        )
+
                     continue
                 if (
                     line.find("begin filament") != -1
@@ -1129,30 +1455,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     and headind != -1
                 ):
                     coilinds.append(i)
-                    names.append(" ".join(line.split()[4:]))
-        if len(lines[3 + headind].split()) != 4:
-            raise OSError(
-                "4th line in file must be the start of the first coil! "
-                + "Expected a line of length 4 (after .split()), "
-                + f"instead got length {lines[3].split()}"
-            )
-        header_lines_not_as_expected = np.array(
-            [
-                len(lines[0 + headind].split()) != 2,
-                len(lines[1 + headind].split()) != 2,
-                len(lines[2 + headind].split()) != 2,
-            ]
-        )
-        if np.any(header_lines_not_as_expected):
-            raise OSError(
-                "First 3 lines in file starting with the periods line "
-                + "must be the header lines,"
-                + " each of length 2 (after .split())! "
-                + f"Line(s) {lines[np.where(header_lines_not_as_expected)[0]+headind]}"
-                + " are not length 2"
-            )
+                    groupname = " ".join(line.split()[4:])
+                    coilnames.append(groupname)
 
-        for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
+        for i, (start, end, coilname) in enumerate(
+            zip(coilinds[0:-1], coilinds[1:], coilnames)
+        ):
             coords = np.genfromtxt(lines[start + 1 : end])
             coils.append(
                 SplineXYZCoil(
@@ -1161,11 +1469,20 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     coords[:, 1],
                     coords[:, 2],
                     method=method,
-                    name=names[i],
+                    name=coilname,
                 )
             )
 
-        return cls(*coils)
+        try:
+            return cls(*coils)
+        except ValueError as e:
+            errorif(
+                True,
+                ValueError,
+                f"Unable to create CoilSet with the coils in the file, got error {e}."
+                + "The issue is likely differing numbers of knots for the coils, "
+                "try using a MixedCoilSet instead of a CoilSet.",
+            )
 
     def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.
@@ -1230,8 +1547,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # at the end of each individual coil
         if hasattr(grid, "endpoint"):
             endpoint = grid.endpoint
-        elif isinstance(grid, numbers.Integral):
-            endpoint = False  # if int, will create a grid w/ endpoint=False in compute
+        elif isinstance(grid, numbers.Integral) or grid is None:
+            # if int or None, will create a grid w/ endpoint=False in compute
+            endpoint = False
         for i in range(int(len(coils))):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]
@@ -1284,7 +1602,85 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+    def to_FourierPlanar(
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+    ):
+        """Convert all coils to FourierPlanarCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a Fourier series for
+            minor radius r in a plane specified by a center position and normal vector.
+
+        """
+        coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
+
+    def to_FourierRZ(
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+    ):
+        """Convert all coils to FourierRZCoil representaion.
+
+        Note that some types of coils may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the coil will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a Fourier series for R,Z.
+
+        """
+        coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
+
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -1295,33 +1691,43 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
             If an integer, uses that many equally spaced points.
         s : ndarray
-            arbitrary curve parameter to use for the fitting. if None, defaults to
-            normalized arclength
+            Arbitrary curve parameter to use for the fitting. If None, defaults to
+            normalized arclength.
         name : str
-            name for the new CoilSet
+            Name for the new CoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
         coilset : CoilSet
-            New representation of the coilset parameterized by Fourier series for X,Y,Z.
+            New representation of the coil set parameterized by a Fourier series for
+            X,Y,Z.
 
         """
         coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
-        """Convert all coils to SplineXYZCoil.
+    def to_SplineXYZ(
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+    ):
+        """Convert all coils to SplineXYZCoil representation.
 
         Parameters
         ----------
         knots : ndarray
-            arbitrary curve parameter values to use for spline knots,
+            Arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
-            (input length in this case is determined by grid argument, since
-            the input coordinates come from
-            Coil.compute("x",grid=grid))
-            If None, defaults to using an equal-arclength angle as the knots
-            If supplied, will be rescaled to lie in [0,2pi]
+            (Input length in this case is determined by grid argument, since
+            the input coordinates come from Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots.
+            If supplied, will be rescaled to the range [0,2pi].
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
             If an integer, uses that many equally spaced points.
@@ -1333,7 +1739,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
-            name for the new CoilSet
+            Name for the new CoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
 
         Returns
         -------
@@ -1342,7 +1750,107 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
-        return self.__class__(*coils, name=name)
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
+
+    def is_self_intersecting(self, grid=None, tol=None):
+        """Check if any coils in the CoilSet intersect.
+
+        By default, checks intersection by checking that for each point on a given coil
+        the closest point in the coilset is on that same coil. If the closest point is
+        on another coil, that indicates that the coils may be close to intersecting.
+
+        If instead the ``tol`` argument is provided, then the function will
+        check the minimum distance from each coil to each other coil against
+        that tol and if it finds the minimum distance is less than the ``tol``,
+        it will take it as intersecting coils, returning True and raising a warning.
+
+        NOTE: If grid resolution used is too low, this function may fail to return
+        the correct answer.
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            Collocation grid containing the nodes to evaluate the coil positions at.
+            If a list, must have the same structure as the coilset. Defaults to a
+            LinearGrid(N=100)
+        tol : float, optional
+            the tolerance (in meters) to check the intersections to, if points on any
+            two coils are closer than this tolerance, then the function will return
+            True and a warning will be raised. If not passed, then the method used
+            to determine coilset intersection will be based off of checking that
+            each point on a coil is closest to a point on the same coil, which does
+            not rely on a ``tol`` parameter.
+
+        Returns
+        -------
+        is_self_intersecting : bool
+            Whether or not any coils in the CoilSet come close enough to each other to
+            possibly be intersecting.
+
+        """
+        from desc.objectives._coils import CoilSetMinDistance
+
+        grid = grid if grid else LinearGrid(N=100)
+        obj = CoilSetMinDistance(self, grid=grid)
+        obj.build(verbose=0)
+        if tol:
+            min_dists = obj.compute(self.params_dict)
+            is_nearly_intersecting = np.any(min_dists < tol)
+            warnif(
+                is_nearly_intersecting,
+                UserWarning,
+                "Found coils which are nearly intersecting according to the given tol "
+                + "(min coil-coil distance = "
+                + f"{np.min(min_dists):1.3e} m < {tol:1.3e} m)"
+                + " in the coilset, it is recommended to check coils closely.",
+            )
+            return is_nearly_intersecting
+        else:
+
+            pts = obj._constants["coilset"]._compute_position(
+                params=self.params_dict, grid=obj._constants["grid"], basis="xyz"
+            )
+            pts = np.array(pts)
+            num_nodes = pts.shape[1]
+            bad_coil_inds = []
+            # We will raise the warning if the jth point on the
+            # kth coil is closer to a point on a different coil than
+            # it is to the neighboring points on itself
+            for k in range(self.num_coils):
+                # dist[i,j,n] is the distance from the jth point on the kth coil
+                # to the nth point on the ith coil
+                dist = np.asarray(
+                    safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
+                )
+                for j in range(num_nodes):
+                    dists_for_this_pt = dist[:, j, :].copy()
+                    dists_for_this_pt[k][
+                        j
+                    ] = np.inf  # Set the dist from the pt to itself to inf to ignore
+                    ind_min = np.argmin(dists_for_this_pt)
+                    # check if the index returned corresponds to a point on the same
+                    # coil. if it does not, then this jth pt on the kth coil is closer
+                    #  to a point on another coil than it is to pts on its own coil,
+                    # which means it may be intersecting it.
+                    if ind_min not in np.arange((num_nodes) * k, (num_nodes) * (k + 1)):
+                        bad_coil_inds.append(k)
+            bad_coil_inds = set(bad_coil_inds)
+            is_nearly_intersecting = True if bad_coil_inds else False
+            warnif(
+                is_nearly_intersecting,
+                UserWarning,
+                "Found coils which are nearly intersecting according to the given grid"
+                + " it is recommended to check coils closely or run function "
+                + "again with a higher resolution grid."
+                + f" Offending coil indices are {bad_coil_inds}.",
+            )
+            return is_nearly_intersecting
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
@@ -1394,16 +1902,27 @@ class MixedCoilSet(CoilSet):
         Collection of coils.
     name : str
         Name of this CoilSet.
+    check_intersection: bool
+        Whether or not to check the coils in the coilset for intersections.
 
     """
 
-    def __init__(self, *coils, name=""):
+    _io_attrs_ = CoilSet._io_attrs_
+
+    def __init__(self, *coils, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         self._coils = list(coils)
         self._NFP = 1
         self._sym = False
         self._name = str(name)
+        if check_intersection:
+            self.is_self_intersecting()
+
+    @property
+    def num_coils(self):
+        """int: Number of coils."""
+        return sum([c.num_coils for c in self])
 
     def compute(
         self,
@@ -1455,8 +1974,42 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
+    def _compute_position(self, params=None, grid=None, **kwargs):
+        """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int or array-like, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+            If array-like, should be 1 value per coil.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
+        errorif(
+            grid is None,
+            ValueError,
+            "grid must be supplied to MixedCoilSet._compute_position, since the "
+            + "default grid for each coil could have a different number of nodes.",
+        )
+        params = self._make_arraylike(params)
+        grid = self._make_arraylike(grid)
+        x = jnp.vstack(
+            [
+                coil._compute_position(par, grd, **kwargs)
+                for coil, par, grd in zip(self.coils, params, grid)
+            ]
+        )
+        return x
+
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1473,6 +2026,8 @@ class MixedCoilSet(CoilSet):
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
             If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
 
         Returns
         -------
@@ -1482,12 +2037,145 @@ class MixedCoilSet(CoilSet):
         """
         params = self._make_arraylike(params)
         source_grid = self._make_arraylike(source_grid)
+        transforms = self._make_arraylike(transforms)
 
         B = 0
-        for coil, par, grd in zip(self.coils, params, source_grid):
-            B += coil.compute_magnetic_field(coords, par, basis, grd)
+        for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
+            B += coil.compute_magnetic_field(coords, par, basis, grd, transforms=tr)
 
         return B
+
+    def to_FourierPlanar(
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=False
+    ):
+        """Convert all coils to FourierPlanarCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierPlanarCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierPlanarCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for the new MixedCoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
+
+        Returns
+        -------
+        coilset : MixedCoilSet
+            New representation of the coilset parameterized by a Fourier series for
+            minor radius r in a plane specified by a center position and normal vector.
+
+        """
+        coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
+
+    def to_FourierRZ(
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+    ):
+        """Convert all coils to FourierRZCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCoil.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the coil will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
+        name : str
+            Name for the new MixedCoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
+
+        Returns
+        -------
+        coilset : MixedCoilSet
+            New representation of the coilset parameterized by a Fourier series for R,Z.
+
+        """
+        coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
+
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
+        """Convert all coils to FourierXYZCoil representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray
+            Arbitrary curve parameter to use for the fitting. If None, defaults to
+            normalized arclength.
+        name : str
+            Name for the new MixedCoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
+
+        Returns
+        -------
+        coilset : MixedCoilSet
+            New representation of the coil set parameterized by a Fourier series for
+            X,Y,Z.
+
+        """
+        coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
+
+    def to_SplineXYZ(
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+    ):
+        """Convert all coils to SplineXYZCoil representation.
+
+        Parameters
+        ----------
+        knots : ndarray
+            Arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (Input length in this case is determined by grid argument, since
+            the input coordinates come from Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots.
+            If supplied, will be rescaled to the range [0,2pi].
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            Name for the new MixedCoilSet.
+        check_intersection: bool
+            Whether or not to check the coils in the new coiilset for intersections.
+
+        Returns
+        -------
+        coilset : MixedCoilSet
+            New representation of the coilset parameterized by a spline for X,Y,Z.
+
+        """
+        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def __add__(self, other):
         if isinstance(other, (CoilSet, MixedCoilSet)):
@@ -1507,3 +2195,152 @@ class MixedCoilSet(CoilSet):
         if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
         self._coils.insert(i, new_item)
+
+    @classmethod
+    def from_makegrid_coilfile(  # noqa: C901 - FIXME: simplify this
+        cls, coil_file, method="cubic", ignore_groups=False
+    ):
+        """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.
+
+        If ignore_groups=False and the MAKEGRID contains more than one coil group
+        (denoted by the number listed after the current on the last line defining a
+        given coil), this function will try to return a MixedCoilSet of CoilSets, with
+        each sub CoilSet pertaining to the different coil groups. If the coils in a
+        group have differing numbers of knots, then it will return MixedCoilSets
+        instead. The name of the sub (Mixed)CoilSet will be the number and the name
+        of the group listed in the MAKEGRID file.
+
+        Parameters
+        ----------
+        coil_file : str or path-like
+            path to coil file in txt format
+        method : str
+            method of interpolation
+
+            - ``'nearest'``: nearest neighbor interpolation
+            - ``'linear'``: linear interpolation
+            - ``'cubic'``: C1 cubic splines (aka local splines)
+            - ``'cubic2'``: C2 cubic splines (aka natural splines)
+            - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+            - ``'cardinal'``: C1 cubic general tension splines. If used, default tension
+              of c = 0 will be used
+            - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in
+              the data, and will not introduce new extrema in the interpolated points
+            - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
+              both endpoints
+        ignore_groups : bool
+            If False, return the coils in a nested MixedCoilSet, with a sub coilset per
+            single coilgroup. If there is only a single group, however, this will not
+            return a nested coilset, but just a single coilset for that group. if True,
+            return the coils as just a single MixedCoilSet.
+
+        """
+        coils = {}  # dict of list of SplineXYZCoils, one list per coilgroup
+        coilinds = [2]  # List of line indices where coils are at in the file.
+        # always start at the 3rd line after periods
+        coilnames = []  # the coilgroup each coil belongs to
+        # corresponds to each coil in the coilinds list
+        groupnames = []  # this is the groupind + the name of the first coil in
+        # the group
+        groupinds = []  # the coilgroup ind each coil belongs to
+        # corresponds to each coil in the coilinds list
+        # (sometimes, coils in the same group could have different names,
+        # so this separately tracks just the number of the group)
+
+        # read in the coils file
+        headind = -1
+        with open(coil_file) as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.find("periods") != -1:
+                    headind = i  # skip anything that is above the periods line
+                    coilinds[0] += headind
+                    if len(lines[3 + headind].split()) != 4:
+                        raise OSError(
+                            "4th line in file must be the start of the first coil! "
+                            + "Expected a line of length 4 (after .split()), "
+                            + f"instead got length {lines[3+headind].split()}"
+                        )
+                    header_lines_not_as_expected = np.array(
+                        [
+                            len(lines[0 + headind].split()) != 2,
+                            len(lines[1 + headind].split()) != 2,
+                            len(lines[2 + headind].split()) != 2,
+                        ]
+                    )
+                    if np.any(header_lines_not_as_expected):
+                        wronglines = lines[
+                            np.where(header_lines_not_as_expected)[0] + headind
+                        ]
+                        raise OSError(
+                            "First 3 lines in file starting with the periods line "
+                            + "must be the header lines,"
+                            + " each of length 2 (after .split())! "
+                            + f"Line(s) {wronglines}"
+                            + " are not length 2"
+                        )
+
+                    continue
+                if (
+                    line.find("begin filament") != -1
+                    or line.find("end") != -1
+                    or line.find("mirror") != -1
+                ):
+                    continue  # skip headers and last line
+                if (
+                    len(line.split()) != 4  # find the line immediately before a coil,
+                    # where the line length is greater than 4
+                    and line.strip()  # ensure not counting blank lines
+                    # if we have not found the header yet, skip the line
+                    and headind != -1
+                ):
+                    coilinds.append(i)
+                    groupname = " ".join(line.split()[4:])
+                    groupind = int(groupname.split()[0].strip())
+                    if groupind not in coils.keys():
+                        coils[groupind] = []
+                        groupnames.append(groupname)
+                    coilnames.append(groupname)
+                    groupinds.append(groupind)
+
+        for i, (start, end, groupind, coilname) in enumerate(
+            zip(coilinds[0:-1], coilinds[1:], groupinds, coilnames)
+        ):
+            coords = np.genfromtxt(lines[start + 1 : end])
+            coils[groupind].append(
+                SplineXYZCoil(
+                    coords[:, -1][0],
+                    coords[:, 0],
+                    coords[:, 1],
+                    coords[:, 2],
+                    method=method,
+                    name=coilname,
+                )
+            )
+
+        def flatten_coils(coilset):
+            # helper function for flattening coilset
+            if hasattr(coilset, "__len__"):
+                return [a for i in coilset for a in flatten_coils(i)]
+            else:
+                return [coilset]
+
+        # if it is a single group, then only return one coilset, not a
+        # nested coilset
+        groupinds = list(coils.keys())
+        if len(groupinds) == 1:
+            return cls(*coils[groupinds[0]], name=groupnames[0])
+
+        # if not, possibly return a nested coilset, containing one coilset per coilgroup
+        coilsets = []  # list of coilsets, so we can attempt to use CoilSet for each one
+        for groupname, groupind in zip(groupnames, groupinds):
+            try:
+                # try making the coilgroup use a CoilSet
+                coilsets.append(CoilSet(*coils[groupind], name=groupname))
+            except ValueError:  # can't load as a CoilSet if any of the coils have
+                # different length of knots, so load as MixedCoilSet instead
+                coilsets.append(cls(*coils[groupind], name=groupname))
+        cset = cls(*coilsets)
+        if ignore_groups:
+            cset = cls(*flatten_coils(cset))
+        return cset

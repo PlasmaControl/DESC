@@ -376,6 +376,7 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["J*sqrt(g)", "B", "V_r(r)"],
     axis_limit_data=["(J*sqrt(g))_r", "V_rr(r)"],
+    resolution_requirement="tz",
 )
 def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
     J = transforms["grid"].replace_at_axis(
@@ -534,6 +535,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|F|", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
 )
 def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data["<|F|>_vol"] = (
@@ -564,7 +566,7 @@ def _e_sup_helical(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^helical*sqrt(g)",
-    label=" \\sqrt{g}(B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta)",
+    label="\\sqrt{g}(B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta)",
     units="T \\cdot m^{2}",
     units_long="Tesla * square meter",
     description="Helical basis vector weighted by 3-D volume Jacobian",
@@ -655,6 +657,7 @@ def _F_anisotropic(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|B|", "sqrt(g)"],
+    resolution_requirement="rtz",
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
@@ -675,6 +678,7 @@ def _W_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["B", "sqrt(g)"],
+    resolution_requirement="rtz",
 )
 def _W_Bpol(params, transforms, profiles, data, **kwargs):
     data["W_Bpol"] = jnp.sum(
@@ -697,6 +701,7 @@ def _W_Bpol(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["B", "sqrt(g)"],
+    resolution_requirement="rtz",
 )
 def _W_Btor(params, transforms, profiles, data, **kwargs):
     data["W_Btor"] = jnp.sum(
@@ -717,7 +722,8 @@ def _W_Btor(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["p", "sqrt(g)"],
-    gamma="gamma",
+    gamma="float: Adiabatic index. Default 0",
+    resolution_requirement="rtz",
 )
 def _W_p(params, transforms, profiles, data, **kwargs):
     data["W_p"] = jnp.sum(data["p"] * data["sqrt(g)"] * transforms["grid"].weights) / (

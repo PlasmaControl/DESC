@@ -1641,13 +1641,15 @@ class VMECIO:
             return C + S
 
     @classmethod
-    def compute_theta_coords(cls, lmns, xm, xn, s, theta_star, zeta, si=None):
+    def compute_theta_coords(
+        cls, lmns, xm, xn, s, theta_star, zeta, si=None, lmnc=None
+    ):
         """Find theta such that theta + lambda(theta) == theta_star.
 
         Parameters
         ----------
         lmns : array-like
-            fourier coefficients for lambda
+            sin(mt-nz) Fourier coefficients for lambda
         xm : array-like
             poloidal mode numbers
         xn : array-like
@@ -1662,6 +1664,8 @@ class VMECIO:
         si : ndarray
             values of radial coordinates where lmns are defined. Defaults to linearly
             spaced on half grid between (0,1)
+        lmnc : array-like, optional
+            cos(mt-nz) Fourier coefficients for lambda
 
         Returns
         -------
@@ -1672,15 +1676,26 @@ class VMECIO:
         if si is None:
             si = np.linspace(0, 1, lmns.shape[0])
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
-        lmbda_mn = interpolate.CubicSpline(si, lmns)
+        lmbda_mns = interpolate.CubicSpline(si, lmns)
+        if lmnc is None:
+            lmbda_mnc = lambda s: 0
+        else:
+            lmbda_mnc = interpolate.CubicSpline(si, lmnc)
 
         # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         def root_fun(theta):
             lmbda = np.sum(
-                lmbda_mn(s)
+                lmbda_mns(s)
                 * np.sin(
+                    xm[np.newaxis] * theta[:, np.newaxis]
+                    - xn[np.newaxis] * zeta[:, np.newaxis]
+                ),
+                axis=-1,
+            ) + np.sum(
+                lmbda_mnc(s)
+                * np.cos(
                     xm[np.newaxis] * theta[:, np.newaxis]
                     - xn[np.newaxis] * zeta[:, np.newaxis]
                 ),
@@ -1782,6 +1797,8 @@ class VMECIO:
         t_nodes = t_grid.nodes
         t_nodes[:, 0] = t_nodes[:, 0] ** 2
 
+        sym = "lmnc" not in vmec_data.key()
+
         v_nodes = cls.compute_theta_coords(
             vmec_data["lmns"],
             vmec_data["xm"],
@@ -1789,29 +1806,71 @@ class VMECIO:
             t_nodes[:, 0],
             t_nodes[:, 1],
             t_nodes[:, 2],
+            lmnc=vmec_data["lmnc"] if not sym else None,
         )
 
         t_nodes[:, 1] = v_nodes
+        if sym:
+            Rr_vmec, Zr_vmec = cls.vmec_interpolate(
+                vmec_data["rmnc"],
+                vmec_data["zmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=r_nodes[:, 1],
+                phi=r_nodes[:, 2],
+                s=r_nodes[:, 0],
+            )
 
-        Rr_vmec, Zr_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"],
-            vmec_data["zmns"],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            theta=r_nodes[:, 1],
-            phi=r_nodes[:, 2],
-            s=r_nodes[:, 0],
-        )
-
-        Rv_vmec, Zv_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"],
-            vmec_data["zmns"],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            theta=t_nodes[:, 1],
-            phi=t_nodes[:, 2],
-            s=t_nodes[:, 0],
-        )
+            Rv_vmec, Zv_vmec = cls.vmec_interpolate(
+                vmec_data["rmnc"],
+                vmec_data["zmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=t_nodes[:, 1],
+                phi=t_nodes[:, 2],
+                s=t_nodes[:, 0],
+            )
+        else:
+            Rr_vmec = cls.vmec_interpolate(
+                vmec_data["rmnc"],
+                vmec_data["rmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=r_nodes[:, 1],
+                phi=r_nodes[:, 2],
+                s=r_nodes[:, 0],
+                sym=False,
+            )
+            Zr_vmec = cls.vmec_interpolate(
+                vmec_data["zmnc"],
+                vmec_data["zmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=r_nodes[:, 1],
+                phi=r_nodes[:, 2],
+                s=r_nodes[:, 0],
+                sym=False,
+            )
+            Rv_vmec = cls.vmec_interpolate(
+                vmec_data["rmnc"],
+                vmec_data["rmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=t_nodes[:, 1],
+                phi=t_nodes[:, 2],
+                s=t_nodes[:, 0],
+                sym=False,
+            )
+            Zv_vmec = cls.vmec_interpolate(
+                vmec_data["zmnc"],
+                vmec_data["zmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=t_nodes[:, 1],
+                phi=t_nodes[:, 2],
+                s=t_nodes[:, 0],
+                sym=False,
+            )
 
         coords = {
             "Rr_desc": Rr_desc,

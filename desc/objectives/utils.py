@@ -9,7 +9,7 @@ from desc.backend import cond, jit, jnp, logsumexp, put
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
-def factorize_linear_constraints(objective, constraint):  # noqa: C901
+def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -22,6 +22,10 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
+    x_scale : array_like or ``'auto'``, optional
+        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+        to reformulating the problem in scaled variables ``xs = x / x_scale``.
+        If set to ``'auto'``, the scale is determined from the initial state vector.
 
     Returns
     -------
@@ -33,6 +37,8 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         Combined RHS vector.
     Z : ndarray
         Null space operator for full combined A such that A @ Z == 0.
+    D : ndarray
+        Scale of the full state vector x, as set by the parameter ``x_scale``.
     unfixed_idx : ndarray
         Indices of x that correspond to non-fixed values.
     project, recover : function
@@ -130,32 +136,53 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
             )
         A = A[unfixed_rows][:, unfixed_idx]
         b = b[unfixed_rows]
+
     unfixed_idx = indices_idx
+    fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
+
+    # compute x_scale if not provided
+    if x_scale == "auto":
+        x_scale = objective.x(*objective.things)
+    errorif(
+        x_scale.shape != xp.shape,
+        ValueError,
+        "x_scale must be the same size as the full state vector. "
+        + f"Got size {x_scale.size} for state vector of size {xp.size}.",
+    )
+    D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
+
+    # null space & particular solution
+    A = A * D[None, unfixed_idx]
     if A.size:
-        Ainv_full, Z = svd_inv_null(A)
+        A_inv, Z = svd_inv_null(A)
     else:
-        Ainv_full = A.T
+        A_inv = A.T
         Z = np.eye(A.shape[1])
-    Ainv_full = jnp.asarray(Ainv_full)
-    Z = jnp.asarray(Z)
-    b = jnp.asarray(b)
-    xp = put(xp, unfixed_idx, Ainv_full @ b)
+    xp = put(xp, unfixed_idx, A_inv @ b)
+    xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
+
+    # cast to jnp arrays
     xp = jnp.asarray(xp)
+    A = jnp.asarray(A)
+    b = jnp.asarray(b)
+    Z = jnp.asarray(Z)
+    D = jnp.asarray(D)
 
     @jit
-    def project(x):
+    def project(x_full):
         """Project a full state vector into the reduced optimization vector."""
-        x_reduced = Z.T @ ((x - xp)[unfixed_idx])
+        x_reduced = Z.T @ ((1 / D) * x_full - xp)[unfixed_idx]
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     @jit
     def recover(x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
         dx = put(jnp.zeros(objective.dim_x), unfixed_idx, Z @ x_reduced)
-        return jnp.atleast_1d(jnp.squeeze(xp + dx))
+        x_full = D * (xp + dx)
+        return jnp.atleast_1d(jnp.squeeze(x_full))
 
     # check that all constraints are actually satisfiable
-    params = objective.unpack_state(xp, False)
+    params = objective.unpack_state(D * xp, False)
     for con in constraint.objectives:
         xpi = [params[i] for i, t in enumerate(objective.things) if t in con.things]
         y1 = con.compute_unscaled(*xpi)
@@ -198,7 +225,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
                 "or be due to floating point error.",
             )
 
-    return xp, A, b, Z, unfixed_idx, project, recover
+    return xp, A, b, Z, D, unfixed_idx, project, recover
 
 
 def softmax(arr, alpha):

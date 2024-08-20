@@ -123,7 +123,7 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 Perlmutter (NERSC)
 ++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 18-06-2024
+These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 6-18-2024
 
 Set up the correct cuda environment for jax installation
 

@@ -865,7 +865,7 @@ class TestObjectiveFunction:
         test(mixed_coils)
         test(nested_coils, grid=grid)
 
-    def test_coil_type_error(self, DummyCoilSet):
+    def test_coil_type_error(self):
         """Tests error when objective is not passed a coil."""
         curve = FourierPlanarCurve(r_n=2, basis="rpz")
         obj = CoilLength(curve)

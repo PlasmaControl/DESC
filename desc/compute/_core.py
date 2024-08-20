@@ -22,9 +22,34 @@ from .data_index import register_compute_fun
         "desc.geometry.core.Surface",
         "desc.geometry.core.Curve",
     ],
+    aliases=["rho_t", "rho_z", "theta_r", "theta_z", "zeta_r", "zeta_t"],
 )
 def _0(params, transforms, profiles, data, **kwargs):
     data["0"] = jnp.zeros(transforms["grid"].num_nodes)
+    return data
+
+
+@register_compute_fun(
+    name="1",
+    label="1",
+    units="~",
+    units_long="None",
+    description="Ones",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+        "desc.geometry.core.Curve",
+    ],
+    aliases=["rho_r", "theta_t", "zeta_z"],
+)
+def _1(params, transforms, profiles, data, **kwargs):
+    data["1"] = jnp.ones(transforms["grid"].num_nodes)
     return data
 
 
@@ -1475,10 +1500,10 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta_PEST", "zeta", "iota"],
+    data=["theta_PEST", "phi", "iota"],
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
-    data["alpha"] = (data["theta_PEST"] - data["iota"] * data["zeta"]) % (2 * jnp.pi)
+    data["alpha"] = (data["theta_PEST"] - data["iota"] * data["phi"]) % (2 * jnp.pi)
     return data
 
 
@@ -1518,7 +1543,43 @@ def _alpha_r(params, transforms, profiles, data, **kwargs):
     data=["theta_PEST_t", "phi_t", "iota"],
 )
 def _alpha_t(params, transforms, profiles, data, **kwargs):
-    data["alpha_t"] = data["theta_PEST_t"] + data["iota"] * data["phi_t"]
+    data["alpha_t"] = data["theta_PEST_t"] - data["iota"] * data["phi_t"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_tt",
+    label="\\partial_{\\theta \\theta} \\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label, second derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_PEST_tt", "phi_tt", "iota"],
+)
+def _alpha_tt(params, transforms, profiles, data, **kwargs):
+    data["alpha_tt"] = data["theta_PEST_tt"] - data["iota"] * data["phi_tt"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_tz",
+    label="\\partial_{\\theta \\zeta} \\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt poloidal and toroidal coordinates",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_PEST_tz", "phi_tz", "iota"],
+)
+def _alpha_tz(params, transforms, profiles, data, **kwargs):
+    data["alpha_tz"] = data["theta_PEST_tz"] - data["iota"] * data["phi_tz"]
     return data
 
 
@@ -1537,6 +1598,24 @@ def _alpha_t(params, transforms, profiles, data, **kwargs):
 )
 def _alpha_z(params, transforms, profiles, data, **kwargs):
     data["alpha_z"] = data["theta_PEST_z"] - data["iota"] * data["phi_z"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_zz",
+    label="\\partial_{\\zeta \\zeta} \\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label, second derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_PEST_zz", "phi_zz", "iota"],
+)
+def _alpha_zz(params, transforms, profiles, data, **kwargs):
+    data["alpha_zz"] = data["theta_PEST_zz"] - data["iota"] * data["phi_zz"]
     return data
 
 
@@ -2657,6 +2736,10 @@ def _phi(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_r"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_r(params, transforms, profiles, data, **kwargs):
     data["phi_r"] = data["omega_r"]
@@ -2731,6 +2814,10 @@ def _phi_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_t"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_t(params, transforms, profiles, data, **kwargs):
     data["phi_t"] = data["omega_t"]
@@ -2787,6 +2874,10 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_z"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_z(params, transforms, profiles, data, **kwargs):
     data["phi_z"] = 1 + data["omega_z"]
@@ -2833,75 +2924,6 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
 )
 def _rho(params, transforms, profiles, data, **kwargs):
     data["rho"] = transforms["grid"].nodes[:, 0]
-    return data
-
-
-@register_compute_fun(
-    name="rho_r",
-    label="\\partial_{\\rho} \\rho",
-    units="~",
-    units_long="None",
-    description="Radial coordinate, proportional to the square root "
-    + "of the toroidal flux, derivative wrt radial coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="r",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _rho_r(params, transforms, profiles, data, **kwargs):
-    data["rho_r"] = jnp.ones_like(data["0"])
-    return data
-
-
-@register_compute_fun(
-    name="rho_t",
-    label="\\partial_{\\theta} \\rho",
-    units="~",
-    units_long="None",
-    description="Radial coordinate, proportional to the square root "
-    "of the toroidal flux, derivative wrt poloidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="r",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _rho_t(params, transforms, profiles, data, **kwargs):
-    data["rho_t"] = data["0"]
-    return data
-
-
-@register_compute_fun(
-    name="rho_z",
-    label="\\partial_{\\zeta} \\rho",
-    units="~",
-    units_long="None",
-    description="Radial coordinate, proportional to the square root "
-    "of the toroidal flux, derivative wrt toroidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="r",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _rho_z(params, transforms, profiles, data, **kwargs):
-    data["rho_z"] = data["0"]
     return data
 
 
@@ -2984,6 +3006,44 @@ def _theta_PEST_t(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="theta_PEST_tt",
+    label="\\partial_{\\theta \\theta} \\vartheta",
+    units="rad",
+    units_long="radians",
+    description="PEST straight field line poloidal angular coordinate, second "
+    "derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda_tt"],
+)
+def _theta_PEST_tt(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST_tt"] = data["lambda_tt"]
+    return data
+
+
+@register_compute_fun(
+    name="theta_PEST_tz",
+    label="\\partial_{\\theta \\zeta} \\vartheta",
+    units="rad",
+    units_long="radians",
+    description="PEST straight field line poloidal angular coordinate, derivative wrt "
+    "poloidal and toroidal coordinates",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda_tz"],
+)
+def _theta_PEST_tz(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST_tz"] = data["lambda_tz"]
+    return data
+
+
+@register_compute_fun(
     name="theta_PEST_z",
     label="\\partial_{\\zeta} \\vartheta",
     units="rad",
@@ -3003,71 +3063,21 @@ def _theta_PEST_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="theta_r",
-    label="\\partial_{\\rho} \\theta",
+    name="theta_PEST_zz",
+    label="\\partial_{\\zeta \\zeta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="Poloidal angular coordinate (geometric, not magnetic), "
-    "derivative wrt radial coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="t",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _theta_r(params, transforms, profiles, data, **kwargs):
-    data["theta_r"] = data["0"]
-    return data
-
-
-@register_compute_fun(
-    name="theta_t",
-    label="\\partial_{\\theta} \\theta",
-    units="rad",
-    units_long="radians",
-    description="Poloidal angular coordinate (geometric, not magnetic), "
-    "derivative wrt poloidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="t",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _theta_t(params, transforms, profiles, data, **kwargs):
-    data["theta_t"] = jnp.ones_like(data["0"])
-    return data
-
-
-@register_compute_fun(
-    name="theta_z",
-    label="\\partial_{\\zeta} \\theta",
-    units="rad",
-    units_long="radians",
-    description="Poloidal angular coordinate (geometric, not magnetic), "
+    description="PEST straight field line poloidal angular coordinate, second "
     "derivative wrt toroidal coordinate",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
-    coordinates="t",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
+    coordinates="rtz",
+    data=["lambda_zz"],
 )
-def _theta_z(params, transforms, profiles, data, **kwargs):
-    data["theta_z"] = data["0"]
+def _theta_PEST_zz(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST_zz"] = data["lambda_zz"]
     return data
 
 
@@ -3090,70 +3100,4 @@ def _theta_z(params, transforms, profiles, data, **kwargs):
 )
 def _zeta(params, transforms, profiles, data, **kwargs):
     data["zeta"] = transforms["grid"].nodes[:, 2]
-    return data
-
-
-@register_compute_fun(
-    name="zeta_r",
-    label="\\partial_{\\rho} \\zeta",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angular coordinate derivative, wrt radial coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="z",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _zeta_r(params, transforms, profiles, data, **kwargs):
-    data["zeta_r"] = data["0"]
-    return data
-
-
-@register_compute_fun(
-    name="zeta_t",
-    label="\\partial_{\\theta} \\zeta",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angular coordinate, derivative wrt poloidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="z",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _zeta_t(params, transforms, profiles, data, **kwargs):
-    data["zeta_t"] = data["0"]
-    return data
-
-
-@register_compute_fun(
-    name="zeta_z",
-    label="\\partial_{\\zeta} \\zeta",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angular coordinate, derivative wrt toroidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="z",
-    data=["0"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _zeta_z(params, transforms, profiles, data, **kwargs):
-    data["zeta_z"] = jnp.ones_like(data["0"])
     return data

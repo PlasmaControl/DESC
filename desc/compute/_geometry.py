@@ -27,6 +27,7 @@ from .utils import cross, dot, line_integrals, safenorm, surface_integrals
     profiles=[],
     coordinates="",
     data=["sqrt(g)"],
+    resolution_requirement="rtz",
 )
 def _V(params, transforms, profiles, data, **kwargs):
     data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
@@ -46,6 +47,7 @@ def _V(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["e_theta", "e_zeta", "x"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    resolution_requirement="tz",
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
@@ -73,6 +75,7 @@ def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["e_theta", "e_zeta", "Z"],
+    resolution_requirement="tz",
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
@@ -97,6 +100,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)"],
+    resolution_requirement="tz",
 )
 def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
@@ -117,6 +121,7 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)_r"],
+    resolution_requirement="tz",
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     # The sign of sqrt(g) is enforced to be non-negative.
@@ -137,6 +142,7 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)_rr"],
+    resolution_requirement="tz",
 )
 def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     # The sign of sqrt(g) is enforced to be non-negative.
@@ -160,6 +166,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+    resolution_requirement="rt",
 )
 def _A_of_z(params, transforms, profiles, data, **kwargs):
     data["A(z)"] = surface_integrals(
@@ -185,6 +192,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     coordinates="z",
     data=["Z", "n_rho", "e_theta|r,p", "rho"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    resolution_requirement="rt",  # just need max(rho) near 1
     # FIXME: Add source grid requirement once omega is nonzero.
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -235,6 +243,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
+    resolution_requirement="z",
 )
 def _A(params, transforms, profiles, data, **kwargs):
     data["A"] = jnp.mean(
@@ -277,13 +286,12 @@ def _A_of_r(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
+    resolution_requirement="tz",
 )
 def _S(params, transforms, profiles, data, **kwargs):
     data["S"] = jnp.max(
         surface_integrals(
-            transforms["grid"],
-            data["|e_theta x e_zeta|"],
-            expand_out=False,
+            transforms["grid"], data["|e_theta x e_zeta|"], expand_out=False
         )
     )
     return data
@@ -301,6 +309,7 @@ def _S(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|"],
+    resolution_requirement="tz",
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
     data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
@@ -319,6 +328,7 @@ def _S_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|_r"],
+    resolution_requirement="tz",
 )
 def _S_r_of_r(params, transforms, profiles, data, **kwargs):
     data["S_r(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|_r"])
@@ -338,6 +348,7 @@ def _S_r_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|_rr"],
+    resolution_requirement="tz",
 )
 def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
     data["S_rr(r)"] = surface_integrals(
@@ -429,6 +440,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
+    resolution_requirement="rt",  # just need max(rho) near 1
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     max_rho = jnp.max(data["rho"])
@@ -613,32 +625,14 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["g_tt", "g_tz", "g_zz", "L_sff_rho", "M_sff_rho", "N_sff_rho"],
+    data=["curvature_k1_rho"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
 )
 def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
-    # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface
-    E = data["g_tt"]
-    F = data["g_tz"]
-    G = data["g_zz"]
-    L = data["L_sff_rho"]
-    M = data["M_sff_rho"]
-    N = data["N_sff_rho"]
-    a = E * G - F**2
-    b = 2 * F * M - L * G - E * N
-    c = L * N - M**2
-    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # In the axis limit, the matrix of the first fundamental form is singular.
-    # The diagonal of the shape operator becomes unbounded,
-    # so the eigenvalues do not exist.
-    data["curvature_k1_rho"] = jnp.maximum(r1, r2)
-    data["curvature_k2_rho"] = jnp.minimum(r1, r2)
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -792,25 +786,10 @@ def _curvature_k1_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["g_rr", "g_rz", "g_zz", "L_sff_theta", "M_sff_theta", "N_sff_theta"],
+    data=["curvature_k1_theta"],
 )
 def _curvature_k2_theta(params, transforms, profiles, data, **kwargs):
-    # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface
-    E = data["g_zz"]
-    F = data["g_rz"]
-    G = data["g_rr"]
-    L = data["L_sff_theta"]
-    M = data["M_sff_theta"]
-    N = data["N_sff_theta"]
-    a = E * G - F**2
-    b = 2 * F * M - L * G - E * N
-    c = L * N - M**2
-    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    data["curvature_k1_theta"] = jnp.maximum(r1, r2)
-    data["curvature_k2_theta"] = jnp.minimum(r1, r2)
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -977,32 +956,14 @@ def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["g_rr", "g_rt", "g_tt", "L_sff_zeta", "M_sff_zeta", "N_sff_zeta"],
+    data=["curvature_k1_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
-    # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface
-    E = data["g_rr"]
-    F = data["g_rt"]
-    G = data["g_tt"]
-    L = data["L_sff_zeta"]
-    M = data["M_sff_zeta"]
-    N = data["N_sff_zeta"]
-    a = E * G - F**2
-    b = 2 * F * M - L * G - E * N
-    c = L * N - M**2
-    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # In the axis limit, the matrix of the first fundamental form is singular.
-    # The diagonal of the shape operator becomes unbounded,
-    # so the eigenvalues do not exist.
-    data["curvature_k1_zeta"] = jnp.maximum(r1, r2)
-    data["curvature_k2_zeta"] = jnp.minimum(r1, r2)
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

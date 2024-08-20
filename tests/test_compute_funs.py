@@ -1,30 +1,16 @@
 """Tests for compute functions."""
 
-import copy
-import pickle
-
 import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
-from desc.compute import data_index, rpz2xyz_vec
+from desc.compute import rpz2xyz_vec
+from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import (
-    FourierPlanarCurve,
-    FourierRZCurve,
-    FourierRZToroidalSurface,
-    FourierXYZCurve,
-    ZernikeRZToroidalSection,
-)
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import (
-    CurrentPotentialField,
-    FourierCurrentPotentialField,
-    OmnigenousField,
-)
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1050,8 +1036,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_rho = 110
     grid = LinearGrid(NFP=eq.NFP, rho=num_rho)
     drho = grid.nodes[1, 0]
-    data = eq.compute(["|B|", "grad(|B|^2)_rho"], grid=grid)
-    B2_r = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / drho
+    data = eq.compute(["|B|^2", "grad(|B|^2)_rho"], grid=grid)
+    B2_r = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / drho
     np.testing.assert_allclose(
         data["grad(|B|^2)_rho"][3:-2],
         B2_r[3:-2],
@@ -1063,8 +1049,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_theta = 90
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
-    data = eq.compute(["|B|", "grad(|B|^2)_theta"], grid=grid)
-    B2_t = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dtheta
+    data = eq.compute(["|B|^2", "grad(|B|^2)_theta"], grid=grid)
+    B2_t = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / dtheta
     np.testing.assert_allclose(
         data["grad(|B|^2)_theta"][2:-2],
         B2_t[2:-2],
@@ -1076,8 +1062,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_zeta = 90
     grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
-    data = eq.compute(["|B|", "grad(|B|^2)_zeta"], grid=grid)
-    B2_z = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dzeta
+    data = eq.compute(["|B|^2", "grad(|B|^2)_zeta"], grid=grid)
+    B2_z = np.convolve(data["|B|^2"], FD_COEF_1_4, "same") / dzeta
     np.testing.assert_allclose(
         data["grad(|B|^2)_zeta"][2:-2],
         B2_z[2:-2],
@@ -1146,202 +1132,6 @@ def test_boozer_transform():
         rtol=1e-3,
         atol=1e-4,
     )
-
-
-@pytest.mark.unit
-def test_compute_everything():
-    """Test that the computations on this branch agree with those on master.
-
-    Also make sure we can compute everything without errors. Computed quantities
-    are both in "rpz" and "xyz" basis.
-    """
-    elliptic_cross_section_with_torsion = {
-        "R_lmn": [10, 1, 0.2],
-        "Z_lmn": [-2, -0.2],
-        "modes_R": [[0, 0], [1, 0], [0, 1]],
-        "modes_Z": [[-1, 0], [0, -1]],
-    }
-    things = {
-        # equilibria
-        "desc.equilibrium.equilibrium.Equilibrium": get("W7-X"),
-        # curves
-        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ),
-        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(
-            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
-        ),
-        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
-            center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
-        ),
-        "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ).to_SplineXYZ(grid=LinearGrid(N=50)),
-        # surfaces
-        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
-            **elliptic_cross_section_with_torsion
-        ),
-        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
-            **elliptic_cross_section_with_torsion
-        ),
-        # magnetic fields
-        "desc.magnetic_fields._current_potential.CurrentPotentialField": CurrentPotentialField(  # noqa:E501
-            **elliptic_cross_section_with_torsion,
-            potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
-            potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
-            potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
-            params={"G": 1e7},
-        ),
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": (
-            FourierCurrentPotentialField(
-                **elliptic_cross_section_with_torsion, I=0, G=1e7
-            )
-        ),
-        "desc.magnetic_fields._core.OmnigenousField": OmnigenousField(
-            L_B=0,
-            M_B=4,
-            L_x=0,
-            M_x=1,
-            N_x=1,
-            NFP=2,
-            helicity=(0, 2),
-            B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
-            x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
-        ),
-        # coils
-        "desc.coils.FourierRZCoil": FourierRZCoil(
-            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
-        ),
-        "desc.coils.FourierXYZCoil": FourierXYZCoil(
-            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ),
-        "desc.coils.FourierPlanarCoil": FourierPlanarCoil(
-            current=5,
-            center=[10, 1, 3],
-            normal=[1, 2, 3],
-            r_n=[1, 2, 3],
-            modes=[0, 1, 2],
-        ),
-        "desc.coils.SplineXYZCoil": SplineXYZCoil(
-            current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
-        ),
-    }
-    assert things.keys() == data_index.keys(), (
-        f"Missing the parameterization {data_index.keys() - things.keys()}"
-        f" to test against master."
-    )
-    # use this low resolution grid for equilibria to reduce file size
-    eqgrid = LinearGrid(
-        L=9,
-        M=5,
-        N=5,
-        NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
-        sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
-        axis=True,
-    )
-    curvegrid1 = LinearGrid(N=10)
-    curvegrid2 = LinearGrid(N=10, NFP=2)
-    fieldgrid = LinearGrid(
-        L=2,
-        M=4,
-        N=5,
-        NFP=things["desc.magnetic_fields._core.OmnigenousField"].NFP,
-        sym=False,
-        axis=True,
-    )
-    grid = {
-        "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
-        "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
-        "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
-        "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
-        "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
-        "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
-    }
-
-    with open("tests/inputs/master_compute_data.pkl", "rb") as file:
-        master_data_rpz = pickle.load(file)
-    with open("tests/inputs/master_compute_data_xyz.pkl", "rb") as file:
-        master_data_xyz = pickle.load(file)
-    this_branch_data_rpz = {}
-    this_branch_data_xyz = {}
-    update_master_data_rpz = False
-    update_master_data_xyz = False
-    error_rpz = False
-    error_xyz = False
-
-    # some things can't compute "phi" and therefore can't convert to XYZ basis
-    no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
-
-    for p in things:
-        # test compute in RPZ basis
-        this_branch_data_rpz[p] = things[p].compute(
-            list(data_index[p].keys()), **grid.get(p, {}), basis="rpz"
-        )
-        # make sure we can compute everything
-        assert this_branch_data_rpz[p].keys() == data_index[p].keys(), (
-            f"Parameterization: {p}. Can't compute "
-            + f"{data_index[p].keys() - this_branch_data_rpz[p].keys()}."
-        )
-        # compare data against master branch
-        for name in this_branch_data_rpz[p]:
-            if p in master_data_rpz and name in master_data_rpz[p]:
-                try:
-                    np.testing.assert_allclose(
-                        actual=this_branch_data_rpz[p][name],
-                        desired=master_data_rpz[p][name],
-                        atol=1e-10,
-                        rtol=1e-10,
-                        err_msg=f"Parameterization: {p}. Name: {name}.",
-                    )
-                except AssertionError as e:
-                    error_rpz = True
-                    print(e)
-            else:  # update master data with new compute quantity
-                update_master_data_rpz = True
-
-        # test compute in XYZ basis
-        if p not in no_xyz_things:
-            # remove quantities that are not implemented in the XYZ basis
-            # TODO: generalize this instead of hard-coding for "grad(B)" & dependencies
-            data_index_xyz = copy.deepcopy(data_index)
-            if "grad(B)" in list(data_index[p].keys()):
-                del data_index_xyz[p]["grad(B)"]
-                del data_index_xyz[p]["|grad(B)|"]
-                del data_index_xyz[p]["L_grad(B)"]
-            this_branch_data_xyz[p] = things[p].compute(
-                list(data_index_xyz[p].keys()), **grid.get(p, {}), basis="xyz"
-            )
-            assert this_branch_data_xyz[p].keys() == data_index_xyz[p].keys(), (
-                f"Parameterization: {p}. Can't compute "
-                + f"{data_index_xyz[p].keys() - this_branch_data_xyz[p].keys()}."
-            )
-            # compare data against master branch
-            for name in this_branch_data_xyz[p]:
-                if p in master_data_xyz and name in master_data_xyz[p]:
-                    try:
-                        np.testing.assert_allclose(
-                            actual=this_branch_data_xyz[p][name],
-                            desired=master_data_xyz[p][name],
-                            atol=1e-10,
-                            rtol=1e-10,
-                            err_msg=f"Parameterization: {p}. Name: {name}.",
-                        )
-                    except AssertionError as e:
-                        error_xyz = True
-                        print(e)
-                else:  # update master data with new compute quantity
-                    update_master_data_xyz = True
-
-    if not error_rpz and update_master_data_rpz:
-        # then update the master compute data
-        with open("tests/inputs/master_compute_data.pkl", "wb") as file:
-            # remember to git commit this file
-            pickle.dump(this_branch_data_rpz, file)
-    if not error_xyz and update_master_data_xyz:
-        with open("tests/inputs/master_compute_data_xyz.pkl", "wb") as file:
-            pickle.dump(this_branch_data_xyz, file)
-    assert not error_rpz
-    assert not error_xyz
 
 
 @pytest.mark.unit
@@ -1729,3 +1519,35 @@ def test_surface_equilibrium_geometry():
                 rtol=3e-13,
                 atol=1e-13,
             )
+
+
+@pytest.mark.unit
+def test_parallel_grad():
+    """Test geometric and physical methods of computing parallel gradients agree."""
+    eq = get("W7-X")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 2, 4, 4, 4)
+    data = eq.compute(
+        [
+            "e_zeta|r,a",
+            "B",
+            "B^zeta",
+            "|B|_z|r,a",
+            "grad(|B|)",
+            "|e_zeta|r,a|_z|r,a",
+            "B^zeta_z|r,a",
+            "|B|",
+        ],
+    )
+    np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+    np.testing.assert_allclose(
+        data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+    )
+    np.testing.assert_allclose(
+        data["|e_zeta|r,a|_z|r,a"],
+        data["|B|_z|r,a"] / np.abs(data["B^zeta"])
+        - data["|B|"]
+        * data["B^zeta_z|r,a"]
+        * np.sign(data["B^zeta"])
+        / data["B^zeta"] ** 2,
+    )

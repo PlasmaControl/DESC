@@ -27,6 +27,7 @@ The full code is below:
         coordinates="rtz",
         data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
         axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
+        resolution_requirement="",
         parameterization="desc.equilibrium.equilibrium.Equilibrium",
     )
     def _J_sup_rho(params, transforms, profiles, data, **kwargs):
@@ -96,6 +97,12 @@ metadata about the quantity. The necessary fields are detailed below:
   the quantities mentioned above to evaluate the magnetic axis limit. These dependencies
   are specified in ``axis_limit_data``. The dependencies specified in this list are
   marked to be computed only when there is a node at the magnetic axis.
+* ``resolution_requirement``: Resolution requirements in coordinates.
+  I.e. "r" expects radial resolution in the grid. Likewise, "rtz" is shorthand for
+  "rho, theta, zeta" and indicates the computation expects a grid with radial,
+  poloidal, and toroidal resolution. If the computation simply performs
+  pointwise operations, instead of a reduction (such as integration) over a
+  coordinate, then an empty string may be used to indicate no requirements.
 * ``parameterization``: what sorts of DESC objects is this function for. Most functions
   will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.core.Curve``,
   or specific types eg ``desc.geometry.curve.FourierRZCurve``. If a quantity is computed differently
@@ -148,8 +155,8 @@ if ``False`` is printed, then the limit of the quantity does not evaluate as fin
   The tests automatically detect this, so no further action is needed from developers in this case.
 
 
-The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_funs.py`` file.
-This can be done with the command :console:`pytest -k test_compute_everything tests/test_compute_funs.py`.
+The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_everything.py`` file.
+This can be done with the command :console:`pytest tests/test_compute_everything.py`.
 This test is a regression test to ensure that compute quantities in each new update of DESC do not differ significantly
 from previous versions of DESC.
 Since the new quantity did not exist in previous versions of DESC, one must run this test

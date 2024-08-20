@@ -1314,16 +1314,22 @@ def test_second_stage_optimization_CoilSet():
 
 @pytest.mark.slow
 @pytest.mark.unit
-def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
+@pytest.mark.parametrize(
+    "coil,optimizer,path",
+    [
+        (FourierPlanarCoil(), "fmintr", ""),
+        (FourierRZCoil(), "fmintr", ""),
+        (FourierXYZCoil(), "fmintr", ""),
+        ("DummyCoilSet", "lsq-exact", "output_path_sym"),
+        ("DummyCoilSet", "lsq-exact", "output_path_asym"),
+        ("DummyMixedCoilSet", "lsq-exact", "output_path"),
+    ],
+)
+def test_optimize_with_all_coil_types(coil, optimizer, path, request):
     """Test optimizing for every type of coil and dummy coil sets."""
-    sym_coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
-    asym_coils = load(
-        load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
-    )
-    mixed_coils = load(
-        load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
-    )
-    nested_coils = MixedCoilSet(sym_coils, mixed_coils, check_intersection=False)
+    if isinstance(coil, str):
+        coil = load(load_from=request.getfixturevalue(coil)[path], file_format="hdf5")
+
     eq = Equilibrium()
     # not attempting to accurately calc B for this test,
     # so make the grids very coarse
@@ -1349,9 +1355,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
         (c,), _ = optimizer.optimize(c, obj, maxiter=2, ftol=0, xtol=1e-15)
 
         # now check with optimizing geometry and actually check result
-        objs = [
-            CoilLength(c, target=target),
-        ]
+        objs = [CoilLength(c, target=target)]
         extra_msg = ""
         if isinstance(c, MixedCoilSet):
             # just to check they work without error
@@ -1375,21 +1379,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
             lengths, target, rtol=rtol, err_msg=f"lengths {c}" + extra_msg
         )
 
-    spline_coil = mixed_coils.coils[-1].copy()
-
-    # single coil
-    test(FourierPlanarCoil(), "fmintr")
-    test(FourierRZCoil(), "fmintr")
-    test(FourierXYZCoil(), "fmintr")
-    test(spline_coil, "fmintr")
-
-    # CoilSet
-    test(sym_coils, "lsq-exact")
-    test(asym_coils, "lsq-exact")
-
-    # MixedCoilSet
-    test(mixed_coils, "lsq-exact")
-    test(nested_coils, "lsq-exact")
+    test(coil, optimizer)
 
 
 @pytest.mark.unit

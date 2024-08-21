@@ -1,6 +1,8 @@
 """Surface integrals of non-singular functions.
 
-The API is subject to change.
+Please see the documentation below, in particular the surface integrals
+section, if you would like tutorial and example use of these functions.
+https://desc-docs.readthedocs.io/en/latest/notebooks/dev_guide/grid.html
 """
 
 from desc.backend import cond, fori_loop, jnp, put

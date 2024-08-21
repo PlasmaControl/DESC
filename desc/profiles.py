@@ -799,11 +799,11 @@ class SplineProfile(_Profile):
     Parameters
     ----------
     values: array-like
-        1-D Array containing values of the dependent variable.
+        1-D array containing values of the dependent variable.
     knots : array-like
         1-D array containing values of the independent variable.
         Must be real, finite, and in strictly increasing order in [0, 1].
-        If not given, assumes ``values`` is uniformly spaced in [0, 1].
+        If ``None``, assumes ``values`` is given on knots uniformly spaced in [0, 1].
     method : str
         Method of interpolation. Default is cubic2.
         - `'nearest'`: nearest neighbor interpolation
@@ -865,10 +865,10 @@ class SplineProfile(_Profile):
         Parameters
         ----------
         grid : Grid
-            locations to compute values at.
+            Locations to compute values at.
         params : array-like
-            spline values to use. If not given, uses the
-            values given by the params attribute
+            Values of the function at ``self.knots``.
+            If not given, uses ``self.params``.
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 
@@ -897,13 +897,14 @@ class HermiteSplineProfile(_Profile):
     Parameters
     ----------
     f: array-like
-        1-D Array containing values of the dependent variable.
+        1-D array containing values of the dependent variable.
     df: array-like
-        1-D Array containing derivatives of the dependent variable.
+        1-D array containing derivatives of the dependent variable.
     knots : array-like
         1-D array containing values of the independent variable.
         Must be real, finite, and in strictly increasing order in [0, 1].
-        If not given, assumes ``values`` is uniformly spaced in [0, 1].
+        If ``None``, assumes ``f`` and ``df`` are given on knots uniformly
+        spaced in [0, 1].
     name : str
         Optional name of the profile.
 
@@ -959,10 +960,10 @@ class HermiteSplineProfile(_Profile):
         Parameters
         ----------
         grid : Grid
-            locations to compute values at.
+            Locations to compute values at.
         params : array-like
             First (second) half stores function (derivative) values at ``knots``.
-            Defaults to ``self.params``.
+            If not given, uses ``self.params``.
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 

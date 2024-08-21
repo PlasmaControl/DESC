@@ -35,13 +35,31 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.combos.python_version }}
+
+      - name: Restore Python environment cache
+        id: restore-env
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv-${{ matrix.combos.python_version }}
+          key: ${{ runner.os }}-venv-${{ matrix.combos.python_version }}-${{ hashFiles('devtools/dev-requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-venv-${{ matrix.combos.python_version }}-
+
+      - name: Check if virtual environment exists
+        if: steps.restore-env.outputs.cache-hit != 'true'
+        run: |
+            echo "Error: Virtual environment .venv-${{ matrix.combos.python_version }} not found!"
+            exit 1
+
       - name: Activate virtual environment
         run: |
           source .venv-${{ matrix.combos.python_version }}/bin/activate
+
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@master
         with:
           swap-size-gb: 10
+
       - name: Test with pytest
         run: |
           pwd
@@ -58,6 +76,7 @@ jobs:
             --group ${{ matrix.combos.group }} \
             --splitting-algorithm least_duration \
             --db ./prof.db
+
       - name: save coverage file and plot comparison results
         if: always()
         uses: actions/upload-artifact@v4
@@ -67,6 +86,7 @@ jobs:
             ./cov.xml
             ./mpl_results.html
             ./prof.db
+
       - name: Upload coverage
         id : codecov
         uses: Wandalen/wretry.action@v1.3.0

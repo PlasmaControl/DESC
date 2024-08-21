@@ -29,6 +29,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Restore Python environment cache
         id: restore-env
         uses: actions/cache/restore@v4
@@ -52,6 +53,7 @@ jobs:
         uses: pierotofy/set-swap-space@master
         with:
           swap-size-gb: 10
+
       - name: Test with pytest
         run: |
           source .venv-${{ matrix.python-version }}/bin/activate
@@ -69,6 +71,7 @@ jobs:
             --group ${{ matrix.group }} \
             --splitting-algorithm least_duration \
             --db ./prof.db
+
       - name: save coverage file and plot comparison results
         if: always()
         uses: actions/upload-artifact@v4
@@ -78,6 +81,7 @@ jobs:
             ./cov.xml
             ./mpl_results.html
             ./prof.db
+
       - name: Upload coverage
         id : codecov
         uses: Wandalen/wretry.action@v1.3.0

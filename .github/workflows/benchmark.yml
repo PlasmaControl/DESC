@@ -31,14 +31,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+
       - name: Set up Python 3.9
         uses: actions/setup-python@v5
         with:
           python-version: 3.9
-      - name: Install dependencies
+
+      - name: Restore Python environment cache
+        id: restore-env
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv-3.9
+          key: ${{ runner.os }}-venv-3.9-${{ hashFiles('devtools/dev-requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-venv-3.9-
+
+      - name: Check if virtual environment exists
+        if: steps.restore-env.outputs.cache-hit != 'true'
         run: |
-          python -m pip install --upgrade pip
-          pip install -r devtools/dev-requirements.txt
+            echo "Error: Virtual environment .venv-3.9 not found!"
+            exit 1
+
+      - name: Activate virtual environment
+        run: |
+          source .venv-3.9/bin/activate
+
       - name: Benchmark with pytest-benchmark
         run: |
           pwd
@@ -48,11 +65,13 @@ jobs:
             --benchmark-save='Latest_Commit' \
             --durations=0 \
             --benchmark-save-data
+
       - name: Checkout current master
         uses: actions/checkout@v4
         with:
           ref: master
           clean: false
+
       - name: Checkout benchmarks from PR head
         run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
       - name: Benchmark with pytest-benchmark
@@ -64,6 +83,7 @@ jobs:
             --benchmark-save='master' \
             --durations=0 \
             --benchmark-save-data
+
       - name: put benchmark results in same folder
         run: |
           pwd
@@ -75,12 +95,14 @@ jobs:
           mkdir compare_results
           cp $t1 compare_results
           cp $t2 compare_results
+
       - name: Compare latest commit results to the master branch results
         run: |
           pwd
           cd tests/benchmarks
           python compare_bench_results.py
           cat commit_msg.txt
+
       - name: comment PR with the results
         uses: thollander/actions-comment-pull-request@v2
         env:
@@ -88,6 +110,7 @@ jobs:
         with:
           filePath: tests/benchmarks/commit_msg.txt
           comment_tag: benchmark
+
       - name: Upload benchmark data
         if: always()
         uses: actions/upload-artifact@v4

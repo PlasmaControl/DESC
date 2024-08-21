@@ -2,6 +2,13 @@ name: Cache Python and pip dependencies
 # This workflow is triggered every Sunday at midnight and updates the Python and pip dependencies cache
 
 on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master    # TODO: comment this lines later
   schedule:
     - cron: '0 0 * * 0'  # This triggers the workflow every Sunday at midnight
   workflow_dispatch:

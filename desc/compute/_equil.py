@@ -13,8 +13,9 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
+from ..integrals.surface_integral import surface_averages
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm, surface_averages
+from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(

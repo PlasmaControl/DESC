@@ -12,10 +12,10 @@ from scipy.constants import mu_0
 
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
-from desc.compute.utils import surface_averages
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
+from desc.integrals.surface_integral import surface_averages
 from desc.objectives import (
     ObjectiveFunction,
     get_fixed_axis_constraints,

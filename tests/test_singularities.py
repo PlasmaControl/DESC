@@ -25,7 +25,7 @@ import pytest
 import desc
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
-from desc.singularities import (
+from desc.integrals.singularities import (
     DFTInterpolator,
     FFTInterpolator,
     _get_quadrature_nodes,

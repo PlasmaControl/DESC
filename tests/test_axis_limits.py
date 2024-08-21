@@ -12,10 +12,11 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import _grow_seeds, dot, surface_integrals_map
+from desc.compute.utils import _grow_seeds, dot
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
+from desc.integrals.surface_integral import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
 
 # Unless mentioned in the source code of the compute function, the assumptions

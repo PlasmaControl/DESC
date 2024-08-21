@@ -23,7 +23,11 @@ jobs:
         combos: [{group: 1, python_version: '3.9'},
                  {group: 2, python_version: '3.10'},
                  {group: 3, python_version: '3.11'},
-                 {group: 4, python_version: '3.12'}]
+                 {group: 4, python_version: '3.12'},
+                 {group: 5, python_version: '3.12'},
+                 {group: 6, python_version: '3.12'},
+                 {group: 7, python_version: '3.12'},
+                 {group: 8, python_version: '3.12'}]
 
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +48,7 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest -v -n auto -m unit \
+          python -m pytest -v -m unit \
             --durations=0 \
             --cov-report xml:cov.xml \
             --cov-config=setup.cfg \
@@ -52,7 +56,7 @@ jobs:
             --mpl \
             --mpl-results-path=mpl_results.html \
             --mpl-generate-summary=html \
-            --splits 4 \
+            --splits 8 \
             --group ${{ matrix.combos.group }} \
             --splitting-algorithm least_duration \
             --db ./prof.db

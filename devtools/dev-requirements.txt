@@ -24,7 +24,6 @@ pre-commit
 markupsafe == 2.0.1
 nbmake
 pytest ~= 8.0.0
-pytest-xdist >= 3.6.0
 pytest-benchmark
 pytest-cov >= 2.6.0
 pytest-monitor

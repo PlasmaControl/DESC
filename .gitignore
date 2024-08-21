@@ -20,6 +20,4 @@ tests/benchmarks/.benchmarks/
 *.output
 *.pdf
 *.pyc
-*.swp
-*.swo
 .pymon

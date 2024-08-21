@@ -1134,7 +1134,6 @@ class Equilibrium(IOAble, Optimizable):
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym,
-                endpoint=grid.endpoint,
             )
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
@@ -1444,13 +1443,6 @@ class Equilibrium(IOAble, Optimizable):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
-
-    @NFP.setter
-    def NFP(self, NFP):
-        assert (
-            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
-        ), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFP=NFP)
 
     @property
     def L(self):

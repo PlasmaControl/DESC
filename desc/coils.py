@@ -1717,7 +1717,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return self.__class__(
             *coils,
             NFP=self.NFP,
-            NFP_umbilic_factor=self.NFP_umbilic_factor,
             sym=self.sym,
             name=name,
             check_intersection=check_intersection,

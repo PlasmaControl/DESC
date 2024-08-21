@@ -133,20 +133,21 @@ class FourierRZCurve(Curve):
         """Number of field periods."""
         return self._NFP
 
-    # --no-verify @property
-    # --no-verify def NFP_umbilic_factor(self):
-    # --no-verify     """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
-    # --no-verify     return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
-
-    # --no-verify @property
-    # --no-verify def _NFP_umbilic_factor(self):
-    # --no-verify    """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
-    # --no-verify    self._NFP_umbilic_factor = self.NFP_umbilic_factor
-
     @property
     def NFP_umbilic_factor(self):
         """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
-        self._NFP_umbilic_factor
+        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+
+    # @NFP_umbilic_factor.setter
+    # @property
+    def _NFP_umbilic_factor(self):
+        """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
+        self._NFP_umbilic_factor = self.NFP_umbilic_factor
+
+    # --no-verify @property
+    # --no-verify def NFP_umbilic_factor(self):
+    # --no-verify     """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
+    # --no-verify     self._NFP_umbilic_factor
 
     @property
     def N(self):
@@ -170,9 +171,7 @@ class FourierRZCurve(Curve):
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
             self._NFP_umbilic_factor = int(
-                NFP_umbilic_factor
-                if NFP_umbilic_factor is not None
-                else self.NFP_umbilic_factor
+                NFP_umbilic_factor if NFP_umbilic_factor is not None else int(1)
             )
             self._sym = bool(sym) if sym is not None else self.sym
             N = int(N if N is not None else self.N)

@@ -184,8 +184,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
         basis = kwargs.pop("basis", "xyz")
         if basis.lower() == "rpz":
-            # --no-verify x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
-            x = x.at[:, :, 1].set(x[:, :, 1])
+            x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+            # --no-verify x = x.at[:, :, 1].set(x[:, :, 1])
         return x
 
     def compute_magnetic_field(
@@ -1155,9 +1155,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
 
-        import pdb
-
-        pdb.set_trace()
         # stellarator symmetry is easiest in [X,Y,Z] coordinates
         if basis.lower() == "rpz":
             xyz = rpz2xyz(x)

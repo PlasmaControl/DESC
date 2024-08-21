@@ -117,7 +117,6 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            NFP = self.NFP if hasattr(self, "NFP") else 1
             NFP_umbilic_factor = (
                 self.NFP_umbilic_factor
                 if (
@@ -126,15 +125,9 @@ class Curve(IOAble, Optimizable, ABC):
                 )
                 else 1
             )
-
-            import pdb
-
-            pdb.set_trace()
             grid = LinearGrid(
-                N=2 * self.N + 5,
-                NFP=NFP,
+                N=2 * self.N * getattr(self, "NFP", 1) + 5,
                 NFP_umbilic_factor=int(NFP_umbilic_factor),
-                endpoint=False,
             )
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1

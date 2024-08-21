@@ -803,11 +803,13 @@ def bounce_integral(
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first. This map defines a
         change of variable for the bounce integral. The choice made for the automorphism
-        can affect the performance of the quadrature method.
+        will affect the performance of the quadrature method.
     B_ref : float
         Optional. Reference magnetic field strength for normalization.
+        Has no effect on computation, but may be useful for analysis.
     L_ref : float
         Optional. Reference length scale for normalization.
+        Has no effect on computation, but may be useful for analysis.
     check : bool
         Flag for debugging. Must be false for jax transformations.
     plot : bool

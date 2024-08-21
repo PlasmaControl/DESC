@@ -11,15 +11,6 @@ from desc.integrals._quad_utils import bijection_from_disc
 from desc.utils import Index, errorif
 
 
-# Y = [a, b] evaluate on grid -> y = [-1, 1] chebyshev points -> y = cos(z)
-# evenly spaced z.
-# So I find coefficients to chebyshev series T_n(y) = cos(n arcos(y)) = cos(n z).
-# So evaluating my chebyshev series in y is same as evaluting cosine series in
-# z = arcos(y).
-# for y = inversemap[a, b].
-# Open questions is finding roots y using chebroots better or is finding roots z
-# of trig poly.
-# answer: research shows doesn't really matter.
 # TODO: Transformation to make nodes uniform Boyd eq. 16.46 pg 336.
 #  Shouldn't really change locations of complex poles for us, so convergence
 #  rate will still be good.

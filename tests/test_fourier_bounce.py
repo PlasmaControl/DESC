@@ -17,8 +17,8 @@ from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.bounce_integral import filter_bounce_points, get_pitch
 from desc.integrals.fourier_bounce_integral import (
     FourierChebyshevBasis,
-    alpha_sequence,
     bounce_integral,
+    get_alphas,
     required_names,
 )
 
@@ -31,7 +31,7 @@ from desc.integrals.fourier_bounce_integral import (
 def test_alpha_sequence(alpha_0, iota, num_period, period):
     """Test field line poloidal label tracking."""
     iota = np.atleast_1d(iota)
-    alphas = alpha_sequence(alpha_0, iota, num_period, period)
+    alphas = get_alphas(alpha_0, iota, num_period, period)
     assert alphas.shape == (iota.size, num_period)
     for i in range(iota.size):
         assert np.unique(alphas[i]).size == num_period, f"{iota} is irrational"
@@ -60,15 +60,15 @@ class TestBouncePoints:
     @pytest.mark.unit
     def test_bp1_first(self):
         """Test that bounce points are computed correctly."""
-        pitch = 1 / np.linspace(1, 4, 20).reshape(20, 1)
         M, N = 1, 10
         domain = (-1, 1)
         nodes = FourierChebyshevBasis.nodes(M, N, domain=domain)
         f = self._periodic_fun(nodes, M, N)
         fcb = FourierChebyshevBasis(f, domain=domain)
         pcb = fcb.compute_cheb(fourier_pts(M))
-        bp1, bp2 = pcb.bounce_points(*pcb.intersect(1 / pitch))
-        pcb.check_bounce_points(bp1, bp2, pitch.ravel())
+        pitch = 0.5  # 1 / np.linspace(1, 4, 20)
+        bp1, bp2 = pcb.bounce_points(pitch)
+        pcb.check_bounce_points(bp1, bp2, pitch)
         bp1, bp2 = filter_bounce_points(bp1, bp2)
 
         def f(z):

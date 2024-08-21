@@ -4,8 +4,16 @@ import numpy as np
 import pytest
 
 from desc.basis import FourierZernikeBasis
+from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.integrals.singularities import (
+    DFTInterpolator,
+    FFTInterpolator,
+    _get_quadrature_nodes,
+    singular_integral,
+    virtual_casing_biot_savart,
+)
 from desc.integrals.surface_integral import (
     _get_grid_surface,
     line_integrals,
@@ -18,15 +26,15 @@ from desc.integrals.surface_integral import (
 )
 from desc.transform import Transform
 
-# arbitrary choice
-L = 5
-M = 5
-N = 2
-NFP = 3
-
 
 class TestSurfaceIntegral:
     """Tests for non-singular surface integrals."""
+
+    # arbitrary choice
+    L = 5
+    M = 5
+    N = 2
+    NFP = 3
 
     @staticmethod
     def _surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
@@ -47,7 +55,7 @@ class TestSurfaceIntegral:
     @pytest.mark.unit
     def test_unknown_unique_grid_integral(self):
         """Test that averages are invariant to whether grids have unique_idx."""
-        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, endpoint=False)
+        lg = LinearGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, endpoint=False)
         q = np.arange(lg.num_nodes) ** 2
         result = surface_integrals(lg, q, surface_label="rho")
         del lg._unique_rho_idx
@@ -88,8 +96,10 @@ class TestSurfaceIntegral:
             desired = self._surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(integrals, desired, err_msg=surface_label)
 
-        cg = ConcentricGrid(L=L, M=M, N=N, sym=True, NFP=NFP)
-        lg = LinearGrid(L=L, M=M, N=N, sym=True, NFP=NFP, endpoint=True)
+        cg = ConcentricGrid(L=self.L, M=self.M, N=self.N, sym=True, NFP=self.NFP)
+        lg = LinearGrid(
+            L=self.L, M=self.M, N=self.N, sym=True, NFP=self.NFP, endpoint=True
+        )
         test("rho", cg)
         test("theta", lg)
         test("zeta", cg)
@@ -120,8 +130,10 @@ class TestSurfaceIntegral:
                 grid.compress(averages, surface_label), desired, err_msg=surface_label
             )
 
-        cg = ConcentricGrid(L=L, M=M, N=N, sym=True, NFP=NFP)
-        lg = LinearGrid(L=L, M=M, N=N, sym=True, NFP=NFP, endpoint=True)
+        cg = ConcentricGrid(L=self.L, M=self.M, N=self.N, sym=True, NFP=self.NFP)
+        lg = LinearGrid(
+            L=self.L, M=self.M, N=self.N, sym=True, NFP=self.NFP, endpoint=True
+        )
         test("rho", cg)
         test("theta", lg)
         test("zeta", cg)
@@ -143,26 +155,34 @@ class TestSurfaceIntegral:
             correct_area = 4 * np.pi**2 if surface_label == "rho" else 2 * np.pi
             np.testing.assert_allclose(areas, correct_area, err_msg=surface_label)
 
-        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False, endpoint=False)
-        lg_sym = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=False)
-        lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False, endpoint=True)
-        lg_sym_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
-        rho = np.linspace(1, 0, L)[::-1]
-        theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
-        theta_endpoint = np.linspace(0, 2 * np.pi, M, endpoint=True)
-        zeta = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
-        zeta_endpoint = np.linspace(0, 2 * np.pi / NFP, N, endpoint=True)
+        lg = LinearGrid(
+            L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=False, endpoint=False
+        )
+        lg_sym = LinearGrid(
+            L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=True, endpoint=False
+        )
+        lg_endpoint = LinearGrid(
+            L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=False, endpoint=True
+        )
+        lg_sym_endpoint = LinearGrid(
+            L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=True, endpoint=True
+        )
+        rho = np.linspace(1, 0, self.L)[::-1]
+        theta = np.linspace(0, 2 * np.pi, self.M, endpoint=False)
+        theta_endpoint = np.linspace(0, 2 * np.pi, self.M, endpoint=True)
+        zeta = np.linspace(0, 2 * np.pi / self.NFP, self.N, endpoint=False)
+        zeta_endpoint = np.linspace(0, 2 * np.pi / self.NFP, self.N, endpoint=True)
         lg_2 = LinearGrid(
-            rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=False, endpoint=False
+            rho=rho, theta=theta, zeta=zeta, NFP=self.NFP, sym=False, endpoint=False
         )
         lg_2_sym = LinearGrid(
-            rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=True, endpoint=False
+            rho=rho, theta=theta, zeta=zeta, NFP=self.NFP, sym=True, endpoint=False
         )
         lg_2_endpoint = LinearGrid(
             rho=rho,
             theta=theta_endpoint,
             zeta=zeta_endpoint,
-            NFP=NFP,
+            NFP=self.NFP,
             sym=False,
             endpoint=True,
         )
@@ -170,12 +190,12 @@ class TestSurfaceIntegral:
             rho=rho,
             theta=theta_endpoint,
             zeta=zeta_endpoint,
-            NFP=NFP,
+            NFP=self.NFP,
             sym=True,
             endpoint=True,
         )
-        cg = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=False)
-        cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
+        cg = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=False)
+        cg_sym = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=True)
 
         for label in ("rho", "theta", "zeta"):
             test(label, lg)
@@ -226,15 +246,15 @@ class TestSurfaceIntegral:
                 )
                 np.testing.assert_allclose(result, 2 * np.pi)
 
-        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False)
-        lg_sym = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
-        rho = np.linspace(1, 0, L)[::-1]
-        theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
-        zeta = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
-        lg_2 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=False)
-        lg_2_sym = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=True)
-        cg = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=False)
-        cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
+        lg = LinearGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=False)
+        lg_sym = LinearGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=True)
+        rho = np.linspace(1, 0, self.L)[::-1]
+        theta = np.linspace(0, 2 * np.pi, self.M, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / self.NFP, self.N, endpoint=False)
+        lg_2 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=self.NFP, sym=False)
+        lg_2_sym = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=self.NFP, sym=True)
+        cg = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=False)
+        cg_sym = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=True)
 
         test(lg)
         test(lg_sym)
@@ -249,7 +269,7 @@ class TestSurfaceIntegral:
         eq = get("W7-X")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(3, 3, 3, 6, 6, 6)
-        grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["p", "sqrt(g)"], grid=grid)
         pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
         np.testing.assert_allclose(data["p"], pressure_average)
@@ -263,7 +283,7 @@ class TestSurfaceIntegral:
         eq = get("W7-X")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(3, 3, 3, 6, 6, 6)
-        grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["|B|", "|B|_t", "sqrt(g)"], grid=grid)
         a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
         b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
@@ -273,7 +293,7 @@ class TestSurfaceIntegral:
     @pytest.mark.unit
     def test_surface_integrals_against_shortcut(self):
         """Test integration against less general methods."""
-        grid = ConcentricGrid(L=L, M=M, N=N, NFP=NFP)
+        grid = ConcentricGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
         ds = grid.spacing[:, :2].prod(axis=-1)
         # something arbitrary that will give different sum across surfaces
         q = np.arange(grid.num_nodes) ** 2
@@ -293,7 +313,7 @@ class TestSurfaceIntegral:
     def test_surface_averages_against_shortcut(self):
         """Test averaging against less general methods."""
         # test on zeta surfaces
-        grid = LinearGrid(L=L, M=M, N=N, NFP=NFP)
+        grid = LinearGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
         # something arbitrary that will give different average across surfaces
         q = np.arange(grid.num_nodes) ** 2
         # The predefined grids sort nodes in zeta surface chunks.
@@ -459,7 +479,7 @@ class TestSurfaceIntegral:
     @pytest.mark.unit
     def test_surface_variance(self):
         """Test correctness of variance against less general methods."""
-        grid = LinearGrid(L=L, M=M, N=N, NFP=NFP)
+        grid = LinearGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
         # something arbitrary that will give different variance across surfaces
         q = np.arange(grid.num_nodes) ** 2
 
@@ -506,7 +526,7 @@ class TestSurfaceIntegral:
     def test_surface_min_max(self):
         """Test the surface_min and surface_max functions."""
         for grid_type in [LinearGrid, QuadratureGrid, ConcentricGrid]:
-            grid = grid_type(L=L, M=M, N=N, NFP=NFP)
+            grid = grid_type(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
             rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
             zeta = grid.nodes[:, 2]
@@ -524,3 +544,149 @@ class TestSurfaceIntegral:
                 Bmin_alt[j] = np.min(B[mask])
             np.testing.assert_allclose(Bmax_alt, grid.compress(surface_max(grid, B)))
             np.testing.assert_allclose(Bmin_alt, grid.compress(surface_min(grid, B)))
+
+
+class TestSingularities:
+    """Tests for high order singular integration.
+
+    Hyperparams from Dhairya for greens ID test:
+
+     M  q  Nu Nv   N=Nu*Nv    error
+    13 10  15 13       195 0.246547
+    13 10  30 13       390 0.0313301
+    13 12  45 13       585 0.0022925
+    13 12  60 13       780 0.00024359
+    13 12  75 13       975 1.97686e-05
+    19 16  90 19      1710 1.2541e-05
+    19 16 105 19      1995 2.91152e-06
+    19 18 120 19      2280 7.03463e-07
+    19 18 135 19      2565 1.60672e-07
+    25 20 150 25      3750 7.59613e-09
+    31 22 210 31      6510 1.04357e-09
+    37 24 240 37      8880 1.80728e-11
+    43 28 300 43     12900 2.14129e-12
+
+    """
+
+    @pytest.mark.unit
+    def test_singular_integral_greens_id(self):
+        """Test high order singular integration using greens identity.
+
+        Any harmonic function can be represented as the sum of a single layer and double
+        layer potential:
+
+        Φ(r) = -1/2π ∫ Φ(r) n⋅(r-r')/|r-r'|³ da + 1/2π ∫ dΦ/dn 1/|r-r'| da
+
+        If we choose Φ(r) == 1, then we get
+
+        1 + 1/2π ∫ n⋅(r-r')/|r-r'|³ da = 0
+
+        So we integrate the kernel n⋅(r-r')/|r-r'|³ and can benchmark the residual.
+
+        """
+        eq = Equilibrium()
+        Nv = np.array([30, 45, 60, 90, 120, 150, 240])
+        Nu = np.array([13, 13, 13, 19, 19, 25, 37])
+        ss = np.array([13, 13, 13, 19, 19, 25, 37])
+        qs = np.array([10, 12, 12, 16, 18, 20, 24])
+        es = np.array([0.4, 2e-2, 3e-3, 5e-5, 4e-6, 1e-6, 1e-9])
+        eval_grid = LinearGrid(M=5, N=6, NFP=eq.NFP)
+
+        for i, (m, n) in enumerate(zip(Nu, Nv)):
+            source_grid = LinearGrid(M=m // 2, N=n // 2, NFP=eq.NFP)
+            source_data = eq.compute(
+                ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=source_grid
+            )
+            eval_data = eq.compute(
+                ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=eval_grid
+            )
+            s = ss[i]
+            q = qs[i]
+            interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
+
+            err = singular_integral(
+                eval_data,
+                source_data,
+                "nr_over_r3",
+                interpolator,
+                loop=True,
+            )
+            np.testing.assert_array_less(np.abs(2 * np.pi + err), es[i])
+
+    @pytest.mark.unit
+    def test_singular_integral_vac_estell(self):
+        """Test calculating Bplasma for vacuum estell, which should be near 0."""
+        eq = get("ESTELL")
+        eval_grid = LinearGrid(M=8, N=8, NFP=eq.NFP)
+
+        source_grid = LinearGrid(M=18, N=18, NFP=eq.NFP)
+
+        keys = [
+            "K_vc",
+            "B",
+            "|B|^2",
+            "R",
+            "phi",
+            "Z",
+            "e^rho",
+            "n_rho",
+            "|e_theta x e_zeta|",
+        ]
+
+        source_data = eq.compute(keys, grid=source_grid)
+        eval_data = eq.compute(keys, grid=eval_grid)
+
+        k = min(source_grid.num_theta, source_grid.num_zeta)
+        s = k // 2 + int(np.sqrt(k))
+        q = k // 2 + int(np.sqrt(k))
+
+        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
+        Bplasma = virtual_casing_biot_savart(
+            eval_data,
+            source_data,
+            interpolator,
+            loop=True,
+        )
+        # need extra factor of B/2 bc we're evaluating on plasma surface
+        Bplasma += eval_data["B"] / 2
+        Bplasma = np.linalg.norm(Bplasma, axis=-1)
+        # scale by total field magnitude
+        B = Bplasma / np.mean(np.linalg.norm(eval_data["B"], axis=-1))
+        # this isn't a perfect vacuum equilibrium (|J| ~ 1e3 A/m^2), so increasing
+        # resolution of singular integral won't really make Bplasma less.
+        np.testing.assert_array_less(B, 0.05)
+
+    @pytest.mark.unit
+    def test_biest_interpolators(self):
+        """Test that FFT and DFT interpolation gives same result for standard grids."""
+        sgrid = LinearGrid(0, 5, 6)
+        egrid = LinearGrid(0, 4, 7)
+        s = 3
+        q = 4
+        r, w, dr, dw = _get_quadrature_nodes(q)
+        interp1 = FFTInterpolator(egrid, sgrid, s, q)
+        interp2 = DFTInterpolator(egrid, sgrid, s, q)
+
+        f = lambda t, z: np.sin(4 * t) + np.cos(3 * z)
+
+        source_dtheta = sgrid.spacing[:, 1]
+        source_dzeta = sgrid.spacing[:, 2] / sgrid.NFP
+        source_theta = sgrid.nodes[:, 1]
+        source_zeta = sgrid.nodes[:, 2]
+        eval_theta = egrid.nodes[:, 1]
+        eval_zeta = egrid.nodes[:, 2]
+
+        h_t = np.mean(source_dtheta)
+        h_z = np.mean(source_dzeta)
+
+        for i in range(len(r)):
+            dt = s / 2 * h_t * r[i] * np.sin(w[i])
+            dz = s / 2 * h_z * r[i] * np.cos(w[i])
+            theta_i = eval_theta + dt
+            zeta_i = eval_zeta + dz
+            ff = f(theta_i, zeta_i)
+
+            g1 = interp1(f(source_theta, source_zeta), i)
+            g2 = interp2(f(source_theta, source_zeta), i)
+            np.testing.assert_allclose(g1, g2)
+            np.testing.assert_allclose(g1, ff)

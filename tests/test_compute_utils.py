@@ -23,7 +23,7 @@ def test_rotation_matrix():
     np.testing.assert_allclose(dfdx_rev(x0), np.zeros((3, 3, 3)))
 
 
-@partial(np.vectorize, signature="(m)->()")
+@partial(jnp.vectorize, signature="(m)->()")
 def _last_value(a):
     """Return the last non-nan value in ``a``."""
     a = a[::-1]

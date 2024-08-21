@@ -1,11 +1,16 @@
-"""Surface integrals of non-singular functions."""
+"""Surface integrals of non-singular functions.
+
+The API is subject to change.
+"""
 
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, LinearGrid
 from desc.utils import errorif, warnif
 
-# TODO: Make these objects that override callable method instead of returning callables.
-#       Would make simpler to default to more efficient methods on tensor product grids.
+# TODO: Make the surface integral stuff objects with a callable method instead of
+#       returning functions. Would make simpler, allow users to actually see the
+#       docstrings of the methods, and less bookkeeping to default to more
+#       efficient methods on tensor product grids.
 
 
 def _get_grid_surface(grid, surface_label):

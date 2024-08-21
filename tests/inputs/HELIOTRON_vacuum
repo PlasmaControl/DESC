@@ -18,7 +18,7 @@ pert_order = 2
 ftol = 1e-3
 xtol = 1e-6
 gtol = 1e-6
-maxiter = 50
+maxiter = 150
 
 # solver methods
 optimizer         = lsq-exact

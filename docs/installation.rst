@@ -35,7 +35,7 @@ Now pick one of the installation options below.
 
 Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
-`Option 1 tested to work on M1 Macbook on 5-3-23`
+`Option 1 tested to work on M1 Macbook on May 3, 2023`
 
 .. code-block:: sh
 
@@ -123,7 +123,7 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 Perlmutter (NERSC)
 ++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 6-18-2024
+These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on June 18, 2024.
 
 Set up the correct cuda environment for jax installation
 
@@ -199,7 +199,7 @@ Then, install DESC,
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Tested and confirmed to work on the Della cluster as of 6-20-24 and Stellar cluster at Princeton as of 6-20-24.
+Tested and confirmed to work on the Della and Stellar clusters at Princeton as of June 20, 2024.
 
 On Clusters with IBM Power Architecture
 ***************************************
@@ -207,7 +207,7 @@ On Clusters with IBM Power Architecture
 If pre-built JAX binaries are not available, you will first need to build JAX from source.
 More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
 
-These instructions were tested and confirmed to work on the Traverse supercomputer at Princeton as of 11-6-2023.
+These instructions were tested and confirmed to work on the Traverse supercomputer at Princeton as of Nov. 6, 2023.
 
 NOTE: You must use an older version of DESC in order to use Traverse, as there are some compatibility issues with JAX and the architecture.
 Commit `a2fe711ffa3f` (an older version of the `master` branch) was tested to work fine on Traverse with these instructions.

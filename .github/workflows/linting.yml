@@ -12,6 +12,22 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Restore Python environment cache
+        id: restore-env
+        uses: actions/cache@v3
+        with:
+          path: .venv-3.10
+          key: ${{ runner.os }}-venv-3.10-${{ hashFiles('devtools/dev-requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-venv-3.10-
+
+      - name: Check if virtual environment exists
+        run: |
+          if [ ! -d ".venv-3.10" ]; then
+            echo "Error: Virtual environment .venv-3.10 not found!"
+            exit 1
+          fi
+
       - name: Activate virtual environment
         run: |
           source .venv-3.10/bin/activate

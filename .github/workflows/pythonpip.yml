@@ -25,7 +25,7 @@ jobs:
         id: cache-env
         uses: actions/cache@v3
         with:
-          path: .venv-${{ matrix.python-version }}
+          path: ./.venv-${{ matrix.python-version }}
           key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-venv-${{ matrix.python-version }}-

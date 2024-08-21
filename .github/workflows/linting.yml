@@ -14,7 +14,7 @@ jobs:
           python-version: '3.10'
       - name: Restore Python environment cache
         id: restore-env
-        uses: actions/cache@v3
+        uses: actions/restore@v3
         with:
           path: .venv-3.10
           key: ${{ runner.os }}-venv-3.10-${{ hashFiles('devtools/dev-requirements.txt') }}
@@ -22,15 +22,15 @@ jobs:
             ${{ runner.os }}-venv-3.10-
 
       - name: Check if virtual environment exists
+        if: steps.restore-env.outputs.cache-hit != 'true'
         run: |
-          if [ ! -d ".venv-3.10" ]; then
             echo "Error: Virtual environment .venv-3.10 not found!"
             exit 1
-          fi
 
       - name: Activate virtual environment
         run: |
           source .venv-3.10/bin/activate
+
       - name: flake8 Lint
         uses: reviewdog/action-flake8@v3
         with:

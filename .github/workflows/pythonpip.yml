@@ -1,9 +1,10 @@
 name: Cache Python and pip dependencies
-# This workflow is triggered every Sunday at midnight and updates the Python and pip dependencies cache
+# This workflow is triggered every 2 days and updates the Python
+# and pip dependencies cache
 
 on:
   schedule:
-    - cron: '0 0 * * 0'  # This triggers the workflow every Sunday at midnight
+    - cron: '0 0 */2 * *'  # This triggers the workflow every 2 days at midnight
   workflow_dispatch:
 
 jobs:
@@ -31,7 +32,6 @@ jobs:
             ${{ runner.os }}-venv-${{ matrix.python-version }}-
 
       - name: Set up virtual environment
-        if: steps.cache-env.outputs.cache-hit != 'true'
         run: |
           python -m venv .venv-${{ matrix.python-version }}
           source .venv-${{ matrix.python-version }}/bin/activate

@@ -540,6 +540,9 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
+    # rho=1.0 here is a dummy value to ensure we just have one surface,
+    # as we are only using the DoubleFourierSeries transform which has
+    # no rho dependence
     grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=1.0, sym=False)
 
     transforms = get_transforms(
@@ -789,8 +792,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     lasym = file.createVariable("lasym__logical__", np.int32)
     lasym.long_name = "0 if the configuration is stellarator-symmetric, 1 if not"
     lasym[:] = not eq.sym
-
-    # FIXME: ns?
 
     ns = file.createVariable("ns_b", np.int32)
     ns.long_name = "Number of radial surfaces at which data is outputted minus 1"

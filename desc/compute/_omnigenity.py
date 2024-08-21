@@ -202,10 +202,10 @@ def _nu(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _nu_mn(params, transforms, profiles, data, **kwargs):
-    norm = data["Boozer transform matrix"]
-    data["nu_mn"] = (norm @ (data["sqrt(g)_Boozer_DESC"] * data["nu"])) / transforms[
-        "B"
-    ].grid.num_nodes
+    transform_matrix = data["Boozer transform matrix"]
+    data["nu_mn"] = (
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["nu"])
+    ) / transforms["B"].grid.num_nodes
     return data
 
 
@@ -297,7 +297,7 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
 )
-def _sqrt_g__Boozer_DESC(params, transforms, profiles, data, **kwargs):
+def _sqrt_g_Boozer_DESC(params, transforms, profiles, data, **kwargs):
     data["sqrt(g)_Boozer_DESC"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
         data["iota"] - data["lambda_z"]
     ) * data["nu_t"]
@@ -342,9 +342,9 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
-    norm = data["Boozer transform matrix"]
+    transform_matrix = data["Boozer transform matrix"]
     data["sqrt(g)_B_mn"] = (
-        norm @ (data["sqrt(g)_Boozer_DESC"] * data["sqrt(g)_B"])
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["sqrt(g)_B"])
     ) / transforms["B"].grid.num_nodes
     return data
 
@@ -367,11 +367,12 @@ def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
     ],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    aliases=["|B|_mn"],
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
-    norm = data["Boozer transform matrix"]
+    transform_matrix = data["Boozer transform matrix"]
     data["|B|_mn_B"] = (
-        norm @ (data["sqrt(g)_Boozer_DESC"] * data["|B|"])
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["|B|"])
     ) / transforms["B"].grid.num_nodes
     return data
 
@@ -394,10 +395,10 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _R_mn(params, transforms, profiles, data, **kwargs):
-    norm = data["Boozer transform matrix"]
-    data["R_mn_B"] = (norm @ (data["sqrt(g)_Boozer_DESC"] * data["R"])) / transforms[
-        "B"
-    ].grid.num_nodes
+    transform_matrix = data["Boozer transform matrix"]
+    data["R_mn_B"] = (
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["R"])
+    ) / transforms["B"].grid.num_nodes
     return data
 
 
@@ -419,10 +420,10 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _Z_mn(params, transforms, profiles, data, **kwargs):
-    norm = data["Boozer transform matrix"]
-    data["Z_mn_B"] = (norm @ (data["sqrt(g)_Boozer_DESC"] * data["Z"])) / transforms[
-        "B"
-    ].grid.num_nodes
+    transform_matrix = data["Boozer transform matrix"]
+    data["Z_mn_B"] = (
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["Z"])
+    ) / transforms["B"].grid.num_nodes
     return data
 
 

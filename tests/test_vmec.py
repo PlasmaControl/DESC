@@ -1384,6 +1384,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
             "rmin_b",
             "pres_b",
             "phip_b",
+            "ns_b",
         ]:
             np.testing.assert_allclose(
                 file.variables[key], file_cpp.variables[key], err_msg=key

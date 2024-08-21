@@ -2002,10 +2002,13 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "e^rho", "grad(|B|)"],
+    data=["rho", "|B|^2", "b", "e^rho", "grad(|B|)"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (
-        1 / data["|B|^2"] * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
+        2
+        * data["rho"]
+        / data["|B|^2"]
+        * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
     )
     return data

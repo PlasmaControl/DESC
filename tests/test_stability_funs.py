@@ -581,7 +581,7 @@ def test_ballooning_stability_eval():
                 * dpdpsi
                 * (
                     data0["cvdrift"][None, :]
-                    - shear / rho * zeta0[:, None] * data0["cvdrift0"][None, :]
+                    - shear / (2 * rho**2) * zeta0[:, None] * data0["cvdrift0"][None, :]
                 ),
                 (N_alpha, N_zeta0, N_zeta),
             )

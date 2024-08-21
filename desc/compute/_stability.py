@@ -348,7 +348,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
             * dpdpsi
             * (
                 data["cvdrift"][None, :]
-                - shear / rho * zeta0[:, None] * data["cvdrift0"][None, :]
+                - shear / (2 * rho**2) * zeta0[:, None] * data["cvdrift0"][None, :]
             ),
             (N_alpha, N_zeta0, N_zeta),
         )
@@ -510,7 +510,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
             * dpdpsi
             * (
                 data["cvdrift"][None, :]
-                - shear / rho * zeta0[:, None] * data["cvdrift0"][None, :]
+                - shear / (2 * rho**2) * zeta0[:, None] * data["cvdrift0"][None, :]
             ),
             (N_alpha, N_zeta0, N_zeta),
         )

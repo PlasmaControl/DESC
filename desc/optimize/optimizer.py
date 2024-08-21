@@ -359,7 +359,7 @@ class Optimizer(IOAble):
 
             # put a divider
             w_divider = 50
-            print("\n{:=<{}}\n".format("", PRINT_WIDTH + w_divider))
+            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
             print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
             objective.print_value(objective.x(*state), objective.x(*state_0))
@@ -371,7 +371,7 @@ class Optimizer(IOAble):
                 args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
                 con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
 
-            print("\n{:=<{}}\n".format("", PRINT_WIDTH + w_divider))
+            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

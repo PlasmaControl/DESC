@@ -61,4 +61,4 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest tests/test_plotting.py --durations=0 --mpl --maxfail=1
+          python -m pytest -n auto tests/test_plotting.py --durations=0 --mpl --maxfail=1

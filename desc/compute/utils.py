@@ -216,7 +216,7 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
 
     Returns
     -------
-    deps : list of str
+    deps : list[str]
         Names of quantities needed to compute key.
 
     """

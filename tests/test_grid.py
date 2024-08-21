@@ -738,20 +738,21 @@ class TestGrid:
         """Test meshgrid constructor."""
         R = np.linspace(0, 1, 4)
         A = np.linspace(0, 2 * np.pi, 2)
-        Z = np.linspace(0, 10 * np.pi, 3)
+        Z = np.linspace(0, 2 * np.pi, 3)
         grid = Grid.create_meshgrid(
-            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, 2 * np.pi)
         )
-        r, a, z = grid.nodes.T
-        _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_rho_idx, unique)
-        np.testing.assert_allclose(grid.inverse_rho_idx, inverse)
-        _, unique, inverse = np.unique(a, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_alpha_idx, unique)
-        np.testing.assert_allclose(grid.inverse_alpha_idx, inverse)
-        _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_zeta_idx, unique)
-        np.testing.assert_allclose(grid.inverse_zeta_idx, inverse)
+        # treating theta == alpha just for grid construction
+        grid1 = LinearGrid(rho=R, theta=A, zeta=Z)
+        # atol=1e-12 bc Grid by default shifts points away from the axis a tiny bit
+        np.testing.assert_allclose(grid1.nodes, grid.nodes, atol=1e-12)
+        # want radial/poloidal/toroidal nodes sorted in the same order for both
+        np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_rho_idx)
+        np.testing.assert_allclose(grid1.unique_theta_idx, grid.unique_alpha_idx)
+        np.testing.assert_allclose(grid1.unique_zeta_idx, grid.unique_zeta_idx)
+        np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_rho_idx)
+        np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_alpha_idx)
+        np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_zeta_idx)
 
 
 @pytest.mark.unit

@@ -738,20 +738,61 @@ class TestGrid:
         """Test meshgrid constructor."""
         R = np.linspace(0, 1, 4)
         A = np.linspace(0, 2 * np.pi, 2)
-        Z = np.linspace(0, 10 * np.pi, 3)
+        Z = np.linspace(0, 2 * np.pi, 3)
         grid = Grid.create_meshgrid(
-            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, 2 * np.pi)
         )
-        r, a, z = grid.nodes.T
-        _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_rho_idx, unique)
-        np.testing.assert_allclose(grid.inverse_rho_idx, inverse)
-        _, unique, inverse = np.unique(a, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_alpha_idx, unique)
-        np.testing.assert_allclose(grid.inverse_alpha_idx, inverse)
-        _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_zeta_idx, unique)
-        np.testing.assert_allclose(grid.inverse_zeta_idx, inverse)
+        # treating theta == alpha just for grid construction
+        grid1 = LinearGrid(rho=R, theta=A, zeta=Z)
+        # atol=1e-12 bc Grid by default shifts points away from the axis a tiny bit
+        np.testing.assert_allclose(grid1.nodes, grid.nodes, atol=1e-12)
+        # want radial/poloidal/toroidal nodes sorted in the same order for both
+        np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_rho_idx)
+        np.testing.assert_allclose(grid1.unique_theta_idx, grid.unique_alpha_idx)
+        np.testing.assert_allclose(grid1.unique_zeta_idx, grid.unique_zeta_idx)
+        np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_rho_idx)
+        np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_alpha_idx)
+        np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_zeta_idx)
+
+    @pytest.mark.unit
+    def test_meshgrid_reshape(self):
+        """Test that reshaping meshgrids works correctly."""
+        grid = LinearGrid(2, 3, 4)
+
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        t = grid.nodes[grid.unique_theta_idx, 1]
+        z = grid.nodes[grid.unique_zeta_idx, 2]
+
+        # reshaping rtz should have rho along first axis
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")[0], r[0]
+        )
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")[2], r[2]
+        )
+        # reshaping rzt should have theta along last axis
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt")[:, :, 0], t[0]
+        )
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt")[:, :, 3], t[3]
+        )
+        # reshaping tzr should have zeta along 2nd axis
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes, "tzr")[:, 0, :, 2], z[0]
+        )
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes, "tzr")[:, 3, :, 2], z[3]
+        )
+
+        # coordinates are rtz, not raz
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "raz")
+
+        # not a meshgrid
+        grid = ConcentricGrid(2, 3, 4)
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
 
 
 @pytest.mark.unit

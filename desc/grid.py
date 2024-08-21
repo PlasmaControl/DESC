@@ -598,6 +598,52 @@ class _Grid(IOAble, ABC):
             )
         return x
 
+    def meshgrid_reshape(self, x, order):
+        """Reshape data to match grid coordinates.
+
+        Given flattened data on a tensor product grid, reshape the data such that
+        the axes of the array correspond to coordinate values on the grid.
+
+        Parameters
+        ----------
+        x : ndarray, shape(N,) or shape(N,3)
+            Data to reshape.
+        order : str
+            Desired order of axes for returned data. Should be a permutation of
+            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the returned
+            data correspond to different rho coordinates, the second axis to different
+            theta, etc.  ``order="trz"`` would have the first axis correspond to theta,
+            and so on.
+
+        Returns
+        -------
+        x : ndarray
+            Data reshaped to align with grid nodes.
+        """
+        errorif(
+            not self.is_meshgrid,
+            ValueError,
+            "grid is not a tensor product grid, so meshgrid_reshape doesn't "
+            "make any sense",
+        )
+        errorif(
+            sorted(order) != sorted(self.coordinates),
+            ValueError,
+            f"order should be a permutation of {self.coordinates}, got {order}",
+        )
+        shape = (self.num_poloidal, self.num_rho, self.num_zeta)
+        vec = False
+        if x.ndim > 1:
+            vec = True
+            shape += (-1,)
+        x = x.reshape(shape, order="F")
+        x = jnp.moveaxis(x, 1, 0)  # now shape rtz/raz etc
+        newax = tuple(list(self.coordinates).index(c) for c in order)
+        if vec:
+            newax += (3,)
+        x = jnp.transpose(x, newax)
+        return x
+
 
 class Grid(_Grid):
     """Collocation grid with custom node placement.

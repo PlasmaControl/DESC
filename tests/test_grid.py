@@ -754,6 +754,46 @@ class TestGrid:
         np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_alpha_idx)
         np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_zeta_idx)
 
+    @pytest.mark.unit
+    def test_meshgrid_reshape(self):
+        """Test that reshaping meshgrids works correctly."""
+        grid = LinearGrid(2, 3, 4)
+
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        t = grid.nodes[grid.unique_theta_idx, 1]
+        z = grid.nodes[grid.unique_zeta_idx, 2]
+
+        # reshaping rtz should have rho along first axis
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")[0], r[0]
+        )
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")[2], r[2]
+        )
+        # reshaping rzt should have theta along last axis
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt")[:, :, 0], t[0]
+        )
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt")[:, :, 3], t[3]
+        )
+        # reshaping tzr should have zeta along 2nd axis
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes, "tzr")[:, 0, :, 2], z[0]
+        )
+        np.testing.assert_allclose(
+            grid.meshgrid_reshape(grid.nodes, "tzr")[:, 3, :, 2], z[3]
+        )
+
+        # coordinates are rtz, not raz
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "raz")
+
+        # not a meshgrid
+        grid = ConcentricGrid(2, 3, 4)
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
+
 
 @pytest.mark.unit
 def test_find_most_rational_surfaces():

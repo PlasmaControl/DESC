@@ -7,7 +7,7 @@ from scipy.interpolate import interp1d
 
 import desc.examples
 import desc.io
-from desc.backend import jnp
+from desc.backend import eigvals, jnp
 from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
@@ -481,6 +481,7 @@ def test_ballooning_stability_eval():
     We calculated the ideal ballooning growth rate and Newcomb ball
     metric for the HELIOTRON case at different radii.
     """
+    mu_0 = 4 * np.pi * 1e-7
     eq = desc.examples.get("HELIOTRON")
 
     # Flux surfaces on which to evaluate ballooning stability
@@ -491,19 +492,19 @@ def test_ballooning_stability_eval():
 
     data = eq.compute(eq_data_keys, grid=grid)
 
-    Nalpha = int(8)
+    N_alpha = int(8)
 
     # Field lines on which to evaluate ballooning stability
-    alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
+    alpha = jnp.linspace(0, np.pi, N_alpha + 1)[:N_alpha]
 
     # Number of toroidal transits of the field line
     ntor = int(3)
 
     # Number of point along a field line in ballooning space
-    N0 = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
+    N_zeta = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
 
     # range of the ballooning coordinate zeta
-    zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
+    zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N_zeta)
 
     for i in range(len(surfaces)):
         rho = np.array([surfaces[i]])
@@ -516,10 +517,102 @@ def test_ballooning_stability_eval():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ball gamma1", "ideal ball gamma2", "Newcomb ball metric"]
+        data_keys0 = [
+            "g^aa",
+            "g^ra",
+            "g^rr",
+            "cvdrift",
+            "cvdrift0",
+            "|B|",
+            "B^zeta",
+            "p_r",
+            "iota",
+            "shear",
+            "psi",
+            "psi_r",
+            "rho",
+            "Psi",
+        ]
+        data0 = eq.compute(data_keys0, grid=grid)
+
+        rho = data0["rho"]
+        psi_b = eq.compute("Psi")["Psi"][-1] / (2 * jnp.pi)
+        a_N = eq.compute(["a"])["a"]
+        B_N = 2 * psi_b / a_N**2
+
+        N_zeta0 = int(15)
+        # up-down symmetric equilibria only
+        zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
+
+        iota = data0["iota"]
+        shear = data0["shear"]
+        psi = data0["psi"]
+        sign_psi = jnp.sign(psi)
+        sign_iota = jnp.sign(iota)
+
+        phi = zeta
+
+        B = jnp.reshape(data0["|B|"], (N_alpha, 1, N_zeta))
+        gradpar = jnp.reshape(data0["B^zeta"] / data0["|B|"], (N_alpha, 1, N_zeta))
+        dpdpsi = jnp.mean(mu_0 * data0["p_r"] / data0["psi_r"])
+
+        gds2 = jnp.reshape(
+            rho**2
+            * (
+                data0["g^aa"][None, :]
+                - 2 * sign_iota * shear / rho * zeta0[:, None] * data0["g^ra"][None, :]
+                + zeta0[:, None] ** 2 * (shear / rho) ** 2 * data0["g^rr"][None, :]
+            ),
+            (N_alpha, N_zeta0, N_zeta),
+        )
+
+        f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
+        g = a_N**3 * B_N * gds2 / B * gradpar
+        g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
+        c = (
+            1
+            * a_N**3
+            * B_N
+            * jnp.reshape(
+                2
+                / data0["B^zeta"][None, :]
+                * sign_psi
+                * rho**2
+                * dpdpsi
+                * (
+                    data0["cvdrift"][None, :]
+                    - shear / rho * zeta0[:, None] * data0["cvdrift0"][None, :]
+                ),
+                (N_alpha, N_zeta0, N_zeta),
+            )
+        )
+
+        h = phi[1] - phi[0]
+
+        A = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
+
+        i = jnp.arange(N_alpha)[:, None, None, None]
+        l = jnp.arange(N_zeta0)[None, :, None, None]
+        j = jnp.arange(N_zeta - 2)[None, None, :, None]
+        k = jnp.arange(N_zeta - 2)[None, None, None, :]
+
+        A = A.at[i, l, j, k].set(
+            g_half[i, l, k] / f[i, l, k] * 1 / h**2 * (j - k == -1)
+            + (
+                -(g_half[i, l, j + 1] + g_half[i, l, j]) / f[i, l, j + 1] * 1 / h**2
+                + c[i, l, j + 1] / f[i, l, j + 1]
+            )
+            * (j - k == 0)
+            + g_half[i, l, j] / f[i, l, j + 1] * 1 / h**2 * (j - k == 1)
+        )
+
+        w = eigvals(jnp.where(jnp.isfinite(A), A, 0))
+
+        lam1 = jnp.max(jnp.real(jnp.max(w, axis=(2,))))
+
+        data_keys = ["ideal ball gamma2", "Newcomb ball metric"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam1 = np.max(data["ideal ball gamma1"])
         lam2 = np.max(data["ideal ball gamma2"])
         Newcomb_metric = data["Newcomb ball metric"]
 

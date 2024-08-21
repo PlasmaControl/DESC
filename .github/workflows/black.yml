@@ -15,7 +15,7 @@ jobs:
 
       - name: Restore Python environment cache
         id: restore-env
-        uses: actions/restore@v4
+        uses: actions/cache/restore@v4
         with:
           path: .venv-3.10
           key: ${{ runner.os }}-venv-3.10-${{ hashFiles('devtools/dev-requirements.txt') }}

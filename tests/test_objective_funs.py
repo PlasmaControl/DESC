@@ -640,6 +640,7 @@ class TestObjectiveFunction:
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert d.size == obj.dim_f
         assert abs(d.min() - (a_s - a_p)) < 1e-14
         assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
 
@@ -679,6 +680,7 @@ class TestObjectiveFunction:
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert d.size == obj.dim_f
         assert np.all(np.abs(d) < a_s - a_p)
 
         # for large enough alpha, should be same as actual min
@@ -688,7 +690,7 @@ class TestObjectiveFunction:
             surface_grid=surf_grid,
             surface=surface,
             use_softmin=True,
-            alpha=100,
+            softmin_alpha=100,
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
@@ -803,7 +805,7 @@ class TestObjectiveFunction:
             obj.build()
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 4 * np.pi, rtol=1e-8)
-            assert len(f) == obj.dim_f
+            assert f.shape == (obj.dim_f,)
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
         coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
@@ -1136,6 +1138,89 @@ class TestObjectiveFunction:
         eq.change_resolution(L_grid=10, M_grid=10)
 
         test(eq, field, psi_from_field)
+
+    @pytest.mark.unit
+    def test_signed_plasma_vessel_distance(self):
+        """Test calculation of signed distance from plasma to vessel."""
+        R0 = 10.0
+        a_p = 1.0
+        a_s = 2.0
+        # default eq has R0=10, a=1
+        eq = Equilibrium(M=3, N=2)
+        # surface with same R0, a=2, so true d=1 for all pts
+        surface = FourierRZToroidalSurface(
+            R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        )
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=grid,
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        np.testing.assert_allclose(d, a_s - a_p)
+
+        # ensure that it works (dimension-wise) when compute_scaled is called
+        _ = obj.compute_scaled(*obj.xs(eq, surface))
+
+        # For plasma outside surface, should get signed distance
+        a_s = 0.5 * a_p
+        surface = FourierRZToroidalSurface(
+            R_lmn=[R0, a_s],
+            Z_lmn=[-a_s],
+            modes_R=[[0, 0], [1, 0]],
+            modes_Z=[[-1, 0]],
+        )
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=grid,
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        np.testing.assert_allclose(d, a_s - a_p)
+
+        # ensure it works with different sized grids (poloidal resolution different)
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=LinearGrid(M=10, N=6),
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        assert abs(d.max() - (-a_s)) < 1e-14
+        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
+
+        # ensure it works with different sized grids (poloidal resolution different)
+        # and using softmin (with deprecated name alpha)
+        grid = LinearGrid(M=5, N=6)
+        with pytest.raises(FutureWarning):
+            obj = PlasmaVesselDistance(
+                eq=eq,
+                surface_grid=grid,
+                plasma_grid=LinearGrid(M=10, N=6),
+                surface=surface,
+                use_signed_distance=True,
+                use_softmin=True,
+                alpha=4000,
+            )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        assert abs(d.max() - (-a_s)) < 1e-14
+        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
 
 @pytest.mark.regression

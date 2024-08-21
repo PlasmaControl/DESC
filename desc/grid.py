@@ -721,9 +721,8 @@ class Grid(_Grid):
         self._N = self.num_nodes
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
-    @classmethod
+    @staticmethod
     def create_meshgrid(
-        cls,
         nodes,
         spacing=None,
         coordinates="rtz",
@@ -796,7 +795,7 @@ class Grid(_Grid):
             a.size,
         )
         inverse_c_idx = jnp.tile(unique_c_idx, a.size * b.size)
-        return cls(
+        return Grid(
             nodes=nodes,
             spacing=spacing,
             weights=weights,

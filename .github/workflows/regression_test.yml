@@ -54,6 +54,7 @@ jobs:
           swap-size-gb: 10
       - name: Test with pytest
         run: |
+          source .venv-${{ matrix.python-version }}/bin/activate
           pwd
           lscpu
           python -m pytest -v -m regression\

@@ -35,6 +35,7 @@ jobs:
           source .venv-${{ matrix.python-version }}/bin/activate
       - name: Test notebooks with pytest and nbmake
         run: |
+          source .venv-${{ matrix.python-version }}/bin/activate
           pwd
           lscpu
           export PYTHONPATH=$(pwd)

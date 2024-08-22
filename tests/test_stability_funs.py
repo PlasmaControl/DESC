@@ -537,19 +537,22 @@ def test_ballooning_stability_eval():
         ]
         data0 = eq.compute(data_keys0, grid=grid)
 
-        rho = jnp.reshape(data0["rho"], (N_alpha, N_zeta))
-        psi_b = eq.compute("Psi")["Psi"][-1] / (2 * jnp.pi)
-        a_N = eq.compute(["a"])["a"]
+        rho = jnp.mean(data0["rho"])
+
+        data_keys01 = ["Psi", "a"]
+        data01 = eq.compute(data_keys01, grid=LinearGrid(rho=np.array([1.0])))
+        psi_b = data01["Psi"][-1] / (2 * jnp.pi)
+        a_N = data01["a"]
         B_N = 2 * psi_b / a_N**2
 
         N_zeta0 = int(15)
         # up-down symmetric equilibria only
         zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
-        iota = jnp.reshape(data0["iota"], (N_alpha, N_zeta))
-        shear = jnp.reshape(data0["shear"], (N_alpha, N_zeta))
-        psi = jnp.reshape(data0["psi"], (N_alpha, N_zeta))
-
+        # This would fail with rho vectorization
+        iota = jnp.mean(data0["iota"])
+        shear = jnp.mean(data0["shear"])
+        psi = jnp.mean(data0["psi"])
         sign_psi = jnp.sign(psi)
         sign_iota = jnp.sign(iota)
 
@@ -568,18 +571,16 @@ def test_ballooning_stability_eval():
 
         # zeta0 is the first dimension before reshaping
         gds2 = jnp.reshape(
-            rho[None, :, :] ** 2
+            rho**2
             * (
                 g_sup_aa[None, :, :]
                 - 2
-                * sign_iota[None, :, :]
-                * shear[None, :, :]
-                / rho[None, :, :]
+                * sign_iota
+                * shear
+                / rho
                 * zeta0[:, None, None]
                 * g_sup_ra[None, :, :]
-                + zeta0[:, None, None] ** 2
-                * (shear[None, :, :] / rho[None, :, :]) ** 2
-                * g_sup_rr[None, :, :]
+                + zeta0[:, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr[None, :, :]
             ),
             (N_alpha, N_zeta0, N_zeta),
         )
@@ -600,15 +601,12 @@ def test_ballooning_stability_eval():
             * jnp.reshape(
                 2
                 / B_sup_zeta[None, :, :]
-                * sign_psi[None, :, :]
-                * rho[None, :, :] ** 2
+                * sign_psi
+                * rho**2
                 * dpdpsi
                 * (
                     cvdrift[None, :, :]
-                    - shear[None, :, :]
-                    / (2 * rho[None, :, :] ** 2)
-                    * zeta0[:, None, None]
-                    * cvdrift0[None, :, :]
+                    - shear / (2 * rho**2) * zeta0[:, None, None] * cvdrift0[None, :, :]
                 ),
                 (N_alpha, N_zeta0, N_zeta),
             )

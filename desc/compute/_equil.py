@@ -872,7 +872,7 @@ def _P_fusion(params, transforms, profiles, data, **kwargs):
             energy = 0.82e6 + 2.45e6  # eV
 
     reaction_rate = jnp.sum(
-        *data["ni"] ** 2
+        data["ni"] ** 2
         * data["<sigma*nu>"]
         * data["sqrt(g)"]
         * transforms["grid"].weights

@@ -822,15 +822,15 @@ def test_plot_coils():
 def test_plot_b_mag():
     """Test plot of |B| on longer field lines for gyrokinetic simulations."""
     psi = 0.5
+    rho = np.sqrt(psi)
     npol = 2
     nzgrid = 128
     alpha = 0
     # compute iota
     eq = get("W7-X")
-    iota = eq.compute("iota", grid=LinearGrid(rho=np.sqrt(psi), NFP=eq.NFP))["iota"][0]
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho, NFP=eq.NFP))["iota"][0]
 
     # get flux tube coordinate system
-    rho = np.sqrt(psi)
     zeta = np.linspace(
         -np.pi * npol / np.abs(iota), np.pi * npol / np.abs(iota), 2 * nzgrid + 1
     )

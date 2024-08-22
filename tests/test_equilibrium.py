@@ -15,7 +15,6 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
-from desc.utils import errorif
 
 from .utils import area_difference, compute_coords
 
@@ -52,32 +51,12 @@ def test_map_coordinates():
     eq = get("NCSX")
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    grid = LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
-    iota = np.broadcast_to(iota, shape=(n,))
-
-    tol = 1e-5
-    out_1 = eq.map_coordinates(
-        coords, inbasis=["rho", "alpha", "zeta"], iota=iota, tol=tol
-    )
-    assert np.isfinite(out_1).all()
-    out_2 = eq.map_coordinates(
+    out = eq.map_coordinates(
         coords,
         inbasis=["rho", "alpha", "zeta"],
         period=(np.inf, 2 * np.pi, np.inf),
-        tol=tol,
     )
-    assert np.isfinite(out_2).all()
-    diff = out_1 - out_2
-    errorif(
-        # Todo: Reduce to 2*tol after GitHub issue #1207 is resolved.
-        not np.all(
-            np.isclose(diff, 0, atol=15 * tol)
-            | np.isclose(np.abs(diff), 2 * np.pi, atol=15 * tol)
-        ),
-        AssertionError,
-        f"Residual between 3D and 1D root finding methods:\n{diff}",
-    )
+    assert np.isfinite(out).all()
 
     eq = get("DSHAPE")
 

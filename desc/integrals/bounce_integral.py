@@ -819,7 +819,7 @@ def bounce_integral(
     )
     # Strictly increasing zeta knots enforces dζ > 0.
     # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require B^ζ = B⋅∇ζ > 0.
-    # This is equivalent to changing the sign of ∇ζ (or [∂ℓ/∂ζ]|ρ,a).
+    # This is equivalent to changing the sign of ∇ζ or [∂ℓ/∂ζ]|ρ,a.
     # Recall dζ = ∇ζ⋅dR, implying 1 = ∇ζ⋅(e_ζ|ρ,a). Hence, a sign change in ∇ζ
     # requires the same sign change in e_ζ|ρ,a to retain the metric identity.
     B_sup_z = jnp.abs(data["B^zeta"]).reshape(-1, knots.size) * L_ref / B_ref

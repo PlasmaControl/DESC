@@ -57,7 +57,7 @@ class FourierChebyshevBasis:
         Chebyshev spectral resolution.
     lobatto : bool
         Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
-        or interior roots grid for Chebyshev points.
+        instead of the interior roots grid for Chebyshev points.
     domain : (float, float)
         Domain for y coordinates.
 
@@ -76,7 +76,7 @@ class FourierChebyshevBasis:
             Domain for y coordinates.
         lobatto : bool
             Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
-            or interior roots grid for Chebyshev points.
+            instead of the interior roots grid for Chebyshev points.
 
         """
         self.M = f.shape[-2]
@@ -101,7 +101,7 @@ class FourierChebyshevBasis:
             Domain for y coordinates.
         lobatto : bool
             Whether to use the Gauss-Lobatto (Extrema-plus-Endpoint)
-            or interior roots grid for Chebyshev points.
+            instead of the interior roots grid for Chebyshev points.
 
         Returns
         -------
@@ -496,33 +496,35 @@ class PiecewiseChebyshevBasis:
 
         for l in np.ndindex(cheb.shape[:-2]):
             for p in range(pitch.shape[0]):
-                if not (err_1[p, l] or err_2[p, l] or err_3[p, l]):
+                idx = (p, *l)
+                if not (err_1[idx] or err_2[idx] or err_3[idx]):
                     continue
-                _bp1 = bp1[p, l][mask[p, l]]
-                _bp2 = bp2[p, l][mask[p, l]]
+                _bp1 = bp1[idx][mask[idx]]
+                _bp2 = bp2[idx][mask[idx]]
                 if plot:
                     self.plot_field_line(
-                        cheb[l],
-                        pitch=pitch[p, l],
+                        cheb=cheb[l],
                         bp1=_bp1,
                         bp2=_bp2,
-                        title_id=f"{p},{l}",
+                        pitch=pitch[idx],
+                        title_id=str(idx),
                         **kwargs,
                     )
                 print("      bp1    |    bp2")
                 print(jnp.column_stack([_bp1, _bp2]))
-                assert not err_1[p, l], "Bounce points have an inversion.\n"
-                assert not err_2[p, l], "Detected discontinuity.\n"
-                assert not err_3[p, l], (
+                assert not err_1[idx], "Bounce points have an inversion.\n"
+                assert not err_2[idx], "Detected discontinuity.\n"
+                assert not err_3[idx], (
                     "Detected |B| > 1/λ in well. Increase Chebyshev resolution.\n"
-                    f"{B_m[p, l][mask[p, l]]} > {1 / pitch[p, l] + self._eps}"
+                    f"{B_m[idx][mask[idx]]} > {1 / pitch[idx] + self._eps}"
                 )
+            idx = (slice(None), *l)
             if plot:
                 self.plot_field_line(
-                    cheb[l],
-                    pitch=pitch[:, l],
-                    bp1=bp1[:, l],
-                    bp2=bp2[:, l],
+                    cheb=cheb[l],
+                    bp1=bp1[idx],
+                    bp2=bp2[idx],
+                    pitch=pitch[idx],
                     title_id=str(l),
                     **kwargs,
                 )
@@ -548,11 +550,14 @@ class PiecewiseChebyshevBasis:
         num : int
             Number of ζ points to plot. Pick a big number.
         bp1 : jnp.ndarray
+            Shape (P, W).
             Bounce points with (∂|B|/∂ζ)|ρ,α <= 0.
         bp2 : jnp.ndarray
+            Shape (P, W).
             Bounce points with (∂|B|/∂ζ)|ρ,α >= 0.
         pitch : jnp.ndarray
-            λ value.
+            Shape (P, ).
+            λ values.
         title : str
             Plot title.
         title_id : str
@@ -584,7 +589,12 @@ class PiecewiseChebyshevBasis:
         add(ax.plot(z, self.eval1d(z, cheb), label=r"$\vert B \vert (\zeta)$"))
 
         if pitch is not None:
-            b = 1 / jnp.atleast_1d(pitch)
+            b = 1 / jnp.atleast_1d(jnp.squeeze(pitch))
+            assert b.ndim == 1
+            bp1, bp2 = jnp.atleast_2d(bp1, bp2)
+            assert bp1.ndim == bp2.ndim == 2
+            assert b.shape[0] == bp1.shape[0]
+
             for val in b:
                 add(
                     ax.axhline(
@@ -594,7 +604,6 @@ class PiecewiseChebyshevBasis:
                         label=r"$1 / \lambda$",
                     )
                 )
-            bp1, bp2 = jnp.atleast_2d(bp1, bp2)
             for i in range(bp1.shape[0]):
                 if bp1.shape == bp2.shape:
                     _bp1, _bp2 = filter_bounce_points(bp1[i], bp2[i])
@@ -674,11 +683,14 @@ def _transform_to_desc(grid, f):
     Returns
     -------
     a : jnp.ndarray
-        Coefficients 2D real FFT.
+        Shape (grid.num_rho, 1, grid.num_theta, grid.num_zeta // 2 + 1)
+        Coefficients of 2D real FFT.
 
     """
-    f = grid.meshgrid_reshape(f, order="rtz")[:, jnp.newaxis]
-    return rfft2(f, norm="forward")
+    f = grid.meshgrid_reshape(f, order="rtz")
+    a = rfft2(f, norm="forward")[:, jnp.newaxis]
+    assert a.shape == (grid.num_rho, 1, grid.num_theta, grid.num_zeta // 2 + 1)
+    return a
 
 
 def _transform_to_clebsch(grid, M, N, desc_from_clebsch, B):
@@ -736,7 +748,12 @@ def _transform_to_clebsch(grid, M, N, desc_from_clebsch, B):
     # because there is a global minima or unique mapping between coordinate
     # systems. However, it should still be avoided as the number of
     # quadrature points is higher due to the large number of integrals that
-    # need to be computed.
+    # need to be computed. (An alternative would be to also transform functions
+    # in the integrand of the quadrature like |B| and evaluate quadrature
+    # points in Clebsch space. This may be less efficient if there are
+    # multiple functions in the integrand that need to be transformed
+    # independently, perhaps because the composition defined by the
+    # integrand is less smooth than the individual components.)
     return T, B
 
 
@@ -772,23 +789,10 @@ class FourierBounce:
         Number of toroidal transits to follow field line.
     N : int
         Chebyshev spectral resolution.
-    _b_sup_z : jnp.ndarray
-        Shape (L, 1, m, n).
-        Set of 2D (θ, ζ) Fourier spectral coefficients of B^ζ/|B|.
-    _x : jnp.ndarray
-        Shape (w.size, ).
-        Quadrature points in [-1, 1].
-    _w : jnp.ndarray
-        Shape (w.size, ).
-        Quadrature weights.
-    _check : bool
-        Flag for debugging. Must be false for jax transformations.
-    _plot : bool
-        Whether to plot stuff if ``check`` is true. Default is false.
 
     """
 
-    domain = (0, 2 * jnp.pi)
+    domain = (0, 4 * jnp.pi)
 
     # TODO: Assumes zeta = phi (alpha sequence)
     def __init__(
@@ -847,19 +851,22 @@ class FourierBounce:
             automorphism will affect the performance of the quadrature method.
         B_ref : float
             Optional. Reference magnetic field strength for normalization.
-            Has no effect on computation, but may be useful for analysis.
         L_ref : float
             Optional. Reference length scale for normalization.
-            Has no effect on computation, but may be useful for analysis.
         check : bool
             Flag for debugging. Must be false for jax transformations.
         plot : bool
             Whether to plot stuff if ``check`` is true. Default is false.
 
         """
+        errorif(
+            grid.sym, NotImplementedError, msg="Need grid that samples full domain."
+        )
         # Strictly increasing zeta knots enforces dζ > 0.
         # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
-        # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ.
+        # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ or [∂ℓ/∂ζ]|ρ,a.
+        # Recall dζ = ∇ζ⋅dR, implying 1 = ∇ζ⋅(e_ζ|ρ,a). Hence, a sign change in ∇ζ
+        # requires the same sign change in e_ζ|ρ,a to retain the metric identity.
         warnif(
             check and kwargs.pop("warn", True) and jnp.any(data["B^zeta"] <= 0),
             msg="(∂ℓ/∂ζ)|ρ,a > 0 is required. Enforcing positive B^ζ.",
@@ -889,6 +896,42 @@ class FourierBounce:
         self._x, self._w = get_quad_points(quad, automorphism)
         self._check = check
         self._plot = plot
+        self.m, self.n = grid.num_theta, grid.num_zeta
+
+    @staticmethod
+    def desc_from_clebsch(eq, rho, M, N, **kwargs):
+        """Return DESC coordinates of optimal Fourier Chebyshev basis nodes.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to use defining the coordinate mapping.
+        rho : jnp.ndarray
+            Flux surface coordinate values.
+        M : int
+            Grid resolution in poloidal direction for Clebsch coordinate grid.
+            Preferably power of 2. A good choice is ``m``. If the poloidal stream
+            function condenses the Fourier spectrum of |B| significantly, then a
+            larger number may be beneficial.
+        N : int
+            Grid resolution in toroidal direction for Clebsch coordinate grid.
+            Preferably power of 2.
+
+        Returns
+        -------
+        coords : jnp.ndarray
+            Shape (L * M * N, 3).
+            DESC coordinate grid (ρ, θ, ζ) sourced from the Clebsch coordinate
+            tensor-product grid (ρ, α, ζ).
+
+        """
+        coords = FourierChebyshevBasis.nodes(M, N, FourierBounce.domain, rho=rho)
+        return eq.map_coordinates(
+            coords,
+            inbasis=("rho", "alpha", "zeta"),
+            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+            **kwargs,
+        )
 
     @staticmethod
     def required_names():
@@ -961,7 +1004,7 @@ class FourierBounce:
             functions in the bounce integrand evaluated on the periodic DESC coordinate
             (ρ, θ, ζ) tensor-product grid.
         weight : jnp.ndarray
-            Shape (L, 1, m * n).
+            Shape (L, 1, m, n).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
             evaluated at the deepest point in the magnetic well.
@@ -1040,9 +1083,6 @@ class FourierBounce:
         assert bp1.ndim == 3
         assert bp1.shape == bp2.shape
         assert pitch.ndim == 2
-        assert self.L == f[0].shape[0]
-        m = f[0].shape[-2]
-        n = f[0].shape[-1]
         W = bp1.shape[-1]  # number of wells
         shape = (pitch.shape[0], self.L, W, self._x.size)
 
@@ -1064,7 +1104,7 @@ class FourierBounce:
                 B=self.B.eval1d(Q_zeta).reshape(shape),
                 pitch=pitch[..., jnp.newaxis, jnp.newaxis],
             )
-            / irfft2_non_uniform(Q_desc, self._b_sup_z, m, n).reshape(shape),
+            / irfft2_non_uniform(Q_desc, self._b_sup_z, self.m, self.n).reshape(shape),
             self._w,
         )
         assert result.shape == (pitch.shape[0], self.L, W)

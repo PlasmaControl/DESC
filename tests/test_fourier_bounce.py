@@ -155,33 +155,25 @@ def test_drift():
     # Compute analytic approximation.
     drift_analytic, cvdrift, gbdrift, pitch = _drift_analytic(data)
     # Compute numerical result.
-    M, N = eq.M_grid, 100
-    clebsch = FourierChebyshevBasis.nodes(
-        M=eq.M_grid, N=N, domain=FourierBounce.domain, rho=rho
-    )
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data_2 = eq.compute(
         names=FourierBounce.required_names() + ["cvdrift", "gbdrift"], grid=grid
     )
     normalization = -np.sign(data["psi"]) * data["B ref"] * data["a"] ** 2
-    cvdrift = data_2["cvdrift"] * normalization
-    gbdrift = data_2["gbdrift"] * normalization
+    data_2["cvdrift"] = data_2["cvdrift"] * normalization
+    data_2["gbdrift"] = data_2["gbdrift"] * normalization
+    M, N = eq.M_grid, 20
     fb = FourierBounce(
         grid,
         data_2,
         M,
         N,
-        desc_from_clebsch=map_coordinates(
-            eq,
-            clebsch,
-            inbasis=("rho", "alpha", "zeta"),
-            period=(np.inf, 2 * np.pi, np.inf),
-            iota=np.broadcast_to(data["iota"], (M * N)),
-        ),
+        desc_from_clebsch=FourierBounce.desc_from_clebsch(eq, rho, M, N),
         alpha_0=data["alpha"],
-        num_transit=5,
+        num_transit=1,
         B_ref=data["B ref"],
         L_ref=data["a"],
-        quad=leggauss(28),  # converges to absolute and relative tolerance of 1e-7
+        quad=leggauss(50),  # converges to absolute and relative tolerance of 1e-7
         check=True,
         plot=True,
     )
@@ -194,15 +186,15 @@ def test_drift():
         return 1 / jnp.sqrt(1 - pitch * B)
 
     drift_numerical_num = fb.bounce_integrate(
-        integrand=integrand_num,
-        f=[cvdrift, gbdrift],
         pitch=pitch[:, np.newaxis],
+        integrand=integrand_num,
+        f=FourierBounce.reshape_data(grid, data_2, ["cvdrift", "gbdrift"]),
         num_well=1,
     )
     drift_numerical_den = fb.bounce_integrate(
+        pitch=pitch[:, np.newaxis],
         integrand=integrand_den,
         f=[],
-        pitch=pitch[:, np.newaxis],
         num_well=1,
     )
     drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)

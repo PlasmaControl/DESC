@@ -10,18 +10,43 @@ from desc.compute.utils import safediv
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif
 
-
-# TODO: Transformation to make nodes uniform Boyd eq. 16.46 pg 336.
+# TODO: Transformation to make nodes uniform Boyd eq. 16.46 pg. 336.
 #  Shouldn't really change locations of complex poles for us, so convergence
-#  rate will still be good.
+#  rate will still be good. This will basically do spectral condensation.
+
+
 def cheb_pts(N, lobatto=False, domain=(-1, 1)):
-    """Get ``N`` Chebyshev points mapped to given domain."""
+    """Get ``N`` Chebyshev points mapped to given domain.
+
+    Notes
+    -----
+    This is a common definition of the Chebyshev points (see Boyd, Chebyshev and
+    Fourier Spectral Methods p. 498). These are the points demanded by Discrete
+    Cosine Transformations to interpolate Chebyshev series because the cosine
+    basis for the DCT is defined on [0, π].
+
+    They differ in ordering from the points returned by
+    ``numpy.polynomial.chebyshev.chebpts1`` and
+    ``numpy.polynomial.chebyshev.chebpts2``.
+
+    Parameters
+    ----------
+    N : int
+        Number of points.
+    lobatto : bool
+        Whether to return the Gauss-Lobatto (extrema-plus-endpoint)
+        instead of the interior roots for Chebyshev points.
+    domain : (float, float)
+        Domain for points.
+
+    Returns
+    -------
+    pts : jnp.ndarray
+        Shape (N, ).
+        Chebyshev points mapped to given domain.
+
+    """
     n = jnp.arange(N)
-    # These are the standard definitions of the Chebyshev points.
-    # Reference: Wikipedia or Boyd p. 498. These are the points demanded by
-    # Discrete Cosine Transformations to interpolate Chebyshev series because
-    # the cosine basis for the DCT is defined on [0, π]. These points differ
-    # from numpy's chebpts1 and chebpts2 in ordering.
     if lobatto:
         y = jnp.cos(jnp.pi * n / (N - 1))
     else:
@@ -106,7 +131,8 @@ def harmonic_vander(x, M):
 # TODO: For inverse transforms, do multipoint evaluation with FFT.
 #   FFT cost is 𝒪(M N log[M N]) while direct evaluation is 𝒪(M² N²).
 #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-#   Likely better than using NFFT to evaluate f(xq) given fourier
+#   Right now we just do an MMT with the Vandermode matrix.
+#   Multipoint is likely better than using NFFT to evaluate f(xq) given fourier
 #   coefficients because evaluation points are quadratically packed near edges as
 #   required by quadrature to avoid runge. NFFT is only approximation anyway.
 #   https://github.com/flatironinstitute/jax-finufft.

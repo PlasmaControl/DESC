@@ -18,7 +18,7 @@ from desc.compute import data_index
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
-from desc.integrals.surface_integral import surface_averages
+from desc.integrals import surface_averages
 from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,

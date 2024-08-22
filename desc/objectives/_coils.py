@@ -14,7 +14,7 @@ from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
-from desc.integrals.singularities import compute_B_plasma
+from desc.integrals import compute_B_plasma
 from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors

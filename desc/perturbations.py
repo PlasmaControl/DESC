@@ -185,7 +185,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
-    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, _, _, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
     timer.stop("linear constraint factorize")
@@ -291,7 +291,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac_scaled_error(x)
-        Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
+        Jx_reduced = Jx @ jnp.diag(D)[:, unfixed_idx] @ Z @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
             f = objective.compute_scaled_error(x)
@@ -388,9 +388,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             con.update_target(eq_new)
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
-    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective, constraint
-    )
+    _, _, _, _, _, _, _, recover = factorize_linear_constraints(objective, constraint)
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
@@ -547,7 +545,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
 
-    _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    _, _, _, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective_f, constraint
     )
 
@@ -564,7 +562,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = 0
 
     # dx/dx_reduced
-    dxdx_reduced = jnp.eye(eq.dim_x)[:, unfixed_idx] @ Z
+    dxdx_reduced = jnp.diag(D)[:, unfixed_idx] @ Z
 
     # dx/dc
     dxdc = []
@@ -612,8 +610,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             timer.disp("dg computation")
 
         # projections onto optimization space
-        Fx_reduced = Fx[:, unfixed_idx] @ Z
-        Gx_reduced = Gx[:, unfixed_idx] @ Z
+        Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
+        Gx_reduced = Gx @ jnp.diag(D)[:, unfixed_idx] @ Z
         Fc = Fx @ dxdc
         Gc = Gx @ dxdc
 
@@ -752,9 +750,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             con.update_target(eq_new)
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
-    _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective_f, constraint
-    )
+    _, _, _, _, _, _, _, recover = factorize_linear_constraints(objective_f, constraint)
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced

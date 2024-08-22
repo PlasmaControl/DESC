@@ -13,8 +13,9 @@ from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
 
+from ..integrals import surface_averages, surface_integrals
 from .data_index import register_compute_fun
-from .utils import cumtrapz, dot, safediv, surface_averages, surface_integrals
+from .utils import cumtrapz, dot, safediv
 
 
 @register_compute_fun(
@@ -82,10 +83,10 @@ def _psi_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["rho"],
+    data=["1"],
 )
 def _psi_rr(params, transforms, profiles, data, **kwargs):
-    data["psi_rr"] = params["Psi"] * jnp.ones_like(data["rho"]) / jnp.pi
+    data["psi_rr"] = data["1"] * params["Psi"] / jnp.pi
     return data
 
 

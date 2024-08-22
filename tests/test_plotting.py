@@ -15,10 +15,10 @@ from desc.basis import (
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
-from desc.compute.utils import surface_averages
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.integrals import surface_averages
 from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
@@ -801,6 +801,8 @@ def test_plot_coils():
     coil.rotate(angle=np.pi / N)
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
     fig, data = plot_coils(coils2, return_data=True)
 
     def flatten_coils(coilset):

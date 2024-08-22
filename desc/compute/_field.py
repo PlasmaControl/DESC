@@ -13,17 +13,14 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
-from .data_index import register_compute_fun
-from .utils import (
-    cross,
-    dot,
-    safediv,
-    safenorm,
+from ..integrals import (
     surface_averages,
     surface_integrals_map,
     surface_max,
     surface_min,
 )
+from .data_index import register_compute_fun
+from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(
@@ -2935,7 +2932,7 @@ def _gradB2(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|grad(|B|^2)|/2mu0",
-    label="|\\nabla |B|^{2}/(2\\mu_0)|",
+    label="|\\nabla |B|^{2}|/(2\\mu_0)",
     units="N \\cdot m^{-3}",
     units_long="Newton / cubic meter",
     description="Magnitude of magnetic pressure gradient",

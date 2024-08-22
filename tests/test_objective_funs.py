@@ -641,7 +641,7 @@ class TestObjectiveFunction:
             surface_fixed=True,
         )
         obj.build()
-        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        d = obj.compute_unscaled(*obj.xs(eq))
         assert d.size == obj.dim_f
         assert abs(d.min() - (a_s - a_p)) < 1e-14
         assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
@@ -1536,7 +1536,7 @@ def test_boundary_error_print(capsys):
     obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
@@ -1611,7 +1611,7 @@ def test_boundary_error_print(capsys):
     obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
@@ -1687,7 +1687,7 @@ def test_boundary_error_print(capsys):
     obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
     n = len(f) // 3
     f1 = f[:n]
     f2 = f[n : 2 * n]

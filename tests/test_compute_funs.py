@@ -1137,7 +1137,7 @@ def test_boozer_transform():
 @pytest.mark.unit
 def test_boozer_transform_multiple_surfaces():
     """Test that computing over multiple surfaces is the same as over 1 at a time."""
-    eq = get("DSHAPE_CURRENT")
+    eq = get("HELIOTRON")
     grid1 = LinearGrid(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid2 = LinearGrid(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid3 = LinearGrid(rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)

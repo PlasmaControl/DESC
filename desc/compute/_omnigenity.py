@@ -36,12 +36,12 @@ from .utils import cross, dot, safediv
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
-    grid = transforms["grid"]
-    B_theta = data["B_theta"].reshape(
-        (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-    )
-    B_theta = jnp.moveaxis(B_theta, 1, 0).reshape((grid.num_rho, -1))
-    B_theta_mn = vmap(transforms["B"].fit)(B_theta)
+    B_theta = transforms["grid"].meshgrid_reshape(data["B_theta"], "rtz")
+
+    def fitfun(x):
+        return transforms["B"].fit(x.flatten(order="F"))
+
+    B_theta_mn = vmap(fitfun)(B_theta)
     # modes stored as shape(rho, mn) flattened
     data["B_theta_mn"] = B_theta_mn.flatten()
     return data
@@ -66,12 +66,12 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
-    grid = transforms["grid"]
-    B_zeta = data["B_zeta"].reshape(
-        (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-    )
-    B_zeta = jnp.moveaxis(B_zeta, 1, 0).reshape((grid.num_rho, -1))
-    B_zeta_mn = vmap(transforms["B"].fit)(B_zeta)
+    B_zeta = transforms["grid"].meshgrid_reshape(data["B_zeta"], "rtz")
+
+    def fitfun(x):
+        return transforms["B"].fit(x.flatten(order="F"))
+
+    B_zeta_mn = vmap(fitfun)(B_zeta)
     # modes stored as shape(rho, mn) flattened
     data["B_zeta_mn"] = B_zeta_mn.flatten()
     return data
@@ -142,7 +142,7 @@ def _w(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
     w = vmap(transforms["w"].transform)(w_mn)  # shape(rho, theta*zeta)
-    w = w.reshape((grid.num_rho, grid.num_theta, grid.num_zeta))
+    w = w.reshape((grid.num_rho, grid.num_theta, grid.num_zeta), order="F")
     w = jnp.moveaxis(w, 0, 1)
     data["w_Boozer"] = w.flatten(order="F")
     return data
@@ -172,7 +172,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     # need to close over dt which can't be vmapped
     fun = lambda x: transforms["w"].transform(x, dt=1)
     w_t = vmap(fun)(w_mn)  # shape(rho, theta*zeta)
-    w_t = w_t.reshape((grid.num_rho, grid.num_theta, grid.num_zeta))
+    w_t = w_t.reshape((grid.num_rho, grid.num_theta, grid.num_zeta), order="F")
     w_t = jnp.moveaxis(w_t, 0, 1)
     data["w_Boozer_t"] = w_t.flatten(order="F")
     return data
@@ -202,7 +202,7 @@ def _w_z(params, transforms, profiles, data, **kwargs):
     # need to close over dz which can't be vmapped
     fun = lambda x: transforms["w"].transform(x, dz=1)
     w_z = vmap(fun)(w_mn)  # shape(rho, theta*zeta)
-    w_z = w_z.reshape((grid.num_rho, grid.num_theta, grid.num_zeta))
+    w_z = w_z.reshape((grid.num_rho, grid.num_theta, grid.num_zeta), order="F")
     w_z = jnp.moveaxis(w_z, 0, 1)
     data["w_Boozer_z"] = w_z.flatten(order="F")
     return data
@@ -347,17 +347,13 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
         nodes = jnp.array([rho, theta_B, zeta_B]).T
         B_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-            # fft matrix is only orthogonal for uniform nodes, should this really
-            # be a proper least squares fit?
             * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B * B))
             / transforms["B"].grid.num_nodes
         )
         return B_mn
 
     def reshape(x):
-        x = x.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-        x = jnp.moveaxis(x, 1, 0)
-        return x.reshape((grid.num_rho, -1))
+        return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
 
     rho, theta_B, zeta_B, sqrtg_B, B = map(
         reshape,

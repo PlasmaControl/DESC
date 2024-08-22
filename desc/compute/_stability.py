@@ -13,8 +13,9 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
+from ..integrals import surface_integrals_map
 from .data_index import register_compute_fun
-from .utils import dot, surface_integrals_map
+from .utils import dot
 
 
 @register_compute_fun(

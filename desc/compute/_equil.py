@@ -816,7 +816,7 @@ def _beta_voltor(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["a", "iota", "rho", "R0", "W_p", "<ne>_rho", "<|B|>_axis"],
+    data=["a", "iota", "rho", "R0", "W_p", "<ne>_vol", "<|B|>_axis"],
     method="str: Interpolation method. Default 'cubic'.",
     H_ISS04="float: ISS04 confinement enhancement factor. Default 1.",
 )
@@ -835,7 +835,7 @@ def _P_ISS04(params, transforms, profiles, data, **kwargs):
             0.134
             * data["a"] ** 2.28  # m
             * data["R0"] ** 0.64  # m
-            * (data["<ne>_rho"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
+            * (data["<ne>_vol"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
             * data["<|B|>_axis"] ** 0.84  # T
             * iota_23**0.41
             * kwargs.get("H_ISS04", 1)

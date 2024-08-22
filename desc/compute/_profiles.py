@@ -217,25 +217,22 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="<ne>_rho",
-    label="\\bar{n}_e = \\int n_e d\\rho",  # simple radial average〈nₑ〉ᵨ = ∫ nₑ dρ
+    name="<ne>_vol",
+    label="\\lange n_e \\rangle_{vol}",
     units="m^{-3}",
     units_long="1 / cubic meters",
-    description="Line-averaged electron density",
+    description="Volume average electron density",
     dim=0,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["ne", "|e_theta x e_zeta|"],
-    resolution_requirement="r",
+    data=["ne", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
 )
 def _bar_ne(params, transforms, profiles, data, **kwargs):
-    data["<ne>_rho"] = jnp.dot(
-        surface_averages(
-            transforms["grid"], data["ne"], data["|e_theta x e_zeta|"], expand_out=False
-        ),
-        transforms["grid"].compress(transforms["grid"].spacing[:, 0]),
+    data["<ne>_vol"] = (
+        jnp.sum(data["ne"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
     )
     return data
 

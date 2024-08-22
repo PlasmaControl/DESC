@@ -1,6 +1,7 @@
 import numbers
 
 import numpy as np
+from scipy.constants import mu_0
 
 from desc.backend import (
     fori_loop,
@@ -1502,3 +1503,159 @@ class ToroidalFlux(_Objective):
         )
 
         return Psi
+
+
+class LinkingCurrent(_Objective):
+    """Target the self-consistent poloidal linking current between the plasma and coils.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. If array, it has to
+        be flattened according to the number of inputs.
+    bounds : tuple of float, ndarray, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Operates over all coils, not each individial coil.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate plasma current at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)``.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = True
+    _units = "(A)"
+    _print_value_fmt = "Linking current: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="linking current",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        super().__init__(
+            things=[eq, coil],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        coil = self.things[1]
+        grid = self._grid or LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+        )
+        warnif(
+            not np.allclose(grid.nodes[:, 0], 1),
+            UserWarning,
+            "grid includes interior points, should be rho=1.",
+        )
+
+        self._dim_f = 1
+        self._data_keys = ["G"]
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "eq": eq,
+            "coil": coil,
+            "grid": grid,
+            "profiles": profiles,
+            "transforms": transforms,
+            "quad_weights": 1.0,
+        }
+
+        if self._normalize:
+            params = tree_leaves(
+                coil.params_dict, is_leaf=lambda x: isinstance(x, dict)
+            )
+            self._normalization = np.sum([np.abs(param["current"]) for param in params])
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, eq_params, coil_params, constants=None):
+        """Compute linking current error.
+
+        Parameters
+        ----------
+        eq_params : dict
+            Dictionary of equilibrium degrees of freedom, eg ``Equilibrium.params_dict``
+        coil_params : dict
+            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict``
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Linking current error.
+
+        """
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=eq_params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        eq_linking_current = 2 * jnp.pi * data["G"][0] / mu_0
+        coil_linking_current = jnp.sum(
+            jnp.concatenate(
+                [jnp.atleast_1d(param["current"]) for param in tree_leaves(coil_params)]
+            )
+        )
+        return eq_linking_current - coil_linking_current

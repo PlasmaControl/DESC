@@ -109,7 +109,7 @@ def map_coordinates(  # noqa: C901
             else:
                 if profiles["iota"] is None:
                     profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
-                iota = profiles["iota"](coords[:, 0])
+                iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
             return _map_clebsch_coordinates(
                 coords,
                 iota,

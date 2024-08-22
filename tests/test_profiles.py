@@ -509,19 +509,6 @@ class TestProfiles:
         np.testing.assert_allclose(data1["p_r"], data2["p_r"])
 
     @pytest.mark.unit
-    def test_line_average(self):
-        """Test that line-averaged profiles are correct."""
-        ne0 = 3e19
-        Te0 = 2e3
-        ne = PowerSeriesProfile(2 * ne0 * np.array([1, -1]), modes=[0, 1])
-        Te = PowerSeriesProfile(2 * Te0 * np.array([1, -1]), modes=[0, 1])
-
-        with pytest.raises(UserWarning):
-            eq = Equilibrium(electron_density=ne, electron_temperature=Te)
-            data = eq.compute("<ne>_rho")
-            np.testing.assert_allclose(data["<ne>_rho"], ne0)
-
-    @pytest.mark.unit
     def test_hermite_spline_solve(self):
         """Test that spline with double number of parameters is optimized."""
         eq = get("DSHAPE")

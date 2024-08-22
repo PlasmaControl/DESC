@@ -218,7 +218,7 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<ne>_vol",
-    label="\\lange n_e \\rangle_{vol}",
+    label="\\langle n_e \\rangle_{vol}",
     units="m^{-3}",
     units_long="1 / cubic meters",
     description="Volume average electron density",

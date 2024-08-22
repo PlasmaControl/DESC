@@ -7,22 +7,20 @@ from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
-from desc.integrals.singularities import (
+from desc.integrals import (
     DFTInterpolator,
     FFTInterpolator,
-    _get_quadrature_nodes,
-    singular_integral,
-    virtual_casing_biot_savart,
-)
-from desc.integrals.surface_integral import (
     _get_grid_surface,
+    _get_quadrature_nodes,
     line_integrals,
+    singular_integral,
     surface_averages,
     surface_integrals,
     surface_integrals_transform,
     surface_max,
     surface_min,
     surface_variance,
+    virtual_casing_biot_savart,
 )
 from desc.transform import Transform
 

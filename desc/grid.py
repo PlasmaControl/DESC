@@ -638,7 +638,7 @@ class _Grid(IOAble, ABC):
             shape += (-1,)
         x = x.reshape(shape, order="F")
         x = jnp.moveaxis(x, 1, 0)  # now shape rtz/raz etc
-        newax = tuple(list(self.coordinates).index(c) for c in order)
+        newax = tuple(self.coordinates.index(c) for c in order)
         if vec:
             newax += (3,)
         x = jnp.transpose(x, newax)

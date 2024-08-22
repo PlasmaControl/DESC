@@ -763,26 +763,18 @@ class TestGrid:
         t = grid.nodes[grid.unique_theta_idx, 1]
         z = grid.nodes[grid.unique_zeta_idx, 2]
 
+        # user regular allclose for broadcasting to work correctly
         # reshaping rtz should have rho along first axis
-        np.testing.assert_allclose(
-            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")[0], r[0]
-        )
-        np.testing.assert_allclose(
-            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")[2], r[2]
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz"), r[:, None, None]
         )
         # reshaping rzt should have theta along last axis
-        np.testing.assert_allclose(
-            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt")[:, :, 0], t[0]
-        )
-        np.testing.assert_allclose(
-            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt")[:, :, 3], t[3]
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt"), t[None, None, :]
         )
         # reshaping tzr should have zeta along 2nd axis
-        np.testing.assert_allclose(
-            grid.meshgrid_reshape(grid.nodes, "tzr")[:, 0, :, 2], z[0]
-        )
-        np.testing.assert_allclose(
-            grid.meshgrid_reshape(grid.nodes, "tzr")[:, 3, :, 2], z[3]
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes, "tzr")[:, :, :, 2], z[None, :, None]
         )
 
         # coordinates are rtz, not raz
@@ -793,6 +785,34 @@ class TestGrid:
         grid = ConcentricGrid(2, 3, 4)
         with pytest.raises(ValueError):
             grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
+
+        rho = np.linspace(0, 1, 3)
+        alpha = np.linspace(0, 2 * np.pi, 4)
+        zeta = np.linspace(0, 6 * np.pi, 5)
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        r, a, z = grid.nodes.T
+        r = grid.meshgrid_reshape(r, "raz")
+        a = grid.meshgrid_reshape(a, "raz")
+        z = grid.meshgrid_reshape(z, "raz")
+        # functions of zeta should separate along first two axes
+        # since those are contiguous, this should work
+        f = z.reshape(-1, zeta.size)
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        # likewise for rho
+        f = r.reshape(rho.size, -1)
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        # test reshaping result won't mix data
+        f = (a**2 + z).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        f = (r**2 + z).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        f = (r**2 + a).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[..., i - 1], f[..., i])
 
 
 @pytest.mark.unit

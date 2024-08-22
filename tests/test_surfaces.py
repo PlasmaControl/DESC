@@ -7,7 +7,7 @@ import desc.examples
 from desc.compute import rpz2xyz
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface, PoincareRZLSection
+from desc.geometry import FourierRZToroidalSurface, ZernikeRZLToroidalSection
 from desc.grid import LinearGrid
 
 
@@ -401,13 +401,13 @@ class TestFourierRZToroidalSurface:
         )
 
 
-class TestPoincareRZLSection:
-    """Tests for PoincareRZLSection class."""
+class TestZernikeRZLToroidalSection:
+    """Tests for ZernikeRZLToroidalSection class."""
 
     @pytest.mark.unit
     def test_area(self):
         """Test calculation of surface area."""
-        s = PoincareRZLSection()
+        s = ZernikeRZLToroidalSection()
         grid = LinearGrid(L=10, M=10)
         area = np.pi * 1**2
         np.testing.assert_allclose(s.compute("A", grid=grid)["A"], area)
@@ -415,7 +415,7 @@ class TestPoincareRZLSection:
     @pytest.mark.unit
     def test_normal(self):
         """Test calculation of surface normal vector."""
-        s = PoincareRZLSection()
+        s = ZernikeRZLToroidalSection()
         grid = LinearGrid(L=8, M=4, N=0, axis=False)
         N = s.compute("n_zeta", grid=grid)["n_zeta"]
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
@@ -423,7 +423,7 @@ class TestPoincareRZLSection:
     @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting surface attributes."""
-        c = PoincareRZLSection()
+        c = ZernikeRZLToroidalSection()
 
         R, Z, L = c.get_coeffs(0, 0)
         np.testing.assert_allclose(R, 10)
@@ -457,7 +457,7 @@ class TestPoincareRZLSection:
 
         (kind of pointless since it's a flat surface so its always 0)
         """
-        s = PoincareRZLSection()
+        s = ZernikeRZLToroidalSection()
         grid = LinearGrid(theta=np.pi / 2, rho=0.5)
         data = s.compute(
             [

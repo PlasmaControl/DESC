@@ -26,7 +26,7 @@ for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
             matches = pattern.findall(source_code)
             if matches:  # skip imported functions
                 # matches[0] is the thing this function says it computes, e.g. x
-                # while function_name is e.g. _x_PoincareRZLSection
+                # while function_name is e.g. _x_ZernikeRZLToroidalSection
                 if function_name in source_codes:
                     raise ValueError("Can't sort when things have same name.")
                 source_codes[function_name] = source_code

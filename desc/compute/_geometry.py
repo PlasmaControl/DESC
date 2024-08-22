@@ -164,7 +164,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     data=["|e_rho x e_theta|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
     resolution_requirement="rt",
 )
@@ -848,7 +848,7 @@ def _curvature_H_theta(params, transforms, profiles, data, **kwargs):
     data=["n_zeta", "e_rho_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _L_sff_zeta(params, transforms, profiles, data, **kwargs):
@@ -872,7 +872,7 @@ def _L_sff_zeta(params, transforms, profiles, data, **kwargs):
     data=["n_zeta", "e_rho_t"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _M_sff_zeta(params, transforms, profiles, data, **kwargs):
@@ -896,7 +896,7 @@ def _M_sff_zeta(params, transforms, profiles, data, **kwargs):
     data=["n_zeta", "e_theta_t"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _N_sff_zeta(params, transforms, profiles, data, **kwargs):
@@ -920,7 +920,7 @@ def _N_sff_zeta(params, transforms, profiles, data, **kwargs):
     data=["g_rr", "g_rt", "g_tt", "L_sff_zeta", "M_sff_zeta", "N_sff_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
@@ -959,7 +959,7 @@ def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
@@ -980,7 +980,7 @@ def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_zeta", "curvature_k2_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _curvature_K_zeta(params, transforms, profiles, data, **kwargs):
@@ -1004,7 +1004,7 @@ def _curvature_K_zeta(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_zeta", "curvature_k2_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):

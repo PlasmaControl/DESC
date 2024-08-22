@@ -98,7 +98,7 @@ Geometry
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
     desc.geometry.SplineXYZCurve
-    desc.geometry.PoincareRZLSection
+    desc.geometry.ZernikeRZLToroidalSection
 
 Grid
 ****

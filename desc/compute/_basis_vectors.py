@@ -1424,7 +1424,7 @@ def _e_sub_phi_rt(params, transforms, profiles, data, **kwargs):
     data=["R", "R_r", "Z_r", "omega_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _e_sub_rho(params, transforms, profiles, data, **kwargs):
@@ -1448,7 +1448,7 @@ def _e_sub_rho(params, transforms, profiles, data, **kwargs):
     data=["R", "R_r", "R_rr", "Z_rr", "omega_r", "omega_rr"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
@@ -1492,7 +1492,7 @@ def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _e_sub_rho_rr(params, transforms, profiles, data, **kwargs):
@@ -1537,7 +1537,7 @@ def _e_sub_rho_rr(params, transforms, profiles, data, **kwargs):
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
@@ -1598,7 +1598,7 @@ def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
     aliases=["e_theta_rrr"],
 )
@@ -1757,7 +1757,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
     aliases=["x_rrt", "x_rtr", "x_trr", "e_theta_rr"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
 )
 def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
@@ -1816,7 +1816,7 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
     aliases=["e_theta_rrt"],
 )
@@ -2163,7 +2163,7 @@ def _e_sub_rho_rzz(params, transforms, profiles, data, **kwargs):
     data=["R", "R_r", "R_rt", "R_t", "Z_rt", "omega_r", "omega_rt", "omega_t"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
     aliases=["e_theta_r"],
 )
@@ -2213,7 +2213,7 @@ def _e_sub_rho_t(params, transforms, profiles, data, **kwargs):
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
     aliases=["e_theta_rt"],
 )
@@ -2540,7 +2540,7 @@ def _e_sub_rho_vp(params, transforms, profiles, data, **kwargs):
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
     aliases=["e_rho_ttt"],
 )

@@ -243,7 +243,7 @@ def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     data=[],
     parameterization=[
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
     aliases=["e_zeta_r"],
 )
@@ -294,7 +294,7 @@ def _e_theta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **k
     data=[],
     parameterization=[
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.surface.PoincareRZLSection",
+        "desc.geometry.surface.ZernikeRZLToroidalSection",
     ],
     aliases=["e_rho_rz"],
 )
@@ -485,9 +485,9 @@ def _K_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.surface.PoincareRZLSection",
+    parameterization="desc.geometry.surface.ZernikeRZLToroidalSection",
 )
-def _x_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
+def _x_ZernikeRZLToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
     Z = transforms["Z"].transform(params["Z_lmn"])
     phi = transforms["grid"].nodes[:, 2]
@@ -510,9 +510,9 @@ def _x_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.surface.PoincareRZLSection",
+    parameterization="desc.geometry.surface.ZernikeRZLToroidalSection",
 )
-def _e_zeta_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
+def _e_zeta_ZernikeRZLToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_zeta"] = coords
     return data
@@ -532,10 +532,10 @@ def _e_zeta_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.surface.PoincareRZLSection",
+    parameterization="desc.geometry.surface.ZernikeRZLToroidalSection",
     aliases=["e_zeta_t"],
 )
-def _e_theta_z_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
+def _e_theta_z_ZernikeRZLToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_theta_z"] = coords
     return data
@@ -555,9 +555,9 @@ def _e_theta_z_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.surface.PoincareRZLSection",
+    parameterization="desc.geometry.surface.ZernikeRZLToroidalSection",
 )
-def _e_zeta_z_PoincareRZLSection(params, transforms, profiles, data, **kwargs):
+def _e_zeta_z_ZernikeRZLToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_zeta_z"] = coords
     return data

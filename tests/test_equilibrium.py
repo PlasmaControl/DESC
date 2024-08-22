@@ -372,7 +372,6 @@ def test_poincare_bc():
 
 @pytest.mark.regression
 @pytest.mark.slow
-@pytest.mark.filterwarnings("ignore::UserWarning")
 def test_poincare_as_bc():
     """Test fixed Poincare section solve for axisymmetry."""
     eq = get("SOLOVEV")

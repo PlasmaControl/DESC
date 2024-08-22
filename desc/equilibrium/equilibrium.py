@@ -20,7 +20,11 @@ from desc.compute.utils import (
     get_profiles,
     get_transforms,
 )
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, PoincareRZLSection
+from desc.geometry import (
+    FourierRZCurve,
+    FourierRZToroidalSurface,
+    ZernikeRZLToroidalSection,
+)
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
@@ -672,7 +676,7 @@ class Equilibrium(IOAble, Optimizable):
         -------
         surf : Surface
             object representing the given surface, either a FourierRZToroidalSurface
-            for surfaces of constant rho, or a PoincareRZLSection for
+            for surfaces of constant rho, or a ZernikeRZLToroidalSection for
             surfaces of constant zeta.
 
         """
@@ -736,7 +740,7 @@ class Equilibrium(IOAble, Optimizable):
 
         if zeta is not None:
             assert (zeta >= 0) and (zeta <= 2 * np.pi)
-            surface = PoincareRZLSection(sym=self.sym, zeta=zeta)
+            surface = ZernikeRZLToroidalSection(sym=self.sym, zeta=zeta)
             surface.change_resolution(self.L, self.M)
             Lp_lmn, Lp_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
 
@@ -1509,8 +1513,8 @@ class Equilibrium(IOAble, Optimizable):
     @xsection.setter
     def xsection(self, new):
         assert isinstance(
-            new, PoincareRZLSection
-        ), f"surfaces should be of type PoincareRZLSection, got {new}"
+            new, ZernikeRZLToroidalSection
+        ), f"surfaces should be of type ZernikeRZLToroidalSection, got {new}"
         assert (
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"

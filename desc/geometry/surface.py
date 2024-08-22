@@ -24,7 +24,7 @@ from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, setd
 
 from .core import Surface
 
-__all__ = ["FourierRZToroidalSurface", "PoincareRZLSection"]
+__all__ = ["FourierRZToroidalSurface", "ZernikeRZLToroidalSection"]
 
 
 class FourierRZToroidalSurface(Surface):
@@ -758,7 +758,7 @@ class FourierRZToroidalSurface(Surface):
             return offset_surface
 
 
-class PoincareRZLSection(Surface):
+class ZernikeRZLToroidalSection(Surface):
     """A toroidal cross section represented by a Zernike polynomial in R,Z and Lambda.
 
     Parameters
@@ -979,7 +979,8 @@ class PoincareRZLSection(Surface):
         self._sym = sym if sym is not None else self.sym
         if N is not None:
             warnings.warn(
-                "PoincareRZLSection does not have toroidal resolution, ignoring N"
+                "ZernikeRZLToroidalSection does not have toroidal "
+                "resolution, ignoring N"
             )
         if len(args) == 2:
             L, M = args

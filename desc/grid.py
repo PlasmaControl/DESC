@@ -980,7 +980,6 @@ class LinearGrid(_Grid):
             2 * np.pi / self._NFP * self._NFP_umbilic_factor,
         )
 
-        
         self._nodes, self._spacing = self._create_nodes(
             L=L,
             M=M,

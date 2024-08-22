@@ -202,9 +202,9 @@ Then, install DESC,
 Tested and confirmed to work on the Della cluster as of 6-20-24 and Stellar cluster at Princeton as of 6-20-24.
 
 
-COBRA (IPP, Germany)
+RAVEN (IPP, Germany)
 ++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the COBRA cluster at IPP on Aug 18, 2024
+These instructions were tested and confirmed to work on the RAVEN cluster at IPP on Aug 18, 2024
 
 Create a conda environment for DESC
 

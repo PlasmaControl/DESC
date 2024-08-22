@@ -298,7 +298,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     """
     source_grid = transforms["grid"].source_grid
     # Vectorize in rho later
-    rho = data["rho"]
+    rho = source_grid.meshgrid_reshape(data["rho"], "arz")
 
     psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
@@ -308,28 +308,36 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     # up-down symmetric equilibria only
     zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
-    iota = data["iota"]
-    shear = data["shear"]
-    psi = data["psi"]
+    # This would fail with rho vectorization
+    iota = jnp.mean(data["iota"])
+    shear = jnp.mean(data["shear"])
+    psi = jnp.mean(data["psi"])
     sign_psi = jnp.sign(psi)
     sign_iota = jnp.sign(iota)
 
     N_alpha = int(source_grid.num_alpha)
 
     # phi is the same for each alpha
-    phi = source_grid.nodes[::N_alpha, 2]
+    phi = source_grid.meshgrid_reshape(data["phi"], "arz")[0, 0, :]
     N_zeta = len(phi)
 
-    B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))
-    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N_zeta))
+    B = source_grid.meshgrid_reshape(data["|B|"], "arz")
+    B_sup_zeta = source_grid.meshgrid_reshape(data["B^zeta"], "arz")
+    gradpar = B_sup_zeta / B
+
+    # This would fail with rho vectorization
     dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
+
+    g_sup_aa = source_grid.meshgrid_reshape(data["g^aa"], "arz")[None, ...]
+    g_sup_ra = source_grid.meshgrid_reshape(data["g^ra"], "arz")[None, ...]
+    g_sup_rr = source_grid.meshgrid_reshape(data["g^rr"], "arz")[None, ...]
 
     gds2 = jnp.reshape(
         rho**2
         * (
-            data["g^aa"][None, :]
-            - 2 * sign_iota * shear / rho * zeta0[:, None] * data["g^ra"][None, :]
-            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * data["g^rr"][None, :]
+            g_sup_aa
+            - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
+            + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
         ),
         (N_alpha, N_zeta0, N_zeta),
     )
@@ -337,20 +345,21 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
     g = a_N**3 * B_N * gds2 / B * gradpar
     g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
+
+    cvdrift = source_grid.meshgrid_reshape(data["cvdrift"], "arz")[None, ...]
+    cvdrift0 = source_grid.meshgrid_reshape(data["cvdrift0"], "arz")[None, ...]
+
     c = (
         1
         * a_N**3
         * B_N
         * jnp.reshape(
             2
-            / data["B^zeta"][None, :]
+            / B_sup_zeta[None, ...]
             * sign_psi
             * rho**2
             * dpdpsi
-            * (
-                data["cvdrift"][None, :]
-                - shear / (2 * rho**2) * zeta0[:, None] * data["cvdrift0"][None, :]
-            ),
+            * (cvdrift - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0),
             (N_alpha, N_zeta0, N_zeta),
         )
     )
@@ -363,7 +372,6 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     k = jnp.arange(N_zeta - 2)[None, None, None, :]
 
     A = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
-    B = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
     B_inv = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
 
     A = A.at[i, l, j, k].set(
@@ -373,7 +381,6 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
         + g_half[i, l, j] * 1 / h**2 * (j - k == 1)
     )
 
-    B = B.at[i, l, j, k].set(jnp.sqrt(f[i, l, j + 1]) * (j - k == 0))
     B_inv = B_inv.at[i, l, j, k].set(1 / jnp.sqrt(f[i, l, j + 1]) * (j - k == 0))
 
     A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
@@ -462,7 +469,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     """
     source_grid = transforms["grid"].source_grid
     # Vectorize in rho later
-    rho = data["rho"]
+    rho = source_grid.meshgrid_reshape(data["rho"], "arz")
 
     psi_b = params["Psi"] / (2 * jnp.pi)
     a_N = data["a"]
@@ -472,48 +479,56 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     # up-down symmetric equilibria only
     zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
-    iota = data["iota"]
-    shear = data["shear"]
-    psi = data["psi"]
+    # This would fail with rho vectorization
+    iota = jnp.mean(data["iota"])
+    shear = jnp.mean(data["shear"])
+    psi = jnp.mean(data["psi"])
     sign_psi = jnp.sign(psi)
     sign_iota = jnp.sign(iota)
 
     N_alpha = int(source_grid.num_alpha)
 
     # phi is the same for each alpha
-    phi = source_grid.nodes[::N_alpha, 2]
+    phi = source_grid.meshgrid_reshape(data["phi"], "arz")[0, 0, :]
     N_zeta = len(phi)
 
-    B = jnp.reshape(data["|B|"], (N_alpha, 1, N_zeta))
-    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N_zeta))
-    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
+    B = source_grid.meshgrid_reshape(data["|B|"], "arz")
+    B_sup_zeta = source_grid.meshgrid_reshape(data["B^zeta"], "arz")
+    gradpar = B_sup_zeta / B
+
+    dpdpsi = source_grid.meshgrid_reshape(mu_0 * data["p_r"] / data["psi_r"], "arz")
+
+    g_sup_aa = source_grid.meshgrid_reshape(data["g^aa"], "arz")[None, :]
+    g_sup_ra = source_grid.meshgrid_reshape(data["g^ra"], "arz")[None, :]
+    g_sup_rr = source_grid.meshgrid_reshape(data["g^rr"], "arz")[None, :]
 
     gds2 = jnp.reshape(
         rho**2
         * (
-            data["g^aa"][None, :]
-            - 2 * sign_iota * shear / rho * zeta0[:, None] * data["g^ra"][None, :]
-            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * data["g^rr"][None, :]
+            g_sup_aa
+            - 2 * sign_iota * shear / rho * zeta0[:, None] * g_sup_ra
+            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
         ),
         (N_alpha, N_zeta0, N_zeta),
     )
 
     g = a_N**3 * B_N * gds2 / B * gradpar
     g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
+
+    cvdrift = source_grid.meshgrid_reshape(data["cvdrift"], "arz")[None, :]
+    cvdrift0 = source_grid.meshgrid_reshape(data["cvdrift0"], "arz")[None, :]
+
     c = (
         1
         * a_N**3
         * B_N
         * jnp.reshape(
             2
-            / data["B^zeta"][None, :]
+            / B_sup_zeta[None, :]
             * sign_psi
             * rho**2
             * dpdpsi
-            * (
-                data["cvdrift"][None, :]
-                - shear / (2 * rho**2) * zeta0[:, None] * data["cvdrift0"][None, :]
-            ),
+            * (cvdrift - shear / (2 * rho**2) * zeta0[:, None] * cvdrift0),
             (N_alpha, N_zeta0, N_zeta),
         )
     )

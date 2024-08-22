@@ -481,7 +481,7 @@ def test_ballooning_stability_eval():
     We calculated the ideal ballooning growth rate and Newcomb ball
     metric for the HELIOTRON case at different radii.
     """
-    mu_0 = 4 * np.pi * 1e-7
+    mu_0 = 4 * jnp.pi * 1e-7
     eq = desc.examples.get("HELIOTRON")
 
     # Flux surfaces on which to evaluate ballooning stability
@@ -505,6 +505,8 @@ def test_ballooning_stability_eval():
 
     # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N_zeta)
+
+    import pdb
 
     for i in range(len(surfaces)):
         rho = np.array([surfaces[i]])
@@ -535,7 +537,7 @@ def test_ballooning_stability_eval():
         ]
         data0 = eq.compute(data_keys0, grid=grid)
 
-        rho = data0["rho"]
+        rho = jnp.reshape(data0["rho"], (N_alpha, N_zeta))
         psi_b = eq.compute("Psi")["Psi"][-1] / (2 * jnp.pi)
         a_N = eq.compute(["a"])["a"]
         B_N = 2 * psi_b / a_N**2
@@ -544,44 +546,69 @@ def test_ballooning_stability_eval():
         # up-down symmetric equilibria only
         zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
-        iota = data0["iota"]
-        shear = data0["shear"]
-        psi = data0["psi"]
+        iota = jnp.reshape(data0["iota"], (N_alpha, N_zeta))
+        shear = jnp.reshape(data0["shear"], (N_alpha, N_zeta))
+        psi = jnp.reshape(data0["psi"], (N_alpha, N_zeta))
+
         sign_psi = jnp.sign(psi)
         sign_iota = jnp.sign(iota)
 
         phi = zeta
 
-        B = jnp.reshape(data0["|B|"], (N_alpha, 1, N_zeta))
-        gradpar = jnp.reshape(data0["B^zeta"] / data0["|B|"], (N_alpha, 1, N_zeta))
+        B = jnp.reshape(data0["|B|"], (N_alpha, N_zeta))
+        B_sup_zeta = jnp.reshape(data0["B^zeta"], (N_alpha, N_zeta))
+
+        gradpar = jnp.reshape(B_sup_zeta / B, (N_alpha, 1, N_zeta))
+        # This would fail with rho vectorization
         dpdpsi = jnp.mean(mu_0 * data0["p_r"] / data0["psi_r"])
 
+        g_sup_aa = jnp.reshape(data0["g^aa"], (N_alpha, N_zeta))
+        g_sup_ra = jnp.reshape(data0["g^ra"], (N_alpha, N_zeta))
+        g_sup_rr = jnp.reshape(data0["g^rr"], (N_alpha, N_zeta))
+
+        # zeta0 is the first dimension before reshaping
         gds2 = jnp.reshape(
-            rho**2
+            rho[None, :, :] ** 2
             * (
-                data0["g^aa"][None, :]
-                - 2 * sign_iota * shear / rho * zeta0[:, None] * data0["g^ra"][None, :]
-                + zeta0[:, None] ** 2 * (shear / rho) ** 2 * data0["g^rr"][None, :]
+                g_sup_aa[None, :, :]
+                - 2
+                * sign_iota[None, :, :]
+                * shear[None, :, :]
+                / rho[None, :, :]
+                * zeta0[:, None, None]
+                * g_sup_ra[None, :, :]
+                + zeta0[:, None, None] ** 2
+                * (shear[None, :, :] / rho[None, :, :]) ** 2
+                * g_sup_rr[None, :, :]
             ),
             (N_alpha, N_zeta0, N_zeta),
         )
 
+        B = jnp.reshape(B, (N_alpha, 1, N_zeta))
+
         f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
         g = a_N**3 * B_N * gds2 / B * gradpar
         g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
+
+        cvdrift = jnp.reshape(data0["cvdrift"], (N_alpha, N_zeta))
+        cvdrift0 = jnp.reshape(data0["cvdrift0"], (N_alpha, N_zeta))
+
         c = (
             1
             * a_N**3
             * B_N
             * jnp.reshape(
                 2
-                / data0["B^zeta"][None, :]
-                * sign_psi
-                * rho**2
+                / B_sup_zeta[None, :, :]
+                * sign_psi[None, :, :]
+                * rho[None, :, :] ** 2
                 * dpdpsi
                 * (
-                    data0["cvdrift"][None, :]
-                    - shear / (2 * rho**2) * zeta0[:, None] * data0["cvdrift0"][None, :]
+                    cvdrift[None, :, :]
+                    - shear[None, :, :]
+                    / (2 * rho[None, :, :] ** 2)
+                    * zeta0[:, None, None]
+                    * cvdrift0[None, :, :]
                 ),
                 (N_alpha, N_zeta0, N_zeta),
             )
@@ -616,6 +643,7 @@ def test_ballooning_stability_eval():
         lam2 = np.max(data["ideal ball gamma2"])
         Newcomb_metric = data["Newcomb ball metric"]
 
+        pdb.set_trace()
         np.testing.assert_allclose(lam1, lam2, atol=5e-3, rtol=1e-8)
 
         if lam2 > 0:

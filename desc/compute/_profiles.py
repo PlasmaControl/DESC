@@ -230,7 +230,7 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
     data=["ne", "sqrt(g)", "V"],
     resolution_requirement="rtz",
 )
-def _bar_ne(params, transforms, profiles, data, **kwargs):
+def _ne_vol(params, transforms, profiles, data, **kwargs):
     data["<ne>_vol"] = (
         jnp.sum(data["ne"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
     )

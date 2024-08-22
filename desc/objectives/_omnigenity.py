@@ -57,6 +57,19 @@ class QuasisymmetryBoozer(_Objective):
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
     name : str, optional
         Name of the objective function.
+    chunk_size : int, optional
+        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
+        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
+        instead of all at once.  The memory usage of the Jacobian calculation is
+        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
+        less memory the Jacobian calculation will require (with some baseline memory
+        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
+        with some baseline time, so the larger the ``chunk_size``, the faster the
+        calculation takes, at the cost of requiring more memory. A ``chunk_size``
+        of 1 corresponds to the least memory intensive,  but slowest method of
+        calculating the Jacobian.
+        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+
 
     """
 
@@ -78,6 +91,7 @@ class QuasisymmetryBoozer(_Objective):
         M_booz=None,
         N_booz=None,
         name="QS Boozer",
+        chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -95,6 +109,7 @@ class QuasisymmetryBoozer(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
         self._print_value_fmt = (
@@ -279,6 +294,19 @@ class QuasisymmetryTwoTerm(_Objective):
         Type of quasi-symmetry (M, N).
     name : str, optional
         Name of the objective function.
+    chunk_size : int, optional
+        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
+        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
+        instead of all at once.  The memory usage of the Jacobian calculation is
+        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
+        less memory the Jacobian calculation will require (with some baseline memory
+        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
+        with some baseline time, so the larger the ``chunk_size``, the faster the
+        calculation takes, at the cost of requiring more memory. A ``chunk_size``
+        of 1 corresponds to the least memory intensive,  but slowest method of
+        calculating the Jacobian.
+        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+
 
     """
 
@@ -299,6 +327,7 @@ class QuasisymmetryTwoTerm(_Objective):
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
+        chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -314,6 +343,7 @@ class QuasisymmetryTwoTerm(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
         self._print_value_fmt = (
@@ -471,6 +501,19 @@ class QuasisymmetryTripleProduct(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
+    chunk_size : int, optional
+        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
+        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
+        instead of all at once.  The memory usage of the Jacobian calculation is
+        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
+        less memory the Jacobian calculation will require (with some baseline memory
+        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
+        with some baseline time, so the larger the ``chunk_size``, the faster the
+        calculation takes, at the cost of requiring more memory. A ``chunk_size``
+        of 1 corresponds to the least memory intensive,  but slowest method of
+        calculating the Jacobian.
+        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+
 
     """
 
@@ -490,6 +533,7 @@ class QuasisymmetryTripleProduct(_Objective):
         deriv_mode="auto",
         grid=None,
         name="QS triple product",
+        chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -504,6 +548,7 @@ class QuasisymmetryTripleProduct(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -647,8 +692,21 @@ class Omnigenity(_Objective):
         computation time during optimization and self.things = [eq] only.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
-    name : str
+    name : str, optional
         Name of the objective function.
+    chunk_size : int, optional
+        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
+        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
+        instead of all at once.  The memory usage of the Jacobian calculation is
+        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
+        less memory the Jacobian calculation will require (with some baseline memory
+        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
+        with some baseline time, so the larger the ``chunk_size``, the faster the
+        calculation takes, at the cost of requiring more memory. A ``chunk_size``
+        of 1 corresponds to the least memory intensive,  but slowest method of
+        calculating the Jacobian.
+        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+
 
     """
 
@@ -675,6 +733,7 @@ class Omnigenity(_Objective):
         eq_fixed=False,
         field_fixed=False,
         name="omnigenity",
+        chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -706,6 +765,7 @@ class Omnigenity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -984,6 +1044,19 @@ class Isodynamicity(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
+    chunk_size : int, optional
+        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
+        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
+        instead of all at once.  The memory usage of the Jacobian calculation is
+        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
+        less memory the Jacobian calculation will require (with some baseline memory
+        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
+        with some baseline time, so the larger the ``chunk_size``, the faster the
+        calculation takes, at the cost of requiring more memory. A ``chunk_size``
+        of 1 corresponds to the least memory intensive,  but slowest method of
+        calculating the Jacobian.
+        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+
 
     """
 
@@ -1003,6 +1076,7 @@ class Isodynamicity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="Isodynamicity",
+        chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1017,6 +1091,7 @@ class Isodynamicity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

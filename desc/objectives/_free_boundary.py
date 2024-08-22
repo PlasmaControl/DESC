@@ -75,8 +75,21 @@ class VacuumBoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
-    name : str
+    name : str, optional
         Name of the objective function.
+    chunk_size : int, optional
+        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
+        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
+        instead of all at once.  The memory usage of the Jacobian calculation is
+        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
+        less memory the Jacobian calculation will require (with some baseline memory
+        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
+        with some baseline time, so the larger the ``chunk_size``, the faster the
+        calculation takes, at the cost of requiring more memory. A ``chunk_size``
+        of 1 corresponds to the least memory intensive,  but slowest method of
+        calculating the Jacobian.
+        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+
 
     """
 
@@ -101,6 +114,7 @@ class VacuumBoundaryError(_Objective):
         field_grid=None,
         field_fixed=False,
         name="Vacuum boundary error",
+        chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -123,6 +137,7 @@ class VacuumBoundaryError(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -390,8 +405,21 @@ class BoundaryError(_Objective):
     loop : bool
         If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
         less memory.
-    name : str
+    name : str, optional
         Name of the objective function.
+    chunk_size : int, optional
+        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
+        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
+        instead of all at once.  The memory usage of the Jacobian calculation is
+        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
+        less memory the Jacobian calculation will require (with some baseline memory
+        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
+        with some baseline time, so the larger the ``chunk_size``, the faster the
+        calculation takes, at the cost of requiring more memory. A ``chunk_size``
+        of 1 corresponds to the least memory intensive,  but slowest method of
+        calculating the Jacobian.
+        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+
 
 
     Examples
@@ -437,6 +465,7 @@ class BoundaryError(_Objective):
         field_fixed=False,
         loop=True,
         name="Boundary error",
+        chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -463,6 +492,7 @@ class BoundaryError(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -825,8 +855,21 @@ class BoundaryErrorNESTOR(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    name : str
+    name : str, optional
         Name of the objective function.
+    chunk_size : int, optional
+        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
+        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
+        instead of all at once.  The memory usage of the Jacobian calculation is
+        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
+        less memory the Jacobian calculation will require (with some baseline memory
+        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
+        with some baseline time, so the larger the ``chunk_size``, the faster the
+        calculation takes, at the cost of requiring more memory. A ``chunk_size``
+        of 1 corresponds to the least memory intensive,  but slowest method of
+        calculating the Jacobian.
+        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+
 
     """
 
@@ -853,6 +896,7 @@ class BoundaryErrorNESTOR(_Objective):
         loss_function=None,
         deriv_mode="auto",
         name="NESTOR Boundary",
+        chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -872,6 +916,7 @@ class BoundaryErrorNESTOR(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            chunk_size=chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

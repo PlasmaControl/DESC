@@ -33,10 +33,11 @@ class ObjectiveFunction(IOAble):
         Method for computing Jacobian matrices. "batched" uses forward mode, applied to
         the entire objective at once, and is generally the fastest for vector valued
         objectives, though most memory intensive. "blocked" builds the Jacobian for each
-        objective separately, using each objective's preferred AD mode. Generally the
-        most efficient option when mixing scalar and vector valued objectives.
-        "looped" uses forward mode jacobian vector products in a loop to build the
-        Jacobian column by column. Generally the slowest, but most memory efficient.
+        objective separately, using each objective's preferred AD mode (and
+        each objective's `chunk_size`). Generally the most efficient option when mixing
+        scalar and vector valued objectives. "looped" uses forward mode jacobian vector
+        products in a loop to build the Jacobian column by column. Generally the
+        slowest, but most memory efficient.
         "auto" defaults to "batched" if all sub-objectives are set to "fwd",
         otherwise "blocked".
     name : str
@@ -46,10 +47,11 @@ class ObjectiveFunction(IOAble):
         ``chunk_size`` columns at a time, instead of all at once. A
         ``chunk_size`` of 1 is equivalent to using `"looped"` deriv_mode.
         The memory usage of the Jacobian calculation is linearly proportional to
-        ``chunk_size``:the smaller the ``chunk_size``, the less memory the Jacobian
+        ``chunk_size``: the smaller the ``chunk_size``, the less memory the Jacobian
         calculation will require (with some baseline memory usage). The time it takes
-        to compute the Jacobian roughly ``t ~1/chunk_size` with some baseline time,
-        so the larger the ``chunk_size``, the faster the calculation takes.
+        to compute the Jacobian is roughly ``t ~1/chunk_size` with some baseline time,
+        so the larger the ``chunk_size``, the faster the calculation takes, at the cost
+        of requiring more memory.
         If None, it will default to the largest possible size i.e. ``dim_x``
 
     """
@@ -71,10 +73,8 @@ class ObjectiveFunction(IOAble):
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
         assert deriv_mode in {"auto", "batched", "looped", "blocked"}
-        if chunk_size is None:
-            self.chunk_size = objectives[0].chunk_size
-        else:
-            self.chunk_size = chunk_size
+
+        self.chunk_size = chunk_size
 
         self._objectives = objectives
         self._use_jit = use_jit

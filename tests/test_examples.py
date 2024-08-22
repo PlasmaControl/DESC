@@ -175,7 +175,7 @@ def test_1d_optimization():
     eq = get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
     constraints = (
-        ForceBalance(eq=eq, chunk_size=50),
+        ForceBalance(eq=eq, chunk_size=None),
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq, modes=eq.surface.Z_basis.modes[0:-1, :]),
         FixPressure(eq=eq),

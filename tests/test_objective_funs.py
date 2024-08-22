@@ -1238,8 +1238,8 @@ def test_derivative_modes():
     )
     obj2 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf),
-            MagneticWell(eq),
+            PlasmaVesselDistance(eq, surf, chunk_size=2),
+            MagneticWell(eq, chunk_size=3),
         ],
         deriv_mode="blocked",
         use_jit=False,

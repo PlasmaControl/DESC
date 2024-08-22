@@ -506,8 +506,6 @@ def test_ballooning_stability_eval():
     # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N_zeta)
 
-    import pdb
-
     for i in range(len(surfaces)):
         rho = np.array([surfaces[i]])
 
@@ -558,41 +556,35 @@ def test_ballooning_stability_eval():
 
         phi = zeta
 
-        B = jnp.reshape(data0["|B|"], (N_alpha, N_zeta))
-        B_sup_zeta = jnp.reshape(data0["B^zeta"], (N_alpha, N_zeta))
+        source_grid = grid.source_grid
 
-        gradpar = jnp.reshape(B_sup_zeta / B, (N_alpha, 1, N_zeta))
+        B = source_grid.meshgrid_reshape(data0["|B|"], "arz")
+        B_sup_zeta = source_grid.meshgrid_reshape(data0["B^zeta"], "arz")
+        gradpar = B_sup_zeta / B
+
         # This would fail with rho vectorization
         dpdpsi = jnp.mean(mu_0 * data0["p_r"] / data0["psi_r"])
 
-        g_sup_aa = jnp.reshape(data0["g^aa"], (N_alpha, N_zeta))
-        g_sup_ra = jnp.reshape(data0["g^ra"], (N_alpha, N_zeta))
-        g_sup_rr = jnp.reshape(data0["g^rr"], (N_alpha, N_zeta))
+        g_sup_aa = source_grid.meshgrid_reshape(data0["g^aa"], "arz")[None, ...]
+        g_sup_ra = source_grid.meshgrid_reshape(data0["g^ra"], "arz")[None, ...]
+        g_sup_rr = source_grid.meshgrid_reshape(data0["g^rr"], "arz")[None, ...]
 
-        # zeta0 is the first dimension before reshaping
         gds2 = jnp.reshape(
             rho**2
             * (
-                g_sup_aa[None, :, :]
-                - 2
-                * sign_iota
-                * shear
-                / rho
-                * zeta0[:, None, None]
-                * g_sup_ra[None, :, :]
-                + zeta0[:, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr[None, :, :]
+                g_sup_aa
+                - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
+                + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
             ),
             (N_alpha, N_zeta0, N_zeta),
         )
-
-        B = jnp.reshape(B, (N_alpha, 1, N_zeta))
 
         f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
         g = a_N**3 * B_N * gds2 / B * gradpar
         g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
 
-        cvdrift = jnp.reshape(data0["cvdrift"], (N_alpha, N_zeta))
-        cvdrift0 = jnp.reshape(data0["cvdrift0"], (N_alpha, N_zeta))
+        cvdrift = source_grid.meshgrid_reshape(data0["cvdrift"], "arz")[None, ...]
+        cvdrift0 = source_grid.meshgrid_reshape(data0["cvdrift0"], "arz")[None, ...]
 
         c = (
             1
@@ -600,13 +592,13 @@ def test_ballooning_stability_eval():
             * B_N
             * jnp.reshape(
                 2
-                / B_sup_zeta[None, :, :]
+                / B_sup_zeta[None, ...]
                 * sign_psi
                 * rho**2
                 * dpdpsi
                 * (
-                    cvdrift[None, :, :]
-                    - shear / (2 * rho**2) * zeta0[:, None, None] * cvdrift0[None, :, :]
+                    cvdrift
+                    - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0
                 ),
                 (N_alpha, N_zeta0, N_zeta),
             )
@@ -641,7 +633,6 @@ def test_ballooning_stability_eval():
         lam2 = np.max(data["ideal ball gamma2"])
         Newcomb_metric = data["Newcomb ball metric"]
 
-        pdb.set_trace()
         np.testing.assert_allclose(lam1, lam2, atol=5e-3, rtol=1e-8)
 
         if lam2 > 0:

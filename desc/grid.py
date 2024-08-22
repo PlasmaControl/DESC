@@ -1299,7 +1299,6 @@ class QuadratureGrid(_Grid):
         self._sym = False
         self._node_pattern = "quad"
         self._coordinates = "rtz"
-        
         self._is_meshgrid = True
         self._period = (
             np.inf,

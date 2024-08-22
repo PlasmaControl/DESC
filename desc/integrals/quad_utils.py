@@ -176,3 +176,61 @@ def leggausslob(deg):
 
     w = 2 / (deg * (deg - 1) * legval(x=x, c=c0) ** 2)
     return x, w
+
+
+def get_quad_points(quad, automorphism):
+    """Apply automorphism to given quadrature points and weights.
+
+    Parameters
+    ----------
+    quad : (jnp.ndarray, jnp.ndarray)
+        Quadrature points xₖ and weights wₖ for the approximate evaluation of an
+        integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
+    automorphism : (Callable, Callable) or None
+        The first callable should be an automorphism of the real interval [-1, 1].
+        The second callable should be the derivative of the first. This map defines
+        a change of variable for the bounce integral. The choice made for the
+        automorphism will affect the performance of the quadrature method.
+
+    Returns
+    -------
+    x, w : (jnp.ndarray, jnp.ndarray)
+        Quadrature points in [-1, 1] and associated weights.
+
+    """
+    x, w = quad
+    assert x.ndim == w.ndim == 1
+    assert x.shape == w.shape
+    if automorphism is not None:
+        # Apply automorphisms to supress singularities.
+        auto, grad_auto = automorphism
+        w = w * grad_auto(x)
+        # Recall bijection_from_disc(auto(x), ζ_b₁, ζ_b₂) = ζ.
+        x = auto(x)
+    return x, w
+
+
+def composite_linspace(x, num):
+    """Returns linearly spaced points between every pair of points ``x``.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        First axis has values to return linearly spaced values between. The remaining
+        axes are batch axes. Assumes input is sorted along first axis.
+    num : int
+        Number of points between every pair of points in ``x``.
+
+    Returns
+    -------
+    pts : jnp.ndarray
+        Shape ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:]).
+        Linearly spaced points between ``x``.
+
+    """
+    x = jnp.atleast_1d(x)
+    pts = jnp.linspace(x[:-1], x[1:], num + 1, endpoint=False)
+    pts = jnp.swapaxes(pts, 0, 1).reshape(-1, *x.shape[1:])
+    pts = jnp.append(pts, x[jnp.newaxis, -1], axis=0)
+    assert pts.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
+    return pts

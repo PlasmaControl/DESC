@@ -12,15 +12,11 @@ from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
-from desc.integrals._interp_utils import fourier_pts
+from desc.grid import LinearGrid
+from desc.integrals import FourierBounce
 from desc.integrals.bounce_integral import filter_bounce_points, get_pitch
-from desc.integrals.fourier_bounce_integral import (
-    FourierChebyshevBasis,
-    bounce_integral,
-    get_alphas,
-    required_names,
-)
+from desc.integrals.fourier_bounce_integral import FourierChebyshevBasis, _get_alphas
+from desc.integrals.interp_utils import fourier_pts
 
 
 @pytest.mark.unit
@@ -31,7 +27,7 @@ from desc.integrals.fourier_bounce_integral import (
 def test_alpha_sequence(alpha_0, iota, num_period, period):
     """Test field line poloidal label tracking."""
     iota = np.atleast_1d(iota)
-    alphas = get_alphas(alpha_0, iota, num_period, period)
+    alphas = _get_alphas(alpha_0, iota, num_period, period)
     assert alphas.shape == (iota.size, num_period)
     for i in range(iota.size):
         assert np.unique(alphas[i]).size == num_period, f"{iota} is irrational"
@@ -66,7 +62,7 @@ class TestBouncePoints:
         f = self._periodic_fun(nodes, M, N)
         fcb = FourierChebyshevBasis(f, domain=domain)
         pcb = fcb.compute_cheb(fourier_pts(M))
-        pitch = 0.5  # 1 / np.linspace(1, 4, 20)
+        pitch = 1 / np.linspace(1, 4, 20)
         bp1, bp2 = pcb.bounce_points(pitch)
         pcb.check_bounce_points(bp1, bp2, pitch)
         bp1, bp2 = filter_bounce_points(bp1, bp2)
@@ -93,14 +89,16 @@ def test_fourier_chebyshev(rho=1, M=8, N=32, f=lambda B, pitch: B * pitch):
     grid = LinearGrid(
         rho=rho, M=eq.M_grid, N=eq.N_grid, sym=False, NFP=eq.NFP
     )  # check if NFP!=1 works
-    data = eq.compute(names=required_names() + ["min_tz |B|", "max_tz |B|"], grid=grid)
-    bounce_integrate, _ = bounce_integral(
+    data = eq.compute(
+        names=FourierBounce.required_names() + ["min_tz |B|", "max_tz |B|"], grid=grid
+    )
+    fb = FourierBounce(
         grid, data, M, N, desc_from_clebsch, check=True, warn=False
     )  # TODO check true
     pitch = get_pitch(
         grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
     )
-    result = bounce_integrate(f, [], pitch)  # noqa: F841
+    result = fb.bounce_integrate(f, [], pitch)  # noqa: F841
 
 
 @pytest.mark.unit
@@ -114,18 +112,12 @@ def test_drift():
     np.testing.assert_allclose(rho, 0.5)
 
     # Make a set of nodes along a single fieldline.
-    grid_rtz = Grid.create_meshgrid(
-        [
-            rho,
-            np.linspace(0, 2 * np.pi, eq.M_grid),
-            np.linspace(0, 2 * np.pi, eq.N_grid + 1),
-        ],
-    )
-    data = eq.compute(["iota"], grid=grid_rtz)
-    iota = grid_rtz.compress(data["iota"]).item()
+    grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
+    data = eq.compute(["iota"], grid=grid_fsa)
+    iota = grid_fsa.compress(data["iota"]).item()
     alpha = 0
     zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-    grid_raz = get_rtz_grid(
+    grid = get_rtz_grid(
         eq,
         rho,
         alpha,
@@ -135,7 +127,7 @@ def test_drift():
         iota=np.array([iota]),
     )
     data = eq.compute(
-        required_names()
+        FourierBounce.required_names()
         + [
             "cvdrift",
             "gbdrift",
@@ -146,7 +138,7 @@ def test_drift():
             "psi",
             "a",
         ],
-        grid=grid_raz,
+        grid=grid,
     )
     np.testing.assert_allclose(data["psi"], psi)
     np.testing.assert_allclose(data["iota"], iota)
@@ -156,21 +148,25 @@ def test_drift():
     data["rho"] = rho
     data["alpha"] = alpha
     data["zeta"] = zeta
-    data["psi"] = grid_raz.compress(data["psi"])
-    data["iota"] = grid_raz.compress(data["iota"])
-    data["shear"] = grid_raz.compress(data["shear"])
+    data["psi"] = grid.compress(data["psi"])
+    data["iota"] = grid.compress(data["iota"])
+    data["shear"] = grid.compress(data["shear"])
+
     # Compute analytic approximation.
     drift_analytic, cvdrift, gbdrift, pitch = _drift_analytic(data)
-
     # Compute numerical result.
     M, N = eq.M_grid, 100
-    clebsch = FourierChebyshevBasis.nodes(M=eq.M_grid, N=N, rho=rho)
-    data_2 = eq.compute(names=required_names() + ["cvdrift", "gbdrift"], grid=grid_rtz)
+    clebsch = FourierChebyshevBasis.nodes(
+        M=eq.M_grid, N=N, domain=FourierBounce.domain, rho=rho
+    )
+    data_2 = eq.compute(
+        names=FourierBounce.required_names() + ["cvdrift", "gbdrift"], grid=grid
+    )
     normalization = -np.sign(data["psi"]) * data["B ref"] * data["a"] ** 2
     cvdrift = data_2["cvdrift"] * normalization
     gbdrift = data_2["gbdrift"] * normalization
-    bounce_integrate, _ = bounce_integral(
-        grid_rtz,
+    fb = FourierBounce(
+        grid,
         data_2,
         M,
         N,
@@ -197,13 +193,13 @@ def test_drift():
     def integrand_den(B, pitch):
         return 1 / jnp.sqrt(1 - pitch * B)
 
-    drift_numerical_num = bounce_integrate(
+    drift_numerical_num = fb.bounce_integrate(
         integrand=integrand_num,
         f=[cvdrift, gbdrift],
         pitch=pitch[:, np.newaxis],
         num_well=1,
     )
-    drift_numerical_den = bounce_integrate(
+    drift_numerical_den = fb.bounce_integrate(
         integrand=integrand_den,
         f=[],
         pitch=pitch[:, np.newaxis],

@@ -6,7 +6,8 @@ from orthax.chebyshev import chebroots
 from orthax.legendre import leggauss
 
 from desc.backend import dct, idct, irfft, jnp, rfft, rfft2
-from desc.integrals._interp_utils import (
+from desc.integrals.bounce_integral import _fix_inversion, filter_bounce_points
+from desc.integrals.interp_utils import (
     _filter_distinct,
     cheb_from_dct,
     cheb_pts,
@@ -17,13 +18,13 @@ from desc.integrals._interp_utils import (
     irfft2_non_uniform,
     irfft_non_uniform,
 )
-from desc.integrals._quad_utils import (
+from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     bijection_to_disc,
+    get_quad_points,
     grad_automorphism_sin,
 )
-from desc.integrals.bounce_integral import _fix_inversion, filter_bounce_points
 from desc.utils import (
     atleast_2d_end,
     atleast_3d_mid,
@@ -34,39 +35,11 @@ from desc.utils import (
     warnif,
 )
 
-_chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
-
-def _flatten_matrix(y):
-    # Flatten batch of matrix to batch of vector.
-    return y.reshape(*y.shape[:-2], -1)
-
-
-def get_alphas(alpha_0, iota, num_transit, period):
-    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
-
-    Parameters
-    ----------
-    alpha_0 : float
-        Starting field line poloidal label.
-    iota : jnp.ndarray
-        Shape (iota.size, ).
-        Rotational transform normalized by 2π.
-    num_transit : float
-        Number of ``period``s to follow field line.
-    period : float
-        Toroidal period after which to update label.
-
-    Returns
-    -------
-    alphas : jnp.ndarray
-        Shape (iota.size, num_transit).
-        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
-
-    """
-    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    alphas = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_transit)
-    return alphas
+def _fast_transform(f, lobatto):
+    M = f.shape[-2]
+    N = f.shape[-1]
+    return rfft(dct(f, type=2 - lobatto, axis=-1), axis=-2) / (M * (N - lobatto))
 
 
 class FourierChebyshevBasis:
@@ -112,7 +85,7 @@ class FourierChebyshevBasis:
         self.domain = domain
         errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
         self.lobatto = bool(lobatto)
-        self._c = self._fast_transform(f, self.lobatto)
+        self._c = _fast_transform(f, self.lobatto)
 
     @staticmethod
     def nodes(M, N, domain, lobatto=False, **kwargs):
@@ -143,12 +116,6 @@ class FourierChebyshevBasis:
         coord = list(map(jnp.ravel, jnp.meshgrid(*coord, indexing="ij")))
         coord = jnp.column_stack(coord)
         return coord
-
-    @staticmethod
-    def _fast_transform(f, lobatto):
-        M = f.shape[-2]
-        N = f.shape[-1]
-        return rfft(dct(f, type=2 - lobatto, axis=-1), axis=-2) / (M * (N - lobatto))
 
     def evaluate(self, M, N):
         """Evaluate Fourier-Chebyshev series.
@@ -208,6 +175,14 @@ class FourierChebyshevBasis:
         cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2), axis=-1)
         assert cheb.shape[-2:] == (x.shape[-2], self.N)
         return PiecewiseChebyshevBasis(cheb, self.domain)
+
+
+_chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
+
+
+def _flatten_matrix(y):
+    # Flatten batch of matrix to batch of vector.
+    return y.reshape(*y.shape[:-2], -1)
 
 
 def _subtract(c, k):
@@ -657,122 +632,116 @@ class PiecewiseChebyshevBasis:
         return fig, ax
 
 
-def _bounce_quadrature(bp1, bp2, x, w, m, n, integrand, f, b_sup_z, B, T, pitch):
-    """Bounce integrate ∫ f(ℓ) dℓ.
+def _get_alphas(alpha_0, iota, num_transit, period):
+    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
 
     Parameters
     ----------
-    bp1 : jnp.ndarray
-        Shape (P, L, num_well).
-        The field line-following coordinates of bounce points for a given pitch
-        along a field line. The pairs ``bp1`` and ``bp2`` form left and right
-        integration boundaries, respectively, for the bounce integrals.
-    bp2 : jnp.ndarray
-        Shape (P, L, num_well).
-        The field line-following coordinates of bounce points for a given pitch
-        along a field line. The pairs ``bp1`` and ``bp2`` form left and right
-        integration boundaries, respectively, for the bounce integrals.
-    x : jnp.ndarray
-        Shape (w.size, ).
-        Quadrature points in [-1, 1].
-    w : jnp.ndarray
-        Shape (w.size, ).
-        Quadrature weights.
-    m : int
-        Poloidal periodic DESC coordinate resolution on which the given
-         ``f`` and ``b_sup_z`` were evaluated.
-    n : int
-        Toroidal periodic DESC coordinate resolution on which the given
-        ``f`` and ``b_sup_z`` were evaluated.
-    integrand : callable
-        The composition operator on the set of functions in ``f`` that maps the
-        functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
-        arrays in ``f`` as arguments as well as the additional keyword arguments:
-        ``B`` and ``pitch``. A quadrature will be performed to approximate the
-        bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
-    f : list of jnp.ndarray
-        Shape (L * m * n, ).
-        Arguments to the callable ``integrand``. These should be real scalar-valued
-        functions in the bounce integrand evaluated on the periodic DESC coordinate
-        (ρ, θ, ζ) tensor-product grid.
-    b_sup_z : jnp.ndarray
-        Shape (L, 1, m, n).
-        Set of 2D Fourier spectral coefficients of B^ζ/|B|.
-    B : PiecewiseChebyshevBasis
-        Set of 1D Chebyshev spectral coefficients of |B| along field line.
-        {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A }.
-    T : PiecewiseChebyshevBasis
-        Set of 1D Chebyshev spectral coefficients of θ along field line.
-        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A }.
-    pitch : jnp.ndarray
-        Shape (P, L).
-        λ values to evaluate the bounce integral at each field line.
+    alpha_0 : float
+        Starting field line poloidal label.
+    iota : jnp.ndarray
+        Shape (iota.size, ).
+        Rotational transform normalized by 2π.
+    num_transit : float
+        Number of ``period``s to follow field line.
+    period : float
+        Toroidal period after which to update label.
 
     Returns
     -------
-    result : jnp.ndarray
-        Shape (P, L, num_well).
-        First axis enumerates pitch values. Second axis enumerates the field lines.
-        Last axis enumerates the bounce integrals.
+    alphas : jnp.ndarray
+        Shape (iota.size, num_transit).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
 
     """
-    assert bp1.ndim == 3
-    assert bp1.shape == bp2.shape
-    assert x.ndim == 1
-    assert x.shape == w.shape
-    assert B.cheb.ndim == 3
-    assert B.cheb.shape == T.cheb.shape
-    assert pitch.ndim == 2
+    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
+    alphas = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_transit)
+    return alphas
 
-    P, L, num_well = bp1.shape
-    shape = (P, L, num_well, x.size)
-    # Quadrature points parameterized by ζ, for each pitch and flux surface.
-    Q_zeta = _flatten_matrix(
-        bijection_from_disc(
-            x,
-            bp1[..., jnp.newaxis],
-            bp2[..., jnp.newaxis],
-        )
+
+def _transform_to_desc(grid, f):
+    """Transform to DESC spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Periodic tensor-product grid in (ρ, θ, ζ).
+        Note that below shape notation defines
+        L = ``grid.num_rho``.
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Coefficients 2D real FFT.
+
+    """
+    f = grid.meshgrid_reshape(f, order="rtz")[:, jnp.newaxis]
+    return rfft2(f, norm="forward")
+
+
+def _transform_to_clebsch(grid, M, N, desc_from_clebsch, B):
+    """Transform to Clebsch spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Periodic tensor-product grid in (ρ, θ, ζ).
+        Note that below shape notation defines
+        L = ``grid.num_rho``.
+    M : int
+        Grid resolution in poloidal direction for Clebsch coordinate grid.
+        Preferably power of 2. A good choice is ``m``. If the poloidal stream
+        function condenses the Fourier spectrum of |B| significantly, then a
+        larger number may be beneficial.
+    N : int
+        Grid resolution in toroidal direction for Clebsch coordinate grid.
+        Preferably power of 2.
+    desc_from_clebsch : jnp.ndarray
+        Shape (L * M * N, 3).
+        DESC coordinate grid (ρ, θ, ζ) sourced from the Clebsch coordinate
+        tensor-product grid (ρ, α, ζ) returned by
+        ``FourierChebyshevBasis.nodes(M,N,domain=FourierBounce.domain)``.
+    B : jnp.ndarray
+        |B| evaluated on ``grid``.
+
+    Returns
+    -------
+    T, B : (FourierChebyshevBasis, FourierChebyshevBasis)
+
+    """
+    T = FourierChebyshevBasis(
+        # θ is computed on the optimal nodes in Clebsch space,
+        # which is a tensor product node set in Clebsch space.
+        f=desc_from_clebsch[:, 1].reshape(grid.num_rho, M, N),
+        domain=FourierBounce.domain,
     )
-    # Quadrature points in (θ, ζ) coordinates.
-    Q_desc = jnp.stack([T.eval1d(Q_zeta), Q_zeta], axis=-1)
-    f = [interp_rfft2(Q_desc, f_i.reshape(L, 1, m, n)).reshape(shape) for f_i in f]
-    result = jnp.dot(
-        integrand(
-            *f,
-            B=B.eval1d(Q_zeta).reshape(shape),
-            pitch=pitch[..., jnp.newaxis, jnp.newaxis],
-        )
-        / irfft2_non_uniform(Q_desc, b_sup_z, m, n).reshape(shape),
-        w,
+    # Transformation from spectral domain of periodic basis to spectral
+    # domain of non-periodic basis is best done through interpolation.
+    # No shortcuts.
+    B = FourierChebyshevBasis(
+        f=interp_rfft2(
+            # Interpolate to optimal nodes in Clebsch space,
+            # which is not a tensor product node set in DESC space.
+            xq=desc_from_clebsch[:, 1:].reshape(grid.num_rho, -1, 2),
+            f=grid.meshgrid_reshape(B, order="rtz")[:, jnp.newaxis],
+        ).reshape(grid.num_rho, M, N),
+        domain=FourierBounce.domain,
     )
-    assert result.shape == (P, L, num_well)
-    return result
+    # We compute |B|(α,ζ) so that roots are obtainable without inferior
+    # local search algorithms and θ(α,ζ) to avoid coordinate mapping
+    # of quadrature points in Clebsch space to DESC space. The root finding
+    # required to solve the nonlinear relation in the latter is not "local"
+    # because there is a global minima or unique mapping between coordinate
+    # systems. However, it should still be avoided as the number of
+    # quadrature points is higher due to the large number of integrals that
+    # need to be computed.
+    return T, B
 
 
-def required_names():
-    """Return names in ``data_index`` required to compute bounce integrals."""
-    return ["B^zeta", "|B|", "iota"]
-
-
-# TODO: Assumes zeta = phi (alpha sequence)
-def bounce_integral(
-    grid,
-    data,
-    M,
-    N,
-    desc_from_clebsch,
-    alpha_0=0.0,
-    num_transit=50,
-    quad=leggauss(21),
-    automorphism=(automorphism_sin, grad_automorphism_sin),
-    B_ref=1.0,
-    L_ref=1.0,
-    check=False,
-    plot=False,
-    **kwargs,
-):
-    """Returns a method to compute bounce integrals.
+class FourierBounce:
+    """Computes bounce integrals with pseudo-spectral methods.
 
     The bounce integral is defined as ∫ f(ℓ) dℓ, where
         dℓ parameterizes the distance along the field line in meters,
@@ -787,134 +756,212 @@ def bounce_integral(
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    Parameters
+    Attributes
     ----------
-    grid : Grid
-        Periodic tensor-product grid in (ρ, θ, ζ).
-        Note that below shape notation defines
-        L = ``grid.num_rho``, m = ``grid.num_theta``, and n = ``grid.num_zeta``.
-    data : dict of jnp.ndarray
-        Data evaluated on grid.
-    M : int
-        Grid resolution in poloidal direction for Clebsch coordinates.
-        Preferably power of 2. A good choice is ``m``. If the poloidal stream
-        function condenses the Fourier spectrum of |B| significantly, then a
-        larger number may be beneficial.
-    N : int
-        Grid resolution in toroidal direction for Clebsch coordinates.
-        Preferably power of 2.
-    desc_from_clebsch : jnp.ndarray
-        Shape (L * M * N, 3).
-        DESC coordinate grid (ρ, θ, ζ) sourced from the Clebsch coordinate
-         tensor-product grid (ρ, α, ζ) returned by
-        ``FourierChebyshevBasis.nodes(M,N,domain=(0,2π))``.
-    alpha_0 : float
-        Starting field line poloidal label.
-        TODO: Allow multiple starting labels for near-rational surfaces.
-              Concatenate along second to last axis of cheb.
+    B : PiecewiseChebyshevBasis
+        Set of 1D Chebyshev spectral coefficients of |B| along field line.
+        {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A } where A = (α₀, α₁, …, αₘ₋₁) is the
+        sequence of poloidal coordinates that specify the field line.
+    T : PiecewiseChebyshevBasis
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A } where A = (α₀, α₁, …, αₘ₋₁) is the
+        sequence of poloidal coordinates that specify the field line.
+    L : int
+        Number of flux surfaces to compute on.
     num_transit : int
         Number of toroidal transits to follow field line.
-    quad : (jnp.ndarray, jnp.ndarray)
-        Quadrature points xₖ and weights wₖ for the approximate evaluation of an
-        integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 21 points.
-    automorphism : (Callable, Callable) or None
-        The first callable should be an automorphism of the real interval [-1, 1].
-        The second callable should be the derivative of the first. This map defines a
-        change of variable for the bounce integral. The choice made for the automorphism
-        will affect the performance of the quadrature method.
-    B_ref : float
-        Optional. Reference magnetic field strength for normalization.
-        Has no effect on computation, but may be useful for analysis.
-    L_ref : float
-        Optional. Reference length scale for normalization.
-        Has no effect on computation, but may be useful for analysis.
-    check : bool
+    N : int
+        Chebyshev spectral resolution.
+    _b_sup_z : jnp.ndarray
+        Shape (L, 1, m, n).
+        Set of 2D (θ, ζ) Fourier spectral coefficients of B^ζ/|B|.
+    _x : jnp.ndarray
+        Shape (w.size, ).
+        Quadrature points in [-1, 1].
+    _w : jnp.ndarray
+        Shape (w.size, ).
+        Quadrature weights.
+    _check : bool
         Flag for debugging. Must be false for jax transformations.
-    plot : bool
+    _plot : bool
         Whether to plot stuff if ``check`` is true. Default is false.
 
-    Returns
-    -------
-    bounce_integrate : callable
-        This callable method computes the bounce integral ∫ f(ℓ) dℓ for every
-        specified field line for every λ value in ``pitch``.
-    spline : tuple(ndarray, PiecewiseChebyshevBasis, PiecewiseChebyshevBasis)
-        alphas : jnp.ndarray
-            Poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
-        B : PiecewiseChebyshevBasis
-            Set of 1D Chebyshev spectral coefficients of |B| along field line.
-            {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A }.
-        T : PiecewiseChebyshevBasis
-            Set of 1D Chebyshev spectral coefficients of θ along field line.
-            {θ_α : ζ ↦ θ(α, ζ) | α ∈ A }.
-
     """
-    # Strictly increasing zeta knots enforces dζ > 0.
-    # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require B^ζ = B⋅∇ζ > 0.
-    # This is equivalent to changing the sign of ∇ζ (or [∂ℓ/∂ζ]|ρ,a).
-    warnif(
-        check and kwargs.pop("warn", True) and jnp.any(data["B^zeta"] <= 0),
-        msg="(∂ℓ/∂ζ)|ρ,a > 0 is required. Enforcing positive B^ζ.",
-    )
 
-    # Resolution of periodic DESC coordinate tensor-product grid.
-    L, m, n = grid.num_rho, grid.num_theta, grid.num_zeta
-    # Transform to DESC spectral domain.
-    b_sup_z = rfft2(  # B^ζ(θ,ζ)
-        (jnp.abs(data["B^zeta"]) / data["|B|"] * L_ref).reshape(L, 1, m, n),
-        norm="forward",
-    )
     domain = (0, 2 * jnp.pi)
-    # Transform to Clebsch spectral domain.
-    # We compute θ(α,ζ) to avoid nonlinear root finding later, and |B|(α,ζ)
-    # so that roots are computable without inferior local search algorithms.
-    T = FourierChebyshevBasis(desc_from_clebsch[:, 1].reshape(L, M, N), domain)
-    B = FourierChebyshevBasis(
-        interp_rfft2(
-            xq=desc_from_clebsch[:, 1:].reshape(L, -1, 2),
-            f=data["|B|"].reshape(L, 1, m, n) / B_ref,
-        ).reshape(L, M, N),
-        domain,
-    )
-    # Peel off field lines.
-    alphas = get_alphas(alpha_0, grid.compress(data["iota"]), num_transit, domain[-1])
-    T = T.compute_cheb(alphas)
-    B = B.compute_cheb(alphas)
-    assert T.cheb.shape == B.cheb.shape == (L, num_transit, N)
-    # Evaluation of a set of Chebyshev series is always more efficient than evaluating
-    # single Fourier Chebyshev series, so we also get Chebyshev series for θ.
 
-    x, w = quad
-    assert x.ndim == w.ndim == 1
-    if automorphism is not None:
-        auto, grad_auto = automorphism
-        w = w * grad_auto(x)
-        # Recall bijection_from_disc(auto(x), ζ_b₁, ζ_b₂) = ζ.
-        x = auto(x)
-
-    def bounce_integrate(integrand, f, pitch, weight=None, num_well=None):
-        """Bounce integrate ∫ f(ℓ) dℓ.
+    # TODO: Assumes zeta = phi (alpha sequence)
+    def __init__(
+        self,
+        grid,
+        data,
+        M,
+        N,
+        desc_from_clebsch,
+        alpha_0=0.0,
+        num_transit=50,
+        quad=leggauss(21),
+        automorphism=(automorphism_sin, grad_automorphism_sin),
+        B_ref=1.0,
+        L_ref=1.0,
+        check=False,
+        plot=False,
+        **kwargs,
+    ):
+        """Returns an object to compute bounce integrals.
 
         Parameters
         ----------
-        integrand : callable
-            The composition operator on the set of functions in ``f`` that maps the
-            functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
-            arrays in ``f`` as arguments as well as the additional keyword arguments:
-            ``B`` and ``pitch``. A quadrature will be performed to approximate the
-            bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
-        f : list of jnp.ndarray
-            Shape (L * m * n, ) or (L, m, n).
-            Arguments to the callable ``integrand``. These should be real scalar-valued
-            functions in the bounce integrand evaluated on ``grid``.
+        grid : Grid
+            Periodic tensor-product grid in (ρ, θ, ζ).
+            Note that below shape notation defines
+            L = ``grid.num_rho``, m = ``grid.num_theta``, and n = ``grid.num_zeta``.
+        data : dict[str, jnp.ndarray]
+            Data evaluated on grid. Must include ``FourierBounce.required_names()``.
+        M : int
+            Grid resolution in poloidal direction for Clebsch coordinate grid.
+            Preferably power of 2. A good choice is ``m``. If the poloidal stream
+            function condenses the Fourier spectrum of |B| significantly, then a
+            larger number may be beneficial.
+        N : int
+            Grid resolution in toroidal direction for Clebsch coordinate grid.
+            Preferably power of 2.
+        desc_from_clebsch : jnp.ndarray
+            Shape (L * M * N, 3).
+            DESC coordinate grid (ρ, θ, ζ) sourced from the Clebsch coordinate
+            tensor-product grid (ρ, α, ζ) returned by
+            ``FourierChebyshevBasis.nodes(M,N,domain=FourierBounce.domain)``.
+        alpha_0 : float
+            Starting field line poloidal label.
+            TODO: Allow multiple starting labels for near-rational surfaces.
+                  Concatenate along second to last axis of cheb.
+        num_transit : int
+            Number of toroidal transits to follow field line.
+        quad : (jnp.ndarray, jnp.ndarray)
+            Quadrature points xₖ and weights wₖ for the approximate evaluation of an
+            integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 21 points.
+        automorphism : (Callable, Callable) or None
+            The first callable should be an automorphism of the real interval [-1, 1].
+            The second callable should be the derivative of the first. This map defines
+            a change of variable for the bounce integral. The choice made for the
+            automorphism will affect the performance of the quadrature method.
+        B_ref : float
+            Optional. Reference magnetic field strength for normalization.
+            Has no effect on computation, but may be useful for analysis.
+        L_ref : float
+            Optional. Reference length scale for normalization.
+            Has no effect on computation, but may be useful for analysis.
+        check : bool
+            Flag for debugging. Must be false for jax transformations.
+        plot : bool
+            Whether to plot stuff if ``check`` is true. Default is false.
+
+        """
+        # Strictly increasing zeta knots enforces dζ > 0.
+        # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
+        # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ.
+        warnif(
+            check and kwargs.pop("warn", True) and jnp.any(data["B^zeta"] <= 0),
+            msg="(∂ℓ/∂ζ)|ρ,a > 0 is required. Enforcing positive B^ζ.",
+        )
+
+        T, B = _transform_to_clebsch(grid, M, N, desc_from_clebsch, data["|B|"] / B_ref)
+        alphas = _get_alphas(
+            alpha_0,
+            grid.compress(data["iota"]),
+            num_transit,
+            period=FourierBounce.domain[-1],
+        )
+        # Peel off field lines.
+        self.B = B.compute_cheb(alphas)
+        # Evaluating a set of Chebyshev series is more efficient than evaluating
+        # single Fourier Chebyshev series, so we also get Chebyshev series for θ.
+        # This statement holds even if fast 2D transform methods are used, such
+        # as non-uniform fast transforms or fast multipoint transforms.
+        self.T = T.compute_cheb(alphas)
+        assert self.B.cheb.shape == self.T.cheb.shape
+        assert self.B.cheb.shape == (grid.num_rho, num_transit, N)
+
+        # Cache these since they are used in every integral.
+        self._b_sup_z = _transform_to_desc(
+            grid, jnp.abs(data["B^zeta"]) / data["|B|"] * L_ref
+        )
+        self._x, self._w = get_quad_points(quad, automorphism)
+        self._check = check
+        self._plot = plot
+
+    @staticmethod
+    def required_names():
+        """Return names in ``data_index`` required to compute bounce integrals."""
+        return ["B^zeta", "|B|", "iota"]
+
+    @staticmethod
+    def reshape_data(grid, data, names):
+        """Reshape``data`` given by ``names`` for input to ``bounce_integrate``.
+
+        Parameters
+        ----------
+        grid : Grid
+            Periodic tensor-product grid in (ρ, θ, ζ).
+        data : dict[str, jnp.ndarray]
+            Data evaluated on grid.
+        names : list[str]
+            Strings of keys in ``data`` dict to reshape.
+
+        Returns
+        -------
+        f : list[jnp.ndarray]
+            List of reshaped data which may be given to ``bounce_integrate``.
+
+        """
+        if isinstance(names, str):
+            names = [names]
+        # Add dim to broadcast with axis of quadrature points.
+        f = [grid.meshgrid_reshape(data[name], "rtz")[:, jnp.newaxis] for name in names]
+        return f
+
+    @property
+    def L(self):
+        """int: Number of flux surfaces to compute on."""
+        return self.B.cheb.shape[0]
+
+    @property
+    def num_transit(self):
+        """int: Number of toroidal transits to follow field line."""
+        return self.B.cheb.shape[-2]
+
+    @property
+    def N(self):
+        """int: Chebyshev spectral resolution."""
+        return self.B.cheb.shape[-1]
+
+    def bounce_integrate(self, pitch, integrand, f, weight=None, num_well=None):
+        """Bounce integrate ∫ f(ℓ) dℓ.
+
+        Computes the bounce integral ∫ f(ℓ) dℓ for every specified field line
+        for every λ value in ``pitch``.
+
+        Parameters
+        ----------
         pitch : jnp.ndarray
             Shape (P, L).
             λ values to evaluate the bounce integral at each field line. λ(ρ) is
             specified by ``pitch[...,ρ]`` where in the latter the labels ρ are
             interpreted as the index into the last axis that corresponds to that field
             line. If two-dimensional, the first axis is the batch axis.
+        integrand : callable
+            The composition operator on the set of functions in ``f`` that maps the
+            functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
+            arrays in ``f`` as arguments as well as the additional keyword arguments:
+            ``B`` and ``pitch``. A quadrature will be performed to approximate the
+            bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
+        f : list[jnp.ndarray]
+            Shape (L, 1, m, n).
+            Arguments to the callable ``integrand``. These should be real scalar-valued
+            functions in the bounce integrand evaluated on the periodic DESC coordinate
+            (ρ, θ, ζ) tensor-product grid.
         weight : jnp.ndarray
-            Shape (L * m * n, ) or (L, m, n).
+            Shape (L, 1, m * n).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
             evaluated at the deepest point in the magnetic well.
@@ -938,18 +985,87 @@ def bounce_integral(
         result : jnp.ndarray
             Shape (P, L, num_well).
             First axis enumerates pitch values. Second axis enumerates the field lines.
-            Last axis enumerates the bounce integrals.cd
+            Last axis enumerates the bounce integrals.
 
         """
         errorif(weight is not None, NotImplementedError)
         pitch = jnp.atleast_2d(pitch)
-        bp1, bp2 = B.bounce_points(pitch, num_well)
-        if check:
-            B.check_bounce_points(bp1, bp2, pitch, plot)
-        result = _bounce_quadrature(
-            bp1, bp2, x, w, m, n, integrand, f, b_sup_z, B, T, pitch
+        bp1, bp2 = self.B.bounce_points(pitch, num_well)
+        if self._check:
+            self.B.check_bounce_points(bp1, bp2, pitch, self._plot)
+        result = self._bounce_quadrature(bp1, bp2, pitch, integrand, f)
+        assert result.shape == (
+            pitch.shape[0],
+            self.L,
+            setdefault(num_well, self.N - 1),
         )
-        assert result.shape == (pitch.shape[0], L, setdefault(num_well, N - 1))
         return result
 
-    return bounce_integrate, (alphas, B, T)
+    def _bounce_quadrature(self, bp1, bp2, pitch, integrand, f):
+        """Bounce integrate ∫ f(ℓ) dℓ.
+
+        Parameters
+        ----------
+        bp1, bp2 : jnp.ndarray
+            Shape (P, L, num_well).
+            The field line-following coordinates of bounce points for a given pitch
+            along a field line. The pairs ``bp1`` and ``bp2`` form left and right
+            integration boundaries, respectively, for the bounce integrals.
+        pitch : jnp.ndarray
+            Shape (P, L).
+            λ values to evaluate the bounce integral at each field line. λ(ρ) is
+            specified by ``pitch[...,ρ]`` where in the latter the labels ρ are
+            interpreted as the index into the last axis that corresponds to that field
+            line. If two-dimensional, the first axis is the batch axis.
+        integrand : callable
+            The composition operator on the set of functions in ``f`` that maps the
+            functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
+            arrays in ``f`` as arguments as well as the additional keyword arguments:
+            ``B`` and ``pitch``. A quadrature will be performed to approximate the
+            bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
+        f : list[jnp.ndarray]
+            Shape (L, 1, m, n).
+            Arguments to the callable ``integrand``. These should be real scalar-valued
+            functions in the bounce integrand evaluated on the periodic DESC coordinate
+            (ρ, θ, ζ) tensor-product grid.
+
+        Returns
+        -------
+        result : jnp.ndarray
+            Shape (P, L, num_well).
+            First axis enumerates pitch values. Second axis enumerates the field lines.
+            Last axis enumerates the bounce integrals.
+
+        """
+        assert bp1.ndim == 3
+        assert bp1.shape == bp2.shape
+        assert pitch.ndim == 2
+        assert self.L == f[0].shape[0]
+        m = f[0].shape[-2]
+        n = f[0].shape[-1]
+        W = bp1.shape[-1]  # number of wells
+        shape = (pitch.shape[0], self.L, W, self._x.size)
+
+        # quadrature points parameterized by ζ for each pitch and flux surface
+        Q_zeta = _flatten_matrix(
+            bijection_from_disc(
+                self._x,
+                bp1[..., jnp.newaxis],
+                bp2[..., jnp.newaxis],
+            )
+        )
+        # quadrature points in (θ, ζ) coordinates
+        Q_desc = jnp.stack([self.T.eval1d(Q_zeta), Q_zeta], axis=-1)
+        # interpolate and integrate
+        f = [interp_rfft2(Q_desc, f_i).reshape(shape) for f_i in f]
+        result = jnp.dot(
+            integrand(
+                *f,
+                B=self.B.eval1d(Q_zeta).reshape(shape),
+                pitch=pitch[..., jnp.newaxis, jnp.newaxis],
+            )
+            / irfft2_non_uniform(Q_desc, self._b_sup_z, m, n).reshape(shape),
+            self._w,
+        )
+        assert result.shape == (pitch.shape[0], self.L, W)
+        return result

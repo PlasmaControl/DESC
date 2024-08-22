@@ -9,10 +9,11 @@ from orthax.legendre import leggauss
 from tests.test_interp_utils import filter_not_nan
 
 from desc.backend import flatnonzero, imap, jnp, put
-from desc.integrals._interp_utils import poly_root, polyder_vec, polyval_vec
-from desc.integrals._quad_utils import (
+from desc.integrals.interp_utils import poly_root, polyder_vec, polyval_vec
+from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
+    composite_linspace,
     grad_automorphism_sin,
     grad_bijection_from_disc,
 )
@@ -365,32 +366,6 @@ def bounce_points(
     return bp1, bp2
 
 
-def _composite_linspace(x, num):
-    """Returns linearly spaced points between every pair of points ``x``.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        First axis has values to return linearly spaced values between. The remaining
-        axes are batch axes. Assumes input is sorted along first axis.
-    num : int
-        Number of points between every pair of points in ``x``.
-
-    Returns
-    -------
-    pts : jnp.ndarray
-        Shape ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:]).
-        Linearly spaced points between ``x``.
-
-    """
-    x = jnp.atleast_1d(x)
-    pts = jnp.linspace(x[:-1], x[1:], num + 1, endpoint=False)
-    pts = jnp.swapaxes(pts, 0, 1).reshape(-1, *x.shape[1:])
-    pts = jnp.append(pts, x[jnp.newaxis, -1], axis=0)
-    assert pts.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
-    return pts
-
-
 def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     """Return uniformly spaced pitch values between 1 / max B and 1 / min B.
 
@@ -416,7 +391,7 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
-    pitch = _composite_linspace(1 / jnp.stack([max_B, min_B]), num)
+    pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
     assert pitch.shape == (num + 2, *pitch.shape[1:])
     return pitch
 

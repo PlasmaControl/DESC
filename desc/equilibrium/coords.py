@@ -704,8 +704,6 @@ def get_rtz_grid(
         "z": "zeta",
         "p": "phi",
     }
-    if "iota" in kwargs:
-        kwargs["iota"] = grid.expand(kwargs["iota"], surface_label="rho")
     rtz_nodes = map_coordinates(
         eq,
         grid.nodes,

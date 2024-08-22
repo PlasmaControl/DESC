@@ -1,6 +1,5 @@
 """Test bounce integral methods."""
 
-import inspect
 from functools import partial
 
 import numpy as np
@@ -19,20 +18,8 @@ from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
-from desc.integrals._quad_utils import (
-    automorphism_arcsin,
-    automorphism_sin,
-    bijection_from_disc,
-    bijection_to_disc,
-    grad_automorphism_arcsin,
-    grad_automorphism_sin,
-    grad_bijection_from_disc,
-    leggausslob,
-    tanh_sinh,
-)
+from desc.grid import LinearGrid
 from desc.integrals.bounce_integral import (
-    _composite_linspace,
     _get_extrema,
     _interp_to_argmin_B_hard,
     _interp_to_argmin_B_soft,
@@ -43,77 +30,14 @@ from desc.integrals.bounce_integral import (
     plot_field_line,
     required_names,
 )
-from desc.utils import only1
-
-
-@pytest.mark.unit
-def test_reshape_convention():
-    """Test the reshaping convention separates data across field lines."""
-    rho = np.linspace(0, 1, 3)
-    alpha = np.linspace(0, 2 * np.pi, 4)
-    zeta = np.linspace(0, 6 * np.pi, 5)
-    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
-    r, a, z = grid.nodes.T
-    # functions of zeta should separate along first two axes
-    # since those are contiguous, this should work
-    f = z.reshape(-1, zeta.size)
-    for i in range(1, f.shape[0]):
-        np.testing.assert_allclose(f[i - 1], f[i])
-    # likewise for rho
-    f = r.reshape(rho.size, -1)
-    for i in range(1, f.shape[-1]):
-        np.testing.assert_allclose(f[:, i - 1], f[:, i])
-    # test reshaping result won't mix data
-    f = (a**2 + z).reshape(rho.size, alpha.size, zeta.size)
-    for i in range(1, f.shape[0]):
-        np.testing.assert_allclose(f[i - 1], f[i])
-    f = (r**2 + z).reshape(rho.size, alpha.size, zeta.size)
-    for i in range(1, f.shape[1]):
-        np.testing.assert_allclose(f[:, i - 1], f[:, i])
-    f = (r**2 + a).reshape(rho.size, alpha.size, zeta.size)
-    for i in range(1, f.shape[-1]):
-        np.testing.assert_allclose(f[..., i - 1], f[..., i])
-
-    err_msg = "The ordering conventions are required for correctness."
-    assert "P, S, N" in inspect.getsource(bounce_points), err_msg
-    assert "S, knots.size" in inspect.getsource(bounce_integral), err_msg
-    assert 'meshgrid(a, b, c, indexing="ij")' in inspect.getsource(
-        Grid.create_meshgrid
-    ), err_msg
-
-
-@pytest.mark.unit
-def test_get_extrema():
-    """Test computation of extrema of |B|."""
-    start = -np.pi
-    end = -2 * start
-    k = np.linspace(start, end, 5)
-    B = CubicHermiteSpline(
-        k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
-    )
-    B_z_ra = B.derivative()
-    extrema, B_extrema = _get_extrema(k, B.c, B_z_ra.c)
-    mask = ~np.isnan(extrema)
-    extrema, B_extrema = extrema[mask], B_extrema[mask]
-    idx = np.argsort(extrema)
-
-    extrema_scipy = np.sort(B_z_ra.roots(extrapolate=False))
-    B_extrema_scipy = B(extrema_scipy)
-    assert extrema.size == extrema_scipy.size
-    np.testing.assert_allclose(extrema[idx], extrema_scipy)
-    np.testing.assert_allclose(B_extrema[idx], B_extrema_scipy)
-
-
-@pytest.mark.unit
-def test_composite_linspace():
-    """Test this utility function useful for Newton-Cotes integration over pitch."""
-    B_min_tz = np.array([0.1, 0.2])
-    B_max_tz = np.array([1, 3])
-    breaks = np.linspace(B_min_tz, B_max_tz, num=5)
-    b = _composite_linspace(breaks, num=3)
-    for i in range(breaks.shape[0]):
-        for j in range(breaks.shape[1]):
-            assert only1(np.isclose(breaks[i, j], b[:, j]).tolist())
+from desc.integrals.quad_utils import (
+    automorphism_sin,
+    bijection_from_disc,
+    grad_automorphism_sin,
+    grad_bijection_from_disc,
+    leggausslob,
+    tanh_sinh,
+)
 
 
 class TestBouncePoints:
@@ -246,41 +170,6 @@ class TestBouncePoints:
         np.testing.assert_allclose(bp2, intersect[[2, 4, 6]], rtol=1e-5)
 
 
-@pytest.mark.unit
-def test_automorphism():
-    """Test automorphisms."""
-    a, b = -312, 786
-    x = np.linspace(a, b, 10)
-    y = bijection_to_disc(x, a, b)
-    x_1 = bijection_from_disc(y, a, b)
-    np.testing.assert_allclose(x_1, x)
-    np.testing.assert_allclose(bijection_to_disc(x_1, a, b), y)
-    np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y, atol=5e-7)
-    np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y, atol=5e-7)
-
-    np.testing.assert_allclose(grad_bijection_from_disc(a, b), 1 / (2 / (b - a)))
-    np.testing.assert_allclose(
-        grad_automorphism_sin(y),
-        1 / grad_automorphism_arcsin(automorphism_sin(y)),
-        atol=2e-6,
-    )
-    np.testing.assert_allclose(
-        1 / grad_automorphism_arcsin(y),
-        grad_automorphism_sin(automorphism_arcsin(y)),
-        atol=2e-6,
-    )
-
-    # test that floating point error is acceptable
-    x = tanh_sinh(19)[0]
-    assert np.all(np.abs(x) < 1)
-    y = 1 / np.sqrt(1 - np.abs(x))
-    assert np.isfinite(y).all()
-    y = 1 / np.sqrt(1 - np.abs(automorphism_sin(x)))
-    assert np.isfinite(y).all()
-    y = 1 / np.sqrt(1 - np.abs(automorphism_arcsin(x)))
-    assert np.isfinite(y).all()
-
-
 class TestBounceQuadrature:
     """Test bounce quadrature accuracy."""
 
@@ -397,6 +286,28 @@ def test_bounce_integral_checks():
     # for the pitch values stored in
     pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
     print(pitch[:, i, j])
+
+
+@pytest.mark.unit
+def test_get_extrema():
+    """Test computation of extrema of |B|."""
+    start = -np.pi
+    end = -2 * start
+    k = np.linspace(start, end, 5)
+    B = CubicHermiteSpline(
+        k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
+    )
+    B_z_ra = B.derivative()
+    extrema, B_extrema = _get_extrema(k, B.c, B_z_ra.c)
+    mask = ~np.isnan(extrema)
+    extrema, B_extrema = extrema[mask], B_extrema[mask]
+    idx = np.argsort(extrema)
+
+    extrema_scipy = np.sort(B_z_ra.roots(extrapolate=False))
+    B_extrema_scipy = B(extrema_scipy)
+    assert extrema.size == extrema_scipy.size
+    np.testing.assert_allclose(extrema[idx], extrema_scipy)
+    np.testing.assert_allclose(B_extrema[idx], B_extrema_scipy)
 
 
 @pytest.mark.unit

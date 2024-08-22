@@ -1,5 +1,10 @@
 """Classes for function integration."""
 
+from .fourier_bounce_integral import (
+    FourierBounce,
+    FourierChebyshevBasis,
+    PiecewiseChebyshevBasis,
+)
 from .singularities import (
     DFTInterpolator,
     FFTInterpolator,

@@ -7,7 +7,7 @@ from orthax.polynomial import polyvander
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.compute.utils import safediv
-from desc.integrals._quad_utils import bijection_from_disc
+from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif
 
 
@@ -508,8 +508,7 @@ def poly_root(
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
         r = jnp.where(
-            # Order operations default to real part on complex numbers.
-            (jnp.abs(r.imag) <= eps) & (a_min <= r) & (r <= a_max),
+            (jnp.abs(r.imag) <= eps) & (a_min <= r.real) & (r.real <= a_max),
             r.real,
             sentinel,
         )

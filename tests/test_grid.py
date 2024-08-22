@@ -485,7 +485,9 @@ class TestGrid:
         roots, weights = special.js_roots(2, 2, 2)
         quadrature_nodes = np.stack(
             [
-                np.array([roots[0]] * 5 + [roots[1]] * 5),
+                np.array(
+                    [roots[0]] * grid_quad.num_theta + [roots[1]] * grid_quad.num_theta
+                ),
                 np.array(
                     [0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5] * 2
                 ),

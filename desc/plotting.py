@@ -2031,12 +2031,8 @@ def plot_boundaries(
 ):
     """Plot stellarator boundaries at multiple toroidal coordinates.
 
-    NOTE: supplied objects must have either all the same NFP, or if
-    there are differing NFPs, the non-axisymmetric objects must have the
-    same NFP and the rest of the objects must be axisymmetric. i.e
-    can plot a tokamak and an NFP=2 stellarator, but cannot plot
-    a NFP=2 and NFP=3 stellarator as there is some ambiguity on the
-    choice of phi
+    NOTE: If attempting to plot objects with differing NFP, `phi` must
+    be given explicitly.
 
     Parameters
     ----------
@@ -2093,29 +2089,17 @@ def plot_boundaries(
         fig, ax = plot_boundaries((eq1, eq2, eq3))
 
     """
-    NFPs = np.array([thing.NFP for thing in eqs])
-    Ns = np.array([thing.N for thing in eqs])
-    if not np.allclose(NFPs, NFPs[0]) and np.any(Ns == 0):
-        # if all NFPs are not equal, maybe there are some axisymmetric
-        # objects. We can try to change those to match the NFP of the first
-        # of the nonaxisymmetric objects
-        eqs = [thing.copy() for thing in eqs]  # make copy so we dont modify originals
-        NFP_nonax = int(NFPs[NFPs > 1][0])
-        [
-            thing.change_resolution(NFP=NFP_nonax if thing.N == 0 else thing.NFP)
-            for thing in eqs
-        ]
-    # if after above, the NFPs are still not all equal, means there are multiple
-    # nonaxisymmetric objects with differing NFPs, which it is not clear
-    # how to choose the phis for by default, so we will throw an error.
+    # if NFPs are not all equal, means there are
+    # objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error
+    # unless phi was given.
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
     errorif(
-        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP),
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
         ValueError,
         "supplied objects must have the same number of field periods, "
-        "or if there are differing field periods, the ones which differ must be"
-        " axisymmetric.",
+        "or if there are differing field periods, `phi` must be given explicitly.",
     )
-    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
@@ -2228,12 +2212,8 @@ def plot_comparison(
 ):
     """Plot comparison between flux surfaces of multiple equilibria.
 
-    NOTE: supplied objects must have either all the same NFP, or if
-    there are differing NFPs, the non-axisymmetric objects must have the
-    same NFP and the rest of the objects must be axisymmetric. i.e
-    can plot a tokamak and an NFP=2 stellarator, but cannot plot
-    a NFP=2 and NFP=3 stellarator as there is some ambiguity on the
-    choice of phi
+    NOTE: If attempting to plot objects with differing NFP, `phi` must
+    be given explicitly.
 
     Parameters
     ----------
@@ -2303,29 +2283,17 @@ def plot_comparison(
                                  )
 
     """
-    NFPs = np.array([thing.NFP for thing in eqs])
-    Ns = np.array([thing.N for thing in eqs])
-    if not np.allclose(NFPs, NFPs[0]) and np.any(Ns == 0):
-        # if all NFPs are not equal, maybe there are some axisymmetric
-        # objects. We can try to change those to match the NFP of the first
-        # of the nonaxisymmetric objects
-        eqs = [thing.copy() for thing in eqs]  # make copy so we dont modify originals
-        NFP_nonax = int(NFPs[NFPs > 1][0])
-        [
-            thing.change_resolution(NFP=NFP_nonax if thing.N == 0 else thing.NFP)
-            for thing in eqs
-        ]
-    # if after above, the NFPs are still not all equal, means there are multiple
-    # nonaxisymmetric objects with differing NFPs, which it is not clear
-    # how to choose the phis for by default, so we will throw an error.
+    # if NFPs are not all equal, means there are
+    # objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error
+    # unless phi was given.
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
     errorif(
-        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP),
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
         ValueError,
         "supplied objects must have the same number of field periods, "
-        "or if there are differing field periods, the ones which differ must be"
-        " axisymmetric.",
+        "or if there are differing field periods, `phi` must be given explicitly.",
     )
-    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
     color = parse_argname_change(color, kwargs, "colors", "color")
     ls = parse_argname_change(ls, kwargs, "linestyles", "ls")
     lw = parse_argname_change(lw, kwargs, "lws", "lw")

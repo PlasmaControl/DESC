@@ -517,7 +517,11 @@ class TestPlotBoundary:
         eq4 = get("ESTELL")
         with pytest.raises(ValueError, match="differing field periods"):
             fig, ax = plot_boundaries([eq3, eq4], theta=0)
-        fig, ax, data = plot_boundaries((eq1, eq2, eq3), return_data=True)
+        fig, ax, data = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=np.linspace(0, 2 * np.pi / eq3.NFP, 4, endpoint=False),
+            return_data=True,
+        )
         assert "R" in data.keys()
         assert "Z" in data.keys()
         assert len(data["R"]) == 3
@@ -563,7 +567,11 @@ class TestPlotComparison:
         eq_nonax2 = get("ESTELL")
         with pytest.raises(ValueError, match="differing field periods"):
             fig, ax = plot_comparison([eq_nonax, eq_nonax2], theta=0)
-        fig, ax = plot_comparison([eq, eq_nonax], theta=0)
+        fig, ax = plot_comparison(
+            [eq, eq_nonax],
+            phi=np.linspace(0, 2 * np.pi / eq_nonax.NFP, 6, endpoint=False),
+            theta=0,
+        )
         return fig
 
 

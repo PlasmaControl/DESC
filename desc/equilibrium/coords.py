@@ -108,7 +108,7 @@ def map_coordinates(  # noqa: C901
                 iota = kwargs.pop("iota")
             else:
                 if profiles["iota"] is None:
-                    profiles["iota"] = eq.get_profile("iota", params=params)
+                    profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
                 iota = profiles["iota"](coords[:, 0])
             return _map_clebsch_coordinates(
                 coords,

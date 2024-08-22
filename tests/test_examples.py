@@ -175,7 +175,7 @@ def test_1d_optimization():
     eq = get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
     constraints = (
-        ForceBalance(eq=eq, chunk_size=None),
+        ForceBalance(eq=eq),
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq, modes=eq.surface.Z_basis.modes[0:-1, :]),
         FixPressure(eq=eq),
@@ -201,6 +201,7 @@ def run_qh_step(n, eq):
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
+        chunk_size=1000,
     )
     R_modes = np.vstack(
         (
@@ -301,9 +302,7 @@ def test_ATF_results(tmpdir_factory):
         spectral_indexing=eq0.spectral_indexing,
     )
     eqf = EquilibriaFamily.solve_continuation_automatic(
-        eq,
-        verbose=2,
-        checkpoint_path=output_dir.join("ATF.h5"),
+        eq, verbose=2, checkpoint_path=output_dir.join("ATF.h5"), chunk_size=500
     )
     eqf = load(output_dir.join("ATF.h5"))
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])

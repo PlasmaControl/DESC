@@ -91,13 +91,25 @@ def map_coordinates(  # noqa: C901
     inbasis = tuple(inbasis)
     outbasis = tuple(outbasis)
 
+    basis_derivs = tuple(f"{X}_{d}" for X in inbasis for d in ("r", "t", "z"))
+    for key in basis_derivs:
+        errorif(
+            key not in data_index["desc.equilibrium.equilibrium.Equilibrium"],
+            NotImplementedError,
+            f"don't have recipe to compute partial derivative {key}",
+        )
+    profiles = get_profiles(inbasis + basis_derivs, eq)
+    # do surface average to get iota once
+    if "iota" in profiles and profiles["iota"] is None:
+        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+        params["i_l"] = profiles["iota"].params
+
     # TODO: make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
-        # TODO: get iota if not supplied using below logic
         if inbasis == ("rho", "alpha", "zeta") and "iota" in kwargs:
             return _map_clebsch_coordinates(
                 coords,
-                kwargs.pop("iota"),
+                kwargs.pop("iota", profiles["iota"](coords[:, 0])),
                 params["L_lmn"],
                 eq.L_basis,
                 guess[:, 1] if guess is not None else None,
@@ -118,28 +130,14 @@ def map_coordinates(  # noqa: C901
                 **kwargs,
             )
 
-    basis_derivs = tuple(f"{X}_{d}" for X in inbasis for d in ("r", "t", "z"))
-    for key in basis_derivs:
-        errorif(
-            key not in data_index["desc.equilibrium.equilibrium.Equilibrium"],
-            NotImplementedError,
-            f"don't have recipe to compute partial derivative {key}",
-        )
-
     rhomin = kwargs.pop("rhomin", tol / 10)
     warnif(period is None, msg="Assuming no periodicity.")
     period = np.asarray(setdefault(period, (np.inf, np.inf, np.inf)))
     coords = _periodic(coords, period)
 
-    profiles = get_profiles(inbasis + basis_derivs, eq)
     p = "desc.equilibrium.equilibrium.Equilibrium"
     names = inbasis + basis_derivs + outbasis
     deps = list(set(get_data_deps(names, obj=p) + list(names)))
-
-    # do surface average to get iota once
-    if "iota" in profiles and profiles["iota"] is None:
-        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
-        params["i_l"] = profiles["iota"].params
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):

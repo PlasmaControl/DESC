@@ -6,6 +6,7 @@ from scipy.constants import elementary_charge
 from scipy.interpolate import interp1d
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.objectives import (
@@ -15,6 +16,7 @@ from desc.objectives import (
 )
 from desc.profiles import (
     FourierZernikeProfile,
+    HermiteSplineProfile,
     MTanhProfile,
     PowerSeriesProfile,
     SplineProfile,
@@ -518,3 +520,14 @@ class TestProfiles:
             eq = Equilibrium(electron_density=ne, electron_temperature=Te)
             data = eq.compute("<ne>_rho")
             np.testing.assert_allclose(data["<ne>_rho"], ne0)
+
+    @pytest.mark.unit
+    def test_hermite_spline_solve(self):
+        """Test that spline with double number of parameters is optimized."""
+        eq = get("DSHAPE")
+        rho = np.linspace(0, 1.0, 20, endpoint=True)
+        eq.pressure = HermiteSplineProfile(
+            eq.pressure(rho), eq.pressure(rho, dr=1), rho
+        )
+        eq.solve()
+        assert eq.is_nested()

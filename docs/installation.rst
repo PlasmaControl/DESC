@@ -222,7 +222,7 @@ Clone DESC
     cd DESC
     sed -i '/jax/d' ./requirements.txt
 
-In the requirements.txt fiel, change the scipy version from
+In the requirements.txt file, change the scipy version from
 
 .. code-block:: sh
 

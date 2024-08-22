@@ -882,9 +882,9 @@ class FourierBounce:
         # Peel off field lines.
         self.B = B.compute_cheb(alphas)
         # Evaluating a set of Chebyshev series is more efficient than evaluating
-        # single Fourier Chebyshev series, so we also get Chebyshev series for θ.
-        # This statement holds even if fast 2D transform methods are used, such
-        # as non-uniform fast transforms or fast multipoint transforms.
+        # single Fourier Chebyshev series, so we get the Chebyshev series for
+        # all the other functions whose Fourier Chebyshev series is available.
+        # This statement holds even if fast 2D transform methods are used.
         self.T = T.compute_cheb(alphas)
         assert self.B.cheb.shape == self.T.cheb.shape
         assert self.B.cheb.shape == (grid.num_rho, num_transit, N)

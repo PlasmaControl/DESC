@@ -5,20 +5,13 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from desc.backend import (
-    batched_vectorize,
-    execute_on_cpu,
-    jit,
-    jnp,
-    tree_flatten,
-    tree_unflatten,
-    use_jax,
-)
+from desc.backend import execute_on_cpu, jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
 from desc.utils import (
     Timer,
+    batched_vectorize,
     errorif,
     flatten_list,
     is_broadcastable,

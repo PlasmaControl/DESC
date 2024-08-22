@@ -1909,3 +1909,65 @@ def _shear(params, transforms, profiles, data, **kwargs):
         None,
     )
     return data
+
+
+@register_compute_fun(
+    name="<sigma*nu>",
+    label="\\langle\\sigma\\nu\\rangle",
+    units="m^3 \\cdot s^{-1}",
+    units_long="cubic meters / second",
+    description="Thermal reactivity from Bosch-Hale parameterization",
+    dim=1,
+    params=["Ti_l"],
+    transforms={"grid": []},
+    profiles=["ion_temperature"],
+    coordinates="r",
+    data=["Ti"],
+    reaction="str: Fusion reaction. One of {'T(d,n)4He', 'D(d,p)T', 'D(d,n)3He'}. "
+    + "Default is 'T(d,n)4He'.",
+)
+def _reactivity(params, transforms, profiles, data, **kwargs):
+    # Bosch and Hale. “Improved Formulas for Fusion Cross-Sections and Thermal
+    # Reactivities.” Nuclear Fusion 32 (April 1992): 611-631.
+    # https://doi.org/10.1088/0029-5515/32/4/I07.
+    reaction = kwargs.get("fuel", "T(d,n)4He")
+    match reaction:
+        case "T(d,n)4He":
+            B_G = 34.382
+            mc2 = 1124656
+            C1 = 1.17302e-9
+            C2 = 1.51361e-2
+            C3 = 7.51886e-2
+            C4 = 4.60643e-3
+            C5 = 1.35000e-2
+            C6 = -1.06750e-4
+            C7 = 1.36600e-5
+        case "D(d,p)T":
+            B_G = 31.3970
+            mc2 = 937814
+            C1 = 5.65718e-12
+            C2 = 3.41267e-3
+            C3 = 1.99167e-3
+            C4 = 0
+            C5 = 1.05060e-5
+            C6 = 0
+            C7 = 0
+        case "D(d,n)3He":
+            B_G = 31.3970
+            mc2 = 937814
+            C1 = 5.43360e-12
+            C2 = 5.85778e-3
+            C3 = 7.68222e-3
+            C4 = 0
+            C5 = -2.96400e-6
+            C6 = 0
+            C7 = 0
+
+    T = data["Ti"] / 1e3  # keV
+    theta = T / (
+        1 - (T * (C2 + T * (C4 + T * C6))) / (1 + T * (C3 + T * (C5 + T * C7)))
+    )
+    xi = (B_G**2 / (4 * theta)) ** (1 / 3)
+    sigma_nu = C1 * theta * jnp.sqrt(xi / (mc2 * T**3)) * jnp.exp(-3 * xi)  # cm^3/s
+    data["<sigma*nu>"] = sigma_nu / 1e6  # m^3/s
+    return data

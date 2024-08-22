@@ -10,7 +10,7 @@ expensive computations.
 """
 
 from interpax import interp1d
-from scipy.constants import mu_0
+from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import jnp
 
@@ -842,4 +842,40 @@ def _P_ISS04(params, transforms, profiles, data, **kwargs):
             * kwargs.get("H_ISS04", 1)
         )
     ) ** (1 / 0.39)
+    return data
+
+
+@register_compute_fun(
+    name="P_fusion",
+    label="P_{fusion}",
+    units="W",
+    units_long="Watts",
+    description="Fusion power",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["rho", "ni", "<sigma*nu>", "sqrt(g)"],
+    resolution_requirement="rtz",
+    reaction="str: Fusion reaction. One of {'T(d,n)4He', 'D(d,p)T', 'D(d,n)3He'}. "
+    + "Default is 'T(d,n)4He'.",
+)
+def _P_fusion(params, transforms, profiles, data, **kwargs):
+    reaction = kwargs.get("fuel", "T(d,n)4He")
+    match reaction:
+        case "T(d,n)4He":
+            energy = 3.52e6 + 14.06e6  # eV
+        case "D(d,p)T":
+            energy = 1.01e6 + 3.02e6  # eV
+        case "D(d,n)3He":
+            energy = 0.82e6 + 2.45e6  # eV
+
+    reaction_rate = jnp.sum(
+        *data["ni"] ** 2
+        * data["<sigma*nu>"]
+        * data["sqrt(g)"]
+        * transforms["grid"].weights
+    )  # reactions/s
+    data["P_fusion"] = reaction_rate * energy * elementary_charge  # J/s
     return data

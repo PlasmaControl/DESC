@@ -33,7 +33,9 @@ def _parse_parameterization(p):
     return module + "." + klass.__qualname__
 
 
-def compute(parameterization, names, params, transforms, profiles, data=None, **kwargs):
+def compute(  # noqa: C901
+    parameterization, names, params, transforms, profiles, data=None, **kwargs
+):
     """Compute the quantity given by name on grid.
 
     Parameters
@@ -88,6 +90,15 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     if "grid" in transforms:
 
         def check_fun(name):
+            reqs = data_index[p][name]["grid_requirement"]
+            for req in reqs:
+                errorif(
+                    not hasattr(transforms["grid"], req)
+                    or reqs[req] != getattr(transforms["grid"], req),
+                    AttributeError,
+                    f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
+                )
+
             reqs = data_index[p][name]["source_grid_requirement"]
             errorif(
                 reqs and not hasattr(transforms["grid"], "source_grid"),

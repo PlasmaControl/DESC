@@ -31,7 +31,7 @@ from .utils import cross, dot, safediv
     coordinates="rtz",
     data=["B_theta"],
     resolution_requirement="tz",
-    source_grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -61,7 +61,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B_zeta"],
     resolution_requirement="tz",
-    source_grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -90,7 +90,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["B_theta_mn", "B_zeta_mn"],
-    source_grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -134,7 +134,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
-    source_grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -162,7 +162,7 @@ def _w(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
-    source_grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -192,7 +192,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["w_Boozer_mn"],
     resolution_requirement="tz",
-    source_grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -334,7 +334,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
     resolution_requirement="tz",
-    source_grid_requirement={"is_meshgrid": True},
+    grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )

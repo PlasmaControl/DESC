@@ -8,6 +8,7 @@ from .singularities import (
     virtual_casing_biot_savart,
 )
 from .surface_integral import (
+    line_integrals,
     surface_averages,
     surface_averages_map,
     surface_integrals,

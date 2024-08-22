@@ -10,8 +10,6 @@ from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.integrals import (
     DFTInterpolator,
     FFTInterpolator,
-    _get_grid_surface,
-    _get_quadrature_nodes,
     line_integrals,
     singular_integral,
     surface_averages,
@@ -22,6 +20,8 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
+from desc.integrals.singularities import _get_quadrature_nodes
+from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
 
 

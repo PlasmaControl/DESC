@@ -13,7 +13,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
-from ..integrals.surface_integral import (
+from ..integrals import (
     surface_averages,
     surface_integrals_map,
     surface_max,

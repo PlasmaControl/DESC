@@ -45,16 +45,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-venv-${{ matrix.combos.python_version }}-
 
-      - name: Check if virtual environment exists
-        if: steps.restore-env.outputs.cache-hit != 'true'
-        run: |
-            echo "Error: Virtual environment .venv-${{ matrix.combos.python_version }} not found!"
-            exit 1
-
-      - name: Activate virtual environment
-        run: |
-          source .venv-${{ matrix.combos.python_version }}/bin/activate
-
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@master
         with:
@@ -62,6 +52,7 @@ jobs:
 
       - name: Test with pytest
         run: |
+          source .venv-${{ matrix.combos.python_version }}/bin/activate
           pwd
           lscpu
           python -m pytest -v -m unit \

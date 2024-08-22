@@ -21,15 +21,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-venv-3.10-
 
-      - name: Check if virtual environment exists
-        if: steps.restore-env.outputs.cache-hit != 'true'
+      # We need to activate the virtual environment and add the PATH to the environment variables
+      # so that the flake8 command can be found. This is  different than other workflows, but needed.
+      - name: Activate virtualenv
         run: |
-            echo "Error: Virtual environment .venv-3.10 not found!"
-            exit 1
-
-      - name: Activate virtual environment
-        run: |
-          source .venv-3.10/bin/activate
+          . .venv-3.10/bin/activate
+          echo PATH=$PATH >> $GITHUB_ENV
 
       - name: flake8 Lint
         uses: reviewdog/action-flake8@v3

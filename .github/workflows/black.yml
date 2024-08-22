@@ -22,16 +22,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-venv-3.10-
 
-      - name: Check if virtual environment exists
-        if: steps.restore-env.outputs.cache-hit != 'true'
-        run: |
-            echo "Error: Virtual environment .venv-3.10 not found!"
-            exit 1
-
-      - name: Activate virtual environment
-        run: |
-          source .venv-3.10/bin/activate
-
       - name: Check files using the black formatter
         run: |
           source .venv-3.10/bin/activate

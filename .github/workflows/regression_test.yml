@@ -39,16 +39,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-venv-${{ matrix.python-version }}-
 
-      - name: Check if virtual environment exists
-        if: steps.restore-env.outputs.cache-hit != 'true'
-        run: |
-            echo "Error: Virtual environment .venv-${{ matrix.python-version }} not found!"
-            exit 1
-
-      - name: Activate virtual environment
-        run: |
-          source .venv-${{ matrix.python-version }}/bin/activate
-
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@master
         with:

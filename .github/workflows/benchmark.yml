@@ -46,18 +46,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-venv-3.9-
 
-      - name: Check if virtual environment exists
-        if: steps.restore-env.outputs.cache-hit != 'true'
-        run: |
-            echo "Error: Virtual environment .venv-3.9 not found!"
-            exit 1
-
-      - name: Activate virtual environment
-        run: |
-          source .venv-3.9/bin/activate
-
       - name: Benchmark with pytest-benchmark
         run: |
+          source .venv-3.9/bin/activate
           pwd
           lscpu
           cd tests/benchmarks
@@ -76,6 +67,7 @@ jobs:
         run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
       - name: Benchmark with pytest-benchmark
         run: |
+          source .venv-3.9/bin/activate
           pwd
           lscpu
           cd tests/benchmarks
@@ -86,6 +78,7 @@ jobs:
 
       - name: put benchmark results in same folder
         run: |
+          source .venv-3.9/bin/activate
           pwd
           cd tests/benchmarks
           find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 1 > temp1
@@ -98,6 +91,7 @@ jobs:
 
       - name: Compare latest commit results to the master branch results
         run: |
+          source .venv-3.9/bin/activate
           pwd
           cd tests/benchmarks
           python compare_bench_results.py

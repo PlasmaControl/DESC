@@ -1,5 +1,7 @@
 """Classes for parameterized 3D space curves."""
 
+import warnings
+
 import numpy as np
 
 from desc.backend import jnp, put
@@ -94,7 +96,7 @@ class FourierRZCurve(Curve):
 
     @property
     def sym(self):
-        """Whether this curve has stellarator symmetry."""
+        """bool: Whether or not the curve is stellarator symmetric."""
         return self._sym
 
     @property
@@ -128,7 +130,7 @@ class FourierRZCurve(Curve):
             and (sym != self.sym)
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
-            self._sym = sym if sym is not None else self.sym
+            self._sym = bool(sym) if sym is not None else self.sym
             N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
@@ -214,7 +216,9 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
-        inputs = InputReader().parse_inputs(path)[-1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],
@@ -573,7 +577,7 @@ class FourierPlanarCurve(Curve):
     _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
-    # The curve is computed in this frame and then shifted/rotated to the correct frame.
+    # Curve is computed in reference frame, then displaced/rotated to the desired frame.
     def __init__(
         self,
         center=[10, 0, 0],
@@ -597,9 +601,9 @@ class FourierPlanarCurve(Curve):
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
+        self._basis = basis
         self.normal = normal
         self.center = center
-        self._basis = basis
 
     @property
     def r_basis(self):
@@ -713,7 +717,10 @@ class FourierPlanarCurve(Curve):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
@@ -818,7 +825,7 @@ class SplineXYZCurve(Curve):
             knots = knots[:-1] if closed_flag else knots
 
         self._knots = knots
-        self.method = method
+        self._method = method
 
     @optimizable_parameter
     @property
@@ -920,6 +927,46 @@ class SplineXYZCurve(Curve):
                 "Method must be one of {possible_methods}, "
                 + f"instead got unknown method {new} "
             )
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+        """
+        return super().compute(
+            names=names,
+            grid=grid,
+            params=params,
+            transforms=transforms,
+            data=data,
+            method=self._method,
+            **kwargs,
+        )
 
     @classmethod
     def from_values(cls, coords, knots=None, method="cubic", name="", basis="xyz"):

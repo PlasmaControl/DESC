@@ -201,6 +201,49 @@ Then, install DESC,
 
 Tested and confirmed to work on the Della and Stellar clusters at Princeton as of June 20, 2024.
 
+
+RAVEN (IPP, Germany)
+++++++++++++++++++++++++++++++
+These instructions were tested and confirmed to work on the RAVEN cluster at IPP on Aug 18, 2024
+
+Create a conda environment for DESC
+
+.. code-block:: sh
+
+    module load anaconda/3/2023.03
+    CONDA_OVERRIDE_CUDA="12.2" conda create --name desc-env "jax==0.4.23" "jaxlib==0.4.23=cuda12*" -c conda-forge
+    conda activate desc-env
+
+Clone DESC
+
+.. code-block:: sh
+
+    git clone https://github.com/PlasmaControl/DESC
+    cd DESC
+    sed -i '/jax/d' ./requirements.txt
+
+In the requirements.txt file, change the scipy version from
+
+.. code-block:: sh
+
+    scipy >= 1.7.0, < 2.0.0
+
+to
+
+.. code-block:: sh
+
+    scipy >= 1.7.0, <= 1.11.3
+
+Install DESC
+
+.. code-block:: sh
+
+    # installation for users
+    pip install --editable .
+    # optionally install developer requirements (if you want to run tests)
+    pip install -r devtools/dev-requirements.txt
+
+
 On Clusters with IBM Power Architecture
 ***************************************
 

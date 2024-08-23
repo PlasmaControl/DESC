@@ -5,13 +5,17 @@ on: [pull_request, workflow_dispatch]
 jobs:
   flake8_linting:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10']
+
     name: Linting
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.10
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: ${{ matrix.python-version }}
 
       # For some reason, loading venv makes this way slower
       - name: Install dependencies

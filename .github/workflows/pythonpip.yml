@@ -3,8 +3,15 @@ name: Cache Python and pip dependencies
 # and pip dependencies cache
 
 on:
+  push:  # TODO: remove while merging
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
   schedule:
-    - cron: '0 0 */2 * *'  # This triggers the workflow every 2 days at midnight
+    - cron: '30 4 */2 * *'  # This triggers the workflow at 4:30 AM every 2 days
   workflow_dispatch:
 
 jobs:
@@ -27,9 +34,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ./.venv-${{ matrix.python-version }}
-          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}
+          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}--${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-venv-${{ matrix.python-version }}-
+            ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}--${{ hashFiles('requirements.txt') }}
 
       - name: Set up virtual environment
         run: |

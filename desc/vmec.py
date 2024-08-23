@@ -158,7 +158,7 @@ class VMECIO:
         zax_cs = file.variables["zaxis_cs"][:].filled()
         try:
             rax_cs = file.variables["raxis_cs"][:].filled()
-            rax_cc = file.variables["zaxis_cc"][:].filled()
+            zax_cc = file.variables["zaxis_cc"][:].filled()
         except KeyError:
             rax_cs = np.zeros_like(rax_cc)
             zax_cc = np.zeros_like(zax_cs)

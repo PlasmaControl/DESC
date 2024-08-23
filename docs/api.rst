@@ -290,6 +290,7 @@ Profiles
     desc.profiles.PowerSeriesProfile
     desc.profiles.TwoPowerProfile
     desc.profiles.SplineProfile
+    desc.profiles.HermiteSplineProfile
     desc.profiles.MTanhProfile
     desc.profiles.ScaledProfile
     desc.profiles.SumProfile

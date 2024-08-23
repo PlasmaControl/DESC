@@ -29,6 +29,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Delete old cached file with same python version
+        run: |
+          echo "Current Cached files list"
+          gh cache list
+          gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-
+          echo "After Deletion Cached files list"
+          gh cache list
+
       - name: Set up virtual environment
         run: |
           python -m venv .venv-${{ matrix.python-version }}
@@ -38,10 +46,13 @@ jobs:
 
       - name: Cache Python environment
         id: cache-env
-        uses: actions/cache/save@v3
+        uses: actions/cache@v3
         with:
           path: ./.venv-${{ matrix.python-version }}
           key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}--${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}--${{ hashFiles('requirements.txt') }}
+            ${{ runner.os }}-venv-${{ matrix.python-version }}-
 
       - name: Verify virtual environment activation
         run: |

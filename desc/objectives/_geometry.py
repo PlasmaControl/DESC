@@ -1568,6 +1568,7 @@ class UmbilicHighCurvature(_Objective):
         bounds=None,
         weight=1,
         curve_grid=None,
+        eq_fixed=False,
         normalize=True,
         normalize_target=True,
         loss_function=None,
@@ -1581,9 +1582,13 @@ class UmbilicHighCurvature(_Objective):
 
         self._eq = eq
         self._curve = curve
+
+        self._eq_fixed = eq_fixed
         self._curve_grid = curve_grid
+
+        things = [eq, curve]
         super().__init__(
-            things=[self._eq, self._curve],  # if not curve_fixed else [eq],
+            things=things,  # if not curve_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1605,11 +1610,8 @@ class UmbilicHighCurvature(_Objective):
             Level of output.
 
         """
-        eq = self._eq
-        curve = self._curve  # if self._curve_fixed else self.things[1]
-        # if things[1] is different than self._curve, update self._curve
-        if curve != self._curve:
-            self._curve = curve
+        curve = self.things[1]
+
         if self._curve_grid is None:
             phi_arr = jnp.linspace(0, 2 * jnp.pi, 3 * curve.N)
             phi_arr = jnp.tile(phi_arr, curve.NFP_umbilic_factor) + jnp.repeat(
@@ -1622,9 +1624,6 @@ class UmbilicHighCurvature(_Objective):
             )
         else:
             curve_grid = self._curve_grid
-
-        if eq != self._eq:
-            self._eq = eq
 
         self._dim_f = int(curve_grid.num_nodes)
 
@@ -1658,7 +1657,7 @@ class UmbilicHighCurvature(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1=None, params_2=None, constants=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute max absolute principal curvature.
 
         Parameters
@@ -1682,10 +1681,16 @@ class UmbilicHighCurvature(_Objective):
         if constants is None:
             constants = self.constants
 
+        if self._eq_fixed:
+            curve_params = params_1
+        else:
+            equil_params = params_1
+            curve_params = params_2
+
         curve_data = compute_fun(
             self._curve,
             self._curve_data_keys,
-            params=params_2,
+            params=curve_params,
             transforms=constants["curve_transforms"],
             profiles={},
         )
@@ -1693,7 +1698,7 @@ class UmbilicHighCurvature(_Objective):
         curve_phi = curve_data["phi"]
         curve_Z = curve_data["R"]
 
-        theta_points = (curve_phi + curve_R + curve_Z) / self._curve.NFP_umbilic_factor
+        theta_points = (-curve_phi + curve_R + curve_Z) / self._curve.NFP_umbilic_factor
 
         umbilic_edge_grid = Grid(
             jnp.array([jnp.ones_like(theta_points), theta_points, curve_phi]).T,
@@ -1715,13 +1720,22 @@ class UmbilicHighCurvature(_Objective):
         )
 
         # now compute the curvature
-        data = compute_fun(
-            self._eq,
-            self._equil_data_keys,
-            params=params_1,
-            profiles=equil_profiles,
-            transforms=equil_transforms,
-        )
+        if not self._eq_fixed:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._equil_data_keys,
+                params=equil_params,
+                profiles=equil_profiles,
+                transforms=equil_transforms,
+            )
+        else:
+            data = compute_fun(
+                self._eq,
+                self._equil_data_keys,
+                params=equil_params,
+                profiles=equil_profiles,
+                transforms=equil_transforms,
+            )
 
         return data["curvature_k2_rho"]
 

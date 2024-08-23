@@ -16,7 +16,7 @@ from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
-from desc.coils import CoilSet, _Coil
+from desc.coils import CoilSet
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
@@ -2405,11 +2405,6 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         len(kwargs) != 0,
         ValueError,
         f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
-    )
-    errorif(
-        not isinstance(coils, _Coil),
-        ValueError,
-        "Expected `coils` to be of type `_Coil`, instead got type" f" {type(coils)}",
     )
 
     if not isinstance(lw, (list, tuple)):

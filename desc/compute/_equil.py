@@ -858,18 +858,12 @@ def _P_ISS04(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["rho", "ni", "<sigma*nu>", "sqrt(g)"],
     resolution_requirement="rtz",
-    reaction="str: Fusion reaction. One of {'T(d,n)4He', 'D(d,p)T', 'D(d,n)3He'}. "
-    + "Default is 'T(d,n)4He'.",
+    fuel="str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default is 'DT'.",
 )
 def _P_fusion(params, transforms, profiles, data, **kwargs):
-    reaction = kwargs.get("fuel", "T(d,n)4He")
-    match reaction:
-        case "T(d,n)4He":
-            energy = 3.52e6 + 14.06e6  # eV
-        case "D(d,p)T":
-            energy = 1.01e6 + 3.02e6  # eV
-        case "D(d,n)3He":
-            energy = 0.82e6 + 2.45e6  # eV
+    energies = {"DT": 3.52e6 + 14.06e6}  # eV
+    fuel = kwargs.get("fuel", "DT")
+    energy = energies.get(fuel)
 
     reaction_rate = jnp.sum(
         data["ni"] ** 2

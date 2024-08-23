@@ -49,9 +49,8 @@ class FusionPower(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    reaction : str, optional
-        Fusion reaction. One of {'T(d,n)4He', 'D(d,p)T', 'D(d,n)3He'}.
-        Default = 'T(d,n)4He'.
+    fuel : str, optional
+        Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'.
     grid : Grid, optional
         Collocation grid used to compute the intermediate quantities.
         Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
@@ -74,13 +73,16 @@ class FusionPower(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        reaction="T(d,n)4He",
+        fuel="DT",
         grid=None,
         name="fusion power",
     ):
+        errorif(
+            fuel not in ["DT"], ValueError, f"fuel must be one of ['DT'], got {fuel}."
+        )
         if target is None and bounds is None:
             target = 0
-        self._reaction = reaction
+        self._fuel = fuel
         self._grid = grid
         super().__init__(
             things=eq,
@@ -107,9 +109,9 @@ class FusionPower(_Objective):
         """
         eq = self.things[0]
         errorif(
-            eq.ion_density is None,
+            eq.electron_density is None,
             ValueError,
-            "Equilibrium must have an ion density profile.",
+            "Equilibrium must have an electron density profile.",
         )
         if self._grid is None:
             self._grid = QuadratureGrid(
@@ -129,7 +131,7 @@ class FusionPower(_Objective):
         self._constants = {
             "profiles": get_profiles(self._data_keys, obj=eq, grid=self._grid),
             "transforms": get_transforms(self._data_keys, obj=eq, grid=self._grid),
-            "reaction": self._reaction,
+            "fuel": self._fuel,
         }
 
         timer.stop("Precomputing transforms")
@@ -168,18 +170,21 @@ class FusionPower(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
-            reaction=constants["reaction"],
+            fuel=constants["fuel"],
         )
         return data["P_fusion"]
 
     @property
-    def reaction(self):
-        """str: Fusion reaction. One of {'T(d,n)4He', 'D(d,p)T', 'D(d,n)3He'}."""
-        return self._reaction
+    def fuel(self):
+        """str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'."""
+        return self._fuel
 
-    @reaction.setter
-    def reaction(self, new):
-        self._reaction = new
+    @fuel.setter
+    def fuel(self, new):
+        errorif(
+            new not in ["DT"], ValueError, f"fuel must be one of ['DT'], got {new}."
+        )
+        self._fuel = new
 
 
 class HeatingPowerISS04(_Objective):

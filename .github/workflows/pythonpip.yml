@@ -17,6 +17,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12']

@@ -250,7 +250,7 @@ class VMECIO:
         N = eq.N
         M_nyq = M + 4 if M_nyq is None else M_nyq
         N_nyq = N + 2 if N_nyq is None else N_nyq
-        N_nyq = 0 if N is None else N_nyq
+        N_nyq = 0 if int(N) == 0 else N_nyq
 
         # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
         s_full = np.linspace(0, 1, surfs)

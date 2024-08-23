@@ -12,7 +12,7 @@ from .objective_funs import _Objective
 class HeatingPowerISS04(_Objective):
     """Heating power required by the ISS04 energy confinement time scaling.
 
-    𝜏_E = W_p / P = 0.134 H_ISS04 a^2.28 R^0.64 P^-0.61 n_e^0.54 B^0.84 𝜄^0.41 (s)
+    τ_E = Wₚ / P = 0.134 H_ISS04 a²ᐧ²⁸ R⁰ᐧ⁶⁴ P⁻⁰ᐧ⁶¹ nₑ⁰ᐧ⁵⁴ B⁰ᐧ⁸⁴ 𝜄⁰ᐧ⁴¹ (s)
 
     References
     ----------

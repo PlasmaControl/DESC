@@ -31,13 +31,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Delete old cached file with same python version
-        run: |
-          echo "Current Cached files list"
-          gh cache list
-          gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-
-          echo "After Deletion Cached files list"
-          gh cache list
+      # - name: Delete old cached file with same python version
+      #   run: |
+      #     echo "Current Cached files list"
+      #     gh cache list
+      #     gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-
+      #     echo "After Deletion Cached files list"
+      #     gh cache list
 
       - name: Set up virtual environment
         run: |

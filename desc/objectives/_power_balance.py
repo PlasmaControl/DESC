@@ -131,7 +131,6 @@ class FusionPower(_Objective):
         self._constants = {
             "profiles": get_profiles(self._data_keys, obj=eq, grid=self._grid),
             "transforms": get_transforms(self._data_keys, obj=eq, grid=self._grid),
-            "fuel": self._fuel,
         }
 
         timer.stop("Precomputing transforms")
@@ -170,7 +169,7 @@ class FusionPower(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
-            fuel=constants["fuel"],
+            fuel=self.fuel,
         )
         return data["P_fusion"]
 

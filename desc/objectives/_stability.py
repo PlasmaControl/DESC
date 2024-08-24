@@ -408,8 +408,8 @@ class BallooningStability(_Objective):
     """
 
     _coordinates = "r"
-    _units = "(normalized)"
-    _print_value_fmt = "Ideal-ballooning objective: {:10.3e} "
+    _units = "(Wb^-2)"
+    _print_value_fmt = "Ideal-ballooning objective: "
 
     def __init__(
         self,

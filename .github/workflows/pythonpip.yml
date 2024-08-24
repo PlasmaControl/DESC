@@ -2,6 +2,13 @@ name: Cache dependencies
 # This workflow is triggered every 2 days and updates the Python
 # and pip dependencies cache
 on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
   schedule:
     - cron: '30 4 */2 * *'  # This triggers the workflow at 4:30 AM every 2 days
   workflow_dispatch:
@@ -45,9 +52,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ./.venv-${{ matrix.python-version }}
-          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}--${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}--${{ hashFiles('requirements.txt') }}
+            ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}-${{ hashFiles('requirements.txt') }}
 
       - name: Verify virtual environment activation
         run: |

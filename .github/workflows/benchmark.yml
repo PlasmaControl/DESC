@@ -25,6 +25,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.9']
+        group: [1, 2]
 
     steps:
       # Enable tmate debugging of manually-triggered workflows if the input option was provided
@@ -66,7 +67,10 @@ jobs:
           python -m pytest benchmark_cpu_small.py -vv \
             --benchmark-save='Latest_Commit' \
             --durations=0 \
-            --benchmark-save-data
+            --benchmark-save-data \
+            --splits 2 \
+            --group ${{ matrix.group }} \
+            --splitting-algorithm least_duration
 
       - name: Checkout current master
         uses: actions/checkout@v4
@@ -85,7 +89,10 @@ jobs:
           python -m pytest benchmark_cpu_small.py -vv \
             --benchmark-save='master' \
             --durations=0 \
-            --benchmark-save-data
+            --benchmark-save-data \
+            --splits 2 \
+            --group ${{ matrix.group }} \
+            --splitting-algorithm least_duration
 
       - name: put benchmark results in same folder
         run: |

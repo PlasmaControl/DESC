@@ -35,7 +35,7 @@ jobs:
         run: |
           echo "Current Cached files list"
           gh cache list
-          gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-
+          gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-*
           echo "After Deletion Cached files list"
           gh cache list
 

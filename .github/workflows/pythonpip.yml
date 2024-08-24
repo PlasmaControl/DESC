@@ -1,15 +1,7 @@
-name: Cache Python and pip dependencies
+name: Cache dependencies
 # This workflow is triggered every 2 days and updates the Python
 # and pip dependencies cache
-# TODO: this needs to delete old cache too!!!!!
 on:
-  push:  # TODO: remove while merging
-    branches:
-      - master
-      - dev
-  pull_request:
-    branches:
-      - master
   schedule:
     - cron: '30 4 */2 * *'  # This triggers the workflow at 4:30 AM every 2 days
   workflow_dispatch:

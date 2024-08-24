@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.10']
-        group: [1, 2, 3, 4]
+        group: [1, 2, 3]
 
     steps:
       - uses: actions/checkout@v4
@@ -57,5 +57,6 @@ jobs:
           pytest -v --nbmake "./docs/notebooks" \
             --nbmake-timeout=2000 \
             --ignore=./docs/notebooks/zernike_eval.ipynb \
-            --splits 4 \
+            --splits 3 \
             --group ${{ matrix.group }} \
+            --splitting-algorithm least_duration

@@ -1,0 +1,32 @@
+name: Dummy Test
+# This workflow is triggered every 2 days and updates the Python
+# and pip dependencies cache
+on: ["pull_request"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    strategy:
+      matrix:
+        python-version: ['3.9']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: List all cached files
+        run: |
+          echo "Current Cached files list"
+          gh cache list
+
+      - name: Check cache hit
+        run: |
+          echo "Checking cache hit"
+          echo "Cache key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}"
+          gh cache get ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }} || echo "Cache miss"

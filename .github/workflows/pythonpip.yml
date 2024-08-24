@@ -42,7 +42,7 @@ jobs:
 
       - name: Cache Python environment
         id: cache-env
-        uses: actions/cache/save@v3
+        uses: actions/cache@v4
         with:
           path: ./.venv-${{ matrix.python-version }}
           key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}

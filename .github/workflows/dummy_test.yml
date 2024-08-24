@@ -27,6 +27,7 @@ jobs:
 
       - name: Check cache hit
         run: |
-          echo "Checking cache hit"
+          echo "Checking cache delete"
           echo "Cache key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}"
-          gh cache get ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }} || echo "Cache miss"
+          gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+          gh cache list

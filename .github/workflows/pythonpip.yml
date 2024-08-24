@@ -40,8 +40,6 @@ jobs:
             echo "Deleting cache with key: $cache_key"
             gh cache delete "$cache_key"
           done
-          echo "Remaining Cached files list"
-          gh cache list
 
       - name: Set up virtual environment
         run: |
@@ -58,7 +56,6 @@ jobs:
           key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}--${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}--${{ hashFiles('requirements.txt') }}
-            ${{ runner.os }}-venv-${{ matrix.python-version }}-
 
       - name: Verify virtual environment activation
         run: |

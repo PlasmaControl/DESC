@@ -18,6 +18,8 @@ jobs:
   unit_tests:
 
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
         combos: [{group: 1, python_version: '3.9'},
@@ -46,6 +48,7 @@ jobs:
       - name: Set up virtual environment if not restored from cache
         if: steps.restore-env.outputs.cache-hit != 'true'
         run: |
+          gh cache list
           python -m venv .venv-${{ matrix.combos.python_version }}
           source .venv-${{ matrix.combos.python_version }}/bin/activate
           python -m pip install --upgrade pip

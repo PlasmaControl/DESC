@@ -35,8 +35,12 @@ jobs:
         run: |
           echo "Current Cached files list"
           gh cache list
-          gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-*
-          echo "After Deletion Cached files list"
+          echo "Deleting cached files with pattern: ${{ runner.os }}-venv-${{ matrix.python-version }}-"
+          for cache_key in $(gh cache list --json key -q ".[] | select(.key | startswith(\"${{ runner.os }}-venv-${{ matrix.python-version }}-\")) | .key"); do
+            echo "Deleting cache with key: $cache_key"
+            gh cache delete "$cache_key"
+          done
+          echo "Remaining Cached files list"
           gh cache list
 
       - name: Set up virtual environment

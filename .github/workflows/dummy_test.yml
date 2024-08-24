@@ -22,6 +22,8 @@ jobs:
 
       - name: List all cached files
         run: |
+          ls
+          pwd
           echo "Current Cached files list"
           gh cache list
 

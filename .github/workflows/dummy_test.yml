@@ -10,7 +10,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        python-version: ['3.9']
+        python-version: ['3.10']
 
     steps:
       - uses: actions/checkout@v4
@@ -25,9 +25,15 @@ jobs:
           echo "Current Cached files list"
           gh cache list
 
-      - name: Check cache hit
-        run: |
-          echo "Checking cache delete"
-          echo "Cache key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}"
-          gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
-          gh cache list
+    #   - name: Check cache hit
+    #     run: |
+    #       echo "Checking cache delete"
+    #       echo "Cache key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}"
+    #       gh cache delete ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+    #       gh cache list
+      - name: Restore Python environment cache
+        id: restore-env
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv-${{ matrix.python-version }}
+          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}

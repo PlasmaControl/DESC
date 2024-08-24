@@ -69,7 +69,7 @@ class MercierStability(_Objective):
 
     _coordinates = "r"
     _units = "(Wb^-2)"
-    _print_value_fmt = "Mercier Stability: {:10.3e} "
+    _print_value_fmt = "Mercier Stability: "
 
     def __init__(
         self,
@@ -250,7 +250,7 @@ class MagneticWell(_Objective):
 
     _coordinates = "r"
     _units = "(dimensionless)"
-    _print_value_fmt = "Magnetic Well: {:10.3e} "
+    _print_value_fmt = "Magnetic Well: "
 
     def __init__(
         self,

@@ -42,12 +42,10 @@ jobs:
 
       - name: Cache Python environment
         id: cache-env
-        uses: actions/cache@v3
+        uses: actions/cache/save@v3
         with:
           path: ./.venv-${{ matrix.python-version }}
           key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt') }}-${{ hashFiles('requirements.txt') }}
 
       - name: Verify virtual environment activation
         run: |

@@ -682,3 +682,6 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
     # invalid tree structure
     else:
         raise ValueError("trees must be nested lists of dicts")
+
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text

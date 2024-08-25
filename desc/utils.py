@@ -760,3 +760,6 @@ def atleast_2d_end(*arys):
     if len(tup) == 1:
         tup = tup[0]
     return tup
+
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text

@@ -11,7 +11,6 @@ from termcolor import colored
 
 from desc.backend import fori_loop, jax, jit, jnp
 
-
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
 

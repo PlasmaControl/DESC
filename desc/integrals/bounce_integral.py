@@ -1,4 +1,4 @@
-"""Methods for computing bounce integrals."""
+"""Functional programming methods for ``Bounce1D``."""
 
 from functools import partial
 
@@ -8,22 +8,16 @@ from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
 from tests.test_interp_utils import filter_not_nan
 
-from desc.backend import flatnonzero, imap, jnp, put
+from desc.backend import imap, jnp
+from desc.integrals._bounce_utils import filter_bounce_points, fix_inversion
 from desc.integrals.interp_utils import poly_root, polyder_vec, polyval_vec
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
-    composite_linspace,
     grad_automorphism_sin,
     grad_bijection_from_disc,
 )
 from desc.utils import errorif, setdefault, take_mask, warnif
-
-
-def filter_bounce_points(bp1, bp2):
-    """Return only bounce points such that |bp2 - bp1| > 0."""
-    mask = (bp2 - bp1) != 0.0
-    return bp1[mask], bp2[mask]
 
 
 def plot_field_line(
@@ -244,31 +238,6 @@ def _check_shape(knots, B_c, B_z_ra_c, pitch=None):
     return B_c, B_z_ra_c, pitch
 
 
-@partial(jnp.vectorize, signature="(m),(m)->(m)")
-def _fix_inversion(is_intersect, B_z_ra):
-    # idx of first two intersects
-    idx = flatnonzero(is_intersect, size=2, fill_value=-1)
-    edge_case = (
-        (B_z_ra[idx[0]] == 0)
-        & (B_z_ra[idx[1]] < 0)
-        & is_intersect[idx[0]]
-        & is_intersect[idx[1]]
-        # In theory, we need to keep propagating this edge case,
-        # e.g. (B_z_ra[..., 1] < 0) | ((B_z_ra[..., 1] == 0) & (B_z_ra[..., 2] < 0)...).
-        # At each step, the likelihood that an intersection has already been lost
-        # due to floating point errors grows, so the real solution is to pick a less
-        # degenerate pitch value - one that does not ride the global extrema of |B|.
-    )
-    # The pairs bp1[i, j, k] and bp2[i, j, k] are boundaries of an integral only
-    # if bp1[i, j, k] <= bp2[i, j, k]. For correctness of the algorithm, it is
-    # required that the first intersect satisfies non-positive derivative. Now,
-    # because B_z_ra[i, j, k] <= 0 implies B_z_ra[i, j, k + 1] >= 0 by continuity,
-    # there can be at most one inversion, and if it exists, the inversion must be
-    # at the first pair. To correct the inversion, it suffices to disqualify the
-    # first intersect as a right boundary, except under the above edge case.
-    return put(is_intersect, idx[0], edge_case)
-
-
 def bounce_points(
     pitch, knots, B_c, B_z_ra_c, num_well=None, check=False, plot=True, **kwargs
 ):
@@ -346,7 +315,7 @@ def bounce_points(
     # we ignore the bounce points of particles only assigned to a class that are
     # trapped outside this snapshot of the field line.
     is_bp1 = (B_z_ra <= 0) & is_intersect
-    is_bp2 = (B_z_ra >= 0) & _fix_inversion(is_intersect, B_z_ra)
+    is_bp2 = (B_z_ra >= 0) & fix_inversion(is_intersect, B_z_ra)
 
     # Transform out of local power basis expansion.
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
@@ -364,36 +333,6 @@ def bounce_points(
         _check_bounce_points(bp1, bp2, pitch, knots, B_c, plot, **kwargs)
 
     return bp1, bp2
-
-
-def get_pitch(min_B, max_B, num, relative_shift=1e-6):
-    """Return uniformly spaced pitch values between 1 / max B and 1 / min B.
-
-    Parameters
-    ----------
-    min_B : jnp.ndarray
-        Minimum |B| value.
-    max_B : jnp.ndarray
-        Maximum |B| value.
-    num : int
-        Number of values, not including endpoints.
-    relative_shift : float
-        Relative amount to shift maxima down and minima up to avoid floating point
-        errors in downstream routines.
-
-    Returns
-    -------
-    pitch : jnp.ndarray
-        Shape (num + 2, *min_B.shape).
-
-    """
-    # Floating point error impedes consistent detection of bounce points riding
-    # extrema. Shift values slightly to resolve this issue.
-    min_B = (1 + relative_shift) * min_B
-    max_B = (1 - relative_shift) * max_B
-    pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
-    assert pitch.shape == (num + 2, *pitch.shape[1:])
-    return pitch
 
 
 def _get_extrema(knots, B_c, B_z_ra_c, sentinel=jnp.nan):
@@ -728,7 +667,7 @@ def required_names():
 def bounce_integral(
     data,
     knots,
-    quad=leggauss(21),
+    quad=leggauss(32),
     automorphism=(automorphism_sin, grad_automorphism_sin),
     B_ref=1.0,
     L_ref=1.0,
@@ -773,7 +712,7 @@ def bounce_integral(
         integrand. A good reference density is 100 knots per toroidal transit.
     quad : (jnp.ndarray, jnp.ndarray)
         Quadrature points xₖ and weights wₖ for the approximate evaluation of an
-        integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 21 points.
+        integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
     automorphism : (Callable, Callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first. This map defines a

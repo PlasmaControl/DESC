@@ -13,7 +13,7 @@ from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.integrals import FourierBounce
+from desc.integrals import Bounce2D
 from desc.integrals.bounce_integral import filter_bounce_points, get_pitch
 from desc.integrals.fourier_bounce_integral import FourierChebyshevBasis, _get_alphas
 from desc.integrals.interp_utils import fourier_pts
@@ -63,8 +63,8 @@ class TestBouncePoints:
         fcb = FourierChebyshevBasis(f, domain=domain)
         pcb = fcb.compute_cheb(fourier_pts(M))
         pitch = 1 / np.linspace(1, 4, 20)
-        bp1, bp2 = pcb.bounce_points(pitch)
-        pcb.check_bounce_points(bp1, bp2, pitch)
+        bp1, bp2 = pcb.intersect1d(pitch)
+        pcb.check_intersect1d(bp1, bp2, pitch)
         bp1, bp2 = filter_bounce_points(bp1, bp2)
 
         def f(z):
@@ -90,15 +90,15 @@ def test_fourier_chebyshev(rho=1, M=8, N=32, f=lambda B, pitch: B * pitch):
         rho=rho, M=eq.M_grid, N=eq.N_grid, sym=False, NFP=eq.NFP
     )  # check if NFP!=1 works
     data = eq.compute(
-        names=FourierBounce.required_names() + ["min_tz |B|", "max_tz |B|"], grid=grid
+        names=Bounce2D.required_names() + ["min_tz |B|", "max_tz |B|"], grid=grid
     )
-    fb = FourierBounce(
+    fb = Bounce2D(
         grid, data, M, N, desc_from_clebsch, check=True, warn=False
     )  # TODO check true
     pitch = get_pitch(
         grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
     )
-    result = fb.bounce_integrate(f, [], pitch)  # noqa: F841
+    result = fb.integrate(f, [], pitch)  # noqa: F841
 
 
 @pytest.mark.unit
@@ -127,7 +127,7 @@ def test_drift():
         iota=np.array([iota]),
     )
     data = eq.compute(
-        FourierBounce.required_names()
+        Bounce2D.required_names()
         + [
             "cvdrift",
             "gbdrift",
@@ -157,18 +157,18 @@ def test_drift():
     # Compute numerical result.
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data_2 = eq.compute(
-        names=FourierBounce.required_names() + ["cvdrift", "gbdrift"], grid=grid
+        names=Bounce2D.required_names() + ["cvdrift", "gbdrift"], grid=grid
     )
     normalization = -np.sign(data["psi"]) * data["B ref"] * data["a"] ** 2
     data_2["cvdrift"] = data_2["cvdrift"] * normalization
     data_2["gbdrift"] = data_2["gbdrift"] * normalization
     M, N = eq.M_grid, 20
-    fb = FourierBounce(
+    fb = Bounce2D(
         grid,
         data_2,
         M,
         N,
-        desc_from_clebsch=FourierBounce.desc_from_clebsch(eq, rho, M, N),
+        desc_from_clebsch=Bounce2D.desc_from_clebsch(eq, rho, M, N),
         alpha_0=data["alpha"],
         num_transit=1,
         B_ref=data["B ref"],
@@ -185,13 +185,13 @@ def test_drift():
     def integrand_den(B, pitch):
         return 1 / jnp.sqrt(1 - pitch * B)
 
-    drift_numerical_num = fb.bounce_integrate(
+    drift_numerical_num = fb.integrate(
         pitch=pitch[:, np.newaxis],
         integrand=integrand_num,
-        f=FourierBounce.reshape_data(grid, data_2, ["cvdrift", "gbdrift"]),
+        f=Bounce2D.reshape_data(grid, data_2, ["cvdrift", "gbdrift"]),
         num_well=1,
     )
-    drift_numerical_den = fb.bounce_integrate(
+    drift_numerical_den = fb.integrate(
         pitch=pitch[:, np.newaxis],
         integrand=integrand_den,
         f=[],

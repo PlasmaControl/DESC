@@ -178,7 +178,7 @@ def leggausslob(deg):
     return x, w
 
 
-def get_quad_points(quad, automorphism):
+def get_quad(quad, automorphism):
     """Apply automorphism to given quadrature points and weights.
 
     Parameters
@@ -200,7 +200,6 @@ def get_quad_points(quad, automorphism):
     """
     x, w = quad
     assert x.ndim == w.ndim == 1
-    assert x.shape == w.shape
     if automorphism is not None:
         # Apply automorphisms to supress singularities.
         auto, grad_auto = automorphism

@@ -684,6 +684,9 @@ def get_rtz_grid(
     jitable : bool, optional
         If false the returned grid has additional attributes.
         Required to be false to retain nodes at magnetic axis.
+    kwargs : dict
+        Additional parameters to supply to the coordinate mapping function.
+        See ``desc.equilibrium.coords.map_coordinates``.
 
     Returns
     -------

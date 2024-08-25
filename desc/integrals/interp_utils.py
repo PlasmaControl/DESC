@@ -10,9 +10,9 @@ from desc.compute.utils import safediv
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif
 
-# TODO: Transformation to make nodes uniform Boyd eq. 16.46 pg. 336.
-#  Shouldn't really change locations of complex poles for us, so convergence
-#  rate will still be good. This will basically do spectral condensation.
+# TODO: Transformation to make nodes more uniform Boyd eq. 16.46 pg. 336.
+#  Have a hunch it won't change locations of complex poles much, so using
+#  more uniformly spaced nodes could speed up convergence.
 
 
 def cheb_pts(N, lobatto=False, domain=(-1, 1)):
@@ -21,8 +21,8 @@ def cheb_pts(N, lobatto=False, domain=(-1, 1)):
     Notes
     -----
     This is a common definition of the Chebyshev points (see Boyd, Chebyshev and
-    Fourier Spectral Methods p. 498). These are the points demanded by Discrete
-    Cosine Transformations to interpolate Chebyshev series because the cosine
+    Fourier Spectral Methods p. 498). These are the points demanded by discrete
+    cosine transformations to interpolate Chebyshev series because the cosine
     basis for the DCT is defined on [0, π].
 
     They differ in ordering from the points returned by
@@ -147,7 +147,7 @@ def interp_rfft(xq, f, axis=-1):
         Real query points where interpolation is desired.
         Shape of ``xq`` must broadcast with arrays of shape ``np.delete(f.shape,axis)``.
     f : jnp.ndarray
-        Real function values on uniform 2π periodic grid to interpolate.
+        Real 2π periodic function values on uniform grid to interpolate.
     axis : int
         Axis along which to transform.
 
@@ -213,10 +213,12 @@ def interp_rfft2(xq, f, axes=(-2, -1)):
         Shape ``xq.shape[:-1]`` must broadcast with shape ``np.delete(f.shape,axes)``.
     f : jnp.ndarray
         Shape (..., f.shape[-2], f.shape[-1]).
-        Real function values on uniform (2π × 2π) periodic tensor-product grid to
-        interpolate.
+        Real (2π × 2π) periodic function values on uniform tensor-product grid
+        to interpolate.
     axes : tuple[int, int]
         Axes along which to transform.
+        The real transform is done along ``axes[-1]``, so it will be more
+        efficient for that to denote the larger size axis in ``axes``.
 
     Returns
     -------
@@ -283,13 +285,38 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
     return fq
 
 
+def transform_to_desc(grid, f):
+    """Transform to DESC spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
+        (2π × 2π) poloidal and toroidal coordinates.
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Shape (grid.num_rho, grid.num_theta // 2 + 1, grid.num_zeta)
+        Coefficients of 2D real FFT.
+
+    """
+    f = grid.meshgrid_reshape(f, order="rtz")
+    a = rfft2(f, axes=(-1, -2), norm="forward")
+    # Real fft done over poloidal since grid.num_theta > grid.num_zeta usually.
+    assert a.shape == (grid.num_rho, grid.num_theta // 2 + 1, grid.num_zeta)
+    return a
+
+
 def cheb_from_dct(a, axis=-1):
-    """Get Discrete Chebyshev Transform from Discrete Cosine Transform.
+    """Get discrete Chebyshev transform from discrete cosine transform.
 
     Parameters
     ----------
     a : jnp.ndarray
-        Discrete Cosine Transform coefficients, e.g.
+        Discrete cosine transform coefficients, e.g.
         ``a=dct(f,type=2,axis=axis,norm="forward")``.
         The discrete cosine transformation used by scipy is defined here.
         docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html#scipy.fft.dct
@@ -307,7 +334,7 @@ def cheb_from_dct(a, axis=-1):
 
 
 def interp_dct(xq, f, lobatto=False, axis=-1):
-    """Interpolate ``f`` to ``xq`` with Discrete Chebyshev Transform.
+    """Interpolate ``f`` to ``xq`` with discrete Chebyshev transform.
 
     Parameters
     ----------
@@ -329,7 +356,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
 
     """
     lobatto = bool(lobatto)
-    errorif(lobatto, NotImplementedError)
+    errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
     assert f.ndim >= 1
     a = cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis) / (
         f.shape[axis] - lobatto
@@ -339,7 +366,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
 
 
 def idct_non_uniform(xq, a, n, axis=-1):
-    """Evaluate Discrete Chebyshev Transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
+    """Evaluate discrete Chebyshev transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
 
     Parameters
     ----------
@@ -347,7 +374,7 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Real query points where interpolation is desired.
         Shape of ``xq`` must broadcast with shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
-        Discrete Chebyshev Transform coefficients.
+        Discrete Chebyshev transform coefficients.
     n : int
         Spectral resolution of ``a``.
     axis : int
@@ -361,102 +388,78 @@ def idct_non_uniform(xq, a, n, axis=-1):
     """
     assert a.ndim >= 1
     a = jnp.moveaxis(a, axis, -1)
-    basis = chebvander(xq, n - 1)
     # Could use Clenshaw recursion with fq = chebval(xq, a, tensor=False).
+    basis = chebvander(xq, n - 1)
     fq = jnp.linalg.vecdot(basis, a)
     return fq
 
 
-# TODO: upstream cubic spline polynomial root finding to interpax
+def polyder_vec(c):
+    """Coefficients for the derivatives of the given set of polynomials.
+
+    Parameters
+    ----------
+    c : jnp.ndarray
+        First axis should store coefficients of a polynomial. For a polynomial given by
+        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
+        ``c[n-i]``.
+
+    Returns
+    -------
+    poly : jnp.ndarray
+        Coefficients of polynomial derivative, ignoring the arbitrary constant. That is,
+        ``poly[i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁻¹,  where n is
+        ``c.shape[0]-1``.
+
+    """
+    poly = (c[:-1].T * jnp.arange(c.shape[0] - 1, 0, -1)).T
+    return poly
 
 
-def _filter_distinct(r, sentinel, eps):
-    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
-    # eps needs to be low enough that close distinct roots do not get removed.
-    # Otherwise, algorithms relying on continuity will fail.
-    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-    r = jnp.where(mask, sentinel, r)
-    return r
+def polyval_vec(x, c):
+    """Evaluate the set of polynomials ``c`` at the points ``x``.
 
+    Note this function is not the same as ``np.polynomial.polynomial.polyval(x,c)``.
 
-def _concat_sentinel(r, sentinel, num=1):
-    """Concat ``sentinel`` ``num`` times to ``r`` on last axis."""
-    sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
-    return jnp.append(r, sent, axis=-1)
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Real coordinates at which to evaluate the set of polynomials.
+    c : jnp.ndarray
+        First axis should store coefficients of a polynomial. For a polynomial given by
+        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
+        ``c[n-i]``.
 
+    Returns
+    -------
+    val : jnp.ndarray
+        Polynomial with given coefficients evaluated at given points.
 
-def _root_linear(a, b, sentinel, eps, distinct=False):
-    """Return r such that a r + b = 0."""
-    return safediv(-b, a, jnp.where(jnp.abs(b) <= eps, 0, sentinel))
+    Examples
+    --------
+    .. code-block:: python
 
-
-def _root_quadratic(a, b, c, sentinel, eps, distinct):
-    """Return r such that a r² + b r + c = 0, assuming real coefficients and roots."""
-    # numerical.recipes/book.html, page 227
-    discriminant = b**2 - 4 * a * c
-    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
-    r1 = jnp.where(
-        discriminant < 0,
-        sentinel,
-        safediv(q, a, _root_linear(b, c, sentinel, eps)),
-    )
-    r2 = jnp.where(
-        # more robust to remove repeated roots with discriminant
-        (discriminant < 0) | (distinct & (discriminant <= eps)),
-        sentinel,
-        safediv(c, q, sentinel),
-    )
-    return jnp.stack([r1, r2], axis=-1)
-
-
-def _root_cubic(a, b, c, d, sentinel, eps, distinct):
-    """Return r such that a r³ + b r² + c r + d = 0, assuming real coef and roots."""
-    # numerical.recipes/book.html, page 228
-
-    def irreducible(Q, R, b, mask):
-        # Three irrational real roots.
-        theta = jnp.arccos(R / jnp.sqrt(jnp.where(mask, Q**3, R**2 + 1)))
-        return jnp.moveaxis(
-            -2
-            * jnp.sqrt(Q)
-            * jnp.stack(
-                [
-                    jnp.cos(theta / 3),
-                    jnp.cos((theta + 2 * jnp.pi) / 3),
-                    jnp.cos((theta - 2 * jnp.pi) / 3),
-                ]
+        val = polyval_vec(x, c)
+        if val.ndim != max(x.ndim, c.ndim - 1):
+            raise ValueError(f"Incompatible shapes {x.shape} and {c.shape}.")
+        for index in np.ndindex(c.shape[1:]):
+            idx = (..., *index)
+            np.testing.assert_allclose(
+                actual=val[idx],
+                desired=np.poly1d(c[idx])(x[idx]),
+                err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
             )
-            - b / 3,
-            source=0,
-            destination=-1,
-        )
 
-    def reducible(Q, R, b):
-        # One real and two complex roots.
-        A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3))) ** (1 / 3)
-        B = safediv(Q, A)
-        r1 = (A + B) - b / 3
-        return _concat_sentinel(r1[..., jnp.newaxis], sentinel, num=2)
-
-    def root(b, c, d):
-        b = safediv(b, a)
-        c = safediv(c, a)
-        d = safediv(d, a)
-        Q = (b**2 - 3 * c) / 9
-        R = (2 * b**3 - 9 * b * c + 27 * d) / 54
-        mask = R**2 < Q**3
-        return jnp.where(
-            mask[..., jnp.newaxis],
-            irreducible(jnp.abs(Q), R, b, mask),
-            reducible(Q, R, b),
-        )
-
-    return jnp.where(
-        # Tests catch failure here if eps < 1e-12 for 64 bit jax.
-        jnp.expand_dims(jnp.abs(a) <= eps, axis=-1),
-        _concat_sentinel(_root_quadratic(b, c, d, sentinel, eps, distinct), sentinel),
-        root(b, c, d),
+    """
+    # Better than Horner's method as we expect to evaluate low order polynomials.
+    # No need to use fast multipoint evaluation techniques for the same reason.
+    val = jnp.linalg.vecdot(
+        polyvander(x, c.shape[0] - 1), jnp.moveaxis(jnp.flipud(c), 0, -1)
     )
+    return val
+
+
+# TODO: Eventually do a PR to move this stuff into interpax.
 
 
 _roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
@@ -522,6 +525,7 @@ def poly_root(
         # Compute from analytic formula to avoid the issue of complex roots with small
         # imaginary parts and to avoid nan in gradient.
         r = func[c.shape[0]](*c[:-1], c[-1] - k, sentinel, eps, distinct)
+        # We already filtered distinct roots for quadratics.
         distinct = distinct and c.shape[0] > 3
     else:
         # Compute from eigenvalues of polynomial companion matrix.
@@ -544,66 +548,90 @@ def poly_root(
     return _filter_distinct(r, sentinel, eps) if distinct else r
 
 
-def polyder_vec(c):
-    """Coefficients for the derivatives of the given set of polynomials.
+def _root_cubic(a, b, c, d, sentinel, eps, distinct):
+    """Return r such that a r³ + b r² + c r + d = 0, assuming real coef and roots."""
+    # numerical.recipes/book.html, page 228
 
-    Parameters
-    ----------
-    c : jnp.ndarray
-        First axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
-        ``c[n-i]``.
-
-    Returns
-    -------
-    poly : jnp.ndarray
-        Coefficients of polynomial derivative, ignoring the arbitrary constant. That is,
-        ``poly[i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁻¹,  where n is
-        ``c.shape[0]-1``.
-
-    """
-    poly = (c[:-1].T * jnp.arange(c.shape[0] - 1, 0, -1)).T
-    return poly
-
-
-def polyval_vec(x, c):
-    """Evaluate the set of polynomials ``c`` at the points ``x``.
-
-    Note this function is not the same as ``np.polynomial.polynomial.polyval(x,c)``.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Real coordinates at which to evaluate the set of polynomials.
-    c : jnp.ndarray
-        First axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
-        ``c[n-i]``.
-
-    Returns
-    -------
-    val : jnp.ndarray
-        Polynomial with given coefficients evaluated at given points.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        val = _poly_val(x, c)
-        if val.ndim != max(x.ndim, c.ndim - 1):
-            raise ValueError(f"Incompatible shapes {x.shape} and {c.shape}.")
-        for index in np.ndindex(c.shape[1:]):
-            idx = (..., *index)
-            np.testing.assert_allclose(
-                actual=val[idx],
-                desired=np.poly1d(c[idx])(x[idx]),
-                err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
+    def irreducible(Q, R, b, mask):
+        # Three irrational real roots.
+        theta = jnp.arccos(R / jnp.sqrt(jnp.where(mask, Q**3, R**2 + 1)))
+        return jnp.moveaxis(
+            -2
+            * jnp.sqrt(Q)
+            * jnp.stack(
+                [
+                    jnp.cos(theta / 3),
+                    jnp.cos((theta + 2 * jnp.pi) / 3),
+                    jnp.cos((theta - 2 * jnp.pi) / 3),
+                ]
             )
+            - b / 3,
+            source=0,
+            destination=-1,
+        )
 
-    """
-    # Better than Horner's method as we expect to evaluate low order polynomials.
-    # No need to use fast multipoint evaluation techniques for the same reason.
-    val = jnp.linalg.vecdot(
-        polyvander(x, c.shape[0] - 1), jnp.moveaxis(jnp.flipud(c), 0, -1)
+    def reducible(Q, R, b):
+        # One real and two complex roots.
+        A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3))) ** (1 / 3)
+        B = safediv(Q, A)
+        r1 = (A + B) - b / 3
+        return _concat_sentinel(r1[..., jnp.newaxis], sentinel, num=2)
+
+    def root(b, c, d):
+        b = safediv(b, a)
+        c = safediv(c, a)
+        d = safediv(d, a)
+        Q = (b**2 - 3 * c) / 9
+        R = (2 * b**3 - 9 * b * c + 27 * d) / 54
+        mask = R**2 < Q**3
+        return jnp.where(
+            mask[..., jnp.newaxis],
+            irreducible(jnp.abs(Q), R, b, mask),
+            reducible(Q, R, b),
+        )
+
+    return jnp.where(
+        # Tests catch failure here if eps < 1e-12 for 64 bit jax.
+        jnp.expand_dims(jnp.abs(a) <= eps, axis=-1),
+        _concat_sentinel(_root_quadratic(b, c, d, sentinel, eps, distinct), sentinel),
+        root(b, c, d),
     )
-    return val
+
+
+def _root_quadratic(a, b, c, sentinel, eps, distinct):
+    """Return r such that a r² + b r + c = 0, assuming real coefficients and roots."""
+    # numerical.recipes/book.html, page 227
+    discriminant = b**2 - 4 * a * c
+    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
+    r1 = jnp.where(
+        discriminant < 0,
+        sentinel,
+        safediv(q, a, _root_linear(b, c, sentinel, eps)),
+    )
+    r2 = jnp.where(
+        # more robust to remove repeated roots with discriminant
+        (discriminant < 0) | (distinct & (discriminant <= eps)),
+        sentinel,
+        safediv(c, q, sentinel),
+    )
+    return jnp.stack([r1, r2], axis=-1)
+
+
+def _root_linear(a, b, sentinel, eps, distinct=False):
+    """Return r such that a r + b = 0."""
+    return safediv(-b, a, jnp.where(jnp.abs(b) <= eps, 0, sentinel))
+
+
+def _concat_sentinel(r, sentinel, num=1):
+    """Concat ``sentinel`` ``num`` times to ``r`` on last axis."""
+    sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
+    return jnp.append(r, sent, axis=-1)
+
+
+def _filter_distinct(r, sentinel, eps):
+    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
+    # eps needs to be low enough that close distinct roots do not get removed.
+    # Otherwise, algorithms relying on continuity will fail.
+    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
+    r = jnp.where(mask, sentinel, r)
+    return r

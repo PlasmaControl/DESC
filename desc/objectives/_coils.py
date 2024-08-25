@@ -254,7 +254,7 @@ class CoilLength(_CoilObjective):
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m)"
-    _print_value_fmt = "Coil length: {:10.3e} "
+    _print_value_fmt = "Coil length: "
 
     def __init__(
         self,
@@ -379,7 +379,7 @@ class CoilCurvature(_CoilObjective):
 
     _scalar = False
     _units = "(m^-1)"
-    _print_value_fmt = "Coil curvature: {:10.3e} "
+    _print_value_fmt = "Coil curvature: "
 
     def __init__(
         self,
@@ -499,7 +499,7 @@ class CoilTorsion(_CoilObjective):
 
     _scalar = False
     _units = "(m^-1)"
-    _print_value_fmt = "Coil torsion: {:10.3e} "
+    _print_value_fmt = "Coil torsion: "
 
     def __init__(
         self,
@@ -619,7 +619,7 @@ class CoilCurrentLength(CoilLength):
 
     _scalar = False
     _units = "(A*m)"
-    _print_value_fmt = "Coil current length: {:10.3e} "
+    _print_value_fmt = "Coil current length: "
 
     def __init__(
         self,
@@ -747,7 +747,7 @@ class CoilSetMinDistance(_Objective):
 
     _scalar = False
     _units = "(m)"
-    _print_value_fmt = "Minimum coil-coil distance: {:10.3e} "
+    _print_value_fmt = "Minimum coil-coil distance: "
 
     def __init__(
         self,
@@ -921,7 +921,7 @@ class PlasmaCoilSetMinDistance(_Objective):
 
     _scalar = False
     _units = "(m)"
-    _print_value_fmt = "Minimum plasma-coil distance: {:10.3e} "
+    _print_value_fmt = "Minimum plasma-coil distance: "
 
     def __init__(
         self,
@@ -1151,7 +1151,7 @@ class QuadraticFlux(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary normal field error: {:10.3e} "
+    _print_value_fmt = "Boundary normal field error: "
     _units = "(T m^2)"
     _coordinates = "rtz"
 
@@ -1354,7 +1354,7 @@ class ToroidalFlux(_Objective):
 
     _coordinates = "rtz"
     _units = "(Wb)"
-    _print_value_fmt = "Toroidal Flux: {:10.3e} "
+    _print_value_fmt = "Toroidal Flux: "
 
     def __init__(
         self,

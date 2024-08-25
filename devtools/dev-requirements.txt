@@ -13,7 +13,7 @@ sphinx-github-style >= 1.0, < 2.0
 
 
 # linting
-black == 24.3.0
+black[jupyter] == 24.3.0
 flake8 >= 5.0.0, <6.0.0
 flake8-docstrings >= 1.0.0, <2.0.0
 flake8-eradicate >= 1.0.0, <2.0.0

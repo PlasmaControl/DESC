@@ -12,6 +12,7 @@ from ._coils import (
     QuadraticFlux,
     ToroidalFlux,
 )
+from ._confinement import HeatingPowerISS04
 from ._equilibrium import (
     CurrentDensity,
     Energy,

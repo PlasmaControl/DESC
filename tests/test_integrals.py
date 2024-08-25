@@ -36,10 +36,10 @@ from desc.integrals import (
 )
 from desc.integrals.bounce_utils import (
     _get_extrema,
-    _interp_to_argmin_B_hard,
-    _interp_to_argmin_B_soft,
     bounce_points,
     get_pitch,
+    interp_to_argmin_B_hard,
+    interp_to_argmin_B_soft,
     plot_ppoly,
 )
 from desc.integrals.quad_utils import (
@@ -1096,9 +1096,7 @@ class TestBounce1D:
         print(pitch[:, i, j])
 
     @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "func", [_interp_to_argmin_B_soft, _interp_to_argmin_B_hard]
-    )
+    @pytest.mark.parametrize("func", [interp_to_argmin_B_soft, interp_to_argmin_B_hard])
     def test_interp_to_argmin_B(self, func):
         """Test argmin interpolation."""  # noqa: D202
 

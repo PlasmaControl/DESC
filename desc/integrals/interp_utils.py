@@ -557,7 +557,7 @@ def poly_root(
 
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
-    return _filter_distinct(r, sentinel, eps) if distinct else r
+    return filter_distinct(r, sentinel, eps) if distinct else r
 
 
 def _root_cubic(a, b, c, d, sentinel, eps, distinct):
@@ -640,7 +640,7 @@ def _concat_sentinel(r, sentinel, num=1):
     return jnp.append(r, sent, axis=-1)
 
 
-def _filter_distinct(r, sentinel, eps):
+def filter_distinct(r, sentinel, eps):
     """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
     # eps needs to be low enough that close distinct roots do not get removed.
     # Otherwise, algorithms relying on continuity will fail.

@@ -9,7 +9,6 @@ from desc.backend import dct, idct, irfft, jnp, rfft
 from desc.integrals.bounce_utils import (
     _add2legend,
     _check_bounce_points,
-    _interp_to_argmin_B_soft,
     _plot_intersect,
     bounce_points,
     bounce_quadrature,
@@ -17,13 +16,14 @@ from desc.integrals.bounce_utils import (
     epigraph_and,
     flatten_matrix,
     get_alpha,
+    interp_to_argmin_B_soft,
     plot_ppoly,
     subtract,
 )
 from desc.integrals.interp_utils import (
-    _filter_distinct,
     cheb_from_dct,
     cheb_pts,
+    filter_distinct,
     fourier_pts,
     harmonic,
     idct_non_uniform,
@@ -297,7 +297,7 @@ class ChebyshevBasisSet:
 
         # Intersects must satisfy y ∈ [-1, 1].
         # Pick sentinel such that only distinct roots are considered intersects.
-        y = _filter_distinct(y, sentinel=-2.0, eps=eps)
+        y = filter_distinct(y, sentinel=-2.0, eps=eps)
         is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) <= 1.0)
         y = jnp.where(is_intersect, y.real, 1.0)  # ensure y is in domain of arcos
 
@@ -324,12 +324,12 @@ class ChebyshevBasisSet:
             Shape must broadcast with (..., *cheb.shape[:-2]).
             Specify to find solutions yᵢ to fₓ(yᵢ) = k. Default 0.
         num_intersect : int or None
-            If not specified, then all intersects are returned in an array whose
-            last axis has size ``self.M*(self.N-1)``. If there were less than that many
-            intersects detected, then the last axis of the returned arrays is padded
-            with ``pad_value``. Specify to return the first ``num_intersect`` pairs
-            of intersects. This is useful if ``num_intersect`` tightly bounds the
-            actual number.
+            Specify to return the first ``num_intersect`` intersects.
+            This is useful if ``num_intersect`` tightly bounds the actual number.
+
+            If not specified, then all intersects are returned. If there were fewer
+            intersects detected than the size of the last axis of the returned arrays,
+            then that axis is padded with ``pad_value``.
         pad_value : float
             Value with which to pad array. Default 0.
 
@@ -988,8 +988,8 @@ class Bounce2D:
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
-            bounds the actual number of wells. As a reference, there are typically
-            at most 5 wells per toroidal transit for a given pitch.
+            bounds the actual number. As a reference, there are typically at most 5
+            wells per toroidal transit for a given pitch.
 
             If not specified, then all bounce points are returned. If there were fewer
             wells detected along a field line than the size of the last axis of the
@@ -1050,8 +1050,8 @@ class Bounce2D:
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
-            bounds the actual number of wells. As a reference, there are typically
-            at most 5 wells per toroidal transit for a given pitch.
+            bounds the actual number. As a reference, there are typically at most 5
+            wells per toroidal transit for a given pitch.
 
             If not specified, then all bounce points are returned. If there were fewer
             wells detected along a field line than the size of the last axis of the
@@ -1300,8 +1300,8 @@ class Bounce1D:
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
-            bounds the actual number of wells. As a reference, there are typically
-            at most 5 wells per toroidal transit for a given pitch.
+            bounds the actual number. As a reference, there are typically at most 5
+            wells per toroidal transit for a given pitch.
 
             If not specified, then all bounce points are returned. If there were fewer
             wells detected along a field line than the size of the last axis of the
@@ -1397,7 +1397,7 @@ class Bounce1D:
             ``integrand``. Use the method ``self.reshape_data`` to reshape the data
             into the expected shape.
         weight : jnp.ndarray
-            Shape (L * M, N).
+            Shape must broadcast with (L * M, N).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in the magnetic well. Use the method
@@ -1405,8 +1405,8 @@ class Bounce1D:
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
-            bounds the actual number of wells. As a reference, there are typically
-            at most 5 wells per toroidal transit for a given pitch.
+            bounds the actual number. As a reference, there are typically at most 5
+            wells per toroidal transit for a given pitch.
 
             If not specified, then all bounce points are returned. If there were fewer
             wells detected along a field line than the size of the last axis of the
@@ -1445,7 +1445,7 @@ class Bounce1D:
             check=check,
         )
         if weight is not None:
-            result *= _interp_to_argmin_B_soft(
+            result *= interp_to_argmin_B_soft(
                 g=weight,
                 bp1=bp1,
                 bp2=bp2,

@@ -239,8 +239,8 @@ def bounce_points(
     num_well : int or None
         Specify to return the first ``num_well`` pairs of bounce points for each
         pitch along each field line. This is useful if ``num_well`` tightly
-        bounds the actual number of wells. As a reference, there are typically
-        at most 5 wells per toroidal transit for a given pitch.
+        bounds the actual number. As a reference, there are typically at most 5
+        wells per toroidal transit for a given pitch.
 
         If not specified, then all bounce points are returned. If there were fewer
         wells detected along a field line than the size of the last axis of the
@@ -685,13 +685,16 @@ def _get_extrema(knots, B, dB_dz, sentinel=jnp.nan):
     return extrema, B_extrema
 
 
-def _interp_to_argmin_B_soft(g, bp1, bp2, knots, B, dB_dz, method="cubic", beta=-50):
+def interp_to_argmin_B_soft(g, bp1, bp2, knots, B, dB_dz, method="cubic", beta=-50):
     """Interpolate ``g`` to the deepest point in the magnetic well.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E |B|(ζ). Returns mean_A g(ζ).
 
     Parameters
     ----------
+    g : jnp.ndarray
+        Shape must broadcast with (S, knots.size).
+        Values evaluated on ``knots`` to interpolate.
     beta : float
         More negative gives exponentially better approximation at the
         expense of noisier gradients - noisier in the physics sense (unrelated
@@ -712,19 +715,24 @@ def _interp_to_argmin_B_soft(g, bp1, bp2, knots, B, dB_dz, method="cubic", beta=
     )
     g = jnp.linalg.vecdot(
         argmin,
-        interp1d_vec(ext, knots, g.reshape(-1, knots.size), method=method)[
-            :, jnp.newaxis
-        ],
+        interp1d_vec(ext, knots, jnp.atleast_2d(g), method=method)[:, jnp.newaxis],
     )
     assert g.shape == bp1.shape == bp2.shape
     return g
 
 
 # Less efficient than soft if P >> 1.
-def _interp_to_argmin_B_hard(g, bp1, bp2, knots, B, dB_dz, method="cubic"):
+def interp_to_argmin_B_hard(g, bp1, bp2, knots, B, dB_dz, method="cubic"):
     """Interpolate ``g`` to the deepest point in the magnetic well.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E |B|(ζ). Returns g(A).
+
+    Parameters
+    ----------
+    g : jnp.ndarray
+        Shape must broadcast with (S, knots.size).
+        Values evaluated on ``knots`` to interpolate.
+
     """
     ext, B = _get_extrema(knots, B, dB_dz, sentinel=0)
     assert ext.shape[0] == B.shape[0] == bp1.shape[1] == bp2.shape[1]
@@ -738,7 +746,7 @@ def _interp_to_argmin_B_hard(g, bp1, bp2, knots, B, dB_dz, method="cubic"):
         axis=-1,
     )
     A = jnp.take_along_axis(ext[jnp.newaxis], argmin, axis=-1)
-    g = interp1d_vec(A, knots, g.reshape(-1, knots.size), method=method)
+    g = interp1d_vec(A, knots, jnp.atleast_2d(g), method=method)
     assert g.shape == bp1.shape == bp2.shape
     return g
 

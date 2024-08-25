@@ -410,7 +410,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -463,7 +462,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(

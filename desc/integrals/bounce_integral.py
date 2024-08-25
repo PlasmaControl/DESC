@@ -1,4 +1,4 @@
-"""Bounce integrals, along field lines or otherwise."""
+"""Methods for computing bounce integrals (singular or otherwise)."""
 
 import numpy as np
 from interpax import CubicHermiteSpline
@@ -466,7 +466,7 @@ class ChebyshevBasisSet:
         errorif(not (z1.ndim == z2.ndim == k.ndim == self.cheb.ndim))
         return z1, z2, k
 
-    def check_intersect1d(self, z1, z2, k, pad_value=0.0, plot=True, **kwargs):
+    def check_intersect1d(self, z1, z2, k, plot=True, **kwargs):
         """Check that intersects are computed correctly.
 
         Parameters
@@ -478,8 +478,6 @@ class ChebyshevBasisSet:
         k : jnp.ndarray
             Shape must broadcast with (k.shape[0], *self.cheb.shape[:-2]).
             k such that fₓ(yᵢ) = k.
-        pad_value : float
-            Value that pads ``z1`` and ``z2`` arrays.
         plot : bool
             Whether to plot stuff. Default is true.
         kwargs : dict
@@ -487,7 +485,7 @@ class ChebyshevBasisSet:
 
         """
         assert z1.shape == z2.shape
-        mask = (z1 - z2) != pad_value
+        mask = (z1 - z2) != 0.0
         z1 = jnp.where(mask, z1, jnp.nan)
         z2 = jnp.where(mask, z2, jnp.nan)
         z1, z2, k = self._check_shape(z1, z2, k)
@@ -551,7 +549,6 @@ class ChebyshevBasisSet:
         hlabel=r"$z$",
         vlabel=r"$f(z)$",
         show=True,
-        pad_value=0.0,
     ):
         """Plot the piecewise Chebyshev series.
 
@@ -583,8 +580,6 @@ class ChebyshevBasisSet:
             Vertical axis label.
         show : bool
             Whether to show the plot. Default is true.
-        pad_value : float
-            Doesn't plot intersects where ``z1-z2==pad_value``.
 
         Returns
         -------
@@ -607,7 +602,6 @@ class ChebyshevBasisSet:
             k=k,
             k_transparency=k_transparency,
             klabel=klabel,
-            pad_value=pad_value,
         )
         ax.set_xlabel(hlabel)
         ax.set_ylabel(vlabel)
@@ -1167,6 +1161,10 @@ class Bounce1D:
     The ζ coordinate is preferably uniformly spaced, although this is not required.
     These are used as knots to construct splines.
     A reference density is 100 knots per toroidal transit.
+
+    Examples
+    --------
+    See ``tests/test_integrals.py::TestBounce1D::test_integrate_checks``.
 
     Attributes
     ----------

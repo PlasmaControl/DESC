@@ -5,17 +5,17 @@ import pytest
 from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebinterpolate, chebroots
 from numpy.polynomial.legendre import leggauss
-from tests.test_bounce_integral import _drift_analytic
+from tests.test_integrals import TestBounce1D
 from tests.test_plotting import tol_1d
 
-from desc._bounce_utils.bounce_integral import filter_bounce_points, get_pitch
 from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import Bounce2D
-from desc.integrals.fourier_bounce_integral import FourierChebyshevBasis, _get_alphas
+from desc.integrals.bounce_integral import FourierChebyshevBasis
+from desc.integrals.bounce_utils import get_alpha, get_pitch
 from desc.integrals.interp_utils import fourier_pts
 
 
@@ -27,7 +27,7 @@ from desc.integrals.interp_utils import fourier_pts
 def test_alpha_sequence(alpha_0, iota, num_period, period):
     """Test field line poloidal label tracking."""
     iota = np.atleast_1d(iota)
-    alphas = _get_alphas(alpha_0, iota, num_period, period)
+    alphas = get_alpha(alpha_0, iota, num_period, period)
     assert alphas.shape == (iota.size, num_period)
     for i in range(iota.size):
         assert np.unique(alphas[i]).size == num_period, f"{iota} is irrational"
@@ -65,7 +65,7 @@ class TestBouncePoints:
         pitch = 1 / np.linspace(1, 4, 20)
         bp1, bp2 = pcb.intersect1d(pitch)
         pcb.check_intersect1d(bp1, bp2, pitch)
-        bp1, bp2 = filter_bounce_points(bp1, bp2)
+        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
 
         def f(z):
             return -2 * np.cos(1 / (0.1 + z**2)) + 2
@@ -153,7 +153,7 @@ def test_drift():
     data["shear"] = grid.compress(data["shear"])
 
     # Compute analytic approximation.
-    drift_analytic, cvdrift, gbdrift, pitch = _drift_analytic(data)
+    drift_analytic, cvdrift, gbdrift, pitch = TestBounce1D.drift_analytic(data)
     # Compute numerical result.
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data_2 = eq.compute(

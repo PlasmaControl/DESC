@@ -828,7 +828,6 @@ def plot_ppoly(
         k=k,
         k_transparency=k_transparency,
         klabel=klabel,
-        pad_value=0.0,
     )
     ax.set_xlabel(hlabel)
     ax.set_ylabel(vlabel)
@@ -849,7 +848,7 @@ def _add2legend(legend, lines):
             legend[label] = line
 
 
-def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel, pad_value=0.0):
+def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
     """Plot intersects on ``ax``."""
     if k is None:
         return
@@ -867,7 +866,7 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel, pad_value=0.0
     for i in range(k.size):
         _z1, _z2 = z1[i], z2[i]
         if _z1.size == _z2.size:
-            mask = (z1 - z2) != pad_value
+            mask = (z1 - z2) != 0.0
             _z1 = z1[mask]
             _z2 = z2[mask]
         ax.scatter(_z1, jnp.full_like(_z1, k[i]), marker="v", color="tab:red")

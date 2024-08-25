@@ -720,13 +720,14 @@ class TestSingularities:
             np.testing.assert_allclose(g1, ff)
 
 
-def _filter_bounce_points(bp1, bp2):
-    mask = (bp1 - bp2) != 0
-    return bp1[mask], bp2[mask]
-
-
 class TestBouncePoints:
     """Test that bounce points are computed correctly."""
+
+    @staticmethod
+    def filter(bp1, bp2):
+        """Remove bounce points whose integrals have zero measure."""
+        mask = (bp1 - bp2) != 0.0
+        return bp1[mask], bp2[mask]
 
     @staticmethod
     @pytest.mark.unit
@@ -739,7 +740,7 @@ class TestBouncePoints:
         pitch = 2.0
         intersect = B.solve(1 / pitch, extrapolate=False)
         bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
-        bp1, bp2 = _filter_bounce_points(bp1, bp2)
+        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
@@ -755,7 +756,7 @@ class TestBouncePoints:
         pitch = 2.0
         intersect = B.solve(1 / pitch, extrapolate=False)
         bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
-        bp1, bp2 = _filter_bounce_points(bp1, bp2)
+        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         np.testing.assert_allclose(bp1, intersect[1:-1:2])
         np.testing.assert_allclose(bp2, intersect[0::2][1:])
@@ -773,7 +774,7 @@ class TestBouncePoints:
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3] + 1e-13
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
-        bp1, bp2 = _filter_bounce_points(bp1, bp2)
+        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[1], 1.982767, rtol=1e-6)
@@ -797,7 +798,7 @@ class TestBouncePoints:
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
-        bp1, bp2 = _filter_bounce_points(bp1, bp2)
+        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
@@ -821,7 +822,7 @@ class TestBouncePoints:
             pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True, plot=False
         )
         plot_ppoly(B, z1=bp1, z2=bp2, k=1 / pitch, start=k[2])
-        bp1, bp2 = _filter_bounce_points(bp1, bp2)
+        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1[0], 0.835319, rtol=1e-6)
@@ -844,7 +845,7 @@ class TestBouncePoints:
         B_z_ra = B.derivative()
         pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1] + 1e-13
         bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
-        bp1, bp2 = _filter_bounce_points(bp1, bp2)
+        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -1034,8 +1035,14 @@ class TestBounce1D:
     """Test bounce integral methods that use one-dimensional local splines."""
 
     @pytest.mark.unit
-    def test_bounce_integral_checks(self):
+    def test_integrate_checks(self):
         """Test that all the internal correctness checks pass for real example."""
+        # noqa: D202
+        # Suppose we want to compute a bounce average of the function
+        # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
+        # toroidal basis vector on some set of field lines specified by (ρ, α)
+        # coordinates. This is defined as
+        # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
 
         def numerator(g_zz, B, pitch):
             f = (1 - pitch * B / 2) * g_zz
@@ -1044,18 +1051,16 @@ class TestBounce1D:
         def denominator(B, pitch):
             return 1 / jnp.sqrt(1 - pitch * B)
 
-        # Suppose we want to compute a bounce average of the function
-        # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
-        # toroidal basis vector on some set of field lines specified by (ρ, α)
-        # coordinates. This is defined as
-        # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
-        eq = get("HELIOTRON")
-        # Clebsch-Type field-line coordinates ρ, α, ζ.
+        # Pick flux surfaces, field lines, and how far to follow the field line
+        # in Clebsch-Type field-line coordinates ρ, α, ζ.
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0])
-        knots = np.linspace(-2 * np.pi, 2 * np.pi, 200)
+        zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
+
+        eq = get("HELIOTRON")
+        # Convert above coordinates to DESC computational coordinates.
         grid = get_rtz_grid(
-            eq, rho, alpha, knots, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+            eq, rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
         )
         data = eq.compute(
             Bounce1D.required_names() + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid

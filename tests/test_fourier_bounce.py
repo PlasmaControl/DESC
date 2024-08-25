@@ -8,13 +8,13 @@ from numpy.polynomial.legendre import leggauss
 from tests.test_bounce_integral import _drift_analytic
 from tests.test_plotting import tol_1d
 
+from desc._bounce_utils.bounce_integral import filter_bounce_points, get_pitch
 from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import Bounce2D
-from desc.integrals.bounce_integral import filter_bounce_points, get_pitch
 from desc.integrals.fourier_bounce_integral import FourierChebyshevBasis, _get_alphas
 from desc.integrals.interp_utils import fourier_pts
 

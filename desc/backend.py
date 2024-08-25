@@ -71,6 +71,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     imap = jax.lax.map
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
+    from jax.nn import softmax
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import irfft, rfft, rfft2
     from jax.scipy.fft import dct, idct
@@ -421,7 +422,7 @@ else:  # pragma: no cover
         qr,
         solve_triangular,
     )
-    from scipy.special import gammaln, logsumexp  # noqa: F401
+    from scipy.special import gammaln, logsumexp, softmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 

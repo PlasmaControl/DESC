@@ -178,7 +178,7 @@ def leggausslob(deg):
     return x, w
 
 
-def get_quad(quad, automorphism):
+def get_quadrature(quad, automorphism):
     """Apply automorphism to given quadrature points and weights.
 
     Parameters

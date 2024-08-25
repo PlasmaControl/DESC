@@ -2,6 +2,7 @@
 
 from functools import partial
 
+from interpax import interp1d
 from orthax.chebyshev import chebvander
 from orthax.polynomial import polyvander
 
@@ -457,6 +458,17 @@ def polyval_vec(x, c):
         polyvander(x, c.shape[0] - 1), jnp.moveaxis(jnp.flipud(c), 0, -1)
     )
     return val
+
+
+interp1d_vec = jnp.vectorize(
+    interp1d, signature="(m),(n),(n)->(m)", excluded={"method"}
+)
+
+
+@partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)")
+def interp1d_vec_with_df(xq, x, f, fx):
+    """Vectorized interp1d."""
+    return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
 # TODO: Eventually do a PR to move this stuff into interpax.

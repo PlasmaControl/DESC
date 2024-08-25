@@ -14,7 +14,7 @@ from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import Bounce2D
-from desc.integrals.bounce_integral import FourierChebyshevBasis
+from desc.integrals.basis import FourierChebyshevBasis
 from desc.integrals.bounce_utils import get_alpha, get_pitch
 from desc.integrals.interp_utils import fourier_pts
 

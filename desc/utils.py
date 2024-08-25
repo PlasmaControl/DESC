@@ -730,6 +730,11 @@ def take_mask(a, mask, size=None, fill_value=None):
     )
 
 
+def flatten_matrix(y):
+    """Flatten matrix to vector."""
+    return y.reshape(*y.shape[:-2], -1)
+
+
 # TODO: Eventually remove and use numpy's stuff.
 # https://github.com/numpy/numpy/issues/25805
 def atleast_nd(ndmin, *arys):

@@ -3,13 +3,19 @@
 from functools import partial
 
 from interpax import interp1d
-from orthax.chebyshev import chebvander
+from orthax.chebyshev import chebroots, chebvander
 from orthax.polynomial import polyvander
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.compute.utils import safediv
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif
+
+# TODO: Boyd's method 𝒪(N²) instead of Chebyshev companion matrix 𝒪(N³).
+#  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
+#  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
+chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
+
 
 # TODO: Transformation to make nodes more uniform Boyd eq. 16.46 pg. 336.
 #  Have a hunch it won't change locations of complex poles much, so using

@@ -1,12 +1,10 @@
 """Utilities for bounce integrals."""
 
-from functools import partial
-
 from interpax import PPoly
 from matplotlib import pyplot as plt
-from orthax.chebyshev import chebroots
 
-from desc.backend import flatnonzero, imap, jnp, put, softmax
+from desc.backend import imap, jnp, softmax
+from desc.integrals.basis import _add2legend, _plot_intersect, epigraph_and
 from desc.integrals.interp_utils import (
     interp1d_vec,
     interp1d_vec_with_df,
@@ -19,33 +17,6 @@ from desc.integrals.quad_utils import (
     grad_bijection_from_disc,
 )
 from desc.utils import atleast_3d_mid, errorif, setdefault, take_mask
-
-# TODO: Boyd's method 𝒪(N²) instead of Chebyshev companion matrix 𝒪(N³).
-#  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
-#  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
-
-
-def flatten_matrix(y):
-    """Flatten matrix to vector."""
-    return y.reshape(*y.shape[:-2], -1)
-
-
-def subtract(c, k):
-    """Subtract ``k`` from first index of last axis of ``c``.
-
-    Semantically same as ``return c.copy().at[...,0].add(-k)``,
-    but allows dimension to increase.
-    """
-    c_0 = c[..., 0] - k
-    c = jnp.concatenate(
-        [
-            c_0[..., jnp.newaxis],
-            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
-        ],
-        axis=-1,
-    )
-    return c
 
 
 def get_pitch(min_B, max_B, num, relative_shift=1e-6):
@@ -106,53 +77,6 @@ def get_alpha(alpha_0, iota, num_transit, period):
     return alpha
 
 
-@partial(jnp.vectorize, signature="(m),(m)->(m)")
-def epigraph_and(is_intersect, df_dy_sign):
-    """Set and  epigraph of f with ``is_intersect``.
-
-    Remove intersects for which there does not exist a connected path between
-    adjacent intersects in the epigraph of a continuous map ``f``.
-
-    Parameters
-    ----------
-    is_intersect : jnp.ndarray
-        Boolean array indicating whether element is an intersect.
-    df_dy_sign : jnp.ndarray
-        Shape ``is_intersect.shape``.
-        Sign of ∂f/∂y (yᵢ) for f(yᵢ) = 0.
-
-    Returns
-    -------
-    is_intersect : jnp.ndarray
-        Boolean array indicating whether element is an intersect
-        and satisfies the stated condition.
-
-    """
-    # The pairs ``y1`` and ``y2`` are boundaries of an integral only if ``y1 <= y2``.
-    # For the integrals to be over wells, it is required that the first intersect
-    # has a non-positive derivative. Now, by continuity,
-    # ``df_dy_sign[...,k]<=0`` implies ``df_dy_sign[...,k+1]>=0``,
-    # so there can be at most one inversion, and if it exists, the inversion
-    # must be at the first pair. To correct the inversion, it suffices to disqualify the
-    # first intersect as a right boundary, except under an edge case of a series of
-    # inflection points.
-    idx = flatnonzero(is_intersect, size=2, fill_value=-1)  # idx of first 2 intersects
-    edge_case = (
-        (df_dy_sign[idx[0]] == 0)
-        & (df_dy_sign[idx[1]] < 0)
-        & is_intersect[idx[0]]
-        & is_intersect[idx[1]]
-        # In theory, we need to keep propagating this edge case, e.g.
-        # (df_dy_sign[..., 1] < 0) | (
-        #     (df_dy_sign[..., 1] == 0) & (df_dy_sign[..., 2] < 0)...
-        # ).
-        # At each step, the likelihood that an intersection has already been lost
-        # due to floating point errors grows, so the real solution is to pick a less
-        # degenerate pitch value - one that does not ride the global extrema of |B|.
-    )
-    return put(is_intersect, idx[0], edge_case)
-
-
 def _check_spline_shape(knots, B, dB_dz, pitch=None):
     """Ensure inputs have compatible shape, and return them with full dimension.
 
@@ -160,7 +84,7 @@ def _check_spline_shape(knots, B, dB_dz, pitch=None):
     ----------
     knots : jnp.ndarray
         Shape (knots.size, ).
-        Field line-following ζ coordinates of spline knots. Must be strictly increasing.
+        ζ coordinates of spline knots. Must be strictly increasing.
     B : jnp.ndarray
         Shape (B.shape[0], S, knots.size - 1).
         Polynomial coefficients of the spline of |B| in local power basis.
@@ -223,7 +147,7 @@ def bounce_points(
         line. If two-dimensional, the first axis is the batch axis.
     knots : jnp.ndarray
         Shape (knots.size, ).
-        Field line-following ζ coordinates of spline knots. Must be strictly increasing.
+        ζ coordinates of spline knots. Must be strictly increasing.
     B : jnp.ndarray
         Shape (B.shape[0], S, knots.size - 1).
         Polynomial coefficients of the spline of |B| in local power basis.
@@ -256,7 +180,7 @@ def bounce_points(
     -------
     bp1, bp2 : (jnp.ndarray, jnp.ndarray)
         Shape (P, S, num_well).
-        The field line-following coordinates of bounce points.
+        ζ coordinates of bounce points.
         The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
         respectively, for the bounce integrals.
 
@@ -311,14 +235,14 @@ def bounce_points(
 
 def _check_bounce_points(bp1, bp2, pitch, knots, B, plot=True, **kwargs):
     """Check that bounce points are computed correctly."""
-    eps = jnp.finfo(jnp.array(1.0).dtype).eps * 10
-    title = kwargs.pop(
+    eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
+    kwargs.setdefault(
         "title",
         r"Intersects $\zeta$ in epigraph of $\vert B \vert(\zeta) = 1/\lambda$",
     )
-    klabel = kwargs.pop("klabel", r"$1/\lambda$")
-    hlabel = kwargs.pop("hlabel", r"$\zeta$")
-    vlabel = kwargs.pop("vlabel", r"$\vert B \vert(\zeta)$")
+    kwargs.setdefault("klabel", r"$1/\lambda$")
+    kwargs.setdefault("hlabel", r"$\zeta$")
+    kwargs.setdefault("vlabel", r"$\vert B \vert(\zeta)$")
 
     assert bp1.shape == bp2.shape
     mask = (bp1 - bp2) != 0.0
@@ -344,12 +268,9 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B, plot=True, **kwargs):
                     z1=_bp1,
                     z2=_bp2,
                     k=1 / pitch[p, s],
-                    klabel=klabel,
-                    title=title,
-                    hlabel=hlabel,
-                    vlabel=vlabel,
                     **kwargs,
                 )
+
             print("      bp1    |    bp2")
             print(jnp.column_stack([_bp1, _bp2]))
             assert not err_1[p, s], "Intersects have an inversion.\n"
@@ -364,10 +285,6 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B, plot=True, **kwargs):
                 z1=bp1[:, s],
                 z2=bp2[:, s],
                 k=1 / pitch[:, s],
-                klabel=klabel,
-                title=title,
-                hlabel=hlabel,
-                vlabel=vlabel,
                 **kwargs,
             )
 
@@ -399,7 +316,7 @@ def bounce_quadrature(
         Quadrature weights.
     bp1, bp2 : jnp.ndarray
         Shape (P, S, num_well).
-        The field line-following coordinates of bounce points.
+        ζ coordinates of bounce points.
         The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
         respectively, for the bounce integrals.
     pitch : jnp.ndarray
@@ -423,8 +340,7 @@ def bounce_quadrature(
         Must include names in ``Bounce1D.required_names()``.
     knots : jnp.ndarray
         Shape (knots.size, ).
-        Field line-following sorted, unique ζ coordinates where the arrays in
-        ``data`` and ``f`` were evaluated.
+        Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
     method : str
         Method of interpolation for functions contained in ``f``.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -442,7 +358,7 @@ def bounce_quadrature(
     -------
     result : jnp.ndarray
         Shape (P, S, num_well).
-        Quadrature for every pitch along every field line.
+        Quadrature for every pitch.
         First axis enumerates pitch values. Second axis enumerates the field lines.
         Last axis enumerates the bounce integrals.
 
@@ -519,7 +435,7 @@ def _interpolate_and_integrate(
         Quadrature weights.
     Q : jnp.ndarray
         Shape (P, S, Q.shape[2], w.size).
-        Quadrature points at field line-following ζ coordinates.
+        Quadrature points at ζ coordinates.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid`` and reshaped with ``Bounce1D.reshape_data``.
         Must include names in ``Bounce1D.required_names()``.
@@ -528,7 +444,7 @@ def _interpolate_and_integrate(
     -------
     result : jnp.ndarray
         Shape Q.shape[:-1].
-        Quadrature for every pitch along every field line.
+        Quadrature for every pitch.
 
     """
     assert pitch.ndim == 2
@@ -573,17 +489,15 @@ def _check_interp(Z, f, b_sup_z, B, B_z_ra, result, plot):
     Parameters
     ----------
     Z : jnp.ndarray
-        Quadrature points at field line-following ζ coordinates.
+        Quadrature points at ζ coordinates.
     f : list of jnp.ndarray
         Arguments to the integrand interpolated to Z.
     b_sup_z : jnp.ndarray
-        Contravariant field-line following toroidal component of magnetic field,
-        interpolated to Z.
+        Contravariant toroidal component of magnetic field, interpolated to Z.
     B : jnp.ndarray
         Norm of magnetic field, interpolated to Z.
     B_z_ra : jnp.ndarray
-        Norm of magnetic field, derivative with respect to field-line following
-        coordinate.
+        Norm of magnetic field, derivative with respect to ζ.
     result : jnp.ndarray
         Output of ``_interpolate_and_integrate``.
     plot : bool
@@ -625,7 +539,7 @@ def _plot_check_interp(Z, V, name=""):
             if marked.size == 0:
                 continue
             fig, ax = plt.subplots()
-            ax.set_xlabel(r"Field line $\zeta$")
+            ax.set_xlabel(r"$\zeta$")
             ax.set_ylabel(name)
             ax.set_title(
                 f"Interpolation of {name} to quadrature points. Index {p},{s}."
@@ -643,13 +557,13 @@ def _plot_check_interp(Z, V, name=""):
 
 
 def _get_extrema(knots, B, dB_dz, sentinel=jnp.nan):
-    """Return extrema (ζ*, |B|(ζ*)) along field line.
+    """Return extrema (ζ*, |B|(ζ*)).
 
     Parameters
     ----------
     knots : jnp.ndarray
         Shape (knots.size, ).
-        Field line-following ζ coordinates of spline knots. Must be strictly increasing.
+        ζ coordinates of spline knots. Must be strictly increasing.
     B : jnp.ndarray
         Shape (B.shape[0], S, knots.size - 1).
         Polynomial coefficients of the spline of |B| in local power basis.
@@ -787,7 +701,7 @@ def plot_ppoly(
         Optional, k such that f(ζ) = k.
     k_transparency : float
         Transparency of intersect lines.
-    klabel : float
+    klabel : str
         Label of intersect lines.
     title : str
         Plot title.
@@ -846,36 +760,3 @@ def plot_ppoly(
         plt.show()
         plt.close()
     return fig, ax
-
-
-def _add2legend(legend, lines):
-    """Add lines to legend if it's not already in it."""
-    for line in setdefault(lines, [lines], hasattr(lines, "__iter__")):
-        label = line.get_label()
-        if label not in legend:
-            legend[label] = line
-
-
-def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
-    """Plot intersects on ``ax``."""
-    if k is None:
-        return
-
-    k = jnp.atleast_1d(jnp.squeeze(k))
-    assert k.ndim == 1
-    z1, z2 = jnp.atleast_2d(z1, z2)
-    assert z1.ndim == z2.ndim >= 2
-    assert k.shape[0] == z1.shape[0] == z2.shape[0]
-    for p in k:
-        _add2legend(
-            legend,
-            ax.axhline(p, color="tab:purple", alpha=k_transparency, label=klabel),
-        )
-    for i in range(k.size):
-        _z1, _z2 = z1[i], z2[i]
-        if _z1.size == _z2.size:
-            mask = (z1 - z2) != 0.0
-            _z1 = z1[mask]
-            _z2 = z2[mask]
-        ax.scatter(_z1, jnp.full_like(_z1, k[i]), marker="v", color="tab:red")
-        ax.scatter(_z2, jnp.full_like(_z2, k[i]), marker="^", color="tab:green")

@@ -1,617 +1,31 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
-import numpy as np
 from interpax import CubicHermiteSpline
-from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
 
-from desc.backend import dct, idct, irfft, jnp, rfft
+from desc.backend import jnp
+from desc.integrals.basis import FourierChebyshevBasis
 from desc.integrals.bounce_utils import (
-    _add2legend,
     _check_bounce_points,
-    _plot_intersect,
     bounce_points,
     bounce_quadrature,
-    chebroots_vec,
-    epigraph_and,
-    flatten_matrix,
     get_alpha,
     interp_to_argmin_B_soft,
     plot_ppoly,
-    subtract,
 )
 from desc.integrals.interp_utils import (
-    cheb_from_dct,
-    cheb_pts,
-    filter_distinct,
-    fourier_pts,
-    harmonic,
-    idct_non_uniform,
     interp_rfft2,
     irfft2_non_uniform,
-    irfft_non_uniform,
     polyder_vec,
     transform_to_desc,
 )
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
-    bijection_to_disc,
     get_quadrature,
     grad_automorphism_sin,
 )
-from desc.utils import (
-    atleast_2d_end,
-    atleast_3d_mid,
-    atleast_nd,
-    errorif,
-    isposint,
-    setdefault,
-    take_mask,
-    warnif,
-)
-
-
-class FourierChebyshevBasis:
-    """Fourier-Chebyshev series.
-
-    f(x, y) = ∑ₘₙ aₘₙ ψₘ(x) Tₙ(y)
-    where ψₘ are trigonometric polynomials on [0, 2π]
-    and Tₙ are Chebyshev polynomials on [−yₘᵢₙ, yₘₐₓ].
-
-    Notes
-    -----
-    Performance may improve significantly
-    if the spectral resolutions ``M`` and ``N`` are powers of two.
-
-    Attributes
-    ----------
-    M : int
-        Fourier spectral resolution.
-    N : int
-        Chebyshev spectral resolution.
-    lobatto : bool
-        Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
-        instead of the interior roots grid for Chebyshev points.
-    domain : (float, float)
-        Domain for y coordinates.
-
-    """
-
-    def __init__(self, f, domain=(-1, 1), lobatto=False):
-        """Interpolate Fourier-Chebyshev basis to ``f``.
-
-        Parameters
-        ----------
-        f : jnp.ndarray
-            Shape (..., M, N).
-            Samples of real function on the ``FourierChebyshevBasis.nodes`` grid.
-        domain : (float, float)
-            Domain for y coordinates. Default is [-1, 1].
-        lobatto : bool
-            Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
-            instead of the interior roots grid for Chebyshev points.
-
-        """
-        self.M = f.shape[-2]
-        self.N = f.shape[-1]
-        errorif(domain[0] > domain[-1], msg="Got inverted domain.")
-        self.domain = tuple(domain)
-        errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
-        self.lobatto = bool(lobatto)
-        self._c = FourierChebyshevBasis._fast_transform(f, self.lobatto)
-
-    @staticmethod
-    def _fast_transform(f, lobatto):
-        M = f.shape[-2]
-        N = f.shape[-1]
-        return rfft(dct(f, type=2 - lobatto, axis=-1), axis=-2) / (M * (N - lobatto))
-
-    @staticmethod
-    def nodes(M, N, L=None, domain=(-1, 1), lobatto=False):
-        """Tensor product grid of optimal collocation nodes for this basis.
-
-        Parameters
-        ----------
-        M : int
-            Grid resolution in x direction. Preferably power of 2.
-        N : int
-            Grid resolution in y direction. Preferably power of 2.
-        L : int or jnp.ndarray
-            Optional, resolution in radial direction of domain [0, 1].
-            May also be an array of coordinates values. If given, then the
-            returned ``coords`` is a 3D tensor-product with shape (L * M * N, 3).
-        domain : (float, float)
-            Domain for y coordinates. Default is [-1, 1].
-        lobatto : bool
-            Whether to use the Gauss-Lobatto (Extrema-plus-Endpoint)
-            instead of the interior roots grid for Chebyshev points.
-
-        Returns
-        -------
-        coords : jnp.ndarray
-            Shape (M * N, 2).
-            Grid of (x, y) points for optimal interpolation.
-
-        """
-        x = fourier_pts(M)
-        y = cheb_pts(N, lobatto, domain)
-        if L is not None:
-            if isposint(L):
-                L = jnp.flipud(jnp.linspace(1, 0, L, endpoint=False))
-            coords = (L, x, y)
-        else:
-            coords = (x, y)
-        coords = list(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
-        coords = jnp.column_stack(coords)
-        return coords
-
-    def evaluate(self, M, N):
-        """Evaluate Fourier-Chebyshev series.
-
-        Parameters
-        ----------
-        M : int
-            Grid resolution in x direction. Preferably power of 2.
-        N : int
-            Grid resolution in y direction. Preferably power of 2.
-
-        Returns
-        -------
-        fq : jnp.ndarray
-            Shape (..., M, N)
-            Fourier-Chebyshev series evaluated at ``FourierChebyshevBasis.nodes(M, N)``.
-
-        """
-        fq = idct(irfft(self._c, n=M, axis=-2), type=2 - self.lobatto, n=N, axis=-1) * (
-            M * (N - self.lobatto)
-        )
-        return fq
-
-    def harmonics(self):
-        """Spectral coefficients aₘₙ of the interpolating polynomial.
-
-        Transform Fourier interpolant harmonics to Nyquist trigonometric
-        interpolant harmonics so that the coefficients are all real.
-
-        Returns
-        -------
-        a_mn : jnp.ndarray
-            Shape (..., M, N).
-            Real valued spectral coefficients for Fourier-Chebyshev basis.
-
-        """
-        a_mn = harmonic(cheb_from_dct(self._c, axis=-1), self.M, axis=-2)
-        assert a_mn.shape[-2:] == (self.M, self.N)
-        return a_mn
-
-    def compute_cheb(self, x):
-        """Evaluate Fourier basis at ``x`` to obtain set of 1D Chebyshev coefficients.
-
-        Parameters
-        ----------
-        x : jnp.ndarray
-            Points to evaluate Fourier basis.
-
-        Returns
-        -------
-        cheb : ChebyshevBasisSet
-            Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
-
-        """
-        # Always add new axis to broadcast against Chebyshev coefficients.
-        x = jnp.atleast_1d(x)[..., jnp.newaxis]
-        cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2), axis=-1)
-        assert cheb.shape[-2:] == (x.shape[-2], self.N)
-        return ChebyshevBasisSet(cheb, self.domain)
-
-
-class ChebyshevBasisSet:
-    """Chebyshev series.
-
-    { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
-    and Tₙ are Chebyshev polynomials on [−yₘᵢₙ, yₘₐₓ]
-
-    Attributes
-    ----------
-    cheb : jnp.ndarray
-        Shape (..., M, N).
-        Chebyshev coefficients αₙ(x) for fₓ(y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
-    M : int
-        Number of function in this basis set.
-    N : int
-        Chebyshev spectral resolution.
-    domain : (float, float)
-        Domain for y coordinates.
-
-    """
-
-    _eps = min(jnp.finfo(jnp.array(1.0).dtype).eps * 1e2, 1e-10)
-
-    def __init__(self, cheb, domain=(-1, 1)):
-        """Make Chebyshev series basis from given coefficients.
-
-        Parameters
-        ----------
-        cheb : jnp.ndarray
-            Shape (..., M, N).
-            Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
-        domain : (float, float)
-            Domain for y coordinates. Default is [-1, 1].
-
-        """
-        self.cheb = jnp.atleast_2d(cheb)
-        errorif(domain[0] > domain[-1], msg="Got inverted domain.")
-        self.domain = tuple(domain)
-
-    @property
-    def M(self):
-        """Number of function in this basis set."""
-        return self.cheb.shape[-2]
-
-    @property
-    def N(self):
-        """Chebyshev spectral resolution."""
-        return self.cheb.shape[-1]
-
-    @staticmethod
-    def _chebcast(cheb, arr):
-        # Input should not have rightmost dimension of cheb that iterates coefficients,
-        # but may have additional leftmost dimension for batch operation.
-        errorif(
-            jnp.ndim(arr) > cheb.ndim,
-            NotImplementedError,
-            msg=f"Only one additional axis for batch dimension is allowed. "
-            f"Got {jnp.ndim(arr) - cheb.ndim + 1} additional axes.",
-        )
-        return cheb if jnp.ndim(arr) < cheb.ndim else cheb[jnp.newaxis]
-
-    def intersect2d(self, k=0.0, eps=_eps):
-        """Coordinates yᵢ such that f(x, yᵢ) = k(x).
-
-        Parameters
-        ----------
-        k : jnp.ndarray
-            Shape must broadcast with (..., *cheb.shape[:-1]).
-            Specify to find solutions yᵢ to f(x, yᵢ) = k(x). Default 0.
-        eps : float
-            Absolute tolerance with which to consider value as zero.
-
-        Returns
-        -------
-        y : jnp.ndarray
-            Shape (..., *cheb.shape[:-1], N - 1).
-            Solutions yᵢ of f(x, yᵢ) = k(x), in ascending order.
-        is_intersect : jnp.ndarray
-            Shape y.shape.
-            Boolean array into ``y`` indicating whether element is an intersect.
-        df_dy_sign : jnp.ndarray
-            Shape y.shape.
-            Sign of ∂f/∂y (x, yᵢ).
-
-        """
-        c = subtract(ChebyshevBasisSet._chebcast(self.cheb, k), k)
-        # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
-        y = chebroots_vec(c)
-        assert y.shape == (*c.shape[:-1], self.N - 1)
-
-        # Intersects must satisfy y ∈ [-1, 1].
-        # Pick sentinel such that only distinct roots are considered intersects.
-        y = filter_distinct(y, sentinel=-2.0, eps=eps)
-        is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) <= 1.0)
-        y = jnp.where(is_intersect, y.real, 1.0)  # ensure y is in domain of arcos
-
-        # TODO: Multipoint evaluation with FFT.
-        #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-        n = jnp.arange(self.N)
-        #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
-        # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
-        df_dy_sign = jnp.sign(
-            jnp.linalg.vecdot(
-                n * jnp.sin(n * jnp.arccos(y)[..., jnp.newaxis]),
-                self.cheb[..., jnp.newaxis, :],
-            )
-        )
-        y = bijection_from_disc(y, self.domain[0], self.domain[-1])
-        return y, is_intersect, df_dy_sign
-
-    def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
-        """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
-
-        Parameters
-        ----------
-        k : jnp.ndarray
-            Shape must broadcast with (..., *cheb.shape[:-2]).
-            Specify to find solutions yᵢ to fₓ(yᵢ) = k. Default 0.
-        num_intersect : int or None
-            Specify to return the first ``num_intersect`` intersects.
-            This is useful if ``num_intersect`` tightly bounds the actual number.
-
-            If not specified, then all intersects are returned. If there were fewer
-            intersects detected than the size of the last axis of the returned arrays,
-            then that axis is padded with ``pad_value``.
-        pad_value : float
-            Value with which to pad array. Default 0.
-
-        Returns
-        -------
-        z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape broadcasts with (..., *self.cheb.shape[:-2], num_intersect).
-            ``z1``, ``z2`` holds intersects satisfying ∂f/∂y <= 0, ∂f/∂y >= 0,
-            respectively.
-
-        """
-        errorif(
-            self.N < 2,
-            NotImplementedError,
-            "This method requires the Chebyshev spectral resolution of at "
-            f"least 2, but got N={self.N}.",
-        )
-
-        # Add axis to use same k over all Chebyshev series of the piecewise object.
-        y, is_intersect, df_dy_sign = self.intersect2d(
-            jnp.atleast_1d(k)[..., jnp.newaxis]
-        )
-        # Flatten so that last axis enumerates intersects along the piecewise object.
-        y, is_intersect, df_dy_sign = map(
-            flatten_matrix, (self.isomorphism_to_C1(y), is_intersect, df_dy_sign)
-        )
-
-        # Note for bounce point applications:
-        # We ignore the degenerate edge case where the boundary shared by adjacent
-        # polynomials is a left intersect point i.e. ``is_z1`` because the subset of
-        # pitch values that generate this edge case has zero measure. Note that
-        # the technique to account for this would be to disqualify intersects
-        # within ``_eps`` from ``domain[-1]``.
-        is_z1 = (df_dy_sign <= 0) & is_intersect
-        is_z2 = (df_dy_sign >= 0) & epigraph_and(is_intersect, df_dy_sign)
-
-        sentinel = self.domain[0] - 1.0
-        z1 = take_mask(y, is_z1, size=num_intersect, fill_value=sentinel)
-        z2 = take_mask(y, is_z2, size=num_intersect, fill_value=sentinel)
-
-        mask = (z1 > sentinel) & (z2 > sentinel)
-        # Set outside mask to same value so integration is over set of measure zero.
-        z1 = jnp.where(mask, z1, pad_value)
-        z2 = jnp.where(mask, z2, pad_value)
-        return z1, z2
-
-    def eval1d(self, z, cheb=None):
-        """Evaluate piecewise Chebyshev spline at coordinates z.
-
-        Parameters
-        ----------
-        z : jnp.ndarray
-            Shape (..., *cheb.shape[:-2], z.shape[-1]).
-            Coordinates in [sef.domain[0], ∞).
-            The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ² where
-            ``z // domain`` yields the index into the proper Chebyshev series
-            along the second to last axis of ``cheb`` and ``z % domain`` is
-            the coordinate value on the domain of that Chebyshev series.
-        cheb : jnp.ndarray
-            Shape (..., M, N).
-            Chebyshev coefficients to use. If not given, uses ``self.cheb``.
-
-        Returns
-        -------
-        f : jnp.ndarray
-            Shape z.shape.
-            Chebyshev basis evaluated at z.
-
-        """
-        cheb = self._chebcast(setdefault(cheb, self.cheb), z)
-        N = cheb.shape[-1]
-        x_idx, y = self.isomorphism_to_C2(z)
-        y = bijection_to_disc(y, self.domain[0], self.domain[1])
-        # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
-        # are held in cheb with shape (..., num cheb series, N).
-        cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
-        f = idct_non_uniform(y, cheb, N)
-        assert f.shape == z.shape
-        return f
-
-    def isomorphism_to_C1(self, y):
-        """Return coordinates z ∈ ℂ isomorphic to (x, y) ∈ ℂ².
-
-        Maps row x of y to z = y + f(x) where f(x) = x * |domain|.
-
-        Parameters
-        ----------
-        y : jnp.ndarray
-            Shape (..., y.shape[-2], y.shape[-1]).
-            Second to last axis iterates the rows.
-
-        Returns
-        -------
-        z : jnp.ndarray
-            Shape y.shape.
-            Isomorphic coordinates.
-
-        """
-        assert y.ndim >= 2
-        z_shift = jnp.arange(y.shape[-2]) * (self.domain[-1] - self.domain[0])
-        z = y + z_shift[:, jnp.newaxis]
-        return z
-
-    def isomorphism_to_C2(self, z):
-        """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
-
-        Returns index x and value y such that z = f(x) + y where f(x) = x * |domain|.
-
-        Parameters
-        ----------
-        z : jnp.ndarray
-            Shape z.shape.
-
-        Returns
-        -------
-        x_idx, y_val : (jnp.ndarray, jnp.ndarray)
-            Shape z.shape.
-            Isomorphic coordinates.
-
-        """
-        x_idx, y_val = jnp.divmod(z - self.domain[0], self.domain[-1] - self.domain[0])
-        x_idx = x_idx.astype(int)
-        y_val += self.domain[0]
-        return x_idx, y_val
-
-    def _check_shape(self, z1, z2, k):
-        """Return shapes that broadcast with (k.shape[0], *self.cheb.shape[:-2], W)."""
-        # Ensure pitch batch dim exists and add back dim to broadcast with wells.
-        k = atleast_nd(self.cheb.ndim - 1, k)[..., jnp.newaxis]
-        # Same but back dim already exists.
-        z1, z2 = atleast_nd(self.cheb.ndim, z1, z2)
-        # Cheb has shape    (..., M, N) and others
-        #     have shape (K, ..., W)
-        errorif(not (z1.ndim == z2.ndim == k.ndim == self.cheb.ndim))
-        return z1, z2, k
-
-    def check_intersect1d(self, z1, z2, k, plot=True, **kwargs):
-        """Check that intersects are computed correctly.
-
-        Parameters
-        ----------
-        z1, z2 : jnp.ndarray
-            Shape must broadcast with (k, *self.cheb.shape[:-2], W).
-            ``z1``, ``z2`` holds intersects satisfying ∂f/∂y <= 0, ∂f/∂y >= 0,
-            respectively.
-        k : jnp.ndarray
-            Shape must broadcast with (k.shape[0], *self.cheb.shape[:-2]).
-            k such that fₓ(yᵢ) = k.
-        plot : bool
-            Whether to plot stuff. Default is true.
-        kwargs : dict
-            Keyword arguments into ``self.plot``.
-
-        """
-        assert z1.shape == z2.shape
-        mask = (z1 - z2) != 0.0
-        z1 = jnp.where(mask, z1, jnp.nan)
-        z2 = jnp.where(mask, z2, jnp.nan)
-        z1, z2, k = self._check_shape(z1, z2, k)
-
-        err_1 = jnp.any(z1 > z2, axis=-1)
-        err_2 = jnp.any(z1[..., 1:] < z2[..., :-1], axis=-1)
-        f_m = self.eval1d((z1 + z2) / 2)
-        assert f_m.shape == z1.shape
-        err_3 = jnp.any(f_m > k + self._eps, axis=-1)
-        if not (plot or jnp.any(err_1 | err_2 | err_3)):
-            return
-
-        # Ensure l axis exists for iteration in below loop.
-        cheb = atleast_nd(3, self.cheb)
-        mask, z1, z2, f_m = atleast_3d_mid(mask, z1, z2, f_m)
-        err_1, err_2, err_3 = atleast_2d_end(err_1, err_2, err_3)
-
-        for l in np.ndindex(cheb.shape[:-2]):
-            for p in range(k.shape[0]):
-                idx = (p, *l)
-                if not (err_1[idx] or err_2[idx] or err_3[idx]):
-                    continue
-                _z1 = z1[idx][mask[idx]]
-                _z2 = z2[idx][mask[idx]]
-                if plot:
-                    self.plot1d(
-                        cheb=cheb[l],
-                        z1=_z1,
-                        z2=_z2,
-                        k=k[idx],
-                        **kwargs,
-                    )
-                print("      z1    |    z2")
-                print(jnp.column_stack([_z1, _z2]))
-                assert not err_1[idx], "Intersects have an inversion.\n"
-                assert not err_2[idx], "Detected discontinuity.\n"
-                assert not err_3[idx], (
-                    "Detected f > k in well. Increase Chebyshev resolution.\n"
-                    f"{f_m[idx][mask[idx]]} > {k[idx] + self._eps}"
-                )
-            idx = (slice(None), *l)
-            if plot:
-                self.plot1d(
-                    cheb=cheb[l],
-                    z1=z1[idx],
-                    z2=z2[idx],
-                    k=k[idx],
-                    **kwargs,
-                )
-
-    def plot1d(
-        self,
-        cheb,
-        num=1000,
-        z1=None,
-        z2=None,
-        k=None,
-        k_transparency=0.5,
-        klabel=r"$k$",
-        title=r"Intersects $z$ in epigraph of $f(z) = k$",
-        hlabel=r"$z$",
-        vlabel=r"$f(z)$",
-        show=True,
-    ):
-        """Plot the piecewise Chebyshev series.
-
-        Parameters
-        ----------
-        cheb : jnp.ndarray
-            Shape (M, N).
-            Piecewise Chebyshev series f.
-        num : int
-            Number of points to evaluate ``cheb`` for plot.
-        z1 : jnp.ndarray
-            Shape (k.shape[0], W).
-            Optional, intersects with ∂f/∂y <= 0.
-        z2 : jnp.ndarray
-            Shape (k.shape[0], W).
-            Optional, intersects with ∂f/∂y >= 0.
-        k : jnp.ndarray
-            Shape (k.shape[0], ).
-            Optional, k such that fₓ(yᵢ) = k.
-        k_transparency : float
-            Transparency of pitch lines.
-        klabel : float
-            Label of intersect lines.
-        title : str
-            Plot title.
-        hlabel : str
-            Horizontal axis label.
-        vlabel : str
-            Vertical axis label.
-        show : bool
-            Whether to show the plot. Default is true.
-
-        Returns
-        -------
-        fig, ax : matplotlib figure and axes
-
-        """
-        fig, ax = plt.subplots()
-        legend = {}
-        z = jnp.linspace(
-            start=self.domain[0],
-            stop=self.domain[0] + (self.domain[1] - self.domain[0]) * self.M,
-            num=num,
-        )
-        _add2legend(legend, ax.plot(z, self.eval1d(z, cheb), label=vlabel))
-        _plot_intersect(
-            ax=ax,
-            legend=legend,
-            z1=z1,
-            z2=z2,
-            k=k,
-            k_transparency=k_transparency,
-            klabel=klabel,
-        )
-        ax.set_xlabel(hlabel)
-        ax.set_ylabel(vlabel)
-        ax.legend(legend.values(), legend.keys())
-        ax.set_title(title)
-        plt.tight_layout()
-        if show:
-            plt.show()
-            plt.close()
-        return fig, ax
+from desc.utils import errorif, flatten_matrix, setdefault, warnif
 
 
 def _transform_to_clebsch(grid, desc_from_clebsch, M, N, B):
@@ -669,6 +83,7 @@ def _transform_to_clebsch(grid, desc_from_clebsch, M, N, B):
 #  Perhaps tell the optimizer to perturb the coefficients of the
 #  |B|(α, ζ) directly? Maybe auto diff to see change on |B|(θ, ζ)
 #  and hence stream functions. just guessing. not sure if feasible / useful.
+
 # TODO: Allow multiple starting labels for near-rational surfaces.
 #  can just concatenate along second to last axis of cheb.
 
@@ -697,7 +112,7 @@ class Bounce2D:
     along field lines between bounce points, it is required to identify these
     points with field-line-following coordinates. In the special case of a linear
     function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as this operation becomes a surface integral,
+    coordinate systems may be used as this operation reduces to a surface integral,
     which is invariant to the order of summation.
 
     The DESC coordinate system is related to field-line-following coordinate
@@ -706,11 +121,11 @@ class Bounce2D:
     globally convergent root-finding algorithm here. For the task of finding
     bounce points, even if the inverse map: θ(α, ζ) was known, Newton iteration
     is not a globally convergent algorithm to find the real roots of
-    f : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following  coordinate.
+    f : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following coordinate.
     For this, function approximation of |B| is necessary.
 
     Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate |B| by a
-    series expansion of basis functions in (α, ζ) coordinates restricting the
+    series expansion of basis functions in (α, ζ) coordinates, restricting the
     class of basis functions to low order (e.g. N = 2ᵏ where k is small)
     algebraic or trigonometric polynomial with integer frequencies. These are
     the two classes useful for function approximation and for which there exists
@@ -748,11 +163,11 @@ class Bounce2D:
 
         g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
     However, the basis for the latter are trigonometric functions with
-    irrational frequencies since the rotational transform is irrational.
+    irrational frequencies, courtesy of the irrational rotational transform.
     Globally convergent root-finding schemes for that basis (at fixed α) are
     not known. The denominator of a close rational could be absorbed into the
     coordinate ϕ, but this balloons the frequency, and hence the degree of the
-    series. Although since Fourier series may converge faster than Chebyshev,
+    series. Although, because Fourier series may converge faster than Chebyshev,
     an alternate strategy that should work is to interpolate |B| to a double
     Fourier series in (ϑ, ϕ), then apply bisection methods to find roots of f
     with mesh size inversely proportional to the max frequency along the field
@@ -952,7 +367,7 @@ class Bounce2D:
 
     @staticmethod
     def reshape_data(grid, *data):
-        """Reshape``data`` given by ``names`` for input to ``self.integrate``.
+        """Reshape ``data`` arrays for acceptable input to ``integrate``.
 
         Parameters
         ----------
@@ -964,10 +379,11 @@ class Bounce2D:
         Returns
         -------
         f : list[jnp.ndarray]
-            List of reshaped data which may be given to ``self.integrate``.
+            List of reshaped arrays which may be given to ``integrate``.
 
         """
-        return [grid.meshgrid_reshape(d, "rtz")[:, jnp.newaxis] for d in data]
+        f = [grid.meshgrid_reshape(d, "rtz")[:, jnp.newaxis] for d in data]
+        return f
 
     @property
     def _L(self):
@@ -999,7 +415,7 @@ class Bounce2D:
         -------
         bp1, bp2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L, num_well).
-            The field line-following coordinates of bounce points.
+            ζ coordinates of bounce points.
             The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
             respectively, for the bounce integrals.
 
@@ -1009,10 +425,12 @@ class Bounce2D:
     def check_bounce_points(self, bp1, bp2, pitch, plot=True, **kwargs):
         """Check that bounce points are computed correctly and plot them."""
         kwargs.setdefault(
-            "title", r"Intersects $\zeta$ for $\vertB(\zeta)\vert = 1/\lambda$"
+            "title",
+            r"Intersects $\zeta$ in epigraph of $\vert B \vert(\zeta) = 1/\lambda$",
         )
+        kwargs.setdefault("klabel", r"$1/\lambda$")
         kwargs.setdefault("hlabel", r"$\zeta$")
-        kwargs.setdefault("vlabel", r"$\vertB\vert(\zeta)$")
+        kwargs.setdefault("vlabel", r"$\vert B \vert(\zeta)$")
         self._B.check_intersect1d(bp1, bp2, 1 / pitch, plot, **kwargs)
 
     def integrate(self, pitch, integrand, f, weight=None, num_well=None):
@@ -1126,7 +544,7 @@ class Bounce1D:
     along field lines between bounce points, it is required to identify these
     points with field-line-following coordinates. In the special case of a linear
     function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as this operation becomes a surface integral,
+    coordinate systems may be used as this operation reduces to a surface integral,
     which is invariant to the order of summation.
 
     The DESC coordinate system is related to field-line-following coordinate
@@ -1157,10 +575,9 @@ class Bounce1D:
     Warnings
     --------
     The supplied data must be from a Clebsch coordinate (ρ, α, ζ) tensor-product grid.
-    The field-line-following  coordinate ζ must be strictly increasing.
-    The ζ coordinate is preferably uniformly spaced, although this is not required.
-    These are used as knots to construct splines.
-    A reference density is 100 knots per toroidal transit.
+    ζ coordinates must be strictly increasing and preferably uniformly spaced.
+    These are used as knots to construct splines; a reference knot density is 100
+    knots per toroidal transit.
 
     Examples
     --------
@@ -1267,7 +684,7 @@ class Bounce1D:
 
     @staticmethod
     def reshape_data(grid, *data):
-        """Reshape ``data`` given by ``names`` for input to ``self.integrate``.
+        """Reshape ``data`` arrays for acceptable input to ``integrate``.
 
         Parameters
         ----------
@@ -1279,12 +696,11 @@ class Bounce1D:
         Returns
         -------
         f : list[jnp.ndarray]
-            List of reshaped data which may be given to ``self.integrate``.
+            List of reshaped data which may be given to ``integrate``.
 
         """
-        return [
-            grid.meshgrid_reshape(d, "raz").reshape(-1, grid.num_zeta) for d in data
-        ]
+        f = [grid.meshgrid_reshape(d, "raz").reshape(-1, grid.num_zeta) for d in data]
+        return f
 
     def bounce_points(self, pitch, num_well=None):
         """Compute bounce points.
@@ -1311,7 +727,7 @@ class Bounce1D:
         -------
         bp1, bp2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L * M, num_well).
-            The field line-following coordinates of bounce points.
+            ζ coordinates of bounce points.
             The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
             respectively, for the bounce integrals.
 
@@ -1335,7 +751,7 @@ class Bounce1D:
         ----------
         bp1, bp2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L * M, num_well).
-            The field line-following coordinates of bounce points.
+            ζ coordinates of bounce points.
             The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
             respectively, for the bounce integrals.
         pitch : jnp.ndarray

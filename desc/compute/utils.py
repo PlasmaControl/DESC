@@ -528,6 +528,7 @@ def get_transforms(
 
     """
     from desc.basis import DoubleFourierSeries
+    from desc.grid import LinearGrid
     from desc.transform import Transform
 
     method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"

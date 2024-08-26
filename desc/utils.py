@@ -697,7 +697,15 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
         raise ValueError("trees must be nested lists of dicts")
 
 
-# credit to _chunk_utils.py of netket package for below section
+# The following section of this code is a derived from the NetKet project
+# https://github.com/netket/netket/blob/9881c9fb217a2ac4dc9274a054bf6e6a2993c519/
+# netket/jax/_chunk_utils.py
+#
+# The original copyright notice is as follows
+# Copyright 2021 The NetKet Authors - All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+
+
 def _treeify(f):
     def _f(x, *args, **kwargs):
         return jax.tree_util.tree_map(lambda y: f(y, *args, **kwargs), x)
@@ -777,7 +785,13 @@ def chunk(x, chunk_size=None):
 
 ####
 
-# credit to _scanmap.py from netket package for below
+# The following section of this code is a derived from the NetKet project
+# https://github.com/netket/netket/blob/9881c9fb217a2ac4dc9274a054bf6e6a2993c519/
+# netket/jax/_scanmap.py
+#
+# The original copyright notice is as follows
+# Copyright 2021 The NetKet Authors - All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
 
 _tree_add = functools.partial(jax.tree_util.tree_map, jax.lax.add)
 _tree_zeros_like = functools.partial(
@@ -916,9 +930,13 @@ def _scanmap(fun, scan_fun, argnums=0):
     return f_
 
 
-# credit to _vmap_chunked.py from netket package
-# taking the parts not meant to support sharding, as we do not
-# need that in DESC
+# The following section of this code is derived from the NetKet project
+# https://github.com/netket/netket/blob/9881c9fb217a2ac4dc9274a054bf6e6a2993c519/
+# netket/jax/_vmap_chunked.py
+#
+# The original copyright notice is as follows
+# Copyright 2021 The NetKet Authors - All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
 
 
 def _eval_fun_in_chunks(vmapped_fun, chunk_size, argnums, *args, **kwargs):

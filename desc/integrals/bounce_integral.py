@@ -78,14 +78,15 @@ def _transform_to_clebsch(grid, desc_from_clebsch, M, N, B):
 
 
 # TODO:
-#  After GitHub issue #1034 is resolved, we can also pass in the previous
+#  After GitHub issue #1034 is resolved, we should pass in the previous
 #  θ(α) coordinates as an initial guess for the next coordinate mapping.
 #  Perhaps tell the optimizer to perturb the coefficients of the
 #  |B|(α, ζ) directly? Maybe auto diff to see change on |B|(θ, ζ)
-#  and hence stream functions. just guessing. not sure if feasible / useful.
+#  and hence stream functions. Not sure how feasible...
 
 # TODO: Allow multiple starting labels for near-rational surfaces.
-#  can just concatenate along second to last axis of cheb.
+#  can just concatenate along second to last axis of cheb, but will
+#  do in later pull request since it's not urgent.
 
 
 class Bounce2D:
@@ -171,11 +172,11 @@ class Bounce2D:
     an alternate strategy that should work is to interpolate |B| to a double
     Fourier series in (ϑ, ϕ), then apply bisection methods to find roots of f
     with mesh size inversely proportional to the max frequency along the field
-    line: M ι + N. ``Bounce2D`` does not use this approach because the
+    line: M ι + N. ``Bounce2D`` does not use that approach because that
     root-finding scheme is inferior.
 
     After obtaining the bounce points, the supplied quadrature is performed.
-    By default, Gauss quadrature is performed after removing the singularity.
+    By default, this is a Gauss quadrature after removing the singularity.
     Fast fourier transforms interpolate functions in the integrand to the
     quadrature nodes.
 
@@ -194,7 +195,7 @@ class Bounce2D:
         Uses one-dimensional local spline methods for the same task.
         An advantage of ``Bounce2D`` over ``Bounce1D`` is that the coordinates on
         which the root-finding must be done to map from DESC to Clebsch coords is
-        fixed to ``M*N``, independent of the number of toroidal transits.
+        fixed to ``L*M*N``, independent of the number of toroidal transits.
 
     Warnings
     --------
@@ -223,11 +224,11 @@ class Bounce2D:
         M,
         N,
         alpha_0=0.0,
-        num_transit=50,
+        num_transit=32,
         quad=leggauss(32),
         automorphism=(automorphism_sin, grad_automorphism_sin),
-        B_ref=1.0,
-        L_ref=1.0,
+        Bref=1.0,
+        Lref=1.0,
         check=False,
         **kwargs,
     ):
@@ -250,7 +251,7 @@ class Bounce2D:
         desc_from_clebsch : jnp.ndarray
             Shape (L * M * N, 3).
             DESC coordinates (ρ, θ, ζ) sourced from the Clebsch coordinates
-            ``FourierChebyshevBasis.nodes(M,N,domain=FourierBounce.domain)``.
+            ``FourierChebyshevBasis.nodes(M,N,L,domain=FourierBounce.domain)``.
         M : int
             Grid resolution in poloidal direction for Clebsch coordinate grid.
             Preferably power of 2. A good choice is ``m``. If the poloidal stream
@@ -271,9 +272,9 @@ class Bounce2D:
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
-        B_ref : float
+        Bref : float
             Optional. Reference magnetic field strength for normalization.
-        L_ref : float
+        Lref : float
             Optional. Reference length scale for normalization.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
@@ -292,13 +293,13 @@ class Bounce2D:
         self._m = grid.num_theta
         self._n = grid.num_zeta
         self._b_sup_z = jnp.expand_dims(
-            transform_to_desc(grid, jnp.abs(data["B^zeta"]) / data["|B|"] * L_ref),
+            transform_to_desc(grid, jnp.abs(data["B^zeta"]) / data["|B|"] * Lref),
             axis=1,
         )
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute global splines.
-        T, B = _transform_to_clebsch(grid, desc_from_clebsch, M, N, data["|B|"] / B_ref)
+        T, B = _transform_to_clebsch(grid, desc_from_clebsch, M, N, data["|B|"] / Bref)
         # peel off field lines
         alphas = get_alpha(
             alpha_0,
@@ -337,6 +338,7 @@ class Bounce2D:
             Preferably power of 2.
         clebsch : jnp.ndarray
             Optional, Clebsch coordinate tensor-product grid (ρ, α, ζ).
+            ``FourierChebyshevBasis.nodes(M,N,L,domain=FourierBounce.domain)``.
             If given, ``L``, ``M``, and ``N`` are ignored.
         kwargs : dict
             Additional parameters to supply to the coordinate mapping function.
@@ -426,7 +428,8 @@ class Bounce2D:
         """Check that bounce points are computed correctly and plot them."""
         kwargs.setdefault(
             "title",
-            r"Intersects $\zeta$ in epigraph of $\vert B \vert(\zeta) = 1/\lambda$",
+            r"Intersects $\zeta$ in epigraph($\vert B \vert$) s.t. "
+            r"$\vert B \vert(\zeta) = 1/\lambda$",
         )
         kwargs.setdefault("klabel", r"$1/\lambda$")
         kwargs.setdefault("hlabel", r"$\zeta$")
@@ -565,7 +568,7 @@ class Bounce1D:
     This is useful if one can efficiently obtain data along field lines.
 
     After obtaining the bounce points, the supplied quadrature is performed.
-    By default, Gauss quadrature is performed after removing the singularity.
+    By default, this is a Gauss quadrature after removing the singularity.
     Local splines interpolate functions in the integrand to the quadrature nodes.
 
     See Also
@@ -575,9 +578,9 @@ class Bounce1D:
     Warnings
     --------
     The supplied data must be from a Clebsch coordinate (ρ, α, ζ) tensor-product grid.
-    ζ coordinates must be strictly increasing and preferably uniformly spaced.
-    These are used as knots to construct splines; a reference knot density is 100
-    knots per toroidal transit.
+    The ζ coordinates (the unique values prior to taking the tensor-product) must be
+    strictly increasing and preferably uniformly spaced. These are used as knots to
+    construct splines; a reference knot density is 100 knots per toroidal transit.
 
     Examples
     --------

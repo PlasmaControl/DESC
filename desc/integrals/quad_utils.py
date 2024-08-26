@@ -8,19 +8,19 @@ from desc.utils import errorif
 
 def bijection_to_disc(x, a, b):
     """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
-    y = 2 * (x - a) / (b - a) - 1
+    y = 2.0 * (x - a) / (b - a) - 1.0
     return y
 
 
 def bijection_from_disc(x, a, b):
     """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
-    y = (x + 1) / 2 * (b - a) + a
+    y = 0.5 * (b - a) * (x + 1.0) + a
     return y
 
 
 def grad_bijection_from_disc(a, b):
-    """Gradient of affine bijection."""
-    dy_dx = (b - a) / 2
+    """Gradient of affine bijection from disc."""
+    dy_dx = 0.5 * (b - a)
     return dy_dx
 
 
@@ -42,13 +42,13 @@ def automorphism_arcsin(x):
         Transformed points.
 
     """
-    y = 2 * jnp.arcsin(x) / jnp.pi
+    y = 2.0 * jnp.arcsin(x) / jnp.pi
     return y
 
 
 def grad_automorphism_arcsin(x):
     """Gradient of arcsin automorphism."""
-    dy_dx = 2 / (jnp.sqrt(1 - x**2) * jnp.pi)
+    dy_dx = 2.0 / (jnp.sqrt(1.0 - x**2) * jnp.pi)
     return dy_dx
 
 
@@ -85,7 +85,7 @@ def automorphism_sin(x, s=0, m=10):
     errorif(not (0 <= s <= 1))
     # s = 0 -> derivative vanishes like cosine.
     # s = 1 -> derivative vanishes like cosine^k.
-    y0 = jnp.sin(jnp.pi * x / 2)
+    y0 = jnp.sin(0.5 * jnp.pi * x)
     y1 = x + jnp.sin(jnp.pi * x) / jnp.pi  # k = 2
     y = (1 - s) * y0 + s * y1
     # y is an expansion, so y(x) > x near x ∈ {−1, 1} and there is a tendency
@@ -96,8 +96,8 @@ def automorphism_sin(x, s=0, m=10):
 
 def grad_automorphism_sin(x, s=0):
     """Gradient of sin automorphism."""
-    dy0_dx = jnp.pi * jnp.cos(jnp.pi * x / 2) / 2
-    dy1_dx = 1 + jnp.cos(jnp.pi * x)
+    dy0_dx = 0.5 * jnp.pi * jnp.cos(0.5 * jnp.pi * x)
+    dy1_dx = 1.0 + jnp.cos(jnp.pi * x)
     dy_dx = (1 - s) * dy0_dx + s * dy1_dx
     return dy_dx
 
@@ -138,7 +138,7 @@ def tanh_sinh(deg, m=10):
     return x, w
 
 
-def leggausslob(deg):
+def leggauss_lobatto(deg):
     """Lobatto-Gauss-Legendre quadrature.
 
     Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
@@ -210,7 +210,7 @@ def get_quadrature(quad, automorphism):
 
 
 def composite_linspace(x, num):
-    """Returns linearly spaced points between every pair of points ``x``.
+    """Returns linearly spaced values between every pair of values in ``x``.
 
     Parameters
     ----------
@@ -218,18 +218,18 @@ def composite_linspace(x, num):
         First axis has values to return linearly spaced values between. The remaining
         axes are batch axes. Assumes input is sorted along first axis.
     num : int
-        Number of points between every pair of points in ``x``.
+        Number of values between every pair of values in ``x``.
 
     Returns
     -------
-    pts : jnp.ndarray
+    vals : jnp.ndarray
         Shape ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:]).
-        Linearly spaced points between ``x``.
+        Linearly spaced values between ``x``.
 
     """
     x = jnp.atleast_1d(x)
-    pts = jnp.linspace(x[:-1], x[1:], num + 1, endpoint=False)
-    pts = jnp.swapaxes(pts, 0, 1).reshape(-1, *x.shape[1:])
-    pts = jnp.append(pts, x[jnp.newaxis, -1], axis=0)
-    assert pts.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
-    return pts
+    vals = jnp.linspace(x[:-1], x[1:], num + 1, endpoint=False)
+    vals = jnp.swapaxes(vals, 0, 1).reshape(-1, *x.shape[1:])
+    vals = jnp.append(vals, x[jnp.newaxis, -1], axis=0)
+    assert vals.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
+    return vals

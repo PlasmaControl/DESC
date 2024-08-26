@@ -4,10 +4,10 @@ from interpax import PPoly
 from matplotlib import pyplot as plt
 
 from desc.backend import imap, jnp, softmax
-from desc.integrals.basis import _add2legend, _plot_intersect, epigraph_and
+from desc.integrals.basis import _add2legend, _in_epigraph_and, _plot_intersect
 from desc.integrals.interp_utils import (
     interp1d_vec,
-    interp1d_vec_with_df,
+    interp1d_vec_Hermite,
     poly_root,
     polyval_vec,
 )
@@ -185,7 +185,7 @@ def bounce_points(
         respectively, for the bounce integrals.
 
         If there were less than ``num_wells`` wells detected along a field line,
-        then the last axis, which enumerates bounce points for  a particular field
+        then the last axis, which enumerates bounce points for a particular field
         line and pitch, is padded with zero.
 
     """
@@ -213,7 +213,7 @@ def bounce_points(
     # we ignore the bounce points of particles only assigned to a class that are
     # trapped outside this snapshot of the field line.
     is_bp1 = (dB_dz_sign <= 0) & is_intersect
-    is_bp2 = (dB_dz_sign >= 0) & epigraph_and(is_intersect, dB_dz_sign)
+    is_bp2 = (dB_dz_sign >= 0) & _in_epigraph_and(is_intersect, dB_dz_sign)
 
     # Transform out of local power basis expansion.
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
@@ -238,7 +238,8 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B, plot=True, **kwargs):
     eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
     kwargs.setdefault(
         "title",
-        r"Intersects $\zeta$ in epigraph of $\vert B \vert(\zeta) = 1/\lambda$",
+        r"Intersects $\zeta$ in epigraph($\vert B \vert$) s.t. "
+        r"$\vert B \vert(\zeta) = 1/\lambda$",
     )
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
@@ -277,7 +278,8 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B, plot=True, **kwargs):
             assert not err_2[p, s], "Detected discontinuity.\n"
             assert not err_3, (
                 f"Detected |B| = {Bs_midpoint[mask[p, s]]} > {1 / pitch[p, s] + eps} "
-                f"= 1/λ in well. Use more knots.\n"
+                "= 1/λ in well, implying a path between bounce points is in "
+                "hypograph(|B|). Use more knots.\n"
             )
         if plot:
             plot_ppoly(
@@ -435,7 +437,7 @@ def _interpolate_and_integrate(
         Quadrature weights.
     Q : jnp.ndarray
         Shape (P, S, Q.shape[2], w.size).
-        Quadrature points at ζ coordinates.
+        Quadrature points in ζ coordinates.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid`` and reshaped with ``Bounce1D.reshape_data``.
         Must include names in ``Bounce1D.required_names()``.
@@ -462,14 +464,14 @@ def _interpolate_and_integrate(
     pitch = jnp.expand_dims(pitch, axis=(2, 3) if (Q.ndim == 4) else 2)
     shape = Q.shape
     Q = Q.reshape(Q.shape[0], Q.shape[1], -1)
-    b_sup_z = interp1d_vec_with_df(
+    b_sup_z = interp1d_vec_Hermite(
         Q,
         knots,
         data["B^zeta"] / data["|B|"],
         data["B^zeta_z|r,a"] / data["|B|"]
         - data["B^zeta"] * data["|B|_z|r,a"] / data["|B|"] ** 2,
     ).reshape(shape)
-    B = interp1d_vec_with_df(Q, knots, data["|B|"], data["|B|_z|r,a"]).reshape(shape)
+    B = interp1d_vec_Hermite(Q, knots, data["|B|"], data["|B|_z|r,a"]).reshape(shape)
     # Spline the integrand so that we can evaluate it at quadrature points without
     # expensive coordinate mappings and root finding. Spline each function separately so
     # that the singularity near the bounce points can be captured more accurately than
@@ -483,13 +485,13 @@ def _interpolate_and_integrate(
     return result
 
 
-def _check_interp(Z, f, b_sup_z, B, B_z_ra, result, plot):
+def _check_interp(Q, f, b_sup_z, B, B_z_ra, result, plot):
     """Check for floating point errors.
 
     Parameters
     ----------
-    Z : jnp.ndarray
-        Quadrature points at ζ coordinates.
+    Q : jnp.ndarray
+        Quadrature points in ζ coordinates.
     f : list of jnp.ndarray
         Arguments to the integrand interpolated to Z.
     b_sup_z : jnp.ndarray
@@ -504,9 +506,9 @@ def _check_interp(Z, f, b_sup_z, B, B_z_ra, result, plot):
         Whether to plot stuff.
 
     """
-    assert jnp.isfinite(Z).all(), "NaN interpolation point."
+    assert jnp.isfinite(Q).all(), "NaN interpolation point."
     # Integrals that we should be computing.
-    marked = jnp.any(Z != 0, axis=-1)
+    marked = jnp.any(Q != 0.0, axis=-1)
     goal = jnp.sum(marked)
 
     msg = "Interpolation failed."
@@ -527,15 +529,15 @@ def _check_interp(Z, f, b_sup_z, B, B_z_ra, result, plot):
         "can be caused by floating point error or a poor choice of quadrature nodes."
     )
     if plot:
-        _plot_check_interp(Z, B, name=r"$\vert B \vert$")
-        _plot_check_interp(Z, b_sup_z, name=r"$ (B / \vert B \vert) \cdot e^{\zeta}$")
+        _plot_check_interp(Q, B, name=r"$\vert B \vert$")
+        _plot_check_interp(Q, b_sup_z, name=r"$ (B / \vert B \vert) \cdot e^{\zeta}$")
 
 
-def _plot_check_interp(Z, V, name=""):
-    """Plot V[λ, (ρ, α), (ζ₁, ζ₂)](Z)."""
-    for p in range(Z.shape[0]):
-        for s in range(Z.shape[1]):
-            marked = jnp.nonzero(jnp.any(Z != 0, axis=-1))[0]
+def _plot_check_interp(Q, V, name=""):
+    """Plot V[λ, (ρ, α), (ζ₁, ζ₂)](Q)."""
+    for p in range(Q.shape[0]):
+        for s in range(Q.shape[1]):
+            marked = jnp.nonzero(jnp.any(Q != 0.0, axis=-1))[0]
             if marked.size == 0:
                 continue
             fig, ax = plt.subplots()
@@ -545,7 +547,7 @@ def _plot_check_interp(Z, V, name=""):
                 f"Interpolation of {name} to quadrature points. Index {p},{s}."
             )
             for i in marked:
-                ax.plot(Z[p, s, i], V[p, s, i], marker="o")
+                ax.plot(Q[p, s, i], V[p, s, i], marker="o")
             fig.text(
                 0.01,
                 0.01,
@@ -673,7 +675,7 @@ def plot_ppoly(
     k=None,
     k_transparency=0.5,
     klabel=r"$k$",
-    title=r"Intersects $z$ in epigraph of $f(z) = k$",
+    title=r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$",
     hlabel=r"$z$",
     vlabel=r"$f(z)$",
     show=True,
@@ -692,13 +694,13 @@ def plot_ppoly(
         Number of points to evaluate for plot.
     z1 : jnp.ndarray
         Shape (k.shape[0], W).
-        Optional, intersects with ∂f/∂ζ <= 0.
+        Optional, intersects with ∂f/∂z <= 0.
     z2 : jnp.ndarray
         Shape (k.shape[0], W).
-        Optional, intersects with ∂f/∂ζ >= 0.
+        Optional, intersects with ∂f/∂z >= 0.
     k : jnp.ndarray
         Shape (k.shape[0], ).
-        Optional, k such that f(ζ) = k.
+        Optional, k such that f(z) = k.
     k_transparency : float
         Transparency of intersect lines.
     klabel : str
@@ -712,9 +714,9 @@ def plot_ppoly(
     show : bool
         Whether to show the plot. Default is true.
     start : float
-        Minimum ζ on plot.
+        Minimum z on plot.
     stop : float
-        Maximum ζ on plot.
+        Maximum z on plot.
     include_knots : bool
         Whether to plot vertical lines at the knots.
     knot_transparency : float

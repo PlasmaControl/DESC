@@ -62,3 +62,8 @@ def test_automorphism():
     assert np.isfinite(y).all()
     y = 1 / np.sqrt(1 - np.abs(automorphism_arcsin(x)))
     assert np.isfinite(y).all()
+
+
+@pytest.mark.unit
+def test_leggauss_lobatto():
+    """Test that quadrature points and weights are correct."""

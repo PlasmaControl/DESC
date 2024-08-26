@@ -47,7 +47,7 @@ from desc.integrals.quad_utils import (
     bijection_from_disc,
     grad_automorphism_sin,
     grad_bijection_from_disc,
-    leggausslob,
+    leggauss_lobatto,
     tanh_sinh,
 )
 from desc.integrals.singularities import _get_quadrature_nodes
@@ -729,9 +729,8 @@ class TestBouncePoints:
         mask = (bp1 - bp2) != 0.0
         return bp1[mask], bp2[mask]
 
-    @staticmethod
     @pytest.mark.unit
-    def test_bp1_first():
+    def test_bp1_first(self):
         """Test that bounce points are computed correctly."""
         start = np.pi / 3
         end = 6 * np.pi
@@ -745,9 +744,8 @@ class TestBouncePoints:
         np.testing.assert_allclose(bp1, intersect[0::2])
         np.testing.assert_allclose(bp2, intersect[1::2])
 
-    @staticmethod
     @pytest.mark.unit
-    def test_bp2_first():
+    def test_bp2_first(self):
         """Test that bounce points are computed correctly."""
         start = -3 * np.pi
         end = -start
@@ -761,9 +759,8 @@ class TestBouncePoints:
         np.testing.assert_allclose(bp1, intersect[1:-1:2])
         np.testing.assert_allclose(bp2, intersect[0::2][1:])
 
-    @staticmethod
     @pytest.mark.unit
-    def test_bp1_before_extrema():
+    def test_bp1_before_extrema(self):
         """Test that bounce points are computed correctly."""
         start = -np.pi
         end = -2 * start
@@ -771,9 +768,9 @@ class TestBouncePoints:
         B = CubicHermiteSpline(
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
-        B_z_ra = B.derivative()
-        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[3] + 1e-13
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        dB_dz = B.derivative()
+        pitch = 1 / B(dB_dz.roots(extrapolate=False))[3] + 1e-13
+        bp1, bp2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
         bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
@@ -783,9 +780,8 @@ class TestBouncePoints:
         np.testing.assert_allclose(intersect[2], intersect[3], rtol=1e-6)
         np.testing.assert_allclose(bp2, intersect[[3, 4]], rtol=1e-6)
 
-    @staticmethod
     @pytest.mark.unit
-    def test_bp2_before_extrema():
+    def test_bp2_before_extrema(self):
         """Test that bounce points are computed correctly."""
         start = -1.2 * np.pi
         end = -2 * start
@@ -795,18 +791,17 @@ class TestBouncePoints:
             np.cos(k) + 2 * np.sin(-2 * k) + k / 4,
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 4,
         )
-        B_z_ra = B.derivative()
-        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2]
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        dB_dz = B.derivative()
+        pitch = 1 / B(dB_dz.roots(extrapolate=False))[2]
+        bp1, bp2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
         bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
         np.testing.assert_allclose(bp1, intersect[[0, -2]])
         np.testing.assert_allclose(bp2, intersect[[1, -1]])
 
-    @staticmethod
     @pytest.mark.unit
-    def test_extrema_first_and_before_bp1():
+    def test_extrema_first_and_before_bp1(self):
         """Test that bounce points are computed correctly."""
         start = -1.2 * np.pi
         end = -2 * start
@@ -816,10 +811,10 @@ class TestBouncePoints:
             np.cos(k) + 2 * np.sin(-2 * k) + k / 20,
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
-        B_z_ra = B.derivative()
-        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[2] - 1e-13
+        dB_dz = B.derivative()
+        pitch = 1 / B(dB_dz.roots(extrapolate=False))[2] - 1e-13
         bp1, bp2 = bounce_points(
-            pitch, k[2:], B.c[:, 2:], B_z_ra.c[:, 2:], check=True, plot=False
+            pitch, k[2:], B.c[:, 2:], dB_dz.c[:, 2:], check=True, plot=False
         )
         plot_ppoly(B, z1=bp1, z2=bp2, k=1 / pitch, start=k[2])
         bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
@@ -830,9 +825,8 @@ class TestBouncePoints:
         np.testing.assert_allclose(bp1, intersect[[0, 2, 4]], rtol=1e-6)
         np.testing.assert_allclose(bp2, intersect[[0, 3, 5]], rtol=1e-6)
 
-    @staticmethod
     @pytest.mark.unit
-    def test_extrema_first_and_before_bp2():
+    def test_extrema_first_and_before_bp2(self):
         """Test that bounce points are computed correctly."""
         start = -1.2 * np.pi
         end = -2 * start + 1
@@ -842,9 +836,9 @@ class TestBouncePoints:
             np.cos(k) + 2 * np.sin(-2 * k) + k / 10,
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
-        B_z_ra = B.derivative()
-        pitch = 1 / B(B_z_ra.roots(extrapolate=False))[1] + 1e-13
-        bp1, bp2 = bounce_points(pitch, k, B.c, B_z_ra.c, check=True)
+        dB_dz = B.derivative()
+        pitch = 1 / B(dB_dz.roots(extrapolate=False))[1] + 1e-13
+        bp1, bp2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
         bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
         assert bp1.size and bp2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
@@ -864,17 +858,17 @@ class TestBouncePoints:
         B = CubicHermiteSpline(
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
-        B_z_ra = B.derivative()
-        extrema, B_extrema = _get_extrema(k, B.c, B_z_ra.c)
-        mask = ~np.isnan(extrema)
-        extrema, B_extrema = extrema[mask], B_extrema[mask]
-        idx = np.argsort(extrema)
+        dB_dz = B.derivative()
+        ext, B_ext = _get_extrema(k, B.c, dB_dz.c)
+        mask = ~np.isnan(ext)
+        ext, B_ext = ext[mask], B_ext[mask]
+        idx = np.argsort(ext)
 
-        extrema_scipy = np.sort(B_z_ra.roots(extrapolate=False))
-        B_extrema_scipy = B(extrema_scipy)
-        assert extrema.size == extrema_scipy.size
-        np.testing.assert_allclose(extrema[idx], extrema_scipy)
-        np.testing.assert_allclose(B_extrema[idx], B_extrema_scipy)
+        ext_scipy = np.sort(dB_dz.roots(extrapolate=False))
+        B_ext_scipy = B(ext_scipy)
+        assert ext.size == ext_scipy.size
+        np.testing.assert_allclose(ext[idx], ext_scipy)
+        np.testing.assert_allclose(B_ext[idx], B_ext_scipy)
 
 
 class TestBounceQuadrature:
@@ -899,7 +893,7 @@ class TestBounceQuadrature:
             (True, tanh_sinh(40), None),
             (True, leggauss(25), "default"),
             (False, tanh_sinh(20), None),
-            (False, leggausslob(10), "default"),
+            (False, leggauss_lobatto(10), "default"),
             # sin automorphism still helps out chebyshev quadrature
             (True, _mod_cheb_gauss(30), "default"),
             (False, _mod_chebu_gauss(10), "default"),
@@ -1136,7 +1130,6 @@ class TestBounce1D:
                 knots=zeta,
                 B=bounce.B,
                 dB_dz=bounce._dB_dz,
-                method="cubic",
             ),
             rtol=1e-3,
         )
@@ -1355,4 +1348,4 @@ class TestBounce1D:
         assert np.isclose(grad(fun1)(pitch), truth, rtol=1e-3)
         # Make sure bounce points get differentiated too.
         result = fun2(pitch)
-        assert np.isfinite(result) and not np.isclose(result, truth, rtol=1e-3)
+        assert np.isfinite(result) and not np.isclose(result, truth, rtol=1e-1)

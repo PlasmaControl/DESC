@@ -1,4 +1,4 @@
-"""Interpolation utilities."""
+"""Fast interpolation utilities."""
 
 from functools import partial
 
@@ -19,14 +19,15 @@ chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 # TODO: Transformation to make nodes more uniform Boyd eq. 16.46 pg. 336.
 #  Have a hunch it won't change locations of complex poles much, so using
-#  more uniformly spaced nodes could speed up convergence.
+#  more uniformly spaced nodes could speed up convergence (wrt early
+#  series truncation, not the infinite limit).
 
 
 def cheb_pts(N, lobatto=False, domain=(-1, 1)):
     """Get ``N`` Chebyshev points mapped to given domain.
 
-    Notes
-    -----
+    Warnings
+    --------
     This is a common definition of the Chebyshev points (see Boyd, Chebyshev and
     Fourier Spectral Methods p. 498). These are the points demanded by discrete
     cosine transformations to interpolate Chebyshev series because the cosine
@@ -307,7 +308,7 @@ def transform_to_desc(grid, f):
     -------
     a : jnp.ndarray
         Shape (grid.num_rho, grid.num_theta // 2 + 1, grid.num_zeta)
-        Coefficients of 2D real FFT.
+        Complex coefficients of 2D real FFT.
 
     """
     f = grid.meshgrid_reshape(f, order="rtz")
@@ -325,8 +326,8 @@ def cheb_from_dct(a, axis=-1):
     a : jnp.ndarray
         Discrete cosine transform coefficients, e.g.
         ``a=dct(f,type=2,axis=axis,norm="forward")``.
-        The discrete cosine transformation used by scipy is defined here.
-        docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html#scipy.fft.dct
+        The discrete cosine transformation used by scipy is defined here:
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html.
     axis : int
         Axis along which to transform.
 
@@ -472,8 +473,8 @@ interp1d_vec = jnp.vectorize(
 
 
 @partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)")
-def interp1d_vec_with_df(xq, x, f, fx):
-    """Vectorized interp1d."""
+def interp1d_vec_Hermite(xq, x, f, fx):
+    """Vectorized cubic Hermite spline."""
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 

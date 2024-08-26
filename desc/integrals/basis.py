@@ -47,16 +47,16 @@ def _subtract(c, k):
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
-def epigraph_and(is_intersect, df_dy_sign):
-    """Set and  epigraph of f with ``is_intersect``.
+def _in_epigraph_and(is_intersect, df_dy_sign):
+    """Set and epigraph of function f with the given set of points.
 
-    Remove intersects for which there does not exist a connected path between
+    Return only intersects where there is a connected path between
     adjacent intersects in the epigraph of a continuous map ``f``.
 
     Parameters
     ----------
     is_intersect : jnp.ndarray
-        Boolean array indicating whether element is an intersect.
+        Boolean array indicating whether index corresponds to an intersect.
     df_dy_sign : jnp.ndarray
         Shape ``is_intersect.shape``.
         Sign of ∂f/∂y (yᵢ) for f(yᵢ) = 0.
@@ -88,9 +88,21 @@ def epigraph_and(is_intersect, df_dy_sign):
         # ).
         # At each step, the likelihood that an intersection has already been lost
         # due to floating point errors grows, so the real solution is to pick a less
-        # degenerate pitch value - one that does not ride the global extrema of |B|.
+        # degenerate pitch value - one that does not ride the global extrema of f.
     )
     return put(is_intersect, idx[0], edge_case)
+
+
+def _chebcast(cheb, arr):
+    # Input should not have rightmost dimension of cheb that iterates coefficients,
+    # but may have additional leftmost dimension for batch operation.
+    errorif(
+        jnp.ndim(arr) > cheb.ndim,
+        NotImplementedError,
+        msg=f"Only one additional axis for batch dimension is allowed. "
+        f"Got {jnp.ndim(arr) - cheb.ndim + 1} additional axes.",
+    )
+    return cheb if jnp.ndim(arr) < cheb.ndim else cheb[jnp.newaxis]
 
 
 class FourierChebyshevBasis:
@@ -138,15 +150,19 @@ class FourierChebyshevBasis:
         self.N = f.shape[-1]
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         self.domain = tuple(domain)
-        errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
+        errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
         self.lobatto = bool(lobatto)
         self._c = FourierChebyshevBasis._fast_transform(f, self.lobatto)
 
     @staticmethod
     def _fast_transform(f, lobatto):
-        M = f.shape[-2]
         N = f.shape[-1]
-        return rfft(dct(f, type=2 - lobatto, axis=-1), axis=-2) / (M * (N - lobatto))
+        c = rfft(
+            dct(f, type=2 - lobatto, axis=-1) / (N - lobatto),
+            axis=-2,
+            norm="forward",
+        )
+        return c
 
     @staticmethod
     def nodes(M, N, L=None, domain=(-1, 1), lobatto=False):
@@ -201,12 +217,16 @@ class FourierChebyshevBasis:
         -------
         fq : jnp.ndarray
             Shape (..., M, N)
-            Fourier-Chebyshev series evaluated at ``FourierChebyshevBasis.nodes(M, N)``.
+            Fourier-Chebyshev series evaluated at
+            ``FourierChebyshevBasis.nodes(M,N,L,self.domain,self.lobatto)``.
 
         """
-        fq = idct(irfft(self._c, n=M, axis=-2), type=2 - self.lobatto, n=N, axis=-1) * (
-            M * (N - self.lobatto)
-        )
+        fq = idct(
+            irfft(self._c, n=M, axis=-2, norm="forward"),
+            type=2 - self.lobatto,
+            n=N,
+            axis=-1,
+        ) * (N - self.lobatto)
         return fq
 
     def harmonics(self):
@@ -259,7 +279,7 @@ class ChebyshevBasisSet:
         Shape (..., M, N).
         Chebyshev coefficients αₙ(x) for fₓ(y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
     M : int
-        Number of function in this basis set.
+        Number of functions in this basis set.
     N : int
         Chebyshev spectral resolution.
     domain : (float, float)
@@ -287,25 +307,13 @@ class ChebyshevBasisSet:
 
     @property
     def M(self):
-        """Number of function in this basis set."""
+        """Number of functions in this basis set."""
         return self.cheb.shape[-2]
 
     @property
     def N(self):
         """Chebyshev spectral resolution."""
         return self.cheb.shape[-1]
-
-    @staticmethod
-    def _chebcast(cheb, arr):
-        # Input should not have rightmost dimension of cheb that iterates coefficients,
-        # but may have additional leftmost dimension for batch operation.
-        errorif(
-            jnp.ndim(arr) > cheb.ndim,
-            NotImplementedError,
-            msg=f"Only one additional axis for batch dimension is allowed. "
-            f"Got {jnp.ndim(arr) - cheb.ndim + 1} additional axes.",
-        )
-        return cheb if jnp.ndim(arr) < cheb.ndim else cheb[jnp.newaxis]
 
     def intersect2d(self, k=0.0, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
@@ -331,7 +339,7 @@ class ChebyshevBasisSet:
             Sign of ∂f/∂y (x, yᵢ).
 
         """
-        c = _subtract(ChebyshevBasisSet._chebcast(self.cheb, k), k)
+        c = _subtract(_chebcast(self.cheb, k), k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
         y = chebroots_vec(c)
         assert y.shape == (*c.shape[:-1], self.N - 1)
@@ -340,7 +348,8 @@ class ChebyshevBasisSet:
         # Pick sentinel such that only distinct roots are considered intersects.
         y = filter_distinct(y, sentinel=-2.0, eps=eps)
         is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) <= 1.0)
-        y = jnp.where(is_intersect, y.real, 1.0)  # ensure y is in domain of arcos
+        # Ensure y is in domain of arcos; choose 1 because kernel probably cheaper.
+        y = jnp.where(is_intersect, y.real, 1.0)
 
         # TODO: Multipoint evaluation with FFT.
         #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
@@ -379,7 +388,8 @@ class ChebyshevBasisSet:
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape broadcasts with (..., *self.cheb.shape[:-2], num_intersect).
             ``z1``, ``z2`` holds intersects satisfying ∂f/∂y <= 0, ∂f/∂y >= 0,
-            respectively.
+            respectively. The points are ordered such that the path between
+            ``z1`` and ``z2`` lies in the epigraph of f.
 
         """
         errorif(
@@ -400,12 +410,14 @@ class ChebyshevBasisSet:
 
         # Note for bounce point applications:
         # We ignore the degenerate edge case where the boundary shared by adjacent
-        # polynomials is a left intersect point i.e. ``is_z1`` because the subset of
-        # pitch values that generate this edge case has zero measure. Note that
-        # the technique to account for this would be to disqualify intersects
-        # within ``_eps`` from ``domain[-1]``.
+        # polynomials is a left intersection i.e. ``is_z1`` because the subset of
+        # pitch values that generate this edge case has zero measure. By ignoring
+        # this, for those subset of pitch values the integrations will be done in
+        # the hypograph of |B| rather than the epigraph, which will be integrated
+        # to zero. If we decide later to not ignore this, the technique to solve
+        # this is to disqualify intersects within ``_eps`` from ``domain[-1]``.
         is_z1 = (df_dy_sign <= 0) & is_intersect
-        is_z2 = (df_dy_sign >= 0) & epigraph_and(is_intersect, df_dy_sign)
+        is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(is_intersect, df_dy_sign)
 
         sentinel = self.domain[0] - 1.0
         z1 = take_mask(y, is_z1, size=num_intersect, fill_value=sentinel)
@@ -418,7 +430,7 @@ class ChebyshevBasisSet:
         return z1, z2
 
     def eval1d(self, z, cheb=None):
-        """Evaluate piecewise Chebyshev spline at coordinates z.
+        """Evaluate piecewise Chebyshev series at coordinates z.
 
         Parameters
         ----------
@@ -440,7 +452,7 @@ class ChebyshevBasisSet:
             Chebyshev basis evaluated at z.
 
         """
-        cheb = self._chebcast(setdefault(cheb, self.cheb), z)
+        cheb = _chebcast(setdefault(cheb, self.cheb), z)
         N = cheb.shape[-1]
         x_idx, y = self.isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[1])
@@ -477,7 +489,8 @@ class ChebyshevBasisSet:
     def isomorphism_to_C2(self, z):
         """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
 
-        Returns index x and value y such that z = f(x) + y where f(x) = x * |domain|.
+        Returns index x and minimum value y such that
+        z = f(x) + y where f(x) = x * |domain|.
 
         Parameters
         ----------
@@ -513,11 +526,11 @@ class ChebyshevBasisSet:
         Parameters
         ----------
         z1, z2 : jnp.ndarray
-            Shape must broadcast with (k, *self.cheb.shape[:-2], W).
+            Shape must broadcast with (*self.cheb.shape[:-2], W).
             ``z1``, ``z2`` holds intersects satisfying ∂f/∂y <= 0, ∂f/∂y >= 0,
             respectively.
         k : jnp.ndarray
-            Shape must broadcast with (k.shape[0], *self.cheb.shape[:-2]).
+            Shape must broadcast with *self.cheb.shape[:-2].
             k such that fₓ(yᵢ) = k.
         plot : bool
             Whether to plot stuff. Default is true.
@@ -533,15 +546,15 @@ class ChebyshevBasisSet:
 
         err_1 = jnp.any(z1 > z2, axis=-1)
         err_2 = jnp.any(z1[..., 1:] < z2[..., :-1], axis=-1)
-        f_m = self.eval1d((z1 + z2) / 2)
-        assert f_m.shape == z1.shape
-        err_3 = jnp.any(f_m > k + self._eps, axis=-1)
+        f_midpoint = self.eval1d((z1 + z2) / 2)
+        assert f_midpoint.shape == z1.shape
+        err_3 = jnp.any(f_midpoint > k + self._eps, axis=-1)
         if not (plot or jnp.any(err_1 | err_2 | err_3)):
             return
 
         # Ensure l axis exists for iteration in below loop.
         cheb = atleast_nd(3, self.cheb)
-        mask, z1, z2, f_m = atleast_3d_mid(mask, z1, z2, f_m)
+        mask, z1, z2, f_midpoint = atleast_3d_mid(mask, z1, z2, f_midpoint)
         err_1, err_2, err_3 = atleast_2d_end(err_1, err_2, err_3)
 
         for l in np.ndindex(cheb.shape[:-2]):
@@ -564,8 +577,9 @@ class ChebyshevBasisSet:
                 assert not err_1[idx], "Intersects have an inversion.\n"
                 assert not err_2[idx], "Detected discontinuity.\n"
                 assert not err_3[idx], (
-                    "Detected f > k in well. Increase Chebyshev resolution.\n"
-                    f"{f_m[idx][mask[idx]]} > {k[idx] + self._eps}"
+                    "Detected f > k in well, implying a path between z1 and z2 "
+                    "is in hypograph(f). Increase Chebyshev resolution.\n"
+                    f"{f_midpoint[idx][mask[idx]]} > {k[idx] + self._eps}"
                 )
             idx = (slice(None), *l)
             if plot:
@@ -586,7 +600,7 @@ class ChebyshevBasisSet:
         k=None,
         k_transparency=0.5,
         klabel=r"$k$",
-        title=r"Intersects $z$ in epigraph of $f(z) = k$",
+        title=r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$",
         hlabel=r"$z$",
         vlabel=r"$f(z)$",
         show=True,

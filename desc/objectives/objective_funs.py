@@ -10,6 +10,7 @@ from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
 from desc.utils import (
+    PRINT_WIDTH,
     Timer,
     batched_vectorize,
     errorif,
@@ -307,13 +308,15 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def print_value(self, x, constants=None):
+    def print_value(self, x, x0=None, constants=None):
         """Print the value(s) of the objective.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        x0 : ndarray, optional
+            Initial state vector before optimization.
         constants : list
             Constant parameters passed to sub-objectives.
 
@@ -322,13 +325,35 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         if self.compiled and self._compile_mode in {"scalar", "all"}:
             f = self.compute_scalar(x, constants=constants)
+            if x0 is not None:
+                f0 = self.compute_scalar(x0, constants=constants)
         else:
             f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
-        print("Total (sum of squares): {:10.3e}, ".format(f))
+            if x0 is not None:
+                f0 = (
+                    jnp.sum(self.compute_scaled_error(x0, constants=constants) ** 2) / 2
+                )
+        if x0 is not None:
+            print(
+                f"{'Total (sum of squares): ':<{PRINT_WIDTH}}"
+                + "{:10.3e}  -->  {:10.3e}, ".format(f0, f)
+            )
+        else:
+            print(
+                f"{'Total (sum of squares): ':<{PRINT_WIDTH}}" + "{:10.3e}, ".format(f)
+            )
         params = self.unpack_state(x)
         assert len(params) == len(constants) == len(self.objectives)
-        for par, obj, const in zip(params, self.objectives, constants):
-            obj.print_value(*par, constants=const)
+        if x0 is not None:
+            params0 = self.unpack_state(x0)
+            assert len(params0) == len(constants) == len(self.objectives)
+            for par, par0, obj, const in zip(
+                params, params0, self.objectives, constants
+            ):
+                obj.print_value(par, par0, constants=const)
+        else:
+            for par, obj, const in zip(params, self.objectives, constants):
+                obj.print_value(par, constants=const)
         return None
 
     def unpack_state(self, x, per_objective=True):
@@ -1150,24 +1175,40 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "compute_unscaled")
 
-    def print_value(self, *args, **kwargs):
+    def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""
         # compute_unscaled is jitted so better to use than than bare compute
-        f = self.compute_unscaled(*args, **kwargs)
+        if args0 is not None:
+            f = self.compute_unscaled(*args, **kwargs)
+            f0 = self.compute_unscaled(*args0, **kwargs)
+            print_value_fmt = (
+                f"{self._print_value_fmt:<{PRINT_WIDTH}}" + "{:10.3e}  -->  {:10.3e} "
+            )
+        else:
+            f = self.compute_unscaled(*args, **kwargs)
+            f0 = f
+            # In this case, print_value_fmt only has 1 value,
+            # but the format string is still used with 2 arguments given.
+            # This is a bit of a hack, but it works. the format() only replaces
+            # the first value in the {} string, so the second one is unused.
+            # That is why we set f0 to f.
+            print_value_fmt = f"{self._print_value_fmt:<{PRINT_WIDTH}}" + "{:10.3e} "
+
         if self.linear:
             # probably a Fixed* thing, just need to know norm
             f = jnp.linalg.norm(self._shift(f))
-            print(self._print_value_fmt.format(f) + self._units)
+            f0 = jnp.linalg.norm(self._shift(f0))
+            print(print_value_fmt.format(f0, f) + self._units)
 
         elif self.scalar:
             # dont need min/max/mean of a scalar
-            print(self._print_value_fmt.format(f.squeeze()) + self._units)
+            fs = f.squeeze()
+            f0s = f0.squeeze()
+            print(print_value_fmt.format(f0s, fs) + self._units)
             if self._normalize and self._units != "(dimensionless)":
-                print(
-                    self._print_value_fmt.format(self._scale(self._shift(f)).squeeze())
-                    + "(normalized error)"
-                )
-
+                fs_norm = self._scale(self._shift(f)).squeeze()
+                f0s_norm = self._scale(self._shift(f0)).squeeze()
+                print(print_value_fmt.format(f0s_norm, fs_norm) + "(normalized error)")
         else:
             # try to do weighted mean if possible
             constants = kwargs.get("constants", self.constants)
@@ -1184,42 +1225,65 @@ class _Objective(IOAble, ABC):
             fmin = jnp.min(f)
             fmean = jnp.mean(f * w) / jnp.mean(w)
 
+            f0 = jnp.abs(f0) if abserr else f0
+            f0max = jnp.max(f0)
+            f0min = jnp.min(f0)
+            f0mean = jnp.mean(f0 * w) / jnp.mean(w)
+
+            pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
+            if args0 is not None:
+                print_value_fmt = (
+                    f"{self._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
+                    + "{:10.3e}  -->  {:10.3e} "
+                )
+            else:
+                print_value_fmt = (
+                    f"{self._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
+                )
             print(
                 "Maximum "
                 + ("absolute " if abserr else "")
-                + self._print_value_fmt.format(fmax)
+                + print_value_fmt.format(f0max, fmax)
                 + self._units
             )
             print(
                 "Minimum "
                 + ("absolute " if abserr else "")
-                + self._print_value_fmt.format(fmin)
+                + print_value_fmt.format(f0min, fmin)
                 + self._units
             )
             print(
                 "Average "
                 + ("absolute " if abserr else "")
-                + self._print_value_fmt.format(fmean)
+                + print_value_fmt.format(f0mean, fmean)
                 + self._units
             )
 
             if self._normalize and self._units != "(dimensionless)":
+                fmax_norm = fmax / jnp.mean(self.normalization)
+                fmin_norm = fmin / jnp.mean(self.normalization)
+                fmean_norm = fmean / jnp.mean(self.normalization)
+
+                f0max_norm = f0max / jnp.mean(self.normalization)
+                f0min_norm = f0min / jnp.mean(self.normalization)
+                f0mean_norm = f0mean / jnp.mean(self.normalization)
+
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmax / jnp.mean(self.normalization))
+                    + print_value_fmt.format(f0max_norm, fmax_norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmin / jnp.mean(self.normalization))
+                    + print_value_fmt.format(f0min_norm, fmin_norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmean / jnp.mean(self.normalization))
+                    + print_value_fmt.format(f0mean_norm, fmean_norm)
                     + "(normalized)"
                 )
 

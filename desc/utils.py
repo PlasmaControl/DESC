@@ -1188,3 +1188,6 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
             return jnp.expand_dims(result, axis=dims_to_expand)
 
     return wrapped
+
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text

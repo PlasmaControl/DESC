@@ -71,7 +71,7 @@ class Pressure(_Objective):
 
     _coordinates = "r"
     _units = "(Pa)"
-    _print_value_fmt = "Pressure: {:10.3e} "
+    _print_value_fmt = "Pressure: "
 
     def __init__(
         self,
@@ -244,7 +244,7 @@ class RotationalTransform(_Objective):
 
     _coordinates = "r"
     _units = "(dimensionless)"
-    _print_value_fmt = "Rotational transform: {:10.3e} "
+    _print_value_fmt = "Rotational transform: "
 
     def __init__(
         self,
@@ -430,7 +430,7 @@ class Shear(_Objective):
 
     _coordinates = "r"
     _units = "(dimensionless)"
-    _print_value_fmt = "Shear: {:10.3e} "
+    _print_value_fmt = "Shear: "
 
     def __init__(
         self,
@@ -612,7 +612,7 @@ class ToroidalCurrent(_Objective):
 
     _coordinates = "r"
     _units = "(A)"
-    _print_value_fmt = "Toroidal current: {:10.3e} "
+    _print_value_fmt = "Toroidal current: "
 
     def __init__(
         self,

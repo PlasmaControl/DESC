@@ -73,7 +73,7 @@ class GenericObjective(_Objective):
 
     """
 
-    _print_value_fmt = "Generic objective value: {:10.3e} "
+    _print_value_fmt = "Generic objective value: "
 
     def __init__(
         self,
@@ -228,7 +228,7 @@ class LinearObjectiveFromUser(_FixedObjective):
     _linear = True
     _fixed = True
     _units = "(Unknown)"
-    _print_value_fmt = "Custom linear objective value: {:10.3e}"
+    _print_value_fmt = "Custom linear objective value: "
 
     def __init__(
         self,
@@ -393,7 +393,7 @@ class ObjectiveFromUser(_Objective):
     """
 
     _units = "(Unknown)"
-    _print_value_fmt = "Custom objective value: {:10.3e}"
+    _print_value_fmt = "Custom objective value: "
 
     def __init__(
         self,

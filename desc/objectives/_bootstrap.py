@@ -83,7 +83,7 @@ class BootstrapRedlConsistency(_Objective):
 
     _coordinates = "r"
     _units = "(T A m^-2)"
-    _print_value_fmt = "Bootstrap current self-consistency error: {:10.3e} "
+    _print_value_fmt = "Bootstrap current self-consistency error: "
 
     def __init__(
         self,

@@ -2,6 +2,7 @@
 
 from functools import partial
 
+import numpy as np
 from interpax import interp1d
 from orthax.chebyshev import chebroots, chebvander
 from orthax.polynomial import polyvander
@@ -165,14 +166,13 @@ def interp_rfft(xq, f, axis=-1):
         Real function value at query points.
 
     """
-    assert f.ndim >= 1
     a = rfft(f, axis=axis, norm="forward")
     fq = irfft_non_uniform(xq, a, f.shape[axis], axis)
     return fq
 
 
 def irfft_non_uniform(xq, a, n, axis=-1):
-    """Evaluate Fourier coefficients ``a`` at ``xq`` ∈ [0, 2π] periodic.
+    """Evaluate Fourier coefficients ``a`` at ``xq`` ∈ [0, 2π].
 
     Parameters
     ----------
@@ -192,18 +192,17 @@ def irfft_non_uniform(xq, a, n, axis=-1):
         Real function value at query points.
 
     """
-    assert a.ndim >= 1
+    # |a| << |basis|, so move a instead of basis
     a = (
-        (2.0 * a)
-        .at[Index.get(0, axis, a.ndim)]
+        jnp.moveaxis(a, axis, -1)
+        .at[..., 0]
         .divide(2.0)
-        .at[Index.get(-1, axis, a.ndim)]
+        .at[..., -1]
         .divide(1.0 + ((n % 2) == 0))
     )
-    a = jnp.moveaxis(a, axis, -1)
     m = jnp.fft.rfftfreq(n, d=1 / n)
     basis = jnp.exp(-1j * m * xq[..., jnp.newaxis])
-    fq = jnp.linalg.vecdot(basis, a).real
+    fq = 2.0 * jnp.linalg.vecdot(basis, a).real
     # TODO: Test JAX does this optimization automatically.
     # ℜ〈 basis, a 〉= cos(m xq)⋅ℜ(a) − sin(m xq)⋅ℑ(a)
     return fq
@@ -217,15 +216,17 @@ def interp_rfft2(xq, f, axes=(-2, -1)):
     xq : jnp.ndarray
         Shape (..., 2).
         Real query points where interpolation is desired.
-        Last axis must hold coordinates for a given point.
         Shape ``xq.shape[:-1]`` must broadcast with shape ``np.delete(f.shape,axes)``.
+        Last axis must hold coordinates for a given point. The coordinates stored
+        along ``xq[...,0]`` (``xq[...,1]``) must be the same coordinate enumerated
+        across axis ``min(axes)`` (``max(axes)``) of the function values ``f``.
     f : jnp.ndarray
         Shape (..., f.shape[-2], f.shape[-1]).
         Real (2π × 2π) periodic function values on uniform tensor-product grid
         to interpolate.
     axes : tuple[int, int]
         Axes along which to transform.
-        The real transform is done along ``axes[-1]``, so it will be more
+        The real transform is done along ``axes[1]``, so it will be more
         efficient for that to denote the larger size axis in ``axes``.
 
     Returns
@@ -234,15 +235,13 @@ def interp_rfft2(xq, f, axes=(-2, -1)):
         Real function value at query points.
 
     """
-    assert xq.shape[-1] == 2
-    assert f.ndim >= 2
     a = rfft2(f, axes=axes, norm="forward")
-    fq = irfft2_non_uniform(xq, a, f.shape[axes[0]], f.shape[axes[-1]], axes)
+    fq = irfft2_non_uniform(xq, a, f.shape[axes[0]], f.shape[axes[1]], axes)
     return fq
 
 
 def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
-    """Evaluate Fourier coefficients ``a`` at ``xq`` ∈ [0, 2π]² periodic.
+    """Evaluate Fourier coefficients ``a`` at ``xq`` ∈ [0, 2π]².
 
     Parameters
     ----------
@@ -251,6 +250,9 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
         Real query points where interpolation is desired.
         Last axis must hold coordinates for a given point.
         Shape ``xq.shape[:-1]`` must broadcast with shape ``np.delete(a.shape,axes)``.
+        Last axis must hold coordinates for a given point. The coordinates stored
+        along ``xq[...,0]`` (``xq[...,1]``) must be the same coordinate enumerated
+        across axis ``min(axes)`` (``max(axes)``) of the Fourier coefficients ``a``.
     a : jnp.ndarray
         Shape (..., a.shape[-2], a.shape[-1]).
         Fourier coefficients ``a=rfft2(f,axes=axes,norm="forward")``.
@@ -267,29 +269,29 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
         Real function value at query points.
 
     """
-    assert xq.shape[-1] == 2
-    assert a.ndim >= 2
+    errorif(not (len(axes) == xq.shape[-1] == 2), msg="This is a 2D transform.")
+    errorif(a.ndim < 2, msg=f"Dimension mismatch, a.shape: {a.shape}.")
+
+    # |a| << |basis|, so move a instead of basis
     a = (
-        (2.0 * a)
-        .at[Index.get(0, axes[-1], a.ndim)]
+        jnp.moveaxis(a, source=axes, destination=(-2, -1))
+        .at[..., 0]
         .divide(2.0)
-        .at[Index.get(-1, axes[-1], a.ndim)]
+        .at[..., -1]
         .divide(1.0 + ((N % 2) == 0))
     )
-    a = jnp.moveaxis(a, source=axes, destination=(-2, -1))
-    a = a.reshape(*a.shape[:-2], -1)
 
     m = jnp.fft.fftfreq(M, d=1 / M)
     n = jnp.fft.rfftfreq(N, d=1 / N)
+    idx = np.argsort(axes)
     basis = jnp.exp(
-        -1j
+        1j
         * (
-            (m * xq[..., 0, jnp.newaxis])[..., jnp.newaxis]
-            + (n * xq[..., -1, jnp.newaxis])[..., jnp.newaxis, :]
+            (m * xq[..., idx[0], jnp.newaxis])[..., jnp.newaxis]
+            + (n * xq[..., idx[1], jnp.newaxis])[..., jnp.newaxis, :]
         )
-    ).reshape(*xq.shape[:-1], m.size * n.size)
-
-    fq = jnp.linalg.vecdot(basis, a).real
+    )
+    fq = 2.0 * jnp.sum(basis * a, axis=(-2, -1)).real
     return fq
 
 
@@ -312,8 +314,8 @@ def transform_to_desc(grid, f):
 
     """
     f = grid.meshgrid_reshape(f, order="rtz")
+    # Real fft done over poloidal since num_theta > num_zeta usually.
     a = rfft2(f, axes=(-1, -2), norm="forward")
-    # Real fft done over poloidal since grid.num_theta > grid.num_zeta usually.
     assert a.shape == (grid.num_rho, grid.num_theta // 2 + 1, grid.num_zeta)
     return a
 
@@ -365,7 +367,6 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
     """
     lobatto = bool(lobatto)
     errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
-    assert f.ndim >= 1
     a = cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis) / (
         f.shape[axis] - lobatto
     )
@@ -394,7 +395,6 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Real function value at query points.
 
     """
-    assert a.ndim >= 1
     a = jnp.moveaxis(a, axis, -1)
     # Could use Clenshaw recursion with fq = chebval(xq, a, tensor=False).
     basis = chebvander(xq, n - 1)
@@ -467,14 +467,15 @@ def polyval_vec(x, c):
     return val
 
 
+# Warning: method must be specified as keyword argument.
 interp1d_vec = jnp.vectorize(
     interp1d, signature="(m),(n),(n)->(m)", excluded={"method"}
 )
 
 
 @partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)")
-def interp1d_vec_Hermite(xq, x, f, fx):
-    """Vectorized cubic Hermite spline."""
+def interp1d_Hermite_vec(xq, x, f, fx):
+    """Vectorized cubic Hermite spline. Does not support keyword arguments."""
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 

@@ -1,4 +1,4 @@
-"""Utilities for bounce integrals."""
+"""Utilities and functional programming interface for bounce integrals."""
 
 from interpax import PPoly
 from matplotlib import pyplot as plt
@@ -6,8 +6,8 @@ from matplotlib import pyplot as plt
 from desc.backend import imap, jnp, softmax
 from desc.integrals.basis import _add2legend, _in_epigraph_and, _plot_intersect
 from desc.integrals.interp_utils import (
+    interp1d_Hermite_vec,
     interp1d_vec,
-    interp1d_vec_Hermite,
     poly_root,
     polyval_vec,
 )
@@ -178,11 +178,11 @@ def bounce_points(
 
     Returns
     -------
-    bp1, bp2 : (jnp.ndarray, jnp.ndarray)
+    z1, z2 : (jnp.ndarray, jnp.ndarray)
         Shape (P, S, num_well).
-        ζ coordinates of bounce points.
-        The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
-        respectively, for the bounce integrals.
+        ζ coordinates of bounce points. The points are grouped and ordered such
+        that the straight line path between the intersects in ``z1`` and ``z2``
+        resides in the epigraph of |B|.
 
         If there were less than ``num_wells`` wells detected along a field line,
         then the last axis, which enumerates bounce points for a particular field
@@ -212,28 +212,28 @@ def bounce_points(
     # Following discussion on page 3 and 5 of https://doi.org/10.1063/1.873749,
     # we ignore the bounce points of particles only assigned to a class that are
     # trapped outside this snapshot of the field line.
-    is_bp1 = (dB_dz_sign <= 0) & is_intersect
-    is_bp2 = (dB_dz_sign >= 0) & _in_epigraph_and(is_intersect, dB_dz_sign)
+    is_z1 = (dB_dz_sign <= 0) & is_intersect
+    is_z2 = (dB_dz_sign >= 0) & _in_epigraph_and(is_intersect, dB_dz_sign)
 
     # Transform out of local power basis expansion.
     intersect = (intersect + knots[:-1, jnp.newaxis]).reshape(P, S, -1)
     # New versions of JAX only like static sentinels.
     sentinel = -10000000.0  # instead of knots[0] - 1
-    bp1 = take_mask(intersect, is_bp1, size=num_well, fill_value=sentinel)
-    bp2 = take_mask(intersect, is_bp2, size=num_well, fill_value=sentinel)
+    z1 = take_mask(intersect, is_z1, size=num_well, fill_value=sentinel)
+    z2 = take_mask(intersect, is_z2, size=num_well, fill_value=sentinel)
 
-    mask = (bp1 > sentinel) & (bp2 > sentinel)
+    mask = (z1 > sentinel) & (z2 > sentinel)
     # Set outside mask to same value so integration is over set of measure zero.
-    bp1 = jnp.where(mask, bp1, 0.0)
-    bp2 = jnp.where(mask, bp2, 0.0)
+    z1 = jnp.where(mask, z1, 0.0)
+    z2 = jnp.where(mask, z2, 0.0)
 
     if check:
-        _check_bounce_points(bp1, bp2, pitch, knots, B, plot, **kwargs)
+        _check_bounce_points(z1, z2, pitch, knots, B, plot, **kwargs)
 
-    return bp1, bp2
+    return z1, z2
 
 
-def _check_bounce_points(bp1, bp2, pitch, knots, B, plot=True, **kwargs):
+def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
     """Check that bounce points are computed correctly."""
     eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
     kwargs.setdefault(
@@ -243,49 +243,49 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B, plot=True, **kwargs):
     )
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
-    kwargs.setdefault("vlabel", r"$\vert B \vert(\zeta)$")
+    kwargs.setdefault("vlabel", r"$\vert B \vert$")
 
-    assert bp1.shape == bp2.shape
-    mask = (bp1 - bp2) != 0.0
-    bp1 = jnp.where(mask, bp1, jnp.nan)
-    bp2 = jnp.where(mask, bp2, jnp.nan)
+    assert z1.shape == z2.shape
+    mask = (z1 - z2) != 0.0
+    z1 = jnp.where(mask, z1, jnp.nan)
+    z2 = jnp.where(mask, z2, jnp.nan)
 
-    err_1 = jnp.any(bp1 > bp2, axis=-1)
-    err_2 = jnp.any(bp1[..., 1:] < bp2[..., :-1], axis=-1)
+    err_1 = jnp.any(z1 > z2, axis=-1)
+    err_2 = jnp.any(z1[..., 1:] < z2[..., :-1], axis=-1)
 
-    P, S, _ = bp1.shape
+    P, S, _ = z1.shape
     for s in range(S):
         Bs = PPoly(B[:, s], knots)
         for p in range(P):
-            Bs_midpoint = Bs((bp1[p, s] + bp2[p, s]) / 2)
+            Bs_midpoint = Bs((z1[p, s] + z2[p, s]) / 2)
             err_3 = jnp.any(Bs_midpoint > 1 / pitch[p, s] + eps)
             if not (err_1[p, s] or err_2[p, s] or err_3):
                 continue
-            _bp1 = bp1[p, s][mask[p, s]]
-            _bp2 = bp2[p, s][mask[p, s]]
+            _z1 = z1[p, s][mask[p, s]]
+            _z2 = z2[p, s][mask[p, s]]
             if plot:
                 plot_ppoly(
                     ppoly=Bs,
-                    z1=_bp1,
-                    z2=_bp2,
+                    z1=_z1,
+                    z2=_z2,
                     k=1 / pitch[p, s],
                     **kwargs,
                 )
 
-            print("      bp1    |    bp2")
-            print(jnp.column_stack([_bp1, _bp2]))
+            print("      z1    |    z2")
+            print(jnp.column_stack([_z1, _z2]))
             assert not err_1[p, s], "Intersects have an inversion.\n"
             assert not err_2[p, s], "Detected discontinuity.\n"
             assert not err_3, (
                 f"Detected |B| = {Bs_midpoint[mask[p, s]]} > {1 / pitch[p, s] + eps} "
-                "= 1/λ in well, implying a path between bounce points is in "
-                "hypograph(|B|). Use more knots.\n"
+                "= 1/λ in well, implying the straight line path between bounce points "
+                "is in hypograph(|B|). Use more knots.\n"
             )
         if plot:
             plot_ppoly(
                 ppoly=Bs,
-                z1=bp1[:, s],
-                z2=bp2[:, s],
+                z1=z1[:, s],
+                z2=z2[:, s],
                 k=1 / pitch[:, s],
                 **kwargs,
             )
@@ -294,8 +294,8 @@ def _check_bounce_points(bp1, bp2, pitch, knots, B, plot=True, **kwargs):
 def bounce_quadrature(
     x,
     w,
-    bp1,
-    bp2,
+    z1,
+    z2,
     pitch,
     integrand,
     f,
@@ -316,11 +316,11 @@ def bounce_quadrature(
     w : jnp.ndarray
         Shape (w.size, ).
         Quadrature weights.
-    bp1, bp2 : jnp.ndarray
+    z1, z2 : jnp.ndarray
         Shape (P, S, num_well).
-        ζ coordinates of bounce points.
-        The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
-        respectively, for the bounce integrals.
+        ζ coordinates of bounce points. The points are grouped and ordered such
+        that the straight line path between the intersects in ``z1`` and ``z2``
+        resides in the epigraph of |B|.
     pitch : jnp.ndarray
         Shape must broadcast with (P, S).
         λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
@@ -365,7 +365,7 @@ def bounce_quadrature(
         Last axis enumerates the bounce integrals.
 
     """
-    errorif(bp1.ndim != 3 or bp1.shape != bp2.shape)
+    errorif(z1.ndim != 3 or z1.shape != z2.shape)
     errorif(x.ndim != 1 or x.shape != w.shape)
     pitch = jnp.atleast_2d(pitch)
     if not isinstance(f, (list, tuple)):
@@ -375,7 +375,7 @@ def bounce_quadrature(
     if batch:
         result = _interpolate_and_integrate(
             w=w,
-            Q=bijection_from_disc(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis]),
+            Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
             pitch=pitch,
             integrand=integrand,
             f=f,
@@ -389,12 +389,12 @@ def bounce_quadrature(
         f = list(f)
 
         # TODO: Use batched vmap.
-        def loop(bp):
-            bp1, bp2 = bp
+        def loop(z):
+            z1, z2 = z
             # Need to return tuple because input was tuple; artifact of JAX map.
             return None, _interpolate_and_integrate(
                 w=w,
-                Q=bijection_from_disc(x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis]),
+                Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
                 pitch=pitch,
                 integrand=integrand,
                 f=f,
@@ -406,13 +406,13 @@ def bounce_quadrature(
             )
 
         result = jnp.moveaxis(
-            imap(loop, (jnp.moveaxis(bp1, -1, 0), jnp.moveaxis(bp2, -1, 0)))[1],
+            imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1],
             source=0,
             destination=-1,
         )
 
-    result = result * grad_bijection_from_disc(bp1, bp2)
-    assert result.shape == (pitch.shape[0], data["|B|"].shape[0], bp1.shape[-1])
+    result = result * grad_bijection_from_disc(z1, z2)
+    assert result.shape == (pitch.shape[0], data["|B|"].shape[0], z1.shape[-1])
     return result
 
 
@@ -464,14 +464,14 @@ def _interpolate_and_integrate(
     pitch = jnp.expand_dims(pitch, axis=(2, 3) if (Q.ndim == 4) else 2)
     shape = Q.shape
     Q = Q.reshape(Q.shape[0], Q.shape[1], -1)
-    b_sup_z = interp1d_vec_Hermite(
+    b_sup_z = interp1d_Hermite_vec(
         Q,
         knots,
         data["B^zeta"] / data["|B|"],
         data["B^zeta_z|r,a"] / data["|B|"]
         - data["B^zeta"] * data["|B|_z|r,a"] / data["|B|"] ** 2,
     ).reshape(shape)
-    B = interp1d_vec_Hermite(Q, knots, data["|B|"], data["|B|_z|r,a"]).reshape(shape)
+    B = interp1d_Hermite_vec(Q, knots, data["|B|"], data["|B|_z|r,a"]).reshape(shape)
     # Spline the integrand so that we can evaluate it at quadrature points without
     # expensive coordinate mappings and root finding. Spline each function separately so
     # that the singularity near the bounce points can be captured more accurately than
@@ -493,11 +493,11 @@ def _check_interp(Q, f, b_sup_z, B, B_z_ra, result, plot):
     Q : jnp.ndarray
         Quadrature points in ζ coordinates.
     f : list of jnp.ndarray
-        Arguments to the integrand interpolated to Z.
+        Arguments to the integrand interpolated to Q.
     b_sup_z : jnp.ndarray
-        Contravariant toroidal component of magnetic field, interpolated to Z.
+        Contravariant toroidal component of magnetic field, interpolated to Q.
     B : jnp.ndarray
-        Norm of magnetic field, interpolated to Z.
+        Norm of magnetic field, interpolated to Q.
     B_z_ra : jnp.ndarray
         Norm of magnetic field, derivative with respect to ζ.
     result : jnp.ndarray
@@ -559,7 +559,7 @@ def _plot_check_interp(Q, V, name=""):
 
 
 def _get_extrema(knots, B, dB_dz, sentinel=jnp.nan):
-    """Return extrema (ζ*, |B|(ζ*)).
+    """Return ext (ζ*, |B|(ζ*)).
 
     Parameters
     ----------
@@ -583,7 +583,7 @@ def _get_extrema(knots, B, dB_dz, sentinel=jnp.nan):
 
     Returns
     -------
-    extrema, B_extrema : jnp.ndarray
+    ext, B_ext : jnp.ndarray
         Shape (S, (knots.size - 1) * (degree - 1)).
         First array enumerates ζ*. Second array enumerates |B|(ζ*)
         Sorted order of ζ* is not promised.
@@ -591,17 +591,17 @@ def _get_extrema(knots, B, dB_dz, sentinel=jnp.nan):
     """
     B, dB_dz, _ = _check_spline_shape(knots, B, dB_dz)
     S, degree = B.shape[1], B.shape[0] - 1
-    extrema = poly_root(
+    ext = poly_root(
         c=dB_dz, a_min=jnp.array([0.0]), a_max=jnp.diff(knots), sentinel=sentinel
     )
-    assert extrema.shape == (S, knots.size - 1, degree - 1)
-    B_extrema = polyval_vec(x=extrema, c=B[..., jnp.newaxis]).reshape(S, -1)
+    assert ext.shape == (S, knots.size - 1, degree - 1)
+    B_ext = polyval_vec(x=ext, c=B[..., jnp.newaxis]).reshape(S, -1)
     # Transform out of local power basis expansion.
-    extrema = (extrema + knots[:-1, jnp.newaxis]).reshape(S, -1)
-    return extrema, B_extrema
+    ext = (ext + knots[:-1, jnp.newaxis]).reshape(S, -1)
+    return ext, B_ext
 
 
-def interp_to_argmin_B_soft(g, bp1, bp2, knots, B, dB_dz, method="cubic", beta=-50):
+def interp_to_argmin_B_soft(g, z1, z2, knots, B, dB_dz, method="cubic", beta=-50):
     """Interpolate ``g`` to the deepest point in the magnetic well.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E |B|(ζ). Returns mean_A g(ζ).
@@ -618,12 +618,14 @@ def interp_to_argmin_B_soft(g, bp1, bp2, knots, B, dB_dz, method="cubic", beta=-
 
     """
     ext, B = _get_extrema(knots, B, dB_dz, sentinel=0)
-    assert ext.shape[0] == B.shape[0] == bp1.shape[1] == bp2.shape[1]
+    assert ext.shape[0] == B.shape[0] == z1.shape[1] == z2.shape[1]
+    # TODO: Check if softmax has where argument that works like this.
+    #       (numpy ufunc where typically does not.)
     argmin = softmax(
         beta
         * jnp.where(
-            (bp1[..., jnp.newaxis] < ext[:, jnp.newaxis])
-            & (ext[:, jnp.newaxis] < bp2[..., jnp.newaxis]),
+            (z1[..., jnp.newaxis] < ext[:, jnp.newaxis])
+            & (ext[:, jnp.newaxis] < z2[..., jnp.newaxis]),
             jnp.expand_dims(B / jnp.mean(B, axis=-1, keepdims=True), axis=1),
             1e2,  # >> max(|B|) / mean(|B|)
         ),
@@ -633,12 +635,12 @@ def interp_to_argmin_B_soft(g, bp1, bp2, knots, B, dB_dz, method="cubic", beta=-
         argmin,
         interp1d_vec(ext, knots, jnp.atleast_2d(g), method=method)[:, jnp.newaxis],
     )
-    assert g.shape == bp1.shape == bp2.shape
+    assert g.shape == z1.shape == z2.shape
     return g
 
 
 # Less efficient than soft if P >> 1.
-def interp_to_argmin_B_hard(g, bp1, bp2, knots, B, dB_dz, method="cubic"):
+def interp_to_argmin_B_hard(g, z1, z2, knots, B, dB_dz, method="cubic"):
     """Interpolate ``g`` to the deepest point in the magnetic well.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E |B|(ζ). Returns g(A).
@@ -651,11 +653,11 @@ def interp_to_argmin_B_hard(g, bp1, bp2, knots, B, dB_dz, method="cubic"):
 
     """
     ext, B = _get_extrema(knots, B, dB_dz, sentinel=0)
-    assert ext.shape[0] == B.shape[0] == bp1.shape[1] == bp2.shape[1]
+    assert ext.shape[0] == B.shape[0] == z1.shape[1] == z2.shape[1]
     argmin = jnp.argmin(
         jnp.where(
-            (bp1[..., jnp.newaxis] < ext[:, jnp.newaxis])
-            & (ext[:, jnp.newaxis] < bp2[..., jnp.newaxis]),
+            (z1[..., jnp.newaxis] < ext[:, jnp.newaxis])
+            & (ext[:, jnp.newaxis] < z2[..., jnp.newaxis]),
             B[:, jnp.newaxis],
             1e2 + jnp.max(B),
         ),
@@ -663,7 +665,7 @@ def interp_to_argmin_B_hard(g, bp1, bp2, knots, B, dB_dz, method="cubic"):
     )
     A = jnp.take_along_axis(ext[jnp.newaxis], argmin, axis=-1)
     g = interp1d_vec(A, knots, jnp.atleast_2d(g), method=method)
-    assert g.shape == bp1.shape == bp2.shape
+    assert g.shape == z1.shape == z2.shape
     return g
 
 
@@ -677,7 +679,7 @@ def plot_ppoly(
     klabel=r"$k$",
     title=r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$",
     hlabel=r"$z$",
-    vlabel=r"$f(z)$",
+    vlabel=r"$f$",
     show=True,
     start=None,
     stop=None,
@@ -755,7 +757,7 @@ def plot_ppoly(
     )
     ax.set_xlabel(hlabel)
     ax.set_ylabel(vlabel)
-    ax.legend(legend.values(), legend.keys())
+    ax.legend(legend.values(), legend.keys(), loc="lower right")
     ax.set_title(title)
     plt.tight_layout()
     if show:

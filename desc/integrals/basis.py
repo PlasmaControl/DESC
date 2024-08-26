@@ -50,8 +50,12 @@ def _subtract(c, k):
 def _in_epigraph_and(is_intersect, df_dy_sign):
     """Set and epigraph of function f with the given set of points.
 
-    Return only intersects where there is a connected path between
-    adjacent intersects in the epigraph of a continuous map ``f``.
+    Return only intersects where the straight line path between adjacent
+    intersects resides in the epigraph of a continuous map ``f``.
+
+    Warnings
+    --------
+    Does not support keyword arguments.
 
     Parameters
     ----------
@@ -196,7 +200,7 @@ class FourierChebyshevBasis:
         if L is not None:
             if isposint(L):
                 L = jnp.flipud(jnp.linspace(1, 0, L, endpoint=False))
-            coords = (L, x, y)
+            coords = (jnp.atleast_1d(L), x, y)
         else:
             coords = (x, y)
         coords = list(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
@@ -388,8 +392,9 @@ class ChebyshevBasisSet:
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape broadcasts with (..., *self.cheb.shape[:-2], num_intersect).
             ``z1``, ``z2`` holds intersects satisfying ∂f/∂y <= 0, ∂f/∂y >= 0,
-            respectively. The points are ordered such that the path between
-            ``z1`` and ``z2`` lies in the epigraph of f.
+            respectively. The points are grouped and ordered such that the
+            straight line path between the intersects in ``z1`` and ``z2``
+            resides in the epigraph of f.
 
         """
         errorif(
@@ -602,7 +607,7 @@ class ChebyshevBasisSet:
         klabel=r"$k$",
         title=r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$",
         hlabel=r"$z$",
-        vlabel=r"$f(z)$",
+        vlabel=r"$f$",
         show=True,
     ):
         """Plot the piecewise Chebyshev series.
@@ -660,7 +665,7 @@ class ChebyshevBasisSet:
         )
         ax.set_xlabel(hlabel)
         ax.set_ylabel(vlabel)
-        ax.legend(legend.values(), legend.keys())
+        ax.legend(legend.values(), legend.keys(), loc="lower right")
         ax.set_title(title)
         plt.tight_layout()
         if show:
@@ -698,5 +703,23 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
             mask = (z1 - z2) != 0.0
             _z1 = z1[mask]
             _z2 = z2[mask]
-        ax.scatter(_z1, jnp.full_like(_z1, k[i]), marker="v", color="tab:red")
-        ax.scatter(_z2, jnp.full_like(_z2, k[i]), marker="^", color="tab:green")
+        _add2legend(
+            legend,
+            ax.scatter(
+                _z1,
+                jnp.full_like(_z1, k[i]),
+                marker="v",
+                color="tab:red",
+                label=r"$z_1$",
+            ),
+        )
+        _add2legend(
+            legend,
+            ax.scatter(
+                _z2,
+                jnp.full_like(_z2, k[i]),
+                marker="^",
+                color="tab:green",
+                label=r"$z_2$",
+            ),
+        )

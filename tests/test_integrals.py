@@ -724,13 +724,13 @@ class TestBouncePoints:
     """Test that bounce points are computed correctly."""
 
     @staticmethod
-    def filter(bp1, bp2):
+    def filter(z1, z2):
         """Remove bounce points whose integrals have zero measure."""
-        mask = (bp1 - bp2) != 0.0
-        return bp1[mask], bp2[mask]
+        mask = (z1 - z2) != 0.0
+        return z1[mask], z2[mask]
 
     @pytest.mark.unit
-    def test_bp1_first(self):
+    def test_z1_first(self):
         """Test that bounce points are computed correctly."""
         start = np.pi / 3
         end = 6 * np.pi
@@ -738,14 +738,14 @@ class TestBouncePoints:
         B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
         pitch = 2.0
         intersect = B.solve(1 / pitch, extrapolate=False)
-        bp1, bp2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
-        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
-        assert bp1.size and bp2.size
-        np.testing.assert_allclose(bp1, intersect[0::2])
-        np.testing.assert_allclose(bp2, intersect[1::2])
+        z1, z2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
+        assert z1.size and z2.size
+        np.testing.assert_allclose(z1, intersect[0::2])
+        np.testing.assert_allclose(z2, intersect[1::2])
 
     @pytest.mark.unit
-    def test_bp2_first(self):
+    def test_z2_first(self):
         """Test that bounce points are computed correctly."""
         start = -3 * np.pi
         end = -start
@@ -753,14 +753,14 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch = 2.0
         intersect = B.solve(1 / pitch, extrapolate=False)
-        bp1, bp2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
-        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
-        assert bp1.size and bp2.size
-        np.testing.assert_allclose(bp1, intersect[1:-1:2])
-        np.testing.assert_allclose(bp2, intersect[0::2][1:])
+        z1, z2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
+        assert z1.size and z2.size
+        np.testing.assert_allclose(z1, intersect[1:-1:2])
+        np.testing.assert_allclose(z2, intersect[0::2][1:])
 
     @pytest.mark.unit
-    def test_bp1_before_extrema(self):
+    def test_z1_before_extrema(self):
         """Test that bounce points are computed correctly."""
         start = -np.pi
         end = -2 * start
@@ -770,18 +770,18 @@ class TestBouncePoints:
         )
         dB_dz = B.derivative()
         pitch = 1 / B(dB_dz.roots(extrapolate=False))[3] + 1e-13
-        bp1, bp2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
-        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
-        assert bp1.size and bp2.size
+        z1, z2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
+        assert z1.size and z2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
-        np.testing.assert_allclose(bp1[1], 1.982767, rtol=1e-6)
-        np.testing.assert_allclose(bp1, intersect[[1, 2]], rtol=1e-6)
+        np.testing.assert_allclose(z1[1], 1.982767, rtol=1e-6)
+        np.testing.assert_allclose(z1, intersect[[1, 2]], rtol=1e-6)
         # intersect array could not resolve double root as single at index 2,3
         np.testing.assert_allclose(intersect[2], intersect[3], rtol=1e-6)
-        np.testing.assert_allclose(bp2, intersect[[3, 4]], rtol=1e-6)
+        np.testing.assert_allclose(z2, intersect[[3, 4]], rtol=1e-6)
 
     @pytest.mark.unit
-    def test_bp2_before_extrema(self):
+    def test_z2_before_extrema(self):
         """Test that bounce points are computed correctly."""
         start = -1.2 * np.pi
         end = -2 * start
@@ -793,15 +793,15 @@ class TestBouncePoints:
         )
         dB_dz = B.derivative()
         pitch = 1 / B(dB_dz.roots(extrapolate=False))[2]
-        bp1, bp2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
-        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
-        assert bp1.size and bp2.size
+        z1, z2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
+        assert z1.size and z2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
-        np.testing.assert_allclose(bp1, intersect[[0, -2]])
-        np.testing.assert_allclose(bp2, intersect[[1, -1]])
+        np.testing.assert_allclose(z1, intersect[[0, -2]])
+        np.testing.assert_allclose(z2, intersect[[1, -1]])
 
     @pytest.mark.unit
-    def test_extrema_first_and_before_bp1(self):
+    def test_extrema_first_and_before_z1(self):
         """Test that bounce points are computed correctly."""
         start = -1.2 * np.pi
         end = -2 * start
@@ -813,20 +813,20 @@ class TestBouncePoints:
         )
         dB_dz = B.derivative()
         pitch = 1 / B(dB_dz.roots(extrapolate=False))[2] - 1e-13
-        bp1, bp2 = bounce_points(
+        z1, z2 = bounce_points(
             pitch, k[2:], B.c[:, 2:], dB_dz.c[:, 2:], check=True, plot=False
         )
-        plot_ppoly(B, z1=bp1, z2=bp2, k=1 / pitch, start=k[2])
-        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
-        assert bp1.size and bp2.size
+        plot_ppoly(B, z1=z1, z2=z2, k=1 / pitch, start=k[2])
+        z1, z2 = TestBouncePoints.filter(z1, z2)
+        assert z1.size and z2.size
         intersect = B.solve(1 / pitch, extrapolate=False)
-        np.testing.assert_allclose(bp1[0], 0.835319, rtol=1e-6)
+        np.testing.assert_allclose(z1[0], 0.835319, rtol=1e-6)
         intersect = intersect[intersect >= k[2]]
-        np.testing.assert_allclose(bp1, intersect[[0, 2, 4]], rtol=1e-6)
-        np.testing.assert_allclose(bp2, intersect[[0, 3, 5]], rtol=1e-6)
+        np.testing.assert_allclose(z1, intersect[[0, 2, 4]], rtol=1e-6)
+        np.testing.assert_allclose(z2, intersect[[0, 3, 5]], rtol=1e-6)
 
     @pytest.mark.unit
-    def test_extrema_first_and_before_bp2(self):
+    def test_extrema_first_and_before_z2(self):
         """Test that bounce points are computed correctly."""
         start = -1.2 * np.pi
         end = -2 * start + 1
@@ -838,16 +838,16 @@ class TestBouncePoints:
         )
         dB_dz = B.derivative()
         pitch = 1 / B(dB_dz.roots(extrapolate=False))[1] + 1e-13
-        bp1, bp2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
-        bp1, bp2 = TestBouncePoints.filter(bp1, bp2)
-        assert bp1.size and bp2.size
+        z1, z2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
+        assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(1 / pitch, extrapolate=False)
-        np.testing.assert_allclose(bp1[0], -0.671904, rtol=1e-6)
-        np.testing.assert_allclose(bp1, intersect[[0, 3, 5]], rtol=1e-5)
+        np.testing.assert_allclose(z1[0], -0.671904, rtol=1e-6)
+        np.testing.assert_allclose(z1, intersect[[0, 3, 5]], rtol=1e-5)
         # intersect array could not resolve double root as single at index 0,1
         np.testing.assert_allclose(intersect[0], intersect[1], rtol=1e-5)
-        np.testing.assert_allclose(bp2, intersect[[2, 4, 6]], rtol=1e-5)
+        np.testing.assert_allclose(z2, intersect[[2, 4, 6]], rtol=1e-5)
 
     @pytest.mark.unit
     def test_get_extrema(self):
@@ -905,12 +905,12 @@ class TestBounceQuadrature:
         m = 1 - p
         # Some prime number that doesn't appear anywhere in calculation.
         # Ensures no lucky cancellation occurs from this test case since otherwise
-        # (bp2 - bp1) / pi = pi / (bp2 - bp1) which could mask errors since pi
+        # (z2 - z1) / pi = pi / (z2 - z1) which could mask errors since pi
         # appears often in transformations.
         v = 7
-        bp1 = -np.pi / 2 * v
-        bp2 = -bp1
-        knots = np.linspace(bp1, bp2, 50)
+        z1 = -np.pi / 2 * v
+        z2 = -z1
+        knots = np.linspace(z1, z2, 50)
         pitch = 1 + 50 * jnp.finfo(jnp.array(1.0).dtype).eps
         b = np.clip(np.sin(knots / v) ** 2, 1e-7, 1)
         db = np.sin(2 * knots / v) / v
@@ -1125,8 +1125,8 @@ class TestBounce1D:
             f(argmin),
             func(
                 f(zeta),
-                bp1=np.array(0, ndmin=3),
-                bp2=np.array(2 * np.pi, ndmin=3),
+                z1=np.array(0, ndmin=3),
+                z2=np.array(2 * np.pi, ndmin=3),
                 knots=zeta,
                 B=bounce.B,
                 dB_dz=bounce._dB_dz,
@@ -1263,8 +1263,7 @@ class TestBounce1D:
         np.testing.assert_allclose(data["psi"], psi)
         np.testing.assert_allclose(data["iota"], iota)
         assert np.all(data["B^zeta"] > 0)
-        Bref = 2 * np.abs(psi_boundary) / data["a"] ** 2
-        data["Bref"] = Bref
+        data["Bref"] = 2 * np.abs(psi_boundary) / data["a"] ** 2
         data["rho"] = rho
         data["alpha"] = alpha
         data["zeta"] = zeta
@@ -1279,7 +1278,7 @@ class TestBounce1D:
             grid.source_grid,
             data,
             quad=leggauss(28),  # converges to absolute and relative tolerance of 1e-7
-            Bref=Bref,
+            Bref=data["Bref"],
             Lref=data["a"],
             check=True,
         )

@@ -218,9 +218,14 @@ class TestFastInterp:
         assert not np.any(np.isclose(xq[..., 0, np.newaxis], x))
         assert not np.any(np.isclose(xq[..., 1, np.newaxis], y))
         x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))
+        truth = func(xq[..., 0], xq[..., 1])
         np.testing.assert_allclose(
-            interp_rfft2(xq, func(x, y).reshape(m, n)),
-            func(xq[..., 0], xq[..., 1]),
+            interp_rfft2(xq, func(x, y).reshape(m, n), axes=(-2, -1)),
+            truth,
+        )
+        np.testing.assert_allclose(
+            interp_rfft2(xq, func(x, y).reshape(m, n), axes=(-1, -2)),
+            truth,
         )
 
     @staticmethod

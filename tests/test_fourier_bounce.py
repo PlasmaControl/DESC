@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebinterpolate, chebroots
-from numpy.polynomial.legendre import leggauss
 from tests.test_integrals import TestBounce1D
 from tests.test_plotting import tol_1d
 
@@ -79,7 +78,7 @@ class TestBouncePoints:
 def test_fourier_chebyshev(rho=1, M=8, N=32, f=lambda B, pitch: B * pitch):
     """Test bounce points..."""
     eq = get("W7-X")
-    clebsch = FourierChebyshevBasis.nodes(M, N, rho=rho)
+    clebsch = FourierChebyshevBasis.nodes(M, N, L=rho)
     desc_from_clebsch = map_coordinates(
         eq,
         clebsch,
@@ -143,8 +142,7 @@ def test_drift():
     np.testing.assert_allclose(data["psi"], psi)
     np.testing.assert_allclose(data["iota"], iota)
     assert np.all(data["B^zeta"] > 0)
-    B_ref = 2 * np.abs(psi_boundary) / data["a"] ** 2
-    data["B ref"] = B_ref
+    data["Bref"] = 2 * np.abs(psi_boundary) / data["a"] ** 2
     data["rho"] = rho
     data["alpha"] = alpha
     data["zeta"] = zeta
@@ -159,21 +157,17 @@ def test_drift():
     data_2 = eq.compute(
         names=Bounce2D.required_names() + ["cvdrift", "gbdrift"], grid=grid
     )
-    normalization = -np.sign(data["psi"]) * data["B ref"] * data["a"] ** 2
-    data_2["cvdrift"] = data_2["cvdrift"] * normalization
-    data_2["gbdrift"] = data_2["gbdrift"] * normalization
     M, N = eq.M_grid, 20
-    fb = Bounce2D(
-        grid,
-        data_2,
-        M,
-        N,
+    bounce = Bounce2D(
+        grid=grid,
+        data=data_2,
         desc_from_clebsch=Bounce2D.desc_from_clebsch(eq, rho, M, N),
+        M=M,
+        N=N,
         alpha_0=data["alpha"],
         num_transit=1,
-        B_ref=data["B ref"],
-        L_ref=data["a"],
-        quad=leggauss(50),  # converges to absolute and relative tolerance of 1e-7
+        Bref=data["Bref"],
+        Lref=data["a"],
         check=True,
         plot=True,
     )
@@ -185,13 +179,16 @@ def test_drift():
     def integrand_den(B, pitch):
         return 1 / jnp.sqrt(1 - pitch * B)
 
-    drift_numerical_num = fb.integrate(
+    normalization = -np.sign(data["psi"]) * data["Bref"] * data["a"] ** 2
+    drift_numerical_num = bounce.integrate(
         pitch=pitch[:, np.newaxis],
         integrand=integrand_num,
-        f=Bounce2D.reshape_data(grid, data_2, ["cvdrift", "gbdrift"]),
+        f=Bounce2D.reshape_data(
+            grid, data_2["cvdrift"] * normalization, data_2["gbdrift"] * normalization
+        ),
         num_well=1,
     )
-    drift_numerical_den = fb.integrate(
+    drift_numerical_den = bounce.integrate(
         pitch=pitch[:, np.newaxis],
         integrand=integrand_den,
         f=[],

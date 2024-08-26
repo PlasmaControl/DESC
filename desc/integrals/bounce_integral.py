@@ -415,17 +415,37 @@ class Bounce2D:
 
         Returns
         -------
-        bp1, bp2 : (jnp.ndarray, jnp.ndarray)
+        z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L, num_well).
-            ζ coordinates of bounce points.
-            The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
-            respectively, for the bounce integrals.
+            ζ coordinates of bounce points. The points are grouped and ordered such
+            that the straight line path between the intersects in ``z1`` and ``z2``
+            resides in the epigraph of |B|.
 
         """
         return self._B.intersect1d(1 / jnp.atleast_2d(pitch), num_well)
 
-    def check_bounce_points(self, bp1, bp2, pitch, plot=True, **kwargs):
-        """Check that bounce points are computed correctly and plot them."""
+    def check_bounce_points(self, z1, z2, pitch, plot=True, **kwargs):
+        """Check that bounce points are computed correctly.
+
+        Parameters
+        ----------
+        z1, z2 : (jnp.ndarray, jnp.ndarray)
+            Shape (P, L, num_well).
+            ζ coordinates of bounce points. The points are grouped and ordered such
+            that the straight line path between the intersects in ``z1`` and ``z2``
+            resides in the epigraph of |B|.
+        pitch : jnp.ndarray
+            Shape (P, L).
+            λ values to evaluate the bounce integral at each field line. λ(ρ) is
+            specified by ``pitch[...,ρ]`` where in the latter the labels ρ are
+            interpreted as the index into the last axis that corresponds to that field
+            line. If two-dimensional, the first axis is the batch axis.
+        plot : bool
+            Whether to plot stuff.
+        kwargs : dict
+            Keyword arguments into ``ChebyshevBasisSet.plot1d``.
+
+        """
         kwargs.setdefault(
             "title",
             r"Intersects $\zeta$ in epigraph($\vert B \vert$) s.t. "
@@ -433,8 +453,8 @@ class Bounce2D:
         )
         kwargs.setdefault("klabel", r"$1/\lambda$")
         kwargs.setdefault("hlabel", r"$\zeta$")
-        kwargs.setdefault("vlabel", r"$\vert B \vert(\zeta)$")
-        self._B.check_intersect1d(bp1, bp2, 1 / pitch, plot, **kwargs)
+        kwargs.setdefault("vlabel", r"$\vert B \vert$")
+        self._B.check_intersect1d(z1, z2, 1 / pitch, plot, **kwargs)
 
     def integrate(self, pitch, integrand, f, weight=None, num_well=None):
         """Bounce integrate ∫ f(ℓ) dℓ.
@@ -487,21 +507,21 @@ class Bounce2D:
 
         """
         pitch = jnp.atleast_2d(pitch)
-        bp1, bp2 = self.bounce_points(pitch, num_well)
-        result = self._integrate(bp1, bp2, pitch, integrand, f)
+        z1, z2 = self.bounce_points(pitch, num_well)
+        result = self._integrate(z1, z2, pitch, integrand, f)
         errorif(weight is not None, NotImplementedError)
         return result
 
-    def _integrate(self, bp1, bp2, pitch, integrand, f):
-        assert bp1.ndim == 3
-        assert bp1.shape == bp2.shape
+    def _integrate(self, z1, z2, pitch, integrand, f):
+        assert z1.ndim == 3
+        assert z1.shape == z2.shape
         assert pitch.ndim == 2
-        W = bp1.shape[-1]  # number of wells
+        W = z1.shape[-1]  # number of wells
         shape = (pitch.shape[0], self._L, W, self._x.size)
 
         # quadrature points parameterized by ζ for each pitch and flux surface
         Q_zeta = flatten_matrix(
-            bijection_from_disc(self._x, bp1[..., jnp.newaxis], bp2[..., jnp.newaxis])
+            bijection_from_disc(self._x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
         # quadrature points in (θ, ζ) coordinates
         Q = jnp.stack([self._T.eval1d(Q_zeta), Q_zeta], axis=-1)
@@ -728,11 +748,11 @@ class Bounce1D:
 
         Returns
         -------
-        bp1, bp2 : (jnp.ndarray, jnp.ndarray)
+        z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L * M, num_well).
-            ζ coordinates of bounce points.
-            The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
-            respectively, for the bounce integrals.
+            ζ coordinates of bounce points. The points are grouped and ordered such
+            that the straight line path between the intersects in ``z1`` and ``z2``
+            resides in the epigraph of |B|.
 
             If there were less than ``num_wells`` wells detected along a field line,
             then the last axis, which enumerates bounce points for  a particular field
@@ -747,16 +767,16 @@ class Bounce1D:
             num_well=num_well,
         )
 
-    def check_bounce_points(self, bp1, bp2, pitch, plot=True, **kwargs):
+    def check_bounce_points(self, z1, z2, pitch, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
 
         Parameters
         ----------
-        bp1, bp2 : (jnp.ndarray, jnp.ndarray)
+        z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L * M, num_well).
-            ζ coordinates of bounce points.
-            The pairs ``bp1`` and ``bp2`` form left and right integration boundaries,
-            respectively, for the bounce integrals.
+            ζ coordinates of bounce points. The points are grouped and ordered such
+            that the straight line path between the intersects in ``z1`` and ``z2``
+            resides in the epigraph of |B|.
         pitch : jnp.ndarray
             Shape must broadcast with (P, L * M).
             λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
@@ -770,8 +790,8 @@ class Bounce1D:
 
         """
         _check_bounce_points(
-            bp1=bp1,
-            bp2=bp2,
+            z1=z1,
+            z2=z2,
             pitch=jnp.atleast_2d(pitch),
             knots=self._zeta,
             B=self.B,
@@ -848,12 +868,12 @@ class Bounce1D:
 
         """
         pitch = jnp.atleast_2d(pitch)
-        bp1, bp2 = self.bounce_points(pitch, num_well)
+        z1, z2 = self.bounce_points(pitch, num_well)
         result = bounce_quadrature(
             x=self._x,
             w=self._w,
-            bp1=bp1,
-            bp2=bp2,
+            z1=z1,
+            z2=z2,
             pitch=pitch,
             integrand=integrand,
             f=f,
@@ -866,8 +886,8 @@ class Bounce1D:
         if weight is not None:
             result *= interp_to_argmin_B_soft(
                 g=weight,
-                bp1=bp1,
-                bp2=bp2,
+                z1=z1,
+                z2=z2,
                 knots=self._zeta,
                 B=self.B,
                 dB_dz=self._dB_dz,

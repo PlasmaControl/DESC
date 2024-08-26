@@ -446,7 +446,7 @@ class SectionRSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(m)"
-    _print_value_fmt = "R cross-section self consistency error: {:10.3e} "
+    _print_value_fmt = "R cross-section self consistency error: "
 
     def __init__(
         self,
@@ -561,7 +561,7 @@ class SectionZSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(m)"
-    _print_value_fmt = "Z cross-section self consistency error: {:10.3e} "
+    _print_value_fmt = "Z cross-section self consistency error: "
 
     def __init__(
         self,
@@ -662,7 +662,7 @@ class SectionLambdaSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Lambda section self consistency error: {:10.3e}"
+    _print_value_fmt = "Lambda section self consistency error: "
 
     def __init__(
         self,
@@ -1119,7 +1119,7 @@ class FixSectionR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R cross-section error: {:10.3e} "
+    _print_value_fmt = "R cross-section error: "
 
     def __init__(
         self,
@@ -1200,7 +1200,7 @@ class FixSectionZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z cross-section error: {:10.3e} "
+    _print_value_fmt = "Z cross-section error: "
 
     def __init__(
         self,
@@ -1281,7 +1281,7 @@ class FixSectionLambda(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Lambda cross-section error: {:10.3e} "
+    _print_value_fmt = "Lambda cross-section error: "
 
     def __init__(
         self,

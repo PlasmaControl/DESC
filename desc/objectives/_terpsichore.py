@@ -659,8 +659,8 @@ class TERPSICHORE(ExternalObjective):
 
     """
 
-    _units = "(?)"  # FIXME: normalized by Alfven frequency
-    _print_value_fmt = "TERPSICHORE growth rate: {:10.3e} "
+    _units = "(dimensionless)"  # normalized by Alfven frequency
+    _print_value_fmt = "TERPSICHORE growth rate: "
 
     def __init__(
         self,

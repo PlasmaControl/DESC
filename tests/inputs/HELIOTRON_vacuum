@@ -15,7 +15,7 @@ pres_ratio = 0
 pert_order = 2
 
 # solver tolerances
-ftol = 5e-4
+ftol = 8e-4
 xtol = 1e-6
 gtol = 1e-6
 maxiter = 150

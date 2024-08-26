@@ -794,16 +794,16 @@ class TwoPowerProfile(_Profile):
 
 
 class SplineProfile(_Profile):
-    """Profile represented by a piecewise cubic spline.
+    """Radial profile represented by a piecewise cubic spline.
 
     Parameters
     ----------
     values: array-like
-        Array containing values of the dependent variable.
+        1-D array containing values of the dependent variable.
     knots : array-like
         1-D array containing values of the independent variable.
-        Values must be real, finite, and in strictly increasing order in [0, 1].
-        If not given, assumes values is uniformly spaced in [0, 1].
+        Must be real, finite, and in strictly increasing order in [0, 1].
+        If ``None``, assumes ``values`` is given on knots uniformly spaced in [0, 1].
     method : str
         Method of interpolation. Default is cubic2.
         - `'nearest'`: nearest neighbor interpolation
@@ -827,6 +827,8 @@ class SplineProfile(_Profile):
         if knots is None:
             knots = jnp.linspace(0, 1, values.size)
         knots = jnp.atleast_1d(knots)
+        errorif(values.shape[-1] != knots.shape[-1])
+        errorif(not (values.ndim == knots.ndim == 1), NotImplementedError)
         self._knots = knots
         self._params = values
         self._method = method
@@ -835,7 +837,7 @@ class SplineProfile(_Profile):
         """Get the string form of the object."""
         s = super().__repr__()
         s = s[:-1]
-        s += ", method={}, num_knots={})".format(self._method, len(self._knots))
+        s += ", method={}, num_knots={})".format(self._method, self._knots.size)
         return s
 
     @property
@@ -851,9 +853,9 @@ class SplineProfile(_Profile):
     @params.setter
     def params(self, new):
         errorif(
-            len(new) != len(self._knots),
+            len(new) != self._knots.size,
             msg="params should have the same size as the knots, "
-            + f"got {len(new)} values for {len(self._knots)} knots",
+            + f"got {len(new)} values for {self._knots.size} knots",
         )
         self._params = jnp.asarray(new)
 
@@ -863,10 +865,10 @@ class SplineProfile(_Profile):
         Parameters
         ----------
         grid : Grid
-            locations to compute values at.
+            Locations to compute values at.
         params : array-like
-            spline values to use. If not given, uses the
-            values given by the params attribute
+            Values of the function at ``self.knots``.
+            If not given, uses ``self.params``.
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 
@@ -890,17 +892,19 @@ class SplineProfile(_Profile):
 
 
 class HermiteSplineProfile(_Profile):
-    """Profile represented by a piecewise cubic Hermite spline.
+    """Radial profile represented by a piecewise cubic Hermite spline.
 
     Parameters
     ----------
-    r : array-like
-        1-D array containing values of the independent variable.
-        Values must be real, finite, and in strictly increasing order in [0, 1].
     f: array-like
-        Array containing values of the dependent variable.
-    dfdr: array-like
-        Array containing derivatives of the dependent variable.
+        1-D array containing values of the dependent variable.
+    df: array-like
+        1-D array containing derivatives of the dependent variable.
+    knots : array-like
+        1-D array containing values of the independent variable.
+        Must be real, finite, and in strictly increasing order in [0, 1].
+        If ``None``, assumes ``f`` and ``df`` are given on knots uniformly
+        spaced in [0, 1].
     name : str
         Optional name of the profile.
 
@@ -908,17 +912,23 @@ class HermiteSplineProfile(_Profile):
 
     _io_attrs_ = _Profile._io_attrs_ + ["_knots", "_params"]
 
-    def __init__(self, r, f, dfdr, name=""):
+    def __init__(self, f, df, knots=None, name=""):
         super().__init__(name)
-        r, f, dfdr = jnp.atleast_1d(r, f, dfdr)
-        self._knots = r
-        self._params = jnp.stack([f, dfdr])
+
+        f, df = jnp.atleast_1d(f, df)
+        if knots is None:
+            knots = jnp.linspace(0, 1, f.size)
+        knots = jnp.atleast_1d(knots)
+        errorif(not (f.shape[-1] == df.shape[-1] == knots.shape[-1]))
+        errorif(not (f.ndim == df.ndim == knots.ndim == 1), NotImplementedError)
+        self._knots = knots
+        self._params = jnp.concatenate([f, df])
 
     def __repr__(self):
         """Get the string form of the object."""
         s = super().__repr__()
         s = s[:-1]
-        s += ", num_knots={})".format(len(self._knots))
+        s += ", num_knots={})".format(self._knots.size)
         return s
 
     @property
@@ -930,7 +940,7 @@ class HermiteSplineProfile(_Profile):
     def params(self):
         """ndarray: Parameters for computation.
 
-        First (second) index stores function (derivative) values.
+        First (second) half stores function (derivative) values at ``knots``.
         """
         return self._params
 
@@ -938,9 +948,9 @@ class HermiteSplineProfile(_Profile):
     def params(self, new):
         new = jnp.asarray(new)
         errorif(
-            new.shape[-1] != self._knots.shape[-1],
-            msg="Params should have shape that broadcast with knots. "
-            f"Got {new.shape} params for {self._knots} knots.",
+            new.ndim != 1 or new.size != 2 * self._knots.size,
+            msg="Params should be 1D with size twice number of knots. "
+            f"Got {new.shape} params for {self._knots.size} knots.",
         )
         self._params = new
 
@@ -950,10 +960,10 @@ class HermiteSplineProfile(_Profile):
         Parameters
         ----------
         grid : Grid
-            locations to compute values at.
+            Locations to compute values at.
         params : array-like
-            First (second) index stores function (derivative) values
-            evaluated at knots. Defaults to ``self.params``.
+            First (second) half stores function (derivative) values at ``knots``.
+            If not given, uses ``self.params``.
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 
@@ -969,8 +979,8 @@ class HermiteSplineProfile(_Profile):
         return interp1d(
             xq=grid.nodes[:, 0],
             x=self._knots,
-            f=params[0],
-            fx=params[1],
+            f=params[: self._knots.size],
+            fx=params[self._knots.size :],
             derivative=dr,
             extrap=True,
         )

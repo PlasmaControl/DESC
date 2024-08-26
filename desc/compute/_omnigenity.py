@@ -340,12 +340,22 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["iota", "B0", "B_theta", "B_zeta", "|B|_t", "|B|_z", "G", "I", "B*grad(|B|)"],
+    data=[
+        "iota",
+        "psi_r/sqrt(g)",
+        "B_theta",
+        "B_zeta",
+        "|B|_t",
+        "|B|_z",
+        "G",
+        "I",
+        "B*grad(|B|)",
+    ],
     helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
 )
 def _f_C(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
-    data["f_C"] = (M * data["iota"] - N) * data["B0"] * (
+    data["f_C"] = (M * data["iota"] - N) * data["psi_r/sqrt(g)"] * (
         data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
     ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
     return data
@@ -363,10 +373,10 @@ def _f_C(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "|B|_t", "|B|_z", "(B*grad(|B|))_t", "(B*grad(|B|))_z"],
+    data=["psi_r/sqrt(g)", "|B|_t", "|B|_z", "(B*grad(|B|))_t", "(B*grad(|B|))_z"],
 )
 def _f_T(params, transforms, profiles, data, **kwargs):
-    data["f_T"] = data["B0"] * (
+    data["f_T"] = data["psi_r/sqrt(g)"] * (
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
     )

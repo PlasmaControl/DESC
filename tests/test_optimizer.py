@@ -339,7 +339,7 @@ def test_overstepping():
 
     class DummyObjective(_Objective):
         name = "Dummy"
-        _print_value_fmt = "Dummy: {:.3e}"
+        _print_value_fmt = "Dummy: "
         _units = "(Foo)"
 
         def build(self, *args, **kwargs):

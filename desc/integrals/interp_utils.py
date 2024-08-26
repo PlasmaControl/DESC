@@ -259,7 +259,7 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
     M : int
         Spectral resolution of ``a`` along ``axes[0]``.
     N : int
-        Spectral resolution of ``a`` along ``axes[-1]``.
+        Spectral resolution of ``a`` along ``axes[1]``.
     axes : tuple[int, int]
         Axes along which to transform.
 
@@ -293,31 +293,6 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
     )
     fq = 2.0 * jnp.sum(basis * a, axis=(-2, -1)).real
     return fq
-
-
-def transform_to_desc(grid, f):
-    """Transform to DESC spectral domain.
-
-    Parameters
-    ----------
-    grid : Grid
-        Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
-        (2π × 2π) poloidal and toroidal coordinates.
-    f : jnp.ndarray
-        Function evaluated on ``grid``.
-
-    Returns
-    -------
-    a : jnp.ndarray
-        Shape (grid.num_rho, grid.num_theta // 2 + 1, grid.num_zeta)
-        Complex coefficients of 2D real FFT.
-
-    """
-    f = grid.meshgrid_reshape(f, order="rtz")
-    # Real fft done over poloidal since num_theta > num_zeta usually.
-    a = rfft2(f, axes=(-1, -2), norm="forward")
-    assert a.shape == (grid.num_rho, grid.num_theta // 2 + 1, grid.num_zeta)
-    return a
 
 
 def cheb_from_dct(a, axis=-1):

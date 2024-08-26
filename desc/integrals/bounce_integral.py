@@ -3,7 +3,7 @@
 from interpax import CubicHermiteSpline
 from orthax.legendre import leggauss
 
-from desc.backend import jnp
+from desc.backend import jnp, rfft2
 from desc.integrals.basis import FourierChebyshevBasis
 from desc.integrals.bounce_utils import (
     _check_bounce_points,
@@ -13,12 +13,7 @@ from desc.integrals.bounce_utils import (
     interp_to_argmin_B_soft,
     plot_ppoly,
 )
-from desc.integrals.interp_utils import (
-    interp_rfft2,
-    irfft2_non_uniform,
-    polyder_vec,
-    transform_to_desc,
-)
+from desc.integrals.interp_utils import interp_rfft2, irfft2_non_uniform, polyder_vec
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -70,11 +65,36 @@ def _transform_to_clebsch(grid, desc_from_clebsch, M, N, B):
             # which is not a tensor product node set in DESC space.
             xq=desc_from_clebsch[:, 1:].reshape(grid.num_rho, -1, 2),
             f=grid.meshgrid_reshape(B, order="rtz")[:, jnp.newaxis],
+            # Real fft over poloidal since usually num theta > num zeta.
             axes=(-1, -2),
         ).reshape(grid.num_rho, M, N),
         domain=Bounce2D.domain,
     )
     return T, B
+
+
+def _transform_to_desc(grid, f):
+    """Transform to DESC spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
+        (2π × 2π) poloidal and toroidal coordinates.
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Shape (grid.num_rho, grid.num_theta // 2 + 1, grid.num_zeta)
+        Complex coefficients of 2D real FFT.
+
+    """
+    f = grid.meshgrid_reshape(f, order="rtz")
+    a = rfft2(f, axes=(-1, -2), norm="forward")
+    assert a.shape == (grid.num_rho, grid.num_theta // 2 + 1, grid.num_zeta)
+    return a
 
 
 # TODO:
@@ -292,14 +312,20 @@ class Bounce2D:
         )
         self._m = grid.num_theta
         self._n = grid.num_zeta
-        self._b_sup_z = jnp.expand_dims(
-            transform_to_desc(grid, jnp.abs(data["B^zeta"]) / data["|B|"] * Lref),
-            axis=1,
-        )
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute global splines.
-        T, B = _transform_to_clebsch(grid, desc_from_clebsch, M, N, data["|B|"] / Bref)
+        self._b_sup_z = _transform_to_desc(
+            grid,
+            jnp.abs(data["B^zeta"]) / data["|B|"] * Lref,
+        )[:, jnp.newaxis]
+        T, B = _transform_to_clebsch(
+            grid,
+            desc_from_clebsch,
+            M,
+            N,
+            data["|B|"] / Bref,
+        )
         # peel off field lines
         alphas = get_alpha(
             alpha_0,
@@ -535,7 +561,7 @@ class Bounce2D:
                 pitch=pitch[..., jnp.newaxis, jnp.newaxis],
             )
             / irfft2_non_uniform(
-                Q, self._b_sup_z, self._m, self._n, axes=(-1, -2)
+                xq=Q, a=self._b_sup_z, M=self._n, N=self._m, axes=(-1, -2)
             ).reshape(shape),
             self._w,
         )

@@ -138,7 +138,7 @@ def tanh_sinh(deg, m=10):
     return x, w
 
 
-def leggauss_lobatto(deg):
+def leggauss_lob(deg, interior_only=False):
     """Lobatto-Gauss-Legendre quadrature.
 
     Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
@@ -147,26 +147,30 @@ def leggauss_lobatto(deg):
     Parameters
     ----------
     deg : int
-        Number of (interior) quadrature points to return.
+        Number of quadrature points.
+    interior_only : bool
+        Whether to exclude the points and weights at -1 and 1;
+        useful if f(-1) = f(1) = 0. If ``True``, then ``deg`` points are still
+        returned; these are the interior points for lobatto quadrature of ``deg+2``.
 
     Returns
     -------
     x, w : (jnp.ndarray, jnp.ndarray)
-        Quadrature points in (-1, 1) and associated weights.
-        Excludes points and weights at -1 and 1.
+        Shape (deg, ).
+        Quadrature points and weights.
 
     """
-    # Designate two degrees for endpoints.
-    deg = int(deg) + 2
+    N = deg + 2 * bool(interior_only)
+    errorif(N < 2)
 
-    # Golub-Welsh algorithm for eigenvalues of orthogonal polynomials
-    n = jnp.arange(2, deg - 1)
+    # Golub-Welsh algorithm
+    n = jnp.arange(2, N - 1)
     x = eigh_tridiagonal(
-        jnp.zeros(deg - 2),
+        jnp.zeros(N - 2),
         jnp.sqrt((n**2 - 1) / (4 * n**2 - 1)),
         eigvals_only=True,
     )
-    c0 = put(jnp.zeros(deg), -1, 1)
+    c0 = put(jnp.zeros(N), -1, 1)
 
     # improve (single multiplicity) roots by one application of Newton
     c = legder(c0)
@@ -174,7 +178,14 @@ def leggauss_lobatto(deg):
     df = legval(x=x, c=legder(c))
     x -= dy / df
 
-    w = 2 / (deg * (deg - 1) * legval(x=x, c=c0) ** 2)
+    w = 2 / (N * (N - 1) * legval(x=x, c=c0) ** 2)
+
+    if not interior_only:
+        x = jnp.hstack([-1.0, x, 1.0])
+        w_end = 2 / (deg * (deg - 1))
+        w = jnp.hstack([w_end, w, w_end])
+
+    assert x.size == w.size == deg
     return x, w
 
 

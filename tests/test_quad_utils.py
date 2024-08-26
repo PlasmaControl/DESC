@@ -12,6 +12,7 @@ from desc.integrals.quad_utils import (
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     grad_bijection_from_disc,
+    leggauss_lob,
     tanh_sinh,
 )
 from desc.utils import only1
@@ -66,4 +67,27 @@ def test_automorphism():
 
 @pytest.mark.unit
 def test_leggauss_lobatto():
-    """Test that quadrature points and weights are correct."""
+    """Test quadrature points and weights against known values."""
+    with pytest.raises(ValueError):
+        x, w = leggauss_lob(1)
+    x, w = leggauss_lob(0, True)
+    assert x.size == w.size == 0
+
+    x, w = leggauss_lob(2)
+    np.testing.assert_allclose(x, [-1, 1])
+    np.testing.assert_allclose(w, [1, 1])
+
+    x, w = leggauss_lob(3)
+    np.testing.assert_allclose(x, [-1, 0, 1])
+    np.testing.assert_allclose(w, [1 / 3, 4 / 3, 1 / 3])
+    np.testing.assert_allclose(leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]))
+
+    x, w = leggauss_lob(4)
+    np.testing.assert_allclose(x, [-1, -np.sqrt(1 / 5), np.sqrt(1 / 5), 1])
+    np.testing.assert_allclose(w, [1 / 6, 5 / 6, 5 / 6, 1 / 6])
+    np.testing.assert_allclose(leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]))
+
+    x, w = leggauss_lob(5)
+    np.testing.assert_allclose(x, [-1, -np.sqrt(3 / 7), 0, np.sqrt(3 / 7), 1])
+    np.testing.assert_allclose(w, [1 / 10, 49 / 90, 32 / 45, 49 / 90, 1 / 10])
+    np.testing.assert_allclose(leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]))

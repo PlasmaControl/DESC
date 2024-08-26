@@ -319,6 +319,86 @@ class ChebyshevBasisSet:
         """Chebyshev spectral resolution."""
         return self.cheb.shape[-1]
 
+    def isomorphism_to_C1(self, y):
+        """Return coordinates z ∈ ℂ isomorphic to (x, y) ∈ ℂ².
+
+        Maps row x of y to z = y + f(x) where f(x) = x * |domain|.
+
+        Parameters
+        ----------
+        y : jnp.ndarray
+            Shape (..., y.shape[-2], y.shape[-1]).
+            Second to last axis iterates the rows.
+
+        Returns
+        -------
+        z : jnp.ndarray
+            Shape y.shape.
+            Isomorphic coordinates.
+
+        """
+        assert y.ndim >= 2
+        z_shift = jnp.arange(y.shape[-2]) * (self.domain[-1] - self.domain[0])
+        z = y + z_shift[:, jnp.newaxis]
+        return z
+
+    def isomorphism_to_C2(self, z):
+        """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
+
+        Returns index x and minimum value y such that
+        z = f(x) + y where f(x) = x * |domain|.
+
+        Parameters
+        ----------
+        z : jnp.ndarray
+            Shape z.shape.
+
+        Returns
+        -------
+        x_idx, y_val : (jnp.ndarray, jnp.ndarray)
+            Shape z.shape.
+            Isomorphic coordinates.
+
+        """
+        x_idx, y_val = jnp.divmod(z - self.domain[0], self.domain[-1] - self.domain[0])
+        x_idx = x_idx.astype(int)
+        y_val += self.domain[0]
+        return x_idx, y_val
+
+    def eval1d(self, z, cheb=None):
+        """Evaluate piecewise Chebyshev series at coordinates z.
+
+        Parameters
+        ----------
+        z : jnp.ndarray
+            Shape (..., *cheb.shape[:-2], z.shape[-1]).
+            Coordinates in [sef.domain[0], ∞).
+            The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ² where
+            ``z // domain`` yields the index into the proper Chebyshev series
+            along the second to last axis of ``cheb`` and ``z % domain`` is
+            the coordinate value on the domain of that Chebyshev series.
+        cheb : jnp.ndarray
+            Shape (..., M, N).
+            Chebyshev coefficients to use. If not given, uses ``self.cheb``.
+
+        Returns
+        -------
+        f : jnp.ndarray
+            Shape z.shape.
+            Chebyshev basis evaluated at z.
+
+        """
+        cheb = _chebcast(setdefault(cheb, self.cheb), z)
+        N = cheb.shape[-1]
+        x_idx, y = self.isomorphism_to_C2(z)
+        y = bijection_to_disc(y, self.domain[0], self.domain[1])
+        # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
+        # are held in cheb with shape (..., num cheb series, N).
+        cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
+        f = idct_non_uniform(y, cheb, N)
+        assert f.shape == z.shape
+        return f
+
     def intersect2d(self, k=0.0, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
 
@@ -434,86 +514,6 @@ class ChebyshevBasisSet:
         z2 = jnp.where(mask, z2, pad_value)
         return z1, z2
 
-    def eval1d(self, z, cheb=None):
-        """Evaluate piecewise Chebyshev series at coordinates z.
-
-        Parameters
-        ----------
-        z : jnp.ndarray
-            Shape (..., *cheb.shape[:-2], z.shape[-1]).
-            Coordinates in [sef.domain[0], ∞).
-            The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ² where
-            ``z // domain`` yields the index into the proper Chebyshev series
-            along the second to last axis of ``cheb`` and ``z % domain`` is
-            the coordinate value on the domain of that Chebyshev series.
-        cheb : jnp.ndarray
-            Shape (..., M, N).
-            Chebyshev coefficients to use. If not given, uses ``self.cheb``.
-
-        Returns
-        -------
-        f : jnp.ndarray
-            Shape z.shape.
-            Chebyshev basis evaluated at z.
-
-        """
-        cheb = _chebcast(setdefault(cheb, self.cheb), z)
-        N = cheb.shape[-1]
-        x_idx, y = self.isomorphism_to_C2(z)
-        y = bijection_to_disc(y, self.domain[0], self.domain[1])
-        # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
-        # are held in cheb with shape (..., num cheb series, N).
-        cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
-        f = idct_non_uniform(y, cheb, N)
-        assert f.shape == z.shape
-        return f
-
-    def isomorphism_to_C1(self, y):
-        """Return coordinates z ∈ ℂ isomorphic to (x, y) ∈ ℂ².
-
-        Maps row x of y to z = y + f(x) where f(x) = x * |domain|.
-
-        Parameters
-        ----------
-        y : jnp.ndarray
-            Shape (..., y.shape[-2], y.shape[-1]).
-            Second to last axis iterates the rows.
-
-        Returns
-        -------
-        z : jnp.ndarray
-            Shape y.shape.
-            Isomorphic coordinates.
-
-        """
-        assert y.ndim >= 2
-        z_shift = jnp.arange(y.shape[-2]) * (self.domain[-1] - self.domain[0])
-        z = y + z_shift[:, jnp.newaxis]
-        return z
-
-    def isomorphism_to_C2(self, z):
-        """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
-
-        Returns index x and minimum value y such that
-        z = f(x) + y where f(x) = x * |domain|.
-
-        Parameters
-        ----------
-        z : jnp.ndarray
-            Shape z.shape.
-
-        Returns
-        -------
-        x_idx, y_val : (jnp.ndarray, jnp.ndarray)
-            Shape z.shape.
-            Isomorphic coordinates.
-
-        """
-        x_idx, y_val = jnp.divmod(z - self.domain[0], self.domain[-1] - self.domain[0])
-        x_idx = x_idx.astype(int)
-        y_val += self.domain[0]
-        return x_idx, y_val
-
     def _check_shape(self, z1, z2, k):
         """Return shapes that broadcast with (k.shape[0], *self.cheb.shape[:-2], W)."""
         # Ensure pitch batch dim exists and add back dim to broadcast with wells.
@@ -533,7 +533,9 @@ class ChebyshevBasisSet:
         z1, z2 : jnp.ndarray
             Shape must broadcast with (*self.cheb.shape[:-2], W).
             ``z1``, ``z2`` holds intersects satisfying ∂f/∂y <= 0, ∂f/∂y >= 0,
-            respectively.
+            respectively. The points are grouped and ordered such that the
+            straight line path between the intersects in ``z1`` and ``z2``
+            resides in the epigraph of f.
         k : jnp.ndarray
             Shape must broadcast with *self.cheb.shape[:-2].
             k such that fₓ(yᵢ) = k.
@@ -582,8 +584,8 @@ class ChebyshevBasisSet:
                 assert not err_1[idx], "Intersects have an inversion.\n"
                 assert not err_2[idx], "Detected discontinuity.\n"
                 assert not err_3[idx], (
-                    "Detected f > k in well, implying a path between z1 and z2 "
-                    "is in hypograph(f). Increase Chebyshev resolution.\n"
+                    "Detected f > k in well, implying the straight line path between "
+                    "z1 and z2 is in hypograph(f). Increase spectral resolution.\n"
                     f"{f_midpoint[idx][mask[idx]]} > {k[idx] + self._eps}"
                 )
             idx = (slice(None), *l)

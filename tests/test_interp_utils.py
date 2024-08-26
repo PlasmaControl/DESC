@@ -13,7 +13,7 @@ from numpy.polynomial.chebyshev import (
 from scipy.fft import dct as sdct
 from scipy.fft import idct as sidct
 
-from desc.backend import dct, idct, jnp, rfft
+from desc.backend import dct, idct, rfft
 from desc.integrals.interp_utils import (
     cheb_from_dct,
     cheb_pts,
@@ -27,13 +27,6 @@ from desc.integrals.interp_utils import (
     polyval_vec,
 )
 from desc.integrals.quad_utils import bijection_to_disc
-
-
-def filter_not_nan(a):
-    """Filter out nan from ``a`` while asserting nan is padded at right."""
-    is_nan = jnp.isnan(a)
-    assert jnp.array_equal(is_nan, jnp.sort(is_nan, axis=-1))
-    return a[~is_nan]
 
 
 @pytest.mark.unit
@@ -70,15 +63,12 @@ def test_poly_root():
     root = poly_root(c.T, sort=True, distinct=True)
     for j in range(c.shape[0]):
         unique_roots = np.unique(np.roots(c[j]))
-        root_filter = filter_not_nan(root[j])
-        assert root_filter.size == unique_roots.size, j
         np.testing.assert_allclose(
-            actual=root_filter,
-            desired=unique_roots,
-            err_msg=str(j),
+            actual=root[j][~np.isnan(root[j])], desired=unique_roots, err_msg=str(j)
         )
     c = np.array([0, 1, -1, -8, 12])
-    root = filter_not_nan(poly_root(c, sort=True, distinct=True))
+    root = poly_root(c, sort=True, distinct=True)
+    root = root[~np.isnan(root)]
     unique_root = np.unique(np.roots(c))
     assert root.size == unique_root.size
     np.testing.assert_allclose(root, unique_root)
@@ -102,11 +92,11 @@ def test_polyval_vec():
 
     def test(x, c):
         val = polyval_vec(x=x, c=c)
+        c = np.moveaxis(c, 0, -1)
+        x = x[..., np.newaxis]
         np.testing.assert_allclose(
             val,
-            np.vectorize(np.polyval, signature="(m),(n)->(n)")(
-                np.moveaxis(c, 0, -1), x[..., np.newaxis]
-            ).squeeze(axis=-1),
+            np.vectorize(np.polyval, signature="(m),(n)->(n)")(c, x).squeeze(axis=-1),
         )
 
     quartic = 5
@@ -123,6 +113,47 @@ def test_polyval_vec():
     assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
     assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
     test(x, c)
+
+
+def _f_1d(x):
+    """Test function for 1D FFT."""
+    return np.cos(7 * x) + np.sin(x) - 33.2
+
+
+def _f_1d_nyquist_freq():
+    return 7
+
+
+def _f_2d(x, y):
+    """Test function for 2D FFT."""
+    x_freq, y_freq = 3, 5
+    return (
+        # something that's not separable
+        np.cos(x_freq * x) * np.sin(2 * x + y)
+        + np.sin(y_freq * y) * np.cos(x + 3 * y)
+        # DC terms
+        - 33.2
+        + np.cos(x)
+        + np.cos(y)
+    )
+
+
+def _f_2d_nyquist_freq():
+    x_freq_nyquist = 3 + 2
+    y_freq_nyquist = 5 + 3
+    return x_freq_nyquist, y_freq_nyquist
+
+
+def _identity(x):
+    return x
+
+
+def _f_non_periodic(z):
+    return np.sin(np.sqrt(2) * z) * np.cos(1 / (2 + z)) * np.cos(z**2) * z
+
+
+def _f_algebraic(z):
+    return z**3 - 10 * z**6 - z - np.e + z**4
 
 
 class TestFastInterp:
@@ -145,23 +176,6 @@ class TestFastInterp:
         """Make sure numpy uses Nyquist interpolant frequencies."""
         np.testing.assert_allclose(np.fft.rfftfreq(M, d=1 / M), np.arange(M // 2 + 1))
 
-    @staticmethod
-    def _interp_rfft_harmonic(xq, f):
-        M = f.shape[-1]
-        fq = jnp.linalg.vecdot(
-            harmonic_vander(xq, M), harmonic(rfft(f, norm="forward"), M)
-        )
-        return fq
-
-    @staticmethod
-    def _f_1d(x):
-        """Test function for 1D FFT."""
-        return np.cos(7 * x) + np.sin(x) - 33.2
-
-    @staticmethod
-    def _f_1d_nyquist_freq():
-        return 7
-
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "func, n",
@@ -176,28 +190,14 @@ class TestFastInterp:
         x = np.linspace(0, 2 * np.pi, n, endpoint=False)
         assert not np.any(np.isclose(xq[..., np.newaxis], x))
         f, fq = func(x), func(xq)
-        np.testing.assert_allclose(self._interp_rfft_harmonic(xq, f), fq)
         np.testing.assert_allclose(interp_rfft(xq, f), fq)
-
-    @staticmethod
-    def _f_2d(x, y):
-        """Test function for 2D FFT."""
-        x_freq, y_freq = 3, 5
-        return (
-            # something that's not separable
-            np.cos(x_freq * x) * np.sin(2 * x + y)
-            + np.sin(y_freq * y) * np.cos(x + 3 * y)
-            # DC terms
-            - 33.2
-            + np.cos(x)
-            + np.cos(y)
+        M = f.shape[-1]
+        np.testing.assert_allclose(
+            np.sum(
+                harmonic_vander(xq, M) * harmonic(rfft(f, norm="forward"), M), axis=-1
+            ),
+            fq,
         )
-
-    @staticmethod
-    def _f_2d_nyquist_freq():
-        x_freq_nyquist = 3 + 2
-        y_freq_nyquist = 5 + 3
-        return x_freq_nyquist, y_freq_nyquist
 
     @pytest.mark.xfail(
         reason="Numpy, jax, and scipy need to fix bug with 2D FFT (fft2)."
@@ -228,25 +228,12 @@ class TestFastInterp:
             truth,
         )
 
-    @staticmethod
-    def _identity(x):
-        # Identity map known for bad Gibbs;
-        # only if distribution of spectral coefficients is correct will DCT
-        # recover Chebyshev interpolation, avoiding Gibbs and Runge.
-        return x
-
-    @staticmethod
-    def _f_non_periodic(z):
-        return np.sin(np.sqrt(2) * z) * np.cos(1 / (2 + z)) * np.cos(z**2) * z
-
-    @staticmethod
-    def _f_algebraic(z):
-        return z**3 - 10 * z**6 - z - np.e + z**4
-
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "f, M, lobatto",
         [
+            # Identity map known for bad Gibbs; if discrete Chebyshev transform
+            # implemented correctly then won't see Gibbs.
             (_identity, 2, False),
             (_identity, 3, False),
             (_identity, 3, True),
@@ -316,7 +303,7 @@ class TestFastInterp:
         z = cheb_pts(M)
         fz = f(z)
         np.testing.assert_allclose(c0, cheb_from_dct(dct(fz, 2) / M), atol=1e-13)
-        if np.allclose(self._f_algebraic(z), fz):
+        if np.allclose(_f_algebraic(z), fz):
             np.testing.assert_allclose(
                 cheb2poly(c0), np.array([-np.e, -1, 0, 1, 1, 0, -10]), atol=1e-13
             )

@@ -278,8 +278,8 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
             assert not err_2[p, s], "Detected discontinuity.\n"
             assert not err_3, (
                 f"Detected |B| = {Bs_midpoint[mask[p, s]]} > {1 / pitch[p, s] + eps} "
-                "= 1/λ in well, implying the straight line path between bounce points "
-                "is in hypograph(|B|). Use more knots.\n"
+                "= 1/λ in well, implying the straight line path between "
+                "bounce points is in hypograph(|B|). Use more knots.\n"
             )
         if plot:
             plot_ppoly(

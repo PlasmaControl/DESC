@@ -1550,7 +1550,7 @@ class LinkingCurrent(_Objective):
 
     _scalar = True
     _units = "(A)"
-    _print_value_fmt = "Linking current: {:10.3e} "
+    _print_value_fmt = "Linking current: "
 
     def __init__(
         self,
@@ -1647,6 +1647,8 @@ class LinkingCurrent(_Objective):
             Linking current error.
 
         """
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

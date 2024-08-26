@@ -61,7 +61,7 @@ class QuasisymmetryBoozer(_Objective):
     """
 
     _units = "(T)"
-    _print_value_fmt = "Quasi-symmetry Boozer error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry Boozer error: "
 
     def __init__(
         self,
@@ -97,11 +97,8 @@ class QuasisymmetryBoozer(_Objective):
             name=name,
         )
 
-        self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) Boozer error: ".format(
-                self.helicity[0], self.helicity[1]
-            )
-            + "{:10.3e} "
+        self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
+            self.helicity[0], self.helicity[1]
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -227,13 +224,9 @@ class QuasisymmetryBoozer(_Objective):
             warnings.warn("Re-build objective after changing the helicity!")
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            units = "(T)"
-            self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) Boozer error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
+            self._units = "(T)"
+            self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
+                self.helicity[0], self.helicity[1]
             )
 
 
@@ -281,7 +274,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
     _coordinates = "rtz"
     _units = "(T^3)"
-    _print_value_fmt = "Quasi-symmetry two-term error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry two-term error: "
 
     def __init__(
         self,
@@ -313,11 +306,8 @@ class QuasisymmetryTwoTerm(_Objective):
             name=name,
         )
 
-        self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) two-term error: ".format(
-                self.helicity[0], self.helicity[1]
-            )
-            + "{:10.3e} "
+        self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
+            self.helicity[0], self.helicity[1]
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -421,13 +411,9 @@ class QuasisymmetryTwoTerm(_Objective):
             self._built = False
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            units = "(T^3)"
-            self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
+            self._units = "(T^3)"
+            self._print_value_fmt = "Quasi-symmetry ({},{}) error: ".format(
+                self.helicity[0], self.helicity[1]
             )
 
 
@@ -473,7 +459,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
     _coordinates = "rtz"
     _units = "(T^4/m^2)"
-    _print_value_fmt = "Quasi-symmetry error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry error: "
 
     def __init__(
         self,
@@ -651,7 +637,7 @@ class Omnigenity(_Objective):
 
     _coordinates = "rtz"
     _units = "(T)"
-    _print_value_fmt = "Omnigenity error: {:10.3e} "
+    _print_value_fmt = "Omnigenity error: "
 
     def __init__(
         self,
@@ -986,7 +972,7 @@ class Isodynamicity(_Objective):
 
     _coordinates = "rtz"
     _units = "(dimensionless)"
-    _print_value_fmt = "Isodynamicity error: {:10.3e} "
+    _print_value_fmt = "Isodynamicity error: "
 
     def __init__(
         self,

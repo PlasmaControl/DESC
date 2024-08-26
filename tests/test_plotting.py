@@ -15,10 +15,10 @@ from desc.basis import (
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
-from desc.compute.utils import surface_averages
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.integrals import surface_averages
 from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
@@ -335,7 +335,7 @@ class TestPlotFSA:
             plot_data["<" + name + ">"], desired, equal_nan=False
         )
 
-        name = "B0"
+        name = "psi_r/sqrt(g)"
         assert (
             "<" + name + ">"
             not in data_index["desc.equilibrium.equilibrium.Equilibrium"]
@@ -371,7 +371,7 @@ class TestPlotFSA:
             rho=rho,
             M=eq.M_grid,
             N=eq.N_grid,
-            with_sqrt_g=False,  # Test that does not compute data_index["<|B|>"]
+            with_sqrt_g=False,  # test that does not compute data_index["<|B|>"]
             return_data=True,
         )
         data = eq.compute(names=name, grid=grid)

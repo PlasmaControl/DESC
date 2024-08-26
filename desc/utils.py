@@ -697,7 +697,7 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
         raise ValueError("trees must be nested lists of dicts")
 
 
-# The following section of this code is a derived from the NetKet project
+# The following section of this code is derived from the NetKet project
 # https://github.com/netket/netket/blob/9881c9fb217a2ac4dc9274a054bf6e6a2993c519/
 # netket/jax/_chunk_utils.py
 #
@@ -785,7 +785,7 @@ def chunk(x, chunk_size=None):
 
 ####
 
-# The following section of this code is a derived from the NetKet project
+# The following section of this code is derived from the NetKet project
 # https://github.com/netket/netket/blob/9881c9fb217a2ac4dc9274a054bf6e6a2993c519/
 # netket/jax/_scanmap.py
 #

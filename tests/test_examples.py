@@ -71,7 +71,6 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.vmec import VMECIO
 
 from .utils import area_difference_desc, area_difference_vmec
 
@@ -1568,8 +1567,30 @@ def test_external_vs_generic_objectives(tmpdir_factory):
     """Test ExternalObjective compared to GenericObjective."""
     target = np.array([6.2e-3, 1.1e-1, 6.5e-3, 0])  # values at p_l = [2e2, -2e2]
 
-    def data_from_vmec(eq, path=""):
-        VMECIO.save(eq, path, surfs=8, verbose=0)
+    def data_from_vmec(eq, path="", surfs=8):
+        # write data
+        file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+        NFP = eq.NFP
+        M = eq.M
+        N = eq.N
+        M_nyq = M + 4
+        N_nyq = N + 2 if N > 0 else 0
+        s_full = np.linspace(0, 1, surfs)
+        r_full = np.sqrt(s_full)
+        file.createDimension("radius", surfs)
+        grid_full = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
+        data_full = eq.compute(["p"], grid=grid_full)
+        data_quad = eq.compute(["<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"])
+        betatotal = file.createVariable("betatotal", np.float64)
+        betatotal[:] = data_quad["<beta>_vol"]
+        betapol = file.createVariable("betapol", np.float64)
+        betapol[:] = data_quad["<beta_pol>_vol"]
+        betator = file.createVariable("betator", np.float64)
+        betator[:] = data_quad["<beta_tor>_vol"]
+        presf = file.createVariable("presf", np.float64, ("radius",))
+        presf[:] = grid_full.compress(data_full["p"])
+        file.close()
+        # read data
         file = Dataset(path, mode="r")
         betatot = float(file.variables["betatotal"][0])
         betapol = float(file.variables["betapol"][0])
@@ -1616,7 +1637,9 @@ def test_external_vs_generic_objectives(tmpdir_factory):
     dir = tmpdir_factory.mktemp("results")
     path = dir.join("wout_result.nc")
     objective = ObjectiveFunction(
-        ExternalObjective(eq=eq0, fun=data_from_vmec, dim_f=4, target=target, path=path)
+        ExternalObjective(
+            eq=eq0, fun=data_from_vmec, dim_f=4, target=target, path=path, surfs=8
+        )
     )
     constraints = FixParameters(
         eq0,

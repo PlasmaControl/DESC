@@ -18,12 +18,18 @@ jobs:
   unit_tests:
 
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
         combos: [{group: 1, python_version: '3.9'},
                  {group: 2, python_version: '3.10'},
                  {group: 3, python_version: '3.11'},
-                 {group: 4, python_version: '3.12'}]
+                 {group: 4, python_version: '3.12'},
+                 {group: 5, python_version: '3.12'},
+                 {group: 6, python_version: '3.12'},
+                 {group: 7, python_version: '3.12'},
+                 {group: 8, python_version: '3.12'}]
 
     steps:
       - uses: actions/checkout@v4
@@ -31,17 +37,31 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.combos.python_version }}
-      - name: Install dependencies
+
+      - name: Restore Python environment cache
+        id: restore-env
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv-${{ matrix.combos.python_version }}
+          key: ${{ runner.os }}-venv-${{ matrix.combos.python_version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+
+      - name: Set up virtual environment if not restored from cache
+        if: steps.restore-env.outputs.cache-hit != 'true'
         run: |
+          gh cache list
+          python -m venv .venv-${{ matrix.combos.python_version }}
+          source .venv-${{ matrix.combos.python_version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-          pip install matplotlib==3.7.2
+
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@master
         with:
           swap-size-gb: 10
+
       - name: Test with pytest
         run: |
+          source .venv-${{ matrix.combos.python_version }}/bin/activate
           pwd
           lscpu
           python -m pytest -v -m unit \
@@ -52,10 +72,11 @@ jobs:
             --mpl \
             --mpl-results-path=mpl_results.html \
             --mpl-generate-summary=html \
-            --splits 4 \
+            --splits 8 \
             --group ${{ matrix.combos.group }} \
             --splitting-algorithm least_duration \
             --db ./prof.db
+
       - name: save coverage file and plot comparison results
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,6 +86,7 @@ jobs:
             ./cov.xml
             ./mpl_results.html
             ./prof.db
+
       - name: Upload coverage
         id : codecov
         uses: Wandalen/wretry.action@v1.3.0

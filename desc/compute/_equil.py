@@ -856,7 +856,7 @@ def _P_ISS04(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["rho", "ni", "<sigma*nu>", "sqrt(g)"],
+    data=["ni", "<sigma*nu>", "sqrt(g)"],
     resolution_requirement="rtz",
     fuel="str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default is 'DT'.",
 )

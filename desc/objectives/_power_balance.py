@@ -81,7 +81,7 @@ class FusionPower(_Objective):
             fuel not in ["DT"], ValueError, f"fuel must be one of ['DT'], got {fuel}."
         )
         if target is None and bounds is None:
-            target = 0
+            target = 1e9
         self._fuel = fuel
         self._grid = grid
         super().__init__(
@@ -112,6 +112,11 @@ class FusionPower(_Objective):
             eq.electron_density is None,
             ValueError,
             "Equilibrium must have an electron density profile.",
+        )
+        errorif(
+            eq.ion_temperature is None,
+            ValueError,
+            "Equilibrium must have an ion temperature profile.",
         )
         if self._grid is None:
             self._grid = QuadratureGrid(

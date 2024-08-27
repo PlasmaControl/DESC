@@ -2101,7 +2101,11 @@ def plot_boundaries(
         not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
         ValueError,
         "supplied objects must have the same number of field periods, "
-        "or if there are differing field periods, `phi` must be given explicitly.",
+        "or if there are differing field periods, `phi` must be given explicitly."
+        f" Instead, supplied objects have NFPs {[t.NFP for t in eqs]}."
+        " If attempting to plot an axisymmetric object with non-axisymmetric objects,"
+        " you must use the `change_resolution` method to make the axisymmetric "
+        "object have the same NFP as the non-axisymmetric objects.",
     )
 
     figsize = kwargs.pop("figsize", None)
@@ -2295,7 +2299,11 @@ def plot_comparison(
         not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
         ValueError,
         "supplied objects must have the same number of field periods, "
-        "or if there are differing field periods, `phi` must be given explicitly.",
+        "or if there are differing field periods, `phi` must be given explicitly."
+        f" Instead, supplied objects have NFPs {[t.NFP for t in eqs]}."
+        " If attempting to plot an axisymmetric object with non-axisymmetric objects,"
+        " you must use the `change_resolution` method to make the axisymmetric "
+        "object have the same NFP as the non-axisymmetric objects.",
     )
     color = parse_argname_change(color, kwargs, "colors", "color")
     ls = parse_argname_change(ls, kwargs, "linestyles", "ls")

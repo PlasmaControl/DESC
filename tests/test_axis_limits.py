@@ -276,11 +276,8 @@ class TestAxisLimits:
         # The need for a weaker tolerance on these keys may be due to a subpar
         # polynomial regression fit against which the axis limit is compared.
         weaker_tolerance = {
-            "B0_rr": {"rtol": 5e-03},
             "iota_r": {"atol": 1e-6},
             "iota_num_rr": {"atol": 5e-5},
-            "alpha_r": {"rtol": 1e-3},
-            "cvdrift0": {"atol": 1e-5},
             "grad(B)": {"rtol": 1e-4},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})

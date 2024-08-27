@@ -763,8 +763,8 @@ class TestMagneticFields:
         np.testing.assert_allclose(r[1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[1], 0.001, rtol=1e-6, atol=1e-6)
         # if early terinated, the values at the un-integrated phi points are inf
-        assert np.isinf(r[-1])
-        assert np.isinf(z[-1])
+        assert np.isnan(r[-1])
+        assert np.isnan(z[-1])
 
     @pytest.mark.unit
     def test_Bnormal_calculation(self):

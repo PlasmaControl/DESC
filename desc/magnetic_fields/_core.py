@@ -1526,18 +1526,12 @@ def field_line_integrate(
         diffrax Solver object to use in integration,
         defaults to Tsit5(), a RK45 explicit solver
     bounds_R : tuple of (float,float), optional
-        R bounds for field line integration bounding box.
-        If supplied, the RHS of the field line equations will be
-        multiplied by exp(-r) where r is the distance to the bounding box,
-        this is meant to prevent the field lines which escape to infinity from
-        slowing the integration down by being traced to infinity.
-        defaults to (0,np.inf)
+        R bounds for field line integration bounding box. Trajectories that leave this
+        box will be stopped, and NaN returned for points outside the box.
+        Defaults to (0,np.inf)
     bounds_Z : tuple of (float,float), optional
-        Z bounds for field line integration bounding box.
-        If supplied, the RHS of the field line equations will be
-        multiplied by exp(-r) where r is the distance to the bounding box,
-        this is meant to prevent the field lines which escape to infinity from
-        slowing the integration down by being traced to infinity.
+        Z bounds for field line integration bounding box. Trajectories that leave this
+        box will be stopped, and NaN returned for points outside the box.
         Defaults to (-np.inf,np.inf)
     kwargs: dict
         keyword arguments to be passed into the ``diffrax.diffeqsolve``
@@ -1602,6 +1596,7 @@ def field_line_integrate(
         warnings.filterwarnings("ignore", message="unhashable type")
         x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
 
+    x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
     z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
 

@@ -532,7 +532,7 @@ def errorif(cond, err=ValueError, msg=""):
     just AssertionError.
     """
     if cond:
-        raise err(msg)
+        raise err(colored(msg, "red"))
 
 
 class ResolutionWarning(UserWarning):
@@ -544,7 +544,7 @@ class ResolutionWarning(UserWarning):
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
-        warnings.warn(msg, err)
+        warnings.warn(colored(msg, "yellow"), err)
 
 
 def check_nonnegint(x, name="", allow_none=True):
@@ -682,3 +682,6 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
     # invalid tree structure
     else:
         raise ValueError("trees must be nested lists of dicts")
+
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text

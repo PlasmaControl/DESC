@@ -33,6 +33,9 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixNearAxisLambda,
+    FixNearAxisR,
+    FixNearAxisZ,
     FixOmniMap,
     FixOmniWell,
     FixParameters,
@@ -448,7 +451,7 @@ def test_correct_indexing_passed_modes():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -458,8 +461,8 @@ def test_correct_indexing_passed_modes():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -511,7 +514,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -521,8 +524,8 @@ def test_correct_indexing_passed_modes_and_passed_target():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -571,7 +574,7 @@ def test_correct_indexing_passed_modes_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -581,8 +584,8 @@ def test_correct_indexing_passed_modes_axis():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -700,7 +703,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -710,8 +713,8 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -852,21 +855,27 @@ def test_FixNAE_util_correct_objectives():
     eq = Equilibrium()
     qsc = Qsc.from_paper("precise QA")
     cs = get_NAE_constraints(eq, qsc)
-    assert _is_any_instance(cs, FixAxisR)
-    assert _is_any_instance(cs, FixAxisZ)
+    for c in cs:
+        c.build()
     assert _is_any_instance(cs, FixPsi)
-    assert _is_any_instance(cs, FixSumModesR)
-    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_NAE_constraints(eq, qsc, fix_lambda=1)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
+    assert _is_any_instance(cs, FixNearAxisLambda)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
     eq = Equilibrium(electron_temperature=1, electron_density=1, iota=1)
     cs = get_NAE_constraints(eq, qsc)
-    assert _is_any_instance(cs, FixAxisR)
-    assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
-    assert _is_any_instance(cs, FixSumModesR)
-    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
     assert _is_any_instance(cs, FixElectronDensity)
     assert _is_any_instance(cs, FixElectronTemperature)
     assert _is_any_instance(cs, FixIonTemperature)

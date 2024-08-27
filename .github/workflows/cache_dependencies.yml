@@ -52,3 +52,4 @@ jobs:
           source .venv-${{ matrix.python-version }}/bin/activate
           python --version
           pip --version
+          pip list

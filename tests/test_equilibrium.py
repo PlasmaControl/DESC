@@ -55,11 +55,10 @@ def test_map_coordinates():
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
     out = eq.map_coordinates(
         coords,
-        ["rho", "alpha", "zeta"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 10 * np.pi),
+        inbasis=["rho", "alpha", "zeta"],
+        period=(np.inf, 2 * np.pi, np.inf),
     )
-    assert not np.any(np.isnan(out))
+    assert np.isfinite(out).all()
 
     eq = get("DSHAPE")
 
@@ -72,9 +71,9 @@ def test_map_coordinates():
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    in_coords = np.column_stack([in_data[k] for k in inbasis])
     out_data = eq.compute(outbasis, grid=grid)
-    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+    out_coords = np.column_stack([out_data[k] for k in outbasis])
 
     out = eq.map_coordinates(
         in_coords,

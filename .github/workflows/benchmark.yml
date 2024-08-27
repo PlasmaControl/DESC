@@ -35,8 +35,8 @@ jobs:
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
       - uses: actions/checkout@v4
-        # with:
-        #   ref: ${{ github.event.pull_request.head.sha }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -59,7 +59,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
 
-      - name: Benchmark with pytest-benchmark
+      - name: Benchmark with pytest-benchmark (PR)
         run: |
           source .venv-${{ matrix.python-version }}/bin/activate
           pwd
@@ -81,7 +81,8 @@ jobs:
 
       - name: Checkout benchmarks from PR head
         run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
-      - name: Benchmark with pytest-benchmark
+
+      - name: Benchmark with pytest-benchmark (MASTER)
         run: |
           source .venv-${{ matrix.python-version }}/bin/activate
           pwd
@@ -95,7 +96,7 @@ jobs:
             --group ${{ matrix.group }} \
             --splitting-algorithm least_duration
 
-      - name: put benchmark results in same folder
+      - name: Put benchmark results in same folder
         run: |
           source .venv-${{ matrix.python-version }}/bin/activate
           pwd
@@ -108,15 +109,32 @@ jobs:
           cp $t1 compare_results
           cp $t2 compare_results
 
+      - name: Download artifact
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark_artifact_*
+          path: tests/benchmarks
+
+      - name: Unzip artifacts if downloaded
+        run: |
+          cd tests/benchmarks
+          ls
+          if [ -f tests/benchmarks/benchmark_artifact_*.zip ]; then
+            unzip tests/benchmarks/benchmark_artifact_*.zip -d tests/benchmarks
+          else
+            echo "No benchmark artifact file found."
+          fi
+
       - name: Compare latest commit results to the master branch results
         run: |
           source .venv-${{ matrix.python-version }}/bin/activate
-          pwd
           cd tests/benchmarks
+          pwd
           python compare_bench_results.py
           cat commit_msg.txt
 
-      - name: comment PR with the results
+      - name: Comment PR with the results
         uses: thollander/actions-comment-pull-request@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -128,5 +146,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark_artifact
+          name: benchmark_artifact_${{ matrix.group }}
           path: tests/benchmarks/.benchmarks

@@ -25,6 +25,8 @@ dependencies:
     # testing and benchmarking
     - qsc
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
+    - black[jupyter] = 24.3.0
+
 
   # building the docs
   - nbsphinx == 0.8.12
@@ -37,7 +39,6 @@ dependencies:
   - sphinx_rtd_theme >= 1.0, < 2.0
 
   # linting
-  - black = 24.3.0
   - flake8 >= 5.0.0, <6.0.0
   - flake8-docstrings >= 1.0.0, <2.0.0
   - flake8-eradicate >= 1.0.0, <2.0.0

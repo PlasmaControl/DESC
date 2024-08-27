@@ -1201,10 +1201,12 @@ def plot_fsa(  # noqa: C901
             # Attempt to compute the magnetic axis limit.
             # Compute derivative depending on various naming schemes.
             # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
+            # psi_r/sqrt(g) -> (psi_r/sqrt(g))_r
             schemes = (
                 name + "_r",
                 name[:-3] + "_r" + name[-3:],
                 name[:-3] + "r" + name[-3:],
+                "(" + name + ")_r",
             )
             values_r = next(
                 (

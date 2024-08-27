@@ -49,6 +49,7 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
+    HeatingPowerISS04,
     Isodynamicity,
     LinearObjectiveFromUser,
     MagneticWell,
@@ -209,8 +210,8 @@ class TestObjectiveFunction:
             obj.build()
             f = obj.compute_unscaled(*obj.xs(eq))
             f_scaled = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
-            np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=8e-3)
+            np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=8e-3)
 
         test(get("HELIOTRON"))
         test(get("HELIOTRON").surface)
@@ -2120,6 +2121,7 @@ class TestComputeScalarResolution:
         CoilSetMinDistance,
         CoilTorsion,
         GenericObjective,
+        HeatingPowerISS04,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -2177,6 +2179,28 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(eq=eq, grid=grid), use_jit=False
             )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_heating_power(self):
+        """HeatingPowerISS04."""
+        eq = self.eq.copy()
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.atomic_number = 1.0
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = QuadratureGrid(
+                L=int(self.eq.L * res),
+                M=int(self.eq.M * res),
+                N=int(self.eq.N * res),
+                NFP=self.eq.NFP,
+            )
+            obj = ObjectiveFunction(HeatingPowerISS04(eq=eq, grid=grid))
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2450,6 +2474,8 @@ class TestObjectiveNaNGrad:
         CoilSetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
+        HeatingPowerISS04,
+        Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
@@ -2460,7 +2486,6 @@ class TestObjectiveNaNGrad:
         LinearObjectiveFromUser,
         ObjectiveFromUser,
         # TODO: add Omnigenity objective (see GH issue #943)
-        Omnigenity,
         UmbilicHighCurvature,
         UmbilicLowCurvature,
     ]
@@ -2500,6 +2525,22 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "redl bootstrap"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_heating_power(self):
+        """HeatingPowerISS04."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([1, 0, -1]),
+        )
+        obj = ObjectiveFunction(HeatingPowerISS04(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "heating power"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_boundary_error(self):

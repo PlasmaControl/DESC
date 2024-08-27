@@ -5,7 +5,6 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from scipy.interpolate import interp1d
 
 from desc.basis import (
     DoubleFourierSeries,
@@ -335,7 +334,7 @@ class TestPlotFSA:
             plot_data["<" + name + ">"], desired, equal_nan=False
         )
 
-        name = "B0"
+        name = "psi_r/sqrt(g)"
         assert (
             "<" + name + ">"
             not in data_index["desc.equilibrium.equilibrium.Equilibrium"]
@@ -371,7 +370,7 @@ class TestPlotFSA:
             rho=rho,
             M=eq.M_grid,
             N=eq.N_grid,
-            with_sqrt_g=False,  # Test that does not compute data_index["<|B|>"]
+            with_sqrt_g=False,  # test that does not compute data_index["<|B|>"]
             return_data=True,
         )
         data = eq.compute(names=name, grid=grid)
@@ -823,17 +822,15 @@ def test_plot_coils():
 def test_plot_b_mag():
     """Test plot of |B| on longer field lines for gyrokinetic simulations."""
     psi = 0.5
+    rho = np.sqrt(psi)
     npol = 2
     nzgrid = 128
     alpha = 0
-    # compute and fit iota profile
+    # compute iota
     eq = get("W7-X")
-    data = eq.compute("iota")
-    fi = interp1d(data["rho"], data["iota"])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho, NFP=eq.NFP))["iota"][0]
 
     # get flux tube coordinate system
-    rho = np.sqrt(psi)
-    iota = fi(rho)
     zeta = np.linspace(
         -np.pi * npol / np.abs(iota), np.pi * npol / np.abs(iota), 2 * nzgrid + 1
     )

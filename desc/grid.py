@@ -1297,7 +1297,10 @@ class QuadratureGrid(_Grid):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
-        L = L + 1
+        # floor divide (L+2) by 2 bc only need (L+1)/2  points to
+        # integrate L-th order jacobi polynomial exactly, so this
+        # ensures we have enough pts for both odd and even L
+        L = (L + 2) // 2
         M = 2 * M + 1
         N = 2 * N + 1
 

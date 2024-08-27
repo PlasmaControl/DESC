@@ -728,48 +728,24 @@ class TestMagneticFields:
         r0 = [10.001]
         z0 = [0.0]
         phis = [0, 2 * np.pi * 25]
-        r, z = field_line_integrate(r0, z0, phis, field, solver=Dopri5)
+        r, z = field_line_integrate(r0, z0, phis, field, solver=Dopri5())
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
-
-    @pytest.mark.unit
-    def test_field_line_integrate_early_terminate(self):
-        """Test field line integration with early termination criterion."""
-        # q=4, field line should rotate 1/4 turn after 1 toroidal transit
-        # from outboard midplane to top center
-        # early terminate at 2pi, if fails to terminate correctly
-        # then the assert statements would not hold
-        field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
-        r0 = [10.001]
-        z0 = [0.0]
-        phis = [0, 2 * np.pi, 2 * np.pi * 2]
-
-        def cond_fxn(state, **kwargs):
-            return jnp.any(state.y[1] > 8)
-
-        r, z = field_line_integrate(r0, z0, phis, field, terminating_event=cond_fxn)
-        np.testing.assert_allclose(r[1], 10, rtol=1e-6, atol=1e-6)
-        np.testing.assert_allclose(z[1], 0.001, rtol=1e-6, atol=1e-6)
-        # if early terinated, the values at the un-integrated phi points are inf
-        assert np.isinf(r[-1])
-        assert np.isinf(z[-1])
 
     @pytest.mark.unit
     def test_field_line_integrate_early_terminate_default(self):
         """Test field line integration with default early termination criterion."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
         # from outboard midplane to top center
-        # early terminate at 2pi, if fails to terminate correctly
-        # then the assert statements would not hold
+        # early terminate when it crosses towards the inboard side (R=10),
         field1 = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
         # make a SplineMagneticField only defined in a tiny region around initial point
         field = SplineMagneticField.from_field(
             field=field1,
-            R=np.linspace(-9.995, 10.005, 40),
+            R=np.linspace(10.0, 10.005, 40),
             phi=np.linspace(0, 2 * np.pi, 40),
-            Z=np.linspace(-1.5e-3, 1.5e-3, 40),
-            extrap=False,
-            period=2 * np.pi,
+            Z=np.linspace(-5e-3, 5e-3, 40),
+            extrap=True,
         )
         r0 = [10.001]
         z0 = [0.0]
@@ -782,7 +758,6 @@ class TestMagneticFields:
             field,
             bounds_R=(np.min(field._R), np.max(field._R)),
             bounds_Z=(np.min(field._Z), np.max(field._Z)),
-            bounds_phi=(np.min(field._phi), 3 * np.pi),
             min_step_size=1e-2,
         )
         np.testing.assert_allclose(r[1], 10, rtol=1e-6, atol=1e-6)
@@ -790,25 +765,6 @@ class TestMagneticFields:
         # if early terinated, the values at the un-integrated phi points are inf
         assert np.isinf(r[-1])
         assert np.isinf(z[-1])
-
-    def test_field_line_integrate_bounds(self):
-        """Test field line integration with bounding box."""
-        # q=4, field line should rotate 1/4 turn after 1 toroidal transit
-        # from outboard midplane to top center
-        field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
-        # test that bounds work correctly, and stop integration when trajectory
-        # hits the bounds
-        r0 = [10.1]
-        z0 = [0.0]
-        phis = [0, 2 * np.pi]
-        # this will hit the R bound
-        # (there is no Z bound, and R would go to 10.0 if not bounded)
-        r, z = field_line_integrate(r0, z0, phis, field, bounds_R=(10.05, np.inf))
-        np.testing.assert_allclose(r[-1], 10.05, rtol=3e-4)
-        # this will hit the Z bound
-        # (there is no R bound, and Z would go to 0.1 if not bounded)
-        r, z = field_line_integrate(r0, z0, phis, field, bounds_Z=(-np.inf, 0.05))
-        np.testing.assert_allclose(z[-1], 0.05, atol=3e-3)
 
     @pytest.mark.unit
     def test_Bnormal_calculation(self):

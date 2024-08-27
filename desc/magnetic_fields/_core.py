@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
@@ -1566,43 +1567,18 @@ def field_line_integrate(
         ).squeeze()
 
     # diffrax parameters
-    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
 
-    if "discrete_terminating_event" not in kwargs:
-        bounds_phi = (-np.inf, np.inf)
+    def default_terminating_event_fxn(state, **kwargs):
+        R_out = jnp.any(jnp.array([state.y[0] < bounds_R[0], state.y[0] > bounds_R[1]]))
+        Z_out = jnp.any(jnp.array([state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1]]))
+        return jnp.any(jnp.array([R_out, Z_out]))
 
-        def default_terminating_event_fxn(state, **kwargs):
-            R_out_of_bounds = jnp.any(
-                jnp.array(
-                    [
-                        jnp.less(state.y[0], bounds_R[0]),
-                        jnp.greater(state.y[0], bounds_R[1]),
-                    ]
-                )
-            )
-            Z_out_of_bounds = jnp.any(
-                jnp.array(
-                    [
-                        jnp.less(state.y[2], bounds_Z[0]),
-                        jnp.greater(state.y[2], bounds_Z[1]),
-                    ]
-                )
-            )
-            phi_out_of_bounds = jnp.any(
-                jnp.array(
-                    [
-                        jnp.less(state.y[1], bounds_phi[0]),
-                        jnp.greater(state.y[1], bounds_phi[1]),
-                    ]
-                )
-            )
-
-            return jnp.any(
-                jnp.array([R_out_of_bounds, Z_out_of_bounds, phi_out_of_bounds])
-            )
-
-    kwargs["discrete_terminating_event"] = DiscreteTerminatingEvent(
-        default_terminating_event_fxn
+    kwargs.setdefault(
+        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    )
+    kwargs.setdefault(
+        "discrete_terminating_event",
+        DiscreteTerminatingEvent(default_terminating_event_fxn),
     )
 
     term = ODETerm(odefun)
@@ -1615,13 +1591,17 @@ def field_line_integrate(
         t0=phis[0],
         t1=phis[-1],
         saveat=saveat,
-        max_steps=maxstep,
+        max_steps=maxstep * len(phis),
         dt0=min_step_size,
-        stepsize_controller=stepsize_controller,
         **kwargs,
     ).ys
 
-    x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+    # suppress warnings till its fixed upstream:
+    # https://github.com/patrick-kidger/diffrax/issues/445
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="unhashable type")
+        x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+
     r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
     z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
 

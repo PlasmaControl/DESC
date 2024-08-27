@@ -2,8 +2,9 @@
 
 import warnings
 
-from desc.backend import jnp
+from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
+from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
@@ -603,13 +604,12 @@ class Omnigenity(_Objective):
     eq_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for equilibrium data.
         Defaults to a linearly space grid on the rho=1 surface.
-        Must be a single flux surface without stellarator symmetry.
+        Must be without stellarator symmetry.
     field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
         The grid nodes are given in the usual (ρ,θ,ζ) coordinates (with θ ∈ [0, 2π),
         ζ ∈ [0, 2π/NFP)), but θ is mapped to η and ζ is mapped to α. Defaults to a
-        linearly space grid on the rho=1 surface. Must be a single flux surface without
-        stellarator symmetry.
+        linearly space grid on the rho=1 surface. Must be without stellarator symmetry.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
@@ -717,9 +717,9 @@ class Omnigenity(_Objective):
 
         # default grids
         if self._eq_grid is None and self._field_grid is not None:
-            rho = self._field_grid.nodes[0, 0]
+            rho = self._field_grid.nodes[self._field_grid.unique_rho_idx, 0]
         elif self._eq_grid is not None and self._field_grid is None:
-            rho = self._eq_grid.nodes[0, 0]
+            rho = self._eq_grid.nodes[self._eq_grid.unique_rho_idx, 0]
         elif self._eq_grid is None and self._field_grid is None:
             rho = 1.0
         if self._eq_grid is None:
@@ -745,12 +745,13 @@ class Omnigenity(_Objective):
         )
         errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
         errorif(field_grid.sym, msg="field_grid must not be symmetric")
-        errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
-        errorif(field_grid.num_rho != 1, msg="field_grid must be a single surface")
+        field_rho = field_grid.nodes[field_grid.unique_rho_idx, 0]
+        eq_rho = eq_grid.nodes[eq_grid.unique_rho_idx, 0]
         errorif(
-            eq_grid.nodes[eq_grid.unique_rho_idx, 0]
-            != field_grid.nodes[field_grid.unique_rho_idx, 0],
-            msg="eq_grid and field_grid must be the same surface",
+            any(eq_rho != field_rho),
+            msg="eq_grid and field_grid must be the same surface(s), "
+            + f"eq_grid has surfaces {eq_rho}, "
+            + f"field_grid has surfaces {field_rho}",
         )
         errorif(
             jnp.any(field.B_lm[: field.M_B] < 0),
@@ -856,6 +857,9 @@ class Omnigenity(_Objective):
             eq_params = params_1
             field_params = params_2
 
+        eq_grid = constants["eq_transforms"]["grid"]
+        field_grid = constants["field_transforms"]["grid"]
+
         # compute eq data
         if self._eq_fixed:
             eq_data = constants["eq_data"]
@@ -873,27 +877,15 @@ class Omnigenity(_Objective):
             field_data = constants["field_data"]
             # update theta_B and zeta_B with new iota from the equilibrium
             M, N = constants["helicity"]
-            iota = jnp.mean(eq_data["iota"])
-            # see comment in desc.compute._omnigenity for the explanation of these
-            # wheres
-            mat_OP = jnp.array(
-                [[N, iota / jnp.where(N == 0, 1, N)], [0, 1 / jnp.where(N == 0, 1, N)]]
+            iota = eq_data["iota"][eq_grid.unique_rho_idx]
+            theta_B, zeta_B = _omnigenity_mapping(
+                M,
+                N,
+                iota,
+                field_data["alpha"],
+                field_data["h"],
+                field_grid,
             )
-            mat_OT = jnp.array([[0, -1], [M, -1 / jnp.where(iota == 0, 1.0, iota)]])
-            den = jnp.where((N - M * iota) == 0, 1.0, (N - M * iota))
-            mat_OH = jnp.array([[N, M * iota / den], [M, M / den]])
-            matrix = jnp.where(
-                M == 0,
-                mat_OP,
-                jnp.where(
-                    N == 0,
-                    mat_OT,
-                    mat_OH,
-                ),
-            )
-            booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
-            theta_B = booz[0, :]
-            zeta_B = booz[1, :]
         else:
             field_data = compute_fun(
                 "desc.magnetic_fields._core.OmnigenousField",
@@ -902,22 +894,38 @@ class Omnigenity(_Objective):
                 transforms=constants["field_transforms"],
                 profiles={},
                 helicity=constants["helicity"],
-                iota=jnp.mean(eq_data["iota"]),
+                iota=eq_data["iota"][eq_grid.unique_rho_idx],
             )
             theta_B = field_data["theta_B"]
             zeta_B = field_data["zeta_B"]
 
         # additional computations that cannot be part of the regular compute API
-        nodes = jnp.vstack(
-            (
-                jnp.zeros_like(theta_B),
-                theta_B,
-                zeta_B,
+
+        def _compute_B_eta_alpha(theta_B, zeta_B, B_mn):
+            nodes = jnp.vstack(
+                (
+                    jnp.zeros_like(theta_B),
+                    theta_B,
+                    zeta_B,
+                )
+            ).T
+            B_eta_alpha = jnp.matmul(
+                constants["eq_transforms"]["B"].basis.evaluate(nodes), B_mn
             )
-        ).T
-        B_eta_alpha = jnp.matmul(
-            constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
+            return B_eta_alpha
+
+        theta_B = field_grid.meshgrid_reshape(theta_B, "rtz").reshape(
+            (field_grid.num_rho, -1)
         )
+        zeta_B = field_grid.meshgrid_reshape(zeta_B, "rtz").reshape(
+            (field_grid.num_rho, -1)
+        )
+        B_mn = eq_data["|B|_mn"].reshape((eq_grid.num_rho, -1))
+        B_eta_alpha = vmap(_compute_B_eta_alpha)(theta_B, zeta_B, B_mn)
+        B_eta_alpha = B_eta_alpha.reshape(
+            (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
+        )
+        B_eta_alpha = jnp.moveaxis(B_eta_alpha, 0, 1).flatten(order="F")
         omnigenity_error = B_eta_alpha - field_data["|B|"]
         weights = (self.eta_weight + 1) / 2 + (self.eta_weight - 1) / 2 * jnp.cos(
             field_data["eta"]

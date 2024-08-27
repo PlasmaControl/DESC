@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import functools
+
 from interpax import interp1d
 
 from desc.backend import jnp, sign, vmap
@@ -505,7 +507,7 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
     description="Boozer poloidal angle",
     dim=1,
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
     data=["alpha", "h"],
@@ -515,9 +517,32 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
 )
 def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
-    iota = kwargs.get("iota", 1)
+    iota = kwargs.get("iota", jnp.ones(transforms["grid"].num_rho))
 
-    # coordinate mapping matrix from (alpha,h) to (theta_B,zeta_B)
+    theta_B, zeta_B = _omnigenity_mapping(
+        M, N, iota, data["alpha"], data["h"], transforms["grid"]
+    )
+    data["theta_B"] = theta_B
+    data["zeta_B"] = zeta_B
+    return data
+
+
+def _omnigenity_mapping(M, N, iota, alpha, h, grid):
+    matrix = jnp.atleast_3d(_omnigenity_mapping_matrix(M, N, iota))
+    # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
+    alpha = grid.meshgrid_reshape(alpha, "trz")
+    h = grid.meshgrid_reshape(h, "trz")
+    coords = jnp.stack((alpha, h))
+    # matrix has shape (nr,2,2), coords is shape (2, nt, nr, nz)
+    # we vectorize the matmul over rho, indexed by j
+    booz = jnp.einsum("jpl,lijk->pijk", matrix, coords)
+    theta_B = booz[0].flatten(order="F")
+    zeta_B = booz[1].flatten(order="F")
+    return theta_B, zeta_B
+
+
+@functools.partial(jnp.vectorize, signature="(),(),()->(2,2)")
+def _omnigenity_mapping_matrix(M, N, iota):
     # need a bunch of wheres to avoid division by zero causing NaN in backward pass
     # this is fine since the incorrect values get ignored later, except in OT or OH
     # where fieldlines are exactly parallel to |B| contours, but this is a degenerate
@@ -537,12 +562,7 @@ def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
             mat_OH,
         ),
     )
-
-    # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
-    booz = matrix @ jnp.vstack((data["alpha"], data["h"]))
-    data["theta_B"] = booz[0, :]
-    data["zeta_B"] = booz[1, :]
-    return data
+    return matrix
 
 
 @register_compute_fun(

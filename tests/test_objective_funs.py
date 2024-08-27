@@ -1265,6 +1265,47 @@ class TestObjectiveFunction:
         assert abs(d.max() - (-a_s)) < 1e-14
         assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
+    @pytest.mark.unit
+    def test_omnigenity_multiple_surfaces(self):
+        """Test omnigenity transform vectorized over multiple surfaces."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+        field = OmnigenousField(
+            L_B=0,
+            M_B=2,
+            L_x=1,
+            M_x=1,
+            N_x=1,
+            NFP=eq.NFP,
+            helicity=(1, 1),
+            B_lm=np.array([0.8, 1.2]),
+        )
+        grid1 = LinearGrid(rho=0.5, M=eq.M_grid, N=eq.N_grid)
+        grid2 = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
+        grid3 = LinearGrid(rho=np.array([0.5, 1.0]), M=eq.M_grid, N=eq.N_grid)
+        obj1 = Omnigenity(eq=eq, field=field, eq_grid=grid1)
+        obj2 = Omnigenity(eq=eq, field=field, eq_grid=grid2)
+        obj3 = Omnigenity(eq=eq, field=field, eq_grid=grid3)
+        obj1.build()
+        obj2.build()
+        obj3.build()
+        f1 = obj1.compute(*obj1.xs(eq, field))
+        f2 = obj2.compute(*obj2.xs(eq, field))
+        f3 = obj3.compute(*obj3.xs(eq, field))
+        # the order will be different but the values should be the same so we sort
+        # before comparing
+        np.testing.assert_allclose(
+            np.sort(np.concatenate([f1, f2])), np.sort(f3), atol=1e-14
+        )
+
 
 @pytest.mark.regression
 def test_derivative_modes():

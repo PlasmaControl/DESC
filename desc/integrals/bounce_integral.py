@@ -42,7 +42,10 @@ class Bounce1D:
 
     For applications which reduce to computing a nonlinear function of distance
     along field lines between bounce points, it is required to identify these
-    points with field-line-following coordinates.
+    points with field-line-following coordinates. (In the special case of a linear
+    function summing integrals between bounce points over a flux surface, arbitrary
+    coordinate systems may be used as this operation reduces to a surface integral,
+    which is invariant to the order of summation).
 
     The DESC coordinate system is related to field-line-following coordinate
     systems by a relation whose solution is best found with Newton iteration.
@@ -83,7 +86,7 @@ class Bounce1D:
     Attributes
     ----------
     _B : jnp.ndarray
-        TODO: Make this (4, L, M, N-1) now that tensor product in rho and alpha
+        TODO: Make this (4, M, L, N-1) now that tensor product in rho and alpha
           required as well after GitHub PR #1214.
         Shape (4, L * M, N - 1).
         Polynomial coefficients of the spline of |B| in local power basis.

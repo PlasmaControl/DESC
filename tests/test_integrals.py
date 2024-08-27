@@ -15,7 +15,7 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis
-from desc.compute.utils import dot
+from desc.compute.utils import dot, safediv
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -884,7 +884,7 @@ def _mod_chebu_gauss(deg):
 
 
 class TestBounce1DQuadrature:
-    """Test bounce quadrature accuracy."""
+    """Test bounce quadrature."""
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -900,7 +900,7 @@ class TestBounce1DQuadrature:
         ],
     )
     def test_bounce_quadrature(self, is_strong, quad, automorphism):
-        """Test bounce integral matches elliptic integrals."""
+        """Test bounce integral matches singular elliptic integrals."""
         p = 1e-4
         m = 1 - p
         # Some prime number that doesn't appear anywhere in calculation.
@@ -1040,10 +1040,10 @@ class TestBounce1D:
 
         def numerator(g_zz, B, pitch):
             f = (1 - pitch * B / 2) * g_zz
-            return f / jnp.sqrt(1 - pitch * B)
+            return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
         def denominator(B, pitch):
-            return 1 / jnp.sqrt(1 - pitch * B)
+            return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
         # Pick flux surfaces, field lines, and how far to follow the field line
         # in Clebsch-Type field-line coordinates ρ, α, ζ.
@@ -1059,7 +1059,7 @@ class TestBounce1D:
         data = eq.compute(
             Bounce1D.required_names() + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        bounce = Bounce1D(grid.source_grid, data, check=True, quad=leggauss(3))
+        bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
         pitch = get_pitch(
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
@@ -1070,20 +1070,19 @@ class TestBounce1D:
             check=True,
         )
         den = bounce.integrate(pitch, denominator, [], check=True)
-        avg = num / den
+        avg = safediv(num, den)
 
         # Sum all bounce integrals across each particular field line.
-        avg = np.nansum(avg, axis=-1)
-        assert np.count_nonzero(avg)
-        # Split the resulting data by field line.
+        avg = np.sum(avg, axis=-1)
+        assert np.isfinite(avg).all()
+        # Group the averages by field line.
         avg = avg.reshape(pitch.shape[0], rho.size, alpha.size)
         # The sum stored at index i, j
         i, j = 0, 0
         print(avg[:, i, j])
         # is the summed bounce average among wells along the field line with nodes
         # given in Clebsch-Type field-line coordinates ρ, α, ζ
-        raz_grid = grid.source_grid
-        nodes = raz_grid.nodes.reshape(rho.size, alpha.size, -1, 3)
+        nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes, "raz")
         print(nodes[i, j])
         # for the pitch values stored in
         pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)

@@ -85,13 +85,9 @@ def test_compute_everything():
     Notes
     -----
     This test will fail if the benchmark file has been updated on both
-    the local and upstream branches when git cannot resolve the merge
-    conflict. This may occur if the upstream branch fixes a bug and
-    therefore updates the benchmark data file, but your local branch
-    does not due to said merge conflict.
-
-    In that case, please regenerate the benchmark file. Here are
-    instructions for convenience.
+    the local and upstream branches and git cannot resolve the merge
+    conflict. In that case, please regenerate the benchmark file.
+    Here are instructions for convenience.
 
     1. Prepend true to the line near the end of this test.
         ``if True or (not error_rpz and update_master_data_rpz):``

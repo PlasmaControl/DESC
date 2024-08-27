@@ -26,9 +26,10 @@ from desc.objectives import GenericObjective, ObjectiveFunction
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
 zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t"}
 
-# "current Redl" and "P_ISS04" need special treatment because they are not defined for
-# all configurations (giving NaN values)
-not_continuous_limits = {"current Redl", "P_ISS04"}
+# These compute quantities require kinetic profiles, which are not defined for all
+# configurations (giving NaN values)
+not_continuous_limits = {"current Redl", "P_ISS04", "P_fusion", "<sigma*nu>"}
+
 not_finite_limits = {
     "D_Mercier",
     "D_geodesic",

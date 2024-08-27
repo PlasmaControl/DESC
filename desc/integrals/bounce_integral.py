@@ -591,10 +591,7 @@ class Bounce1D:
 
     For applications which reduce to computing a nonlinear function of distance
     along field lines between bounce points, it is required to identify these
-    points with field-line-following coordinates. In the special case of a linear
-    function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as this operation reduces to a surface integral,
-    which is invariant to the order of summation.
+    points with field-line-following coordinates.
 
     The DESC coordinate system is related to field-line-following coordinate
     systems by a relation whose solution is best found with Newton iteration.
@@ -634,12 +631,14 @@ class Bounce1D:
 
     Attributes
     ----------
-    B : jnp.ndarray
+    _B : jnp.ndarray
+        TODO: Make this (4, L, M, N-1) now that tensor product in rho and alpha
+          required as well after GitHub PR #1214.
         Shape (4, L * M, N - 1).
         Polynomial coefficients of the spline of |B| in local power basis.
         First axis enumerates the coefficients of power series. Second axis
-        enumerates the splines along the field lines. Last axis enumerates the
-        polynomials that compose the spline along a particular field line.
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
 
     """
 
@@ -709,7 +708,7 @@ class Bounce1D:
 
         # Compute local splines.
         self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
-        self.B = jnp.moveaxis(
+        self._B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
                 y=self._data["|B|"],
@@ -720,11 +719,11 @@ class Bounce1D:
             source=1,
             destination=-1,
         )
-        self._dB_dz = polyder_vec(self.B)
+        self._dB_dz = polyder_vec(self._B)
         degree = 3
-        assert self.B.shape[0] == degree + 1
+        assert self._B.shape[0] == degree + 1
         assert self._dB_dz.shape[0] == degree
-        assert self.B.shape[-1] == self._dB_dz.shape[-1] == grid.num_zeta - 1
+        assert self._B.shape[-1] == self._dB_dz.shape[-1] == grid.num_zeta - 1
 
     @staticmethod
     def required_names():
@@ -788,7 +787,7 @@ class Bounce1D:
         return bounce_points(
             pitch=pitch,
             knots=self._zeta,
-            B=self.B,
+            B=self._B,
             dB_dz=self._dB_dz,
             num_well=num_well,
         )
@@ -820,7 +819,7 @@ class Bounce1D:
             z2=z2,
             pitch=jnp.atleast_2d(pitch),
             knots=self._zeta,
-            B=self.B,
+            B=self._B,
             plot=plot,
             **kwargs,
         )
@@ -915,7 +914,7 @@ class Bounce1D:
                 z1=z1,
                 z2=z2,
                 knots=self._zeta,
-                g=self.B,
+                g=self._B,
                 dg_dz=self._dB_dz,
                 method=method,
             )

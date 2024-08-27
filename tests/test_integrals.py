@@ -1132,7 +1132,7 @@ class TestBounce1D:
                 z1=np.array(0, ndmin=3),
                 z2=np.array(2 * np.pi, ndmin=3),
                 knots=zeta,
-                g=bounce.B,
+                g=bounce._B,
                 dg_dz=bounce._dB_dz,
             ),
             rtol=1e-3,

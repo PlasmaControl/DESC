@@ -149,13 +149,13 @@ def bounce_points(
         Shape (knots.size, ).
         ζ coordinates of spline knots. Must be strictly increasing.
     B : jnp.ndarray
-        Shape (g.shape[0], S, knots.size - 1).
+        Shape (B.shape[0], S, knots.size - 1).
         Polynomial coefficients of the spline of |B| in local power basis.
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines. Last axis enumerates the polynomials that
         compose a particular spline.
     dB_dz : jnp.ndarray
-        Shape (g.shape[0] - 1, *g.shape[1:]).
+        Shape (B.shape[0] - 1, *B.shape[1:]).
         Polynomial coefficients of the spline of (∂|B|/∂ζ)|(ρ,α) in local power basis.
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines. Last axis enumerates the polynomials that
@@ -660,7 +660,8 @@ def interp_to_argmin_g(
     Returns
     -------
     h : jnp.ndarray
-        Shape (P, S, num_well)
+        Shape (P, S, num_well).
+        mean_A h(ζ)
 
     """
     ext, g = _get_extrema(knots, g, dg_dz, sentinel=0)
@@ -713,6 +714,12 @@ def interp_to_argmin_g_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
         Method of interpolation.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
         Default is cubic C1 local spline.
+
+    Returns
+    -------
+    h : jnp.ndarray
+        Shape (P, S, num_well).
+        h(A)
 
     """
     ext, g = _get_extrema(knots, g, dg_dz, sentinel=0)

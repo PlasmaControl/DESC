@@ -947,7 +947,7 @@ class VMECIO:
             if eq.sym:
                 x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bmnc[0, :] = 0
         bmnc[1:, :] = c
@@ -990,7 +990,7 @@ class VMECIO:
             if eq.sym:
                 x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupumnc[0, :] = 0
         bsupumnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -1033,7 +1033,7 @@ class VMECIO:
             if eq.sym:
                 x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupvmnc[0, :] = 0
         bsupvmnc[1:, :] = c

@@ -29,90 +29,93 @@ from desc.integrals.interp_utils import (
 from desc.integrals.quad_utils import bijection_to_disc
 
 
-@pytest.mark.unit
-def test_poly_root():
-    """Test vectorized computation of cubic polynomial exact roots."""
-    cubic = 4
-    c = np.arange(-24, 24).reshape(cubic, 6, -1) * np.pi
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(c.shape).size == c.ndim
-    constant = np.broadcast_to(np.arange(c.shape[-1]), c.shape[1:])
-    constant = np.stack([constant, constant])
-    root = poly_root(c, constant, sort=True)
+class TestPolyUtils:
+    """Test polynomial stuff used for local spline interpolation."""
 
-    for i in range(constant.shape[0]):
-        for j in range(c.shape[1]):
-            for k in range(c.shape[2]):
-                d = c[-1, j, k] - constant[i, j, k]
-                np.testing.assert_allclose(
-                    actual=root[i, j, k],
-                    desired=np.sort(np.roots([*c[:-1, j, k], d])),
-                )
+    @pytest.mark.unit
+    def test_poly_root(self):
+        """Test vectorized computation of cubic polynomial exact roots."""
+        cubic = 4
+        c = np.arange(-24, 24).reshape(cubic, 6, -1) * np.pi
+        # make sure broadcasting won't hide error in implementation
+        assert np.unique(c.shape).size == c.ndim
+        constant = np.broadcast_to(np.arange(c.shape[-1]), c.shape[1:])
+        constant = np.stack([constant, constant])
+        root = poly_root(c, constant, sort=True)
 
-    c = np.array(
-        [
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1],
-            [1, -1, -8, 12],
-            [1, -6, 11, -6],
-            [0, -6, 11, -2],
-        ]
-    )
-    root = poly_root(c.T, sort=True, distinct=True)
-    for j in range(c.shape[0]):
-        unique_roots = np.unique(np.roots(c[j]))
-        np.testing.assert_allclose(
-            actual=root[j][~np.isnan(root[j])], desired=unique_roots, err_msg=str(j)
+        for i in range(constant.shape[0]):
+            for j in range(c.shape[1]):
+                for k in range(c.shape[2]):
+                    d = c[-1, j, k] - constant[i, j, k]
+                    np.testing.assert_allclose(
+                        actual=root[i, j, k],
+                        desired=np.sort(np.roots([*c[:-1, j, k], d])),
+                    )
+
+        c = np.array(
+            [
+                [1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 0, 1],
+                [1, -1, -8, 12],
+                [1, -6, 11, -6],
+                [0, -6, 11, -2],
+            ]
         )
-    c = np.array([0, 1, -1, -8, 12])
-    root = poly_root(c, sort=True, distinct=True)
-    root = root[~np.isnan(root)]
-    unique_root = np.unique(np.roots(c))
-    assert root.size == unique_root.size
-    np.testing.assert_allclose(root, unique_root)
+        root = poly_root(c.T, sort=True, distinct=True)
+        for j in range(c.shape[0]):
+            unique_roots = np.unique(np.roots(c[j]))
+            np.testing.assert_allclose(
+                actual=root[j][~np.isnan(root[j])], desired=unique_roots, err_msg=str(j)
+            )
+        c = np.array([0, 1, -1, -8, 12])
+        root = poly_root(c, sort=True, distinct=True)
+        root = root[~np.isnan(root)]
+        unique_root = np.unique(np.roots(c))
+        assert root.size == unique_root.size
+        np.testing.assert_allclose(root, unique_root)
 
+    @pytest.mark.unit
+    def test_polyder_vec(self):
+        """Test vectorized computation of polynomial derivative."""
+        quintic = 6
+        c = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
+        # make sure broadcasting won't hide error in implementation
+        assert np.unique(c.shape).size == c.ndim
+        derivative = polyder_vec(c)
+        desired = np.vectorize(np.polyder, signature="(m)->(n)")(c.T).T
+        np.testing.assert_allclose(derivative, desired)
 
-@pytest.mark.unit
-def test_polyder_vec():
-    """Test vectorized computation of polynomial derivative."""
-    quintic = 6
-    c = np.arange(-18, 18).reshape(quintic, 3, -1) * np.pi
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(c.shape).size == c.ndim
-    derivative = polyder_vec(c)
-    desired = np.vectorize(np.polyder, signature="(m)->(n)")(c.T).T
-    np.testing.assert_allclose(derivative, desired)
+    @pytest.mark.unit
+    def test_polyval_vec(self):
+        """Test vectorized computation of polynomial evaluation."""
 
+        def test(x, c):
+            val = polyval_vec(x=x, c=c)
+            c = np.moveaxis(c, 0, -1)
+            x = x[..., np.newaxis]
+            np.testing.assert_allclose(
+                val,
+                np.vectorize(np.polyval, signature="(m),(n)->(n)")(c, x).squeeze(
+                    axis=-1
+                ),
+            )
 
-@pytest.mark.unit
-def test_polyval_vec():
-    """Test vectorized computation of polynomial evaluation."""
+        quartic = 5
+        c = np.arange(-60, 60).reshape(quartic, 3, -1) * np.pi
+        # make sure broadcasting won't hide error in implementation
+        assert np.unique(c.shape).size == c.ndim
+        x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
+        test(x, c)
 
-    def test(x, c):
-        val = polyval_vec(x=x, c=c)
-        c = np.moveaxis(c, 0, -1)
-        x = x[..., np.newaxis]
-        np.testing.assert_allclose(
-            val,
-            np.vectorize(np.polyval, signature="(m),(n)->(n)")(c, x).squeeze(axis=-1),
-        )
-
-    quartic = 5
-    c = np.arange(-60, 60).reshape(quartic, 3, -1) * np.pi
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(c.shape).size == c.ndim
-    x = np.linspace(0, 20, c.shape[1] * c.shape[2]).reshape(c.shape[1], c.shape[2])
-    test(x, c)
-
-    x = np.stack([x, x * 2], axis=0)
-    x = np.stack([x, x * 2, x * 3, x * 4], axis=0)
-    # make sure broadcasting won't hide error in implementation
-    assert np.unique(x.shape).size == x.ndim
-    assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
-    assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
-    test(x, c)
+        x = np.stack([x, x * 2], axis=0)
+        x = np.stack([x, x * 2, x * 3, x * 4], axis=0)
+        # make sure broadcasting won't hide error in implementation
+        assert np.unique(x.shape).size == x.ndim
+        assert c.shape[1:] == x.shape[x.ndim - (c.ndim - 1) :]
+        assert np.unique((c.shape[0],) + x.shape[c.ndim - 1 :]).size == x.ndim - 1
+        test(x, c)
 
 
 def _f_1d(x):
@@ -199,9 +202,7 @@ class TestFastInterp:
             fq,
         )
 
-    @pytest.mark.xfail(
-        reason="Numpy, jax, and scipy need to fix bug with 2D FFT (fft2)."
-    )
+    @pytest.mark.xfail(reason="Does numpy, jax, and scipy need to fix a bug with FFT?")
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "func, m, n",
@@ -254,8 +255,7 @@ class TestFastInterp:
             or interior roots grid for Chebyshev points.
 
         """
-        # Want to unit test external code used in Fourier Chebyshev interpolation
-        # due to issues like
+        # Need to test fft used in Fourier Chebyshev interpolation due to issues like
         # https://github.com/scipy/scipy/issues/15033
         # https://github.com/scipy/scipy/issues/21198
         # https://github.com/google/jax/issues/22466,
@@ -278,7 +278,7 @@ class TestFastInterp:
         else:
             fq_2 = norm * idct(dct(f(m), type=dct_type), n=n.size, type=dct_type)
         np.testing.assert_allclose(fq_1, f(n), atol=1e-14)
-        # JAX is much less accurate than scipy.
+        # JAX is less accurate than scipy.
         np.testing.assert_allclose(fq_2, f(n), atol=1e-6)
 
         fig, ax = plt.subplots()
@@ -295,17 +295,23 @@ class TestFastInterp:
     def test_interp_dct(self, f, M):
         """Test non-uniform DCT interpolation."""
         c0 = chebinterpolate(f, M - 1)
-        assert not np.allclose(c0, cheb_from_dct(dct(f(chebpts1(M)), 2) / M)), (
-            "Interpolation should fail because cosine basis is in different domain. "
-            "Use better test function."
+        assert not np.allclose(
+            c0,
+            cheb_from_dct(dct(f(chebpts1(M)), 2)) / M,
+        ), (
+            "Interpolation should fail because cosine basis is in wrong domain, "
+            "yet the supplied test function was interpolated fine using this wrong "
+            "domain. Pick a better test function."
         )
         # test interpolation
         z = cheb_pts(M)
         fz = f(z)
         np.testing.assert_allclose(c0, cheb_from_dct(dct(fz, 2) / M), atol=1e-13)
-        if np.allclose(_f_algebraic(z), fz):
+        if np.allclose(_f_algebraic(z), fz):  # Should reconstruct exactly.
             np.testing.assert_allclose(
-                cheb2poly(c0), np.array([-np.e, -1, 0, 1, 1, 0, -10]), atol=1e-13
+                cheb2poly(c0),
+                np.array([-np.e, -1, 0, 1, 1, 0, -10]),
+                atol=1e-13,
             )
         # test evaluation
         xq = np.arange(10 * 3 * 2).reshape(10, 3, 2)

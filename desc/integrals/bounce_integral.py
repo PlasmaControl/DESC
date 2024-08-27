@@ -10,7 +10,7 @@ from desc.integrals.bounce_utils import (
     bounce_points,
     bounce_quadrature,
     get_alpha,
-    interp_to_argmin_B_soft,
+    interp_to_argmin_g,
     plot_ppoly,
 )
 from desc.integrals.interp_utils import interp_rfft2, irfft2_non_uniform, polyder_vec
@@ -444,8 +444,8 @@ class Bounce2D:
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L, num_well).
             ζ coordinates of bounce points. The points are grouped and ordered such
-            that the straight line path between the intersects in ``z1`` and ``z2``
-            resides in the epigraph of |B|.
+            that the straight line path between ``z1`` and ``z2`` resides in the
+            epigraph of |B|.
 
         """
         return self._B.intersect1d(1 / jnp.atleast_2d(pitch), num_well)
@@ -458,8 +458,8 @@ class Bounce2D:
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L, num_well).
             ζ coordinates of bounce points. The points are grouped and ordered such
-            that the straight line path between the intersects in ``z1`` and ``z2``
-            resides in the epigraph of |B|.
+            that the straight line path between ``z1`` and ``z2`` resides in the
+            epigraph of |B|.
         pitch : jnp.ndarray
             Shape (P, L).
             λ values to evaluate the bounce integral at each field line. λ(ρ) is
@@ -777,8 +777,8 @@ class Bounce1D:
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L * M, num_well).
             ζ coordinates of bounce points. The points are grouped and ordered such
-            that the straight line path between the intersects in ``z1`` and ``z2``
-            resides in the epigraph of |B|.
+            that the straight line path between ``z1`` and ``z2`` resides in the
+            epigraph of |B|.
 
             If there were less than ``num_wells`` wells detected along a field line,
             then the last axis, which enumerates bounce points for  a particular field
@@ -801,8 +801,8 @@ class Bounce1D:
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L * M, num_well).
             ζ coordinates of bounce points. The points are grouped and ordered such
-            that the straight line path between the intersects in ``z1`` and ``z2``
-            resides in the epigraph of |B|.
+            that the straight line path between ``z1`` and ``z2`` resides in the
+            epigraph of |B|.
         pitch : jnp.ndarray
             Shape must broadcast with (P, L * M).
             λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
@@ -877,7 +877,7 @@ class Bounce1D:
             wells detected along a field line than the size of the last axis of the
             returned arrays, then that axis is padded with zero.
         method : str
-            Method of interpolation for functions contained in ``f``.
+            Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
             Default is cubic C1 local spline.
         batch : bool
@@ -910,13 +910,13 @@ class Bounce1D:
             check=check,
         )
         if weight is not None:
-            result *= interp_to_argmin_B_soft(
-                g=weight,
+            result *= interp_to_argmin_g(
+                h=weight,
                 z1=z1,
                 z2=z2,
                 knots=self._zeta,
-                B=self.B,
-                dB_dz=self._dB_dz,
+                g=self.B,
+                dg_dz=self._dB_dz,
                 method=method,
             )
         assert result.shape[-1] == setdefault(num_well, (self._zeta.size - 1) * 3)

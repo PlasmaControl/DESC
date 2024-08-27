@@ -77,7 +77,7 @@ def get_alpha(alpha_0, iota, num_transit, period):
     return alpha
 
 
-def _check_spline_shape(knots, B, dB_dz, pitch=None):
+def _check_spline_shape(knots, g, dg_dz, pitch=None):
     """Ensure inputs have compatible shape, and return them with full dimension.
 
     Parameters
@@ -85,18 +85,18 @@ def _check_spline_shape(knots, B, dB_dz, pitch=None):
     knots : jnp.ndarray
         Shape (knots.size, ).
         ζ coordinates of spline knots. Must be strictly increasing.
-    B : jnp.ndarray
-        Shape (B.shape[0], S, knots.size - 1).
-        Polynomial coefficients of the spline of |B| in local power basis.
+    g : jnp.ndarray
+        Shape (g.shape[0], S, knots.size - 1).
+        Polynomial coefficients of the spline of g in local power basis.
         First axis enumerates the coefficients of power series. Second axis
-        enumerates the splines along the field lines. Last axis enumerates the
-        polynomials that compose the spline along a particular field line.
-    dB_dz : jnp.ndarray
-        Shape (B.shape[0] - 1, *B.shape[1:]).
-        Polynomial coefficients of the spline of (∂|B|/∂ζ)|ρ,α in local power basis.
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
+    dg_dz : jnp.ndarray
+        Shape (g.shape[0] - 1, *g.shape[1:]).
+        Polynomial coefficients of the spline of ∂g/∂ζ in local power basis.
         First axis enumerates the coefficients of power series. Second axis
-        enumerates the splines along the field lines. Last axis enumerates the
-        polynomials that compose the spline along a particular field line.
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
     pitch : jnp.ndarray
         Shape must broadcast with (P, S).
         λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
@@ -107,29 +107,29 @@ def _check_spline_shape(knots, B, dB_dz, pitch=None):
     """
     errorif(knots.ndim != 1, msg=f"knots should be 1d; got shape {knots.shape}.")
     errorif(
-        B.shape[-1] != (knots.size - 1),
+        g.shape[-1] != (knots.size - 1),
         msg=(
             "Last axis does not enumerate polynomials of spline. "
-            f"B.shape={B.shape}. knots.shape={knots.shape}."
+            f"Spline shape {g.shape}. Knots shape {knots.shape}."
         ),
     )
     errorif(
-        B.ndim > 3
-        or dB_dz.ndim > 3
-        or (B.shape[0] - 1) != dB_dz.shape[0]
-        or B.shape[1:] != dB_dz.shape[1:],
-        msg=f"Invalid shape for spline. B.shape={B.shape}. dB_dz.shape={dB_dz.shape}.",
+        g.ndim > 3
+        or dg_dz.ndim > 3
+        or (g.shape[0] - 1) != dg_dz.shape[0]
+        or g.shape[1:] != dg_dz.shape[1:],
+        msg=f"Invalid shape {g.shape} for spline and derivative {dg_dz.shape}.",
     )
     # Add axis which enumerates field lines if necessary.
-    B, dB_dz = atleast_3d_mid(B, dB_dz)
+    g, dg_dz = atleast_3d_mid(g, dg_dz)
     if pitch is not None:
         pitch = jnp.atleast_2d(pitch)
         errorif(
             pitch.ndim != 2
-            or not (pitch.shape[-1] == 1 or pitch.shape[-1] == B.shape[1]),
+            or not (pitch.shape[-1] == 1 or pitch.shape[-1] == g.shape[1]),
             msg=f"Invalid shape {pitch.shape} for pitch angles.",
         )
-    return B, dB_dz, pitch
+    return g, dg_dz, pitch
 
 
 def bounce_points(
@@ -149,17 +149,17 @@ def bounce_points(
         Shape (knots.size, ).
         ζ coordinates of spline knots. Must be strictly increasing.
     B : jnp.ndarray
-        Shape (B.shape[0], S, knots.size - 1).
+        Shape (g.shape[0], S, knots.size - 1).
         Polynomial coefficients of the spline of |B| in local power basis.
         First axis enumerates the coefficients of power series. Second axis
-        enumerates the splines along the field lines. Last axis enumerates the
-        polynomials that compose the spline along a particular field line.
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
     dB_dz : jnp.ndarray
-        Shape (B.shape[0] - 1, *B.shape[1:]).
-        Polynomial coefficients of the spline of (∂|B|/∂ζ)|ρ,α in local power basis.
+        Shape (g.shape[0] - 1, *g.shape[1:]).
+        Polynomial coefficients of the spline of (∂|B|/∂ζ)|(ρ,α) in local power basis.
         First axis enumerates the coefficients of power series. Second axis
-        enumerates the splines along the field lines. Last axis enumerates the
-        polynomials that compose the spline along a particular field line.
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
     num_well : int or None
         Specify to return the first ``num_well`` pairs of bounce points for each
         pitch along each field line. This is useful if ``num_well`` tightly
@@ -181,8 +181,8 @@ def bounce_points(
     z1, z2 : (jnp.ndarray, jnp.ndarray)
         Shape (P, S, num_well).
         ζ coordinates of bounce points. The points are grouped and ordered such
-        that the straight line path between the intersects in ``z1`` and ``z2``
-        resides in the epigraph of |B|.
+        that the straight line path between ``z1`` and ``z2`` resides in the
+        epigraph of |B|.
 
         If there were less than ``num_wells`` wells detected along a field line,
         then the last axis, which enumerates bounce points for a particular field
@@ -319,8 +319,8 @@ def bounce_quadrature(
     z1, z2 : jnp.ndarray
         Shape (P, S, num_well).
         ζ coordinates of bounce points. The points are grouped and ordered such
-        that the straight line path between the intersects in ``z1`` and ``z2``
-        resides in the epigraph of |B|.
+        that the straight line path between ``z1`` and ``z2`` resides in the
+        epigraph of |B|.
     pitch : jnp.ndarray
         Shape must broadcast with (P, S).
         λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
@@ -344,7 +344,7 @@ def bounce_quadrature(
         Shape (knots.size, ).
         Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
     method : str
-        Method of interpolation for functions contained in ``f``.
+        Method of interpolation.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
         Default is cubic C1 local spline.
     batch : bool
@@ -472,10 +472,8 @@ def _interpolate_and_integrate(
         - data["B^zeta"] * data["|B|_z|r,a"] / data["|B|"] ** 2,
     ).reshape(shape)
     B = interp1d_Hermite_vec(Q, knots, data["|B|"], data["|B|_z|r,a"]).reshape(shape)
-    # Spline the integrand so that we can evaluate it at quadrature points without
-    # expensive coordinate mappings and root finding. Spline each function separately so
-    # that the singularity near the bounce points can be captured more accurately than
-    # can be by any polynomial.
+    # Spline each function separately so that operations in the integrand that do not
+    # preserve smoothness can be captured by the quadrature.
     f = [interp1d_vec(Q, knots, f_i, method=method).reshape(shape) for f_i in f]
     result = jnp.dot(integrand(*f, B=B, pitch=pitch) / b_sup_z, w)
 
@@ -558,115 +556,175 @@ def _plot_check_interp(Q, V, name=""):
             plt.show()
 
 
-def _get_extrema(knots, B, dB_dz, sentinel=jnp.nan):
-    """Return ext (ζ*, |B|(ζ*)).
+def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
+    """Return ext (ζ*, g(ζ*)).
 
     Parameters
     ----------
     knots : jnp.ndarray
         Shape (knots.size, ).
         ζ coordinates of spline knots. Must be strictly increasing.
-    B : jnp.ndarray
-        Shape (B.shape[0], S, knots.size - 1).
-        Polynomial coefficients of the spline of |B| in local power basis.
+    g : jnp.ndarray
+        Shape (g.shape[0], S, knots.size - 1).
+        Polynomial coefficients of the spline of g in local power basis.
         First axis enumerates the coefficients of power series. Second axis
-        enumerates the splines along the field lines. Last axis enumerates the
-        polynomials that compose the spline along a particular field line.
-    dB_dz : jnp.ndarray
-        Shape (B.shape[0] - 1, *B.shape[1:]).
-        Polynomial coefficients of the spline of (∂|B|/∂ζ)|ρ,α in local power basis.
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
+    dg_dz : jnp.ndarray
+        Shape (g.shape[0] - 1, *g.shape[1:]).
+        Polynomial coefficients of the spline of ∂g/∂ζ in local power basis.
         First axis enumerates the coefficients of power series. Second axis
-        enumerates the splines along the field lines. Last axis enumerates the
-        polynomials that compose the spline along a particular field line.
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
     sentinel : float
         Value with which to pad array to return fixed shape.
 
     Returns
     -------
-    ext, B_ext : jnp.ndarray
+    ext, g_ext : jnp.ndarray
         Shape (S, (knots.size - 1) * (degree - 1)).
-        First array enumerates ζ*. Second array enumerates |B|(ζ*)
-        Sorted order of ζ* is not promised.
+        First array enumerates ζ*. Second array enumerates g(ζ*)
+        Sorting order of extrema is arbitrary.
 
     """
-    B, dB_dz, _ = _check_spline_shape(knots, B, dB_dz)
-    S, degree = B.shape[1], B.shape[0] - 1
+    g, dg_dz, _ = _check_spline_shape(knots, g, dg_dz)
+    S, degree = g.shape[1], g.shape[0] - 1
     ext = poly_root(
-        c=dB_dz, a_min=jnp.array([0.0]), a_max=jnp.diff(knots), sentinel=sentinel
+        c=dg_dz, a_min=jnp.array([0.0]), a_max=jnp.diff(knots), sentinel=sentinel
     )
     assert ext.shape == (S, knots.size - 1, degree - 1)
-    B_ext = polyval_vec(x=ext, c=B[..., jnp.newaxis]).reshape(S, -1)
+    g_ext = polyval_vec(x=ext, c=g[..., jnp.newaxis]).reshape(S, -1)
     # Transform out of local power basis expansion.
     ext = (ext + knots[:-1, jnp.newaxis]).reshape(S, -1)
-    return ext, B_ext
+    return ext, g_ext
 
 
-def interp_to_argmin_B_soft(g, z1, z2, knots, B, dB_dz, method="cubic", beta=-50):
-    """Interpolate ``g`` to the deepest point in the magnetic well.
+def _where_argmin_g(z1, z2, ext, g_ext, upper_sentinel):
+    assert z1.shape[1] == z2.shape[1] == ext.shape[0] == g_ext.shape[0]
+    return jnp.where(
+        (z1[..., jnp.newaxis] < ext[:, jnp.newaxis])
+        & (ext[:, jnp.newaxis] < z2[..., jnp.newaxis]),
+        g_ext[:, jnp.newaxis],
+        upper_sentinel,  # don't make too large or softmax loses resolution
+    )
 
-    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E |B|(ζ). Returns mean_A g(ζ).
+
+def interp_to_argmin_g(
+    h, z1, z2, knots, g, dg_dz, method="cubic", beta=-100, upper_sentinel=1e2
+):
+    """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
+
+    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E g(ζ). Returns mean_A h(ζ).
 
     Parameters
     ----------
-    g : jnp.ndarray
+    h : jnp.ndarray
         Shape must broadcast with (S, knots.size).
         Values evaluated on ``knots`` to interpolate.
+    z1, z2 : jnp.ndarray
+        Shape (P, S, num_well).
+        ζ coordinates of bounce points. The points are grouped and ordered such
+        that the straight line path between ``z1`` and ``z2`` resides in the
+        epigraph of g.
+    knots : jnp.ndarray
+        Shape (knots.size, ).
+        ζ coordinates of spline knots. Must be strictly increasing.
+    g : jnp.ndarray
+        Shape (g.shape[0], S, knots.size - 1).
+        Polynomial coefficients of the spline of g in local power basis.
+        First axis enumerates the coefficients of power series. Second axis
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
+    dg_dz : jnp.ndarray
+        Shape (g.shape[0] - 1, *g.shape[1:]).
+        Polynomial coefficients of the spline of ∂g/∂ζ in local power basis.
+        First axis enumerates the coefficients of power series. Second axis
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
+    method : str
+        Method of interpolation.
+        See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
+        Default is cubic C1 local spline.
     beta : float
         More negative gives exponentially better approximation at the
         expense of noisier gradients - noisier in the physics sense (unrelated
         to the automatic differentiation).
+    upper_sentinel : float
+        Something a good bit larger than ``g``. For example if max(g) is
+        10, then 50 will more than suffice.
+
+    Warnings
+    --------
+    Recall that if ``g`` is small then the effect of β is reduced.
+
+    Returns
+    -------
+    h : jnp.ndarray
+        Shape (P, S, num_well)
 
     """
-    ext, B = _get_extrema(knots, B, dB_dz, sentinel=0)
-    assert ext.shape[0] == B.shape[0] == z1.shape[1] == z2.shape[1]
-    # TODO: Check if softmax has where argument that works like this.
-    #       (numpy ufunc where typically does not.)
-    argmin = softmax(
-        beta
-        * jnp.where(
-            (z1[..., jnp.newaxis] < ext[:, jnp.newaxis])
-            & (ext[:, jnp.newaxis] < z2[..., jnp.newaxis]),
-            jnp.expand_dims(B / jnp.mean(B, axis=-1, keepdims=True), axis=1),
-            1e2,  # >> max(|B|) / mean(|B|)
-        ),
-        axis=-1,
-    )
-    g = jnp.linalg.vecdot(
+    ext, g = _get_extrema(knots, g, dg_dz, sentinel=0)
+    argmin = softmax(beta * _where_argmin_g(z1, z2, ext, g, upper_sentinel), axis=-1)
+    h = jnp.linalg.vecdot(
         argmin,
-        interp1d_vec(ext, knots, jnp.atleast_2d(g), method=method)[:, jnp.newaxis],
+        interp1d_vec(ext, knots, jnp.atleast_2d(h), method=method)[:, jnp.newaxis],
     )
-    assert g.shape == z1.shape == z2.shape
-    return g
+    assert h.shape == z1.shape
+    return h
 
 
-# Less efficient than soft if P >> 1.
-def interp_to_argmin_B_hard(g, z1, z2, knots, B, dB_dz, method="cubic"):
-    """Interpolate ``g`` to the deepest point in the magnetic well.
+def interp_to_argmin_g_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
+    """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
-    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E |B|(ζ). Returns g(A).
+    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
+
+    See Also
+    --------
+    interp_to_argmin_g
+        Accomplishes the same task, but handles the case of non-unique global minima
+        more correctly. It is also more efficient if P >> 1.
 
     Parameters
     ----------
-    g : jnp.ndarray
+    h : jnp.ndarray
         Shape must broadcast with (S, knots.size).
         Values evaluated on ``knots`` to interpolate.
+    z1, z2 : jnp.ndarray
+        Shape (P, S, num_well).
+        ζ coordinates of bounce points. The points are grouped and ordered such
+        that the straight line path between ``z1`` and ``z2`` resides in the
+        epigraph of g.
+    knots : jnp.ndarray
+        Shape (knots.size, ).
+        ζ coordinates of spline knots. Must be strictly increasing.
+    g : jnp.ndarray
+        Shape (g.shape[0], S, knots.size - 1).
+        Polynomial coefficients of the spline of g in local power basis.
+        First axis enumerates the coefficients of power series. Second axis
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
+    dg_dz : jnp.ndarray
+        Shape (g.shape[0] - 1, *g.shape[1:]).
+        Polynomial coefficients of the spline of ∂g/∂ζ in local power basis.
+        First axis enumerates the coefficients of power series. Second axis
+        enumerates the splines. Last axis enumerates the polynomials that
+        compose a particular spline.
+    method : str
+        Method of interpolation.
+        See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
+        Default is cubic C1 local spline.
 
     """
-    ext, B = _get_extrema(knots, B, dB_dz, sentinel=0)
-    assert ext.shape[0] == B.shape[0] == z1.shape[1] == z2.shape[1]
-    argmin = jnp.argmin(
-        jnp.where(
-            (z1[..., jnp.newaxis] < ext[:, jnp.newaxis])
-            & (ext[:, jnp.newaxis] < z2[..., jnp.newaxis]),
-            B[:, jnp.newaxis],
-            1e2 + jnp.max(B),
-        ),
-        axis=-1,
-    )
+    ext, g = _get_extrema(knots, g, dg_dz, sentinel=0)
+    # We can use the non-differentiable max because we actually want the gradients
+    # to accumulate through only the minimum anyway since we are differentiating how
+    # our physics objective changes wrt physics stuff not wrt which of the extrema
+    # are interpolated to.
+    argmin = jnp.argmin(_where_argmin_g(z1, z2, ext, g, jnp.max(g) + 10), axis=-1)
     A = jnp.take_along_axis(ext[jnp.newaxis], argmin, axis=-1)
-    g = interp1d_vec(A, knots, jnp.atleast_2d(g), method=method)
-    assert g.shape == z1.shape == z2.shape
-    return g
+    h = interp1d_vec(A, knots, jnp.atleast_2d(h), method=method)
+    assert h.shape == z1.shape
+    return h
 
 
 def plot_ppoly(

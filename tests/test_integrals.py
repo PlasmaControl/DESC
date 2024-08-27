@@ -41,8 +41,8 @@ from desc.integrals.bounce_utils import (
     bounce_points,
     get_alpha,
     get_pitch,
-    interp_to_argmin_B_hard,
-    interp_to_argmin_B_soft,
+    interp_to_argmin_g,
+    interp_to_argmin_g_hard,
     plot_ppoly,
 )
 from desc.integrals.interp_utils import fourier_pts
@@ -1063,7 +1063,7 @@ class TestBounce1D:
         data = eq.compute(
             Bounce1D.required_names() + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        bounce = Bounce1D(grid.source_grid, data, check=True)
+        bounce = Bounce1D(grid.source_grid, data, check=True, quad=leggauss(3))
         pitch = get_pitch(
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
@@ -1094,18 +1094,18 @@ class TestBounce1D:
         print(pitch[:, i, j])
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("func", [interp_to_argmin_B_soft, interp_to_argmin_B_hard])
-    def test_interp_to_argmin_B(self, func):
+    @pytest.mark.parametrize("func", [interp_to_argmin_g, interp_to_argmin_g_hard])
+    def test_interp_to_argmin_g(self, func):
         """Test argmin interpolation."""  # noqa: D202
 
         # Test functions chosen with purpose; don't change unless plotted and compared.
-        def f(z):
+        def h(z):
             return np.cos(3 * z) * np.sin(2 * np.cos(z)) + np.cos(1.2 * z)
 
-        def B(z):
+        def g(z):
             return np.sin(3 * z) * np.cos(1 / (1 + z)) * np.cos(z**2) * z
 
-        def dB_dz(z):
+        def dg_dz(z):
             return (
                 3 * z * np.cos(3 * z) * np.cos(z**2) * np.cos(1 / (1 + z))
                 - 2 * z**2 * np.sin(3 * z) * np.sin(z**2) * np.cos(1 / (1 + z))
@@ -1119,21 +1119,21 @@ class TestBounce1D:
             {
                 "B^zeta": np.ones_like(zeta),
                 "B^zeta_z|r,a": np.ones_like(zeta),
-                "|B|": B(zeta),
-                "|B|_z|r,a": dB_dz(zeta),
+                "|B|": g(zeta),
+                "|B|_z|r,a": dg_dz(zeta),
             },
         )
         np.testing.assert_allclose(bounce._zeta, zeta)
         argmin = 5.61719
         np.testing.assert_allclose(
-            f(argmin),
+            h(argmin),
             func(
-                f(zeta),
+                h(zeta),
                 z1=np.array(0, ndmin=3),
                 z2=np.array(2 * np.pi, ndmin=3),
                 knots=zeta,
-                B=bounce.B,
-                dB_dz=bounce._dB_dz,
+                g=bounce.B,
+                dg_dz=bounce._dB_dz,
             ),
             rtol=1e-3,
         )
@@ -1386,25 +1386,26 @@ class TestBounce2DPoints:
         return f.reshape(M, N)
 
     @pytest.mark.unit
-    def test_bp1_first(self):
+    def test_z1_first(self):
         """Test that bounce points are computed correctly."""
         M, N = 1, 10
         domain = (-1, 1)
         nodes = FourierChebyshevBasis.nodes(M, N, domain=domain)
-        f = self._periodic_fun(nodes, M, N)
-        fcb = FourierChebyshevBasis(f, domain=domain)
-        pcb = fcb.compute_cheb(fourier_pts(M))
-        pitch = 1 / np.linspace(1, 4, 20)
-        bp1, bp2 = pcb.intersect1d(pitch)
-        pcb.check_intersect1d(bp1, bp2, pitch)
-        bp1, bp2 = TestBounce1DPoints.filter(bp1, bp2)
+        f = -self._periodic_fun(nodes, M, N)
+        cheb = FourierChebyshevBasis(f, domain=domain).compute_cheb(fourier_pts(M))
+        pitch = 1 / np.linspace(1, 4, 1)
+        z1, z2 = cheb.intersect1d(1 / pitch, num_intersect=1)
+        print(z1)
+        print(z2)
+        cheb.check_intersect1d(z1, z2, 1 / pitch)
+        z1, z2 = TestBounce1DPoints.filter(z1, z2)
 
         def f(z):
             return -2 * np.cos(1 / (0.1 + z**2)) + 2
 
         r = self._cheb_intersect(chebinterpolate(f, N), 1 / pitch)
-        np.testing.assert_allclose(bp1, r[::2], rtol=1e-3)
-        np.testing.assert_allclose(bp2, r[1::2], rtol=1e-3)
+        np.testing.assert_allclose(z1, r[::2], rtol=1e-3)
+        np.testing.assert_allclose(z2, r[1::2], rtol=1e-3)
 
 
 class TestBounce2D:

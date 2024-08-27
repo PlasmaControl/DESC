@@ -7,10 +7,10 @@ from matplotlib import pyplot as plt
 
 from desc.backend import dct, flatnonzero, idct, irfft, jnp, put, rfft
 from desc.integrals.interp_utils import (
+    _filter_distinct,
     cheb_from_dct,
     cheb_pts,
     chebroots_vec,
-    filter_distinct,
     fourier_pts,
     harmonic,
     idct_non_uniform,
@@ -50,8 +50,8 @@ def _subtract(c, k):
 def _in_epigraph_and(is_intersect, df_dy_sign):
     """Set and epigraph of function f with the given set of points.
 
-    Return only intersects where the straight line path between adjacent
-    intersects resides in the epigraph of a continuous map ``f``.
+    Used to return only intersects where the straight line path between
+    adjacent intersects resides in the epigraph of a continuous map ``f``.
 
     Warnings
     --------
@@ -430,7 +430,7 @@ class ChebyshevBasisSet:
 
         # Intersects must satisfy y ∈ [-1, 1].
         # Pick sentinel such that only distinct roots are considered intersects.
-        y = filter_distinct(y, sentinel=-2.0, eps=eps)
+        y = _filter_distinct(y, sentinel=-2.0, eps=eps)
         is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) <= 1.0)
         # Ensure y is in domain of arcos; choose 1 because kernel probably cheaper.
         y = jnp.where(is_intersect, y.real, 1.0)
@@ -471,17 +471,16 @@ class ChebyshevBasisSet:
         -------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape broadcasts with (..., *self.cheb.shape[:-2], num_intersect).
-            ``z1``, ``z2`` holds intersects satisfying ∂f/∂y <= 0, ∂f/∂y >= 0,
-            respectively. The points are grouped and ordered such that the
-            straight line path between the intersects in ``z1`` and ``z2``
-            resides in the epigraph of f.
+            ``z1`` and ``z2`` are intersects satisfying ∂f/∂y <= 0 and ∂f/∂y >= 0,
+            respectively. The points are grouped and ordered such that the straight
+            line path between ``z1`` and ``z2`` resides in the epigraph of f.
 
         """
         errorif(
             self.N < 2,
             NotImplementedError,
-            "This method requires the Chebyshev spectral resolution of at "
-            f"least 2, but got N={self.N}.",
+            "This method requires a Chebyshev spectral resolution of N > 1, "
+            f"but got N = {self.N}.",
         )
 
         # Add axis to use same k over all Chebyshev series of the piecewise object.
@@ -498,9 +497,9 @@ class ChebyshevBasisSet:
         # polynomials is a left intersection i.e. ``is_z1`` because the subset of
         # pitch values that generate this edge case has zero measure. By ignoring
         # this, for those subset of pitch values the integrations will be done in
-        # the hypograph of |B| rather than the epigraph, which will be integrated
-        # to zero. If we decide later to not ignore this, the technique to solve
-        # this is to disqualify intersects within ``_eps`` from ``domain[-1]``.
+        # the hypograph of |B|, which will yield zero. If in far future decide to
+        # not ignore this, note the solution is to disqualify intersects within
+        # ``_eps`` from ``domain[-1]``.
         is_z1 = (df_dy_sign <= 0) & is_intersect
         is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(is_intersect, df_dy_sign)
 
@@ -532,10 +531,9 @@ class ChebyshevBasisSet:
         ----------
         z1, z2 : jnp.ndarray
             Shape must broadcast with (*self.cheb.shape[:-2], W).
-            ``z1``, ``z2`` holds intersects satisfying ∂f/∂y <= 0, ∂f/∂y >= 0,
-            respectively. The points are grouped and ordered such that the
-            straight line path between the intersects in ``z1`` and ``z2``
-            resides in the epigraph of f.
+            ``z1`` and ``z2`` are intersects satisfying ∂f/∂y <= 0 and ∂f/∂y >= 0,
+            respectively. The points are grouped and ordered such that the straight
+            line path between ``z1`` and ``z2`` resides in the epigraph of f.
         k : jnp.ndarray
             Shape must broadcast with *self.cheb.shape[:-2].
             k such that fₓ(yᵢ) = k.

@@ -32,10 +32,8 @@ def cheb_pts(N, lobatto=False, domain=(-1, 1)):
     This is a common definition of the Chebyshev points (see Boyd, Chebyshev and
     Fourier Spectral Methods p. 498). These are the points demanded by discrete
     cosine transformations to interpolate Chebyshev series because the cosine
-    basis for the DCT is defined on [0, π].
-
-    They differ in ordering from the points returned by
-    ``numpy.polynomial.chebyshev.chebpts1`` and
+    basis for the DCT is defined on [0, π]. They differ in ordering from the
+    points returned by ``numpy.polynomial.chebyshev.chebpts1`` and
     ``numpy.polynomial.chebyshev.chebpts2``.
 
     Parameters
@@ -291,7 +289,7 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
             + (n * xq[..., idx[1], jnp.newaxis])[..., jnp.newaxis, :]
         )
     )
-    fq = 2.0 * jnp.sum(basis * a, axis=(-2, -1)).real
+    fq = 2.0 * jnp.real(basis * a).sum(axis=(-2, -1))
     return fq
 
 
@@ -540,7 +538,7 @@ def poly_root(
 
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
-    return filter_distinct(r, sentinel, eps) if distinct else r
+    return _filter_distinct(r, sentinel, eps) if distinct else r
 
 
 def _root_cubic(a, b, c, d, sentinel, eps, distinct):
@@ -623,7 +621,7 @@ def _concat_sentinel(r, sentinel, num=1):
     return jnp.append(r, sent, axis=-1)
 
 
-def filter_distinct(r, sentinel, eps):
+def _filter_distinct(r, sentinel, eps):
     """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
     # eps needs to be low enough that close distinct roots do not get removed.
     # Otherwise, algorithms relying on continuity will fail.

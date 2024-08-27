@@ -1131,10 +1131,6 @@ class FourierZernikeBasis(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        # TODO: in map_clebsch_root findign
-        #       lambda should be fixed to rho and zeta
-        #       so lambda is slimmed to 1d fourier series for fixed rho zeta.
-        #       cache radial and toroidal for rootfinding
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])

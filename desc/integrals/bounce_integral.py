@@ -8,7 +8,7 @@ from desc.integrals.bounce_utils import (
     _check_bounce_points,
     bounce_points,
     bounce_quadrature,
-    interp_to_argmin_g,
+    interp_to_argmin,
     plot_ppoly,
 )
 from desc.integrals.interp_utils import polyder_vec
@@ -282,7 +282,7 @@ class Bounce1D:
         self,
         pitch,
         integrand,
-        f,
+        f=None,
         weight=None,
         num_well=None,
         method="cubic",
@@ -355,7 +355,7 @@ class Bounce1D:
             z2=z2,
             pitch=pitch,
             integrand=integrand,
-            f=f,
+            f=setdefault(f, []),
             data=self._data,
             knots=self._zeta,
             method=method,
@@ -363,7 +363,7 @@ class Bounce1D:
             check=check,
         )
         if weight is not None:
-            result *= interp_to_argmin_g(
+            result *= interp_to_argmin(
                 h=weight,
                 z1=z1,
                 z2=z2,

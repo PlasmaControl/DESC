@@ -581,7 +581,7 @@ def _where_for_argmin(z1, z2, ext, g_ext, upper_sentinel):
     )
 
 
-def interp_to_argmin_g(
+def interp_to_argmin(
     h, z1, z2, knots, g, dg_dz, method="cubic", beta=-100, upper_sentinel=1e2
 ):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
@@ -652,14 +652,14 @@ def interp_to_argmin_g(
     return h
 
 
-def interp_to_argmin_g_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
+def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
 
     See Also
     --------
-    interp_to_argmin_g
+    interp_to_argmin
         Accomplishes the same task, but handles the case of non-unique global minima
         more correctly. It is also more efficient if P >> 1.
 

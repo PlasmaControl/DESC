@@ -38,8 +38,8 @@ from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
     get_pitch,
-    interp_to_argmin_g,
-    interp_to_argmin_g_hard,
+    interp_to_argmin,
+    interp_to_argmin_hard,
     plot_ppoly,
 )
 from desc.integrals.quad_utils import (
@@ -1089,8 +1089,8 @@ class TestBounce1D:
         print(pitch[:, i, j])
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("func", [interp_to_argmin_g, interp_to_argmin_g_hard])
-    def test_interp_to_argmin_g(self, func):
+    @pytest.mark.parametrize("func", [interp_to_argmin, interp_to_argmin_hard])
+    def test_interp_to_argmin(self, func):
         """Test argmin interpolation."""  # noqa: D202
 
         # Test functions chosen with purpose; don't change unless plotted and compared.
@@ -1146,6 +1146,9 @@ class TestBounce1D:
             Numerically computed ``data["cvdrift"]` and ``data["gbdrift"]`` normalized
             by some scale factors for this unit test. These should be fed to the bounce
             integration as input.
+        pitch : jnp.ndarray
+            Shape (P, ).
+            Pitch values used.
 
         """
         B = data["|B|"] / data["Bref"]
@@ -1232,9 +1235,20 @@ class TestBounce1D:
         drift_analytic = drift_analytic_num / drift_analytic_den
         return drift_analytic, cvdrift, gbdrift, pitch
 
+    @staticmethod
+    def drift_num_integrand(cvdrift, gbdrift, B, pitch):
+        """Integrand of numerator of bounce averaged binormal drift."""
+        g = jnp.sqrt(1 - pitch * B)
+        return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
+
+    @staticmethod
+    def drift_den_integrand(B, pitch):
+        """Integrand of denominator of bounce averaged binormal drift."""
+        return 1 / jnp.sqrt(1 - pitch * B)
+
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-    def test_drift(self):
+    def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
         eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
         psi_boundary = eq.Psi / (2 * np.pi)
@@ -1255,7 +1269,7 @@ class TestBounce1D:
             zeta,
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
-            iota=np.array([iota]),
+            iota=iota,
         )
         data = eq.compute(
             Bounce1D.required_names()
@@ -1293,25 +1307,17 @@ class TestBounce1D:
             Lref=data["a"],
             check=True,
         )
-
-        def integrand_num(cvdrift, gbdrift, B, pitch):
-            g = jnp.sqrt(1 - pitch * B)
-            return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
-
-        def integrand_den(B, pitch):
-            return 1 / jnp.sqrt(1 - pitch * B)
-
+        f = Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
             pitch=pitch[:, np.newaxis],
-            integrand=integrand_num,
-            f=Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift),
+            integrand=TestBounce1D.drift_num_integrand,
+            f=f,
             num_well=1,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
             pitch=pitch[:, np.newaxis],
-            integrand=integrand_den,
-            f=[],
+            integrand=TestBounce1D.drift_den_integrand,
             num_well=1,
             weight=np.ones(zeta.size),
             check=True,
@@ -1325,8 +1331,8 @@ class TestBounce1D:
 
         self._test_bounce_autodiff(
             bounce,
-            integrand_num,
-            f=[cvdrift, gbdrift],
+            TestBounce1D.drift_num_integrand,
+            f=f,
             weight=np.ones(zeta.size),
         )
 
@@ -1339,6 +1345,11 @@ class TestBounce1D:
     def _test_bounce_autodiff(bounce, integrand, **kwargs):
         """Make sure reverse mode AD works correctly on this algorithm."""
 
+        def integrand_grad(*args, **kwargs2):
+            return jnp.vectorize(
+                grad(integrand, -1), signature="()," * len(kwargs["f"]) + "(),()->()"
+            )(*args, *kwargs2.values())
+
         def fun1(pitch):
             return jnp.sum(bounce.integrate(pitch, integrand, check=False, **kwargs))
 
@@ -1347,15 +1358,8 @@ class TestBounce1D:
                 bounce.integrate(pitch, integrand_grad, check=True, **kwargs)
             )
 
-        def integrand_grad(*args, **kwargs2):
-            fun = jnp.vectorize(
-                grad(integrand, -1), signature="()," * len(kwargs["f"]) + "(),()->()"
-            )
-            return fun(*args, *kwargs2.values())
-
         pitch = 1.0
         truth = 650  # Extrapolated from plot.
         assert np.isclose(grad(fun1)(pitch), truth, rtol=1e-3)
         # Make sure bounce points get differentiated too.
-        result = fun2(pitch)
-        assert np.isfinite(result) and not np.isclose(result, truth, rtol=1e-1)
+        assert np.isclose(fun2(pitch), -131750, rtol=1e-1)

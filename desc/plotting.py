@@ -16,11 +16,12 @@ from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
-from desc.coils import CoilSet
+from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
-from desc.compute.utils import _parse_parameterization, surface_averages_map
+from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
+from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
@@ -1199,10 +1200,12 @@ def plot_fsa(  # noqa: C901
             # Attempt to compute the magnetic axis limit.
             # Compute derivative depending on various naming schemes.
             # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
+            # psi_r/sqrt(g) -> (psi_r/sqrt(g))_r
             schemes = (
                 name + "_r",
                 name[:-3] + "_r" + name[-3:],
                 name[:-3] + "r" + name[-3:],
+                "(" + name + ")_r",
             )
             values_r = next(
                 (
@@ -2394,6 +2397,11 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         ValueError,
         f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
     )
+    errorif(
+        not isinstance(coils, _Coil),
+        ValueError,
+        "Expected `coils` to be of type `_Coil`, instead got type" f" {type(coils)}",
+    )
 
     if not isinstance(lw, (list, tuple)):
         lw = [lw]
@@ -2756,22 +2764,14 @@ def plot_boozer_surface(
 
     # default grids
     if grid_compute is None:
-        if eq_switch:
-            grid_kwargs = {
-                "rho": rho,
-                "M": 4 * thing.M,
-                "N": 4 * thing.N,
-                "NFP": thing.NFP,
-                "endpoint": False,
-            }
-        else:
-            grid_kwargs = {
-                "rho": rho,
-                "M": 50,
-                "N": 50,
-                "NFP": thing.NFP,
-                "endpoint": False,
-            }
+        # grid_compute only used for Equilibrium, not OmnigenousField
+        grid_kwargs = {
+            "rho": rho,
+            "M": 4 * getattr(thing, "M", 1),
+            "N": 4 * getattr(thing, "N", 1),
+            "NFP": thing.NFP,
+            "endpoint": False,
+        }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {
@@ -2779,7 +2779,7 @@ def plot_boozer_surface(
             "theta": 91,
             "zeta": 91,
             "NFP": thing.NFP,
-            "endpoint": True,
+            "endpoint": eq_switch,
         }
         grid_plot = _get_grid(**grid_kwargs)
 
@@ -2816,7 +2816,7 @@ def plot_boozer_surface(
             warnings.simplefilter("ignore")
             data = thing.compute(
                 ["theta_B", "zeta_B", "|B|"],
-                grid=grid_compute,
+                grid=grid_plot,
                 helicity=thing.helicity,
                 iota=iota,
             )

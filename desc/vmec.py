@@ -12,10 +12,10 @@ from scipy.constants import mu_0
 
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
-from desc.compute.utils import surface_averages
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
+from desc.integrals import surface_averages
 from desc.objectives import (
     ObjectiveFunction,
     get_fixed_axis_constraints,
@@ -192,7 +192,7 @@ class VMECIO:
         constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints)
         objective.build(verbose=0)
-        _, _, _, _, _, project, recover = factorize_linear_constraints(
+        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
             objective, objective
         )
         args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
@@ -1687,7 +1687,7 @@ class VMECIO:
                 axis=-1,
             )
             theta_star_k = theta + lmbda  # theta* = theta + lambda
-            err = theta_star - theta_star_k
+            err = theta_star - theta_star_k  # FIXME: mod by 2pi
             return err
 
         out = optimize.root(
@@ -1751,7 +1751,9 @@ class VMECIO:
         # angle in PEST-like flux coordinates
 
         # find theta angles corresponding to desired theta* angles
-        v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
+        v_grid = Grid(
+            equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
+        )
         r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
         v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)
 

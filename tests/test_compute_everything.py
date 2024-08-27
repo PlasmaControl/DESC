@@ -80,8 +80,25 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
 def test_compute_everything():
     """Test that the computations on this branch agree with those on master.
 
-    Also make sure we can compute everything without errors. Computed quantities
-    are both in "rpz" and "xyz" basis.
+    Also make sure we can compute everything without errors.
+
+    Notes
+    -----
+    This test will fail if the benchmark file has been updated on both
+    the local and upstream branches when git cannot resolve the merge
+    conflict. This may occur if the upstream branch fixes a bug and
+    therefore updates the benchmark data file, but your local branch
+    does not due to said merge conflict.
+
+    In that case, please regenerate the benchmark file. Here are
+    instructions for convenience.
+
+    1. Prepend true to the line near the end of this test.
+        ``if True or (not error_rpz and update_master_data_rpz):``
+    2. Run pytest -k test_compute_everything
+    3. Revert 1.
+    4. git add tests/inputs/master_compute_data_rpz.pkl
+
     """
     elliptic_cross_section_with_torsion = {
         "R_lmn": [10, 1, 0.2],

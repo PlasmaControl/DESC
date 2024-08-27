@@ -671,8 +671,9 @@ def _splinexyz_helper(f, transforms, s_query_pts, method, derivative):
         Interpolated XYZ coords with shape (3, len(s_query_pts))
     """
     f = jnp.asarray(f)
-    transforms["intervals"] = jnp.asarray(transforms["intervals"])
-    has_break_points = len(transforms["intervals"][0])
+    intervals = jnp.asarray(transforms["intervals"])
+    has_break_points = len(intervals[0])
+    s_query_pts += transforms["knots"][0]
 
     def inner_body(f, knots, period=None):
         """Interpolation for spline curves."""
@@ -716,7 +717,7 @@ def _splinexyz_helper(f, transforms, s_query_pts, method, derivative):
         )
         full_f = jnp.append(f, f[:, 0][..., None], axis=1)
         f_interp = vmap(lambda interval: body(interval, full_f, full_knots))
-        f_interp = f_interp(transforms["intervals"]).sum(axis=0)
+        f_interp = f_interp(intervals).sum(axis=0)
     else:
         # regular interpolation where the period for interp is 2pi
         f_interp = inner_body(f, transforms["knots"], period=2 * jnp.pi)

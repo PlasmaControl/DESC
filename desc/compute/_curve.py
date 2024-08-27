@@ -765,7 +765,6 @@ def _center_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -797,7 +796,6 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s", "phi"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -808,8 +806,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coords_s = _splinexyz_helper(f, transforms, xq, kwargs["method"], derivative)
     coords_s = coords_s @ params["rotmat"].reshape((3, 3)).T
 
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords_s = xyz2rpz_vec(coords_s, phi=data["phi"])
+    coords_s = xyz2rpz_vec(coords_s, phi=data["phi"])
 
     data["x_s"] = coords_s
     return data
@@ -828,7 +825,6 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s", "phi"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -839,8 +835,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coords_ss = _splinexyz_helper(f, transforms, xq, kwargs["method"], derivative)
     coords_ss = coords_ss @ params["rotmat"].reshape((3, 3)).T
 
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords_ss = xyz2rpz_vec(coords_ss, phi=data["phi"])
+    coords_ss = xyz2rpz_vec(coords_ss, phi=data["phi"])
     data["x_ss"] = coords_ss
     return data
 
@@ -858,7 +853,6 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s", "phi"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
     method="Interpolation type, Default 'cubic'. See SplineXYZCurve docs for options.",
 )
 def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -869,8 +863,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     coords_sss = _splinexyz_helper(f, transforms, xq, kwargs["method"], derivative)
     coords_sss = coords_sss @ params["rotmat"].reshape((3, 3)).T
 
-    if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords_sss = xyz2rpz_vec(coords_sss, phi=data["phi"])
+    coords_sss = xyz2rpz_vec(coords_sss, phi=data["phi"])
     data["x_sss"] = coords_sss
 
     return data

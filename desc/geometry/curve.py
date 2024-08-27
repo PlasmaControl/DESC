@@ -1039,6 +1039,8 @@ class SplineXYZCurve(Curve):
     @property
     def intervals(self):
         """Intervals for spline determined from the inputted break indices."""
+        if not (hasattr(self, "_intervals")) or self._intervals is None:
+            self.intervals = None
         return self._intervals
 
     @property

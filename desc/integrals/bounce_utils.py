@@ -49,34 +49,6 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     return pitch
 
 
-# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
-def get_alpha(alpha_0, iota, num_transit, period):
-    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
-
-    Parameters
-    ----------
-    alpha_0 : float
-        Starting field line poloidal label.
-    iota : jnp.ndarray
-        Shape (iota.size, ).
-        Rotational transform normalized by 2π.
-    num_transit : float
-        Number of ``period``s to follow field line.
-    period : float
-        Toroidal period after which to update label.
-
-    Returns
-    -------
-    alpha : jnp.ndarray
-        Shape (iota.size, num_transit).
-        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
-
-    """
-    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    alpha = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_transit)
-    return alpha
-
-
 def _check_spline_shape(knots, g, dg_dz, pitch=None):
     """Ensure inputs have compatible shape, and return them with full dimension.
 

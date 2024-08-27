@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from jax import grad
 from matplotlib import pyplot as plt
-from numpy.polynomial.chebyshev import chebgauss, chebinterpolate, chebroots, chebweight
+from numpy.polynomial.chebyshev import chebgauss, chebweight
 from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
@@ -17,12 +17,11 @@ from desc.backend import jnp
 from desc.basis import FourierZernikeBasis
 from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import get_rtz_grid, map_coordinates
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import (
     Bounce1D,
-    Bounce2D,
     DFTInterpolator,
     FFTInterpolator,
     line_integrals,
@@ -35,17 +34,14 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals.basis import FourierChebyshevBasis
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
-    get_alpha,
     get_pitch,
     interp_to_argmin_g,
     interp_to_argmin_g_hard,
     plot_ppoly,
 )
-from desc.integrals.interp_utils import fourier_pts
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -1364,200 +1360,3 @@ class TestBounce1D:
         # Make sure bounce points get differentiated too.
         result = fun2(pitch)
         assert np.isfinite(result) and not np.isclose(result, truth, rtol=1e-1)
-
-
-class TestBounce2DPoints:
-    """Test that bounce points are computed correctly."""
-
-    @staticmethod
-    def _cheb_intersect(cheb, k):
-        cheb = cheb.copy()
-        cheb[0] = cheb[0] - k
-        roots = chebroots(cheb)
-        intersect = roots[
-            np.logical_and(np.isreal(roots), np.abs(roots.real) <= 1)
-        ].real
-        return intersect
-
-    @staticmethod
-    def _periodic_fun(nodes, M, N):
-        alpha, zeta = nodes.T
-        f = -2 * np.cos(1 / (0.1 + zeta**2)) + 2
-        return f.reshape(M, N)
-
-    @pytest.mark.unit
-    def test_z1_first(self):
-        """Test that bounce points are computed correctly."""
-        M, N = 1, 10
-        domain = (-1, 1)
-        nodes = FourierChebyshevBasis.nodes(M, N, domain=domain)
-        f = -self._periodic_fun(nodes, M, N)
-        cheb = FourierChebyshevBasis(f, domain=domain).compute_cheb(fourier_pts(M))
-        pitch = 1 / np.linspace(1, 4, 1)
-        z1, z2 = cheb.intersect1d(1 / pitch, num_intersect=1)
-        print(z1)
-        print(z2)
-        cheb.check_intersect1d(z1, z2, 1 / pitch)
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
-
-        def f(z):
-            return -2 * np.cos(1 / (0.1 + z**2)) + 2
-
-        r = self._cheb_intersect(chebinterpolate(f, N), 1 / pitch)
-        np.testing.assert_allclose(z1, r[::2], rtol=1e-3)
-        np.testing.assert_allclose(z2, r[1::2], rtol=1e-3)
-
-
-class TestBounce2D:
-    """Test bounce integration with two-dimensional pseudo-spectral methods."""
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "alpha_0, iota, num_period, period",
-        [
-            (0, np.sqrt(2), 1, 2 * np.pi),
-            (0, np.arange(1, 3) * np.sqrt(2), 5, 2 * np.pi),
-        ],
-    )
-    def test_alpha_sequence(self, alpha_0, iota, num_period, period):
-        """Test field line poloidal label tracking."""
-        iota = np.atleast_1d(iota)
-        alphas = get_alpha(alpha_0, iota, num_period, period)
-        assert alphas.shape == (iota.size, num_period)
-        for i in range(iota.size):
-            assert np.unique(alphas[i]).size == num_period, f"{iota} is irrational"
-        print(alphas)
-
-    @pytest.mark.unit
-    def test_fourier_chebyshev(self, rho=1, M=8, N=32, f=lambda B, pitch: B * pitch):
-        """Test bounce points..."""
-        eq = get("W7-X")
-        clebsch = FourierChebyshevBasis.nodes(M, N, L=rho)
-        desc_from_clebsch = map_coordinates(
-            eq,
-            clebsch,
-            inbasis=("rho", "alpha", "zeta"),
-            period=(np.inf, 2 * np.pi, np.inf),
-        )
-        grid = LinearGrid(
-            rho=rho, M=eq.M_grid, N=eq.N_grid, sym=False, NFP=eq.NFP
-        )  # check if NFP!=1 works
-        data = eq.compute(
-            names=Bounce2D.required_names() + ["min_tz |B|", "max_tz |B|"], grid=grid
-        )
-        fb = Bounce2D(
-            grid, data, M, N, desc_from_clebsch, check=True, warn=False
-        )  # TODO check true
-        pitch = get_pitch(
-            grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
-        )
-        result = fb.integrate(f, [], pitch)  # noqa: F841
-
-    @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-    def test_drift(self):
-        """Test bounce-averaged drift with analytical expressions."""
-        eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
-        psi_boundary = eq.Psi / (2 * np.pi)
-        psi = 0.25 * psi_boundary
-        rho = np.sqrt(psi / psi_boundary)
-        np.testing.assert_allclose(rho, 0.5)
-
-        # Make a set of nodes along a single fieldline.
-        grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-        data = eq.compute(["iota"], grid=grid_fsa)
-        iota = grid_fsa.compress(data["iota"]).item()
-        alpha = 0
-        zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-        grid = get_rtz_grid(
-            eq,
-            rho,
-            alpha,
-            zeta,
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-            iota=np.array([iota]),
-        )
-        data = eq.compute(
-            Bounce2D.required_names()
-            + [
-                "cvdrift",
-                "gbdrift",
-                "grad(psi)",
-                "grad(alpha)",
-                "shear",
-                "iota",
-                "psi",
-                "a",
-            ],
-            grid=grid,
-        )
-        np.testing.assert_allclose(data["psi"], psi)
-        np.testing.assert_allclose(data["iota"], iota)
-        assert np.all(data["B^zeta"] > 0)
-        data["Bref"] = 2 * np.abs(psi_boundary) / data["a"] ** 2
-        data["rho"] = rho
-        data["alpha"] = alpha
-        data["zeta"] = zeta
-        data["psi"] = grid.compress(data["psi"])
-        data["iota"] = grid.compress(data["iota"])
-        data["shear"] = grid.compress(data["shear"])
-
-        # Compute analytic approximation.
-        drift_analytic, cvdrift, gbdrift, pitch = TestBounce1D.drift_analytic(data)
-        # Compute numerical result.
-        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        data_2 = eq.compute(
-            names=Bounce2D.required_names() + ["cvdrift", "gbdrift"], grid=grid
-        )
-        M, N = eq.M_grid, 20
-        bounce = Bounce2D(
-            grid=grid,
-            data=data_2,
-            desc_from_clebsch=Bounce2D.desc_from_clebsch(eq, rho, M, N),
-            M=M,
-            N=N,
-            alpha_0=data["alpha"],
-            num_transit=1,
-            Bref=data["Bref"],
-            Lref=data["a"],
-            check=True,
-            plot=True,
-        )
-
-        def integrand_num(cvdrift, gbdrift, B, pitch):
-            g = jnp.sqrt(1 - pitch * B)
-            return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
-
-        def integrand_den(B, pitch):
-            return 1 / jnp.sqrt(1 - pitch * B)
-
-        normalization = -np.sign(data["psi"]) * data["Bref"] * data["a"] ** 2
-        drift_numerical_num = bounce.integrate(
-            pitch=pitch[:, np.newaxis],
-            integrand=integrand_num,
-            f=Bounce2D.reshape_data(
-                grid,
-                data_2["cvdrift"] * normalization,
-                data_2["gbdrift"] * normalization,
-            ),
-            num_well=1,
-        )
-        drift_numerical_den = bounce.integrate(
-            pitch=pitch[:, np.newaxis],
-            integrand=integrand_den,
-            f=[],
-            num_well=1,
-        )
-        drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
-        msg = "There should be one bounce integral per pitch in this example."
-        assert drift_numerical.size == drift_analytic.size, msg
-        np.testing.assert_allclose(
-            drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
-        )
-
-        fig, ax = plt.subplots()
-        ax.plot(1 / pitch, drift_analytic)
-        ax.plot(1 / pitch, drift_numerical)
-        plt.show()
-        return fig

@@ -5,6 +5,7 @@ import pytest
 from scipy import special
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import (
     ConcentricGrid,
     Grid,
@@ -19,28 +20,6 @@ from desc.profiles import PowerSeriesProfile
 
 class TestGrid:
     """Test for Grid classes."""
-
-    @pytest.mark.unit
-    def test_custom_grid(self):
-        """Test creating a grid with custom set of nodes."""
-        nodes = np.array(
-            [
-                [0, 0, 0],
-                [0.25, 0, 0],
-                [0.5, np.pi / 2, np.pi / 3],
-                [0.5, np.pi / 2, np.pi / 3],
-                [0.75, np.pi, np.pi],
-                [1, 2 * np.pi, 3 * np.pi / 2],
-            ]
-        )
-        grid = Grid(nodes)
-        weights = grid.weights
-
-        w = 4 * np.pi**2 / (grid.num_nodes - 1)
-        weights_ref = np.array([w, w, w / 2, w / 2, w, w])
-
-        np.testing.assert_allclose(weights, weights_ref)
-        np.testing.assert_allclose(grid.weights.sum(), (2 * np.pi) ** 2)
 
     @pytest.mark.unit
     def test_linear_grid(self):
@@ -91,9 +70,11 @@ class TestGrid:
             theta = np.linspace(
                 0,
                 2 * np.pi,
-                (ntheta + endpoint + 1) // 2 * 2 - endpoint
-                if (sym and ntheta > 1)
-                else ntheta,
+                (
+                    (ntheta + endpoint + 1) // 2 * 2 - endpoint
+                    if (sym and ntheta > 1)
+                    else ntheta
+                ),
                 endpoint=endpoint,
             )
             if sym and ntheta > 1:
@@ -219,6 +200,7 @@ class TestGrid:
         """Test surface spacing on grids with sym=False."""
         self._test_node_spacing_non_sym(False, 8, 13, 3)
         self._test_node_spacing_non_sym(True, 8, 13, 3)
+        self._test_node_spacing_non_sym(False, 1, 1, 3)
 
     @staticmethod
     def _test_node_spacing_non_sym(
@@ -488,7 +470,7 @@ class TestGrid:
     def test_concentric_grid_high_res(self):
         """Test that we can create high resolution grids without crashing.
 
-        Verifies solution to GH issue #207.
+        Test for GH issue #207.
         """
         _ = ConcentricGrid(L=32, M=28, N=30)
 
@@ -620,6 +602,15 @@ class TestGrid:
     @pytest.mark.unit
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
+        L = [3, 3, 5, 3]
+        M = [3, 6, 5, 7]
+        N = [2, 2, 2, 2]
+        NFP = [5, 3, 5, 3]
+        sym = np.array([True, True, False, False])
+        # to test code not tested on grids made with M=.
+        even_number = 4
+        n_theta = even_number - sym
+
         # Currently, midpoint rule is false for LinearGrid made with L=number.
         def test(grid, midpoint_rule=False):
             r = grid.nodes[:, 0]
@@ -651,9 +642,11 @@ class TestGrid:
                 expected_integral,
                 true_integral,
                 rtol=0,
-                atol=midpoint_rule_error_bound / 4
-                if midpoint_rule
-                else right_riemann_error_bound / 3,
+                atol=(
+                    midpoint_rule_error_bound / 4
+                    if midpoint_rule
+                    else right_riemann_error_bound / 3
+                ),
                 err_msg=type(grid),
             )
             np.testing.assert_allclose(
@@ -662,15 +655,6 @@ class TestGrid:
                 rtol=1e-15,
                 err_msg=type(grid),
             )
-
-        L = [3, 3, 5, 3]
-        M = [3, 6, 5, 7]
-        N = [2, 2, 2, 2]
-        NFP = [5, 3, 5, 3]
-        sym = np.array([True, True, False, False])
-        # to test code not tested on grids made with M=.
-        even_number = 4
-        n_theta = even_number - sym
 
         for i in range(len(L)):
             test(LinearGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
@@ -749,6 +733,87 @@ class TestGrid:
         test("theta", cg_sym)
         test("zeta", cg_sym)
 
+    @pytest.mark.unit
+    def test_meshgrid(self):
+        """Test meshgrid constructor."""
+        R = np.linspace(0, 1, 4)
+        A = np.linspace(0, 2 * np.pi, 2)
+        Z = np.linspace(0, 2 * np.pi, 3)
+        grid = Grid.create_meshgrid(
+            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, 2 * np.pi)
+        )
+        # treating theta == alpha just for grid construction
+        grid1 = LinearGrid(rho=R, theta=A, zeta=Z)
+        # atol=1e-12 bc Grid by default shifts points away from the axis a tiny bit
+        np.testing.assert_allclose(grid1.nodes, grid.nodes, atol=1e-12)
+        # want radial/poloidal/toroidal nodes sorted in the same order for both
+        np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_rho_idx)
+        np.testing.assert_allclose(grid1.unique_theta_idx, grid.unique_alpha_idx)
+        np.testing.assert_allclose(grid1.unique_zeta_idx, grid.unique_zeta_idx)
+        np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_rho_idx)
+        np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_alpha_idx)
+        np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_zeta_idx)
+
+    @pytest.mark.unit
+    def test_meshgrid_reshape(self):
+        """Test that reshaping meshgrids works correctly."""
+        grid = LinearGrid(2, 3, 4)
+
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        t = grid.nodes[grid.unique_theta_idx, 1]
+        z = grid.nodes[grid.unique_zeta_idx, 2]
+
+        # user regular allclose for broadcasting to work correctly
+        # reshaping rtz should have rho along first axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz"), r[:, None, None]
+        )
+        # reshaping rzt should have theta along last axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt"), t[None, None, :]
+        )
+        # reshaping tzr should have zeta along 2nd axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes, "tzr")[:, :, :, 2], z[None, :, None]
+        )
+
+        # coordinates are rtz, not raz
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "raz")
+
+        # not a meshgrid
+        grid = ConcentricGrid(2, 3, 4)
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
+
+        rho = np.linspace(0, 1, 3)
+        alpha = np.linspace(0, 2 * np.pi, 4)
+        zeta = np.linspace(0, 6 * np.pi, 5)
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        r, a, z = grid.nodes.T
+        r = grid.meshgrid_reshape(r, "raz")
+        a = grid.meshgrid_reshape(a, "raz")
+        z = grid.meshgrid_reshape(z, "raz")
+        # functions of zeta should separate along first two axes
+        # since those are contiguous, this should work
+        f = z.reshape(-1, zeta.size)
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        # likewise for rho
+        f = r.reshape(rho.size, -1)
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        # test reshaping result won't mix data
+        f = (a**2 + z).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        f = (r**2 + z).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        f = (r**2 + a).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[..., i - 1], f[..., i])
+
 
 @pytest.mark.unit
 def test_find_most_rational_surfaces():
@@ -774,3 +839,64 @@ def test_find_least_rational_surfaces():
     max_rational = max(lior)
 
     assert np.all(np.array(lio) > max_rational)
+
+
+@pytest.mark.unit
+def test_custom_jitable_grid_indexing():
+    """Test that unique/inverse indices are set correctly when jitable=True."""
+    eq = get("NCSX")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
+    # field lines on two surfaces
+    rho = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
+    theta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
+    zeta = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
+    grid1 = Grid(np.array([rho, theta, zeta]).T, jitable=False)
+    grid2 = Grid(np.array([rho, theta, zeta]).T, jitable=True)
+    grid3 = Grid(np.array([rho, theta, zeta]).T, jitable=True, _unique_rho_idx=[0, 10])
+    np.testing.assert_allclose(grid1.nodes, grid2.nodes)
+
+    x = np.random.random(grid1.num_nodes)
+
+    # these shouldn't error
+    _ = grid1.unique_rho_idx
+    _ = grid1.unique_theta_idx
+    _ = grid1.unique_zeta_idx
+    _ = grid1.inverse_rho_idx
+    _ = grid1.inverse_theta_idx
+    _ = grid1.inverse_zeta_idx
+    _ = grid3.unique_rho_idx
+
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_rho_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_theta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_zeta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_rho_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_theta_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_zeta_idx
+
+    assert not hasattr(grid1, "weights")
+    assert not hasattr(grid1, "spacing")
+    assert not hasattr(grid1, "source_grid")
+    assert not hasattr(grid2, "num_rho")
+    assert not hasattr(grid2, "num_theta")
+    assert not hasattr(grid2, "num_zeta")
+
+    y1 = grid1.copy_data_from_other(x, grid2, "rho")
+    y2 = grid2.copy_data_from_other(x, grid1, "rho")
+    y3 = grid3.copy_data_from_other(x, grid1, "rho")
+
+    np.testing.assert_allclose(y1, y2)
+    np.testing.assert_allclose(y1, y3)
+
+    # make sure compress/expand done when override_grid=True works as expected
+    b1 = eq.compute(["|B|"], grid=grid1, override_grid=True)["|B|"]
+    with pytest.raises(AttributeError):
+        _ = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
+    b3 = eq.compute(["|B|"], grid=grid3, override_grid=True)["|B|"]
+    np.testing.assert_allclose(b1, b3)

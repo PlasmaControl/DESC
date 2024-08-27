@@ -13,8 +13,9 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
+from ..integrals import surface_integrals_map
 from .data_index import register_compute_fun
-from .utils import dot, surface_integrals_map
+from .utils import dot
 
 
 @register_compute_fun(
@@ -58,6 +59,7 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
         "|grad(psi)|",
         "|e_theta x e_zeta|",
     ],
+    resolution_requirement="tz",
 )
 def _D_current(params, transforms, profiles, data, **kwargs):
     # Implements equation 4.17 in M. Landreman & R. Jorge (2020)
@@ -103,6 +105,7 @@ def _D_current(params, transforms, profiles, data, **kwargs):
         "|grad(psi)|",
         "|e_theta x e_zeta|",
     ],
+    resolution_requirement="tz",
 )
 def _D_well(params, transforms, profiles, data, **kwargs):
     # Implements equation 4.18 in M. Landreman & R. Jorge (2020)
@@ -143,6 +146,7 @@ def _D_well(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|grad(psi)|", "J*B", "|B|^2", "|e_theta x e_zeta|"],
+    resolution_requirement="tz",
 )
 def _D_geodesic(params, transforms, profiles, data, **kwargs):
     # Implements equation 4.19 in M. Landreman & R. Jorge (2020)

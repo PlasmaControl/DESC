@@ -9,6 +9,7 @@ import desc.io
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.objectives import MagneticWell, MercierStability
+from desc.utils import PRINT_WIDTH
 
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2
@@ -42,13 +43,13 @@ def assert_all_close(
     np.testing.assert_allclose(y1[interval], y2[interval], rtol=rtol, atol=atol)
 
 
-def get_vmec_data(stellarator, quantity):
+def get_vmec_data(path, quantity):
     """Get data from a VMEC wout.nc file.
 
     Parameters
     ----------
-    stellarator : str
-        The equilibrium's fixture.
+    path : str
+        Path to VMEC file.
     quantity: str
         Name of the quantity to return.
 
@@ -60,7 +61,7 @@ def get_vmec_data(stellarator, quantity):
         Variable from VMEC output.
 
     """
-    f = Dataset(str(stellarator["vmec_nc_path"]))
+    f = Dataset(path)
     rho = np.sqrt(f.variables["phi"] / np.array(f.variables["phi"])[-1])
     q = np.array(f.variables[quantity])
     f.close()
@@ -80,13 +81,11 @@ def test_mercier_vacuum():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
+def test_compute_d_shear():
     """Test that D_shear has a stabilizing effect and matches VMEC."""
 
-    def test(stellarator, rho_range=(0, 1), rtol=1e-12, atol=0.0):
-        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        rho, d_shear_vmec = get_vmec_data(stellarator, "DShear")
+    def test(eq, vmec, rho_range=(0, 1), rtol=1e-12, atol=0.0):
+        rho, d_shear_vmec = get_vmec_data(vmec, "DShear")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_shear = grid.compress(eq.compute("D_shear", grid=grid)["D_shear"])
 
@@ -95,20 +94,22 @@ def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
         ), "D_shear should always have a stabilizing effect."
         assert_all_close(d_shear, d_shear_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.3, 0.9), atol=0.01, rtol=0.1)
-    test(HELIOTRON_ex)
+    test(
+        desc.examples.get("DSHAPE_CURRENT"),
+        ".//tests//inputs//wout_DSHAPE.nc",
+        (0.3, 0.9),
+        atol=0.01,
+        rtol=0.1,
+    )
+    test(desc.examples.get("HELIOTRON"), ".//tests//inputs//wout_HELIOTRON.nc")
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
+def test_compute_d_current():
     """Test calculation of D_current stability criterion against VMEC."""
 
-    def test(
-        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
-    ):
-        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        rho, d_current_vmec = get_vmec_data(stellarator, "DCurr")
+    def test(eq, vmec, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL):
+        rho, d_current_vmec = get_vmec_data(vmec, "DCurr")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_current = grid.compress(eq.compute("D_current", grid=grid)["D_current"])
 
@@ -118,20 +119,27 @@ def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
         )
         assert_all_close(d_current, d_current_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.3, 0.9), rtol=1e-1, atol=1e-2)
-    test(HELIOTRON_ex, (0.25, 0.85), rtol=1e-1)
+    test(
+        desc.examples.get("DSHAPE_CURRENT"),
+        ".//tests//inputs//wout_DSHAPE.nc",
+        (0.3, 0.9),
+        rtol=1e-1,
+        atol=1e-2,
+    )
+    test(
+        desc.examples.get("HELIOTRON"),
+        ".//tests//inputs//wout_HELIOTRON.nc",
+        (0.25, 0.85),
+        rtol=1e-1,
+    )
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
+def test_compute_d_well():
     """Test calculation of D_well stability criterion against VMEC."""
 
-    def test(
-        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
-    ):
-        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        rho, d_well_vmec = get_vmec_data(stellarator, "DWell")
+    def test(eq, vmec, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL):
+        rho, d_well_vmec = get_vmec_data(vmec, "DWell")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_well = grid.compress(eq.compute("D_well", grid=grid)["D_well"])
 
@@ -140,22 +148,38 @@ def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
         )
         assert_all_close(d_well, d_well_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.3, 0.9), rtol=1e-1)
-    test(HELIOTRON_ex, (0.01, 0.45), rtol=1.75e-1)
-    test(HELIOTRON_ex, (0.45, 0.6), atol=7.2e-1)
-    test(HELIOTRON_ex, (0.6, 0.99), rtol=2e-2)
+    test(
+        desc.examples.get("DSHAPE_CURRENT"),
+        ".//tests//inputs//wout_DSHAPE.nc",
+        (0.3, 0.9),
+        rtol=1e-1,
+    )
+    test(
+        desc.examples.get("HELIOTRON"),
+        ".//tests//inputs//wout_HELIOTRON.nc",
+        (0.01, 0.45),
+        rtol=1.75e-1,
+    )
+    test(
+        desc.examples.get("HELIOTRON"),
+        ".//tests//inputs//wout_HELIOTRON.nc",
+        (0.45, 0.6),
+        atol=7.2e-1,
+    )
+    test(
+        desc.examples.get("HELIOTRON"),
+        ".//tests//inputs//wout_HELIOTRON.nc",
+        (0.6, 0.99),
+        rtol=2e-2,
+    )
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
+def test_compute_d_geodesic():
     """Test that D_geodesic has a destabilizing effect and matches VMEC."""
 
-    def test(
-        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
-    ):
-        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        rho, d_geodesic_vmec = get_vmec_data(stellarator, "DGeod")
+    def test(eq, vmec, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL):
+        rho, d_geodesic_vmec = get_vmec_data(vmec, "DGeod")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_geodesic = grid.compress(eq.compute("D_geodesic", grid=grid)["D_geodesic"])
 
@@ -164,21 +188,32 @@ def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
         ), "D_geodesic should always have a destabilizing effect."
         assert_all_close(d_geodesic, d_geodesic_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.3, 0.9), rtol=1e-1)
-    test(HELIOTRON_ex, (0.15, 0.825), rtol=1.2e-1)
-    test(HELIOTRON_ex, (0.85, 0.95), atol=1.2e-1)
+    test(
+        desc.examples.get("DSHAPE_CURRENT"),
+        ".//tests//inputs//wout_DSHAPE.nc",
+        (0.3, 0.9),
+        rtol=1e-1,
+    )
+    test(
+        desc.examples.get("HELIOTRON"),
+        ".//tests//inputs//wout_HELIOTRON.nc",
+        (0.15, 0.825),
+        rtol=1.2e-1,
+    )
+    test(
+        desc.examples.get("HELIOTRON"),
+        ".//tests//inputs//wout_HELIOTRON.nc",
+        (0.85, 0.95),
+        atol=1.2e-1,
+    )
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
+def test_compute_d_mercier():
     """Test calculation of D_Mercier stability criterion against VMEC."""
 
-    def test(
-        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
-    ):
-        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        rho, d_mercier_vmec = get_vmec_data(stellarator, "DMerc")
+    def test(eq, vmec, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL):
+        rho, d_mercier_vmec = get_vmec_data(vmec, "DMerc")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_mercier = grid.compress(eq.compute("D_Mercier", grid=grid)["D_Mercier"])
 
@@ -188,18 +223,32 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
         )
         assert_all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.3, 0.9), rtol=1e-1, atol=1e-2)
-    test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
-    test(HELIOTRON_ex, (0.325, 0.95), rtol=5e-2)
+    test(
+        desc.examples.get("DSHAPE_CURRENT"),
+        ".//tests//inputs//wout_DSHAPE.nc",
+        (0.3, 0.9),
+        rtol=1e-1,
+        atol=1e-2,
+    )
+    test(
+        desc.examples.get("HELIOTRON"),
+        ".//tests//inputs//wout_HELIOTRON.nc",
+        (0.1, 0.325),
+        rtol=1.3e-1,
+    )
+    test(
+        desc.examples.get("HELIOTRON"),
+        ".//tests//inputs//wout_HELIOTRON.nc",
+        (0.325, 0.95),
+        rtol=5e-2,
+    )
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
+def test_compute_magnetic_well():
     """Test that D_well and magnetic_well match signs under finite pressure."""
 
-    def test(stellarator, rho=np.linspace(0, 1, 128)):
-        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+    def test(eq, rho=np.linspace(0, 1, 128)):
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_well = grid.compress(eq.compute("D_well", grid=grid)["D_well"])
         magnetic_well = grid.compress(
@@ -210,8 +259,8 @@ def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
             <= MAX_SIGN_DIFF
         )
 
-    test(DSHAPE_current)
-    test(HELIOTRON_ex)
+    test(desc.examples.get("DSHAPE_CURRENT"))
+    test(desc.examples.get("HELIOTRON"))
 
 
 @pytest.mark.unit
@@ -225,35 +274,40 @@ def test_mercier_print(capsys):
     mercier_obj = MercierStability(eq=eq, grid=grid)
     mercier_obj.build()
     np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
-    mercier_obj.print_value(*mercier_obj.xs(eq))
+    mercier_obj.print_value(mercier_obj.xs(eq))
     out = capsys.readouterr()
+    pre_width = len("Maximum ")
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
-        + mercier_obj._print_value_fmt.format(np.max(Dmerc))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.max(Dmerc))
         + mercier_obj._units
         + "\n"
         + "Minimum "
-        + mercier_obj._print_value_fmt.format(np.min(Dmerc))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.min(Dmerc))
         + mercier_obj._units
         + "\n"
         + "Average "
-        + mercier_obj._print_value_fmt.format(np.mean(Dmerc))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.mean(Dmerc))
         + mercier_obj._units
         + "\n"
         + "Maximum "
-        + mercier_obj._print_value_fmt.format(np.max(Dmerc / mercier_obj.normalization))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.max(Dmerc / mercier_obj.normalization))
         + "(normalized)"
         + "\n"
         + "Minimum "
-        + mercier_obj._print_value_fmt.format(np.min(Dmerc / mercier_obj.normalization))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.min(Dmerc / mercier_obj.normalization))
         + "(normalized)"
         + "\n"
         + "Average "
-        + mercier_obj._print_value_fmt.format(
-            np.mean(Dmerc / mercier_obj.normalization)
-        )
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.mean(Dmerc / mercier_obj.normalization))
         + "(normalized)"
         + "\n"
     )
@@ -272,21 +326,25 @@ def test_magwell_print(capsys):
     f = obj.compute(*obj.xs(eq))
     np.testing.assert_allclose(f, magwell)
 
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(obj.xs(eq))
     out = capsys.readouterr()
+    pre_width = len("Maximum ")
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
-        + obj._print_value_fmt.format(np.max(magwell))
+        + f"{obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.max(magwell))
         + obj._units
         + "\n"
         + "Minimum "
-        + obj._print_value_fmt.format(np.min(magwell))
+        + f"{obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.min(magwell))
         + obj._units
         + "\n"
         + "Average "
-        + obj._print_value_fmt.format(np.mean(magwell))
+        + f"{obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.mean(magwell))
         + obj._units
         + "\n"
     )

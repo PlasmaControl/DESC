@@ -27,6 +27,7 @@ The full code is below:
         coordinates="rtz",
         data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
         axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
+        resolution_requirement="",
         parameterization="desc.equilibrium.equilibrium.Equilibrium",
     )
     def _J_sup_rho(params, transforms, profiles, data, **kwargs):
@@ -96,12 +97,25 @@ metadata about the quantity. The necessary fields are detailed below:
   the quantities mentioned above to evaluate the magnetic axis limit. These dependencies
   are specified in ``axis_limit_data``. The dependencies specified in this list are
   marked to be computed only when there is a node at the magnetic axis.
+* ``resolution_requirement``: Resolution requirements in coordinates.
+  I.e. "r" expects radial resolution in the grid. Likewise, "rtz" is shorthand for
+  "rho, theta, zeta" and indicates the computation expects a grid with radial,
+  poloidal, and toroidal resolution. If the computation simply performs
+  pointwise operations, instead of a reduction (such as integration) over a
+  coordinate, then an empty string may be used to indicate no requirements.
 * ``parameterization``: what sorts of DESC objects is this function for. Most functions
-  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.Curve``,
-  or specific types eg ``desc.geometry.FourierRZCurve``.
+  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.core.Curve``,
+  or specific types eg ``desc.geometry.curve.FourierRZCurve``. If a quantity is computed differently
+  for a subclass versus a superclass, then one may define a compute function for the superclass
+  (e.g. for ``desc.geometry.Curve``) which will be used for that class and any of its subclasses,
+  and then if a specific subclass requires a different method, one may define a second compute function for
+  the same quantity, with a parameterization for that subclass (e.g. ``desc.geometry.curve.SplineXYZCurve``).
+  See the compute definitions for the ``length`` quantity in ``compute/_curve.py`` for an example of this,
+  which is similar to the inheritance structure of Python classes.
 * ``kwargs``: If the compute function requires any additional arguments they should
-  be specified like ``kwarg="thing"`` where the value is the name of the keyword argument
-  that will be passed to the compute function. Most quantities do not take kwargs.
+  be specified like ``kwarg="description"`` where ``kwarg`` is replaced by the actual
+  keyword argument, and ``"description"`` is a string describing what it is.
+  Most quantities do not take kwargs.
 
 
 The function itself should have a signature of the form
@@ -119,7 +133,7 @@ return it. The key in the ``data`` dictionary should match the ``name`` of the q
 
 Once a new quantity is added to the ``desc.compute`` module, there are two final steps involving the testing suite which must be checked.
 The first step is implementing the correct axis limit, or marking it as not finite or not implemented.
-We can check whether the axis limit currently evalutates as finite by computing the quantity on a grid with nodes at the axis.
+We can check whether the axis limit currently evaluates as finite by computing the quantity on a grid with nodes at the axis.
 ::
 
     from desc.examples import get
@@ -141,8 +155,8 @@ if ``False`` is printed, then the limit of the quantity does not evaluate as fin
   The tests automatically detect this, so no further action is needed from developers in this case.
 
 
-The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_funs.py`` file.
-This can be done with the command :console:`pytest -k test_compute_everything tests/test_compute_funs.py`.
+The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_everything.py`` file.
+This can be done with the command :console:`pytest tests/test_compute_everything.py`.
 This test is a regression test to ensure that compute quantities in each new update of DESC do not differ significantly
 from previous versions of DESC.
 Since the new quantity did not exist in previous versions of DESC, one must run this test

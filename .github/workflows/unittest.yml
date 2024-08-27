@@ -20,7 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        combos: [{group: 1, python_version: '3.9'}, {group: 2, python_version: '3.10'}, {group: 3, python_version: '3.11'}]
+        combos: [{group: 1, python_version: '3.9'},
+                 {group: 2, python_version: '3.10'},
+                 {group: 3, python_version: '3.11'},
+                 {group: 4, python_version: '3.12'}]
 
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +44,18 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest -v -m unit --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html --splits 4 --group ${{ matrix.combos.group }} --splitting-algorithm least_duration --db ./prof.db
+          python -m pytest -v -m unit \
+            --durations=0 \
+            --cov-report xml:cov.xml \
+            --cov-config=setup.cfg \
+            --cov=desc/ \
+            --mpl \
+            --mpl-results-path=mpl_results.html \
+            --mpl-generate-summary=html \
+            --splits 4 \
+            --group ${{ matrix.combos.group }} \
+            --splitting-algorithm least_duration \
+            --db ./prof.db
       - name: save coverage file and plot comparison results
         if: always()
         uses: actions/upload-artifact@v4

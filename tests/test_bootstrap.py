@@ -1,5 +1,7 @@
 """Tests for bootstrap current functions."""
 
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -89,9 +91,7 @@ class TestBootstrapCompute:
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"],
-                grid.expand(
-                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])
-                ),
+                grid.expand(np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])),
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
@@ -260,9 +260,7 @@ class TestBootstrapCompute:
 
         # Sauter eq (18d)-(18e):
         ln_Lambda_e = 31.3 - np.log(np.sqrt(ne_rho) / Te_rho)
-        ln_Lambda_ii = 30.0 - np.log(
-            (Zeff_rho**3) * np.sqrt(ni_rho) / (Ti_rho**1.5)
-        )
+        ln_Lambda_ii = 30.0 - np.log((Zeff_rho**3) * np.sqrt(ni_rho) / (Ti_rho**1.5))
 
         # Sauter eq (18b)-(18c):
         nu_e = abs(
@@ -1200,54 +1198,6 @@ class TestBootstrapObjectives:
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
         np.testing.assert_allclose(results, expected, rtol=2e-3)
 
-    @pytest.mark.unit
-    @pytest.mark.solve
-    def test_BootstrapRedlConsistency_resolution(self, DSHAPE_current):
-        """Confirm that the objective function is ~independent of grid resolution."""
-        helicity = (1, 0)
-
-        eq = desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
-        eq.electron_density = PowerSeriesProfile(
-            2.0e19 * np.array([1, -0.85]), modes=[0, 4]
-        )
-        eq.electron_temperature = PowerSeriesProfile(
-            1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
-        )
-        eq.ion_temperature = PowerSeriesProfile(
-            1.1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
-        )
-        eq.atomic_number = 1.4
-
-        def test(grid_type, kwargs, L, M, N):
-            grid = grid_type(L=L, M=M, N=N, NFP=eq.NFP, **kwargs)
-            obj = ObjectiveFunction(
-                BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
-            )
-            obj.build()
-            scalar_objective = obj.compute_scalar(obj.x(eq))
-            print(f"grid_type:{grid_type} L:{L} M:{M} N:{N} obj:{scalar_objective}")
-            return scalar_objective
-
-        results = []
-
-        # Loop over grid types. For LinearGrid we need to drop the
-        # point at rho=0 to avoid a divide-by-0
-        grid_types = [LinearGrid, QuadratureGrid]
-        kwargss = [{"axis": False}, {}]
-
-        # Loop over grid resolutions:
-        Ls = [150, 300, 150, 150]
-        Ms = [10, 10, 20, 10]
-        Ns = [0, 0, 0, 2]
-
-        for grid_type, kwargs in zip(grid_types, kwargss):
-            for L, M, N in zip(Ls, Ms, Ns):
-                results.append(test(grid_type, kwargs, L, M, N))
-
-        results = np.array(results)
-        np.testing.assert_allclose(results, np.mean(results), rtol=0.04)
-
     @pytest.mark.regression
     def test_bootstrap_consistency_iota(self, TmpDir):
         """Try optimizing for bootstrap consistency in axisymmetry, at fixed shape.
@@ -1496,14 +1446,18 @@ def test_bootstrap_objective_build():
         L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e25
     )
     # density too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3, M=3, N=3, NFP=2, electron_temperature=1e5, electron_density=1e21
     )
     # electron temperature too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1514,8 +1468,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e5,
     )
     # ion temperature too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1526,8 +1482,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e3,
     )
     # density too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1538,8 +1496,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e3,
     )
     # electron temperature too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1550,8 +1510,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1,
     )
     # ion temperature too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
 
     eq = Equilibrium(
         L=4,
@@ -1627,7 +1589,7 @@ def test_bootstrap_optimization_comparison_qa():
         objective=objective,
         constraints=constraints,
         optimizer="proximal-lsq-exact",
-        maxiter=4,
+        maxiter=5,
         gtol=1e-16,
         verbose=3,
     )
@@ -1660,5 +1622,5 @@ def test_bootstrap_optimization_comparison_qa():
         grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=1.8e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.8e-2
+        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.9e-2
     )

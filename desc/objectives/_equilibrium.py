@@ -1,8 +1,8 @@
 """Objectives for solving equilibrium problems."""
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -35,10 +35,11 @@ class ForceBalance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -59,6 +60,7 @@ class ForceBalance(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
 
@@ -67,7 +69,7 @@ class ForceBalance(_Objective):
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Force error: {:10.3e} "
+    _print_value_fmt = "Force error: "
 
     def __init__(
         self,
@@ -209,13 +211,14 @@ class ForceBalanceAnisotropic(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        Must be broadcastable to Objective.dim_f.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -229,11 +232,7 @@ class ForceBalanceAnisotropic(_Objective):
         normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str
         Name of the objective function.
 
@@ -242,7 +241,7 @@ class ForceBalanceAnisotropic(_Objective):
     _units = "(N)"
     _coordinates = "rtz"
     _equilibrium = True
-    _print_value_fmt = "Anisotropic force error: {:10.3e} "
+    _print_value_fmt = "Anisotropic force error: "
 
     def __init__(
         self,
@@ -366,10 +365,11 @@ class RadialForceBalance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -390,6 +390,7 @@ class RadialForceBalance(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
 
@@ -398,7 +399,7 @@ class RadialForceBalance(_Objective):
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Radial force error: {:10.3e} "
+    _print_value_fmt = "Radial force error: "
 
     def __init__(
         self,
@@ -522,10 +523,11 @@ class HelicalForceBalance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -546,6 +548,7 @@ class HelicalForceBalance(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
 
@@ -674,10 +677,11 @@ class Energy(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -698,6 +702,7 @@ class Energy(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
     name : str, optional
@@ -709,7 +714,7 @@ class Energy(_Objective):
     _coordinates = ""
     _equilibrium = True
     _units = "(J)"
-    _print_value_fmt = "Total MHD energy: {:10.3e} "
+    _print_value_fmt = "Total MHD energy: "
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
 
     def __init__(
@@ -841,10 +846,11 @@ class CurrentDensity(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -865,6 +871,7 @@ class CurrentDensity(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
 
@@ -873,7 +880,7 @@ class CurrentDensity(_Objective):
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(A*m)"
-    _print_value_fmt = "Current density: {:10.3e} "
+    _print_value_fmt = "Current density: "
 
     def __init__(
         self,

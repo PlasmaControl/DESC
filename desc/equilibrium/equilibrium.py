@@ -2,27 +2,30 @@
 
 import copy
 import numbers
-import warnings
 from collections.abc import MutableSequence
 
 import numpy as np
 from scipy import special
 from scipy.constants import mu_0
-from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import execute_on_cpu, jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
+from desc.compute.utils import (
+    _grow_seeds,
+    get_data_deps,
+    get_params,
+    get_profiles,
+    get_transforms,
+)
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
-    Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid, _Grid
+from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -34,13 +37,23 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import Optimizer
 from desc.perturbations import perturb
-from desc.profiles import PowerSeriesProfile, SplineProfile
+from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
-from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
+from desc.utils import (
+    ResolutionWarning,
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    only1,
+    setdefault,
+    warnif,
+)
 
-from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
+from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
+from .coords import is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
-from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
+from .utils import parse_axis, parse_profile, parse_surface
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -149,6 +162,7 @@ class Equilibrium(IOAble, Optimizable):
         "_N_grid",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         Psi=1.0,
@@ -197,11 +211,7 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing, getattr(surface, "spectral_indexing", "ansi")
         )
 
-        errorif(
-            (NFP is not None) and not isposint(NFP),
-            ValueError,
-            f"NFP should be a positive integer, got {NFP}",
-        )
+        NFP = check_posint(NFP, "NFP")
         self._NFP = int(
             setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
         )
@@ -217,7 +227,7 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"sym should be one of True, False, None, got {sym}",
         )
-        self._sym = setdefault(sym, getattr(surface, "sym", False))
+        self._sym = bool(setdefault(sym, getattr(surface, "sym", False)))
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
 
@@ -230,12 +240,12 @@ class Equilibrium(IOAble, Optimizable):
         self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
 
         # resolution
-        _assert_nonnegint(L, "L")
-        _assert_nonnegint(M, "M")
-        _assert_nonnegint(N, "N")
-        _assert_nonnegint(L_grid, "L_grid")
-        _assert_nonnegint(M_grid, "M_grid")
-        _assert_nonnegint(N_grid, "N_grid")
+        L = check_nonnegint(L, "L")
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+        L_grid = check_nonnegint(L_grid, "L_grid")
+        M_grid = check_nonnegint(M_grid, "M_grid")
+        N_grid = check_nonnegint(N_grid, "N_grid")
 
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, self.surface.M))
@@ -343,10 +353,10 @@ class Equilibrium(IOAble, Optimizable):
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
-            if isinstance(p, PowerSeriesProfile) and p.sym != "even":
-                warnings.warn(
-                    colored(f"{profile} profile is not an even power series.", "yellow")
-                )
+            warnif(
+                isinstance(p, PowerSeriesProfile) and p.sym != "even",
+                msg=f"{profile} profile is not an even power series.",
+            )
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
@@ -401,6 +411,15 @@ class Equilibrium(IOAble, Optimizable):
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
 
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+        self._L_grid = int(self._L_grid)
+        self._M_grid = int(self._M_grid)
+        self._N_grid = int(self._N_grid)
+
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
 
@@ -424,6 +443,9 @@ class Equilibrium(IOAble, Optimizable):
             "Za_n",
             "Rb_lmn",
             "Zb_lmn",
+            "I",
+            "G",
+            "Phi_mn",
         )
         assert sorted(args) == sorted(arg_order)
         return [arg for arg in arg_order if arg in args]
@@ -510,6 +532,7 @@ class Equilibrium(IOAble, Optimizable):
             new = copy.copy(self)
         return new
 
+    @execute_on_cpu
     def change_resolution(
         self,
         L=None,
@@ -543,6 +566,12 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
+        warnif(
+            L is not None and L < self.L,
+            UserWarning,
+            "Reducing radial (L) resolution can make plasma boundary inconsistent. "
+            + "Recommend calling `eq.surface = eq.get_surface_at(rho=1.0)`",
+        )
         self._L = int(setdefault(L, self.L))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))
@@ -550,7 +579,7 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
         self._NFP = int(setdefault(NFP, self.NFP))
-        self._sym = setdefault(sym, self.sym)
+        self._sym = bool(setdefault(sym, self.sym))
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
@@ -589,6 +618,7 @@ class Equilibrium(IOAble, Optimizable):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
+    @execute_on_cpu
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
 
@@ -624,8 +654,10 @@ class Equilibrium(IOAble, Optimizable):
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
-            # TODO: Don't call zernike_radial for each mode, instead compute all
-            # Populate i, j, l, m and call zernike_radial once
+            Js = []
+            zernikeR = zernike_radial(
+                rho, self.R_basis.modes[:, 0], self.R_basis.modes[:, 1]
+            )
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -633,8 +665,16 @@ class Equilibrium(IOAble, Optimizable):
                         surface.R_basis.modes[:, 2] == n,
                     )
                 )
-                AR[j, i] = zernike_radial(rho, l, m)
+                Js.append(j.flatten())
+            Js = np.array(Js)
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            AR[Js[:, 0], np.arange(self.R_basis.num_modes)] = zernikeR
 
+            Js = []
+            zernikeZ = zernike_radial(
+                rho, self.Z_basis.modes[:, 0], self.Z_basis.modes[:, 1]
+            )
             for i, (l, m, n) in enumerate(self.Z_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -642,7 +682,11 @@ class Equilibrium(IOAble, Optimizable):
                         surface.Z_basis.modes[:, 2] == n,
                     )
                 )
-                AZ[j, i] = zernike_radial(rho, l, m)
+                Js.append(j.flatten())
+            Js = np.array(Js)
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            AZ[Js[:, 0], np.arange(self.Z_basis.num_modes)] = zernikeZ
 
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
@@ -688,6 +732,8 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         name : str
             Name of the quantity to compute.
+            If list is given, then two names are expected: the quantity to spline
+            and its radial derivative.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
@@ -704,14 +750,17 @@ class Equilibrium(IOAble, Optimizable):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
-        f = data[name]
-        f = grid.compress(f, surface_label="rho")
-        x = grid.nodes[grid.unique_rho_idx, 0]
-        p = SplineProfile(f, x, name=name)
+        knots = grid.compress(grid.nodes[:, 0])
+        if isinstance(name, str):
+            f = grid.compress(data[name])
+            p = SplineProfile(f, knots, name=name)
+        else:
+            f, df = map(grid.compress, (data[name[0]], data[name[1]]))
+            p = HermiteSplineProfile(f, df, knots, name=name)
         if kind == "power_series":
-            p = p.to_powerseries(order=min(self.L, len(x)), xs=x, sym=True)
+            p = p.to_powerseries(order=min(self.L, grid.num_rho), xs=knots, sym=True)
         if kind == "fourier_zernike":
-            p = p.to_fourierzernike(L=min(self.L, len(x)), xs=x)
+            p = p.to_fourierzernike(L=min(self.L, grid.num_rho), xs=knots)
         return p
 
     def get_axis(self):
@@ -748,7 +797,7 @@ class Equilibrium(IOAble, Optimizable):
         axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
         return axis
 
-    def compute(
+    def compute(  # noqa: C901
         self,
         names,
         grid=None,
@@ -760,6 +809,9 @@ class Equilibrium(IOAble, Optimizable):
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
+
+        If ``grid.coordinates!="rtz"`` then this method may take longer to run
+        than usual as a coordinate mapping subproblem will need to be solved.
 
         Parameters
         ----------
@@ -775,8 +827,11 @@ class Equilibrium(IOAble, Optimizable):
         profiles : dict of Profile
             Profile objects for pressure, iota, current, etc. Defaults to attributes
             of self
-        data : dict of ndarray
-            Data computed so far, generally output from other compute functions
+        data : dict[str, jnp.ndarray]
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
         override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
@@ -793,133 +848,291 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        elif not isinstance(grid, _Grid):
-            raise TypeError(
-                "must pass in a Grid object for argument grid!"
-                f" instead got type {type(grid)}"
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            msg="must pass in a Grid object for argument grid!"
+            f" instead got type {type(grid)}",
+        )
+        if grid.coordinates != "rtz":
+            inbasis = {
+                "r": "rho",
+                "t": "theta",
+                "v": "theta_PEST",
+                "a": "alpha",
+                "z": "zeta",
+            }
+            rtz_nodes = self.map_coordinates(
+                grid.nodes,
+                inbasis=[inbasis[char] for char in grid.coordinates],
+                outbasis=("rho", "theta", "zeta"),
+                period=grid.period,
+            )
+            grid = Grid(
+                nodes=rtz_nodes,
+                coordinates="rtz",
+                source_grid=grid,
+                sort=False,
+                jitable=False,
             )
 
+        method = kwargs.pop("method", "auto")
         if params is None:
-            params = get_params(names, obj=self, has_axis=grid.axis.size)
+            params = get_params(
+                names,
+                obj=self,
+                has_axis=grid.axis.size,
+                basis=kwargs.get("basis", "rpz"),
+            )
         if profiles is None:
-            profiles = get_profiles(names, obj=self, grid=grid)
+            profiles = get_profiles(
+                names, obj=self, grid=grid, basis=kwargs.get("basis", "rpz")
+            )
         if transforms is None:
-            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+            transforms = get_transforms(
+                names,
+                obj=self,
+                grid=grid,
+                method=method,
+                **kwargs,
+            )
         if data is None:
             data = {}
 
-        # To avoid the issue of using the wrong grid for surface and volume averages,
-        # we first figure out what needed qtys are flux functions or volume integrals
-        # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
-        deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
-        # TODO: replace this logic with `grid_type` from data_index
-        dep0d = [
-            dep
-            for dep in deps
-            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
-        ]
-        dep1dr = [
-            dep
-            for dep in deps
-            if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
-        ]
-        dep1dz = [
-            dep
-            for dep in deps
-            if (data_index[p][dep]["coordinates"] == "z") and (dep not in data)
-        ]
+        deps = set(
+            get_data_deps(names, obj=p, has_axis=grid.axis.size, data=data) + names
+        )
 
-        # whether we need to calculate 0d or 1d quantities on a special grid
-        calc0d = bool(len(dep0d))
-        calc1dr = bool(len(dep1dr))
-        calc1dz = bool(len(dep1dz))
-        if (  # see if the grid we're already using will work for desired qtys
-            (grid.L >= self.L_grid)
-            and (grid.M >= self.M_grid)
-            and (grid.N >= self.N_grid)
-        ):
+        def need_src(name):
+            # Need to compute these on grid that is paired to the source grid, since
+            # the compute logic assume input data is evaluated on those coordinates.
+            # We exclude these from the depXdx sets below since the grids we will
+            # use to compute those dependencies are coordinate-blind.
+            # Example, "<L|r,a>" has coordinates="r", but requires computing on
+            # field line following source grid.
+            return bool(data_index[p][name]["source_grid_requirement"])
+
+        # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
+        # which does not need a source grid to evaluate, does not compute <L|r,a> on a
+        # grid that does not follow field lines.
+        # Maybe this can help explain:
+        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1664918897.
+        need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
+
+        dep0d = {
+            dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
+        }
+        # Unless user asks, don't try to recompute stuff which are only dependencies
+        # of dep0d. Example, suppose the user supplied grid is a field-line following
+        # grid, and the user would like to compute the effective ripple, which requires
+        # the scalar R0 as a dependency. The scalar R0 has the following dependencies:
+        # R0 <- A <- A(z). Each of these are computable on the quadrature grid, and
+        # since R0 is a scalar we can trivially interpolate it back to the user-supplied
+        # grid. We don't need to additionally compute A(z) and interpolate it back;
+        # it was only needed to compute R0, so we should remove it from the dep1dz list.
+        # If we don't remove it from the dep1dz list, then the code would try to create
+        # a linear grid with cross-sections at all the unique zeta values in the
+        # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
+        # attribute, so this would cause an error.
+        dep0d_deps = set(
+            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        )
+        # This filter is stronger than the name implies, but the false positives
+        # that are filtered out will still get computed with the logic in
+        # compute.utils.compute
+        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
+        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
+        dep1dr = {
+            dep
+            for dep in deps
+            if is_1dr_rad_grid(dep)
+            and not just_dep0d_dep(dep)
+            and dep not in need_src_deps
+        }
+        dep1dz = {
+            dep
+            for dep in deps
+            # By including the additional requirement that dep is not just a dependency
+            # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
+            # compute things like A(z) when it was only needed to compute R0, as in the
+            # example above.
+            if is_1dz_tor_grid(dep)
+            and not just_dep0d_dep(dep)
+            and dep not in need_src_deps
+            # These don't need a special grid, since the transforms are always
+            # built on the (rho, theta, zeta) coordinate grid.
+            and dep not in ["phi", "zeta"]
+        }
+
+        # Whether we need to calculate any dependencies on a special grid.
+        calc0d = bool(dep0d)
+        calc1dr = bool(dep1dr)
+        calc1dz = bool(dep1dz)
+        # If the grid samples the full volume, then it is sufficient.
+        if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
             if isinstance(grid, QuadratureGrid):
                 calc0d = calc1dr = calc1dz = False
             if isinstance(grid, LinearGrid):
                 calc1dr = calc1dz = False
+        else:
+            # Warn if best way to compute accurately is increasing resolution.
+            for dep in deps:
+                req = data_index[p][dep]["resolution_requirement"]
+                coords = data_index[p][dep]["coordinates"]
+                msg = lambda direction: (
+                    f"Dependency {dep} may require more {direction}"
+                    " resolution to compute accurately."
+                )
+                warnif(
+                    # if need more radial resolution
+                    "r" in req and grid.L < self.L_grid
+                    # and won't override grid to one with more radial resolution
+                    and not (override_grid and coords in {"z", ""}),
+                    ResolutionWarning,
+                    msg("radial"),
+                )
+                warnif(
+                    # if need more poloidal resolution
+                    "t" in req and grid.M < self.M_grid
+                    # and won't override grid to one with more poloidal resolution
+                    and not (override_grid and coords in {"r", "z", ""}),
+                    ResolutionWarning,
+                    msg("poloidal"),
+                )
+                warnif(
+                    # if need more toroidal resolution
+                    "z" in req and grid.N < self.N_grid
+                    # and won't override grid to one with more toroidal resolution
+                    and not (override_grid and coords in {"r", ""}),
+                    ResolutionWarning,
+                    msg("toroidal"),
+                )
+
+        # Now compute dependencies on the proper grids, passing in any available
+        # seed data which is already computed and interpolatable.
+        # There isn't a single non-repeating order for computing that ensures the
+        # dependencies of the dependencies are computed on the proper grid. However,
+        # 0d -> 1dr -> 1dz -> rest covers most cases. In cases where it
+        # doesn't, the expectation is that developer registers the compute function
+        # with a resolution requirement or the user precomputes it.
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
             data0d = compute_fun(
                 self,
-                dep0d,
+                list(dep0d),
                 params=params,
-                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
-                profiles=get_profiles(dep0d, obj=self, grid=grid0d),
-                data=None,
+                transforms=get_transforms(
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep0d, obj=self, grid=grid0d, basis=kwargs.get("basis", "rpz")
+                ),
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data=data0d_seed,
                 **kwargs,
             )
-            # these should all be 0d quantities so don't need to compress/expand
-            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            # These should all be 0d quantities so don't need to compress/expand.
+            data0d = {
+                key: data0d[key] for key in data0d if key in dep0d and key not in data
+            }
             data.update(data0d)
 
+        if (calc1dr or calc1dz) and override_grid:
+            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
+        else:
+            data0d_seed = {}
         if calc1dr and override_grid:
             grid1dr = LinearGrid(
-                rho=grid.nodes[grid.unique_rho_idx, 0],
+                rho=grid.compress(grid.nodes[:, 0], surface_label="rho"),
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
                 sym=self.sym,
             )
-            # TODO: Pass in data0d as a seed once there are 1d quantities that
-            # depend on 0d quantities in data_index.
+            data1dr_seed = {
+                key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
+                for key in data
+                if is_1dr_rad_grid(key)
+            }
             data1dr = compute_fun(
                 self,
-                dep1dr,
+                list(dep1dr),
                 params=params,
-                transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
-                profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
-                data=None,
+                transforms=get_transforms(
+                    dep1dr,
+                    obj=self,
+                    grid=grid1dr,
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep1dr, obj=self, grid=grid1dr, basis=kwargs.get("basis", "rpz")
+                ),
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data=data1dr_seed | data0d_seed,
                 **kwargs,
             )
-            # need to make this data broadcast with the data on the original grid
+            # Need to make this data broadcast with the data on the original grid.
             data1dr = {
-                key: grid.expand(
-                    grid1dr.compress(val, surface_label="rho"), surface_label="rho"
+                key: grid.copy_data_from_other(
+                    data1dr[key], grid1dr, surface_label="rho"
                 )
-                for key, val in data1dr.items()
-                if key in dep1dr
+                for key in data1dr
+                if key in dep1dr and key not in data
             }
             data.update(data1dr)
 
         if calc1dz and override_grid:
             grid1dz = LinearGrid(
-                zeta=grid.nodes[grid.unique_zeta_idx, 2],
+                zeta=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym,
             )
-            # TODO: Pass in data0d as a seed once there are 1d quantities that
-            # depend on 0d quantities in data_index.
+            data1dz_seed = {
+                key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
+                for key in data
+                if is_1dz_tor_grid(key)
+            }
             data1dz = compute_fun(
                 self,
-                dep1dz,
+                list(dep1dz),
                 params=params,
-                transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
-                profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
-                data=None,
+                transforms=get_transforms(
+                    dep1dz,
+                    obj=self,
+                    grid=grid1dz,
+                    method=method,
+                    **kwargs,
+                ),
+                profiles=get_profiles(
+                    dep1dz, obj=self, grid=grid1dz, basis=kwargs.get("basis", "rpz")
+                ),
+                # If a dependency of something is already computed, use it
+                # instead of recomputing it on a potentially bad grid.
+                data=data1dz_seed | data0d_seed,
                 **kwargs,
             )
-            # need to make this data broadcast with the data on the original grid
+            # Need to make this data broadcast with the data on the original grid.
             data1dz = {
-                key: grid.expand(
-                    grid1dz.compress(val, surface_label="zeta"), surface_label="zeta"
+                key: grid.copy_data_from_other(
+                    data1dz[key], grid1dz, surface_label="zeta"
                 )
-                for key, val in data1dz.items()
-                if key in dep1dz
+                for key in data1dz
+                if key in dep1dz and key not in data
             }
             data.update(data1dz)
 
-        # TODO: we can probably reduce the number of deps computed here if some are only
-        #   needed as inputs for 0d and 1d qtys, unless the user asks for them
-        #   specifically?
         data = compute_fun(
             self,
             names,
@@ -931,46 +1144,50 @@ class Equilibrium(IOAble, Optimizable):
         )
         return data
 
-    def map_coordinates(  # noqa: C901
+    def map_coordinates(
         self,
         coords,
         inbasis,
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=(np.inf, np.inf, np.inf),
+        period=None,
         tol=1e-6,
         maxiter=30,
         full_output=False,
         **kwargs,
     ):
-        """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+        """Transform coordinates given in ``inbasis`` to ``outbasis``.
 
-        First solves for the computational coordinates that correspond to inbasis, then
-        evaluates outbasis at those locations.
+        Solves for the computational coordinates that correspond to ``inbasis``,
+        then evaluates ``outbasis`` at those locations.
+
+        Performance can often improve significantly given a reasonable initial guess.
 
         Parameters
         ----------
-        coords : ndarray, shape(k,3)
-            2D array of input coordinates. Each row is a different
-            point in space.
+        coords : ndarray
+            Shape (k, 3).
+            2D array of input coordinates. Each row is a different point in space.
         inbasis, outbasis : tuple of str
-            Labels for input and output coordinates, eg ("R", "phi", "Z") or
+            Labels for input and output coordinates, e.g. ("R", "phi", "Z") or
             ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
-            same as the compute function data key
-        guess : None or ndarray, shape(k,3)
+            same as the compute function data key.
+        guess : jnp.ndarray
+            Shape (k, 3).
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-            corresponding to coords in inbasis. If None, heuristics are used based on
-            in basis and a nearest neighbor search on a coarse grid.
+            corresponding to ``coords`` in ``inbasis``. If not given, then heuristics
+            based on ``inbasis`` or a nearest neighbor search on a grid may be used.
+            In general, this must be given to be compatible with JIT.
         params : dict
-            Values of equilibrium parameters to use, eg eq.params_dict
+            Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
         period : tuple of float
-            Assumed periodicity for each quantity in inbasis.
-            Use np.inf to denote no periodicity.
+            Assumed periodicity for each quantity in ``inbasis``.
+            Use ``np.inf`` to denote no periodicity.
         tol : float
             Stopping tolerance.
-        maxiter : int > 0
-            Maximum number of Newton iterations
+        maxiter : int
+            Maximum number of Newton iterations.
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
             the root finding and the second is the number of iterations.
@@ -980,15 +1197,14 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        coords : ndarray, shape(k,3)
-            Coordinates mapped from inbasis to outbasis.
+        out : jnp.ndarray
+            Shape (k, 3).
+            Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
+            returned for coordinates where root finding did not succeed, possibly
+            because the coordinate is not in the plasma volume.
         info : tuple
             2 element tuple containing residuals and number of iterations
-            for each point. Only returned if ``full_output`` is True
-
-        Notes
-        -----
-        ``guess`` must be given for this function to be compatible with ``jit``.
+            for each point. Only returned if ``full_output`` is True.
 
         """
         return map_coordinates(
@@ -1008,21 +1224,20 @@ class Equilibrium(IOAble, Optimizable):
     def compute_theta_coords(
         self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
     ):
-        """Find theta_DESC for given straight field line theta_PEST.
+        """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to use
-        flux_coords : ndarray, shape(k,3)
-            2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-            point in space.
+        flux_coords : ndarray
+            Shape (k, 3).
+            Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
+            Each row is a different point in space.
         L_lmn : ndarray
-            spectral coefficients for lambda. Defaults to eq.L_lmn
+            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
         tol : float
             Stopping tolerance.
-        maxiter : int > 0
-            maximum number of Newton iterations
+        maxiter : int
+            Maximum number of Newton iterations.
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
             the root finding and the second is the number of iterations.
@@ -1032,22 +1247,28 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        coords : ndarray, shape(k,3)
-            coordinates [rho,theta,zeta].
+        coords : ndarray
+            Shape (k, 3).
+            DESC computational coordinates [ρ, θ, ζ].
         info : tuple
-            2 element tuple containing residuals and number of iterations
-            for each point. Only returned if ``full_output`` is True
+            2 element tuple containing residuals and number of iterations for each
+            point. Only returned if ``full_output`` is True.
+
         """
-        return compute_theta_coords(
+        warnif(True, DeprecationWarning, msg="Use map_coordinates instead.")
+        return map_coordinates(
             self,
             flux_coords,
-            L_lmn=L_lmn,
-            maxiter=maxiter,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
             tol=tol,
+            maxiter=maxiter,
             full_output=full_output,
             **kwargs,
         )
 
+    @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
@@ -1132,14 +1353,12 @@ class Equilibrium(IOAble, Optimizable):
     @surface.setter
     def surface(self, new):
         assert isinstance(
-            new, Surface
-        ), f"surfaces should be of type Surface or a subclass, got {new}"
+            new, FourierRZToroidalSurface
+        ), f"surface should be of type FourierRZToroidalSurface or subclass, got {new}"
         assert (
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
-        assert self.NFP == getattr(
-            new, "NFP", self.NFP
-        ), "Surface and Equilibrium must have the same NFP"
+        assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
         new.change_resolution(self.L, self.M, self.N)
         self._surface = new
 
@@ -1182,49 +1401,27 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(Psi)
+        self._Psi = float(np.squeeze(Psi))
 
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
 
-    @NFP.setter
-    def NFP(self, NFP):
-        assert (
-            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
-        ), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFP=NFP)
-
     @property
     def L(self):
         """int: Maximum radial mode number."""
         return self._L
-
-    @L.setter
-    def L(self, L):
-        _assert_nonnegint(L, "L")
-        self.change_resolution(L=L)
 
     @property
     def M(self):
         """int: Maximum poloidal fourier mode number."""
         return self._M
 
-    @M.setter
-    def M(self, M):
-        _assert_nonnegint(M, "M")
-        self.change_resolution(M=M)
-
     @property
     def N(self):
         """int: Maximum toroidal fourier mode number."""
         return self._N
-
-    @N.setter
-    def N(self, N):
-        _assert_nonnegint(N, "N")
-        self.change_resolution(N=N)
 
     @optimizable_parameter
     @property
@@ -1234,7 +1431,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        R_lmn = jnp.atleast_1d(R_lmn)
+        R_lmn = jnp.atleast_1d(jnp.asarray(R_lmn))
         errorif(
             R_lmn.size != self._R_lmn.size,
             ValueError,
@@ -1251,7 +1448,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        Z_lmn = jnp.atleast_1d(Z_lmn)
+        Z_lmn = jnp.atleast_1d(jnp.asarray(Z_lmn))
         errorif(
             Z_lmn.size != self._Z_lmn.size,
             ValueError,
@@ -1268,7 +1465,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        L_lmn = jnp.atleast_1d(L_lmn)
+        L_lmn = jnp.atleast_1d(jnp.asarray(L_lmn))
         errorif(
             L_lmn.size != self._L_lmn.size,
             ValueError,
@@ -1296,6 +1493,51 @@ class Equilibrium(IOAble, Optimizable):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
+
+    @optimizable_parameter
+    @property
+    def I(self):  # noqa: E743
+        """float: Net toroidal current on the sheet current at the LCFS."""
+        return self.surface.I if hasattr(self.surface, "I") else np.empty(0)
+
+    @I.setter
+    def I(self, new):  # noqa: E743
+        errorif(
+            not hasattr(self.surface, "I"),
+            ValueError,
+            "Attempt to set I on an equilibrium without sheet current",
+        )
+        self.surface.I = new
+
+    @optimizable_parameter
+    @property
+    def G(self):
+        """float: Net poloidal current on the sheet current at the LCFS."""
+        return self.surface.G if hasattr(self.surface, "G") else np.empty(0)
+
+    @G.setter
+    def G(self, new):
+        errorif(
+            not hasattr(self.surface, "G"),
+            ValueError,
+            "Attempt to set G on an equilibrium without sheet current",
+        )
+        self.surface.G = new
+
+    @optimizable_parameter
+    @property
+    def Phi_mn(self):
+        """ndarray: coeffs of single-valued part of surface current potential."""
+        return self.surface.Phi_mn if hasattr(self.surface, "Phi_mn") else np.empty(0)
+
+    @Phi_mn.setter
+    def Phi_mn(self, new):
+        errorif(
+            not hasattr(self.surface, "Phi_mn"),
+            ValueError,
+            "Attempt to set Phi_mn on an equilibrium without sheet current",
+        )
+        self.surface.Phi_mn = new
 
     @optimizable_parameter
     @property
@@ -1721,7 +1963,7 @@ class Equilibrium(IOAble, Optimizable):
             idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
-            L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
+            L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
 
         inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
         inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
@@ -1750,7 +1992,7 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        objective : {"force", "forces", "energy", "vacuum"}
+        objective : {"force", "forces", "energy"}
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
@@ -1798,22 +2040,20 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 
-        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
-            warnings.warn(
-                colored(
-                    "Equilibrium has one or more spectral resolutions "
-                    + "greater than the corresponding collocation grid resolution! "
-                    + "This is not recommended and may result in poor convergence. "
-                    + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
-                    + "to avoid this warning.",
-                    "yellow",
-                )
-            )
-        if self.bdry_mode == "poincare":
-            raise NotImplementedError(
-                "Solving equilibrium with poincare XS as BC is not supported yet "
-                + "on master branch."
-            )
+        warnif(
+            self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid,
+            msg="Equilibrium has one or more spectral resolutions "
+            + "greater than the corresponding collocation grid resolution! "
+            + "This is not recommended and may result in poor convergence. "
+            + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
+            + "to avoid this warning.",
+        )
+        errorif(
+            self.bdry_mode == "poincare",
+            NotImplementedError,
+            "Solving equilibrium with poincare XS as BC is not supported yet "
+            + "on master branch.",
+        )
 
         things, result = optimizer.optimize(
             self,
@@ -1913,163 +2153,6 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         return things[0], result
-
-    def _optimize(  # noqa: C901
-        self,
-        objective,
-        constraint=None,
-        ftol=1e-6,
-        xtol=1e-6,
-        maxiter=50,
-        verbose=1,
-        copy=False,
-        solve_options=None,
-        perturb_options=None,
-    ):
-        """Optimize an equilibrium for an objective.
-
-        Parameters
-        ----------
-        objective : ObjectiveFunction
-            Objective function to optimize.
-        constraint : ObjectiveFunction
-            Objective function to satisfy. Default = fixed-boundary force balance.
-        ftol : float
-            Relative stopping tolerance on objective function value.
-        xtol : float
-            Stopping tolerance on optimization step size.
-        maxiter : int
-            Maximum number of optimization steps.
-        verbose : int
-            Level of output.
-        copy : bool, optional
-            Whether to update the existing equilibrium or make a copy (Default).
-        solve_options : dict
-            Dictionary of additional options used in Equilibrium.solve().
-        perturb_options : dict
-            Dictionary of additional options used in Equilibrium.perturb().
-
-        Returns
-        -------
-        eq_new : Equilibrium
-            Optimized equilibrium.
-
-        """
-        import inspect
-        from copy import deepcopy
-
-        from desc.optimize.tr_subproblems import update_tr_radius
-        from desc.optimize.utils import check_termination
-        from desc.perturbations import optimal_perturb
-
-        solve_options = {} if solve_options is None else solve_options
-        perturb_options = {} if perturb_options is None else perturb_options
-
-        if constraint is None:
-            constraint = get_equilibrium_objective(eq=self)
-
-        timer = Timer()
-        timer.start("Total time")
-
-        if not objective.built:
-            objective.build()
-        if not constraint.built:
-            constraint.build()
-
-        cost = objective.compute_scalar(objective.x(self))
-        perturb_options = deepcopy(perturb_options)
-        tr_ratio = perturb_options.get(
-            "tr_ratio",
-            inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
-        )
-
-        if verbose > 0:
-            objective.print_value(objective.x(self))
-
-        params = orig_params = self.params_dict.copy()
-
-        iteration = 1
-        success = None
-        while success is None:
-            timer.start("Step {} time".format(iteration))
-            if verbose > 0:
-                print("====================")
-                print("Optimization Step {}".format(iteration))
-                print("====================")
-                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
-
-            # perturb + solve
-            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit) = optimal_perturb(
-                self,
-                constraint,
-                objective,
-                copy=False,
-                **perturb_options,
-            )
-            self.solve(objective=constraint, **solve_options)
-
-            # update trust region radius
-            cost_new = objective.compute_scalar(objective.x(self))
-            actual_reduction = cost - cost_new
-            trust_radius, ratio = update_tr_radius(
-                tr_ratio[0] * c_norm,
-                actual_reduction,
-                predicted_reduction,
-                np.linalg.norm(dc_opt),
-                bound_hit,
-            )
-            tr_ratio[0] = trust_radius / c_norm
-            perturb_options["tr_ratio"] = tr_ratio
-
-            timer.stop("Step {} time".format(iteration))
-            if verbose > 0:
-                objective.print_value(objective.x(self))
-                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-                print("Reduction Ratio = {:+.3f}".format(ratio))
-            if verbose > 1:
-                timer.disp("Step {} time".format(iteration))
-
-            # stopping criteria
-            success, message = check_termination(
-                actual_reduction,
-                cost,
-                np.linalg.norm(dc),
-                c_norm,
-                np.inf,  # TODO: add g_norm
-                ratio,
-                ftol,
-                xtol,
-                0,  # TODO: add gtol
-                iteration,
-                maxiter,
-                0,
-                np.inf,
-            )
-            if actual_reduction > 0:
-                params = self.params_dict.copy()
-                cost = cost_new
-            else:
-                # reset equilibrium to last good params
-                self.params_dict = params
-            if success is not None:
-                break
-
-            iteration += 1
-
-        timer.stop("Total time")
-        print("====================")
-        print("Done")
-        if verbose > 0:
-            print(message)
-        if verbose > 1:
-            timer.disp("Total time")
-
-        if copy:
-            eq = self.copy()
-            self.params = orig_params
-        else:
-            eq = self
-        return eq
 
     def perturb(
         self,

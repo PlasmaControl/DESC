@@ -11,7 +11,6 @@ from ._coils import (
     QuadraticFlux,
     ToroidalFlux,
 )
-from ._confinement import HeatingPowerISS04
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -44,6 +43,7 @@ from ._omnigenity import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
+from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import MagneticWell, MercierStability
 from ._terpsichore import TERPSICHORE

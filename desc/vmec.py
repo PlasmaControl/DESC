@@ -814,6 +814,14 @@ class VMECIO:
             lmnc.long_name = "cos(m*t-n*p) component of lambda, on half mesh"
             lmnc.units = "rad"
         l1 = np.ones_like(eq.L_lmn)
+        # should negate lambda coefs bc theta_DESC + lambda = theta_PEST,
+        # since we are reversing the theta direction (and the theta_PEST direction),
+        # so -theta_PEST = -theta_DESC - lambda, so the negative of lambda is what
+        # should be saved, so that would be negating all of eq.L_lmn
+        # BUT since we are also reversing the poloidal angle direction, which
+        # would negate only the coeffs of L_lmn corresponding to m<0
+        # (sin theta modes in DESC), the effective result is to only
+        # negate the cos(theta) (m>0) lambda modes
         l1[eq.L_basis.modes[:, 1] >= 0] *= -1
         m, n, x_mn = zernike_to_fourier(l1 * eq.L_lmn, basis=eq.L_basis, rho=r_half)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -830,7 +838,7 @@ class VMECIO:
 
         sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
         cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
-        full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
+        full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=False)
         if eq.sym:
             sin_transform = Transform(
                 grid=grid_lcfs, basis=sin_basis, build=False, build_pinv=True

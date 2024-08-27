@@ -5,12 +5,13 @@ from ._coils import (
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
-    CoilsetMinDistance,
+    CoilSetMinDistance,
     CoilTorsion,
-    PlasmaCoilsetMinDistance,
+    PlasmaCoilSetMinDistance,
     QuadraticFlux,
     ToroidalFlux,
 )
+from ._confinement import HeatingPowerISS04
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -70,6 +71,9 @@ from .linear_objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixNearAxisLambda,
+    FixNearAxisR,
+    FixNearAxisZ,
     FixOmniBmax,
     FixOmniMap,
     FixOmniWell,
@@ -77,6 +81,7 @@ from .linear_objectives import (
     FixPressure,
     FixPsi,
     FixSheetCurrent,
+    FixSumCoilCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,

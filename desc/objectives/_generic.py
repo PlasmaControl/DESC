@@ -5,7 +5,7 @@ import re
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_unflatten
 from desc.compute import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
@@ -60,7 +60,7 @@ class GenericObjective(_Objective):
 
     """
 
-    _print_value_fmt = "Generic objective value: {:10.3e} "
+    _print_value_fmt = "Generic objective value: "
 
     def __init__(
         self,
@@ -213,7 +213,7 @@ class LinearObjectiveFromUser(_FixedObjective):
     _linear = True
     _fixed = True
     _units = "(Unknown)"
-    _print_value_fmt = "Custom linear objective value: {:10.3e}"
+    _print_value_fmt = "Custom linear objective value: "
 
     def __init__(
         self,
@@ -257,13 +257,14 @@ class LinearObjectiveFromUser(_FixedObjective):
         self._dim_f = jax.eval_shape(self._fun, thing.params_dict).size
 
         # check that fun is linear
+        params, params_tree = tree_flatten(thing.params_dict)
+        for param in params:
+            param += np.random.rand(param.size) * 10
+        params = tree_unflatten(params_tree, params)
         J1 = jax.jacrev(self._fun)(thing.params_dict)
-        params = thing.params_dict.copy()
-        for key, value in params.items():
-            params[key] = value + np.random.rand(value.size) * 10
         J2 = jax.jacrev(self._fun)(params)
-        for key in J1.keys():
-            assert np.all(J1[key] == J2[key]), "Function must be linear!"
+        for j1, j2 in zip(tree_leaves(J1), tree_leaves(J2)):
+            assert np.all(j1 == j2), "Function must be linear!"
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -362,7 +363,7 @@ class ObjectiveFromUser(_Objective):
     """
 
     _units = "(Unknown)"
-    _print_value_fmt = "Custom objective value: {:10.3e}"
+    _print_value_fmt = "Custom objective value: "
 
     def __init__(
         self,

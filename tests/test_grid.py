@@ -200,6 +200,7 @@ class TestGrid:
         """Test surface spacing on grids with sym=False."""
         self._test_node_spacing_non_sym(False, 8, 13, 3)
         self._test_node_spacing_non_sym(True, 8, 13, 3)
+        self._test_node_spacing_non_sym(False, 1, 1, 3)
 
     @staticmethod
     def _test_node_spacing_non_sym(
@@ -732,6 +733,87 @@ class TestGrid:
         test("theta", cg_sym)
         test("zeta", cg_sym)
 
+    @pytest.mark.unit
+    def test_meshgrid(self):
+        """Test meshgrid constructor."""
+        R = np.linspace(0, 1, 4)
+        A = np.linspace(0, 2 * np.pi, 2)
+        Z = np.linspace(0, 2 * np.pi, 3)
+        grid = Grid.create_meshgrid(
+            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, 2 * np.pi)
+        )
+        # treating theta == alpha just for grid construction
+        grid1 = LinearGrid(rho=R, theta=A, zeta=Z)
+        # atol=1e-12 bc Grid by default shifts points away from the axis a tiny bit
+        np.testing.assert_allclose(grid1.nodes, grid.nodes, atol=1e-12)
+        # want radial/poloidal/toroidal nodes sorted in the same order for both
+        np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_rho_idx)
+        np.testing.assert_allclose(grid1.unique_theta_idx, grid.unique_alpha_idx)
+        np.testing.assert_allclose(grid1.unique_zeta_idx, grid.unique_zeta_idx)
+        np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_rho_idx)
+        np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_alpha_idx)
+        np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_zeta_idx)
+
+    @pytest.mark.unit
+    def test_meshgrid_reshape(self):
+        """Test that reshaping meshgrids works correctly."""
+        grid = LinearGrid(2, 3, 4)
+
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        t = grid.nodes[grid.unique_theta_idx, 1]
+        z = grid.nodes[grid.unique_zeta_idx, 2]
+
+        # user regular allclose for broadcasting to work correctly
+        # reshaping rtz should have rho along first axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz"), r[:, None, None]
+        )
+        # reshaping rzt should have theta along last axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt"), t[None, None, :]
+        )
+        # reshaping tzr should have zeta along 2nd axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes, "tzr")[:, :, :, 2], z[None, :, None]
+        )
+
+        # coordinates are rtz, not raz
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "raz")
+
+        # not a meshgrid
+        grid = ConcentricGrid(2, 3, 4)
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
+
+        rho = np.linspace(0, 1, 3)
+        alpha = np.linspace(0, 2 * np.pi, 4)
+        zeta = np.linspace(0, 6 * np.pi, 5)
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        r, a, z = grid.nodes.T
+        r = grid.meshgrid_reshape(r, "raz")
+        a = grid.meshgrid_reshape(a, "raz")
+        z = grid.meshgrid_reshape(z, "raz")
+        # functions of zeta should separate along first two axes
+        # since those are contiguous, this should work
+        f = z.reshape(-1, zeta.size)
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        # likewise for rho
+        f = r.reshape(rho.size, -1)
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        # test reshaping result won't mix data
+        f = (a**2 + z).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        f = (r**2 + z).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        f = (r**2 + a).reshape(rho.size, alpha.size, zeta.size)
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[..., i - 1], f[..., i])
+
 
 @pytest.mark.unit
 def test_find_most_rational_surfaces():
@@ -797,6 +879,13 @@ def test_custom_jitable_grid_indexing():
         _ = grid2.inverse_theta_idx
     with pytest.raises(AttributeError):
         _ = grid2.inverse_zeta_idx
+
+    assert not hasattr(grid1, "weights")
+    assert not hasattr(grid1, "spacing")
+    assert not hasattr(grid1, "source_grid")
+    assert not hasattr(grid2, "num_rho")
+    assert not hasattr(grid2, "num_theta")
+    assert not hasattr(grid2, "num_zeta")
 
     y1 = grid1.copy_data_from_other(x, grid2, "rho")
     y2 = grid2.copy_data_from_other(x, grid1, "rho")

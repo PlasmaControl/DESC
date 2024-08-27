@@ -20,9 +20,9 @@ from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, _Grid
+from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.singularities import compute_B_plasma
 from desc.transform import Transform
 from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
@@ -1835,9 +1835,15 @@ class OmnigenousField(Optimizable, IOAble):
             )
 
         if params is None:
-            params = get_params(names, obj=self)
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
         if transforms is None:
-            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+            transforms = get_transforms(
+                names,
+                obj=self,
+                grid=grid,
+                jitable=kwargs.pop("jitable", False),
+                **kwargs,
+            )
         if data is None:
             data = {}
         profiles = {}

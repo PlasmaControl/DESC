@@ -9,14 +9,10 @@ from desc.backend import jnp
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
+from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective
-from desc.singularities import (
-    DFTInterpolator,
-    FFTInterpolator,
-    virtual_casing_biot_savart,
-)
-from desc.utils import Timer, errorif, warnif
+from desc.utils import PRINT_WIDTH, Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
 
@@ -82,7 +78,7 @@ class VacuumBoundaryError(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary Error: {:10.3e} "
+    _print_value_fmt = "Boundary Error: "
     _units = "(T*m^2, T^2*m^2)"
     _coordinates = "rtz"
 
@@ -139,11 +135,7 @@ class VacuumBoundaryError(_Objective):
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
-                rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=int(eq.NFP),
-                sym=False,
+                rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
             grid = self._grid
@@ -255,11 +247,12 @@ class VacuumBoundaryError(_Objective):
         Bsq_err = (bsq_in - bsq_out) * g
         return jnp.concatenate([Bn_err, Bsq_err])
 
-    def print_value(self, *args, **kwargs):
+    def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""
         # this objective is really 2 residuals concatenated so its helpful to print
         # them individually
         f = self.compute_unscaled(*args, **kwargs)
+        f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -268,56 +261,77 @@ class VacuumBoundaryError(_Objective):
             w = constants["quad_weights"]
 
         abserr = jnp.all(self.target == 0)
+        pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
 
-        def _print(fmt, fmax, fmin, fmean, norm, units):
+        def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units):
 
             print(
-                "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
+                "Maximum "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0max, fmax)
+                + units
             )
             print(
-                "Minimum " + ("absolute " if abserr else "") + fmt.format(fmin) + units
+                "Minimum "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0min, fmin)
+                + units
             )
             print(
-                "Average " + ("absolute " if abserr else "") + fmt.format(fmean) + units
+                "Average "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0mean, fmean)
+                + units
             )
 
             if self._normalize and units != "(dimensionless)":
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmax / norm)
+                    + fmt.format(f0max / norm, fmax / norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmin / norm)
+                    + fmt.format(f0min / norm, fmin / norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmean / norm)
+                    + fmt.format(f0mean / norm, fmean / norm)
                     + "(normalized)"
                 )
 
         formats = [
-            "Boundary normal field error: {:10.3e} ",
-            "Boundary magnetic pressure error: {:10.3e} ",
+            "Boundary normal field error: ",
+            "Boundary magnetic pressure error: ",
         ]
         units = ["(T*m^2)", "(T^2*m^2)"]
         nn = f.size // 2
         norms = [self.normalization[0], self.normalization[nn]]
-        for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
+        for i, (fmt, norm, units) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
+            f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
             fi = jnp.abs(fi) if abserr else fi
+            f0i = jnp.abs(f0i) if abserr else f0i
             wi = w[i * nn : (i + 1) * nn]
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
             fmean = jnp.mean(fi * wi) / jnp.mean(wi)
-            _print(fmt, fmax, fmin, fmean, norm, unit)
+
+            f0max = jnp.max(f0i)
+            f0min = jnp.min(f0i)
+            f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
+            fmt = (
+                f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
+                if args0 is not None
+                else f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
+            )
+            _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units)
 
 
 class BoundaryError(_Objective):
@@ -417,7 +431,7 @@ class BoundaryError(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary Error: {:10.3e} "
+    _print_value_fmt = "Boundary Error: "
     _units = "(T*m^2, T^2*m^2, T*m^2)"
 
     _coordinates = "rtz"
@@ -497,11 +511,7 @@ class BoundaryError(_Objective):
 
         if self._eval_grid is None:
             eval_grid = LinearGrid(
-                rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=int(eq.NFP),
-                sym=False,
+                rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
             eval_grid = self._eval_grid
@@ -707,11 +717,12 @@ class BoundaryError(_Objective):
         else:
             return jnp.concatenate([Bn_err, Bsq_err])
 
-    def print_value(self, *args, **kwargs):
+    def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""
         # this objective is really 3 residuals concatenated so its helpful to print
         # them individually
         f = self.compute_unscaled(*args, **kwargs)
+        f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -720,43 +731,53 @@ class BoundaryError(_Objective):
             w = constants["quad_weights"]
 
         abserr = jnp.all(self.target == 0)
+        pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
 
-        def _print(fmt, fmax, fmin, fmean, norm, units):
+        def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit):
 
             print(
-                "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
+                "Maximum "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0max, fmax)
+                + unit
             )
             print(
-                "Minimum " + ("absolute " if abserr else "") + fmt.format(fmin) + units
+                "Minimum "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0min, fmin)
+                + unit
             )
             print(
-                "Average " + ("absolute " if abserr else "") + fmt.format(fmean) + units
+                "Average "
+                + ("absolute " if abserr else "")
+                + fmt.format(f0mean, fmean)
+                + unit
             )
 
             if self._normalize and units != "(dimensionless)":
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmax / norm)
+                    + fmt.format(f0max / norm, fmax / norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmin / norm)
+                    + fmt.format(f0min / norm, fmin / norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmean / norm)
+                    + fmt.format(f0mean / norm, fmean / norm)
                     + "(normalized)"
                 )
 
         formats = [
-            "Boundary normal field error: {:10.3e} ",
-            "Boundary magnetic pressure error: {:10.3e} ",
-            "Boundary field jump error: {:10.3e} ",
+            "Boundary normal field error: ",
+            "Boundary magnetic pressure error: ",
+            "Boundary field jump error: ",
         ]
         units = ["(T*m^2)", "(T^2*m^2)", "(T*m^2)"]
         if self._sheet_current:
@@ -773,14 +794,25 @@ class BoundaryError(_Objective):
             norms = [self.normalization[0], self.normalization[nn]]
         for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
+            f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
             fi = jnp.abs(fi) if abserr else fi
+            f0i = jnp.abs(f0i) if abserr else fi
             wi = w[i * nn : (i + 1) * nn]
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
             fmean = jnp.mean(fi * wi) / jnp.mean(wi)
-            _print(fmt, fmax, fmin, fmean, norm, unit)
+
+            f0max = jnp.max(f0i)
+            f0min = jnp.min(f0i)
+            f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
+            fmt = (
+                f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
+                if args0 is not None
+                else f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
+            )
+            _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
 
 
 class BoundaryErrorNESTOR(_Objective):
@@ -840,7 +872,7 @@ class BoundaryErrorNESTOR(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary magnetic pressure error: {:10.3e} "
+    _print_value_fmt = "Boundary magnetic pressure error: "
     _units = "(T^2*m^2)"
     _coordinates = "rtz"
 

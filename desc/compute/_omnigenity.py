@@ -32,6 +32,7 @@ from .utils import cross, dot, safediv
     data=["B_theta"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    resolution_requirement="tz",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data["B_theta_mn"] = transforms["B"].fit(data["B_theta"])
@@ -53,6 +54,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data=["B_zeta"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    resolution_requirement="tz",
 )
 def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])
@@ -110,6 +112,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -131,6 +134,7 @@ def _w(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -152,6 +156,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["w_Boozer_mn"],
+    resolution_requirement="tz",
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -331,12 +336,22 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["iota", "B0", "B_theta", "B_zeta", "|B|_t", "|B|_z", "G", "I", "B*grad(|B|)"],
+    data=[
+        "iota",
+        "psi_r/sqrt(g)",
+        "B_theta",
+        "B_zeta",
+        "|B|_t",
+        "|B|_z",
+        "G",
+        "I",
+        "B*grad(|B|)",
+    ],
     helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
 )
 def _f_C(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
-    data["f_C"] = (M * data["iota"] - N) * data["B0"] * (
+    data["f_C"] = (M * data["iota"] - N) * data["psi_r/sqrt(g)"] * (
         data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
     ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
     return data
@@ -354,10 +369,10 @@ def _f_C(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "|B|_t", "|B|_z", "(B*grad(|B|))_t", "(B*grad(|B|))_z"],
+    data=["psi_r/sqrt(g)", "|B|_t", "|B|_z", "(B*grad(|B|))_t", "(B*grad(|B|))_z"],
 )
 def _f_T(params, transforms, profiles, data, **kwargs):
-    data["f_T"] = data["B0"] * (
+    data["f_T"] = data["psi_r/sqrt(g)"] * (
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
     )
@@ -414,6 +429,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["eta"],
+    resolution_requirement="tz",
     parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _omni_angle(params, transforms, profiles, data, **kwargs):
@@ -423,22 +439,21 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="theta_B",
-    label="(\\theta_{B},\\zeta_{B})",
+    label="\\theta_{B}",
     units="rad",
     units_long="radians",
-    description="Boozer angular coordinates",
+    description="Boozer poloidal angle",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["alpha", "h"],
-    aliases=["zeta_B"],
     parameterization="desc.magnetic_fields._core.OmnigenousField",
     helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
     iota="float: Value of rotational transform on the Omnigenous surface. Default 1.0",
 )
-def _omni_map(params, transforms, profiles, data, **kwargs):
+def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
     iota = kwargs.get("iota", 1)
 
@@ -468,6 +483,24 @@ def _omni_map(params, transforms, profiles, data, **kwargs):
     data["theta_B"] = booz[0, :]
     data["zeta_B"] = booz[1, :]
     return data
+
+
+@register_compute_fun(
+    name="zeta_B",
+    label="\\zeta_{B}",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_B"],
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
+)
+def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

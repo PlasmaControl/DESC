@@ -6,23 +6,6 @@ from desc.backend import flatnonzero, jnp, put
 from desc.utils import setdefault
 
 
-def _subtract(c, k):
-    """Subtract ``k`` from first index of last axis of ``c``.
-
-    Semantically same as ``return c.copy().at[...,0].add(-k)``,
-    but allows dimension to increase.
-    """
-    c_0 = c[..., 0] - k
-    c = jnp.concatenate(
-        [
-            c_0[..., jnp.newaxis],
-            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
-        ],
-        axis=-1,
-    )
-    return c
-
-
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
 def _in_epigraph_and(is_intersect, df_dy_sign):
     """Set and epigraph of function f with the given set of points.

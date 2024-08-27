@@ -26,11 +26,11 @@ class FusionPower(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=1e9``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
+        Defaults to ``target=1e9``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f

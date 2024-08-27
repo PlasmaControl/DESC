@@ -1909,3 +1909,51 @@ def _shear(params, transforms, profiles, data, **kwargs):
         None,
     )
     return data
+
+
+@register_compute_fun(
+    name="<sigma*nu>",
+    label="\\langle\\sigma\\nu\\rangle",
+    units="m^3 \\cdot s^{-1}",
+    units_long="cubic meters / second",
+    description="Thermal reactivity from Bosch-Hale parameterization",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["Ti"],
+    fuel="str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default is 'DT'.",
+)
+def _reactivity(params, transforms, profiles, data, **kwargs):
+    # Bosch and Hale. “Improved Formulas for Fusion Cross-Sections and Thermal
+    # Reactivities.” Nuclear Fusion 32 (April 1992): 611-631.
+    # https://doi.org/10.1088/0029-5515/32/4/I07.
+    coefficients = {
+        "DT": {
+            "B_G": 34.382,
+            "mc2": 1124656,
+            "C1": 1.17302e-9,
+            "C2": 1.51361e-2,
+            "C3": 7.51886e-2,
+            "C4": 4.60643e-3,
+            "C5": 1.35000e-2,
+            "C6": -1.06750e-4,
+            "C7": 1.36600e-5,
+        }
+    }
+    fuel = kwargs.get("fuel", "DT")
+    coeffs = coefficients.get(fuel)
+
+    T = data["Ti"] / 1e3  # keV
+    theta = T / (
+        1
+        - (T * (coeffs["C2"] + T * (coeffs["C4"] + T * coeffs["C6"])))
+        / (1 + T * (coeffs["C3"] + T * (coeffs["C5"] + T * coeffs["C7"])))
+    )
+    xi = (coeffs["B_G"] ** 2 / (4 * theta)) ** (1 / 3)
+    sigma_nu = (
+        coeffs["C1"] * theta * jnp.sqrt(xi / (coeffs["mc2"] * T**3)) * jnp.exp(-3 * xi)
+    )  # cm^3/s
+    data["<sigma*nu>"] = sigma_nu / 1e6  # m^3/s
+    return data

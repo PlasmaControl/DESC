@@ -1592,8 +1592,10 @@ def field_line_integrate(
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445
+    # also ignore deprecation warning for now until we actually need to deal with it
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
+        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
         x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
 
     x = jnp.where(jnp.isinf(x), jnp.nan, x)

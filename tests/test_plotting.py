@@ -802,6 +802,10 @@ def test_plot_coils():
     coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
     fig, data = plot_coils(coils2, return_data=True)
 
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
+    fig, data = plot_coils(coils2, return_data=True)
+
     def flatten_coils(coilset):
         if hasattr(coilset, "__len__"):
             return [a for i in coilset for a in flatten_coils(i)]

@@ -69,7 +69,7 @@ class ForceBalance(_Objective):
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Force error: {:10.3e} "
+    _print_value_fmt = "Force error: "
 
     def __init__(
         self,
@@ -241,7 +241,7 @@ class ForceBalanceAnisotropic(_Objective):
     _units = "(N)"
     _coordinates = "rtz"
     _equilibrium = True
-    _print_value_fmt = "Anisotropic force error: {:10.3e} "
+    _print_value_fmt = "Anisotropic force error: "
 
     def __init__(
         self,
@@ -399,7 +399,7 @@ class RadialForceBalance(_Objective):
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Radial force error: {:10.3e} "
+    _print_value_fmt = "Radial force error: "
 
     def __init__(
         self,
@@ -714,7 +714,7 @@ class Energy(_Objective):
     _coordinates = ""
     _equilibrium = True
     _units = "(J)"
-    _print_value_fmt = "Total MHD energy: {:10.3e} "
+    _print_value_fmt = "Total MHD energy: "
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
 
     def __init__(
@@ -880,7 +880,7 @@ class CurrentDensity(_Objective):
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(A*m)"
-    _print_value_fmt = "Current density: {:10.3e} "
+    _print_value_fmt = "Current density: "
 
     def __init__(
         self,

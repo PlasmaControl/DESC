@@ -9,6 +9,7 @@ import desc.io
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.objectives import MagneticWell, MercierStability
+from desc.utils import PRINT_WIDTH
 
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2
@@ -273,35 +274,40 @@ def test_mercier_print(capsys):
     mercier_obj = MercierStability(eq=eq, grid=grid)
     mercier_obj.build()
     np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
-    mercier_obj.print_value(*mercier_obj.xs(eq))
+    mercier_obj.print_value(mercier_obj.xs(eq))
     out = capsys.readouterr()
+    pre_width = len("Maximum ")
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
-        + mercier_obj._print_value_fmt.format(np.max(Dmerc))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.max(Dmerc))
         + mercier_obj._units
         + "\n"
         + "Minimum "
-        + mercier_obj._print_value_fmt.format(np.min(Dmerc))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.min(Dmerc))
         + mercier_obj._units
         + "\n"
         + "Average "
-        + mercier_obj._print_value_fmt.format(np.mean(Dmerc))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.mean(Dmerc))
         + mercier_obj._units
         + "\n"
         + "Maximum "
-        + mercier_obj._print_value_fmt.format(np.max(Dmerc / mercier_obj.normalization))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.max(Dmerc / mercier_obj.normalization))
         + "(normalized)"
         + "\n"
         + "Minimum "
-        + mercier_obj._print_value_fmt.format(np.min(Dmerc / mercier_obj.normalization))
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.min(Dmerc / mercier_obj.normalization))
         + "(normalized)"
         + "\n"
         + "Average "
-        + mercier_obj._print_value_fmt.format(
-            np.mean(Dmerc / mercier_obj.normalization)
-        )
+        + f"{mercier_obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.mean(Dmerc / mercier_obj.normalization))
         + "(normalized)"
         + "\n"
     )
@@ -320,21 +326,25 @@ def test_magwell_print(capsys):
     f = obj.compute(*obj.xs(eq))
     np.testing.assert_allclose(f, magwell)
 
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(obj.xs(eq))
     out = capsys.readouterr()
+    pre_width = len("Maximum ")
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
-        + obj._print_value_fmt.format(np.max(magwell))
+        + f"{obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.max(magwell))
         + obj._units
         + "\n"
         + "Minimum "
-        + obj._print_value_fmt.format(np.min(magwell))
+        + f"{obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.min(magwell))
         + obj._units
         + "\n"
         + "Average "
-        + obj._print_value_fmt.format(np.mean(magwell))
+        + f"{obj._print_value_fmt:<{PRINT_WIDTH - pre_width}}"
+        + "{:10.3e} ".format(np.mean(magwell))
         + obj._units
         + "\n"
     )

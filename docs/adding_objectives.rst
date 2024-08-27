@@ -76,7 +76,7 @@ A full example objective with comments describing the key points is given below:
         _coordinates = "rtz"    # What coordinates is this objective a function of, with r=rho, t=theta, z=zeta?
                                 # i.e. if only a profile, it is "r" , while if all 3 coordinates it is "rtz"
         _units = "(T^4/m^2)"    # units of the output
-        _print_value_fmt = "Quasi-symmetry error: {:10.3e} "    # string with python string formatting for printing the value
+        _print_value_fmt = "Quasi-symmetry error: "    # string with python string formatting for printing the value
 
         def __init__(
             self,

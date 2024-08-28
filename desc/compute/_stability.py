@@ -262,6 +262,8 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "rho",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    zeta0="array: points of vanishing integrated local shear to scan over. "
+    "Default 15 points linearly spaced in [-π/2,π/2]",
 )
 def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     """
@@ -305,9 +307,8 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
-    N_zeta0 = int(15)
-    # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
+    zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
+    N_zeta0 = len(zeta0)
 
     # This would fail with rho vectorization
     iota = jnp.mean(data["iota"])
@@ -423,6 +424,8 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
         "rho",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    zeta0="array: points of vanishing integrated local shear to scan over. "
+    "Default 15 points linearly spaced in [-π/2,π/2]",
 )
 def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     """
@@ -476,9 +479,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
-    N_zeta0 = int(15)
-    # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
+    zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
+    N_zeta0 = len(zeta0)
 
     # This would fail with rho vectorization
     iota = jnp.mean(data["iota"])

@@ -3,12 +3,12 @@
 from functools import partial
 
 from interpax import interp1d
-from orthax.polynomial import polyvander
 
 from desc.backend import jnp
 from desc.compute.utils import safediv
 
 
+# These polynomial manipulation methods are chosen for performance on gpu.
 def polyder_vec(c):
     """Coefficients for the derivatives of the given set of polynomials.
 
@@ -27,14 +27,11 @@ def polyder_vec(c):
         ``c.shape[0]-1``.
 
     """
-    poly = (c[:-1].T * jnp.arange(c.shape[0] - 1, 0, -1)).T
-    return poly
+    return (c[:-1].T * jnp.arange(c.shape[0] - 1, 0, -1)).T
 
 
-def polyval_vec(x, c):
+def polyval_vec(*, x, c):
     """Evaluate the set of polynomials ``c`` at the points ``x``.
-
-    Note this function is not the same as ``np.polynomial.polynomial.polyval(x,c)``.
 
     Parameters
     ----------
@@ -54,24 +51,21 @@ def polyval_vec(x, c):
     --------
     .. code-block:: python
 
-        val = polyval_vec(x, c)
-        if val.ndim != max(x.ndim, c.ndim - 1):
-            raise ValueError(f"Incompatible shapes {x.shape} and {c.shape}.")
-        for index in np.ndindex(c.shape[1:]):
-            idx = (..., *index)
-            np.testing.assert_allclose(
-                actual=val[idx],
-                desired=np.poly1d(c[idx])(x[idx]),
-                err_msg=f"Failed with shapes {x.shape} and {c.shape}.",
-            )
+        np.testing.assert_allclose(
+            polyval_vec(x=x, c=c),
+            np.sum(
+                np.polynomial.polynomial.polyvander(x, c.shape[0] - 1)
+                * np.moveaxis(np.flipud(c), 0, -1),
+                axis=-1,
+            ),
+        )
 
     """
     # Better than Horner's method as we expect to evaluate low order polynomials.
     # No need to use fast multipoint evaluation techniques for the same reason.
-    val = jnp.linalg.vecdot(
-        polyvander(x, c.shape[0] - 1), jnp.moveaxis(jnp.flipud(c), 0, -1)
+    return jnp.einsum(
+        "...i,i...", x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1), c
     )
-    return val
 
 
 # Warning: method must be specified as keyword argument.
@@ -81,8 +75,8 @@ interp1d_vec = jnp.vectorize(
 
 
 @partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)")
-def interp1d_Hermite_vec(xq, x, f, fx):
-    """Vectorized cubic Hermite spline. Does not support keyword arguments."""
+def interp1d_Hermite_vec(xq, x, f, fx, /):
+    """Vectorized cubic Hermite spline."""
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
@@ -99,8 +93,7 @@ def poly_root(
     a_max=None,
     sort=False,
     sentinel=jnp.nan,
-    # About 2e-12 for 64 bit jax.
-    eps=min(jnp.finfo(jnp.array(1.0).dtype).eps * 1e4, 1e-8),
+    eps=max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12),
     distinct=False,
 ):
     """Roots of polynomial with given coefficients.

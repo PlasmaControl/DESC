@@ -731,7 +731,7 @@ class TestBounce1DPoints:
 
     @pytest.mark.unit
     def test_z1_first(self):
-        """Test that bounce points are computed correctly."""
+        """Case where straight line through first two intersects is in epigraph."""
         start = np.pi / 3
         end = 6 * np.pi
         knots = np.linspace(start, end, 5)
@@ -746,7 +746,7 @@ class TestBounce1DPoints:
 
     @pytest.mark.unit
     def test_z2_first(self):
-        """Test that bounce points are computed correctly."""
+        """Case where straight line through first two intersects is in hypograph."""
         start = -3 * np.pi
         end = -start
         k = np.linspace(start, end, 5)
@@ -761,7 +761,9 @@ class TestBounce1DPoints:
 
     @pytest.mark.unit
     def test_z1_before_extrema(self):
-        """Test that bounce points are computed correctly."""
+        """Case where local maximum is the shared intersect between two wells."""
+        # To make sure both regions in epigraph left and right of extrema are
+        # integrated over.
         start = -np.pi
         end = -2 * start
         k = np.linspace(start, end, 5)
@@ -782,7 +784,9 @@ class TestBounce1DPoints:
 
     @pytest.mark.unit
     def test_z2_before_extrema(self):
-        """Test that bounce points are computed correctly."""
+        """Case where local minimum is the shared intersect between two wells."""
+        # To make sure both regions in hypgraph left and right of extrema are not
+        # integrated over.
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -802,7 +806,8 @@ class TestBounce1DPoints:
 
     @pytest.mark.unit
     def test_extrema_first_and_before_z1(self):
-        """Test that bounce points are computed correctly."""
+        """Case where first intersect is extrema and second enters epigraph."""
+        # To make sure we don't perform integral between first pair of intersects.
         start = -1.2 * np.pi
         end = -2 * start
         k = np.linspace(start, end, 7)
@@ -827,7 +832,8 @@ class TestBounce1DPoints:
 
     @pytest.mark.unit
     def test_extrema_first_and_before_z2(self):
-        """Test that bounce points are computed correctly."""
+        """Case where first intersect is extrema and second exits epigraph."""
+        # To make sure we do perform integral between first pair of intersects.
         start = -1.2 * np.pi
         end = -2 * start + 1
         k = np.linspace(start, end, 7)
@@ -904,9 +910,8 @@ class TestBounce1DQuadrature:
         p = 1e-4
         m = 1 - p
         # Some prime number that doesn't appear anywhere in calculation.
-        # Ensures no lucky cancellation occurs from this test case since otherwise
-        # (z2 - z1) / pi = pi / (z2 - z1) which could mask errors since pi
-        # appears often in transformations.
+        # Ensures no lucky cancellation occurs from ζ₂ − ζ₁ / π = π / (ζ₂ − ζ₁)
+        # which could mask errors since π appears often in transformations.
         v = 7
         z1 = -np.pi / 2 * v
         z2 = -z1
@@ -932,7 +937,7 @@ class TestBounce1DQuadrature:
             check=True,
             **kwargs,
         )
-        result = bounce.integrate(pitch, integrand, [], check=True)
+        result = bounce.integrate(pitch, integrand, check=True)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(np.sum(result), truth, rtol=1e-4)
 
@@ -1028,6 +1033,15 @@ class TestBounce1DQuadrature:
 class TestBounce1D:
     """Test bounce integration with one-dimensional local spline methods."""
 
+    @staticmethod
+    def _example_numerator(g_zz, B, pitch):
+        f = (1 - pitch * B / 2) * g_zz
+        return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    @staticmethod
+    def _example_denominator(B, pitch):
+        return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
     @pytest.mark.unit
     def test_integrate_checks(self):
         """Test that all the internal correctness checks pass for real example."""
@@ -1038,55 +1052,59 @@ class TestBounce1D:
         # coordinates. This is defined as
         # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
 
-        def numerator(g_zz, B, pitch):
-            f = (1 - pitch * B / 2) * g_zz
-            return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
-
-        def denominator(B, pitch):
-            return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
-
-        # Pick flux surfaces, field lines, and how far to follow the field line
-        # in Clebsch-Type field-line coordinates ρ, α, ζ.
+        # 1. Define python functions for the integrands. We do that above.
+        # 2. Pick flux surfaces, field lines, and how far to follow the field
+        #    line in Clebsch coordinates ρ, α, ζ.
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
 
         eq = get("HELIOTRON")
-        # Convert above coordinates to DESC computational coordinates.
+        # 3. Convert above coordinates to DESC computational coordinates.
         grid = get_rtz_grid(
             eq, rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
         )
+        # 4. Compute input data.
         data = eq.compute(
             Bounce1D.required_names() + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
         pitch = get_pitch(
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
+        # 5. Make the bounce integration operator.
+        bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
         num = bounce.integrate(
             pitch,
-            numerator,
-            Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
+            integrand=TestBounce1D._example_numerator,
+            f=Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
             check=True,
         )
-        den = bounce.integrate(pitch, denominator, [], check=True)
+        den = bounce.integrate(
+            pitch,
+            integrand=TestBounce1D._example_denominator,
+            check=True,
+        )
         avg = safediv(num, den)
-
-        # Sum all bounce integrals across each particular field line.
-        avg = np.sum(avg, axis=-1)
         assert np.isfinite(avg).all()
+
+        # 6. Basic manipulation of the output.
+        # Sum all bounce integrals across each particular field line.
+        avg_sum = np.sum(avg, axis=-1)
         # Group the averages by field line.
-        avg = avg.reshape(pitch.shape[0], rho.size, alpha.size)
-        # The sum stored at index i, j
+        avg_sum = avg_sum.reshape(pitch.shape[0], rho.size, alpha.size)
+        # The sum stored at index i, j which denote some flux surface and field line
         i, j = 0, 0
-        print(avg[:, i, j])
-        # is the summed bounce average among wells along the field line with nodes
-        # given in Clebsch-Type field-line coordinates ρ, α, ζ
+        print(avg_sum[:, i, j])
+        # This is the summed bounce average over all wells along the field line
+        # given by the field line following coordinates at index [i, j] of nodes
         nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes, "raz")
         print(nodes[i, j])
-        # for the pitch values stored in
-        pitch = pitch.reshape(pitch.shape[0], rho.size, alpha.size)
-        print(pitch[:, i, j])
+        # for the pitch values stored in index [:, i, j] of
+        print(pitch.reshape(pitch.shape[0], rho.size, alpha.size)[:, i, j])
+
+        # 7. Plotting utilities.
+        z1, z2 = bounce.points(pitch)
+        plots = bounce.check_points(z1, z2, pitch)  # noqa: F841
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func", [interp_to_argmin, interp_to_argmin_hard])

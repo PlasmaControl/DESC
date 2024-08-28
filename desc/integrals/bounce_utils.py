@@ -3,7 +3,8 @@
 from interpax import PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import imap, jnp, softmax
+from desc.backend import imap, jnp
+from desc.backend import softmax as softargmax
 from desc.integrals.basis import _add2legend, _in_epigraph_and, _plot_intersect
 from desc.integrals.interp_utils import (
     interp1d_Hermite_vec,
@@ -145,14 +146,14 @@ def bounce_points(
         Flag for debugging. Must be false for JAX transformations.
     plot : bool
         Whether to plot some things if check is true. Default is true.
-    kwargs : dict
+    kwargs
         Keyword arguments into ``plot_ppoly``.
 
     Returns
     -------
     z1, z2 : (jnp.ndarray, jnp.ndarray)
         Shape (P, S, num_well).
-        ζ coordinates of bounce points. The points are grouped and ordered such
+        ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of |B|.
 
@@ -216,6 +217,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
     kwargs.setdefault("vlabel", r"$\vert B \vert$")
+    plots = []
 
     assert z1.shape == z2.shape
     mask = (z1 - z2) != 0.0
@@ -254,13 +256,16 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
                 "bounce points is in hypograph(|B|). Use more knots.\n"
             )
         if plot:
-            plot_ppoly(
-                ppoly=Bs,
-                z1=z1[:, s],
-                z2=z2[:, s],
-                k=1 / pitch[:, s],
-                **kwargs,
+            plots.append(
+                plot_ppoly(
+                    ppoly=Bs,
+                    z1=z1[:, s],
+                    z2=z2[:, s],
+                    k=1 / pitch[:, s],
+                    **kwargs,
+                )
             )
+    return plots
 
 
 def bounce_quadrature(
@@ -290,7 +295,7 @@ def bounce_quadrature(
         Quadrature weights.
     z1, z2 : jnp.ndarray
         Shape (P, S, num_well).
-        ζ coordinates of bounce points. The points are grouped and ordered such
+        ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of |B|.
     pitch : jnp.ndarray
@@ -529,7 +534,7 @@ def _plot_check_interp(Q, V, name=""):
 
 
 def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
-    """Return ext (ζ*, g(ζ*)).
+    """Return extrema (ζ*, g(ζ*)).
 
     Parameters
     ----------
@@ -595,7 +600,7 @@ def interp_to_argmin(
         Values evaluated on ``knots`` to interpolate.
     z1, z2 : jnp.ndarray
         Shape (P, S, num_well).
-        ζ coordinates of bounce points. The points are grouped and ordered such
+        ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of g.
     knots : jnp.ndarray
@@ -643,7 +648,9 @@ def interp_to_argmin(
     # JAX softmax(x) does the proper shift to compute softmax(x - max(x)), but it's
     # still not a good idea to compute over a large length scale, so we warn in
     # docstring to choose upper sentinel properly.
-    argmin = softmax(beta * _where_for_argmin(z1, z2, ext, g, upper_sentinel), axis=-1)
+    argmin = softargmax(
+        beta * _where_for_argmin(z1, z2, ext, g, upper_sentinel), axis=-1
+    )
     h = jnp.linalg.vecdot(
         argmin,
         interp1d_vec(ext, knots, jnp.atleast_2d(h), method=method)[:, jnp.newaxis],
@@ -670,7 +677,7 @@ def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
         Values evaluated on ``knots`` to interpolate.
     z1, z2 : jnp.ndarray
         Shape (P, S, num_well).
-        ζ coordinates of bounce points. The points are grouped and ordered such
+        ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of g.
     knots : jnp.ndarray

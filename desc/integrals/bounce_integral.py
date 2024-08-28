@@ -185,14 +185,14 @@ class Bounce1D:
         return ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
 
     @staticmethod
-    def reshape_data(grid, *data):
-        """Reshape ``data`` arrays for acceptable input to ``integrate``.
+    def reshape_data(grid, *arys):
+        """Reshape arrays for acceptable input to ``integrate``.
 
         Parameters
         ----------
         grid : Grid
             Clebsch coordinate (ρ, α, ζ) tensor-product grid.
-        data : jnp.ndarray
+        arys : jnp.ndarray
             Data evaluated on grid.
 
         Returns
@@ -201,10 +201,10 @@ class Bounce1D:
             List of reshaped data which may be given to ``integrate``.
 
         """
-        f = [grid.meshgrid_reshape(d, "raz").reshape(-1, grid.num_zeta) for d in data]
+        f = [grid.meshgrid_reshape(d, "raz").reshape(-1, grid.num_zeta) for d in arys]
         return f
 
-    def bounce_points(self, pitch, num_well=None):
+    def points(self, pitch, num_well=None):
         """Compute bounce points.
 
         Parameters
@@ -229,7 +229,7 @@ class Bounce1D:
         -------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L * M, num_well).
-            ζ coordinates of bounce points. The points are grouped and ordered such
+            ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
 
@@ -246,14 +246,14 @@ class Bounce1D:
             num_well=num_well,
         )
 
-    def check_bounce_points(self, z1, z2, pitch, plot=True, **kwargs):
+    def check_points(self, z1, z2, pitch, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
 
         Parameters
         ----------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape (P, L * M, num_well).
-            ζ coordinates of bounce points. The points are grouped and ordered such
+            ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
         pitch : jnp.ndarray
@@ -264,11 +264,16 @@ class Bounce1D:
             line. If two-dimensional, the first axis is the batch axis.
         plot : bool
             Whether to plot stuff.
-        kwargs : dict
+        kwargs
             Keyword arguments into ``self.plot_ppoly``.
 
+        Returns
+        -------
+        plots : list
+            List of matplotlib (fig, ax) tuples for the 1D plot of each field line.
+
         """
-        _check_bounce_points(
+        return _check_bounce_points(
             z1=z1,
             z2=z2,
             pitch=jnp.atleast_2d(pitch),
@@ -347,7 +352,7 @@ class Bounce1D:
 
         """
         pitch = jnp.atleast_2d(pitch)
-        z1, z2 = self.bounce_points(pitch, num_well)
+        z1, z2 = self.points(pitch, num_well)
         result = bounce_quadrature(
             x=self._x,
             w=self._w,

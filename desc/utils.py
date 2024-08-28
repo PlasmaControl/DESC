@@ -693,12 +693,8 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
-def take_mask(a, mask, size=None, fill_value=None):
+def take_mask(a, mask, /, *, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
-
-    Warnings
-    --------
-    The parameters ``size`` and ``fill_value`` must be specified as keyword arguments.
 
     Parameters
     ----------

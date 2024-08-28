@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from numpy.polynomial.polynomial import polyvander
 
 from desc.integrals.interp_utils import poly_root, polyder_vec, polyval_vec
 
@@ -69,13 +70,11 @@ class TestPolyUtils:
         """Test vectorized computation of polynomial evaluation."""
 
         def test(x, c):
-            val = polyval_vec(x=x, c=c)
-            c = np.moveaxis(c, 0, -1)
-            x = x[..., np.newaxis]
             np.testing.assert_allclose(
-                val,
-                np.vectorize(np.polyval, signature="(m),(n)->(n)")(c, x).squeeze(
-                    axis=-1
+                polyval_vec(x=x, c=c),
+                np.sum(
+                    polyvander(x, c.shape[0] - 1) * np.moveaxis(np.flipud(c), 0, -1),
+                    axis=-1,
                 ),
             )
 

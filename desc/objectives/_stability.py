@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, warnif
+from desc.utils import Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -382,8 +382,8 @@ class BallooningStability(_Objective):
 
     f = w₀ sum(ReLU(γ-γ₀)) + w₁ max(ReLU(γ-γ₀))
 
-    where γ is the squared growth rate for each field line, γ₀ is a cutoff, and w₀
-    and w₁ are weights.
+    where γ is the negative squared growth rate for each field line (such that γ>0 is
+    unstable), γ₀ is a cutoff, and w₀ and w₁ are weights.
 
     Parameters
     ----------
@@ -404,9 +404,37 @@ class BallooningStability(_Objective):
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        this should also be set to True. Not used since the growth rate is always
+        normalized.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    rho : float
+        Flux surface to optimize on. To optimize over multiple surfaces, use multiple
+        objectives each with a single rho value.
+    alpha : float, ndarray
+        Field line labels to optimize. Values should be in [0, 2pi). Default is alpha=0
+        for axisymmetric equilibria, or 8 field lines linearly spaced in [0, pi] for
+        non-axisymmetric cases.
+    nturns : int
+        Number of toroidal transits of a field line to consider. Field line
+        will run from -π*nturns to π*nturns. Default 3.
+    nzetaperturn : int
+        Number of points along the field line per toroidal transit. Total number of
+        points is ``nturns*nzetaperturn``. Default 100.
+    zeta0 : array-like
+        Points of vanishing integrated local shear to scan over.
+        Default 15 points in [-π/2,π/2]
+    gamma0 : float
+        Threshold for penalizing growth rates in metric above.
+    w0, w1 : float
+        Weights for sum and max terms in metric above.
     name : str, optional
         Name of the objective function.
 
@@ -424,27 +452,29 @@ class BallooningStability(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        deriv_mode="rev",
         loss_function=None,
+        deriv_mode="auto",
         rho=0.5,
-        alpha=jnp.linspace(0, jnp.pi, 8),
-        zetamax=3 * jnp.pi,
-        nzeta=200,
-        lambda_0=0.0,
-        weight_0=0.0,
-        weight_1=1.0,
+        alpha=None,
+        nturns=3,
+        nzetaperturn=200,
+        zeta0=None,
+        gamma0=0.0,
+        w0=1.0,
+        w1=10.0,
         name="ideal ball gamma",
     ):
         if target is None and bounds is None:
             target = 0
 
-        self.rho = rho
-        self.alpha = alpha
-        self.zetamax = zetamax
-        self.nzeta = nzeta
-        self.lambda_0 = lambda_0
-        self.weight_0 = weight_0
-        self.weight_1 = weight_1
+        self._rho = rho
+        self._alpha = alpha
+        self._nturns = nturns
+        self._nzetaperturn = nzetaperturn
+        self._zeta0 = zeta0
+        self._gamma0 = gamma0
+        self._w0 = w0
+        self._w1 = w1
 
         super().__init__(
             things=eq,
@@ -473,26 +503,44 @@ class BallooningStability(_Objective):
         """
         eq = self.things[0]
 
+        errorif(
+            np.asarray(self._rho).size > 1,
+            ValueError,
+            "BallooningStability objective only works on a single surface. "
+            "To optimize multiple surfaces, use multiple instances of the objective.",
+        )
+
         # we need a uniform grid to get correct surface averages for iota
         iota_grid = LinearGrid(
-            rho=self.rho,
-            M=jnp.maximum(eq.M_grid, 16).astype(jnp.int32),
-            N=jnp.maximum(eq.N_grid, 16).astype(jnp.int32),
+            rho=self._rho,
+            M=eq.M_grid,
+            N=eq.N_grid,
             NFP=eq.NFP,
         )
-        self._iota_keys = ["iota", "iota_r", "shear"]  # might not need all of these
+        self._iota_keys = ["iota", "iota_r", "shear"]
         iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
         iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
 
-        ## Separate grid to calculate the right length scale for normalization
+        # Separate grid to calculate the right length scale for normalization
         len_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         self._len_keys = ["a"]
         len_profiles = get_profiles(self._len_keys, obj=eq, grid=len_grid)
         len_transforms = get_transforms(self._len_keys, obj=eq, grid=len_grid)
 
         # make a set of nodes along a single fieldline
-        zeta = np.linspace(-self.zetamax, self.zetamax, self.nzeta)
+        zeta = jnp.linspace(
+            -jnp.pi * self._nturns,
+            jnp.pi * self._nturns,
+            self._nturns * self._nzetaperturn,
+        )
 
+        # set alpha/zeta0 grids
+        self._alpha = setdefault(
+            self._alpha, jnp.linspace(0, jnp.pi, 8) if eq.N != 0 else jnp.array(0.0)
+        )
+        self._zeta0 = setdefault(
+            self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15)
+        )
         self._dim_f = 1
         self._data_keys = ["ideal ball gamma2"]
 
@@ -507,9 +555,13 @@ class BallooningStability(_Objective):
             "iota_profiles": iota_profiles,
             "len_transforms": len_transforms,
             "len_profiles": len_profiles,
-            "rho": self.rho,
-            "alpha": self.alpha,
+            "rho": self._rho,
+            "alpha": self._alpha,
             "zeta": zeta,
+            "zeta0": self._zeta0,
+            "gamma0": self._gamma0,
+            "w0": self._w0,
+            "w1": self._w1,
             "quad_weights": 1.0,
         }
         super().build(use_jit=use_jit, verbose=verbose)
@@ -574,18 +626,21 @@ class BallooningStability(_Objective):
             params=params,
         )
 
-        data = compute_fun(
+        gamma = compute_fun(
             eq,
             self._data_keys,
             params,
             get_transforms(self._data_keys, eq, grid, jitable=True),
             profiles=get_profiles(self._data_keys, eq, grid),
             data=data,
+            zeta0=constants["zeta0"],
         )["ideal ball gamma2"]
 
-        # Shifted ReLU operation
-        data = (data + self.lambda_0) * (data >= self.lambda_0)
+        gamma0, w0, w1 = constants["gamma0"], constants["w0"], constants["w1"]
 
-        results = self.weight_0 * jnp.sum(data) + self.weight_1 * jnp.max(data)
+        # Shifted ReLU operation
+        data = (gamma - gamma0) * (gamma >= gamma0)
+
+        results = w0 * jnp.sum(data) + w1 * jnp.max(data)
 
         return results

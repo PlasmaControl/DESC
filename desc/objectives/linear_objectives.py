@@ -141,7 +141,7 @@ class FixParameters(_Objective):
     _linear = True
     _fixed = True
     _units = "(~)"
-    _print_value_fmt = "Fixed parameters error: {:10.3e} "
+    _print_value_fmt = "Fixed parameters error: "
 
     def __init__(
         self,
@@ -257,7 +257,7 @@ class BoundaryRSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "R boundary self consistency error: {:10.3e} "
+    _print_value_fmt = "R boundary self consistency error: "
 
     def __init__(
         self,
@@ -351,7 +351,7 @@ class BoundaryZSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Z boundary self consistency error: {:10.3e} "
+    _print_value_fmt = "Z boundary self consistency error: "
 
     def __init__(
         self,
@@ -446,7 +446,7 @@ class SectionRSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(m)"
-    _print_value_fmt = "R cross-section self consistency error: {:10.3e} "
+    _print_value_fmt = "R cross-section self consistency error: "
 
     def __init__(
         self,
@@ -561,7 +561,7 @@ class SectionZSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(m)"
-    _print_value_fmt = "Z cross-section self consistency error: {:10.3e} "
+    _print_value_fmt = "Z cross-section self consistency error: "
 
     def __init__(
         self,
@@ -662,7 +662,7 @@ class SectionLambdaSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Lambda section self consistency error: {:10.3e}"
+    _print_value_fmt = "Lambda section self consistency error: "
 
     def __init__(
         self,
@@ -766,7 +766,8 @@ class AxisRSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
-    _print_value_fmt = "R axis self consistency error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "R axis self consistency error: "
 
     def __init__(
         self,
@@ -853,7 +854,8 @@ class AxisZSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
-    _print_value_fmt = "Z axis self consistency error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Z axis self consistency error: "
 
     def __init__(
         self,
@@ -955,7 +957,7 @@ class FixBoundaryR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R boundary error: {:10.3e} "
+    _print_value_fmt = "R boundary error: "
 
     def __init__(
         self,
@@ -1036,7 +1038,7 @@ class FixBoundaryZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z boundary error: {:10.3e} "
+    _print_value_fmt = "Z boundary error: "
 
     def __init__(
         self,
@@ -1117,7 +1119,7 @@ class FixSectionR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R cross-section error: {:10.3e} "
+    _print_value_fmt = "R cross-section error: "
 
     def __init__(
         self,
@@ -1198,7 +1200,7 @@ class FixSectionZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z cross-section error: {:10.3e} "
+    _print_value_fmt = "Z cross-section error: "
 
     def __init__(
         self,
@@ -1279,7 +1281,7 @@ class FixSectionLambda(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Lambda cross-section error: {:10.3e} "
+    _print_value_fmt = "Lambda cross-section error: "
 
     def __init__(
         self,
@@ -1350,7 +1352,7 @@ class FixLambdaGauge(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "lambda gauge error: {:10.3e} "
+    _print_value_fmt = "lambda gauge error: "
 
     def __init__(
         self,
@@ -1449,7 +1451,7 @@ class FixThetaSFL(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "theta - theta SFL error: {:10.3e} "
+    _print_value_fmt = "theta - theta SFL error: "
 
     def __init__(
         self,
@@ -1504,7 +1506,7 @@ class FixAxisR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R axis error: {:10.3e} "
+    _print_value_fmt = "R axis error: "
 
     def __init__(
         self,
@@ -1585,7 +1587,7 @@ class FixAxisZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z axis error: {:10.3e} "
+    _print_value_fmt = "Z axis error: "
 
     def __init__(
         self,
@@ -1666,7 +1668,7 @@ class FixModeR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed-R modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-R modes error: "
 
     def __init__(
         self,
@@ -1747,7 +1749,7 @@ class FixModeZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed-Z modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-Z modes error: "
 
     def __init__(
         self,
@@ -1827,7 +1829,7 @@ class FixModeLambda(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed lambda modes error: {:10.3e} "
+    _print_value_fmt = "Fixed lambda modes error: "
 
     def __init__(
         self,
@@ -1896,7 +1898,7 @@ class FixSumModesR(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-R sum modes error: "
 
     def __init__(
         self,
@@ -2062,7 +2064,7 @@ class FixSumModesZ(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-Z sum modes error: "
 
     def __init__(
         self,
@@ -2229,7 +2231,7 @@ class FixSumModesLambda(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-lambda sum modes error: "
 
     def __init__(
         self,
@@ -2395,7 +2397,7 @@ class FixPressure(FixParameters):
     """
 
     _units = "(Pa)"
-    _print_value_fmt = "Fixed pressure profile error: {:10.3e} "
+    _print_value_fmt = "Fixed pressure profile error: "
 
     def __init__(
         self,
@@ -2475,7 +2477,7 @@ class FixAnisotropy(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed anisotropy profile error: {:10.3e} "
+    _print_value_fmt = "Fixed anisotropy profile error: "
 
     def __init__(
         self,
@@ -2552,7 +2554,7 @@ class FixIota(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed iota profile error: {:10.3e} "
+    _print_value_fmt = "Fixed iota profile error: "
 
     def __init__(
         self,
@@ -2631,7 +2633,7 @@ class FixCurrent(FixParameters):
     """
 
     _units = "(A)"
-    _print_value_fmt = "Fixed current profile error: {:10.3e} "
+    _print_value_fmt = "Fixed current profile error: "
 
     def __init__(
         self,
@@ -2713,7 +2715,7 @@ class FixElectronTemperature(FixParameters):
     """
 
     _units = "(eV)"
-    _print_value_fmt = "Fixed electron temperature profile error: {:10.3e} "
+    _print_value_fmt = "Fixed electron temperature profile error: "
 
     def __init__(
         self,
@@ -2797,7 +2799,7 @@ class FixElectronDensity(FixParameters):
     """
 
     _units = "(m^-3)"
-    _print_value_fmt = "Fixed electron density profile error: {:10.3e} "
+    _print_value_fmt = "Fixed electron density profile error: "
 
     def __init__(
         self,
@@ -2879,7 +2881,7 @@ class FixIonTemperature(FixParameters):
     """
 
     _units = "(eV)"
-    _print_value_fmt = "Fixed ion temperature profile error: {:10.3e} "
+    _print_value_fmt = "Fixed ion temperature profile error: "
 
     def __init__(
         self,
@@ -2959,7 +2961,7 @@ class FixAtomicNumber(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed atomic number profile error: {:10.3e} "
+    _print_value_fmt = "Fixed atomic number profile error: "
 
     def __init__(
         self,
@@ -3032,7 +3034,7 @@ class FixPsi(FixParameters):
     """
 
     _units = "(Wb)"
-    _print_value_fmt = "Fixed Psi error: {:10.3e} "
+    _print_value_fmt = "Fixed Psi error: "
 
     def __init__(
         self,
@@ -3101,7 +3103,7 @@ class FixCurveShift(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed shift error: {:10.3e} "
+    _print_value_fmt = "Fixed shift error: "
 
     def __init__(
         self,
@@ -3152,7 +3154,7 @@ class FixCurveRotation(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed rotation error: {:10.3e} "
+    _print_value_fmt = "Fixed rotation error: "
 
     def __init__(
         self,
@@ -3242,7 +3244,7 @@ class FixCoilCurrent(FixParameters):
     """
 
     _units = "(A)"
-    _print_value_fmt = "Fixed coil current error: {:10.3e} "
+    _print_value_fmt = "Fixed coil current error: "
 
     def __init__(
         self,
@@ -3367,7 +3369,7 @@ class FixSumCoilCurrent(FixCoilCurrent):
     _linear = True
     _fixed = False
     _units = "(A)"
-    _print_value_fmt = "Summed coil current error: {:10.3e} "
+    _print_value_fmt = "Summed coil current error: "
 
     def __init__(
         self,
@@ -3466,7 +3468,7 @@ class FixOmniWell(FixParameters):
     """
 
     _units = "(T)"
-    _print_value_fmt = "Fixed omnigenity well error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity well error: "
 
     def __init__(
         self,
@@ -3519,7 +3521,7 @@ class FixOmniMap(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity map error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity map error: "
 
     def __init__(
         self,
@@ -3568,7 +3570,7 @@ class FixOmniBmax(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity B_max error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity B_max error: "
 
     def __init__(
         self,
@@ -3682,7 +3684,7 @@ class FixSheetCurrent(FixParameters):
     """
 
     _units = "(~)"
-    _print_value_fmt = "Fixed sheet current error: {:10.3e} "
+    _print_value_fmt = "Fixed sheet current error: "
 
     def __init__(
         self,
@@ -3743,7 +3745,7 @@ class FixNearAxisR(_FixedObjective):
     _target_arg = "R_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-Near-Axis R Behavior error: {:10.3e} "
+    _print_value_fmt = "Fixed-Near-Axis R Behavior error: "
 
     def __init__(
         self,
@@ -3880,7 +3882,7 @@ class FixNearAxisZ(_FixedObjective):
     _target_arg = "Z_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-Near-Axis Z Behavior error: {:10.3e} "
+    _print_value_fmt = "Fixed-Near-Axis Z Behavior error: "
 
     def __init__(
         self,
@@ -4023,7 +4025,7 @@ class FixNearAxisLambda(_FixedObjective):
     _target_arg = "L_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed-Near-Axis Lambda Behavior error: {:10.3e} "
+    _print_value_fmt = "Fixed-Near-Axis Lambda Behavior error: "
 
     def __init__(
         self,

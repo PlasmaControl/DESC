@@ -1150,10 +1150,9 @@ class TestBounce1D:
             Numerically computed ``data["cvdrift"]` and ``data["gbdrift"]`` normalized
             by some scale factors for this unit test. These should be fed to the bounce
             integration as input.
-         pitch : jnp.ndarray
+        pitch : jnp.ndarray
             Shape (P, ).
             Pitch values used.
-
 
         """
         B = data["|B|"] / data["Bref"]
@@ -1336,7 +1335,7 @@ class TestBounce1D:
 
         self._test_bounce_autodiff(
             bounce,
-            TestBounce1DPoints.drift_num_integrand,
+            TestBounce1D.drift_num_integrand,
             f=f,
             weight=np.ones(zeta.size),
         )

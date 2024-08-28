@@ -596,7 +596,6 @@ class Bounce1D:
     coordinate systems may be used as this operation reduces to a surface integral,
     which is invariant to the order of summation).
 
-
     The DESC coordinate system is related to field-line-following coordinate
     systems by a relation whose solution is best found with Newton iteration.
     There is a unique real solution to this equation, so Newton iteration is a

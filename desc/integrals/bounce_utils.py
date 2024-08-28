@@ -654,7 +654,6 @@ def interp_to_argmin(
         exp(max(g)) << exp(``upper_sentinel``). Don't make too large or numerical
         resolution is lost.
 
-
     Warnings
     --------
     Recall that if g is small then the effect of β is reduced.

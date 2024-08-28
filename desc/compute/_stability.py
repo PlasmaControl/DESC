@@ -236,10 +236,11 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="ideal ball gamma2",
-    label="\\gamma^2",
-    units=" ",
-    units_long=" ",
-    description="ideal ballooning growth rate" + "requires data along a field line",
+    label="\\gamma_{\\mathrm{ballooning}}=-\\omega^2",
+    units="~",
+    units_long="None",
+    description="Normalized squared ideal ballooning growth rate, "
+    "requires data along a field line",
     dim=1,
     params=["Psi"],
     transforms={"grid": []},
@@ -273,7 +274,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     to calculate the maximum growth rate against the
     infinite-n ideal ballooning mode. The equation being solved is
 
-    d/dζ(g dX/dζ) + c X = lam f X, g, f > 0
+    d/dζ(g dX/dζ) + c X = γ f X, g, f > 0
 
     where
 
@@ -388,20 +389,20 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
 
     w, _ = jnp.linalg.eigh(A_redo)
+    # max over "zeta" axis, still a function of rho, alpha, zeta0
+    gamma = jnp.real(jnp.max(w, axis=(2,)))
 
-    lam = jnp.real(jnp.max(w, axis=(2,)))
-
-    data["ideal ball gamma2"] = lam
+    data["ideal ball gamma2"] = gamma.flatten()
 
     return data
 
 
 @register_compute_fun(
     name="Newcomb ball metric",
-    label="\\mathrm{Nwecomb-metric}",
+    label="\\mathrm{Newcomb-ballooning-metric}",
     units="~",
     units_long="None",
-    description="A measure of Newcomb's distance from marginality",
+    description="A measure of Newcomb's distance from marginal ballooning stability",
     dim=1,
     params=["Psi"],
     transforms={"grid": []},

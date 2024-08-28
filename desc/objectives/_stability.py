@@ -378,18 +378,23 @@ class BallooningStability(_Objective):
     These instabilities are also related to smaller-scale kinetic instabilities.
     With this class, we optimize MHD equilibria against the ideal ballooning mode.
 
+    Targets the following metric:
+
+    f = w₀ sum(ReLU(γ-γ₀)) + w₁ max(ReLU(γ-γ₀))
+
+    where γ is the squared growth rate for each field line, γ₀ is a cutoff, and w₀
+    and w₁ are weights.
+
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
-    bounds : tuple of {float, ndarray, callable}, optional
+        Must be broadcastable to Objective.dim_f. Default is ``target=0``
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
+        Both bounds must be broadcastable to to Objective.dim_f. Default is ``target=0``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -407,9 +412,9 @@ class BallooningStability(_Objective):
 
     """
 
-    _coordinates = "r"
-    _units = "(Wb^-2)"
-    _print_value_fmt = "Ideal-ballooning objective: "
+    _coordinates = "ra"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Ideal-ballooning: "
 
     def __init__(
         self,

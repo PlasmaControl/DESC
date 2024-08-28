@@ -49,6 +49,7 @@ from desc.objectives import (
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
+    FusionPower,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
@@ -2119,6 +2120,7 @@ class TestComputeScalarResolution:
         CoilLength,
         CoilSetMinDistance,
         CoilTorsion,
+        FusionPower,
         GenericObjective,
         HeatingPowerISS04,
         Omnigenity,
@@ -2176,6 +2178,28 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(eq=eq, grid=grid), use_jit=False
             )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_fusion_power(self):
+        """FusionPower."""
+        eq = self.eq.copy()
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.atomic_number = 1.0
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = QuadratureGrid(
+                L=int(self.eq.L * res),
+                M=int(self.eq.M * res),
+                N=int(self.eq.N * res),
+                NFP=self.eq.NFP,
+            )
+            obj = ObjectiveFunction(FusionPower(eq=eq, grid=grid))
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2471,6 +2495,7 @@ class TestObjectiveNaNGrad:
         CoilSetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
+        FusionPower,
         HeatingPowerISS04,
         Omnigenity,
         PlasmaCoilSetMinDistance,
@@ -2520,6 +2545,22 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "redl bootstrap"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_fusion_power(self):
+        """FusionPower."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([1, 0, -1]),
+        )
+        obj = ObjectiveFunction(FusionPower(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "fusion power"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_heating_power(self):

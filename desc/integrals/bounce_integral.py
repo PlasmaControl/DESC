@@ -8,6 +8,7 @@ from desc.integrals.bounce_utils import (
     _check_bounce_points,
     bounce_points,
     bounce_quadrature,
+    get_pitch,
     interp_to_argmin,
     plot_ppoly,
 )
@@ -79,6 +80,9 @@ class Bounce1D:
     strictly increasing and preferably uniformly spaced. These are used as knots to
     construct splines; a reference knot density is 100 knots per toroidal transit.
 
+    Also note the argument ``pitch`` in the below method is defined as
+    1/λ ~ E/μ = energy / magnetic moment.
+
     Examples
     --------
     See ``tests/test_integrals.py::TestBounce1D::test_integrate_checks``.
@@ -97,6 +101,7 @@ class Bounce1D:
     """
 
     plot_ppoly = staticmethod(plot_ppoly)
+    get_pitch = staticmethod(get_pitch)
 
     def __init__(
         self,
@@ -211,7 +216,7 @@ class Bounce1D:
         ----------
         pitch : jnp.ndarray
             Shape must broadcast with (P, L * M).
-            λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
+            1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
             specified by ``pitch[...,ρ]`` where in the latter the labels (ρ,α) are
             interpreted as the index into the last axis that corresponds to that field
             line. If two-dimensional, the first axis is the batch axis.
@@ -238,13 +243,7 @@ class Bounce1D:
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(
-            pitch=pitch,
-            knots=self._zeta,
-            B=self._B,
-            dB_dz=self._dB_dz,
-            num_well=num_well,
-        )
+        return bounce_points(pitch, self._zeta, self._B, self._dB_dz, num_well)
 
     def check_points(self, z1, z2, pitch, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -258,7 +257,7 @@ class Bounce1D:
             epigraph of |B|.
         pitch : jnp.ndarray
             Shape must broadcast with (P, L * M).
-            λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
+            1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
             specified by ``pitch[...,(ρ,α)]`` where in the latter the labels (ρ,α) are
             interpreted as the index into the last axis that corresponds to that field
             line. If two-dimensional, the first axis is the batch axis.
@@ -270,7 +269,7 @@ class Bounce1D:
         Returns
         -------
         plots : list
-            List of matplotlib (fig, ax) tuples for the 1D plot of each field line.
+            Matplotlib (fig, ax) tuples for the 1D plot of each field line.
 
         """
         return _check_bounce_points(
@@ -303,7 +302,7 @@ class Bounce1D:
         ----------
         pitch : jnp.ndarray
             Shape must broadcast with (P, L * M).
-            λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
+            1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
             specified by ``pitch[...,(ρ,α)]`` where in the latter the labels (ρ,α) are
             interpreted as the index into the last axis that corresponds to that field
             line. If two-dimensional, the first axis is the batch axis.
@@ -369,13 +368,13 @@ class Bounce1D:
         )
         if weight is not None:
             result *= interp_to_argmin(
-                h=weight,
-                z1=z1,
-                z2=z2,
-                knots=self._zeta,
-                g=self._B,
-                dg_dz=self._dB_dz,
-                method=method,
+                weight,
+                z1,
+                z2,
+                self._zeta,
+                self._B,
+                self._dB_dz,
+                method,
             )
         assert result.shape[-1] == setdefault(num_well, (self._zeta.size - 1) * 3)
         return result

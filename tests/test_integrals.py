@@ -736,8 +736,8 @@ class TestBounce1DPoints:
         end = 6 * np.pi
         knots = np.linspace(start, end, 5)
         B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
-        pitch = 2.0
-        intersect = B.solve(1 / pitch, extrapolate=False)
+        pitch = 0.5
+        intersect = B.solve(pitch, extrapolate=False)
         z1, z2 = bounce_points(pitch, knots, B.c, B.derivative().c, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -751,8 +751,8 @@ class TestBounce1DPoints:
         end = -start
         k = np.linspace(start, end, 5)
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
-        pitch = 2.0
-        intersect = B.solve(1 / pitch, extrapolate=False)
+        pitch = 0.5
+        intersect = B.solve(pitch, extrapolate=False)
         z1, z2 = bounce_points(pitch, k, B.c, B.derivative().c, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -771,11 +771,11 @@ class TestBounce1DPoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         dB_dz = B.derivative()
-        pitch = 1 / B(dB_dz.roots(extrapolate=False))[3] + 1e-13
+        pitch = B(dB_dz.roots(extrapolate=False))[3] - 1e-13
         z1, z2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
-        intersect = B.solve(1 / pitch, extrapolate=False)
+        intersect = B.solve(pitch, extrapolate=False)
         np.testing.assert_allclose(z1[1], 1.982767, rtol=1e-6)
         np.testing.assert_allclose(z1, intersect[[1, 2]], rtol=1e-6)
         # intersect array could not resolve double root as single at index 2,3
@@ -796,11 +796,11 @@ class TestBounce1DPoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 4,
         )
         dB_dz = B.derivative()
-        pitch = 1 / B(dB_dz.roots(extrapolate=False))[2]
+        pitch = B(dB_dz.roots(extrapolate=False))[2]
         z1, z2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
-        intersect = B.solve(1 / pitch, extrapolate=False)
+        intersect = B.solve(pitch, extrapolate=False)
         np.testing.assert_allclose(z1, intersect[[0, -2]])
         np.testing.assert_allclose(z2, intersect[[1, -1]])
 
@@ -817,14 +817,14 @@ class TestBounce1DPoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
         dB_dz = B.derivative()
-        pitch = 1 / B(dB_dz.roots(extrapolate=False))[2] - 1e-13
+        pitch = B(dB_dz.roots(extrapolate=False))[2] + 1e-13
         z1, z2 = bounce_points(
             pitch, k[2:], B.c[:, 2:], dB_dz.c[:, 2:], check=True, plot=False
         )
-        plot_ppoly(B, z1=z1, z2=z2, k=1 / pitch, start=k[2])
+        plot_ppoly(B, z1=z1, z2=z2, k=pitch, start=k[2])
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
-        intersect = B.solve(1 / pitch, extrapolate=False)
+        intersect = B.solve(pitch, extrapolate=False)
         np.testing.assert_allclose(z1[0], 0.835319, rtol=1e-6)
         intersect = intersect[intersect >= k[2]]
         np.testing.assert_allclose(z1, intersect[[0, 2, 4]], rtol=1e-6)
@@ -843,12 +843,12 @@ class TestBounce1DPoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
         dB_dz = B.derivative()
-        pitch = 1 / B(dB_dz.roots(extrapolate=False))[1] + 1e-13
+        pitch = B(dB_dz.roots(extrapolate=False))[1] - 1e-13
         z1, z2 = bounce_points(pitch, k, B.c, dB_dz.c, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
-        intersect = B.solve(1 / pitch, extrapolate=False)
+        intersect = B.solve(pitch, extrapolate=False)
         np.testing.assert_allclose(z1[0], -0.671904, rtol=1e-6)
         np.testing.assert_allclose(z1, intersect[[0, 3, 5]], rtol=1e-5)
         # intersect array could not resolve double root as single at index 0,1
@@ -916,16 +916,16 @@ class TestBounce1DQuadrature:
         z1 = -np.pi / 2 * v
         z2 = -z1
         knots = np.linspace(z1, z2, 50)
-        pitch = 1 + 50 * jnp.finfo(jnp.array(1.0).dtype).eps
+        pitch = 1 - 50 * jnp.finfo(jnp.array(1.0).dtype).eps
         b = np.clip(np.sin(knots / v) ** 2, 1e-7, 1)
         db = np.sin(2 * knots / v) / v
         data = {"B^zeta": b, "B^zeta_z|r,a": db, "|B|": b, "|B|_z|r,a": db}
 
         if is_strong:
-            integrand = lambda B, pitch: 1 / jnp.sqrt(1 - pitch * m * B)
+            integrand = lambda B, pitch: 1 / jnp.sqrt(1 - m * B / pitch)
             truth = v * 2 * ellipkm1(p)
         else:
-            integrand = lambda B, pitch: jnp.sqrt(1 - pitch * m * B)
+            integrand = lambda B, pitch: jnp.sqrt(1 - m * B / pitch)
             truth = v * 2 * ellipe(m)
         kwargs = {}
         if automorphism != "default":
@@ -939,7 +939,7 @@ class TestBounce1DQuadrature:
         )
         result = bounce.integrate(pitch, integrand, check=True)
         assert np.count_nonzero(result) == 1
-        np.testing.assert_allclose(np.sum(result), truth, rtol=1e-4)
+        np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
     @staticmethod
     @partial(np.vectorize, excluded={0})
@@ -1018,7 +1018,7 @@ class TestBounce1DQuadrature:
             TestBounce1DQuadrature._fixed_elliptic(
                 lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.cos(Z),
                 k,
-                deg=10,
+                deg=11,
             ),
         )
         np.testing.assert_allclose(
@@ -1035,12 +1035,13 @@ class TestBounce1D:
 
     @staticmethod
     def _example_numerator(g_zz, B, pitch):
-        f = (1 - pitch * B / 2) * g_zz
-        return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
+        # Note ``pitch`` = 1/λ ~ E/μ = energy / magnetic moment.
+        f = (1 - 0.5 * B / pitch) * g_zz
+        return safediv(f, jnp.sqrt(jnp.abs(1 - B / pitch)))
 
     @staticmethod
     def _example_denominator(B, pitch):
-        return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
+        return safediv(1, jnp.sqrt(jnp.abs(1 - B / pitch)))
 
     @pytest.mark.unit
     def test_integrate_checks(self):
@@ -1068,11 +1069,11 @@ class TestBounce1D:
         data = eq.compute(
             Bounce1D.required_names() + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        pitch = get_pitch(
-            grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
-        )
         # 5. Make the bounce integration operator.
         bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
+        pitch = bounce.get_pitch(
+            grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
+        )
         num = bounce.integrate(
             pitch,
             integrand=TestBounce1D._example_numerator,
@@ -1089,13 +1090,13 @@ class TestBounce1D:
 
         # 6. Basic manipulation of the output.
         # Sum all bounce integrals across each particular field line.
-        avg_sum = np.sum(avg, axis=-1)
+        avg_sum = avg.sum(axis=-1)
         # Group the averages by field line.
         avg_sum = avg_sum.reshape(pitch.shape[0], rho.size, alpha.size)
         # The sum stored at index i, j which denote some flux surface and field line
         i, j = 0, 0
         print(avg_sum[:, i, j])
-        # This is the summed bounce average over all wells along the field line
+        # is the summed bounce average over all wells along the field line
         # given by the field line following coordinates at index [i, j] of nodes
         nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes, "raz")
         print(nodes[i, j])
@@ -1141,7 +1142,7 @@ class TestBounce1D:
         np.testing.assert_allclose(
             h(argmin),
             func(
-                h(zeta),
+                h=h(zeta),
                 z1=np.array(0, ndmin=3),
                 z2=np.array(2 * np.pi, ndmin=3),
                 knots=zeta,
@@ -1166,7 +1167,7 @@ class TestBounce1D:
             integration as input.
         pitch : jnp.ndarray
             Shape (P, ).
-            Pitch values used.
+            1/λ values used.
 
         """
         B = data["|B|"] / data["Bref"]
@@ -1230,12 +1231,14 @@ class TestBounce1D:
         np.testing.assert_allclose(gbdrift, gbdrift_analytic_low_order, atol=1e-2)
         np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
 
-        pitch = get_pitch(np.min(B), np.max(B), 100)[1:]
-        k2 = 0.5 * ((1 - pitch * B0) / (epsilon * pitch * B0) + 1)
+        # Exclude singularity not captured by analytic approximation for pitch near
+        # the maximum |B|. (This is captured by the numerical integration).
+        pitch = get_pitch(np.min(B), np.max(B), 100)[:-1]
+        k2 = 0.5 * ((1 - B0 / pitch) / (epsilon * B0 / pitch) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounce1DQuadrature.elliptic_incomplete(k2)
         )
-        y = np.sqrt(2 * epsilon * pitch * B0)
+        y = np.sqrt(2 * epsilon * B0 / pitch)
         I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
         I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
 
@@ -1256,13 +1259,13 @@ class TestBounce1D:
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch):
         """Integrand of numerator of bounce averaged binormal drift."""
-        g = jnp.sqrt(1 - pitch * B)
+        g = jnp.sqrt(1 - B / pitch)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
     @staticmethod
     def drift_den_integrand(B, pitch):
         """Integrand of denominator of bounce averaged binormal drift."""
-        return 1 / jnp.sqrt(1 - pitch * B)
+        return 1 / jnp.sqrt(1 - B / pitch)
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
@@ -1355,8 +1358,8 @@ class TestBounce1D:
         )
 
         fig, ax = plt.subplots()
-        ax.plot(1 / pitch, drift_analytic)
-        ax.plot(1 / pitch, drift_numerical)
+        ax.plot(pitch, drift_analytic)
+        ax.plot(pitch, drift_numerical)
         return fig
 
     @staticmethod
@@ -1364,20 +1367,19 @@ class TestBounce1D:
         """Make sure reverse mode AD works correctly on this algorithm."""
 
         def integrand_grad(*args, **kwargs2):
-            return jnp.vectorize(
+            grad_fun = jnp.vectorize(
                 grad(integrand, -1), signature="()," * len(kwargs["f"]) + "(),()->()"
-            )(*args, *kwargs2.values())
+            )
+            return grad_fun(*args, *kwargs2.values())
 
         def fun1(pitch):
-            return jnp.sum(bounce.integrate(pitch, integrand, check=False, **kwargs))
+            return bounce.integrate(pitch, integrand, check=False, **kwargs).sum()
 
         def fun2(pitch):
-            return jnp.sum(
-                bounce.integrate(pitch, integrand_grad, check=True, **kwargs)
-            )
+            return bounce.integrate(pitch, integrand_grad, check=True, **kwargs).sum()
 
         pitch = 1.0
-        truth = 650  # Extrapolated from plot.
-        assert np.isclose(grad(fun1)(pitch), truth, rtol=1e-3)
+        truth = -650  # Extrapolated from plot.
+        np.testing.assert_allclose(grad(fun1)(pitch), truth, rtol=1e-3)
         # Make sure bounce points get differentiated too.
-        assert np.isclose(fun2(pitch), -131750, rtol=1e-1)
+        np.testing.assert_allclose(fun2(pitch), 131750, rtol=1e-1)

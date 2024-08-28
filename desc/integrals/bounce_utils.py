@@ -21,7 +21,7 @@ from desc.utils import atleast_3d_mid, errorif, setdefault, take_mask
 
 
 def get_pitch(min_B, max_B, num, relative_shift=1e-6):
-    """Return uniformly spaced values between ``1/max_B`` and ``1/min_B``.
+    """Return 1/λ values uniformly spaced between ``min_B`` and ``max_B``.
 
     Parameters
     ----------
@@ -39,13 +39,15 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     -------
     pitch : jnp.ndarray
         Shape (num + 2, *min_B.shape).
+        1/λ values. Note ``pitch`` = 1/λ ~ E/μ = energy / magnetic moment.
 
     """
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift values slightly to resolve this issue.
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
-    pitch = composite_linspace(1 / jnp.stack([max_B, min_B]), num)
+    # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
+    pitch = composite_linspace(jnp.stack([min_B, max_B]), num)
     assert pitch.shape == (num + 2, *min_B.shape)
     return pitch
 
@@ -72,7 +74,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch=None):
         compose a particular spline.
     pitch : jnp.ndarray
         Shape must broadcast with (P, S).
-        λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
+        1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
         specified by ``pitch[...,(ρ,α)]`` where in the latter the labels (ρ,α) are
         interpreted as the index into the last axis that corresponds to that field
         line. If two-dimensional, the first axis is the batch axis.
@@ -114,7 +116,7 @@ def bounce_points(
     ----------
     pitch : jnp.ndarray
         Shape must broadcast with (P, S).
-        λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
+        1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
         specified by ``pitch[...,(ρ,α)]`` where in the latter the labels (ρ,α) are
         interpreted as the index into the last axis that corresponds to that field
         line. If two-dimensional, the first axis is the batch axis.
@@ -167,7 +169,7 @@ def bounce_points(
     # Intersection points in local power basis.
     intersect = poly_root(
         c=B,
-        k=(1 / pitch)[..., jnp.newaxis],
+        k=pitch[..., jnp.newaxis],
         a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
         sort=True,
@@ -232,7 +234,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
         Bs = PPoly(B[:, s], knots)
         for p in range(P):
             Bs_midpoint = Bs((z1[p, s] + z2[p, s]) / 2)
-            err_3 = jnp.any(Bs_midpoint > 1 / pitch[p, s] + eps)
+            err_3 = jnp.any(Bs_midpoint > pitch[p, s] + eps)
             if not (err_1[p, s] or err_2[p, s] or err_3):
                 continue
             _z1 = z1[p, s][mask[p, s]]
@@ -242,7 +244,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
                     ppoly=Bs,
                     z1=_z1,
                     z2=_z2,
-                    k=1 / pitch[p, s],
+                    k=pitch[p, s],
                     **kwargs,
                 )
 
@@ -251,7 +253,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
             assert not err_1[p, s], "Intersects have an inversion.\n"
             assert not err_2[p, s], "Detected discontinuity.\n"
             assert not err_3, (
-                f"Detected |B| = {Bs_midpoint[mask[p, s]]} > {1 / pitch[p, s] + eps} "
+                f"Detected |B| = {Bs_midpoint[mask[p, s]]} > {pitch[p, s] + eps} "
                 "= 1/λ in well, implying the straight line path between "
                 "bounce points is in hypograph(|B|). Use more knots.\n"
             )
@@ -261,7 +263,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
                     ppoly=Bs,
                     z1=z1[:, s],
                     z2=z2[:, s],
-                    k=1 / pitch[:, s],
+                    k=pitch[:, s],
                     **kwargs,
                 )
             )
@@ -300,7 +302,7 @@ def bounce_quadrature(
         epigraph of |B|.
     pitch : jnp.ndarray
         Shape must broadcast with (P, S).
-        λ values to evaluate the bounce integral at each field line. λ(ρ,α) is
+        1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
         specified by ``pitch[...,(ρ,α)]`` where in the latter the labels (ρ,α) are
         interpreted as the index into the last axis that corresponds to that field
         line. If two-dimensional, the first axis is the batch axis.
@@ -484,7 +486,7 @@ def _check_interp(Q, f, b_sup_z, B, B_z_ra, result, plot):
     assert jnp.isfinite(Q).all(), "NaN interpolation point."
     # Integrals that we should be computing.
     marked = jnp.any(Q != 0.0, axis=-1)
-    goal = jnp.sum(marked)
+    goal = marked.sum()
 
     msg = "Interpolation failed."
     assert jnp.isfinite(B_z_ra).all(), msg
@@ -501,7 +503,7 @@ def _check_interp(Q, f, b_sup_z, B, B_z_ra, result, plot):
     actual = jnp.sum(marked & jnp.isfinite(result))
     assert goal == actual, (
         f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
-        "can be caused by floating point error or a poor choice of quadrature nodes."
+        "is caused by floating point error, usually due to a poor quadrature choice."
     )
     if plot:
         _plot_check_interp(Q, B, name=r"$\vert B \vert$")

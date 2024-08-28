@@ -19,8 +19,8 @@ from desc.utils import only1
 
 
 @pytest.mark.unit
-def test_get_pitch():
-    """Test this utility function which is used integration over pitch."""
+def test_composite_linspace():
+    """Test this utility function which is used for integration over pitch."""
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
     breaks = np.linspace(B_min_tz, B_max_tz, num=5)

@@ -1364,7 +1364,22 @@ class TestBounce1D:
 
     @staticmethod
     def _test_bounce_autodiff(bounce, integrand, **kwargs):
-        """Make sure reverse mode AD works correctly on this algorithm."""
+        """Make sure reverse mode AD works correctly on this algorithm.
+
+        We use non-differentiable operations throughout the computations.
+        See https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html
+        and https://jax.readthedocs.io/en/latest/faq.html#
+        why-are-gradients-zero-for-functions-based-on-sort-order.
+        If the AD tool works properly, then these operations should be assigned
+        zero gradients while the gradients wrt parameters of our physics computations
+        will accumulate correctly. Less mature AD tools may have subtle bugs that
+        cause the gradients to not accumulate correctly (there's at least a few
+        GitHub issues that JAX has fixed related to this in past).
+
+        This test first confirms the gradients computed by reverse mode AD matches
+        the analytic approximation of the true gradient.
+
+        """
 
         def integrand_grad(*args, **kwargs2):
             grad_fun = jnp.vectorize(
@@ -1379,7 +1394,14 @@ class TestBounce1D:
             return bounce.integrate(pitch, integrand_grad, check=True, **kwargs).sum()
 
         pitch = 1.0
-        truth = -650  # Extrapolated from plot.
-        np.testing.assert_allclose(grad(fun1)(pitch), truth, rtol=1e-3)
-        # Make sure bounce points get differentiated too.
+        # Compare against analytic approximation of true gradient;
+        # extrapolated from plot of analytic expression.
+        np.testing.assert_allclose(grad(fun1)(pitch), -650, rtol=1e-3)
+        # Leibniz rule for differentiating pitch angles in integrand.
+        # This should differ significantly from above because the bounce points
+        # are functions of pitch angles. The gradient is much larger because
+        # the derivative wrt bounce points is not included, which smooths the function.
+        # This is good to confirm that the AD of bounce points smooths the gradient
+        # rather than adding artificial noise due to incorrect accumulation of gradient
+        # from non-differentiable operations in the algorithm.
         np.testing.assert_allclose(fun2(pitch), 131750, rtol=1e-1)

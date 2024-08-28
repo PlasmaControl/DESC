@@ -80,7 +80,7 @@ class Bounce1D:
     strictly increasing and preferably uniformly spaced. These are used as knots to
     construct splines; a reference knot density is 100 knots per toroidal transit.
 
-    Also note the argument ``pitch`` in the below method is defined as
+    Also note the argument ``pitch`` in the below methods is defined as
     1/λ ~ E/μ = energy / magnetic moment.
 
     Examples

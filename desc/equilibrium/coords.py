@@ -704,7 +704,7 @@ def get_rtz_grid(
         [radial, poloidal, toroidal], coordinates=coordinates, period=period
     )
     if "iota" in kwargs:
-        kwargs["iota"] = grid.expand(kwargs["iota"])
+        kwargs["iota"] = grid.expand(jnp.atleast_1d(kwargs["iota"]))
     inbasis = {
         "r": "rho",
         "t": "theta",

@@ -472,8 +472,8 @@ def _interpolate_and_integrate(
         - data["B^zeta"] * data["|B|_z|r,a"] / data["|B|"] ** 2,
     ).reshape(shape)
     B = interp1d_Hermite_vec(Q, knots, data["|B|"], data["|B|_z|r,a"]).reshape(shape)
-    # Spline each function separately so that operations in the integrand that do not
-    # preserve smoothness can be captured by the quadrature.
+    # Spline each function separately so that operations in the integrand
+    # that do not preserve smoothness can be captured.
     f = [interp1d_vec(Q, knots, f_i, method=method).reshape(shape) for f_i in f]
     result = jnp.dot(integrand(*f, B=B, pitch=pitch) / b_sup_z, w)
 
@@ -491,13 +491,13 @@ def _check_interp(Q, f, b_sup_z, B, B_z_ra, result, plot):
     Q : jnp.ndarray
         Quadrature points in ζ coordinates.
     f : list of jnp.ndarray
-        Arguments to the integrand interpolated to Q.
+        Arguments to the integrand, interpolated to Q.
     b_sup_z : jnp.ndarray
         Contravariant toroidal component of magnetic field, interpolated to Q.
     B : jnp.ndarray
         Norm of magnetic field, interpolated to Q.
     B_z_ra : jnp.ndarray
-        Norm of magnetic field, derivative with respect to ζ.
+        Norm of magnetic field derivative, (∂|B|/∂ζ)|(ρ,α).
     result : jnp.ndarray
         Output of ``_interpolate_and_integrate``.
     plot : bool
@@ -599,17 +599,17 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     return ext, g_ext
 
 
-def _where_argmin_g(z1, z2, ext, g_ext, upper_sentinel):
+def _where_for_argmin(z1, z2, ext, g_ext, upper_sentinel):
     assert z1.shape[1] == z2.shape[1] == ext.shape[0] == g_ext.shape[0]
     return jnp.where(
         (z1[..., jnp.newaxis] < ext[:, jnp.newaxis])
         & (ext[:, jnp.newaxis] < z2[..., jnp.newaxis]),
         g_ext[:, jnp.newaxis],
-        upper_sentinel,  # don't make too large or softmax loses resolution
+        upper_sentinel,
     )
 
 
-def interp_to_argmin_g(
+def interp_to_argmin(
     h, z1, z2, knots, g, dg_dz, method="cubic", beta=-100, upper_sentinel=1e2
 ):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
@@ -650,12 +650,16 @@ def interp_to_argmin_g(
         expense of noisier gradients - noisier in the physics sense (unrelated
         to the automatic differentiation).
     upper_sentinel : float
-        Something a good bit larger than ``g``. For example if max(g) is
-        10, then 50 will more than suffice.
+        Something larger than g. Choose value such that
+        exp(max(g)) << exp(``upper_sentinel``). Don't make too large or numerical
+        resolution is lost.
+
 
     Warnings
     --------
-    Recall that if ``g`` is small then the effect of β is reduced.
+    Recall that if g is small then the effect of β is reduced.
+    If the intention is to use this function as argmax, be sure to supply
+    a lower sentinel for ``upper_sentinel``.
 
     Returns
     -------
@@ -665,7 +669,10 @@ def interp_to_argmin_g(
 
     """
     ext, g = _get_extrema(knots, g, dg_dz, sentinel=0)
-    argmin = softmax(beta * _where_argmin_g(z1, z2, ext, g, upper_sentinel), axis=-1)
+    # JAX softmax(x) does the proper shift to compute softmax(x - max(x)), but it's
+    # still not a good idea to compute over a large length scale, so we warn in
+    # docstring to choose upper sentinel properly.
+    argmin = softmax(beta * _where_for_argmin(z1, z2, ext, g, upper_sentinel), axis=-1)
     h = jnp.linalg.vecdot(
         argmin,
         interp1d_vec(ext, knots, jnp.atleast_2d(h), method=method)[:, jnp.newaxis],
@@ -674,14 +681,14 @@ def interp_to_argmin_g(
     return h
 
 
-def interp_to_argmin_g_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
+def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
 
     See Also
     --------
-    interp_to_argmin_g
+    interp_to_argmin
         Accomplishes the same task, but handles the case of non-unique global minima
         more correctly. It is also more efficient if P >> 1.
 
@@ -724,10 +731,10 @@ def interp_to_argmin_g_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
     """
     ext, g = _get_extrema(knots, g, dg_dz, sentinel=0)
     # We can use the non-differentiable max because we actually want the gradients
-    # to accumulate through only the minimum anyway since we are differentiating how
-    # our physics objective changes wrt physics stuff not wrt which of the extrema
-    # are interpolated to.
-    argmin = jnp.argmin(_where_argmin_g(z1, z2, ext, g, jnp.max(g) + 10), axis=-1)
+    # to accumulate through only the minimum since we are differentiating how our
+    # physics objective changes wrt equilibrium perturbations not wrt which of the
+    # extrema get interpolated to.
+    argmin = jnp.argmin(_where_for_argmin(z1, z2, ext, g, jnp.max(g) + 1), axis=-1)
     A = jnp.take_along_axis(ext[jnp.newaxis], argmin, axis=-1)
     h = interp1d_vec(A, knots, jnp.atleast_2d(h), method=method)
     assert h.shape == z1.shape

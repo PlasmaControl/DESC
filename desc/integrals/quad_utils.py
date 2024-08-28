@@ -122,6 +122,7 @@ def tanh_sinh(deg, m=10):
     Returns
     -------
     x, w : (jnp.ndarray, jnp.ndarray)
+        Shape (deg, ).
         Quadrature points and weights.
 
     """
@@ -190,7 +191,7 @@ def leggauss_lob(deg, interior_only=False):
 
 
 def get_quadrature(quad, automorphism):
-    """Apply automorphism to given quadrature points and weights.
+    """Apply automorphism to given quadrature.
 
     Parameters
     ----------
@@ -206,7 +207,7 @@ def get_quadrature(quad, automorphism):
     Returns
     -------
     x, w : (jnp.ndarray, jnp.ndarray)
-        Quadrature points in [-1, 1] and associated weights.
+        Quadrature points and weights.
 
     """
     x, w = quad

@@ -205,7 +205,7 @@ def test_broadcast_tree():
 def _last_value(a):
     """Return the last non-nan value in ``a``."""
     a = a[::-1]
-    idx = np.squeeze(flatnonzero(~np.isnan(a), size=1, fill_value=0))
+    idx = jnp.squeeze(flatnonzero(~jnp.isnan(a), size=1, fill_value=0))
     return a[idx]
 
 

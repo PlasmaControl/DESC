@@ -1,6 +1,7 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
 import functools
+import multiprocessing as mp
 import os
 import warnings
 
@@ -11,15 +12,19 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
+# only print details in the main process, not child processes spawned by multiprocessing
+verbose = bool(mp.current_process().name == "MainProcess")
+
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
     set_device(kind="cpu")
-    print(
-        "DESC version {}, using numpy backend, version={}, dtype={}".format(
-            desc.__version__, np.__version__, np.linspace(0, 1).dtype
+    if verbose:
+        print(
+            "DESC version {}, using numpy backend, version={}, dtype={}".format(
+                desc.__version__, np.__version__, np.linspace(0, 1).dtype
+            )
         )
-    )
 else:
     if desc_config.get("device") is None:
         set_device("cpu")
@@ -41,11 +46,12 @@ else:
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
-        print(
-            f"DESC version {desc.__version__},"
-            + f"using JAX backend, jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
-        )
+        if verbose:
+            print(
+                f"DESC version {desc.__version__}, "
+                + f"using JAX backend, jax version={jax.__version__}, "
+                + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
+            )
         del x, y
     except ModuleNotFoundError:
         jnp = np
@@ -59,11 +65,13 @@ else:
                 desc.__version__, np.__version__, y.dtype
             )
         )
-print(
-    "Using device: {}, with {:.2f} GB available memory".format(
-        desc_config.get("device"), desc_config.get("avail_mem")
+
+if verbose:
+    print(
+        "Using device: {}, with {:.2f} GB available memory".format(
+            desc_config.get("device"), desc_config.get("avail_mem")
+        )
     )
-)
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     jit = jax.jit
@@ -515,7 +523,7 @@ else:  # pragma: no cover
             val = body_fun(i, val)
         return val
 
-    def cond(pred, true_fun, false_fun, *operand):
+    def cond(pred, true_fun, false_fun, *operands):
         """Conditionally apply true_fun or false_fun.
 
         This version is for the numpy backend, for jax backend see jax.lax.cond
@@ -528,7 +536,7 @@ else:  # pragma: no cover
             Function (A -> B), to be applied if pred is True.
         false_fun: callable
             Function (A -> B), to be applied if pred is False.
-        operand: any
+        operands: any
             input to either branch depending on pred. The type can be a scalar, array,
             or any pytree (nested Python tuple/list/dict) thereof.
 
@@ -541,9 +549,9 @@ else:  # pragma: no cover
 
         """
         if pred:
-            return true_fun(*operand)
+            return true_fun(*operands)
         else:
-            return false_fun(*operand)
+            return false_fun(*operands)
 
     def switch(index, branches, operand):
         """Apply exactly one of branches given by index.

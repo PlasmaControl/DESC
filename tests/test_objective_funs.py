@@ -24,7 +24,7 @@ from desc.coils import (
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.magnetic_fields import (
@@ -869,6 +869,13 @@ class TestObjectiveFunction:
         test(coils)
         test(mixed_coils)
         test(nested_coils, grid=grid)
+
+    def test_coil_type_error(self):
+        """Tests error when objective is not passed a coil."""
+        curve = FourierPlanarCurve(r_n=2, basis="rpz")
+        obj = CoilLength(curve)
+        with pytest.raises(TypeError):
+            obj.build()
 
     @pytest.mark.unit
     def test_coil_min_distance(self):

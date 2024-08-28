@@ -1627,7 +1627,7 @@ class UmbilicHighCurvature(_Objective):
 
         self._dim_f = int(curve_grid.num_nodes)
 
-        self._curve_data_keys = ["R", "phi", "Z"]
+        self._curve_data_keys = ["phi", "Z"]
         self._equil_data_keys = ["curvature_k2_rho"]
 
         timer = Timer()
@@ -1695,7 +1695,7 @@ class UmbilicHighCurvature(_Objective):
             profiles={},
         )
         curve_phi = curve_data["phi"]
-        curve_Z = curve_data["R"]
+        curve_Z = curve_data["Z"]
 
         theta_points = (
             -self._curve.NFP * curve_phi + curve_Z

@@ -30,7 +30,6 @@ from ._geometry import (
     PlasmaVesselDistance,
     PrincipalCurvature,
     UmbilicHighCurvature,
-    UmbilicLowCurvature,
     Volume,
 )
 from ._omnigenity import (

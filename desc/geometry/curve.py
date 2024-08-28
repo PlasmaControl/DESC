@@ -891,7 +891,8 @@ class SplineXYZCurve(Curve):
         splines (i+1th, i-1th, etc.) and does not consider their query points
         (knots) when interpolating. The boundary conditions are evaluated using
         interpax's default where non-periodicity is assumed.
-        If None (the default), the spline will be the usual periodic continuous spline.
+        If None (the default), the spline will be the usual periodic spline with the
+        continuity dictated by the spline method.
     """
 
     _attributes = ["_X", "_Y", "_Z", "_knots", "_intervals", "_method"]
@@ -1170,8 +1171,8 @@ class SplineXYZCurve(Curve):
             splines (i+1th, i-1th, etc.) and does not consider their query points
             (knots) when interpolating. The boundary conditions are evaluated using
             Interpax's default where non-periodicity is assumed.
-            If None (the default), the spline will be the usual periodic continuous
-            spline.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------

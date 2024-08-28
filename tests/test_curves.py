@@ -937,7 +937,7 @@ class TestSplineXYZCurve:
             assert discontinuous.method == method
             assert continuous.method == method
 
-            grid = LinearGrid(N=100)
+            grid = LinearGrid(N=100, endpoint=False)
 
             discont_data = discontinuous.compute([data_key], grid=grid)
             discont_quantity = discont_data[data_key]

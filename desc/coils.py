@@ -344,8 +344,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
             splines (i+1th, i-1th, etc.) and does not consider their query points
             (knots) when interpolating. The boundary conditions are evaluated using
             Interpax's default where non-periodicity is assumed.
-            If None (the default), the spline will be the usual periodic continuous
-            spline.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------
@@ -796,7 +796,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         splines (i+1th, i-1th, etc.) and does not consider their query points
         (knots) when interpolating. The boundary conditions are evaluated using
         interpax's default where non-periodicity is assumed.
-        If None (the default), the spline will be the usual periodic continuous spline.
+        If None (the default), the spline will be the usual periodic spline with
+        the continuity dictated by the spline method.
 
     """
 
@@ -926,8 +927,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             splines (i+1th, i-1th, etc.) and does not consider their query points
             (knots) when interpolating. The boundary conditions are evaluated using
             Interpax's default where non-periodicity is assumed.
-            If None (the default), the spline will be the usual periodic continuous
-            spline.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------
@@ -1804,8 +1805,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             splines (i+1th, i-1th, etc.) and does not consider their query points
             (knots) when interpolating. The boundary conditions are evaluated using
             Interpax's default where non-periodicity is assumed.
-            If None (the default), the spline will be the usual periodic continuous
-            spline.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------
@@ -2250,8 +2251,8 @@ class MixedCoilSet(CoilSet):
             splines (i+1th, i-1th, etc.) and does not consider their query points
             (knots) when interpolating. The boundary conditions are evaluated using
             Interpax's default where non-periodicity is assumed.
-            If None (the default), the spline will be the usual periodic continuous
-            spline.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------

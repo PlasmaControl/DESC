@@ -656,6 +656,8 @@ class TERPSICHORE(ExternalObjective):
 
     # TODO: update Parameters docs
     # If mode_family < 0, includes all modes in desired range
+    # NOTE: that TERPSICHORE assumes theta=0 is defined on the outboard midplane!
+    # TODO: include documentation of example script for multiprocessing
 
     """
 

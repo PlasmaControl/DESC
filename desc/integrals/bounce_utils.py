@@ -138,8 +138,9 @@ def bounce_points(
     num_well : int or None
         Specify to return the first ``num_well`` pairs of bounce points for each
         pitch along each field line. This is useful if ``num_well`` tightly
-        bounds the actual number. As a reference, there are typically at most 5
-        wells per toroidal transit for a given pitch.
+        bounds the actual number. As a reference, there are typically 20 wells
+        per toroidal transit for a given pitch. You can check this by plotting
+        the field lines with the ``_check_bounce_points`` method.
 
         If not specified, then all bounce points are returned. If there were fewer
         wells detected along a field line than the size of the last axis of the

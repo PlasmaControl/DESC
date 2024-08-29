@@ -625,7 +625,7 @@ def _e_sup_helical_times_sqrt_g_mag(params, transforms, profiles, data, **kwargs
 
 @register_compute_fun(
     name="F_anisotropic",
-    label="F_{anisotropic}",
+    label="F_{\\mathrm{anisotropic}}",
     units="N \\cdot m^{-3}",
     units_long="Newtons / cubic meter",
     description="Anisotropic force balance error",

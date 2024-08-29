@@ -229,12 +229,8 @@ def DummyStellarator(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def DummyCoilSet(tmpdir_factory):
+def DummyCoilSet():
     """Create and save a dummy coil set for testing."""
-    output_dir = tmpdir_factory.mktemp("result")
-    output_path_sym = output_dir.join("DummyCoilSet_sym.h5")
-    output_path_asym = output_dir.join("DummyCoilSet_asym.h5")
-
     eq = get("precise_QH")
     minor_radius = eq.compute("a")["a"]
 
@@ -256,25 +252,16 @@ def DummyCoilSet(tmpdir_factory):
         )
         coils.append(coil)
     coilset_sym = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
-    coilset_sym.save(output_path_sym)
 
     # equivalent CoilSet without symmetry
     coilset_asym = CoilSet.from_symmetry(coilset_sym, NFP=eq.NFP, sym=eq.sym)
-    coilset_asym.save(output_path_asym)
 
-    DummyCoilSet_out = {
-        "output_path_sym": output_path_sym,
-        "output_path_asym": output_path_asym,
-    }
-    return DummyCoilSet_out
+    return coilset_sym, coilset_asym
 
 
 @pytest.fixture(scope="session")
-def DummyMixedCoilSet(tmpdir_factory):
+def DummyMixedCoilSet():
     """Create and save a dummy mixed coil set for testing."""
-    output_dir = tmpdir_factory.mktemp("result")
-    output_path = output_dir.join("DummyMixedCoilSet.h5")
-
     tf_coil = FourierPlanarCoil(current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
     tf_coil.rotate(angle=np.pi / 4)
     tf_coilset = CoilSet(tf_coil, NFP=2, sym=True)
@@ -295,10 +282,16 @@ def DummyMixedCoilSet(tmpdir_factory):
     full_coilset = MixedCoilSet(
         (tf_coilset, vf_coilset, xyz_coil, spline_coil), check_intersection=False
     )
+    return full_coilset
 
-    full_coilset.save(output_path)
-    DummyMixedCoilSet_out = {"output_path": output_path}
-    return DummyMixedCoilSet_out
+
+@pytest.fixture(scope="session")
+def DummyNestedCoilSet(DummyCoilSet, DummyMixedCoilSet):
+    """Create and save a dummy nested coil set for testing."""
+    mixed_coils = DummyMixedCoilSet
+    sym_coils, __ = DummyCoilSet
+    nested_coils = MixedCoilSet(sym_coils, mixed_coils, check_intersection=False)
+    return nested_coils
 
 
 @pytest.fixture(scope="session")

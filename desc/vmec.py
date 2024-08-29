@@ -12,10 +12,10 @@ from scipy.constants import mu_0
 
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
-from desc.compute.utils import surface_averages
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
+from desc.integrals import surface_averages
 from desc.objectives import (
     ObjectiveFunction,
     get_fixed_axis_constraints,
@@ -158,7 +158,7 @@ class VMECIO:
         zax_cs = file.variables["zaxis_cs"][:].filled()
         try:
             rax_cs = file.variables["raxis_cs"][:].filled()
-            rax_cc = file.variables["zaxis_cc"][:].filled()
+            zax_cc = file.variables["zaxis_cc"][:].filled()
         except KeyError:
             rax_cs = np.zeros_like(rax_cc)
             zax_cc = np.zeros_like(zax_cs)
@@ -208,7 +208,9 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(cls, eq, path, surfs=128, verbose=1):  # noqa: C901 - FIXME - simplify
+    def save(  # noqa: C901 - FIXME - simplify
+        cls, eq, path, surfs=128, verbose=1, M_nyq=None, N_nyq=None
+    ):
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
@@ -224,6 +226,10 @@ class VMECIO:
             * 0: no output
             * 1: status of quantities computed
             * 2: as above plus timing information
+        M_nyq, N_nyq: int
+            The max poloidal and toroidal modenumber to use in the
+            Nyquist spectrum that the derived quantities are Fourier
+            fit with. Defaults to M+4 and N+2.
 
         Returns
         -------
@@ -242,8 +248,9 @@ class VMECIO:
         NFP = eq.NFP
         M = eq.M
         N = eq.N
-        M_nyq = M + 4
-        N_nyq = N + 2 if N > 0 else 0
+        M_nyq = M + 4 if M_nyq is None else M_nyq
+        N_nyq = N + 2 if N_nyq is None else N_nyq
+        N_nyq = 0 if int(N) == 0 else N_nyq
 
         # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
         s_full = np.linspace(0, 1, surfs)
@@ -807,6 +814,14 @@ class VMECIO:
             lmnc.long_name = "cos(m*t-n*p) component of lambda, on half mesh"
             lmnc.units = "rad"
         l1 = np.ones_like(eq.L_lmn)
+        # should negate lambda coefs bc theta_DESC + lambda = theta_PEST,
+        # since we are reversing the theta direction (and the theta_PEST direction),
+        # so -theta_PEST = -theta_DESC - lambda, so the negative of lambda is what
+        # should be saved, so that would be negating all of eq.L_lmn
+        # BUT since we are also reversing the poloidal angle direction, which
+        # would negate only the coeffs of L_lmn corresponding to m<0
+        # (sin theta modes in DESC), the effective result is to only
+        # negate the cos(theta) (m>0) lambda modes
         l1[eq.L_basis.modes[:, 1] >= 0] *= -1
         m, n, x_mn = zernike_to_fourier(l1 * eq.L_lmn, basis=eq.L_basis, rho=r_half)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -823,7 +838,7 @@ class VMECIO:
 
         sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
         cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
-        full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
+        full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=False)
         if eq.sym:
             sin_transform = Transform(
                 grid=grid_lcfs, basis=sin_basis, build=False, build_pinv=True
@@ -932,7 +947,7 @@ class VMECIO:
             if eq.sym:
                 x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bmnc[0, :] = 0
         bmnc[1:, :] = c
@@ -975,7 +990,7 @@ class VMECIO:
             if eq.sym:
                 x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupumnc[0, :] = 0
         bsupumnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -1018,7 +1033,7 @@ class VMECIO:
             if eq.sym:
                 x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupvmnc[0, :] = 0
         bsupvmnc[1:, :] = c
@@ -1641,13 +1656,15 @@ class VMECIO:
             return C + S
 
     @classmethod
-    def compute_theta_coords(cls, lmns, xm, xn, s, theta_star, zeta, si=None):
+    def compute_theta_coords(
+        cls, lmns, xm, xn, s, theta_star, zeta, si=None, lmnc=None
+    ):
         """Find theta such that theta + lambda(theta) == theta_star.
 
         Parameters
         ----------
         lmns : array-like
-            fourier coefficients for lambda
+            sin(mt-nz) Fourier coefficients for lambda
         xm : array-like
             poloidal mode numbers
         xn : array-like
@@ -1662,6 +1679,8 @@ class VMECIO:
         si : ndarray
             values of radial coordinates where lmns are defined. Defaults to linearly
             spaced on half grid between (0,1)
+        lmnc : array-like, optional
+            cos(mt-nz) Fourier coefficients for lambda
 
         Returns
         -------
@@ -1672,15 +1691,26 @@ class VMECIO:
         if si is None:
             si = np.linspace(0, 1, lmns.shape[0])
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
-        lmbda_mn = interpolate.CubicSpline(si, lmns)
+        lmbda_mns = interpolate.CubicSpline(si, lmns)
+        if lmnc is None:
+            lmbda_mnc = lambda s: 0
+        else:
+            lmbda_mnc = interpolate.CubicSpline(si, lmnc)
 
         # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         def root_fun(theta):
             lmbda = np.sum(
-                lmbda_mn(s)
+                lmbda_mns(s)
                 * np.sin(
+                    xm[np.newaxis] * theta[:, np.newaxis]
+                    - xn[np.newaxis] * zeta[:, np.newaxis]
+                ),
+                axis=-1,
+            ) + np.sum(
+                lmbda_mnc(s)
+                * np.cos(
                     xm[np.newaxis] * theta[:, np.newaxis]
                     - xn[np.newaxis] * zeta[:, np.newaxis]
                 ),
@@ -1782,6 +1812,8 @@ class VMECIO:
         t_nodes = t_grid.nodes
         t_nodes[:, 0] = t_nodes[:, 0] ** 2
 
+        sym = "lmnc" not in vmec_data.keys()
+
         v_nodes = cls.compute_theta_coords(
             vmec_data["lmns"],
             vmec_data["xm"],
@@ -1789,29 +1821,71 @@ class VMECIO:
             t_nodes[:, 0],
             t_nodes[:, 1],
             t_nodes[:, 2],
+            lmnc=vmec_data["lmnc"] if not sym else None,
         )
 
         t_nodes[:, 1] = v_nodes
+        if sym:
+            Rr_vmec, Zr_vmec = cls.vmec_interpolate(
+                vmec_data["rmnc"],
+                vmec_data["zmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=r_nodes[:, 1],
+                phi=r_nodes[:, 2],
+                s=r_nodes[:, 0],
+            )
 
-        Rr_vmec, Zr_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"],
-            vmec_data["zmns"],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            theta=r_nodes[:, 1],
-            phi=r_nodes[:, 2],
-            s=r_nodes[:, 0],
-        )
-
-        Rv_vmec, Zv_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"],
-            vmec_data["zmns"],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            theta=t_nodes[:, 1],
-            phi=t_nodes[:, 2],
-            s=t_nodes[:, 0],
-        )
+            Rv_vmec, Zv_vmec = cls.vmec_interpolate(
+                vmec_data["rmnc"],
+                vmec_data["zmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=t_nodes[:, 1],
+                phi=t_nodes[:, 2],
+                s=t_nodes[:, 0],
+            )
+        else:
+            Rr_vmec = cls.vmec_interpolate(
+                vmec_data["rmnc"],
+                vmec_data["rmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=r_nodes[:, 1],
+                phi=r_nodes[:, 2],
+                s=r_nodes[:, 0],
+                sym=False,
+            )
+            Zr_vmec = cls.vmec_interpolate(
+                vmec_data["zmnc"],
+                vmec_data["zmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=r_nodes[:, 1],
+                phi=r_nodes[:, 2],
+                s=r_nodes[:, 0],
+                sym=False,
+            )
+            Rv_vmec = cls.vmec_interpolate(
+                vmec_data["rmnc"],
+                vmec_data["rmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=t_nodes[:, 1],
+                phi=t_nodes[:, 2],
+                s=t_nodes[:, 0],
+                sym=False,
+            )
+            Zv_vmec = cls.vmec_interpolate(
+                vmec_data["zmnc"],
+                vmec_data["zmns"],
+                vmec_data["xm"],
+                vmec_data["xn"],
+                theta=t_nodes[:, 1],
+                phi=t_nodes[:, 2],
+                s=t_nodes[:, 0],
+                sym=False,
+            )
 
         coords = {
             "Rr_desc": Rr_desc,

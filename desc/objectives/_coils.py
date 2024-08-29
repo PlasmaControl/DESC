@@ -14,7 +14,7 @@ from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
-from desc.singularities import compute_B_plasma
+from desc.integrals import compute_B_plasma
 from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
@@ -124,6 +124,12 @@ class _CoilObjective(_Objective):
 
         # get individual coils from coilset
         coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
+        for c in coils:
+            errorif(
+                not isinstance(c, _Coil),
+                TypeError,
+                f"Expected object of type Coil, got {type(c)}",
+            )
         self._num_coils = len(coils)
 
         # map grid to list of length coils
@@ -254,7 +260,7 @@ class CoilLength(_CoilObjective):
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m)"
-    _print_value_fmt = "Coil length: {:10.3e} "
+    _print_value_fmt = "Coil length: "
 
     def __init__(
         self,
@@ -379,7 +385,7 @@ class CoilCurvature(_CoilObjective):
 
     _scalar = False
     _units = "(m^-1)"
-    _print_value_fmt = "Coil curvature: {:10.3e} "
+    _print_value_fmt = "Coil curvature: "
 
     def __init__(
         self,
@@ -499,7 +505,7 @@ class CoilTorsion(_CoilObjective):
 
     _scalar = False
     _units = "(m^-1)"
-    _print_value_fmt = "Coil torsion: {:10.3e} "
+    _print_value_fmt = "Coil torsion: "
 
     def __init__(
         self,
@@ -619,7 +625,7 @@ class CoilCurrentLength(CoilLength):
 
     _scalar = False
     _units = "(A*m)"
-    _print_value_fmt = "Coil current length: {:10.3e} "
+    _print_value_fmt = "Coil current length: "
 
     def __init__(
         self,
@@ -747,7 +753,7 @@ class CoilSetMinDistance(_Objective):
 
     _scalar = False
     _units = "(m)"
-    _print_value_fmt = "Minimum coil-coil distance: {:10.3e} "
+    _print_value_fmt = "Minimum coil-coil distance: "
 
     def __init__(
         self,
@@ -921,7 +927,7 @@ class PlasmaCoilSetMinDistance(_Objective):
 
     _scalar = False
     _units = "(m)"
-    _print_value_fmt = "Minimum plasma-coil distance: {:10.3e} "
+    _print_value_fmt = "Minimum plasma-coil distance: "
 
     def __init__(
         self,
@@ -1151,7 +1157,7 @@ class QuadraticFlux(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary normal field error: {:10.3e} "
+    _print_value_fmt = "Boundary normal field error: "
     _units = "(T m^2)"
     _coordinates = "rtz"
 
@@ -1353,7 +1359,7 @@ class ToroidalFlux(_Objective):
 
     _coordinates = "rtz"
     _units = "(Wb)"
-    _print_value_fmt = "Toroidal Flux: {:10.3e} "
+    _print_value_fmt = "Toroidal Flux: "
 
     def __init__(
         self,

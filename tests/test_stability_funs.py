@@ -646,13 +646,15 @@ def test_ballooning_stability_eval():
         np.testing.assert_allclose(lam1, lam2, atol=5e-3, rtol=1e-8)
 
         if lam2 > 0:
-            assert (
-                Newcomb_metric >= 1
-            ), "Newcomb metric indicates stabiliy for an unstable equilibrium"
+            assert Newcomb_metric <= 0, (
+                "Newcomb metric indicates stabiliy for an unstable equilibrium, "
+                f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
+            )
         else:
-            assert (
-                Newcomb_metric < 1
-            ), "Newcomb metric indicates instabiliy for a stable equilibrium"
+            assert Newcomb_metric > 0, (
+                "Newcomb metric indicates instabiliy for a stable equilibrium, "
+                f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
+            )
 
 
 @pytest.mark.unit

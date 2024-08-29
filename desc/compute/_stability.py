@@ -556,32 +556,34 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
     @jit
     def integrator(carry, x):
-        arr, arr_d = carry
+        y, dy = carry
         g_element, c_element = x
-        # Update the array (Y) and its derivative
-        arr_updated = (g_element * arr + arr_d * h) / g_element
-        arr_d_updated = arr_d - c_element * arr_updated * h
-        # Calculate the sign of the product of arr and arr_updated
-        sign_product = jnp.sign(arr * arr_updated)
-
-        return (arr_updated, arr_d_updated), (arr_updated, sign_product)
+        # Update the array (Y) and its derivative using leapfrog-like method.
+        y_new = y + h * dy / g_element
+        dy_new = dy - c_element * y_new * h
+        # y starts at 0 with positive slope. If y goes negative it's unstable,
+        # so we look for a sign change.
+        sign_change = y_new < 0.0
+        return (y_new, dy_new), (y_new, sign_change)
 
     @jit
-    def cumulative_update_jit(arr, arr_d, g_half, c_full):
-        _, scan_output = scan(integrator, (arr, arr_d), (g_half, c_full))
-        Y, sign_product = scan_output
-        # Create a mask where sign_product is negative
-        negative_mask = sign_product < 0
-        # Find the first occurrence of a negative value
-        first_negative_index = jnp.argmax(negative_mask)
-        # Use where to return 0 if there are no negative values
+    def cumulative_update_jit(y, dy, g_half, c_full):
+        _, scan_output = scan(integrator, (y, dy), (g_half, c_full))
+        Y, sign_change = scan_output
+        # argmax of boolean array returns index if first True, where y goes negative
+        first_negative_index = jnp.argmax(sign_change)
+        # return last index if there are no sign crossings
         first_negative_index = jnp.where(
-            jnp.any(negative_mask), first_negative_index, -1
+            ~jnp.any(sign_change),
+            -1,
+            first_negative_index,
         )
+        # slope of Y where it crosses 0
+        slope = (Y[first_negative_index] - Y[first_negative_index - 1]) / h
         # This factor will give us the exact X point of intersection
         lin_interp_factor = jnp.where(
             first_negative_index != -1,
-            1 / (1 - Y[first_negative_index + 1] / Y[first_negative_index]),
+            -Y[first_negative_index - 1] / slope,
             0,
         )
 
@@ -593,24 +595,25 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         Y, Yp, g_half, c_full
     )
 
+    # x at crossing pts, or last value of x if there were no crossings
     X0 = jnp.zeros((N_alpha, N_zeta0))
-    Y0 = jnp.zeros((N_alpha, N_zeta0))
     i0 = jnp.arange(N_alpha)[:, None]
     j0 = jnp.arange(N_zeta0)[None, :]
     X0 = X0.at[i0, j0].set(
         X[i0, j0, first_negative_indices[i0, j0]] + lin_interp_factors[i0, j0] * h
     )
+    # where X0 < phimax, it means there was a zero crossing so its unstable. We take
+    # the distance from X0 to phimax as the distance to stability. If there was no
+    # crossing we take Y[phi=phimax]. This gives a continuous metric, though
+    # the first derivative will be discontinuous. Could maybe think of something better?
+    metric = jnp.where(
+        first_negative_indices != -1,
+        # if it crossed, then X0 < phimax, so this < 0
+        (X0 - jnp.max(phi)) / jnp.ptp(phi),
+        # if it reached the end without crossing, this is >=0
+        Y[:, :, -1],
+    )
 
-    # value of Y at the zero-crossing. If there is a zero-crossing,
-    # Y0 is very small, if not it's the Y intercept because first
-    # negative index will be -1
-    Y0 = Y0.at[i0, j0].set(Y[i0, j0, first_negative_indices[i0, j0]])
-    Y0 = jnp.where(first_negative_indices != -1, 0, Y0)
-
-    data2 = jnp.min(1 + jnp.tanh(jnp.cbrt(Y0[:, :])))
-
-    data3 = 2 - data2
-
-    data["Newcomb ball metric"] = data3
+    data["Newcomb ball metric"] = jnp.min(metric)
 
     return data

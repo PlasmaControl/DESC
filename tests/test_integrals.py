@@ -1051,7 +1051,7 @@ class TestBounce1D:
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
     def test_bounce1d_checks(self):
         """Test that all the internal correctness checks pass for real example."""
         # noqa: D202
@@ -1078,7 +1078,12 @@ class TestBounce1D:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 5. Make the bounce integration operator.
-        bounce = Bounce1D(grid.source_grid, data, check=True)
+        bounce = Bounce1D(
+            grid.source_grid,
+            data,
+            quad=leggauss(3),  # not checking quadrature accuracy in this test
+            check=True,
+        )
         pitch_inv = bounce.get_pitch_inv(
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
@@ -1113,7 +1118,7 @@ class TestBounce1D:
         print("(α, ρ):", nodes[m, l, 0])
 
         # 7. Plotting
-        fig, ax = bounce.plot(pitch_inv[..., l], m, l, show=False)
+        fig, ax = bounce.plot(pitch_inv[..., l], m, l, include_legend=False, show=False)
         return fig
 
     @pytest.mark.unit

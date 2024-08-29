@@ -763,6 +763,7 @@ def plot_ppoly(
     stop=None,
     include_knots=False,
     knot_transparency=0.1,
+    include_legend=True,
 ):
     """Plot the piecewise polynomial ``ppoly``.
 
@@ -836,7 +837,8 @@ def plot_ppoly(
     )
     ax.set_xlabel(hlabel)
     ax.set_ylabel(vlabel)
-    ax.legend(legend.values(), legend.keys(), loc="lower right")
+    if include_legend:
+        ax.legend(legend.values(), legend.keys(), loc="lower right")
     ax.set_title(title)
     plt.tight_layout()
     if show:

@@ -7,10 +7,10 @@ from scipy.interpolate import interp1d
 
 import desc.examples
 import desc.io
-from desc.backend import eigvals, jnp
+from desc.backend import jnp
 from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.objectives import MagneticWell, MercierStability
 from desc.utils import PRINT_WIDTH
 
@@ -364,28 +364,34 @@ def test_ballooning_geometry(tmpdir_factory):
     example, HELIOTRON coefficients are hard to match
     """
     psi = 0.5  # Actually rho^2 (normalized)
-    alpha = 0
-    ntor = 2.0
+    alpha = 0.0
+    ntor = 2
 
     eq0 = desc.examples.get("W7-X")
     eq1 = desc.examples.get("precise_QA")
 
     eq_list = [eq0, eq1]
-    fac_list = [4, 4]
 
-    for eq, fac in zip(eq_list, fac_list):
+    for eq in eq_list:
         eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
 
-        data_eq = eq.compute(eq_keys)
+        grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, NFP=eq.NFP)
+        data_eq = eq.compute(eq_keys, grid=grid)
 
-        fi = interp1d(data_eq["rho"], data_eq["iota"])
-        fs = interp1d(data_eq["rho"], data_eq["iota_r"])
+        fi = interp1d(
+            data_eq["rho"][grid.unique_rho_idx],
+            data_eq["iota"][grid.unique_rho_idx],
+        )
+        fs = interp1d(
+            data_eq["rho"][grid.unique_rho_idx],
+            data_eq["iota_r"][grid.unique_rho_idx],
+        )
 
         iotas = fi(np.sqrt(psi))
         shears = fs(np.sqrt(psi))
 
         rho = np.sqrt(psi)
-        N = int((2 * eq.M_grid * eq.N_grid) * ntor * int(fac) + 1)
+        N = (8 * eq.M_grid * eq.N_grid) * ntor + 1
         zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
 
         data_keys = [
@@ -415,10 +421,8 @@ def test_ballooning_geometry(tmpdir_factory):
             "B^zeta",
         ]
 
-        grid = eq.get_rtz_grid(
-            rho,
-            alpha,
-            zeta,
+        grid = Grid.create_meshgrid(
+            [rho, alpha, zeta],
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
         )
@@ -502,16 +506,16 @@ def test_ballooning_stability_eval():
 
     data = eq.compute(eq_data_keys, grid=grid)
 
-    N_alpha = int(8)
+    N_alpha = 8
 
     # Field lines on which to evaluate ballooning stability
-    alpha = jnp.linspace(0, np.pi, N_alpha + 1)[:N_alpha]
+    alpha = jnp.linspace(0, np.pi, N_alpha, endpoint=False)
 
     # Number of toroidal transits of the field line
-    ntor = int(3)
+    ntor = 3
 
     # Number of point along a field line in ballooning space
-    N_zeta = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
+    N_zeta = 2 * ntor * eq.M_grid * eq.N_grid + 1
 
     # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N_zeta)
@@ -519,10 +523,8 @@ def test_ballooning_stability_eval():
     for i in range(len(surfaces)):
         rho = np.array([surfaces[i]])
 
-        grid = eq.get_rtz_grid(
-            rho,
-            alpha,
-            zeta,
+        grid = Grid.create_meshgrid(
+            [rho, alpha, zeta],
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
         )
@@ -549,15 +551,17 @@ def test_ballooning_stability_eval():
 
         data_keys01 = ["Psi", "a"]
         data01 = eq.compute(data_keys01, grid=LinearGrid(rho=np.array([1.0])))
+
+        # here we use a different method for calculating the growth rate that uses
+        # different numerics than "ideal ball gamma2" so that we can verify them
+        # against one another
         psi_b = data01["Psi"][-1] / (2 * jnp.pi)
         a_N = data01["a"]
         B_N = 2 * psi_b / a_N**2
 
-        N_zeta0 = int(15)
-        # up-down symmetric equilibria only
+        N_zeta0 = 15
         zeta0 = jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, N_zeta0)
 
-        # This would fail with rho vectorization
         iota = jnp.mean(data0["iota"])
         shear = jnp.mean(data0["shear"])
         psi = jnp.mean(data0["psi"])
@@ -566,18 +570,15 @@ def test_ballooning_stability_eval():
 
         phi = zeta
 
-        source_grid = grid.source_grid
-
-        B = source_grid.meshgrid_reshape(data0["|B|"], "arz")
-        B_sup_zeta = source_grid.meshgrid_reshape(data0["B^zeta"], "arz")
+        B = grid.meshgrid_reshape(data0["|B|"], "arz")
+        B_sup_zeta = grid.meshgrid_reshape(data0["B^zeta"], "arz")
         gradpar = B_sup_zeta / B
 
-        # This would fail with rho vectorization
         dpdpsi = jnp.mean(mu_0 * data0["p_r"] / data0["psi_r"])
 
-        g_sup_aa = source_grid.meshgrid_reshape(data0["g^aa"], "arz")[None, ...]
-        g_sup_ra = source_grid.meshgrid_reshape(data0["g^ra"], "arz")[None, ...]
-        g_sup_rr = source_grid.meshgrid_reshape(data0["g^rr"], "arz")[None, ...]
+        g_sup_aa = grid.meshgrid_reshape(data0["g^aa"], "arz")[None, ...]
+        g_sup_ra = grid.meshgrid_reshape(data0["g^ra"], "arz")[None, ...]
+        g_sup_rr = grid.meshgrid_reshape(data0["g^rr"], "arz")[None, ...]
 
         gds2 = jnp.reshape(
             rho**2
@@ -593,8 +594,8 @@ def test_ballooning_stability_eval():
         g = a_N**3 * B_N * gds2 / B * gradpar
         g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
 
-        cvdrift = source_grid.meshgrid_reshape(data0["cvdrift"], "arz")[None, ...]
-        cvdrift0 = source_grid.meshgrid_reshape(data0["cvdrift0"], "arz")[None, ...]
+        cvdrift = grid.meshgrid_reshape(data0["cvdrift"], "arz")[None, ...]
+        cvdrift0 = grid.meshgrid_reshape(data0["cvdrift0"], "arz")[None, ...]
 
         c = (
             1
@@ -633,10 +634,11 @@ def test_ballooning_stability_eval():
             + g_half[i, l, j] / f[i, l, j + 1] * 1 / h**2 * (j - k == 1)
         )
 
-        w = eigvals(jnp.where(jnp.isfinite(A), A, 0))
+        w = jnp.linalg.eigvals(jnp.where(jnp.isfinite(A), A, 0))
 
         lam1 = jnp.max(jnp.real(jnp.max(w, axis=(2,))))
 
+        # now compute our regular metrics and compare them
         data_keys = ["ideal ball gamma2", "Newcomb ball metric"]
         data = eq.compute(data_keys, grid=grid)
 
@@ -658,8 +660,15 @@ def test_ballooning_stability_eval():
 
 
 @pytest.mark.unit
-def test_compare_with_COBRAVMEC():
-    """Compare marginal stability points from DESC ballooning solve with COBRAVMEC."""
+def test_ballooning_compare_with_COBRAVMEC():
+    """Compare marginal stability points from DESC ballooning solve with COBRAVMEC.
+
+    COBRAVMEC uses some higher order techniques to refine the growth rate value,
+    so we don't expect the actual values to agree, but the sign should be the same.
+    so instead of comparing growth rates, we compare the radial point where it
+    becomes unstable. Recall that it should be stable on axis (zero pressure gradient)
+    but can become unstable elsewhere.
+    """
 
     def find_root_simple(x, y):
         sign_changes = np.where(np.diff(np.sign(y)))[0]
@@ -709,7 +718,7 @@ def test_compare_with_COBRAVMEC():
 
     grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
 
-    Nalpha = int(8)  # Number of field lines
+    Nalpha = 8  # Number of field lines
 
     assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
 
@@ -717,10 +726,10 @@ def test_compare_with_COBRAVMEC():
     alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
 
     # Number of toroidal transits of the field line
-    ntor = int(3)
+    ntor = 3
 
     # Number of point along a field line in ballooning space
-    N0 = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
+    N0 = 2 * ntor * eq.M_grid * eq.N_grid + 1
 
     # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
@@ -732,10 +741,8 @@ def test_compare_with_COBRAVMEC():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
-            rho,
-            alpha,
-            zeta,
+        grid = Grid.create_meshgrid(
+            [rho, alpha, zeta],
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
         )
@@ -746,6 +753,4 @@ def test_compare_with_COBRAVMEC():
         lam2_array[i] = np.max(data["ideal ball gamma2"])
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
-
-    # Comparing the points of marginal stability from COBRAVMEC and DESC
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, atol=5e-4, rtol=1e-8)

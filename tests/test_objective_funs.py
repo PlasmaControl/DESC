@@ -2494,6 +2494,7 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
+        BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,
         CoilLength,
@@ -2514,7 +2515,6 @@ class TestObjectiveNaNGrad:
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
-        BallooningStability,
     ]
     other_objectives = list(set(objectives) - set(specials))
 

@@ -1573,16 +1573,16 @@ def test_ballooning_stability_opt():
 
     data = eq.compute(eq_data_keys, grid=grid)
 
-    Nalpha = int(8)  # Number of field lines
+    Nalpha = 8  # Number of field lines
 
     # Field lines on which to evaluate ballooning stability
     alpha = jnp.linspace(0, np.pi, Nalpha)
 
     # Number of toroidal transits of the field line
-    ntor = int(2)
+    ntor = 2
 
     # Number of point along a field line in ballooning space
-    N0 = int(2.0 * ntor * eq.M_grid * eq.N_grid + 1)
+    N0 = 2 * ntor * eq.M_grid * eq.N_grid + 1
 
     # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
@@ -1623,8 +1623,8 @@ def test_ballooning_stability_opt():
             eq=eq,
             rho=np.array([rho]),
             alpha=alpha,
-            zetamax=ntor * jnp.pi,
-            nzeta=N0,
+            nturns=ntor,
+            nzetaperturn=2 * (eq.M_grid * eq.N_grid),
             weight=eq_ball_weight,
         )
 

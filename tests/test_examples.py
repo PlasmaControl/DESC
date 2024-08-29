@@ -1373,7 +1373,7 @@ def test_optimize_with_all_coil_types(coil, optimizer, index, request):
 
         obj = ObjectiveFunction(objs)
 
-        (c,), _ = optimizer.optimize(c, obj, maxiter=25, ftol=5e-3, xtol=1e-15)
+        (c,), _ = optimizer.optimize(c, obj, maxiter=50, ftol=5e-3, xtol=1e-15)
         flattened_coils = tree_leaves(
             c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
         )

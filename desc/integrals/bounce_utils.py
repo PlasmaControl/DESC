@@ -20,7 +20,7 @@ from desc.integrals.quad_utils import (
 from desc.utils import atleast_3d_mid, errorif, setdefault, take_mask
 
 
-def get_pitch(min_B, max_B, num, relative_shift=1e-6):
+def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
     """Return 1/λ values uniformly spaced between ``min_B`` and ``max_B``.
 
     Parameters
@@ -37,9 +37,9 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
 
     Returns
     -------
-    pitch : jnp.ndarray
+    pitch_inv : jnp.ndarray
         Shape (num + 2, *min_B.shape).
-        1/λ values. Note ``pitch`` = 1/λ ~ E/μ = energy / magnetic moment.
+        1/λ values.
 
     """
     # Floating point error impedes consistent detection of bounce points riding
@@ -47,12 +47,12 @@ def get_pitch(min_B, max_B, num, relative_shift=1e-6):
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
     # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
-    pitch = composite_linspace(jnp.stack([min_B, max_B]), num)
-    assert pitch.shape == (num + 2, *min_B.shape)
-    return pitch
+    pitch_inv = composite_linspace(jnp.stack([min_B, max_B]), num)
+    assert pitch_inv.shape == (num + 2, *min_B.shape)
+    return pitch_inv
 
 
-def _check_spline_shape(knots, g, dg_dz, pitch=None):
+def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
     """Ensure inputs have compatible shape, and return them with full dimension.
 
     Parameters
@@ -72,12 +72,12 @@ def _check_spline_shape(knots, g, dg_dz, pitch=None):
         First axis enumerates the coefficients of power series. Second axis
         enumerates the splines. Last axis enumerates the polynomials that
         compose a particular spline.
-    pitch : jnp.ndarray
+    pitch_inv : jnp.ndarray
         Shape must broadcast with (P, S).
         1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
-        specified by ``pitch[...,(ρ,α)]`` where in the latter the labels (ρ,α) are
-        interpreted as the index into the last axis that corresponds to that field
-        line. If two-dimensional, the first axis is the batch axis.
+        specified by ``pitch_inv[...,(ρ,α)]`` where in the latter the labels
+        (ρ,α) are interpreted as the index into the last axis that corresponds to
+        that field line. If two-dimensional, the first axis is the batch axis.
 
     """
     errorif(knots.ndim != 1, msg=f"knots should be 1d; got shape {knots.shape}.")
@@ -97,29 +97,29 @@ def _check_spline_shape(knots, g, dg_dz, pitch=None):
     )
     # Add axis which enumerates field lines if necessary.
     g, dg_dz = atleast_3d_mid(g, dg_dz)
-    if pitch is not None:
-        pitch = jnp.atleast_2d(pitch)
+    if pitch_inv is not None:
+        pitch_inv = jnp.atleast_2d(pitch_inv)
         errorif(
-            pitch.ndim != 2
-            or not (pitch.shape[-1] == 1 or pitch.shape[-1] == g.shape[1]),
-            msg=f"Invalid shape {pitch.shape} for pitch angles.",
+            pitch_inv.ndim != 2
+            or not (pitch_inv.shape[-1] == 1 or pitch_inv.shape[-1] == g.shape[1]),
+            msg=f"Invalid shape {pitch_inv.shape} for pitch angles.",
         )
-    return g, dg_dz, pitch
+    return g, dg_dz, pitch_inv
 
 
 def bounce_points(
-    pitch, knots, B, dB_dz, num_well=None, check=False, plot=True, **kwargs
+    pitch_inv, knots, B, dB_dz, num_well=None, check=False, plot=True, **kwargs
 ):
     """Compute the bounce points given spline of |B| and pitch λ.
 
     Parameters
     ----------
-    pitch : jnp.ndarray
+    pitch_inv : jnp.ndarray
         Shape must broadcast with (P, S).
         1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
-        specified by ``pitch[...,(ρ,α)]`` where in the latter the labels (ρ,α) are
-        interpreted as the index into the last axis that corresponds to that field
-        line. If two-dimensional, the first axis is the batch axis.
+        specified by ``pitch_inv[...,(ρ,α)]`` where in the latter the labels
+        (ρ,α) are interpreted as the index into the last axis that corresponds to
+        that field line. If two-dimensional, the first axis is the batch axis.
     knots : jnp.ndarray
         Shape (knots.size, ).
         ζ coordinates of spline knots. Must be strictly increasing.
@@ -165,12 +165,12 @@ def bounce_points(
         line and pitch, is padded with zero.
 
     """
-    B, dB_dz, pitch = _check_spline_shape(knots, B, dB_dz, pitch)
-    P, S, degree = pitch.shape[0], B.shape[1], B.shape[0] - 1
+    B, dB_dz, pitch_inv = _check_spline_shape(knots, B, dB_dz, pitch_inv)
+    P, S, degree = pitch_inv.shape[0], B.shape[1], B.shape[0] - 1
     # Intersection points in local power basis.
     intersect = poly_root(
         c=B,
-        k=pitch[..., jnp.newaxis],
+        k=pitch_inv[..., jnp.newaxis],
         a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
         sort=True,
@@ -204,12 +204,12 @@ def bounce_points(
     z2 = jnp.where(mask, z2, 0.0)
 
     if check:
-        _check_bounce_points(z1, z2, pitch, knots, B, plot, **kwargs)
+        _check_bounce_points(z1, z2, pitch_inv, knots, B, plot, **kwargs)
 
     return z1, z2
 
 
-def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
+def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     """Check that bounce points are computed correctly."""
     eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
     kwargs.setdefault(
@@ -235,7 +235,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
         Bs = PPoly(B[:, s], knots)
         for p in range(P):
             Bs_midpoint = Bs((z1[p, s] + z2[p, s]) / 2)
-            err_3 = jnp.any(Bs_midpoint > pitch[p, s] + eps)
+            err_3 = jnp.any(Bs_midpoint > pitch_inv[p, s] + eps)
             if not (err_1[p, s] or err_2[p, s] or err_3):
                 continue
             _z1 = z1[p, s][mask[p, s]]
@@ -245,7 +245,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
                     ppoly=Bs,
                     z1=_z1,
                     z2=_z2,
-                    k=pitch[p, s],
+                    k=pitch_inv[p, s],
                     **kwargs,
                 )
 
@@ -254,7 +254,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
             assert not err_1[p, s], "Intersects have an inversion.\n"
             assert not err_2[p, s], "Detected discontinuity.\n"
             assert not err_3, (
-                f"Detected |B| = {Bs_midpoint[mask[p, s]]} > {pitch[p, s] + eps} "
+                f"Detected |B| = {Bs_midpoint[mask[p, s]]} > {pitch_inv[p, s] + eps} "
                 "= 1/λ in well, implying the straight line path between "
                 "bounce points is in hypograph(|B|). Use more knots.\n"
             )
@@ -264,7 +264,7 @@ def _check_bounce_points(z1, z2, pitch, knots, B, plot=True, **kwargs):
                     ppoly=Bs,
                     z1=z1[:, s],
                     z2=z2[:, s],
-                    k=pitch[:, s],
+                    k=pitch_inv[:, s],
                     **kwargs,
                 )
             )
@@ -276,7 +276,7 @@ def bounce_quadrature(
     w,
     z1,
     z2,
-    pitch,
+    pitch_inv,
     integrand,
     f,
     data,
@@ -301,12 +301,12 @@ def bounce_quadrature(
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of |B|.
-    pitch : jnp.ndarray
+    pitch_inv : jnp.ndarray
         Shape must broadcast with (P, S).
         1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
-        specified by ``pitch[...,(ρ,α)]`` where in the latter the labels (ρ,α) are
-        interpreted as the index into the last axis that corresponds to that field
-        line. If two-dimensional, the first axis is the batch axis.
+        specified by ``pitch_inv[...,(ρ,α)]`` where in the latter the labels
+        (ρ,α) are interpreted as the index into the last axis that corresponds to
+        that field line. If two-dimensional, the first axis is the batch axis.
     integrand : callable
         The composition operator on the set of functions in ``f`` that maps the
         functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
@@ -347,7 +347,7 @@ def bounce_quadrature(
     """
     errorif(z1.ndim != 3 or z1.shape != z2.shape)
     errorif(x.ndim != 1 or x.shape != w.shape)
-    pitch = jnp.atleast_2d(pitch)
+    pitch_inv = jnp.atleast_2d(pitch_inv)
     if not isinstance(f, (list, tuple)):
         f = [f]
 
@@ -356,7 +356,7 @@ def bounce_quadrature(
         result = _interpolate_and_integrate(
             w=w,
             Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
-            pitch=pitch,
+            pitch_inv=pitch_inv,
             integrand=integrand,
             f=f,
             data=data,
@@ -375,7 +375,7 @@ def bounce_quadrature(
             return None, _interpolate_and_integrate(
                 w=w,
                 Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
-                pitch=pitch,
+                pitch_inv=pitch_inv,
                 integrand=integrand,
                 f=f,
                 data=data,
@@ -392,14 +392,14 @@ def bounce_quadrature(
         )
 
     result = result * grad_bijection_from_disc(z1, z2)
-    assert result.shape == (pitch.shape[0], data["|B|"].shape[0], z1.shape[-1])
+    assert result.shape == (pitch_inv.shape[0], data["|B|"].shape[0], z1.shape[-1])
     return result
 
 
 def _interpolate_and_integrate(
     w,
     Q,
-    pitch,
+    pitch_inv,
     integrand,
     f,
     data,
@@ -429,9 +429,12 @@ def _interpolate_and_integrate(
         Quadrature for every pitch.
 
     """
-    assert pitch.ndim == 2
+    assert pitch_inv.ndim == 2
     assert w.ndim == knots.ndim == 1
-    assert 3 <= Q.ndim <= 4 and Q.shape[:2] == (pitch.shape[0], data["|B|"].shape[0])
+    assert 3 <= Q.ndim <= 4 and Q.shape[:2] == (
+        pitch_inv.shape[0],
+        data["|B|"].shape[0],
+    )
     assert Q.shape[-1] == w.size
     assert knots.size == data["|B|"].shape[-1]
     assert (
@@ -441,7 +444,7 @@ def _interpolate_and_integrate(
         == data["|B|_z|r,a"].shape
     )
 
-    pitch = jnp.expand_dims(pitch, axis=(2, 3) if (Q.ndim == 4) else 2)
+    pitch_inv = jnp.expand_dims(pitch_inv, axis=(2, 3) if (Q.ndim == 4) else 2)
     shape = Q.shape
     Q = Q.reshape(Q.shape[0], Q.shape[1], -1)
     b_sup_z = interp1d_Hermite_vec(
@@ -455,7 +458,7 @@ def _interpolate_and_integrate(
     # Spline each function separately so that operations in the integrand
     # that do not preserve smoothness can be captured.
     f = [interp1d_vec(Q, knots, f_i, method=method).reshape(shape) for f_i in f]
-    result = jnp.dot(integrand(*f, B=B, pitch=pitch) / b_sup_z, w)
+    result = jnp.dot(integrand(*f, B=B, pitch=1 / pitch_inv) / b_sup_z, w)
 
     if check:
         _check_interp(Q.reshape(shape), f, b_sup_z, B, data["|B|_z|r,a"], result, plot)

@@ -1,5 +1,6 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
+import numpy as np
 from interpax import CubicHermiteSpline
 from orthax.legendre import leggauss
 
@@ -19,7 +20,7 @@ from desc.integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from desc.io import IOAble
-from desc.utils import setdefault, warnif
+from desc.utils import atleast_nd, setdefault, warnif
 
 
 class Bounce1D(IOAble):
@@ -64,7 +65,9 @@ class Bounce1D(IOAble):
     cannot support reconstruction of the function near the origin. As the
     functions of interest do not vanish at infinity, pseudo-spectral techniques
     are not used. Instead, function approximation is done with local splines.
-    This is useful if one can efficiently obtain data along field lines.
+    This is useful if one can efficiently obtain data along field lines and
+    most efficient if the number of toroidal transit to follow a field line is
+    not too large.
 
     After obtaining the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
@@ -74,13 +77,6 @@ class Bounce1D(IOAble):
     --------
     Bounce2D : Uses two-dimensional pseudo-spectral techniques for the same task.
 
-    Warnings
-    --------
-    The supplied data must be from a Clebsch coordinate (ρ, α, ζ) tensor-product grid.
-    The ζ coordinates (the unique values prior to taking the tensor-product) must be
-    strictly increasing and preferably uniformly spaced. These are used as knots to
-    construct splines; a reference knot density is 100 knots per toroidal transit.
-
     Examples
     --------
     See ``tests/test_integrals.py::TestBounce1D::test_integrate_checks``.
@@ -89,14 +85,14 @@ class Bounce1D(IOAble):
     ----------
     required_names : list
         Names in ``data_index`` required to compute bounce integrals.
-    _B : jnp.ndarray
-        TODO: Make this (4, M, L, N-1) now that tensor product in rho and alpha
-          required as well after GitHub PR #1214.
-        Shape (4, L * M, N - 1).
+    B : jnp.ndarray
+        Shape (M, L, N - 1, B.shape[-1]).
         Polynomial coefficients of the spline of |B| in local power basis.
-        First axis enumerates the coefficients of power series. Second axis
-        enumerates the splines. Last axis enumerates the polynomials that
-        compose a particular spline.
+        Last axis enumerates the coefficients of power series. For a polynomial
+        given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``B[...,n-i]``.
+        Third axis enumerates the polynomials that compose a particular spline.
+        Second axis enumerates flux surfaces.
+        First axis enumerates field lines of a particular flux surface.
 
     """
 
@@ -121,7 +117,10 @@ class Bounce1D(IOAble):
         ----------
         grid : Grid
             Clebsch coordinate (ρ, α, ζ) tensor-product grid.
-            Note that below shape notation defines
+            The ζ coordinates (the unique values prior to taking the tensor-product)
+            must be strictly increasing and preferably uniformly spaced. These are used
+            as knots to construct splines. A reference knot density is 100 knots per
+            toroidal transit. Note that below shape notation defines
             L = ``grid.num_rho``, M = ``grid.num_alpha``, and N = ``grid.num_zeta``.
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
@@ -160,15 +159,12 @@ class Bounce1D(IOAble):
             "|B|": data["|B|"] / Bref,
             "|B|_z|r,a": data["|B|_z|r,a"] / Bref,  # This is already the correct sign.
         }
-        self._data = {
-            name: grid.meshgrid_reshape(data[name], "raz").reshape(-1, grid.num_zeta)
-            for name in Bounce1D.required_names
-        }
+        self._data = dict(zip(data.keys(), Bounce1D.reshape_data(grid, *data.values())))
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
         self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
-        self._B = jnp.moveaxis(
+        self.B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
                 y=self._data["|B|"],
@@ -176,14 +172,12 @@ class Bounce1D(IOAble):
                 axis=-1,
                 check=check,
             ).c,
-            source=1,
-            destination=-1,
+            source=(0, 1),
+            destination=(-1, -2),
         )
-        self._dB_dz = polyder_vec(self._B)
-        degree = 3
-        assert self._B.shape[0] == degree + 1
-        assert self._dB_dz.shape[0] == degree
-        assert self._B.shape[-1] == self._dB_dz.shape[-1] == grid.num_zeta - 1
+        assert self.B.shape == (grid.num_alpha, grid.num_rho, grid.num_zeta - 1, 4)
+        self._dB_dz = polyder_vec(self.B)
+        assert self._dB_dz.shape == (grid.num_alpha, grid.num_rho, grid.num_zeta - 1, 3)
 
     @staticmethod
     def reshape_data(grid, *arys):
@@ -202,20 +196,24 @@ class Bounce1D(IOAble):
             List of reshaped data which may be given to ``integrate``.
 
         """
-        f = [grid.meshgrid_reshape(d, "raz").reshape(-1, grid.num_zeta) for d in arys]
+        f = [grid.meshgrid_reshape(d, "arz") for d in arys]
         return f
 
     def points(self, pitch_inv, num_well=None):
         """Compute bounce points.
 
+        Notes
+        -----
+        Only the dimensions following L are required. The leading axes are batch axes.
+
         Parameters
         ----------
         pitch_inv : jnp.ndarray
-            Shape must broadcast with (P, L * M).
+            Shape (P, M, L).
             1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
-            specified by ``pitch_inv[...,ρ]`` where in the latter the labels
-            (ρ,α) are interpreted as the index into the last axis that corresponds to
-            that field line. If two-dimensional, the first axis is the batch axis.
+            specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
+            are interpreted as the index into the last axis that corresponds to
+            that field line.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
@@ -230,17 +228,17 @@ class Bounce1D(IOAble):
         Returns
         -------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (P, L * M, num_well).
+            Shape (P, M, L, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
 
             If there were less than ``num_wells`` wells detected along a field line,
-            then the last axis, which enumerates bounce points for  a particular field
+            then the last axis, which enumerates bounce points for a particular field
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz, num_well)
+        return bounce_points(pitch_inv, self._zeta, self.B, self._dB_dz, num_well)
 
     def check_points(self, z1, z2, pitch_inv, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -248,16 +246,16 @@ class Bounce1D(IOAble):
         Parameters
         ----------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (P, L * M, num_well).
+            Shape (P, M, L, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
         pitch_inv : jnp.ndarray
-            Shape must broadcast with (P, L * M).
+            Shape (P, M, L).
             1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
-            specified by ``pitch_inv[...,(ρ,α)]`` where in the latter the labels
-            (ρ,α) are interpreted as the index into the last axis that corresponds to
-            that field line. If two-dimensional, the first axis is the batch axis.
+            specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
+            are interpreted as the index into the last axis that corresponds to
+            that field line.
         plot : bool
             Whether to plot stuff.
         kwargs
@@ -272,9 +270,9 @@ class Bounce1D(IOAble):
         return _check_bounce_points(
             z1=z1,
             z2=z2,
-            pitch_inv=jnp.atleast_2d(pitch_inv),
+            pitch_inv=atleast_nd(3, pitch_inv),
             knots=self._zeta,
-            B=self._B,
+            B=self.B,
             plot=plot,
             **kwargs,
         )
@@ -295,14 +293,18 @@ class Bounce1D(IOAble):
         Computes the bounce integral ∫ f(ℓ) dℓ for every specified field line
         for every λ value in ``pitch_inv``.
 
+        Notes
+        -----
+        Only the dimensions following L are required. The leading axes are batch axes.
+
         Parameters
         ----------
         pitch_inv : jnp.ndarray
-            Shape must broadcast with (P, L * M).
+            Shape (P, M, L).
             1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
-            specified by ``pitch_inv[...,(ρ,α)]`` where in the latter the labels
-            (ρ,α) are interpreted as the index into the last axis that corresponds to
-            that field line. If two-dimensional, the first axis is the batch axis.
+            specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
+            are interpreted as the index into the last axis that corresponds to
+            that field line.
         integrand : callable
             The composition operator on the set of functions in ``f`` that maps the
             functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
@@ -310,13 +312,13 @@ class Bounce1D(IOAble):
             ``B`` and ``pitch``. A quadrature will be performed to approximate the
             bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
         f : list[jnp.ndarray]
-            Shape (L * M, N).
+            Shape (M, L, N).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
             construct this object. These functions should be arguments to the callable
             ``integrand``. Use the method ``self.reshape_data`` to reshape the data
             into the expected shape.
         weight : jnp.ndarray
-            Shape must broadcast with (L * M, N).
+            Shape (M, L, N).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in the magnetic well. Use the method
@@ -343,12 +345,12 @@ class Bounce1D(IOAble):
         Returns
         -------
         result : jnp.ndarray
-            Shape (P, L*M, num_well).
-            First axis enumerates pitch values. Second axis enumerates the field lines.
-            Last axis enumerates the bounce integrals.
+            Shape (P, M, L, num_well).
+            Last axis enumerates the bounce integrals for a given pitch, field line,
+            and flux surface.
 
         """
-        pitch_inv = jnp.atleast_2d(pitch_inv)
+        pitch_inv = atleast_nd(3, pitch_inv)
         z1, z2 = self.points(pitch_inv, num_well)
         result = bounce_quadrature(
             x=self._x,
@@ -370,9 +372,10 @@ class Bounce1D(IOAble):
                 z1,
                 z2,
                 self._zeta,
-                self._B,
+                self.B,
                 self._dB_dz,
                 method,
             )
-        assert result.shape[-1] == setdefault(num_well, (self._zeta.size - 1) * 3)
+        assert result.shape[0] == pitch_inv.shape[0]
+        assert result.shape[-1] == setdefault(num_well, np.prod(self._dB_dz.shape[-2:]))
         return result

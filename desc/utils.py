@@ -737,34 +737,25 @@ def flatten_matrix(y):
 
 # TODO: Eventually remove and use numpy's stuff.
 # https://github.com/numpy/numpy/issues/25805
-def atleast_nd(ndmin, *arys):
+def atleast_nd(ndmin, ary):
     """Adds dimensions to front if necessary."""
     if ndmin == 1:
-        return jnp.atleast_1d(*arys)
+        return jnp.atleast_1d(ary)
     if ndmin == 2:
-        return jnp.atleast_2d(*arys)
-    tup = tuple(jnp.array(ary, ndmin=ndmin) for ary in arys)
-    if len(tup) == 1:
-        tup = tup[0]
-    return tup
+        return jnp.atleast_2d(ary)
+    return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
 
 
-def atleast_3d_mid(*arys):
+def atleast_3d_mid(ary):
     """Like np.atleast3d but if adds dim at axis 1 for 2d arrays."""
-    arys = jnp.atleast_2d(*arys)
-    tup = tuple(ary[:, jnp.newaxis] if ary.ndim == 2 else ary for ary in arys)
-    if len(tup) == 1:
-        tup = tup[0]
-    return tup
+    ary = jnp.atleast_2d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
 
 
-def atleast_2d_end(*arys):
+def atleast_2d_end(ary):
     """Like np.atleast2d but if adds dim at axis 1 for 1d arrays."""
-    arys = jnp.atleast_1d(*arys)
-    tup = tuple(ary[:, jnp.newaxis] if ary.ndim == 1 else ary for ary in arys)
-    if len(tup) == 1:
-        tup = tup[0]
-    return tup
+    ary = jnp.atleast_1d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
 
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text

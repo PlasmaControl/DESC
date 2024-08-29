@@ -738,7 +738,7 @@ class TestBounce1DPoints:
         B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, knots, B.c, B.derivative().c, check=True)
+        z1, z2 = bounce_points(pitch_inv, knots, B.c.T, B.derivative().c.T, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[0::2])
@@ -753,7 +753,7 @@ class TestBounce1DPoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c, B.derivative().c, check=True)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, B.derivative().c.T, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[1:-1:2])
@@ -772,7 +772,7 @@ class TestBounce1DPoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[3] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c, dB_dz.c, check=True)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -797,7 +797,7 @@ class TestBounce1DPoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[2]
-        z1, z2 = bounce_points(pitch_inv, k, B.c, dB_dz.c, check=True)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -819,7 +819,7 @@ class TestBounce1DPoints:
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[2] + 1e-13
         z1, z2 = bounce_points(
-            pitch_inv, k[2:], B.c[:, 2:], dB_dz.c[:, 2:], check=True, plot=False
+            pitch_inv, k[2:], B.c[:, 2:].T, dB_dz.c[:, 2:].T, check=True, plot=False
         )
         plot_ppoly(B, z1=z1, z2=z2, k=pitch_inv, start=k[2])
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
@@ -844,7 +844,7 @@ class TestBounce1DPoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[1] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c, dB_dz.c, check=True)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T, check=True)
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
@@ -865,7 +865,7 @@ class TestBounce1DPoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         dB_dz = B.derivative()
-        ext, B_ext = _get_extrema(k, B.c, dB_dz.c)
+        ext, B_ext = _get_extrema(k, B.c.T, dB_dz.c.T)
         mask = ~np.isnan(ext)
         ext, B_ext = ext[mask], B_ext[mask]
         idx = np.argsort(ext)
@@ -950,6 +950,8 @@ class TestBounce1DQuadrature:
 
     @staticmethod
     def _fixed_elliptic(integrand, k, deg):
+        # Can use this test to benchmark quadrature performance.
+        # Just
         k = np.atleast_1d(k)
         a = np.zeros_like(k)
         b = 2 * np.arcsin(k)
@@ -963,7 +965,13 @@ class TestBounce1DQuadrature:
 
     @staticmethod
     def elliptic_incomplete(k2):
-        """Calculate elliptic integrals for bounce averaged binormal drift."""
+        """Calculate elliptic integrals for bounce averaged binormal drift.
+
+        The test is nice because it is independent of all the bounce integrals
+        and splines. One can test performance of different quadrature methods
+        by using that method in the ``_fixed_elliptic`` method above.
+
+        """
         K_integrand = lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * (k / 4)
         E_integrand = lambda Z, k: 2 * np.sqrt(k**2 - np.sin(Z / 2) ** 2) / (k * 4)
         # Scipy's elliptic integrals are broken.
@@ -1056,7 +1064,7 @@ class TestBounce1D:
         # 2. Pick flux surfaces, field lines, and how far to follow the field
         #    line in Clebsch coordinates ρ, α, ζ.
         rho = np.linspace(0.1, 1, 6)
-        alpha = np.array([0])
+        alpha = np.array([0, 0.5])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
 
         eq = get("HELIOTRON")
@@ -1069,7 +1077,7 @@ class TestBounce1D:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 5. Make the bounce integration operator.
-        bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
+        bounce = Bounce1D(grid.source_grid, data, check=True)
         pitch_inv = bounce.get_pitch_inv(
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
@@ -1085,22 +1093,21 @@ class TestBounce1D:
             check=True,
         )
         avg = safediv(num, den)
-        assert np.isfinite(avg).all()
+        assert np.isfinite(avg).all() and np.count_nonzero(avg)
 
         # 6. Basic manipulation of the output.
-        # Sum all bounce integrals across each particular field line.
-        avg_sum = avg.sum(axis=-1)
-        # Group the averages by field line.
-        avg_sum = avg_sum.reshape(pitch_inv.shape[0], rho.size, alpha.size)
-        # The sum stored at index i, j which denote some flux surface and field line
-        i, j = 0, 0
-        print(avg_sum[:, i, j])
-        # is the summed bounce average over all wells along the field line
-        # given by the field line following coordinates at index [i, j] of nodes
-        nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes, "raz")
-        print(nodes[i, j])
-        # for the 1/pitch values stored in index [:, i, j] of
-        print(pitch_inv.reshape(pitch_inv.shape[0], rho.size, alpha.size)[:, i, j])
+        # Sum all bounce averages across a particular field line, for every field line.
+        result = avg.sum(axis=-1)
+        # Group the result by pitch and flux surface.
+        result = result.reshape(pitch_inv.shape[0], alpha.size, rho.size)
+        # The result stored at
+        p, m, l = 3, 0, 1
+        print("Result:", result[p, m, l])
+        # corresponds to the 1/λ value
+        print("1/λ:", pitch_inv[p, m % pitch_inv.shape[1], l % pitch_inv.shape[-1]])
+        # for the Clebsch-type field line coordinates
+        nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
+        print("(α, ρ):", nodes[m, l, 0])
 
         # 7. Plotting utilities.
         z1, z2 = bounce.points(pitch_inv)
@@ -1145,7 +1152,7 @@ class TestBounce1D:
                 z1=np.array(0, ndmin=3),
                 z2=np.array(2 * np.pi, ndmin=3),
                 knots=zeta,
-                g=bounce._B,
+                g=bounce.B,
                 dg_dz=bounce._dB_dz,
             ),
             rtol=1e-3,
@@ -1232,7 +1239,7 @@ class TestBounce1D:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = get_pitch_inv(np.min(B), np.max(B), 100)[:-1]
+        pitch_inv = get_pitch_inv(np.min(B), np.max(B), 100).squeeze()[:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounce1DQuadrature.elliptic_incomplete(k2)
@@ -1253,7 +1260,7 @@ class TestBounce1D:
         ) / G0
         drift_analytic_den = I_0 / G0
         drift_analytic = drift_analytic_num / drift_analytic_den
-        return drift_analytic, cvdrift, gbdrift, pitch_inv
+        return drift_analytic, cvdrift, gbdrift, pitch_inv.reshape(-1, 1, 1)
 
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch):
@@ -1329,14 +1336,14 @@ class TestBounce1D:
         )
         f = Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
-            pitch_inv=pitch_inv[:, np.newaxis],
+            pitch_inv=pitch_inv,
             integrand=TestBounce1D.drift_num_integrand,
             f=f,
             num_well=1,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
-            pitch_inv=pitch_inv[:, np.newaxis],
+            pitch_inv=pitch_inv,
             integrand=TestBounce1D.drift_den_integrand,
             num_well=1,
             weight=np.ones(zeta.size),
@@ -1357,8 +1364,8 @@ class TestBounce1D:
         )
 
         fig, ax = plt.subplots()
-        ax.plot(pitch_inv, drift_analytic)
-        ax.plot(pitch_inv, drift_numerical)
+        ax.plot(pitch_inv.squeeze(), drift_analytic)
+        ax.plot(pitch_inv.squeeze(), drift_numerical)
         return fig
 
     @staticmethod

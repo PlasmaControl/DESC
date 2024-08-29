@@ -1,4 +1,11 @@
-"""Fast interpolation utilities."""
+"""Fast interpolation utilities.
+
+Notes
+-----
+These polynomial utilities are chosen for performance on gpu when among
+methods that have the best (asymptotic) algorithmic complexity. For example,
+we prefer not to use Horner's method.
+"""
 
 from functools import partial
 
@@ -6,67 +13,6 @@ from interpax import interp1d
 
 from desc.backend import jnp
 from desc.compute.utils import safediv
-
-
-# These polynomial manipulation methods are chosen for performance on gpu.
-def polyder_vec(c):
-    """Coefficients for the derivatives of the given set of polynomials.
-
-    Parameters
-    ----------
-    c : jnp.ndarray
-        First axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
-        ``c[n-i]``.
-
-    Returns
-    -------
-    poly : jnp.ndarray
-        Coefficients of polynomial derivative, ignoring the arbitrary constant. That is,
-        ``poly[i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁻¹,  where n is
-        ``c.shape[0]-1``.
-
-    """
-    return (c[:-1].T * jnp.arange(c.shape[0] - 1, 0, -1)).T
-
-
-def polyval_vec(*, x, c):
-    """Evaluate the set of polynomials ``c`` at the points ``x``.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Real coordinates at which to evaluate the set of polynomials.
-    c : jnp.ndarray
-        First axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
-        ``c[n-i]``.
-
-    Returns
-    -------
-    val : jnp.ndarray
-        Polynomial with given coefficients evaluated at given points.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        np.testing.assert_allclose(
-            polyval_vec(x=x, c=c),
-            np.sum(
-                np.polynomial.polynomial.polyvander(x, c.shape[0] - 1)
-                * np.moveaxis(np.flipud(c), 0, -1),
-                axis=-1,
-            ),
-        )
-
-    """
-    # Better than Horner's method as we expect to evaluate low order polynomials.
-    # No need to use fast multipoint evaluation techniques for the same reason.
-    return jnp.einsum(
-        "...i,i...", x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1), c
-    )
-
 
 # Warning: method must be specified as keyword argument.
 interp1d_vec = jnp.vectorize(
@@ -80,13 +26,95 @@ def interp1d_Hermite_vec(xq, x, f, fx, /):
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
+def polyder_vec(c):
+    """Coefficients for the derivatives of the given set of polynomials.
+
+    Parameters
+    ----------
+    c : jnp.ndarray
+        Last axis should store coefficients of a polynomial. For a polynomial given by
+        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[-1]-1``, coefficient cᵢ should be stored at
+        ``c[...,n-i]``.
+
+    Returns
+    -------
+    poly : jnp.ndarray
+        Coefficients of polynomial derivative, ignoring the arbitrary constant. That is,
+        ``poly[...,i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁻¹,  where n is
+        ``c.shape[-1]-1``.
+
+    """
+    return c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
+
+
+def polyval_vec(*, x, c):
+    """Evaluate the set of polynomials ``c`` at the points ``x``.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Coordinates at which to evaluate the set of polynomials.
+    c : jnp.ndarray
+        Last axis should store coefficients of a polynomial. For a polynomial given by
+        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[-1]-1``, coefficient cᵢ should be stored at
+        ``c[...,n-i]``.
+
+    Returns
+    -------
+    val : jnp.ndarray
+        Polynomial with given coefficients evaluated at given points.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        np.testing.assert_allclose(
+            polyval_vec(x=x, c=c),
+            np.sum(polyvander(x, c.shape[-1] - 1) * c[..., ::-1], axis=-1),
+        )
+
+    """
+    # Better than Horner's method as we expect to evaluate low order polynomials.
+    # No need to use fast multipoint evaluation techniques for the same reason.
+    return jnp.sum(
+        c * x[..., jnp.newaxis] ** jnp.arange(c.shape[-1] - 1, -1, -1),
+        axis=-1,
+    )
+
+
 # TODO: Eventually do a PR to move this stuff into interpax.
+
+
+def _subtract_last(c, k):
+    """Subtract ``k`` from last index of last axis of ``c``.
+
+    Semantically same as ``return c.copy().at[...,-1].add(-k)``,
+    but allows dimension to increase.
+    """
+    c_1 = c[..., -1] - k
+    c = jnp.concatenate(
+        [
+            jnp.broadcast_to(c[..., :-1], (*c_1.shape, c.shape[-1] - 1)),
+            c_1[..., jnp.newaxis],
+        ],
+        axis=-1,
+    )
+    return c
+
+
+def _filter_distinct(r, sentinel, eps):
+    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
+    # eps needs to be low enough that close distinct roots do not get removed.
+    # Otherwise, algorithms relying on continuity will fail.
+    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
+    r = jnp.where(mask, sentinel, r)
+    return r
 
 
 _roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
 
 
-def poly_root(
+def polyroot_vec(
     c,
     k=0,
     a_min=None,
@@ -101,26 +129,26 @@ def poly_root(
     Parameters
     ----------
     c : jnp.ndarray
-        First axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0]-1``, coefficient cᵢ should be stored at
-        ``c[n-i]``.
+        Last axis should store coefficients of a polynomial. For a polynomial given by
+        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[-1]-1``, coefficient cᵢ should be stored at
+        ``c[...,n-i]``.
     k : jnp.ndarray
-        Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``. Should broadcast with arrays of
-        shape ``c.shape[1:]``.
+        Shape (..., *c.shape[:-1]).
+        Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``.
     a_min : jnp.ndarray
+        Shape (..., *c.shape[:-1]).
         Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
-        If specified only real roots  are returned. If None, returns all complex roots.
-        Should broadcast with arrays of shape ``c.shape[1:]``.
+        If specified only real roots are returned, otherwise returns all complex roots.
     a_max : jnp.ndarray
+        Shape (..., *c.shape[:-1]).
         Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
-        If specified only real roots  are returned. If None, returns all complex roots.
-        Should broadcast with arrays of shape ``c.shape[1:]``.
+        If specified only real roots are returned, otherwise returns all complex roots.
     sort : bool
         Whether to sort the roots.
     sentinel : float
         Value with which to pad array in place of filtered elements.
         Anything less than ``a_min`` or greater than ``a_max`` plus some floating point
-        error buffer will work just like nan while avoiding nan gradient.
+        error buffer will work just like nan while avoiding ``nan`` gradient.
     eps : float
         Absolute tolerance with which to consider value as zero.
     distinct : bool
@@ -130,30 +158,29 @@ def poly_root(
     Returns
     -------
     r : jnp.ndarray
-        Shape (..., c.shape[1:], c.shape[0] - 1).
-        The roots of the polynomial, iterated over the last axis.
+        Shape (..., *c.shape[:-1], c.shape[-1] - 1).
+        The roots of the polynomial, iterated over the last axis.First
 
     """
     get_only_real_roots = not (a_min is None and a_max is None)
-
+    num_coef = c.shape[-1]
+    c = _subtract_last(c, k)
     func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
+
     if (
-        c.shape[0] in func
+        num_coef in func
         and get_only_real_roots
         and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
     ):
         # Compute from analytic formula to avoid the issue of complex roots with small
         # imaginary parts and to avoid nan in gradient.
-        r = func[c.shape[0]](*c[:-1], c[-1] - k, sentinel, eps, distinct)
+        r = func[num_coef](C=c, sentinel=sentinel, eps=eps, distinct=distinct)
         # We already filtered distinct roots for quadratics.
-        distinct = distinct and c.shape[0] > 3
+        distinct = distinct and num_coef > 3
     else:
         # Compute from eigenvalues of polynomial companion matrix.
-        c_n = c[-1] - k
-        c = [jnp.broadcast_to(c_i, c_n.shape) for c_i in c[:-1]]
-        c.append(c_n)
-        c = jnp.stack(c, axis=-1)
         r = _roots(c)
+
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
@@ -165,11 +192,13 @@ def poly_root(
 
     if sort or distinct:
         r = jnp.sort(r, axis=-1)
-    return _filter_distinct(r, sentinel, eps) if distinct else r
+    r = _filter_distinct(r, sentinel, eps) if distinct else r
+    assert r.shape[-1] == num_coef - 1
+    return r
 
 
-def _root_cubic(a, b, c, d, sentinel, eps, distinct):
-    """Return r such that a r³ + b r² + c r + d = 0, assuming real coef and roots."""
+def _root_cubic(C, sentinel, eps, distinct):
+    """Return real cubic root assuming real coefficients."""
     # numerical.recipes/book.html, page 228
 
     def irreducible(Q, R, b, mask):
@@ -210,23 +239,36 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
             reducible(Q, R, b),
         )
 
+    a = C[..., 0]
+    b = C[..., 1]
+    c = C[..., 2]
+    d = C[..., 3]
     return jnp.where(
-        # Tests catch failure here if eps < 1e-12 for 64 bit jax.
+        # Tests catch failure here if eps < 1e-12 for 64 bit precision.
         jnp.expand_dims(jnp.abs(a) <= eps, axis=-1),
-        _concat_sentinel(_root_quadratic(b, c, d, sentinel, eps, distinct), sentinel),
+        _concat_sentinel(
+            _root_quadratic(
+                C=C[..., 1:], sentinel=sentinel, eps=eps, distinct=distinct
+            ),
+            sentinel,
+        ),
         root(b, c, d),
     )
 
 
-def _root_quadratic(a, b, c, sentinel, eps, distinct):
-    """Return r such that a r² + b r + c = 0, assuming real coefficients and roots."""
+def _root_quadratic(C, sentinel, eps, distinct):
+    """Return real quadratic root assuming real coefficients."""
     # numerical.recipes/book.html, page 227
+    a = C[..., 0]
+    b = C[..., 1]
+    c = C[..., 2]
+
     discriminant = b**2 - 4 * a * c
     q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
     r1 = jnp.where(
         discriminant < 0,
         sentinel,
-        safediv(q, a, _root_linear(b, c, sentinel, eps)),
+        safediv(q, a, _root_linear(C=C[..., 1:], sentinel=sentinel, eps=eps)),
     )
     r2 = jnp.where(
         # more robust to remove repeated roots with discriminant
@@ -237,21 +279,14 @@ def _root_quadratic(a, b, c, sentinel, eps, distinct):
     return jnp.stack([r1, r2], axis=-1)
 
 
-def _root_linear(a, b, sentinel, eps, distinct=False):
-    """Return r such that a r + b = 0."""
+def _root_linear(C, sentinel, eps, distinct=False):
+    """Return real linear root assuming real coefficients."""
+    a = C[..., 0]
+    b = C[..., 1]
     return safediv(-b, a, jnp.where(jnp.abs(b) <= eps, 0, sentinel))
 
 
 def _concat_sentinel(r, sentinel, num=1):
-    """Concat ``sentinel`` ``num`` times to ``r`` on last axis."""
+    """Append ``sentinel`` ``num`` times to ``r`` on last axis."""
     sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
     return jnp.append(r, sent, axis=-1)
-
-
-def _filter_distinct(r, sentinel, eps):
-    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
-    # eps needs to be low enough that close distinct roots do not get removed.
-    # Otherwise, algorithms relying on continuity will fail.
-    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-    r = jnp.where(mask, sentinel, r)
-    return r

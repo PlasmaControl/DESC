@@ -1315,20 +1315,23 @@ def test_second_stage_optimization_CoilSet():
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "coil,optimizer,path",
+    "coil,optimizer,index",
     [
-        (FourierPlanarCoil(), "fmintr", ""),
-        (FourierRZCoil(), "fmintr", ""),
-        (FourierXYZCoil(), "fmintr", ""),
-        ("DummyCoilSet", "lsq-exact", "output_path_sym"),
-        ("DummyCoilSet", "lsq-exact", "output_path_asym"),
-        ("DummyMixedCoilSet", "lsq-exact", "output_path"),
+        (FourierPlanarCoil(), "fmintr", None),
+        (FourierRZCoil(), "fmintr", None),
+        (FourierXYZCoil(), "fmintr", None),
+        ("DummyMixedCoilSet", "fmintr", -1),  # spline coil
+        ("DummyCoilSet", "lsq-exact", 0),  # sym coils
+        ("DummyCoilSet", "lsq-exact", 1),  # asym coils
+        ("DummyMixedCoilSet", "lsq-exact", None),
+        ("DummyNestedCoilSet", "lsq-exact", ""),
     ],
 )
-def test_optimize_with_all_coil_types(coil, optimizer, path, request):
+def test_optimize_with_all_coil_types(coil, optimizer, index, request):
     """Test optimizing for every type of coil and dummy coil sets."""
     if isinstance(coil, str):
-        coil = load(load_from=request.getfixturevalue(coil)[path], file_format="hdf5")
+        coil = request.getfixturevalue(coil)
+        coil = coil[index] if index is not None else coil
 
     eq = Equilibrium()
     # not attempting to accurately calc B for this test,

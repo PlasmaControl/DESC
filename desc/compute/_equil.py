@@ -10,7 +10,7 @@ expensive computations.
 """
 
 from interpax import interp1d
-from scipy.constants import mu_0
+from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import jnp
 
@@ -625,7 +625,7 @@ def _e_sup_helical_times_sqrt_g_mag(params, transforms, profiles, data, **kwargs
 
 @register_compute_fun(
     name="F_anisotropic",
-    label="F_{anisotropic}",
+    label="F_{\\mathrm{anisotropic}}",
     units="N \\cdot m^{-3}",
     units_long="Newtons / cubic meter",
     description="Anisotropic force balance error",
@@ -842,4 +842,34 @@ def _P_ISS04(params, transforms, profiles, data, **kwargs):
             * kwargs.get("H_ISS04", 1)
         )
     ) ** (1 / 0.39)
+    return data
+
+
+@register_compute_fun(
+    name="P_fusion",
+    label="P_{fusion}",
+    units="W",
+    units_long="Watts",
+    description="Fusion power",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["ni", "<sigma*nu>", "sqrt(g)"],
+    resolution_requirement="rtz",
+    fuel="str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default is 'DT'.",
+)
+def _P_fusion(params, transforms, profiles, data, **kwargs):
+    energies = {"DT": 3.52e6 + 14.06e6}  # eV
+    fuel = kwargs.get("fuel", "DT")
+    energy = energies.get(fuel)
+
+    reaction_rate = jnp.sum(
+        data["ni"] ** 2
+        * data["<sigma*nu>"]
+        * data["sqrt(g)"]
+        * transforms["grid"].weights
+    )  # reactions/s
+    data["P_fusion"] = reaction_rate * energy * elementary_charge  # J/s
     return data

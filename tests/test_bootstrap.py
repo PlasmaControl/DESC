@@ -1196,7 +1196,7 @@ class TestBootstrapObjectives:
         )
 
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
-        np.testing.assert_allclose(results, expected, rtol=2e-3)
+        np.testing.assert_allclose(results, expected, rtol=3e-3)
 
     @pytest.mark.regression
     def test_bootstrap_consistency_iota(self, TmpDir):

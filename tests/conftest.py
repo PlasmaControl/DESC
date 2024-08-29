@@ -288,8 +288,8 @@ def DummyMixedCoilSet():
 @pytest.fixture(scope="session")
 def DummyNestedCoilSet(DummyCoilSet, DummyMixedCoilSet):
     """Create and save a dummy nested coil set for testing."""
-    mixed_coils = DummyMixedCoilSet
     sym_coils, __ = DummyCoilSet
+    mixed_coils = DummyMixedCoilSet
     nested_coils = MixedCoilSet(sym_coils, mixed_coils, check_intersection=False)
     return nested_coils
 

@@ -1324,7 +1324,7 @@ def test_second_stage_optimization_CoilSet():
         ("DummyCoilSet", "lsq-exact", 0),  # sym coils
         ("DummyCoilSet", "lsq-exact", 1),  # asym coils
         ("DummyMixedCoilSet", "lsq-exact", None),
-        ("DummyNestedCoilSet", "lsq-exact", ""),
+        ("DummyNestedCoilSet", "lsq-exact", None),
     ],
 )
 def test_optimize_with_all_coil_types(coil, optimizer, index, request):

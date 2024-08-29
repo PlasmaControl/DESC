@@ -1520,7 +1520,6 @@ class ToroidalFlux(_Objective):
             )
 
             A_dot_e_theta = jnp.sum(A * data["e_theta"], axis=1)
-            # TODO: use the line integral compute utilities
             Psi = jnp.sum(grid.spacing[:, 1] * A_dot_e_theta)
         else:
             B = constants["field"].compute_magnetic_field(

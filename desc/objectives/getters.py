@@ -148,6 +148,7 @@ def get_fixed_xsection_constraints(
     eq,
     profiles=True,
     normalize=True,
+    fix_lambda=True,
 ):
     """Get the constraints necessary for a fixed cross-section equilibrium problem.
 
@@ -170,9 +171,10 @@ def get_fixed_xsection_constraints(
     constraints = (
         FixSectionR(**kwargs),
         FixSectionZ(**kwargs),
-        FixSectionLambda(**kwargs),
         FixPsi(**kwargs),
     )
+    if fix_lambda:
+        constraints += (FixSectionLambda(**kwargs),)
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:

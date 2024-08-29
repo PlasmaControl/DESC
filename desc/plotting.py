@@ -1352,10 +1352,9 @@ def plot_section(
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     if grid is None:
-        nfp = eq.NFP
         grid_kwargs = {
             "L": 25,
-            "NFP": nfp,
+            "NFP": 1,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
             "zeta": phi,
@@ -1610,9 +1609,14 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     phi = np.atleast_1d(phi)
     nphi = len(phi)
 
+    # do not need NFP supplied to these grids as
+    # the above logic takes care of the correct phi range
+    # if defaults are requested. Setting NFP here instead
+    # can create reshaping issues when phi is supplied and gets
+    # truncated by 2pi/NFP. See PR #1204
     grid_kwargs = {
         "rho": rho,
-        "NFP": nfp,
+        "NFP": 1,
         "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
         "zeta": phi,
     }
@@ -1631,7 +1635,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     )
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
-        "NFP": nfp,
+        "NFP": 1,
         "theta": theta,
         "zeta": phi,
     }
@@ -1960,7 +1964,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     plot_axis = plot_axis and eq.L > 0
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
-    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
+    grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
@@ -2030,6 +2034,9 @@ def plot_boundaries(
 ):
     """Plot stellarator boundaries at multiple toroidal coordinates.
 
+    NOTE: If attempting to plot objects with differing NFP, `phi` must
+    be given explicitly.
+
     Parameters
     ----------
     eqs : array-like of Equilibrium, Surface or EquilibriaFamily
@@ -2085,7 +2092,21 @@ def plot_boundaries(
         fig, ax = plot_boundaries((eq1, eq2, eq3))
 
     """
+    # if NFPs are not all equal, means there are
+    # objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error
+    # unless phi was given.
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
+    errorif(
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
+        ValueError,
+        "supplied objects must have the same number of field periods, "
+        "or if there are differing field periods, `phi` must be given explicitly."
+        f" Instead, supplied objects have NFPs {[t.NFP for t in eqs]}."
+        " If attempting to plot an axisymmetric object with non-axisymmetric objects,"
+        " you must use the `change_resolution` method to make the axisymmetric "
+        "object have the same NFP as the non-axisymmetric objects.",
+    )
 
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
@@ -2129,7 +2150,7 @@ def plot_boundaries(
         plot_axis_i = plot_axis and eqs[i].L > 0
         rho = np.array([0.0, 1.0]) if plot_axis_i else np.array([1.0])
 
-        grid_kwargs = {"NFP": eqs[i].NFP, "theta": 100, "zeta": phi, "rho": rho}
+        grid_kwargs = {"NFP": 1, "theta": 100, "zeta": phi, "rho": rho}
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
@@ -2197,6 +2218,9 @@ def plot_comparison(
     **kwargs,
 ):
     """Plot comparison between flux surfaces of multiple equilibria.
+
+    NOTE: If attempting to plot objects with differing NFP, `phi` must
+    be given explicitly.
 
     Parameters
     ----------
@@ -2266,7 +2290,21 @@ def plot_comparison(
                                  )
 
     """
+    # if NFPs are not all equal, means there are
+    # objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error
+    # unless phi was given.
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
+    errorif(
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
+        ValueError,
+        "supplied objects must have the same number of field periods, "
+        "or if there are differing field periods, `phi` must be given explicitly."
+        f" Instead, supplied objects have NFPs {[t.NFP for t in eqs]}."
+        " If attempting to plot an axisymmetric object with non-axisymmetric objects,"
+        " you must use the `change_resolution` method to make the axisymmetric "
+        "object have the same NFP as the non-axisymmetric objects.",
+    )
     color = parse_argname_change(color, kwargs, "colors", "color")
     ls = parse_argname_change(ls, kwargs, "linestyles", "ls")
     lw = parse_argname_change(lw, kwargs, "lws", "lw")

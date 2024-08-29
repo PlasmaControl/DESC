@@ -1074,69 +1074,6 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     def B0(self, new):
         self._B0 = float(np.squeeze(new))
 
-    def _compute_A_or_B(
-        self,
-        coords,
-        params=None,
-        basis="rpz",
-        source_grid=None,
-        transforms=None,
-        compute_A_or_B="B",
-    ):
-        """Compute magnetic field or vector potential at a set of points.
-
-        Parameters
-        ----------
-        coords : array-like shape(n,3)
-            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
-        params : dict or array-like of dict, optional
-            Dict of values for R0 and B0.
-        basis : {"rpz", "xyz"}
-            Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
-            Unused by this MagneticField class.
-        transforms : dict of Transform
-            Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            Unused by this MagneticField class.
-        compute_A_or_B: {"A", "B"}, optional
-            whether to compute the magnetic vector potential "A" or the magnetic field
-            "B". Defaults to "B"
-
-        Returns
-        -------
-        field : ndarray, shape(N,3)
-            magnetic field or vector potential at specified points
-
-        """
-        errorif(
-            compute_A_or_B not in ["A", "B"],
-            ValueError,
-            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
-        )
-        params = setdefault(params, {})
-        B0 = params.get("B0", self.B0)
-        R0 = params.get("R0", self.R0)
-
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-        if compute_A_or_B == "B":
-            bp = B0 * R0 / coords[:, 0]
-            brz = jnp.zeros_like(bp)
-            B = jnp.array([brz, bp, brz]).T
-            if basis == "xyz":
-                B = rpz2xyz_vec(B, phi=coords[:, 1])
-
-            return B
-        elif compute_A_or_B == "A":
-            az = -B0 * R0 * jnp.log(coords[:, 0])
-            arp = jnp.zeros_like(az)
-            A = jnp.array([arp, arp, az]).T
-            # b/c it only has a nonzero z component, no need
-            # to switch bases back if xyz is given
-            return A
-
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -1162,7 +1099,21 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+        R0 = params.get("R0", self.R0)
+
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        bp = B0 * R0 / coords[:, 0]
+        brz = jnp.zeros_like(bp)
+        B = jnp.array([brz, bp, brz]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+
+        return B
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1191,7 +1142,20 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             magnetic vector potential at specified points
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+        R0 = params.get("R0", self.R0)
+
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        az = -B0 * R0 * jnp.log(coords[:, 0])
+        arp = jnp.zeros_like(az)
+        A = jnp.array([arp, arp, az]).T
+        # b/c it only has a nonzero z component, no need
+        # to switch bases back if xyz is given
+        return A
 
 
 class VerticalMagneticField(_MagneticField, Optimizable):
@@ -1221,71 +1185,6 @@ class VerticalMagneticField(_MagneticField, Optimizable):
     def B0(self, new):
         self._B0 = float(np.squeeze(new))
 
-    def _compute_A_or_B(
-        self,
-        coords,
-        params=None,
-        basis="rpz",
-        source_grid=None,
-        transforms=None,
-        compute_A_or_B="B",
-    ):
-        """Compute magnetic field or magnetic vector potential at a set of points.
-
-        Parameters
-        ----------
-        coords : array-like shape(n,3)
-            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
-        params : dict or array-like of dict, optional
-            Dict of values for B0.
-        basis : {"rpz", "xyz"}
-            Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
-            Unused by this MagneticField class.
-        compute_A_or_B: {"A", "B"}, optional
-            whether to compute the magnetic vector potential "A" or the magnetic field
-            "B". Defaults to "B"
-
-        Returns
-        -------
-        field : ndarray, shape(N,3)
-            magnetic field or vector potential at specified points
-
-        """
-        errorif(
-            compute_A_or_B not in ["A", "B"],
-            ValueError,
-            f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
-        )
-        params = setdefault(params, {})
-        B0 = params.get("B0", self.B0)
-
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if compute_A_or_B == "B":
-            bz = B0 * jnp.ones_like(coords[:, 2])
-            brp = jnp.zeros_like(bz)
-            B = jnp.array([brp, brp, bz]).T
-            # b/c it only has a nonzero z component, no need
-            # to switch bases back if xyz is given
-
-            return B
-        elif compute_A_or_B == "A":
-            if basis == "xyz":
-                coords_xyz = coords
-                coords_rpz = xyz2rpz(coords)
-            else:
-                coords_rpz = coords
-                coords_xyz = rpz2xyz(coords)
-            ax = B0 / 2 * coords_xyz[:, 1]
-            ay = -B0 / 2 * coords_xyz[:, 0]
-
-            az = jnp.zeros_like(ax)
-            A = jnp.array([ax, ay, az]).T
-            if basis == "rpz":
-                A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
-
-            return A
-
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -1311,7 +1210,17 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        bz = B0 * jnp.ones_like(coords[:, 2])
+        brp = jnp.zeros_like(bz)
+        B = jnp.array([brp, brp, bz]).T
+        # b/c it only has a nonzero z component, no need
+        # to switch bases back if xyz is given
+
+        return B
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1340,7 +1249,26 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             magnetic vector potential at specified points
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+
+        if basis == "xyz":
+            coords_xyz = coords
+            coords_rpz = xyz2rpz(coords)
+        else:
+            coords_rpz = coords
+            coords_xyz = rpz2xyz(coords)
+        ax = B0 / 2 * coords_xyz[:, 1]
+        ay = -B0 / 2 * coords_xyz[:, 0]
+
+        az = jnp.zeros_like(ax)
+        A = jnp.array([ax, ay, az]).T
+        if basis == "rpz":
+            A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
+
+        return A
 
 
 class PoloidalMagneticField(_MagneticField, Optimizable):

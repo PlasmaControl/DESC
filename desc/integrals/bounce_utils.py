@@ -223,9 +223,7 @@ def bounce_points(
     return z1, z2
 
 
-def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
-    """Check that bounce points are computed correctly."""
-    eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
+def _set_default_plot_kwargs(kwargs):
     kwargs.setdefault(
         "title",
         r"Intersects $\zeta$ in epigraph($\vert B \vert$) s.t. "
@@ -234,6 +232,12 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
     kwargs.setdefault("vlabel", r"$\vert B \vert$")
+    return kwargs
+
+
+def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
+    """Check that bounce points are computed correctly."""
+    kwargs = _set_default_plot_kwargs(kwargs)
     plots = []
 
     assert z1.shape == z2.shape
@@ -244,6 +248,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     err_1 = jnp.any(z1 > z2, axis=-1)
     err_2 = jnp.any(z1[..., 1:] < z2[..., :-1], axis=-1)
 
+    eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
     for ml in np.ndindex(B.shape[:-2]):
         Bs = PPoly(B[ml].T, knots)
         for p in range(pitch_inv.shape[0]):
@@ -799,7 +804,8 @@ def plot_ppoly(
 
     Returns
     -------
-    fig, ax : matplotlib figure and axes
+    fig, ax
+        Matplotlib (fig, ax) tuple.
 
     """
     fig, ax = plt.subplots()

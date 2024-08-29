@@ -1051,7 +1051,8 @@ class TestBounce1D:
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @pytest.mark.unit
-    def test_integrate_checks(self):
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_bounce1d_checks(self):
         """Test that all the internal correctness checks pass for real example."""
         # noqa: D202
         # Suppose we want to compute a bounce average of the function
@@ -1102,16 +1103,18 @@ class TestBounce1D:
         result = result.reshape(pitch_inv.shape[0], alpha.size, rho.size)
         # The result stored at
         p, m, l = 3, 0, 1
-        print("Result:", result[p, m, l])
+        print("Result(λ, α, ρ):", result[p, m, l])
         # corresponds to the 1/λ value
-        print("1/λ:", pitch_inv[p, m % pitch_inv.shape[1], l % pitch_inv.shape[-1]])
+        print(
+            "1/λ(α, ρ):", pitch_inv[p, m % pitch_inv.shape[1], l % pitch_inv.shape[-1]]
+        )
         # for the Clebsch-type field line coordinates
         nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
         print("(α, ρ):", nodes[m, l, 0])
 
-        # 7. Plotting utilities.
-        z1, z2 = bounce.points(pitch_inv)
-        plots = bounce.check_points(z1, z2, pitch_inv)  # noqa: F841
+        # 7. Plotting
+        fig, ax = bounce.plot(pitch_inv[..., l], m, l, show=False)
+        return fig
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func", [interp_to_argmin, interp_to_argmin_hard])

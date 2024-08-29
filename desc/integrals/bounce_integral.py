@@ -1,12 +1,13 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
 import numpy as np
-from interpax import CubicHermiteSpline
+from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
 from desc.backend import jnp
 from desc.integrals.bounce_utils import (
     _check_bounce_points,
+    _set_default_plot_kwargs,
     bounce_points,
     bounce_quadrature,
     get_pitch_inv,
@@ -20,7 +21,7 @@ from desc.integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from desc.io import IOAble
-from desc.utils import atleast_nd, setdefault, warnif
+from desc.utils import atleast_nd, errorif, setdefault, warnif
 
 
 class Bounce1D(IOAble):
@@ -79,7 +80,7 @@ class Bounce1D(IOAble):
 
     Examples
     --------
-    See ``tests/test_integrals.py::TestBounce1D::test_integrate_checks``.
+    See ``tests/test_integrals.py::TestBounce1D::test_bounce1d_checks``.
 
     Attributes
     ----------
@@ -97,7 +98,6 @@ class Bounce1D(IOAble):
     """
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
-    plot_ppoly = staticmethod(plot_ppoly)
     get_pitch_inv = staticmethod(get_pitch_inv)
 
     def __init__(
@@ -379,3 +379,44 @@ class Bounce1D(IOAble):
         assert result.shape[0] == pitch_inv.shape[0]
         assert result.shape[-1] == setdefault(num_well, np.prod(self._dB_dz.shape[-2:]))
         return result
+
+    def plot(self, pitch_inv, m, l, **kwargs):
+        """Plot the field line and bounce points of the given pitch angles.
+
+        Parameters
+        ----------
+        pitch_inv : jnp.ndarray
+            Shape (P, ).
+            1/λ values to evaluate the bounce integral at the field line
+            specified by the (α(m), ρ(l)) Clebsch coordinate.
+        m, l : int, int
+            Indices into the nodes of the grid supplied to make this object.
+            ``alpha, rho = grid.meshgrid_reshape(grid.nodes[:, :2], "arz")[m, l, 0]``.
+        kwargs
+            Keyword arguments into ``desc/integrals/bounce_utils.py::plot_ppoly``.
+
+        Returns
+        -------
+        fig, ax
+            Matplotlib (fig, ax) tuple.
+
+        """
+        pitch_inv = jnp.atleast_1d(jnp.squeeze(pitch_inv))
+        errorif(
+            pitch_inv.ndim != 1,
+            msg=f"Got pitch_inv.ndim={pitch_inv.ndim}, but expected 1.",
+        )
+        z1, z2 = bounce_points(
+            pitch_inv[:, jnp.newaxis, jnp.newaxis],
+            self._zeta,
+            self.B[m, l],
+            self._dB_dz[m, l],
+        )
+        fig, ax = plot_ppoly(
+            ppoly=PPoly(self.B[m, l].T, self._zeta),
+            z1=z1,
+            z2=z2,
+            k=pitch_inv,
+            **_set_default_plot_kwargs(kwargs),
+        )
+        return fig, ax

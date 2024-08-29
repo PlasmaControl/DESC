@@ -613,7 +613,7 @@ class _MagneticField(IOAble, ABC):
         )
         bz_001[:] = B_Z
 
-        if A_R is not None:
+        if save_vector_potential:
             ar_001 = file.createVariable("ar_001", np.float64, ("phi", "zee", "rad"))
             ar_001.long_name = (
                 "A_R = radial component of magnetic vector potential "

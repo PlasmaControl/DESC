@@ -8,7 +8,9 @@ New Features
 
 Bug Fixes
 
-- Fixes a couple bugs that occur when savingand loading asymmetric equilibria as wout files
+- Fixes bugs that occur when saving asymmetric equilibria as wout files
+- Fixes bug that occurs when using ``VMECIO.plot_vmec_comparison`` to compare to an asymmetric wout file
+
 
 
 v0.12.1

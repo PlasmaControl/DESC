@@ -18,10 +18,11 @@ from desc.integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
+from desc.io import IOAble
 from desc.utils import setdefault, warnif
 
 
-class Bounce1D:
+class Bounce1D(IOAble):
     """Computes bounce integrals using one-dimensional local spline methods.
 
     The bounce integral is defined as ∫ f(ℓ) dℓ, where
@@ -86,6 +87,8 @@ class Bounce1D:
 
     Attributes
     ----------
+    required_names : list
+        Names in ``data_index`` required to compute bounce integrals.
     _B : jnp.ndarray
         TODO: Make this (4, M, L, N-1) now that tensor product in rho and alpha
           required as well after GitHub PR #1214.
@@ -97,6 +100,7 @@ class Bounce1D:
 
     """
 
+    required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
     plot_ppoly = staticmethod(plot_ppoly)
     get_pitch_inv = staticmethod(get_pitch_inv)
 
@@ -121,7 +125,7 @@ class Bounce1D:
             L = ``grid.num_rho``, M = ``grid.num_alpha``, and N = ``grid.num_zeta``.
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
-            Must include names in ``Bounce1D.required_names()``.
+            Must include names in ``Bounce1D.required_names``.
         quad : (jnp.ndarray, jnp.ndarray)
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
@@ -157,8 +161,8 @@ class Bounce1D:
             "|B|_z|r,a": data["|B|_z|r,a"] / Bref,  # This is already the correct sign.
         }
         self._data = {
-            key: grid.meshgrid_reshape(val, "raz").reshape(-1, grid.num_zeta)
-            for key, val in data.items()
+            name: grid.meshgrid_reshape(data[name], "raz").reshape(-1, grid.num_zeta)
+            for name in Bounce1D.required_names
         }
         self._x, self._w = get_quadrature(quad, automorphism)
 
@@ -180,11 +184,6 @@ class Bounce1D:
         assert self._B.shape[0] == degree + 1
         assert self._dB_dz.shape[0] == degree
         assert self._B.shape[-1] == self._dB_dz.shape[-1] == grid.num_zeta - 1
-
-    @staticmethod
-    def required_names():
-        """Return names in ``data_index`` required to compute bounce integrals."""
-        return ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
 
     @staticmethod
     def reshape_data(grid, *arys):

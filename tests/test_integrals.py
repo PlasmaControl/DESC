@@ -1066,7 +1066,7 @@ class TestBounce1D:
         )
         # 4. Compute input data.
         data = eq.compute(
-            Bounce1D.required_names() + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
+            Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 5. Make the bounce integration operator.
         bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
@@ -1292,7 +1292,7 @@ class TestBounce1D:
             iota=iota,
         )
         data = eq.compute(
-            Bounce1D.required_names()
+            Bounce1D.required_names
             + [
                 "cvdrift",
                 "gbdrift",

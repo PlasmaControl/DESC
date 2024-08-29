@@ -2,7 +2,9 @@
 
 import numpy as np
 import pytest
+from jax import grad
 
+from desc.backend import jnp
 from desc.integrals.quad_utils import (
     automorphism_arcsin,
     automorphism_sin,
@@ -91,3 +93,11 @@ def test_leggauss_lobatto():
     np.testing.assert_allclose(x, [-1, -np.sqrt(3 / 7), 0, np.sqrt(3 / 7), 1])
     np.testing.assert_allclose(w, [1 / 10, 49 / 90, 32 / 45, 49 / 90, 1 / 10])
     np.testing.assert_allclose(leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]))
+
+    def fun(a):
+        x, w = leggauss_lob(a.size)
+        return jnp.dot(x * a, w)
+
+    # make sure differentiable
+    # https://github.com/PlasmaControl/DESC/pull/854#discussion_r1733323161
+    assert np.isfinite(grad(fun)(jnp.arange(10) * np.pi)).all()

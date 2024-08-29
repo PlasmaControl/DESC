@@ -319,7 +319,7 @@ def bounce_quadrature(
         These functions should be arguments to the callable ``integrand``.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid`` and reshaped with ``Bounce1D.reshape_data``.
-        Must include names in ``Bounce1D.required_names()``.
+        Must include names in ``Bounce1D.required_names``.
     knots : jnp.ndarray
         Shape (knots.size, ).
         Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
@@ -420,7 +420,7 @@ def _interpolate_and_integrate(
         Quadrature points in ζ coordinates.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid`` and reshaped with ``Bounce1D.reshape_data``.
-        Must include names in ``Bounce1D.required_names()``.
+        Must include names in ``Bounce1D.required_names``.
 
     Returns
     -------

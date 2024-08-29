@@ -61,7 +61,7 @@ class FusionPower(_Objective):
 
     _scalar = True
     _units = "(W)"
-    _print_value_fmt = "Fusion power: {:10.3e} "
+    _print_value_fmt = "Fusion power: "
 
     def __init__(
         self,
@@ -246,7 +246,7 @@ class HeatingPowerISS04(_Objective):
 
     _scalar = True
     _units = "(W)"
-    _print_value_fmt = "Heating power: {:10.3e} "
+    _print_value_fmt = "Heating power: "
 
     def __init__(
         self,

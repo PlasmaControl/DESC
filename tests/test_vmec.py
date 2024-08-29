@@ -937,10 +937,10 @@ def test_vmec_save_asym(VMEC_save_asym):
         vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-8
     )
     np.testing.assert_allclose(
-        vmec.variables["ac"][:], desc.variables["ac"][:], atol=1e-5
+        vmec.variables["ac"][:], desc.variables["ac"][:], atol=3e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["presf"][:], desc.variables["presf"][:], atol=2e-2
+        vmec.variables["presf"][:], desc.variables["presf"][:], atol=2e-5
     )
     np.testing.assert_allclose(vmec.variables["pres"][:], desc.variables["pres"][:])
     np.testing.assert_allclose(vmec.variables["mass"][:], desc.variables["mass"][:])
@@ -1013,7 +1013,7 @@ def test_vmec_save_asym(VMEC_save_asym):
     np.testing.assert_allclose(
         vmec.variables["jdotb"][20:100],
         desc.variables["jdotb"][20:100],
-        atol=1e-2,  # nearly zero bc is vacuum
+        atol=4e-3,  # nearly zero bc is vacuum
     )
     np.testing.assert_allclose(
         vmec.variables["jcuru"][20:100], desc.variables["jcuru"][20:100], atol=2
@@ -1039,7 +1039,8 @@ def test_vmec_save_asym(VMEC_save_asym):
         rtol=1e-2,
     )
 
-    # the Mercier stability is pretty off, though this is a vacuum eq...
+    # the Mercier stability is pretty off,
+    # but these are not exactly similar solutions to eachother
     np.testing.assert_allclose(
         vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], atol=4e-3
     )
@@ -1170,30 +1171,19 @@ def test_vmec_save_asym(VMEC_save_asym):
     test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=4e-2)
 
     # |B|
-    test("bmn", "|B|", rtol_desc_desc_wout=4e-3)
+    test("bmn", "|B|", rtol_desc_desc_wout=7e-4)
 
     # B^zeta
-    test("bsupvmn", "B^zeta", rtol_desc_desc_wout=6e-3)
+    test("bsupvmn", "B^zeta")  # ,rtol_desc_desc_wout=6e-5)
 
     # B_zeta
-    test("bsubvmn", "B_zeta", rtol_desc_desc_wout=2e-3)
+    test("bsubvmn", "B_zeta", rtol_desc_desc_wout=3e-4)
 
-    # hard to compare to VMEC for the currents, just compare back to DESC
-    test(
-        "currumn",
-        "J^theta",
-        rtol_desc_desc_wout=5e-2,
-        atol_desc_desc_wout=2e-1,
-        atol_vmec_desc_wout=1e4,
-    )
-    test(
-        "currvmn",
-        "J^zeta",
-        negate_DESC_quant=True,
-        rtol_desc_desc_wout=1e-3,
-        atol_desc_desc_wout=2e-2,
-        atol_vmec_desc_wout=1e5,
-    )
+    # hard to compare to VMEC for the currents, since
+    # VMEC F error is worse and equilibria are not exactly similar
+    # just compare back to DESC
+    test("currumn", "J^theta", atol_vmec_desc_wout=1e4)
+    test("currvmn", "J^zeta", negate_DESC_quant=True, atol_vmec_desc_wout=1e5)
 
     # can only compare lambda, sqrt(g) B_psi B^theta and B_theta at bdry
     test(

@@ -342,7 +342,7 @@ def VMEC_save_asym(tmpdir_factory):
     """Save an asymmetric equilibrium in VMEC netcdf format for comparison."""
     tmpdir = tmpdir_factory.mktemp("asym_wout")
     filename = tmpdir.join("wout_HELIO_asym_desc.nc")
-    vmec = Dataset("./tests/inputs/wout_HELIOTRON_asym.nc", mode="r")
+    vmec = Dataset("./tests/inputs/wout_HELIOTRON_asym_NTHETA50_NZETA100.nc", mode="r")
     eq = Equilibrium.load("./tests/inputs/HELIO_asym.h5")
     VMECIO.save(
         eq,

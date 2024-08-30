@@ -4,8 +4,7 @@ import numpy as np
 from interpax import PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import imap, jnp
-from desc.backend import softmax as softargmax
+from desc.backend import imap, jnp, softargmax
 from desc.integrals.basis import _add2legend, _in_epigraph_and, _plot_intersect
 from desc.integrals.interp_utils import (
     interp1d_Hermite_vec,
@@ -85,9 +84,9 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
         last axis enumerates the polynomials that compose a particular spline.
     pitch_inv : jnp.ndarray
         Shape (P, M, L).
-        1/λ values to compute the bounce integrals of each field line. 1/λ(ρ,α) is
-        specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-        are interpreted as the indices that corresponds to that field line.
+        1/λ values. 1/λ(α,ρ) is specified by ``pitch_inv[...,α,ρ]`` where in
+        the latter the labels are interpreted as the indices that correspond
+        to that field line.
 
     """
     errorif(knots.ndim != 1, msg=f"knots should be 1d; got shape {knots.shape}.")
@@ -127,9 +126,9 @@ def bounce_points(
     ----------
     pitch_inv : jnp.ndarray
         Shape (P, M, L).
-        1/λ values to compute the bounce points at each field line. 1/λ(ρ,α) is
-        specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-        are interpreted as the indices that corresponds to that field line.
+        1/λ values to compute the bounce points. 1/λ(α,ρ) is specified by
+        ``pitch_inv[...,α,ρ]`` where in the latter the labels are interpreted
+        as the indices that correspond to that field line.
     knots : jnp.ndarray
         Shape (N, ).
         ζ coordinates of spline knots. Must be strictly increasing.
@@ -168,7 +167,7 @@ def bounce_points(
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of |B|.
 
-        If there were less than ``num_wells`` wells detected along a field line,
+        If there were less than ``num_well`` wells detected along a field line,
         then the last axis, which enumerates bounce points for a particular field
         line and pitch, is padded with zero.
 
@@ -321,9 +320,9 @@ def bounce_quadrature(
         epigraph of |B|.
     pitch_inv : jnp.ndarray
         Shape (P, M, L).
-        1/λ values to evaluate the bounce integrals of each field line. 1/λ(ρ,α) is
-        specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-        are interpreted as the indices that corresponds to that field line.
+        1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+        ``pitch_inv[...,α,ρ]`` where in the latter the labels are interpreted
+        as the indices that correspond to that field line.
     integrand : callable
         The composition operator on the set of functions in ``f`` that maps the
         functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
@@ -357,16 +356,15 @@ def bounce_quadrature(
     -------
     result : jnp.ndarray
         Shape (P, M, L, num_well).
-        First axis enumerates pitch values. Second axis enumerates the field lines.
-        Third axis enumerates the flux surfaces. Last axis enumerates the bounce
-        integrals.
+        Last axis enumerates the bounce integrals for a given pitch, field line,
+        and flux surface.
 
     """
     errorif(x.ndim != 1 or x.shape != w.shape)
     errorif(z1.ndim != 4 or z1.shape != z2.shape)
     errorif(pitch_inv.ndim != 3)
     if not isinstance(f, (list, tuple)):
-        f = list(f)
+        f = [f] if isinstance(f, (jnp.ndarray, np.ndarray)) else list(f)
 
     # Integrate and complete the change of variable.
     if batch:
@@ -441,17 +439,15 @@ def _interpolate_and_integrate(
     -------
     result : jnp.ndarray
         Shape Q.shape[:-1].
-        Quadrature for every pitch.
+        Quadrature result.
 
     """
     assert w.ndim == 1
     assert 3 < Q.ndim < 6 and Q.shape[0] == pitch_inv.shape[0] and Q.shape[-1] == w.size
     assert data["|B|"].shape[-1] == knots.size
 
-    if Q.ndim == 5:
-        pitch_inv = pitch_inv[..., jnp.newaxis]
     shape = Q.shape
-    Q = flatten_matrix(Q)
+    Q = Q.reshape(*Q.shape[:3], -1)
     b_sup_z = interp1d_Hermite_vec(
         Q,
         knots,
@@ -464,7 +460,14 @@ def _interpolate_and_integrate(
     # that do not preserve smoothness can be captured.
     f = [interp1d_vec(Q, knots, f_i, method=method) for f_i in f]
     result = jnp.dot(
-        (integrand(*f, B=B, pitch=1 / pitch_inv) / b_sup_z).reshape(shape),
+        (
+            integrand(
+                *f,
+                B=B,
+                pitch=1 / pitch_inv[..., jnp.newaxis],
+            )
+            / b_sup_z
+        ).reshape(shape),
         w,
     )
     if check:
@@ -529,7 +532,7 @@ def _plot_check_interp(Q, V, name=""):
     doing debugging, so we don't include an option to plot these
     in the public API of Bounce1D.
     """
-    for idx in np.ndindex(Q.shape[:-2]):
+    for idx in np.ndindex(Q.shape[:3]):
         marked = jnp.nonzero(jnp.any(Q[idx] != 0.0, axis=-1))[0]
         if marked.size == 0:
             continue
@@ -663,9 +666,9 @@ def interp_to_argmin(
     z1 = atleast_nd(4, z1)
     z2 = atleast_nd(4, z2)
     ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
-    # JAX softmax(x) does the proper shift to compute softmax(x - max(x)), but it's
-    # still not a good idea to compute over a large length scale, so we warn in
-    # docstring to choose upper sentinel properly.
+    # Our softargmax(x) does the proper shift to compute softargmax(x - max(x)),
+    # but it's still not a good idea to compute over a large length scale, so we
+    # warn in docstring to choose upper sentinel properly.
     argmin = softargmax(
         beta * _where_for_argmin(z1, z2, ext, g_ext, upper_sentinel),
         axis=-1,

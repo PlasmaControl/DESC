@@ -175,8 +175,8 @@ class Bounce1D(IOAble):
             source=(0, 1),
             destination=(-1, -2),
         )
-        assert self.B.shape == (grid.num_alpha, grid.num_rho, grid.num_zeta - 1, 4)
         self._dB_dz = polyder_vec(self.B)
+        assert self.B.shape == (grid.num_alpha, grid.num_rho, grid.num_zeta - 1, 4)
         assert self._dB_dz.shape == (grid.num_alpha, grid.num_rho, grid.num_zeta - 1, 3)
 
     @staticmethod
@@ -210,9 +210,9 @@ class Bounce1D(IOAble):
         ----------
         pitch_inv : jnp.ndarray
             Shape (P, M, L).
-            1/λ values to compute the bounce points at each field line. 1/λ(ρ,α) is
+            1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-            are interpreted as the indices that corresponds to that field line.
+            are interpreted as the indices that correspond to that field line.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
@@ -232,7 +232,7 @@ class Bounce1D(IOAble):
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
 
-            If there were less than ``num_wells`` wells detected along a field line,
+            If there were less than ``num_well`` wells detected along a field line,
             then the last axis, which enumerates bounce points for a particular field
             line and pitch, is padded with zero.
 
@@ -251,9 +251,9 @@ class Bounce1D(IOAble):
             epigraph of |B|.
         pitch_inv : jnp.ndarray
             Shape (P, M, L).
-            1/λ values to compute the bounce points at each field line. 1/λ(ρ,α) is
+            1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-            are interpreted as the indices that corresponds to that field line.
+            are interpreted as the indices that correspond to that field line.
         plot : bool
             Whether to plot stuff.
         kwargs
@@ -298,9 +298,9 @@ class Bounce1D(IOAble):
         ----------
         pitch_inv : jnp.ndarray
             Shape (P, M, L).
-            1/λ values to compute the bounce integrals of each field line. 1/λ(ρ,α) is
-            specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-            are interpreted as the indices that corresponds to that field line.
+            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+            ``pitch_inv[...,α,ρ]`` where in the latter the labels are interpreted
+            as the indices that correspond to that field line.
         integrand : callable
             The composition operator on the set of functions in ``f`` that maps the
             functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the

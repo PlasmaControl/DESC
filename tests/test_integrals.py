@@ -785,7 +785,7 @@ class TestBounce1DPoints:
     @pytest.mark.unit
     def test_z2_before_extrema(self):
         """Case where local minimum is the shared intersect between two wells."""
-        # To make sure both regions in hypgraph left and right of extrema are not
+        # To make sure both regions in hypograph left and right of extrema are not
         # integrated over.
         start = -1.2 * np.pi
         end = -2 * start
@@ -1097,6 +1097,7 @@ class TestBounce1D:
             pitch_inv,
             integrand=TestBounce1D._example_denominator,
             check=True,
+            batch=False,
         )
         avg = safediv(num, den)
         assert np.isfinite(avg).all() and np.count_nonzero(avg)

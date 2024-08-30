@@ -213,7 +213,6 @@ def get_quadrature(quad, automorphism):
     x, w = quad
     assert x.ndim == w.ndim == 1
     if automorphism is not None:
-        # Apply automorphisms to supress singularities.
         auto, grad_auto = automorphism
         w = w * grad_auto(x)
         # Recall bijection_from_disc(auto(x), ζ₁, ζ₂) = ζ.

@@ -2,9 +2,9 @@
 
 Notes
 -----
-These polynomial utilities are chosen for performance on gpu when among
-methods that have the best (asymptotic) algorithmic complexity. For example,
-we prefer not to use Horner's method.
+These polynomial utilities are chosen for performance on gpu among
+methods that have the best (asymptotic) algorithmic complexity.
+For example, we prefer to not use Horner's method.
 """
 
 from functools import partial
@@ -159,7 +159,7 @@ def polyroot_vec(
     -------
     r : jnp.ndarray
         Shape (..., *c.shape[:-1], c.shape[-1] - 1).
-        The roots of the polynomial, iterated over the last axis.First
+        The roots of the polynomial, iterated over the last axis.
 
     """
     get_only_real_roots = not (a_min is None and a_max is None)

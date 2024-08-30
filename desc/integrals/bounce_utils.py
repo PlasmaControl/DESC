@@ -30,7 +30,7 @@ from desc.utils import (
 
 
 def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
-    """Return 1/λ values uniformly spaced between ``min_B`` and ``max_B``.
+    """Return 1/λ values for quadrature between ``min_B`` and ``max_B``.
 
     Parameters
     ----------
@@ -262,6 +262,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z1=_z1,
                     z2=_z2,
                     k=pitch_inv[idx],
+                    title=kwargs.pop("title") + f", (p,m,l)={idx}",
                     **kwargs,
                 )
 
@@ -350,7 +351,8 @@ def bounce_quadrature(
         Flag for debugging. Must be false for JAX transformations.
         Ignored if ``batch`` is false.
     plot : bool
-        Whether to plot stuff if ``check`` is true. Default is false.
+        Whether to plot the quantities in the integrand interpolated to the
+        quadrature points of each integral. Ignored if ``check`` is false.
 
     Returns
     -------
@@ -418,8 +420,8 @@ def _interpolate_and_integrate(
     data,
     knots,
     method,
-    check=False,
-    plot=False,
+    check,
+    plot,
 ):
     """Interpolate given functions to points ``Q`` and perform quadrature.
 
@@ -526,12 +528,7 @@ def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
 
 
 def _plot_check_interp(Q, V, name=""):
-    """Plot V[λ, α, ρ, (ζ₁, ζ₂)](Q).
-
-    These are pretty, but likely only useful for developers
-    doing debugging, so we don't include an option to plot these
-    in the public API of Bounce1D.
-    """
+    """Plot V[λ, α, ρ, (ζ₁, ζ₂)](Q)."""
     for idx in np.ndindex(Q.shape[:3]):
         marked = jnp.nonzero(jnp.any(Q[idx] != 0.0, axis=-1))[0]
         if marked.size == 0:
@@ -539,15 +536,10 @@ def _plot_check_interp(Q, V, name=""):
         fig, ax = plt.subplots()
         ax.set_xlabel(r"$\zeta$")
         ax.set_ylabel(name)
-        ax.set_title(f"Interpolation of {name} to quadrature points. Index {idx}.")
+        ax.set_title(f"Interpolation of {name} to quadrature points, (p,m,l)={idx}")
         for i in marked:
             ax.plot(Q[(*idx, i)], V[(*idx, i)], marker="o")
-        fig.text(
-            0.01,
-            0.01,
-            f"Each color specifies {name} interpolated to the quadrature "
-            "points of a particular integral.",
-        )
+        fig.text(0.01, 0.01, "Each color specifies a particular integral.")
         plt.tight_layout()
         plt.show()
 
@@ -765,7 +757,7 @@ def plot_ppoly(
     start=None,
     stop=None,
     include_knots=False,
-    knot_transparency=0.1,
+    knot_transparency=0.2,
     include_legend=True,
 ):
     """Plot the piecewise polynomial ``ppoly``.
@@ -805,6 +797,8 @@ def plot_ppoly(
         Whether to plot vertical lines at the knots.
     knot_transparency : float
         Transparency of knot lines.
+    include_legend : bool
+        Whether to include the legend in the plot. Default is true.
 
     Returns
     -------

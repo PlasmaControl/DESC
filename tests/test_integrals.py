@@ -40,11 +40,11 @@ from desc.integrals.bounce_utils import (
     get_pitch_inv,
     interp_to_argmin,
     interp_to_argmin_hard,
-    plot_ppoly,
 )
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
+    get_quadrature,
     grad_automorphism_sin,
     grad_bijection_from_disc,
     leggauss_lob,
@@ -738,7 +738,9 @@ class TestBounce1DPoints:
         B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, knots, B.c.T, B.derivative().c.T, check=True)
+        z1, z2 = bounce_points(
+            pitch_inv, knots, B.c.T, B.derivative().c.T, check=True, include_knots=True
+        )
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[0::2])
@@ -753,7 +755,9 @@ class TestBounce1DPoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, B.derivative().c.T, check=True)
+        z1, z2 = bounce_points(
+            pitch_inv, k, B.c.T, B.derivative().c.T, check=True, include_knots=True
+        )
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[1:-1:2])
@@ -772,7 +776,9 @@ class TestBounce1DPoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[3] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T, check=True)
+        z1, z2 = bounce_points(
+            pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
+        )
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -797,7 +803,9 @@ class TestBounce1DPoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[2]
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T, check=True)
+        z1, z2 = bounce_points(
+            pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
+        )
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -819,9 +827,14 @@ class TestBounce1DPoints:
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[2] + 1e-13
         z1, z2 = bounce_points(
-            pitch_inv, k[2:], B.c[:, 2:].T, dB_dz.c[:, 2:].T, check=True, plot=False
+            pitch_inv,
+            k[2:],
+            B.c[:, 2:].T,
+            dB_dz.c[:, 2:].T,
+            check=True,
+            start=k[2],
+            include_knots=True,
         )
-        plot_ppoly(B, z1=z1, z2=z2, k=pitch_inv, start=k[2])
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -844,7 +857,9 @@ class TestBounce1DPoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[1] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T, check=True)
+        z1, z2 = bounce_points(
+            pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
+        )
         z1, z2 = TestBounce1DPoints.filter(z1, z2)
         assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
@@ -937,7 +952,7 @@ class TestBounce1DQuadrature:
             check=True,
             **kwargs,
         )
-        result = bounce.integrate(pitch_inv, integrand, check=True)
+        result = bounce.integrate(pitch_inv, integrand, check=True, plot=True)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
@@ -950,14 +965,10 @@ class TestBounce1DQuadrature:
 
     @staticmethod
     def _fixed_elliptic(integrand, k, deg):
-        # Can use this test to benchmark quadrature performance.
-        # Just
         k = np.atleast_1d(k)
         a = np.zeros_like(k)
         b = 2 * np.arcsin(k)
-        x, w = leggauss(deg)
-        w = w * grad_automorphism_sin(x)
-        x = automorphism_sin(x)
+        x, w = get_quadrature(leggauss(deg), (automorphism_sin, grad_automorphism_sin))
         Z = bijection_from_disc(x, a[..., np.newaxis], b[..., np.newaxis])
         k = k[..., np.newaxis]
         quad = np.dot(integrand(Z, k), w) * grad_bijection_from_disc(a, b)
@@ -1118,7 +1129,10 @@ class TestBounce1D:
         nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
         print("(α, ρ):", nodes[m, l, 0])
 
-        # 7. Plotting
+        # 7. Optionally check for correctness of bounce points
+        bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=False)
+
+        # 8. Plotting
         fig, ax = bounce.plot(m, l, pitch_inv[..., l], include_legend=False, show=False)
         return fig
 
@@ -1343,6 +1357,8 @@ class TestBounce1D:
             Lref=data["a"],
             check=True,
         )
+        bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=False)
+
         f = Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
             pitch_inv=pitch_inv,
@@ -1389,8 +1405,8 @@ class TestBounce1D:
         If the AD tool works properly, then these operations should be assigned
         zero gradients while the gradients wrt parameters of our physics computations
         accumulate correctly. Less mature AD tools may have subtle bugs that cause
-        the gradients to not accumulate correctly. (There's more than a few
-        GitHub issues that JAX has fixed related to this in the past!)
+        the gradients to not accumulate correctly. (There's a few
+        GitHub issues that JAX has fixed related to this in the past.)
 
         This test first confirms the gradients computed by reverse mode AD matches
         the analytic approximation of the true gradient. Then we confirm that the

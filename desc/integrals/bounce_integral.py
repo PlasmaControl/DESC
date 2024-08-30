@@ -255,7 +255,7 @@ class Bounce1D(IOAble):
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
             are interpreted as the indices that correspond to that field line.
         plot : bool
-            Whether to plot stuff.
+            Whether to plot the field lines and bounce points of the given pitch angles.
         kwargs
             Keyword arguments into ``desc/integrals/bounce_utils.py::plot_ppoly``.
 
@@ -285,6 +285,7 @@ class Bounce1D(IOAble):
         method="cubic",
         batch=True,
         check=False,
+        plot=False,
     ):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
@@ -337,6 +338,9 @@ class Bounce1D(IOAble):
             Whether to perform computation in a batched manner. Default is true.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
+        plot : bool
+            Whether to plot the quantities in the integrand interpolated to the
+            quadrature points of each integral. Ignored if ``check`` is false.
 
         Returns
         -------
@@ -361,6 +365,7 @@ class Bounce1D(IOAble):
             method=method,
             batch=batch,
             check=check,
+            plot=plot,
         )
         if weight is not None:
             result *= interp_to_argmin(

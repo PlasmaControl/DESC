@@ -86,9 +86,8 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
     pitch_inv : jnp.ndarray
         Shape (P, M, L).
         1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
-        specified by ``pitch_inv[:,α,ρ]`` where in the latter the labels
-        are interpreted as the index into the last axis that corresponds to
-        that field line.
+        specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
+        are interpreted as the indices that corresponds to that field line.
 
     """
     errorif(knots.ndim != 1, msg=f"knots should be 1d; got shape {knots.shape}.")
@@ -130,8 +129,7 @@ def bounce_points(
         Shape (P, M, L).
         1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
         specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-        are interpreted as the index into the last axis that corresponds to
-        that field line.
+        are interpreted as the indices that corresponds to that field line.
     knots : jnp.ndarray
         Shape (N, ).
         ζ coordinates of spline knots. Must be strictly increasing.
@@ -250,18 +248,18 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
 
     eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
     for ml in np.ndindex(B.shape[:-2]):
-        Bs = PPoly(B[ml].T, knots)
+        ppoly = PPoly(B[ml].T, knots)
         for p in range(pitch_inv.shape[0]):
             idx = (p, *ml)
-            Bs_midpoint = Bs((z1[idx] + z2[idx]) / 2)
-            err_3 = jnp.any(Bs_midpoint > pitch_inv[idx] + eps)
+            B_midpoint = ppoly((z1[idx] + z2[idx]) / 2)
+            err_3 = jnp.any(B_midpoint > pitch_inv[idx] + eps)
             if not (err_1[idx] or err_2[idx] or err_3):
                 continue
             _z1 = z1[idx][mask[idx]]
             _z2 = z2[idx][mask[idx]]
             if plot:
                 plot_ppoly(
-                    ppoly=Bs,
+                    ppoly=ppoly,
                     z1=_z1,
                     z2=_z2,
                     k=pitch_inv[idx],
@@ -273,7 +271,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
             assert not err_1[idx], "Intersects have an inversion.\n"
             assert not err_2[idx], "Detected discontinuity.\n"
             assert not err_3, (
-                f"Detected |B| = {Bs_midpoint[mask[idx]]} > {pitch_inv[idx] + eps} "
+                f"Detected |B| = {B_midpoint[mask[idx]]} > {pitch_inv[idx] + eps} "
                 "= 1/λ in well, implying the straight line path between "
                 "bounce points is in hypograph(|B|). Use more knots.\n"
             )
@@ -281,7 +279,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
             idx = (slice(None), *ml)
             plots.append(
                 plot_ppoly(
-                    ppoly=Bs,
+                    ppoly=ppoly,
                     z1=z1[idx],
                     z2=z2[idx],
                     k=pitch_inv[idx],
@@ -325,8 +323,7 @@ def bounce_quadrature(
         Shape (P, M, L).
         1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
         specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-        are interpreted as the index into the last axis that corresponds to
-        that field line.
+        are interpreted as the indices that corresponds to that field line.
     integrand : callable
         The composition operator on the set of functions in ``f`` that maps the
         functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
@@ -355,7 +352,6 @@ def bounce_quadrature(
         Ignored if ``batch`` is false.
     plot : bool
         Whether to plot stuff if ``check`` is true. Default is false.
-        Only developers doing debugging want to see these plots.
 
     Returns
     -------
@@ -478,7 +474,7 @@ def _interpolate_and_integrate(
 
 
 def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
-    """Check for floating point errors.
+    """Check for interpolation failures and floating point issues.
 
     Parameters
     ----------
@@ -499,15 +495,14 @@ def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
 
     """
     assert jnp.isfinite(Q).all(), "NaN interpolation point."
-    msg = "|B| has vanished, violating the hairy ball theorem."
-    assert not jnp.isclose(B, 0).any(), msg
-    assert not jnp.isclose(b_sup_z, 0).any(), msg
+    assert not (
+        jnp.isclose(B, 0).any() or jnp.isclose(b_sup_z, 0).any()
+    ), "|B| has vanished, violating the hairy ball theorem."
 
     # Integrals that we should be computing.
     marked = jnp.any(Q.reshape(shape) != 0.0, axis=-1)
     goal = marked.sum()
 
-    msg = "Interpolation failed."
     assert goal == (marked & jnp.isfinite(b_sup_z).reshape(shape).all(axis=-1)).sum()
     assert goal == (marked & jnp.isfinite(B).reshape(shape).all(axis=-1)).sum()
     for f_i in f:
@@ -528,7 +523,12 @@ def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
 
 
 def _plot_check_interp(Q, V, name=""):
-    """Plot V[λ, α, ρ, (ζ₁, ζ₂)](Q)."""
+    """Plot V[λ, α, ρ, (ζ₁, ζ₂)](Q).
+
+    These are pretty, but likely only useful for developers
+    doing debugging, so we don't include an option to plot these
+    in the public API of Bounce1D.
+    """
     for idx in np.ndindex(Q.shape[:-2]):
         marked = jnp.nonzero(jnp.any(Q[idx] != 0.0, axis=-1))[0]
         if marked.size == 0:
@@ -542,8 +542,8 @@ def _plot_check_interp(Q, V, name=""):
         fig.text(
             0.01,
             0.01,
-            "Each color specifies particular bounce integral with the function "
-            f"{name} interpolated to the quadrature points.",
+            f"Each color specifies {name} interpolated to the quadrature "
+            "points of a particular integral.",
         )
         plt.tight_layout()
         plt.show()

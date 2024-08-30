@@ -11,7 +11,7 @@ class TestPolyUtils:
     """Test polynomial utilities used for local spline interpolation in integrals."""
 
     @pytest.mark.unit
-    def test_poly_root(self):
+    def test_polyroot_vec(self):
         """Test vectorized computation of cubic polynomial exact roots."""
         c = np.arange(-24, 24).reshape(4, 6, -1).transpose(-1, 1, 0)
         # Ensure broadcasting won't hide error in implementation.
@@ -20,7 +20,7 @@ class TestPolyUtils:
         k = np.broadcast_to(np.arange(c.shape[-2]), c.shape[:-1])
         # Now increase dimension so that shapes still broadcast, but stuff like
         # ``c[...,-1]-=k`` is not allowed because it grows the dimension of ``c``.
-        # This is needed functionality in ``poly_root`` that requires an awkward
+        # This is needed functionality in ``polyroot_vec`` that requires an awkward
         # loop to obtain if using jnp.vectorize.
         k = np.stack([k, k * 2 + 1])
         r = polyroot_vec(c, k, sort=True)
@@ -34,7 +34,7 @@ class TestPolyUtils:
                 np.testing.assert_allclose(
                     r[(i, *idx)],
                     np.sort(np.roots(d[idx])),
-                    err_msg=f"Eigenvalue branch of poly_root failed at {i, *idx}.",
+                    err_msg=f"Eigenvalue branch of polyroot_vec failed at {i, *idx}.",
                 )
 
         # Now test analytic formula branch, Ensure it filters distinct roots,
@@ -59,7 +59,7 @@ class TestPolyUtils:
             np.testing.assert_allclose(
                 root,
                 unique_root,
-                err_msg=f"Analytic branch of poly_root failed at {j}.",
+                err_msg=f"Analytic branch of polyroot_vec failed at {j}.",
             )
         c = np.array([0, 1, -1, -8, 12])
         r = polyroot_vec(c, sort=True, distinct=True)

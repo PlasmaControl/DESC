@@ -67,10 +67,10 @@ class Bounce1D(IOAble):
     functions of interest do not vanish at infinity, pseudo-spectral techniques
     are not used. Instead, function approximation is done with local splines.
     This is useful if one can efficiently obtain data along field lines and
-    most efficient if the number of toroidal transit to follow a field line is
+    most efficient if the number of toroidal transits to follow a field line is
     not too large.
 
-    After obtaining the bounce points, the supplied quadrature is performed.
+    After computing the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
     Local splines interpolate functions in the integrand to the quadrature nodes.
 
@@ -212,8 +212,7 @@ class Bounce1D(IOAble):
             Shape (P, M, L).
             1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-            are interpreted as the index into the last axis that corresponds to
-            that field line.
+            are interpreted as the indices that corresponds to that field line.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
@@ -254,12 +253,11 @@ class Bounce1D(IOAble):
             Shape (P, M, L).
             1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-            are interpreted as the index into the last axis that corresponds to
-            that field line.
+            are interpreted as the indices that corresponds to that field line.
         plot : bool
             Whether to plot stuff.
         kwargs
-            Keyword arguments into ``self.plot_ppoly``.
+            Keyword arguments into ``desc/integrals/bounce_utils.py::plot_ppoly``.
 
         Returns
         -------
@@ -290,8 +288,7 @@ class Bounce1D(IOAble):
     ):
         """Bounce integrate ∫ f(ℓ) dℓ.
 
-        Computes the bounce integral ∫ f(ℓ) dℓ for every specified field line
-        for every λ value in ``pitch_inv``.
+        Computes the bounce integral ∫ f(ℓ) dℓ for every field line and pitch.
 
         Notes
         -----
@@ -303,8 +300,7 @@ class Bounce1D(IOAble):
             Shape (P, M, L).
             1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
-            are interpreted as the index into the last axis that corresponds to
-            that field line.
+            are interpreted as the indices that corresponds to that field line.
         integrand : callable
             The composition operator on the set of functions in ``f`` that maps the
             functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
@@ -321,7 +317,7 @@ class Bounce1D(IOAble):
             Shape (M, L, N).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
-            interpolated to the deepest point in the magnetic well. Use the method
+            interpolated to the deepest point in that magnetic well. Use the method
             ``self.reshape_data`` to reshape the data into the expected shape.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
@@ -388,7 +384,7 @@ class Bounce1D(IOAble):
         pitch_inv : jnp.ndarray
             Shape (P, ).
             1/λ values to evaluate the bounce integral at the field line
-            specified by the (α(m), ρ(l)) Clebsch coordinate.
+            specified by Clebsch coordinate α(m), ρ(l).
         m, l : int, int
             Indices into the nodes of the grid supplied to make this object.
             ``alpha, rho = grid.meshgrid_reshape(grid.nodes[:, :2], "arz")[m, l, 0]``.

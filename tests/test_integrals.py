@@ -1118,7 +1118,7 @@ class TestBounce1D:
         print("(α, ρ):", nodes[m, l, 0])
 
         # 7. Plotting
-        fig, ax = bounce.plot(pitch_inv[..., l], m, l, include_legend=False, show=False)
+        fig, ax = bounce.plot(m, l, pitch_inv[..., l], include_legend=False, show=False)
         return fig
 
     @pytest.mark.unit

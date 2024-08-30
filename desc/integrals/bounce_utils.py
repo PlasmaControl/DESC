@@ -85,7 +85,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
         last axis enumerates the polynomials that compose a particular spline.
     pitch_inv : jnp.ndarray
         Shape (P, M, L).
-        1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
+        1/λ values to compute the bounce integrals of each field line. 1/λ(ρ,α) is
         specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
         are interpreted as the indices that corresponds to that field line.
 
@@ -127,7 +127,7 @@ def bounce_points(
     ----------
     pitch_inv : jnp.ndarray
         Shape (P, M, L).
-        1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
+        1/λ values to compute the bounce points at each field line. 1/λ(ρ,α) is
         specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
         are interpreted as the indices that corresponds to that field line.
     knots : jnp.ndarray
@@ -321,7 +321,7 @@ def bounce_quadrature(
         epigraph of |B|.
     pitch_inv : jnp.ndarray
         Shape (P, M, L).
-        1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
+        1/λ values to evaluate the bounce integrals of each field line. 1/λ(ρ,α) is
         specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
         are interpreted as the indices that corresponds to that field line.
     integrand : callable

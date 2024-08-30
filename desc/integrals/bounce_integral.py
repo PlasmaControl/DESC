@@ -210,7 +210,7 @@ class Bounce1D(IOAble):
         ----------
         pitch_inv : jnp.ndarray
             Shape (P, M, L).
-            1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
+            1/λ values to compute the bounce points at each field line. 1/λ(ρ,α) is
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
             are interpreted as the indices that corresponds to that field line.
         num_well : int or None
@@ -251,7 +251,7 @@ class Bounce1D(IOAble):
             epigraph of |B|.
         pitch_inv : jnp.ndarray
             Shape (P, M, L).
-            1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
+            1/λ values to compute the bounce points at each field line. 1/λ(ρ,α) is
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
             are interpreted as the indices that corresponds to that field line.
         plot : bool
@@ -298,7 +298,7 @@ class Bounce1D(IOAble):
         ----------
         pitch_inv : jnp.ndarray
             Shape (P, M, L).
-            1/λ values to evaluate the bounce integral at each field line. 1/λ(ρ,α) is
+            1/λ values to compute the bounce integrals of each field line. 1/λ(ρ,α) is
             specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
             are interpreted as the indices that corresponds to that field line.
         integrand : callable
@@ -376,18 +376,18 @@ class Bounce1D(IOAble):
         assert result.shape[-1] == setdefault(num_well, np.prod(self._dB_dz.shape[-2:]))
         return result
 
-    def plot(self, pitch_inv, m, l, **kwargs):
+    def plot(self, m, l, pitch_inv=None, **kwargs):
         """Plot the field line and bounce points of the given pitch angles.
 
         Parameters
         ----------
-        pitch_inv : jnp.ndarray
-            Shape (P, ).
-            1/λ values to evaluate the bounce integral at the field line
-            specified by Clebsch coordinate α(m), ρ(l).
         m, l : int, int
             Indices into the nodes of the grid supplied to make this object.
-            ``alpha, rho = grid.meshgrid_reshape(grid.nodes[:, :2], "arz")[m, l, 0]``.
+            ``alpha,rho=grid.meshgrid_reshape(grid.nodes[:,:2],"arz")[m,l,0]``.
+        pitch_inv : jnp.ndarray
+            Shape (P, ).
+            Optional, 1/λ values whose corresponding bounce points on the field line
+            specified by Clebsch coordinate α(m), ρ(l) will be plotted.
         kwargs
             Keyword arguments into ``desc/integrals/bounce_utils.py::plot_ppoly``.
 
@@ -397,22 +397,22 @@ class Bounce1D(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
-        pitch_inv = jnp.atleast_1d(jnp.squeeze(pitch_inv))
-        errorif(
-            pitch_inv.ndim != 1,
-            msg=f"Got pitch_inv.ndim={pitch_inv.ndim}, but expected 1.",
-        )
-        z1, z2 = bounce_points(
-            pitch_inv[:, jnp.newaxis, jnp.newaxis],
-            self._zeta,
-            self.B[m, l],
-            self._dB_dz[m, l],
-        )
+        if pitch_inv is not None:
+            pitch_inv = jnp.atleast_1d(jnp.squeeze(pitch_inv))
+            errorif(
+                pitch_inv.ndim != 1,
+                msg=f"Got pitch_inv.ndim={pitch_inv.ndim}, but expected 1.",
+            )
+            z1, z2 = bounce_points(
+                pitch_inv[:, jnp.newaxis, jnp.newaxis],
+                self._zeta,
+                self.B[m, l],
+                self._dB_dz[m, l],
+            )
+            kwargs["z1"] = z1
+            kwargs["z2"] = z2
+            kwargs["k"] = pitch_inv
         fig, ax = plot_ppoly(
-            ppoly=PPoly(self.B[m, l].T, self._zeta),
-            z1=z1,
-            z2=z2,
-            k=pitch_inv,
-            **_set_default_plot_kwargs(kwargs),
+            PPoly(self.B[m, l].T, self._zeta), **_set_default_plot_kwargs(kwargs)
         )
         return fig, ax

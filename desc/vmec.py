@@ -25,7 +25,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 from desc.vmec_utils import (
     fourier_to_zernike,
     ptolemy_identity_fwd,
@@ -249,6 +249,11 @@ class VMECIO:
         M = eq.M
         N = eq.N
         M_nyq = M + 4 if M_nyq is None else M_nyq
+        warnif(
+            N_nyq is not None and int(N) == 0,
+            UserWarning,
+            "Passed in N_nyq but equilibrium is axisymmetric, setting N_nyq to zero",
+        )
         N_nyq = N + 2 if N_nyq is None else N_nyq
         N_nyq = 0 if int(N) == 0 else N_nyq
 

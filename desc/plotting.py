@@ -973,7 +973,7 @@ def plot_3d(
         if not grid.nodes[-1][2] == 2 * np.pi:
             p1, p2 = False, False
         else:
-            p1, p2 = True, True
+            p1, p2 = False, True
     elif grid.num_theta == 1:
         n1, n2 = grid.num_rho, grid.num_zeta
         p1, p2 = False, True

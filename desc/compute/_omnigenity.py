@@ -23,7 +23,7 @@ from .utils import cross, dot, safediv
     units="T \\cdot m}",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant poloidal component of "
-    + "magnetic field",
+    "magnetic field.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
@@ -39,25 +39,27 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: do math to change definition of nu so that we can just use B_zeta_mn here
 @register_compute_fun(
-    name="B_zeta_mn",
-    label="B_{\\zeta, m, n}",
+    name="B_phi_mn",
+    label="B_{\\phi, m, n}",
     units="T \\cdot m}",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant toroidal component of "
-    + "magnetic field",
+    "magnetic field in (ρ,θ,ϕ) coordinates.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_zeta"],
+    data=["B_phi|r,t"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     resolution_requirement="tz",
+    aliases="B_zeta_mn",  # TODO: remove when phi != zeta
 )
-def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
-    data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])
+def _B_phi_mn(params, transforms, profiles, data, **kwargs):
+    data["B_phi_mn"] = transforms["B"].fit(data["B_phi|r,t"])
     return data
 
 
@@ -73,7 +75,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_zeta_mn"],
+    data=["B_theta_mn", "B_phi_mn"],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -89,7 +91,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
 
     num_t = (mask_t @ sign(wn)) * data["B_theta_mn"]
     den_t = mask_t @ jnp.abs(wm)
-    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"]
+    num_z = (mask_z @ sign(wm)) * data["B_phi_mn"]
     den_z = mask_z @ jnp.abs(NFP * wn)
 
     w_mn = jnp.where(mask_t.any(axis=0), mask_t.T @ safediv(num_t, den_t), w_mn)
@@ -233,10 +235,10 @@ def _nu_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta", "lambda", "iota", "nu"],
+    data=["theta_PEST", "iota", "nu"],
 )
 def _theta_B(params, transforms, profiles, data, **kwargs):
-    data["theta_B"] = data["theta"] + data["lambda"] + data["iota"] * data["nu"]
+    data["theta_B"] = data["theta_PEST"] + data["iota"] * data["nu"]
     return data
 
 
@@ -251,10 +253,10 @@ def _theta_B(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["zeta", "nu"],
+    data=["phi", "nu"],
 )
 def _zeta_B(params, transforms, profiles, data, **kwargs):
-    data["zeta_B"] = data["zeta"] + data["nu"]
+    data["zeta_B"] = data["phi"] + data["nu"]
     return data
 
 
@@ -263,18 +265,20 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_{B}",
     units="~",
     units_long="None",
-    description="Jacobian determinant of Boozer coordinates",
+    description="Jacobian determinant from Boozer to DESC coordinates",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
+    data=["theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z", "nu_t", "nu_z", "iota"],
 )
 def _sqrtg_B(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
-        data["iota"] - data["lambda_z"]
-    ) * data["nu_t"]
+    data["sqrt(g)_B"] = (
+        data["theta_PEST_t"] * (data["phi_z"] + data["nu_z"])
+        - data["theta_PEST_z"] * (data["phi_t"] + data["nu_t"])
+        + data["iota"] * (data["nu_t"] * data["phi_z"] - data["nu_z"] * data["phi_t"])
+    )
     return data
 
 
@@ -336,12 +340,22 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["iota", "B0", "B_theta", "B_zeta", "|B|_t", "|B|_z", "G", "I", "B*grad(|B|)"],
+    data=[
+        "iota",
+        "psi_r/sqrt(g)",
+        "B_theta",
+        "B_zeta",
+        "|B|_t",
+        "|B|_z",
+        "G",
+        "I",
+        "B*grad(|B|)",
+    ],
     helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
 )
 def _f_C(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
-    data["f_C"] = (M * data["iota"] - N) * data["B0"] * (
+    data["f_C"] = (M * data["iota"] - N) * data["psi_r/sqrt(g)"] * (
         data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
     ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
     return data
@@ -359,10 +373,10 @@ def _f_C(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "|B|_t", "|B|_z", "(B*grad(|B|))_t", "(B*grad(|B|))_z"],
+    data=["psi_r/sqrt(g)", "|B|_t", "|B|_z", "(B*grad(|B|))_t", "(B*grad(|B|))_z"],
 )
 def _f_T(params, transforms, profiles, data, **kwargs):
-    data["f_T"] = data["B0"] * (
+    data["f_T"] = data["psi_r/sqrt(g)"] * (
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
     )

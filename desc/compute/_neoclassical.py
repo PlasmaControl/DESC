@@ -16,7 +16,7 @@ from quadax import simpson
 
 from desc.backend import imap, jit, jnp
 
-from .bounce_integral import bounce_integral, get_pitch
+from ..integrals.bounce_utils import get_pitch_inv
 from .data_index import register_compute_fun
 from .utils import safediv
 
@@ -73,7 +73,7 @@ def _get_pitch(grid, min_B, max_B, num, for_adaptive=False):
         pitch = jnp.reciprocal(jnp.stack([max_B, min_B], axis=-1))[:, jnp.newaxis]
         assert pitch.shape == (grid.num_rho, 1, 2)
     else:
-        pitch = get_pitch(min_B, max_B, num)
+        pitch = get_pitch_inv(min_B, max_B, num)
         pitch = jnp.broadcast_to(
             pitch[..., jnp.newaxis], (pitch.shape[0], grid.num_rho, grid.num_alpha)
         ).reshape(pitch.shape[0], grid.num_rho * grid.num_alpha)
@@ -225,7 +225,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     batch = kwargs.get("batch", True)
     num_wells = kwargs.get("size", None)
     g = transforms["grid"].source_grid
-    bounce_integrate, _ = bounce_integral(
+    bounce_integrate, _ = bounce_integral(  # noqa: F821
         data["B^zeta"],
         data["|B|"],
         data["|B|_z|r,a"],

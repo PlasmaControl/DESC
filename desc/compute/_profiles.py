@@ -14,8 +14,9 @@ from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
 
+from ..integrals.surface_integral import surface_averages, surface_integrals
 from .data_index import register_compute_fun
-from .utils import dot, safediv, surface_averages, surface_integrals
+from .utils import dot, safediv
 
 
 @register_compute_fun(
@@ -221,6 +222,27 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<ne>_vol",
+    label="\\langle n_e \\rangle_{vol}",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Volume average electron density",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["ne", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
+)
+def _ne_vol(params, transforms, profiles, data, **kwargs):
+    data["<ne>_vol"] = (
+        jnp.sum(data["ne"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="ne",
     label="n_e",
     units="m^{-3}",
@@ -359,6 +381,44 @@ def _Ti_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="ni",
+    label="n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["ne", "Zeff"],
+)
+def _ni(params, transforms, profiles, data, **kwargs):
+    data["ni"] = data["ne"] / data["Zeff"]
+    return data
+
+
+@register_compute_fun(
+    name="ni_r",
+    label="\\partial_{\\rho} n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density, first radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["ne", "ne_r", "Zeff", "Zeff_r"],
+)
+def _ni_r(params, transforms, profiles, data, **kwargs):
+    data["ni_r"] = (data["ne_r"] * data["Zeff"] - data["ne"] * data["Zeff_r"]) / data[
+        "Zeff"
+    ] ** 2
+    return data
+
+
+@register_compute_fun(
     name="Zeff",
     label="Z_{eff}",
     units="~",
@@ -415,7 +475,7 @@ def _Zeff_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
-    data=["Te", "ne", "Ti", "Zeff"],
+    data=["ne", "ni", "Te", "Ti"],
 )
 def _p(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
@@ -424,7 +484,7 @@ def _p(params, transforms, profiles, data, **kwargs):
         )
     else:
         data["p"] = elementary_charge * (
-            data["ne"] * data["Te"] + data["Ti"] * data["ne"] / data["Zeff"]
+            data["ne"] * data["Te"] + data["ni"] * data["Ti"]
         )
     return data
 
@@ -440,7 +500,7 @@ def _p(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
-    data=["Te", "Te_r", "ne", "ne_r", "Ti", "Ti_r", "Zeff", "Zeff_r"],
+    data=["ne", "ne_r", "ni", "ni_r", "Te", "Te_r", "Ti", "Ti_r"],
 )
 def _p_r(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
@@ -451,9 +511,8 @@ def _p_r(params, transforms, profiles, data, **kwargs):
         data["p_r"] = elementary_charge * (
             data["ne_r"] * data["Te"]
             + data["ne"] * data["Te_r"]
-            + data["Ti_r"] * data["ne"] / data["Zeff"]
-            + data["Ti"] * data["ne_r"] / data["Zeff"]
-            - data["Ti"] * data["ne"] * data["Zeff_r"] / data["Zeff"] ** 2
+            + data["ni_r"] * data["Ti"]
+            + data["ni"] * data["Ti_r"]
         )
     return data
 
@@ -709,6 +768,7 @@ def _iota(params, transforms, profiles, data, **kwargs):
         data["iota"] = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=0)
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
+        # Assumes ζ = ϕ − ω and θ = ϑ − λ.
         data["iota"] = transforms["grid"].replace_at_axis(
             safediv(data["iota_num"], data["iota_den"]),
             lambda: safediv(data["iota_num_r"], data["iota_den_r"]),
@@ -737,6 +797,7 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
         )
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
+        # Assumes ζ = ϕ − ω and θ = ϑ − λ.
         data["iota_r"] = transforms["grid"].replace_at_axis(
             safediv(
                 data["iota_num_r"] * data["iota_den"]
@@ -780,6 +841,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
         )
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
+        # Assumes ζ = ϕ − ω and θ = ϑ − λ.
         data["iota_rr"] = transforms["grid"].replace_at_axis(
             safediv(
                 data["iota_num_rr"] * data["iota_den"] ** 2
@@ -867,7 +929,7 @@ def _iota_num_current(params, transforms, profiles, data, **kwargs):
         iota = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=0)
         data["iota_num current"] = iota * data["iota_den"] - data["iota_num vacuum"]
     elif profiles["current"] is not None:
-        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+        # 4π² I = 4π² (μ₀ current / 2π) = 2π μ₀ current
         current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
         current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
         data["iota_num current"] = (
@@ -899,6 +961,7 @@ def _iota_num_current(params, transforms, profiles, data, **kwargs):
 )
 def _iota_num_vacuum(params, transforms, profiles, data, **kwargs):
     """Vacuum contribution to the numerator of rotational transform formula."""
+    # Assumes ζ = ϕ − ω and θ = ϑ − λ.
     iota_num_vacuum = transforms["grid"].replace_at_axis(
         safediv(
             data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"],
@@ -980,6 +1043,7 @@ def _iota_num_r_current(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
 )
 def _iota_num_r_vacuum(params, transforms, profiles, data, **kwargs):
+    # Assumes ζ = ϕ − ω and θ = ϑ − λ.
     iota_num_vacuum = safediv(
         data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"],
         data["sqrt(g)"],
@@ -1099,11 +1163,11 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     Computes d2(𝛼+𝛽)/d𝜌2 as defined in the document attached to the description
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
+    Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     if profiles["iota"] is not None:
         data["iota_num_rr"] = jnp.nan * data["0"]
     elif profiles["current"] is not None:
-        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
         current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
         current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
         current_rr = profiles["current"].compute(
@@ -1112,6 +1176,7 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
         current_rrr = profiles["current"].compute(
             transforms["grid"], params["c_l"], dr=3
         )
+        # 4π² I = 4π² (μ₀ current / 2π) = 2π μ₀ current
         alpha_rr = (
             jnp.pi
             * mu_0
@@ -1228,6 +1293,7 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     Computes d3(𝛼+𝛽)/d𝜌3 as defined in the document attached to the description
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
+    Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     if profiles["iota"] is not None:
         data["iota_num_rrr"] = jnp.nan * data["0"]
@@ -1243,7 +1309,7 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
         current_rrrr = profiles["current"].compute(
             transforms["grid"], params["c_l"], dr=4
         )
-        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+        # 4π² I = 4π² (μ₀ current / 2π) = 2π μ₀ current
         alpha_rrr = (
             jnp.pi
             * mu_0
@@ -1347,14 +1413,14 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula.
 
     Computes 𝛾 as defined in the document attached to the description
-    of GitHub pull request #556.
+    of GitHub pull request #556. Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     gamma = safediv(
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"],
         data["sqrt(g)"],
     )
     # Assumes toroidal stream function behaves such that the magnetic axis limit
-    # of gamma is zero (as it would if omega = 0 identically).
+    # of γ is zero (as it would if ω = 0 identically).
     gamma = transforms["grid"].replace_at_axis(
         surface_integrals(transforms["grid"], gamma), 0
     )
@@ -1392,7 +1458,7 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, first radial derivative.
 
     Computes d𝛾/d𝜌 as defined in the document attached to the description
-    of GitHub pull request #556.
+    of GitHub pull request #556. Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     gamma = safediv(
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"],
@@ -1459,7 +1525,7 @@ def _iota_den_rr(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, second radial derivative.
 
     Computes d2𝛾/d𝜌2 as defined in the document attached to the description
-    of GitHub pull request #556.
+    of GitHub pull request #556. Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     gamma = safediv(
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"],
@@ -1554,7 +1620,7 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula, third radial derivative.
 
     Computes d3𝛾/d𝜌3 as defined in the document attached to the description
-    of GitHub pull request #556.
+    of GitHub pull request #556. Assumes ζ = ϕ − ω and θ = ϑ − λ.
     """
     gamma = safediv(
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"],
@@ -1620,9 +1686,12 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["iota_rr", "psi_rr"],
 )
 def _iota_psi(params, transforms, profiles, data, **kwargs):
-    # Existence of limit at magnetic axis requires ∂ᵨ iota = 0 at axis.
-    # Assume iota may be expanded as an even power series of ρ so that this
-    # condition is satisfied.
+    """∂ι/∂ψ.
+
+    Existence of limit at magnetic axis requires ∂ι/∂ρ = 0 at axis.
+    Assume ι may be expanded as an even power series of ρ so that this
+    condition is satisfied.
+    """
     data["iota_psi"] = transforms["grid"].replace_at_axis(
         safediv(data["iota_r"], data["psi_r"]),
         lambda: safediv(data["iota_rr"], data["psi_rr"]),
@@ -1853,4 +1922,52 @@ def _shear(params, transforms, profiles, data, **kwargs):
         lambda _: -data["rho"] * data["iota_r"] / data["iota"],
         None,
     )
+    return data
+
+
+@register_compute_fun(
+    name="<sigma*nu>",
+    label="\\langle\\sigma\\nu\\rangle",
+    units="m^3 \\cdot s^{-1}",
+    units_long="cubic meters / second",
+    description="Thermal reactivity from Bosch-Hale parameterization",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["Ti"],
+    fuel="str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default is 'DT'.",
+)
+def _reactivity(params, transforms, profiles, data, **kwargs):
+    # Bosch and Hale. “Improved Formulas for Fusion Cross-Sections and Thermal
+    # Reactivities.” Nuclear Fusion 32 (April 1992): 611-631.
+    # https://doi.org/10.1088/0029-5515/32/4/I07.
+    coefficients = {
+        "DT": {
+            "B_G": 34.382,
+            "mc2": 1124656,
+            "C1": 1.17302e-9,
+            "C2": 1.51361e-2,
+            "C3": 7.51886e-2,
+            "C4": 4.60643e-3,
+            "C5": 1.35000e-2,
+            "C6": -1.06750e-4,
+            "C7": 1.36600e-5,
+        }
+    }
+    fuel = kwargs.get("fuel", "DT")
+    coeffs = coefficients.get(fuel)
+
+    T = data["Ti"] / 1e3  # keV
+    theta = T / (
+        1
+        - (T * (coeffs["C2"] + T * (coeffs["C4"] + T * coeffs["C6"])))
+        / (1 + T * (coeffs["C3"] + T * (coeffs["C5"] + T * coeffs["C7"])))
+    )
+    xi = (coeffs["B_G"] ** 2 / (4 * theta)) ** (1 / 3)
+    sigma_nu = (
+        coeffs["C1"] * theta * jnp.sqrt(xi / (coeffs["mc2"] * T**3)) * jnp.exp(-3 * xi)
+    )  # cm^3/s
+    data["<sigma*nu>"] = sigma_nu / 1e6  # m^3/s
     return data

@@ -59,7 +59,7 @@ class AspectRatio(_Objective):
 
     _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "Aspect ratio: {:10.3e} "
+    _print_value_fmt = "Aspect ratio: "
 
     def __init__(
         self,
@@ -221,7 +221,7 @@ class Elongation(_Objective):
 
     _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "Elongation: {:10.3e} "
+    _print_value_fmt = "Elongation: "
 
     def __init__(
         self,
@@ -382,7 +382,7 @@ class Volume(_Objective):
 
     _scalar = True
     _units = "(m^3)"
-    _print_value_fmt = "Plasma volume: {:10.3e} "
+    _print_value_fmt = "Plasma volume: "
 
     def __init__(
         self,
@@ -591,7 +591,7 @@ class PlasmaVesselDistance(_Objective):
 
     _coordinates = "rtz"
     _units = "(m)"
-    _print_value_fmt = "Plasma-vessel distance: {:10.3e} "
+    _print_value_fmt = "Plasma-vessel distance: "
 
     def __init__(
         self,
@@ -930,7 +930,7 @@ class MeanCurvature(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Mean curvature: {:10.3e} "
+    _print_value_fmt = "Mean curvature: "
 
     def __init__(
         self,
@@ -1090,7 +1090,7 @@ class PrincipalCurvature(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Principal curvature: {:10.3e} "
+    _print_value_fmt = "Principal curvature: "
 
     def __init__(
         self,
@@ -1245,7 +1245,7 @@ class BScaleLength(_Objective):
 
     _coordinates = "rtz"
     _units = "(m)"
-    _print_value_fmt = "Magnetic field scale length: {:10.3e} "
+    _print_value_fmt = "Magnetic field scale length: "
 
     def __init__(
         self,
@@ -1396,7 +1396,7 @@ class GoodCoordinates(_Objective):
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Coordinate goodness : {:10.3e} "
+    _print_value_fmt = "Coordinate goodness : "
 
     def __init__(
         self,

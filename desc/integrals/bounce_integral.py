@@ -6,10 +6,10 @@ from orthax.legendre import leggauss
 
 from desc.backend import jnp
 from desc.integrals.bounce_utils import (
+    _bounce_quadrature,
     _check_bounce_points,
     _set_default_plot_kwargs,
     bounce_points,
-    bounce_quadrature,
     get_pitch_inv,
     interp_to_argmin,
     plot_ppoly,
@@ -21,7 +21,7 @@ from desc.integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from desc.io import IOAble
-from desc.utils import atleast_nd, errorif, setdefault, warnif
+from desc.utils import errorif, setdefault, warnif
 
 
 class Bounce1D(IOAble):
@@ -167,8 +167,8 @@ class Bounce1D(IOAble):
         self.B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
-                y=self._data["|B|"],
-                dydx=self._data["|B|_z|r,a"],
+                y=self._data["|B|"].squeeze(axis=-2),
+                dydx=self._data["|B|_z|r,a"].squeeze(axis=-2),
                 axis=-1,
                 check=check,
             ).c,
@@ -196,22 +196,18 @@ class Bounce1D(IOAble):
             List of reshaped data which may be given to ``integrate``.
 
         """
-        f = [grid.meshgrid_reshape(d, "arz") for d in arys]
+        f = [grid.meshgrid_reshape(d, "arz")[..., jnp.newaxis, :] for d in arys]
         return f
 
     def points(self, pitch_inv, num_well=None):
         """Compute bounce points.
 
-        Notes
-        -----
-        Only the dimensions following L are required. The leading axes are batch axes.
-
         Parameters
         ----------
         pitch_inv : jnp.ndarray
-            Shape (P, M, L).
+            Shape (M, L, P).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
-            specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
+            specified by ``pitch_inv[α,ρ]`` where in the latter the labels
             are interpreted as the indices that correspond to that field line.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
@@ -227,7 +223,7 @@ class Bounce1D(IOAble):
         Returns
         -------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (P, M, L, num_well).
+            Shape (M, L, P, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
@@ -245,14 +241,14 @@ class Bounce1D(IOAble):
         Parameters
         ----------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (P, M, L, num_well).
+            Shape (M, L, P, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
         pitch_inv : jnp.ndarray
-            Shape (P, M, L).
+            Shape (M, L, P).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
-            specified by ``pitch_inv[...,α,ρ]`` where in the latter the labels
+            specified by ``pitch_inv[α,ρ]`` where in the latter the labels
             are interpreted as the indices that correspond to that field line.
         plot : bool
             Whether to plot the field lines and bounce points of the given pitch angles.
@@ -268,7 +264,7 @@ class Bounce1D(IOAble):
         return _check_bounce_points(
             z1=z1,
             z2=z2,
-            pitch_inv=atleast_nd(3, pitch_inv),
+            pitch_inv=pitch_inv,
             knots=self._zeta,
             B=self.B,
             plot=plot,
@@ -291,16 +287,12 @@ class Bounce1D(IOAble):
 
         Computes the bounce integral ∫ f(ℓ) dℓ for every field line and pitch.
 
-        Notes
-        -----
-        Only the dimensions following L are required. The leading axes are batch axes.
-
         Parameters
         ----------
         pitch_inv : jnp.ndarray
-            Shape (P, M, L).
+            Shape (M, L, P).
             1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
-            ``pitch_inv[...,α,ρ]`` where in the latter the labels are interpreted
+            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
         integrand : callable
             The composition operator on the set of functions in ``f`` that maps the
@@ -309,13 +301,13 @@ class Bounce1D(IOAble):
             ``B`` and ``pitch``. A quadrature will be performed to approximate the
             bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
         f : list[jnp.ndarray]
-            Shape (M, L, N).
+            Shape (M, L, 1, N).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
             construct this object. These functions should be arguments to the callable
             ``integrand``. Use the method ``self.reshape_data`` to reshape the data
             into the expected shape.
         weight : jnp.ndarray
-            Shape (M, L, N).
+            Shape (M, L, 1, N).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
@@ -345,14 +337,13 @@ class Bounce1D(IOAble):
         Returns
         -------
         result : jnp.ndarray
-            Shape (P, M, L, num_well).
-            Last axis enumerates the bounce integrals for a given pitch, field line,
-            and flux surface.
+            Shape (M, L, P, num_well).
+            Last axis enumerates the bounce integrals for a given field line,
+            flux surface, and pitch value.
 
         """
-        pitch_inv = atleast_nd(3, pitch_inv)
         z1, z2 = self.points(pitch_inv, num_well)
-        result = bounce_quadrature(
+        result = _bounce_quadrature(
             x=self._x,
             w=self._w,
             z1=z1,
@@ -369,7 +360,7 @@ class Bounce1D(IOAble):
         )
         if weight is not None:
             result *= interp_to_argmin(
-                weight,
+                weight.squeeze(axis=-2),
                 z1,
                 z2,
                 self._zeta,
@@ -377,7 +368,6 @@ class Bounce1D(IOAble):
                 self._dB_dz,
                 method,
             )
-        assert result.shape[0] == pitch_inv.shape[0]
         assert result.shape[-1] == setdefault(num_well, np.prod(self._dB_dz.shape[-2:]))
         return result
 
@@ -403,16 +393,12 @@ class Bounce1D(IOAble):
 
         """
         if pitch_inv is not None:
-            pitch_inv = jnp.atleast_1d(jnp.squeeze(pitch_inv))
             errorif(
-                pitch_inv.ndim != 1,
+                pitch_inv.ndim > 1,
                 msg=f"Got pitch_inv.ndim={pitch_inv.ndim}, but expected 1.",
             )
             z1, z2 = bounce_points(
-                pitch_inv[:, jnp.newaxis, jnp.newaxis],
-                self._zeta,
-                self.B[m, l],
-                self._dB_dz[m, l],
+                pitch_inv, self._zeta, self.B[m, l], self._dB_dz[m, l]
             )
             kwargs["z1"] = z1
             kwargs["z2"] = z2

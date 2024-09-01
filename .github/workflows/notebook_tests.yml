@@ -8,6 +8,13 @@ on:
   pull_request:
     branches:
       - master
+    paths:
+        - 'desc/**'
+        - 'docs/notebooks/**'
+        - 'requirements.txt'
+        - 'devtools/dev-requirements.txt'
+        - 'setup.cfg'
+        - '.github/workflows/notebook_tests.yml'
   workflow_dispatch:
 
 concurrency:

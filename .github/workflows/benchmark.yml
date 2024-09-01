@@ -4,9 +4,13 @@ on:
   pull_request:
     branches:
       - master
-    paths-ignore:
-      - 'docs/**'
-      - 'devtools/**'
+    paths:
+      - 'desc/**'
+      - 'tests/benchmarks/**'
+      - 'requirements.txt'
+      - 'devtools/dev-requirements.txt'
+      - 'setup.cfg'
+      - '.github/workflows/benchmark.yml'
   workflow_dispatch:
     inputs:
       debug_enabled:

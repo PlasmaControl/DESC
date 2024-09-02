@@ -1,6 +1,5 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
-import numpy as np
 from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
@@ -108,6 +107,8 @@ class Bounce1D(IOAble):
         automorphism=(automorphism_sin, grad_automorphism_sin),
         Bref=1.0,
         Lref=1.0,
+        *,
+        is_reshaped=False,
         check=False,
         **kwargs,
     ):
@@ -137,6 +138,13 @@ class Bounce1D(IOAble):
             Optional. Reference magnetic field strength for normalization.
         Lref : float
             Optional. Reference length scale for normalization.
+        is_reshaped : bool
+            Whether the arrays in ``data`` are already reshaped to the expected form of
+            shape (..., N) or (..., L, N) or (M, L, N). This option can be used to
+            iteratively compute bounce integrals one field line or one flux surface
+            at a time, respectively, potentially reducing memory usage. To do so,
+            set to true and provide only those axes of the reshaped data.
+            Default is false.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
 
@@ -159,7 +167,11 @@ class Bounce1D(IOAble):
             "|B|": data["|B|"] / Bref,
             "|B|_z|r,a": data["|B|_z|r,a"] / Bref,  # This is already the correct sign.
         }
-        self._data = dict(zip(data.keys(), Bounce1D.reshape_data(grid, *data.values())))
+        self._data = (
+            data
+            if is_reshaped
+            else dict(zip(data.keys(), Bounce1D.reshape_data(grid, *data.values())))
+        )
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
@@ -167,8 +179,8 @@ class Bounce1D(IOAble):
         self.B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
-                y=self._data["|B|"].squeeze(axis=-2),
-                dydx=self._data["|B|_z|r,a"].squeeze(axis=-2),
+                y=self._data["|B|"],
+                dydx=self._data["|B|_z|r,a"],
                 axis=-1,
                 check=check,
             ).c,
@@ -176,8 +188,10 @@ class Bounce1D(IOAble):
             destination=(-1, -2),
         )
         self._dB_dz = polyder_vec(self.B)
-        assert self.B.shape == (grid.num_alpha, grid.num_rho, grid.num_zeta - 1, 4)
-        assert self._dB_dz.shape == (grid.num_alpha, grid.num_rho, grid.num_zeta - 1, 3)
+
+        # Add axis here instead of in ``_bounce_quadrature``.
+        for name in self._data:
+            self._data[name] = self._data[name][..., jnp.newaxis, :]
 
     @staticmethod
     def reshape_data(grid, *arys):
@@ -192,14 +206,15 @@ class Bounce1D(IOAble):
 
         Returns
         -------
-        f : list[jnp.ndarray]
-            List of reshaped data which may be given to ``integrate``.
+        f : jnp.ndarray
+            Shape (M, L, N).
+            Reshaped data which may be given to ``integrate``.
 
         """
-        f = [grid.meshgrid_reshape(d, "arz")[..., jnp.newaxis, :] for d in arys]
-        return f
+        f = [grid.meshgrid_reshape(d, "arz") for d in arys]
+        return f if len(f) > 1 else f[0]
 
-    def points(self, pitch_inv, num_well=None):
+    def points(self, pitch_inv, *, num_well=None):
         """Compute bounce points.
 
         Parameters
@@ -235,7 +250,7 @@ class Bounce1D(IOAble):
         """
         return bounce_points(pitch_inv, self._zeta, self.B, self._dB_dz, num_well)
 
-    def check_points(self, z1, z2, pitch_inv, plot=True, **kwargs):
+    def check_points(self, z1, z2, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
 
         Parameters
@@ -273,10 +288,11 @@ class Bounce1D(IOAble):
 
     def integrate(
         self,
-        pitch_inv,
         integrand,
+        pitch_inv,
         f=None,
         weight=None,
+        *,
         num_well=None,
         method="cubic",
         batch=True,
@@ -289,25 +305,25 @@ class Bounce1D(IOAble):
 
         Parameters
         ----------
-        pitch_inv : jnp.ndarray
-            Shape (M, L, P).
-            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
-            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
-            as the indices that correspond to that field line.
         integrand : callable
             The composition operator on the set of functions in ``f`` that maps the
             functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
             arrays in ``f`` as arguments as well as the additional keyword arguments:
             ``B`` and ``pitch``. A quadrature will be performed to approximate the
             bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
-        f : list[jnp.ndarray]
-            Shape (M, L, 1, N).
+        pitch_inv : jnp.ndarray
+            Shape (M, L, P).
+            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+            as the indices that correspond to that field line.
+        f : list[jnp.ndarray] or jnp.ndarray
+            Shape (M, L, N).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
             construct this object. These functions should be arguments to the callable
             ``integrand``. Use the method ``self.reshape_data`` to reshape the data
             into the expected shape.
         weight : jnp.ndarray
-            Shape (M, L, 1, N).
+            Shape (M, L, N).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
@@ -342,14 +358,14 @@ class Bounce1D(IOAble):
             flux surface, and pitch value.
 
         """
-        z1, z2 = self.points(pitch_inv, num_well)
+        z1, z2 = self.points(pitch_inv, num_well=num_well)
         result = _bounce_quadrature(
             x=self._x,
             w=self._w,
             z1=z1,
             z2=z2,
-            pitch_inv=pitch_inv,
             integrand=integrand,
+            pitch_inv=pitch_inv,
             f=setdefault(f, []),
             data=self._data,
             knots=self._zeta,
@@ -360,7 +376,7 @@ class Bounce1D(IOAble):
         )
         if weight is not None:
             result *= interp_to_argmin(
-                weight.squeeze(axis=-2),
+                weight,
                 z1,
                 z2,
                 self._zeta,
@@ -368,10 +384,10 @@ class Bounce1D(IOAble):
                 self._dB_dz,
                 method,
             )
-        assert result.shape[-1] == setdefault(num_well, np.prod(self._dB_dz.shape[-2:]))
+        assert result.shape == z1.shape
         return result
 
-    def plot(self, m, l, pitch_inv=None, **kwargs):
+    def plot(self, m, l, pitch_inv=None, /, **kwargs):
         """Plot the field line and bounce points of the given pitch angles.
 
         Parameters
@@ -392,18 +408,21 @@ class Bounce1D(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
+        B, dB_dz = self.B, self._dB_dz
+        if B.ndim == 4:
+            B = B[m, l]
+            dB_dz = dB_dz[m, l]
+        elif B.ndim == 3:
+            B = B[l]
+            dB_dz = dB_dz[l]
         if pitch_inv is not None:
             errorif(
                 pitch_inv.ndim > 1,
                 msg=f"Got pitch_inv.ndim={pitch_inv.ndim}, but expected 1.",
             )
-            z1, z2 = bounce_points(
-                pitch_inv, self._zeta, self.B[m, l], self._dB_dz[m, l]
-            )
+            z1, z2 = bounce_points(pitch_inv, self._zeta, B, dB_dz)
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv
-        fig, ax = plot_ppoly(
-            PPoly(self.B[m, l].T, self._zeta), **_set_default_plot_kwargs(kwargs)
-        )
+        fig, ax = plot_ppoly(PPoly(B.T, self._zeta), **_set_default_plot_kwargs(kwargs))
         return fig, ax

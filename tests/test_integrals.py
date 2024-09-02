@@ -952,7 +952,7 @@ class TestBounce1DQuadrature:
             check=True,
             **kwargs,
         )
-        result = bounce.integrate(pitch_inv, integrand, check=True, plot=True)
+        result = bounce.integrate(integrand, pitch_inv, check=True, plot=True)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
@@ -1099,14 +1099,14 @@ class TestBounce1D:
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
         num = bounce.integrate(
-            pitch_inv,
             integrand=TestBounce1D._example_numerator,
+            pitch_inv=pitch_inv,
             f=Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
             check=True,
         )
         den = bounce.integrate(
-            pitch_inv,
             integrand=TestBounce1D._example_denominator,
+            pitch_inv=pitch_inv,
             check=True,
             batch=False,
         )
@@ -1359,17 +1359,17 @@ class TestBounce1D:
 
         f = Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
-            pitch_inv=pitch_inv,
             integrand=TestBounce1D.drift_num_integrand,
+            pitch_inv=pitch_inv,
             f=f,
             num_well=1,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
-            pitch_inv=pitch_inv,
             integrand=TestBounce1D.drift_den_integrand,
+            pitch_inv=pitch_inv,
             num_well=1,
-            weight=np.ones(zeta.size)[np.newaxis],
+            weight=np.ones(zeta.size),
             check=True,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
@@ -1383,7 +1383,7 @@ class TestBounce1D:
             bounce,
             TestBounce1D.drift_num_integrand,
             f=f,
-            weight=np.ones(zeta.size)[np.newaxis],
+            weight=np.ones(zeta.size),
         )
 
         fig, ax = plt.subplots()
@@ -1440,11 +1440,11 @@ class TestBounce1D:
             return grad_fun(*args, *kwargs2.values())
 
         def fun1(pitch):
-            return bounce.integrate(1 / pitch, integrand, check=False, **kwargs).sum()
+            return bounce.integrate(integrand, 1 / pitch, check=False, **kwargs).sum()
 
         def fun2(pitch):
             return bounce.integrate(
-                1 / pitch, integrand_grad, check=True, **kwargs
+                integrand_grad, 1 / pitch, check=True, **kwargs
             ).sum()
 
         pitch = 1.0

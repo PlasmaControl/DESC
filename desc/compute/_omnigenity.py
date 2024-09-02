@@ -187,6 +187,31 @@ def _nu(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="nu_mn",
+    label="\\nu_{mn} = (\\zeta_{B} - \\zeta)_{mn}",
+    units="rad",
+    units_long="radians",
+    description="Boozer harmonics of Boozer toroidal stream function",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "nu",
+        "sqrt(g)_Boozer_DESC",
+        "Boozer transform matrix",
+    ],
+)
+def _nu_mn(params, transforms, profiles, data, **kwargs):
+    transform_matrix = data["Boozer transform matrix"]
+    data["nu_mn"] = (
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["nu"])
+    ) / transforms["B"].grid.num_nodes
+    return data
+
+
+@register_compute_fun(
     name="nu_t",
     label="\\partial_{\\theta} \\nu",
     units="rad",
@@ -261,11 +286,12 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="sqrt(g)_B",
-    label="\\sqrt{g}_{B}",
+    name="sqrt(g)_Boozer_DESC",
+    label="\\frac{\\partial(\\theta_B,\\zeta_B)}{\\theta_{DESC},\\zeta_{DESC}}",
     units="~",
     units_long="None",
-    description="Jacobian determinant from Boozer to DESC coordinates",
+    description="Jacobian determinant from Boozer coordinates (rho, theta_B, zeta_B)"
+    " to DESC coordinates (rho,theta,zeta).",
     dim=1,
     params=[],
     transforms={},
@@ -273,8 +299,8 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z", "nu_t", "nu_z", "iota"],
 )
-def _sqrtg_B(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_B"] = (
+def _sqrt_g_Boozer_DESC(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_Boozer_DESC"] = (
         data["theta_PEST_t"] * (data["phi_z"] + data["nu_z"])
         - data["theta_PEST_z"] * (data["phi_t"] + data["nu_t"])
         + data["iota"] * (data["nu_t"] * data["phi_z"] - data["nu_z"] * data["phi_t"])
@@ -283,7 +309,52 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|B|_mn",
+    name="sqrt(g)_B",
+    label="\\sqrt{g}_B",
+    units="~",
+    units_long="None",
+    description="Jacobian determinant from (rho, theta_B, zeta_B)"
+    " Boozer coordinates to (R,phi,Z) lab frame.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)_Boozer_DESC", "sqrt(g)"],
+)
+def _sqrtg_B(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_B"] = data["sqrt(g)"] / data["sqrt(g)_Boozer_DESC"]
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_B_mn",
+    label="\\sqrt{g}_{B,mn}",
+    units="~",
+    units_long="None",
+    description="Boozer harmonics of Jacobian determinant from (rho, theta_B, zeta_B)"
+    " Boozer coordinates to (R,phi,Z) lab frame.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "sqrt(g)_B",
+        "sqrt(g)_Boozer_DESC",
+        "Boozer transform matrix",
+    ],
+)
+def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
+    transform_matrix = data["Boozer transform matrix"]
+    data["sqrt(g)_B_mn"] = (
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["sqrt(g)_B"])
+    ) / transforms["B"].grid.num_nodes
+    return data
+
+
+@register_compute_fun(
+    name="|B|_mn_B",
     label="B_{mn}^{\\mathrm{Boozer}}",
     units="T",
     units_long="Tesla",
@@ -293,18 +364,70 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
+    data=[
+        "sqrt(g)_Boozer_DESC",
+        "|B|",
+        "Boozer transform matrix",
+    ],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    aliases=["|B|_mn"],
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
-    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
-    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
-    data["|B|_mn"] = (
-        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["|B|"]))
-        / transforms["B"].grid.num_nodes
-    )
+    transform_matrix = data["Boozer transform matrix"]
+    data["|B|_mn_B"] = (
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["|B|"])
+    ) / transforms["B"].grid.num_nodes
+    return data
+
+
+@register_compute_fun(
+    name="R_mn_B",
+    label="R_{mn}^{\\mathrm{Boozer}}",
+    units="m",
+    units_long="meters",
+    description="Boozer harmonics of radial toroidal coordinate of a flux surface",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "sqrt(g)_Boozer_DESC",
+        "R",
+        "Boozer transform matrix",
+    ],
+)
+def _R_mn(params, transforms, profiles, data, **kwargs):
+    transform_matrix = data["Boozer transform matrix"]
+    data["R_mn_B"] = (
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["R"])
+    ) / transforms["B"].grid.num_nodes
+    return data
+
+
+@register_compute_fun(
+    name="Z_mn_B",
+    label="Z_{mn}^{\\mathrm{Boozer}}",
+    units="m",
+    units_long="meters",
+    description="Boozer harmonics of vertical toroidal coordinate of a flux surface",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "sqrt(g)_Boozer_DESC",
+        "Z",
+        "Boozer transform matrix",
+    ],
+)
+def _Z_mn(params, transforms, profiles, data, **kwargs):
+    transform_matrix = data["Boozer transform matrix"]
+    data["Z_mn_B"] = (
+        transform_matrix @ (data["sqrt(g)_Boozer_DESC"] * data["Z"])
+    ) / transforms["B"].grid.num_nodes
     return data
 
 
@@ -325,6 +448,47 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
 )
 def _B_modes(params, transforms, profiles, data, **kwargs):
     data["B modes"] = transforms["B"].basis.modes
+    return data
+
+
+@register_compute_fun(
+    name="Boozer transform modes norm",
+    label="",
+    units="~",
+    units_long="None",
+    description="Inner product norm for boozer modes basis.",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _boozer_modes_norm(params, transforms, profiles, data, **kwargs):
+    # norm is 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    data["Boozer transform modes norm"] = norm
+    return data
+
+
+@register_compute_fun(
+    name="Boozer transform matrix",
+    label="",
+    units="~",
+    units_long="None",
+    description="Matrix which performs boozer transformation.",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["rho", "theta_B", "zeta_B", "Boozer transform modes norm"],
+)
+def _boozer_transform_matrix(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
+    data["Boozer transform matrix"] = (
+        data["Boozer transform modes norm"] * transforms["B"].basis.evaluate(nodes)
+    ).T
     return data
 
 

@@ -1107,7 +1107,7 @@ def test_boozer_transform():
     # TODO: add test with stellarator example
     eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
+    data = eq.compute("|B|_mn_B", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
             2.49792355e-01,
@@ -1127,7 +1127,7 @@ def test_boozer_transform():
         ]
     )
     np.testing.assert_allclose(
-        np.flipud(np.sort(np.abs(data["|B|_mn"]))),
+        np.flipud(np.sort(np.abs(data["|B|_mn_B"]))),
         booz_xform,
         rtol=1e-3,
         atol=1e-4,

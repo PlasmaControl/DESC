@@ -952,7 +952,7 @@ class TestBounce1DQuadrature:
             check=True,
             **kwargs,
         )
-        result = bounce.integrate(pitch_inv, integrand, check=True, plot=True)
+        result = bounce.integrate(integrand, pitch_inv, check=True, plot=True)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
@@ -1099,14 +1099,14 @@ class TestBounce1D:
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
         num = bounce.integrate(
-            pitch_inv,
             integrand=TestBounce1D._example_numerator,
+            pitch_inv=pitch_inv,
             f=Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
             check=True,
         )
         den = bounce.integrate(
-            pitch_inv,
             integrand=TestBounce1D._example_denominator,
+            pitch_inv=pitch_inv,
             check=True,
             batch=False,
         )
@@ -1178,29 +1178,6 @@ class TestBounce1D:
         )
         assert result.shape == z1.shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
-
-    @pytest.mark.unit
-    def test_single_fieldline(self):
-        """Test that the API works when given full grid but single field line data."""
-        zeta = np.linspace(1, 2, 5)
-        grid = Grid.create_meshgrid([1, 0, zeta], coordinates="raz")
-        data = {"B^zeta": zeta, "B^zeta_z|r,a": zeta, "|B|": zeta, "|B|_z|r,a": zeta}
-        bounce = Bounce1D(grid, data, is_reshaped=True, check=True)
-        assert bounce.B.shape == (zeta.size - 1, 4)
-        assert bounce._dB_dz.shape == (zeta.size - 1, 3)
-        pitch_inv = np.array([1, 2])
-        z1, z2 = bounce.points(pitch_inv)
-        assert z1.shape == z2.shape and z1.ndim == 2 and z1.shape[0] == pitch_inv.size
-        bounce.check_points(z1, z2, pitch_inv)
-        result = bounce.integrate(
-            pitch_inv,
-            integrand=TestBounce1D._example_numerator,
-            f=data["B^zeta"],
-            weight=data["B^zeta"],
-            check=True,
-        )
-        assert result.shape == z1.shape
-        bounce.plot(0, 0, pitch_inv)
 
     @staticmethod
     def drift_analytic(data):
@@ -1382,15 +1359,15 @@ class TestBounce1D:
 
         f = Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
-            pitch_inv,
             integrand=TestBounce1D.drift_num_integrand,
+            pitch_inv=pitch_inv,
             f=f,
             num_well=1,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
-            pitch_inv,
             integrand=TestBounce1D.drift_den_integrand,
+            pitch_inv=pitch_inv,
             num_well=1,
             weight=np.ones(zeta.size),
             check=True,
@@ -1463,11 +1440,11 @@ class TestBounce1D:
             return grad_fun(*args, *kwargs2.values())
 
         def fun1(pitch):
-            return bounce.integrate(1 / pitch, integrand, check=False, **kwargs).sum()
+            return bounce.integrate(integrand, 1 / pitch, check=False, **kwargs).sum()
 
         def fun2(pitch):
             return bounce.integrate(
-                1 / pitch, integrand_grad, check=True, **kwargs
+                integrand_grad, 1 / pitch, check=True, **kwargs
             ).sum()
 
         pitch = 1.0

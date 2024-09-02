@@ -139,12 +139,12 @@ class Bounce1D(IOAble):
         Lref : float
             Optional. Reference length scale for normalization.
         is_reshaped : bool
-            Whether the arrays in ``data`` are already reshaped to the expected form.
-            (That is shape (..., N) or (..., L, N) or (M, L, N).)
-            This option can be used to iteratively compute bounce integrals either one
-            field line or one flux surface at a time, respectively, potentially reducing
-            memory usage. To do so, set to true and provide only those axes of the
-            reshaped data. Default is false.
+            Whether the arrays in ``data`` are already reshaped to the expected form of
+            shape (..., N) or (..., L, N) or (M, L, N). This option can be used to
+            iteratively compute bounce integrals one field line or one flux surface
+            at a time, respectively, potentially reducing memory usage. To do so,
+            set to true and provide only those axes of the reshaped data.
+            Default is false.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
 
@@ -167,12 +167,11 @@ class Bounce1D(IOAble):
             "|B|": data["|B|"] / Bref,
             "|B|_z|r,a": data["|B|_z|r,a"] / Bref,  # This is already the correct sign.
         }
-        if is_reshaped:
-            self._data = data
-        else:
-            self._data = dict(
-                zip(data.keys(), Bounce1D.reshape_data(grid, *data.values()))
-            )
+        self._data = (
+            data
+            if is_reshaped
+            else dict(zip(data.keys(), Bounce1D.reshape_data(grid, *data.values())))
+        )
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
@@ -215,7 +214,7 @@ class Bounce1D(IOAble):
         f = [grid.meshgrid_reshape(d, "arz") for d in arys]
         return f if len(f) > 1 else f[0]
 
-    def points(self, pitch_inv, /, *, num_well=None):
+    def points(self, pitch_inv, *, num_well=None):
         """Compute bounce points.
 
         Parameters
@@ -289,9 +288,8 @@ class Bounce1D(IOAble):
 
     def integrate(
         self,
-        pitch_inv,
-        /,
         integrand,
+        pitch_inv,
         f=None,
         weight=None,
         *,
@@ -307,18 +305,18 @@ class Bounce1D(IOAble):
 
         Parameters
         ----------
-        pitch_inv : jnp.ndarray
-            Shape (M, L, P).
-            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
-            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
-            as the indices that correspond to that field line.
         integrand : callable
             The composition operator on the set of functions in ``f`` that maps the
             functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
             arrays in ``f`` as arguments as well as the additional keyword arguments:
             ``B`` and ``pitch``. A quadrature will be performed to approximate the
             bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
-        f : list[jnp.ndarray]
+        pitch_inv : jnp.ndarray
+            Shape (M, L, P).
+            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+            as the indices that correspond to that field line.
+        f : list[jnp.ndarray] or jnp.ndarray
             Shape (M, L, N).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
             construct this object. These functions should be arguments to the callable
@@ -366,8 +364,8 @@ class Bounce1D(IOAble):
             w=self._w,
             z1=z1,
             z2=z2,
-            pitch_inv=pitch_inv,
             integrand=integrand,
+            pitch_inv=pitch_inv,
             f=setdefault(f, []),
             data=self._data,
             knots=self._zeta,

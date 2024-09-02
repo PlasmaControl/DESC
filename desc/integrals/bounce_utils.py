@@ -285,8 +285,8 @@ def _bounce_quadrature(
     w,
     z1,
     z2,
-    pitch_inv,
     integrand,
+    pitch_inv,
     f,
     data,
     knots,
@@ -310,15 +310,15 @@ def _bounce_quadrature(
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of |B|.
-    pitch_inv : jnp.ndarray
-        Shape (..., P).
-        1/λ values to compute the bounce integrals.
     integrand : callable
         The composition operator on the set of functions in ``f`` that maps the
         functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
         arrays in ``f`` as arguments as well as the additional keyword arguments:
         ``B`` and ``pitch``. A quadrature will be performed to approximate the
         bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
+    pitch_inv : jnp.ndarray
+        Shape (..., P).
+        1/λ values to compute the bounce integrals.
     f : list[jnp.ndarray]
         Shape (..., N).
         Real scalar-valued functions evaluated on the ``knots``.
@@ -396,8 +396,7 @@ def _bounce_quadrature(
             destination=-1,
         )
 
-    result = result * grad_bijection_from_disc(z1, z2)
-    return result
+    return result * grad_bijection_from_disc(z1, z2)
 
 
 def _interpolate_and_integrate(
@@ -449,16 +448,10 @@ def _interpolate_and_integrate(
     # Spline each function separately so that operations in the integrand
     # that do not preserve smoothness can be captured.
     f = [interp1d_vec(Q, knots, f_i[..., jnp.newaxis, :], method=method) for f_i in f]
-    result = jnp.dot(
-        (
-            integrand(
-                *f,
-                B=B,
-                pitch=1 / pitch_inv[..., jnp.newaxis],
-            )
-            / b_sup_z
-        ).reshape(shape),
-        w,
+    result = (
+        (integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
+        .reshape(shape)
+        .dot(w)
     )
     if check:
         _check_interp(shape, Q, f, b_sup_z, B, result, plot)

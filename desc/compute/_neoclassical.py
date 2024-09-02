@@ -55,7 +55,7 @@ def _poloidal_mean(grid, f):
         return f.mean(axis=0)
     assert grid.is_meshgrid
     dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
-    return jnp.dot(f.T, dp) / jnp.sum(dp)
+    return f.T.dot(dp) / jnp.sum(dp)
 
 
 def _get_pitch_inv(grid, data, num_pitch):
@@ -206,32 +206,34 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
-    # noqa: unused dependency
     quad = leggauss_lob(kwargs.get("num_quad", 32))
     num_well = kwargs.get("num_well", None)
+    num_pitch = kwargs.get("num_pitch", 125)
     batch = kwargs.get("batch", True)
+
     grid = transforms["grid"].source_grid
     _data = {
+        # noqa: unused dependency
         name: Bounce1D.reshape_data(grid, data[name])
         for name in Bounce1D.required_names
     }
     _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
         grid, data["|grad(rho)|"] * data["kappa_g"]
     )
-    _data["pitch_inv"] = _get_pitch_inv(grid, data, kwargs.get("num_pitch", 125))
+    _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
 
     def compute(data):
         """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ ∑ⱼ Hⱼ²/Iⱼ."""
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
         H = bounce.integrate(
-            data["pitch_inv"],
             dH,
+            data["pitch_inv"],
             data["|grad(rho)|*kappa_g"],
             num_well=num_well,
             batch=batch,
         )
-        I = bounce.integrate(data["pitch_inv"], dI, num_well=num_well, batch=batch)
+        I = bounce.integrate(dI, data["pitch_inv"], num_well=num_well, batch=batch)
         # Note B₀ has units of λ⁻¹.
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) = λ³B₀² d(λ⁻¹).

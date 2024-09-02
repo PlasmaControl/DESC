@@ -1558,7 +1558,7 @@ class UmbilicHighCurvature(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Umbilic high curvature: {:10.3e} "
+    _print_value_fmt = "Umbilic high curvature: "
 
     def __init__(
         self,

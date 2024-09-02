@@ -416,6 +416,37 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="x",
+    label="\\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve",
+    dim=3,
+    params=["A_n", "NFP_umbilic_facror", "NFP"],
+    transforms={"A": [[0, 0, 0]], "grid": []},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.UmbilicCurve",
+)
+def _x_UmbilicCurve(params, transforms, profiles, data, **kwargs):
+    A = transforms["A"].transform(params["A_n"], dz=0)
+    phi = transforms["grid"].nodes[:, 2]
+    NFP_umbilic_factor = params["NFP_umbilic_factor"]
+    NFP = params["NFP"]
+    theta = (A - NFP * phi) / NFP_umbilic_factor
+    rho = jnp.zeros_like(phi)
+    coords = jnp.stack([rho, theta, phi], axis=1)
+    # MUST CALCULATE XYZ on DESC grid
+    # convert to xyz for displacement and rotation
+    coords = rpz2xyz(coords)
+    # convert back to rpz
+    coords = xyz2rpz(coords)
+    data["x"] = coords
+    return data
+
+
+@register_compute_fun(
     name="x_s",
     label="\\partial_{s} \\mathbf{x}",
     units="m",

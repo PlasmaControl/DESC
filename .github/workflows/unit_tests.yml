@@ -127,7 +127,24 @@ jobs:
       - name: Generate 100% Coverage Report
         if: env.has_changes == 'false'
         run: |
-          echo '<?xml version="1.0" ?><coverage branch-rate="1" line-rate="1" version="4.5.4"><sources><source>.</source></sources><packages></packages></coverage>' > cov.xml
+          echo '<?xml version="1.0" ?>
+          <coverage branch-rate="1" line-rate="1" lines-covered="1" lines-valid="1" branches-covered="1" branches-valid="1" complexity="0" version="0">
+            <sources>
+              <source>.</source>
+            </sources>
+            <packages>
+              <package name="." line-rate="1" branch-rate="1" complexity="0">
+                <classes>
+                  <class name="__init__.py" filename="__init__.py" complexity="0" line-rate="0.4737" branch-rate="0">
+                  <methods/>
+                    <lines>
+                      <line number="3" hits="1"/>
+                    </lines>
+                  </class>
+                </classes>
+              </package>
+            </packages>
+          </coverage>' > cov.xml
 
       - name: Upload 100% Coverage Report if skipped
         if: env.has_changes == 'false'

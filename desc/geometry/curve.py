@@ -257,13 +257,16 @@ class FourierRZCurve(Curve):
             )
 
     @classmethod
-    def from_input_file(cls, path):
+    def from_input_file(cls, path, **kwargs):
         """Create a axis curve from Fourier coefficients in a DESC or VMEC input file.
 
         Parameters
         ----------
         path : Path-like or str
             Path to DESC or VMEC input file.
+        **kwargs : dict, optional
+            keyword arguments to pass to the constructor of the
+            FourierRZCurve being created.
 
         Returns
         -------
@@ -282,6 +285,7 @@ class FourierRZCurve(Curve):
             inputs["NFP"],
             int(1),
             inputs["sym"],
+            **kwargs,
         )
         return curve
 

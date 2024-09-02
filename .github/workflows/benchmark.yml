@@ -10,7 +10,6 @@ on:
       - 'requirements.txt'
       - 'devtools/dev-requirements.txt'
       - 'setup.cfg'
-      - '.github/workflows/benchmark.yml'
   workflow_dispatch:
     inputs:
       debug_enabled:

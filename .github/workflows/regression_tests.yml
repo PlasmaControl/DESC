@@ -14,7 +14,6 @@ on:
         - 'requirements.txt'
         - 'devtools/dev-requirements.txt'
         - 'setup.cfg'
-        - '.github/workflows/regression_tests.yml'
   workflow_dispatch:
 
 concurrency:

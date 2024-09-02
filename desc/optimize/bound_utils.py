@@ -361,7 +361,7 @@ def build_quadratic_1d_hess(H, g, s, diag=None, s0=None):
     c : float
         Free term. Returned only if `s0` is provided.
     """
-    a = H.dot(s)
+    a = H.dot(s).dot(s)
     if diag is not None:
         a += jnp.dot(s * diag, s)
     a *= 0.5

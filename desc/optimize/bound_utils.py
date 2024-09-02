@@ -2,7 +2,6 @@
 
 import functools
 
-import desc.utils
 from desc.backend import cond, jit, jnp
 
 from .utils import evaluate_quadratic_form_hess, evaluate_quadratic_form_jac
@@ -362,7 +361,7 @@ def build_quadratic_1d_hess(H, g, s, diag=None, s0=None):
     c : float
         Free term. Returned only if `s0` is provided.
     """
-    a = desc.utils.dot(s)
+    a = H.dot(s)
     if diag is not None:
         a += jnp.dot(s * diag, s)
     a *= 0.5

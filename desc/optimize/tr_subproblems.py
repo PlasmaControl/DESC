@@ -2,7 +2,6 @@
 
 import numpy as np
 
-import desc.utils
 from desc.backend import (
     cho_factor,
     cho_solve,
@@ -123,7 +122,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
 
     R, lower = cho_factor(B)
     q1 = -cho_solve((R, lower), g)
-    p1 = desc.utils.dot(q1)
+    p1 = S.dot(q1)
 
     a = B[0, 0] * trust_radius**2
     b = B[0, 1] * trust_radius**2
@@ -140,7 +139,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
     value = 0.5 * jnp.sum(q2 * B.dot(q2), axis=0) + jnp.dot(g, q2)
     i = jnp.argmin(jnp.where(jnp.isnan(value), jnp.inf, value))
     q2 = q2[:, i]
-    p2 = desc.utils.dot(q2)
+    p2 = S.dot(q2)
 
     out = cond(
         jnp.dot(q1, q1) <= trust_radius**2,

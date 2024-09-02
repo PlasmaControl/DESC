@@ -8,12 +8,6 @@ on:
   pull_request:
     branches:
       - master
-    paths:
-        - 'desc/**'
-        - 'tests/**'
-        - 'requirements.txt'
-        - 'devtools/dev-requirements.txt'
-        - 'setup.cfg'
   workflow_dispatch:
 
 concurrency:
@@ -21,11 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  filter_changes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            has_changes:
+              - 'desc/**'
+              - 'tests/**'
+              - 'requirements.txt'
+              - 'devtools/dev-requirements.txt'
+              - 'setup.cfg'
+
   regression_tests:
 
     runs-on: ubuntu-latest
+    needs: filter_changes
     env:
       GH_TOKEN: ${{ github.token }}
+    if: needs.filter_changes.outputs.has_changes == 'true'
     strategy:
       matrix:
         python-version: ['3.10']
@@ -102,3 +115,11 @@ jobs:
             verbose: true
           attempt_limit: 10
           attempt_delay: 60000 # ms, 1 min
+
+  skip-notification:
+    runs-on: ubuntu-latest
+    needs: filter_changes
+    if: needs.filter_changes.outputs.has_changes == 'false'
+    steps:
+      - name: Skip Tests Notification
+        run: echo "No relevant changes detected. Skipping tests but marking check as success."

@@ -11,14 +11,15 @@ expensive computations.
 
 from functools import partial
 
-from orthax.legendre import leggauss
 from quadax import simpson
 
-from desc.backend import imap, jit, jnp
+from desc.backend import jit, jnp
 
+from ..integrals.bounce_integral import Bounce1D
 from ..integrals.bounce_utils import get_pitch_inv
+from ..integrals.quad_utils import leggauss_lob
+from ..utils import map2, safediv
 from .data_index import register_compute_fun
-from .utils import safediv
 
 
 def _vec_quadax(quad, **kwargs):
@@ -45,51 +46,24 @@ def _vec_quadax(quad, **kwargs):
     return vec_quad
 
 
-def _get_pitch(grid, min_B, max_B, num, for_adaptive=False):
-    """Get points for quadrature over velocity coordinate.
-
-    Parameters
-    ----------
-    grid : Grid
-        The grid on which data is computed.
-    min_B : jnp.ndarray
-        Minimum |B| value.
-    max_B : jnp.ndarray
-        Maximum |B| value.
-    num : int
-        Number of values to uniformly space in between.
-    for_adaptive : bool
-        Whether to return just the points useful for an adaptive quadrature.
-
-    Returns
-    -------
-    pitch : Array
-        Pitch values in the desired shape to use in compute methods.
-
-    """
-    min_B = grid.compress(min_B)
-    max_B = grid.compress(max_B)
-    if for_adaptive:
-        pitch = jnp.reciprocal(jnp.stack([max_B, min_B], axis=-1))[:, jnp.newaxis]
-        assert pitch.shape == (grid.num_rho, 1, 2)
-    else:
-        pitch = get_pitch_inv(min_B, max_B, num)
-        pitch = jnp.broadcast_to(
-            pitch[..., jnp.newaxis], (pitch.shape[0], grid.num_rho, grid.num_alpha)
-        ).reshape(pitch.shape[0], grid.num_rho * grid.num_alpha)
-    return pitch
-
-
 def _poloidal_mean(grid, f):
     """Integrate f over poloidal angle and divide by 2π."""
-    assert f.shape[-1] == grid.num_poloidal
+    assert f.shape[0] == grid.num_poloidal
     if grid.num_poloidal == 1:
-        return jnp.squeeze(f, axis=-1)
+        return f.squeeze(axis=0)
     if not hasattr(grid, "spacing"):
-        return jnp.mean(f, axis=-1)
+        return f.mean(axis=0)
     assert grid.is_meshgrid
     dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
-    return f @ dp / jnp.sum(dp)
+    return jnp.dot(f.T, dp) / jnp.sum(dp)
+
+
+def _get_pitch_inv(grid, data, num_pitch):
+    # TODO: Try Gauss-Chebyshev quadrature after automorphism arcsin to
+    #   make nodes more evenly spaced for effective ripple.
+    return get_pitch_inv(
+        grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), num_pitch
+    )[jnp.newaxis]
 
 
 @register_compute_fun(
@@ -105,18 +79,17 @@ def _poloidal_mean(grid, f):
     profiles=[],
     coordinates="r",
     data=["B^zeta"],
-    resolution_requirement="z",  # and poloidal if near rational surfaces
+    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _L_ra_fsa(data, transforms, profiles, **kwargs):
-    g = transforms["grid"].source_grid
-    shape = (g.num_rho, g.num_alpha, g.num_zeta)
+    grid = transforms["grid"].source_grid
     L_ra = simpson(
-        y=jnp.reciprocal(data["B^zeta"]).reshape(shape),
-        x=jnp.reshape(g.nodes[:, 2], shape),
+        y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
+        x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
         axis=-1,
     )
-    data["<L|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, L_ra)))
+    data["<L|r,a>"] = grid.expand(jnp.abs(_poloidal_mean(grid, L_ra)))
     return data
 
 
@@ -133,19 +106,33 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B^zeta", "sqrt(g)"],
-    resolution_requirement="z",  # and poloidal if near rational surfaces
+    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _G_ra_fsa(data, transforms, profiles, **kwargs):
-    g = transforms["grid"].source_grid
-    shape = (g.num_rho, g.num_alpha, g.num_zeta)
+    grid = transforms["grid"].source_grid
     G_ra = simpson(
-        y=jnp.reciprocal(data["B^zeta"] * data["sqrt(g)"]).reshape(shape),
-        x=jnp.reshape(g.nodes[:, 2], shape),
+        y=grid.meshgrid_reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"),
+        x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
         axis=-1,
     )
-    data["<G|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, G_ra)))
+    data["<G|r,a>"] = grid.expand(jnp.abs(_poloidal_mean(grid, G_ra)))
     return data
+
+
+def dH(grad_rho_norm_kappa_g, B, pitch):
+    """Removed |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ from integrand of Nemov eq. 30."""
+    return (
+        jnp.sqrt(jnp.abs(1 - pitch * B))
+        * (4 / (pitch * B) - 1)
+        * grad_rho_norm_kappa_g
+        / B
+    )
+
+
+def dI(B, pitch):
+    """Integrand of Nemov eq. 31."""
+    return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
 @register_compute_fun(
@@ -168,30 +155,27 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "B^zeta",
-        "|B|",
-        "|B|_z|r,a",
         "|grad(rho)|",
         "kappa_g",
         "<L|r,a>",
         "R0",
         "<|grad(rho)|>",
-    ],
-    resolution_requirement="z",  # and poloidal if near rational surfaces
+    ]
+    + Bounce1D.required_names,
+    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 31.",
+    num_quad="int : Resolution for quadrature of bounce integrals. Default is 32.",
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate, preferably odd. "
-        "Default is 125. Effective ripple will look smoother at high values. "
-        "(If computed on many flux surfaces and micro oscillation is seen "
-        "between neighboring surfaces, increasing num_pitch will smooth the profile)."
+        "Default is 125. Profile will look smoother at high values. "
+        "(If computed on many flux surfaces and small oscillations is seen "
+        "between neighboring surfaces, increasing this will smooth the profile)."
     ),
-    num_wells=(
+    num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
         "may consume more memory. Specifying a number that tightly upper bounds "
         "the number of wells will increase performance. "
-        "As a reference, there are typically <= 5 wells per toroidal transit."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
     # Some notes on choosing the resolution hyperparameters:
@@ -222,54 +206,44 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
+    # noqa: unused dependency
+    quad = leggauss_lob(kwargs.get("num_quad", 32))
+    num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
-    num_wells = kwargs.get("size", None)
-    g = transforms["grid"].source_grid
-    bounce_integrate, _ = bounce_integral(  # noqa: F821
-        data["B^zeta"],
-        data["|B|"],
-        data["|B|_z|r,a"],
-        g.compress(g.nodes[:, 2], surface_label="zeta"),
-        leggauss(kwargs.get("num_quad", 31)),
+    grid = transforms["grid"].source_grid
+    _data = {
+        name: Bounce1D.reshape_data(grid, data[name])
+        for name in Bounce1D.required_names
+    }
+    _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
+        grid, data["|grad(rho)|"] * data["kappa_g"]
     )
+    _data["pitch_inv"] = _get_pitch_inv(grid, data, kwargs.get("num_pitch", 125))
 
-    def dH(grad_rho_norm_kappa_g, B, pitch):
-        # Removed |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ from integrand of Nemov eq. 30. Reintroduced later.
-        return (
-            jnp.sqrt(jnp.abs(1 - pitch * B))
-            * (4 / (pitch * B) - 1)
-            * grad_rho_norm_kappa_g
-            / B
-        )
-
-    def dI(B, pitch):  # Integrand of Nemov eq. 31.
-        return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
-
-    def d_ripple(pitch):
-        # Return (∂ψ/∂ρ)⁻² λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
-        # Note (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) where B₀ has units of λ⁻¹.
+    def compute(data):
+        """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ ∑ⱼ Hⱼ²/Iⱼ."""
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-        H = bounce_integrate(
+        H = bounce.integrate(
+            data["pitch_inv"],
             dH,
-            data["|grad(rho)|"] * data["kappa_g"],
-            pitch,
+            data["|grad(rho)|*kappa_g"],
+            num_well=num_well,
             batch=batch,
-            num_wells=num_wells,
         )
-        I = bounce_integrate(dI, [], pitch, batch=batch, num_wells=num_wells)
-        return pitch * jnp.sum(safediv(H**2, I), axis=-1)
+        I = bounce.integrate(data["pitch_inv"], dI, num_well=num_well, batch=batch)
+        # Note B₀ has units of λ⁻¹.
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        # (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) = λ³B₀² d(λ⁻¹).
+        y = data["pitch_inv"] ** (-3) * safediv(H**2, I).sum(axis=-1)
+        return simpson(y=y, x=data["pitch_inv"])
 
-    # The integrand is continuous and likely poorly approximated by a polynomial.
-    # Composite quadrature should perform better than higher order methods.
-    pitch = _get_pitch(
-        g, data["min_tz |B|"], data["max_tz |B|"], kwargs.get("num_pitch", 125)
-    )
-    ripple = simpson(y=imap(d_ripple, pitch).squeeze(axis=1), x=pitch, axis=0)
+    out = _poloidal_mean(grid, map2(compute, _data))
     data["effective ripple"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (data["max_tz |B|"] * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))
+        * grid.expand(out)
         / data["<L|r,a>"]
     )
     return data

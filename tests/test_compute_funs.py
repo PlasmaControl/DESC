@@ -5,13 +5,13 @@ import pytest
 from scipy.signal import convolve2d
 
 from desc.compute import rpz2xyz_vec
-from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.utils import dot
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]

@@ -320,7 +320,7 @@ def _bounce_quadrature(
         ``B`` and ``pitch``. A quadrature will be performed to approximate the
         bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
     f : list[jnp.ndarray]
-        Shape (..., 1, N).
+        Shape (..., N).
         Real scalar-valued functions evaluated on the ``knots``.
         These functions should be arguments to the callable ``integrand``.
     data : dict[str, jnp.ndarray]
@@ -448,7 +448,7 @@ def _interpolate_and_integrate(
     B = interp1d_Hermite_vec(Q, knots, data["|B|"], data["|B|_z|r,a"])
     # Spline each function separately so that operations in the integrand
     # that do not preserve smoothness can be captured.
-    f = [interp1d_vec(Q, knots, f_i, method=method) for f_i in f]
+    f = [interp1d_vec(Q, knots, f_i[..., jnp.newaxis, :], method=method) for f_i in f]
     result = jnp.dot(
         (
             integrand(

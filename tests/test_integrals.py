@@ -15,7 +15,6 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis
-from desc.compute.utils import dot, safediv
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -53,6 +52,7 @@ from desc.integrals.quad_utils import (
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
+from desc.utils import dot, safediv
 
 
 class TestSurfaceIntegral:
@@ -1179,6 +1179,29 @@ class TestBounce1D:
         assert result.shape == z1.shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
 
+    @pytest.mark.unit
+    def test_single_fieldline(self):
+        """Test that the API works when given full grid but single field line data."""
+        zeta = np.linspace(1, 2, 5)
+        grid = Grid.create_meshgrid([1, 0, zeta], coordinates="raz")
+        data = {"B^zeta": zeta, "B^zeta_z|r,a": zeta, "|B|": zeta, "|B|_z|r,a": zeta}
+        bounce = Bounce1D(grid, data, is_reshaped=True, check=True)
+        assert bounce.B.shape == (zeta.size - 1, 4)
+        assert bounce._dB_dz.shape == (zeta.size - 1, 3)
+        pitch_inv = np.array([1, 2])
+        z1, z2 = bounce.points(pitch_inv)
+        assert z1.shape == z2.shape and z1.ndim == 2 and z1.shape[0] == pitch_inv.size
+        bounce.check_points(z1, z2, pitch_inv)
+        result = bounce.integrate(
+            pitch_inv,
+            integrand=TestBounce1D._example_numerator,
+            f=data["B^zeta"],
+            weight=data["B^zeta"],
+            check=True,
+        )
+        assert result.shape == z1.shape
+        bounce.plot(0, 0, pitch_inv)
+
     @staticmethod
     def drift_analytic(data):
         """Compute analytic approximation for bounce-averaged binormal drift.
@@ -1359,17 +1382,17 @@ class TestBounce1D:
 
         f = Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
-            pitch_inv=pitch_inv,
+            pitch_inv,
             integrand=TestBounce1D.drift_num_integrand,
             f=f,
             num_well=1,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
-            pitch_inv=pitch_inv,
+            pitch_inv,
             integrand=TestBounce1D.drift_den_integrand,
             num_well=1,
-            weight=np.ones(zeta.size)[np.newaxis],
+            weight=np.ones(zeta.size),
             check=True,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
@@ -1383,7 +1406,7 @@ class TestBounce1D:
             bounce,
             TestBounce1D.drift_num_integrand,
             f=f,
-            weight=np.ones(zeta.size)[np.newaxis],
+            weight=np.ones(zeta.size),
         )
 
         fig, ax = plt.subplots()

@@ -336,7 +336,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         This routine may be used on over or under-determined systems, in which case it
         will solve it in a least squares / least norm sense.
         """
-        from desc.compute.utils import safenorm
+        from desc.utils import safenorm
 
         if fixup is None:
             fixup = lambda x, *args: x
@@ -427,7 +427,7 @@ else:  # pragma: no cover
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
-    def imap(f, xs, batch_size=None, in_axes=0, out_axes=0):
+    def imap(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
         if not isinstance(xs, np.ndarray):
             raise NotImplementedError(

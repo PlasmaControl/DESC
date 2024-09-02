@@ -14,6 +14,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pylatexenc.latex2text import LatexNodes2Text
 from termcolor import colored
 
+import desc.utils
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
 from desc.coils import CoilSet, _Coil
@@ -3680,12 +3681,11 @@ def plot_logo(save_path=None, **kwargs):
     radial = zernike_radial_poly(r[:, np.newaxis], ls, ms)
     poloidal = fourier(t[:, np.newaxis], ms)
     zern = radial * poloidal
-    bdry = poloidal
 
     R = zern.dot(cR).reshape((Nr, Nt))
     Z = zern.dot(cZ).reshape((Nr, Nt))
-    bdryR = bdry.dot(cR)
-    bdryZ = bdry.dot(cZ)
+    bdryR = desc.utils.dot(cR)
+    bdryZ = desc.utils.dot(cZ)
 
     R = (R - R0) / (R.max() - R.min()) * Dw + DX
     Z = (Z - Z0) / (Z.max() - Z.min()) * Dh + DY

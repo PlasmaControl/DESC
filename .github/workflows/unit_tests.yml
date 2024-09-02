@@ -123,3 +123,23 @@ jobs:
             verbose: true
           attempt_limit: 10
           attempt_delay: 60000 # ms, 1 min
+
+      - name: Generate 100% Coverage Report
+        if: env.has_changes == 'false'
+        run: |
+          echo '<?xml version="1.0" ?><coverage branch-rate="1" line-rate="1" version="4.5.4"><sources><source>.</source></sources><packages></packages></coverage>' > cov.xml
+
+      - name: Upload 100% Coverage Report if skipped
+        if: env.has_changes == 'false'
+        id: upload-coverage
+        uses: Wandalen/wretry.action@v1.3.0
+        with:
+          action: codecov/codecov-action@v3
+          with: |
+            token: ${{ secrets.CODECOV_TOKEN }}
+            name: codecov-umbrella
+            files: ./cov.xml
+            fail_ci_if_error: true
+            verbose: true
+          attempt_limit: 10
+          attempt_delay: 60000 # ms, 1 min

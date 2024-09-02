@@ -19,8 +19,8 @@ from ..integrals import (
     surface_max,
     surface_min,
 )
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(

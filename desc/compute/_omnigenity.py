@@ -13,8 +13,8 @@ from interpax import interp1d
 
 from desc.backend import jnp, sign, vmap
 
+from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv
 
 
 @register_compute_fun(

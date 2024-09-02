@@ -12,12 +12,13 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import _grow_seeds, dot
+from desc.compute.utils import _grow_seeds
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
+from desc.utils import dot
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these

@@ -368,6 +368,51 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
 
     @pytest.mark.unit
+    def test_qh_boozer_multiple_surfaces(self):
+        """Test for computing Boozer error on multiple surfaces."""
+        eq = get("WISTELL-A")  # WISTELL-A is optimized for QH symmetry
+        helicity = (1, -eq.NFP)
+        M_booz = eq.M
+        N_booz = eq.N
+        grid1 = LinearGrid(rho=0.5, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid2 = LinearGrid(rho=1.0, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid3 = LinearGrid(
+            rho=np.array([0.5, 1.0]), M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False
+        )
+
+        obj1 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid1,
+            normalize=False,
+            eq=eq,
+        )
+        obj2 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid2,
+            normalize=False,
+            eq=eq,
+        )
+        obj3 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid3,
+            normalize=False,
+            eq=eq,
+        )
+        obj1.build()
+        obj2.build()
+        obj3.build()
+        f1 = obj1.compute_unscaled(*obj1.xs(eq))
+        f2 = obj2.compute_unscaled(*obj2.xs(eq))
+        f3 = obj3.compute_unscaled(*obj3.xs(eq))
+        np.testing.assert_allclose(f3, np.concatenate([f1, f2]), atol=1e-14)
+
+    @pytest.mark.unit
     def test_qs_twoterm(self):
         """Test calculation of two term QS metric."""
 
@@ -438,11 +483,6 @@ class TestObjectiveFunction:
 
         # symmetric grid
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
-        with pytest.raises(ValueError):
-            QuasisymmetryBoozer(eq=eq, grid=grid).build()
-
-        # multiple flux surfaces
-        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=[0.25, 0.5, 0.75, 1])
         with pytest.raises(ValueError):
             QuasisymmetryBoozer(eq=eq, grid=grid).build()
 

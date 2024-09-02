@@ -6,6 +6,7 @@ Functions in this module should not depend on any other submodules in desc.objec
 import numpy as np
 
 from desc.backend import cond, jit, jnp, logsumexp, put
+from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
@@ -168,18 +169,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     Z = jnp.asarray(Z)
     D = jnp.asarray(D)
 
-    @jit
-    def project(x_full):
-        """Project a full state vector into the reduced optimization vector."""
-        x_reduced = Z.T @ ((1 / D) * x_full - xp)[unfixed_idx]
-        return jnp.atleast_1d(jnp.squeeze(x_reduced))
-
-    @jit
-    def recover(x_reduced):
-        """Recover the full state vector from the reduced optimization vector."""
-        dx = put(jnp.zeros(objective.dim_x), unfixed_idx, Z @ x_reduced)
-        x_full = D * (xp + dx)
-        return jnp.atleast_1d(jnp.squeeze(x_full))
+    project = _Project(Z, D, xp, unfixed_idx)
+    recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)
 
     # check that all constraints are actually satisfiable
     params = objective.unpack_state(D * xp, False)
@@ -225,6 +216,41 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
             )
 
     return xp, A, b, Z, D, unfixed_idx, project, recover
+
+
+class _Project(IOAble):
+    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx"]
+
+    def __init__(self, Z, D, xp, unfixed_idx):
+        self.Z = Z
+        self.D = D
+        self.xp = xp
+        self.unfixed_idx = unfixed_idx
+
+    @jit
+    def __call__(self, x_full):
+        """Project a full state vector into the reduced optimization vector."""
+        x_reduced = self.Z.T @ ((1 / self.D) * x_full - self.xp)[self.unfixed_idx]
+        return jnp.atleast_1d(jnp.squeeze(x_reduced))
+
+
+class _Recover(IOAble):
+    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx", "dim_x"]
+    _static_attrs = ["dim_x"]
+
+    def __init__(self, Z, D, xp, unfixed_idx, dim_x):
+        self.Z = Z
+        self.D = D
+        self.xp = xp
+        self.unfixed_idx = unfixed_idx
+        self.dim_x = dim_x
+
+    @jit
+    def __call__(self, x_reduced):
+        """Recover the full state vector from the reduced optimization vector."""
+        dx = put(jnp.zeros(self.dim_x), self.unfixed_idx, self.Z @ x_reduced)
+        x_full = self.D * (self.xp + dx)
+        return jnp.atleast_1d(jnp.squeeze(x_full))
 
 
 def softmax(arr, alpha):

@@ -57,7 +57,7 @@ jobs:
           key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
-        if: steps.restore-env.outputs.cache-hit != 'true' && steps.restore-env.outputs.cache-hit != 'true'
+        if: steps.restore-env.outputs.cache-hit != 'true' && steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
         run: |
           gh cache list
           python -m venv .venv-${{ matrix.python-version }}

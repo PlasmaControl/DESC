@@ -921,7 +921,7 @@ class TestBounce1DQuadrature:
         ],
     )
     def test_bounce_quadrature(self, is_strong, quad, automorphism):
-        """Test bounce integral matches singular elliptic integrals."""
+        """Test quadrature matches singular (strong and weak) elliptic integrals."""
         p = 1e-4
         m = 1 - p
         # Some prime number that doesn't appear anywhere in calculation.
@@ -971,9 +971,12 @@ class TestBounce1DQuadrature:
         x, w = get_quadrature(leggauss(deg), (automorphism_sin, grad_automorphism_sin))
         Z = bijection_from_disc(x, a[..., np.newaxis], b[..., np.newaxis])
         k = k[..., np.newaxis]
-        quad = np.dot(integrand(Z, k), w) * grad_bijection_from_disc(a, b)
+        quad = integrand(Z, k).dot(w) * grad_bijection_from_disc(a, b)
         return quad
 
+    # TODO: add the analytical test that converts incomplete elliptic integrals to
+    #  complete ones using the Reciprocal Modulus transformation
+    #  https://dlmf.nist.gov/19.7#E4.
     @staticmethod
     def elliptic_incomplete(k2):
         """Calculate elliptic integrals for bounce averaged binormal drift.
@@ -1179,6 +1182,7 @@ class TestBounce1D:
         assert result.shape == z1.shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
 
+    # TODO: stellarator geometry test with ripples
     @staticmethod
     def drift_analytic(data):
         """Compute analytic approximation for bounce-averaged binormal drift.

@@ -33,7 +33,9 @@ def _parse_parameterization(p):
     return module + "." + klass.__qualname__
 
 
-def compute(parameterization, names, params, transforms, profiles, data=None, **kwargs):
+def compute(  # noqa: C901
+    parameterization, names, params, transforms, profiles, data=None, **kwargs
+):
     """Compute the quantity given by name on grid.
 
     Parameters
@@ -88,6 +90,15 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     if "grid" in transforms:
 
         def check_fun(name):
+            reqs = data_index[p][name]["grid_requirement"]
+            for req in reqs:
+                errorif(
+                    not hasattr(transforms["grid"], req)
+                    or reqs[req] != getattr(transforms["grid"], req),
+                    AttributeError,
+                    f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
+                )
+
             reqs = data_index[p][name]["source_grid_requirement"]
             errorif(
                 reqs and not hasattr(transforms["grid"], "source_grid"),
@@ -517,6 +528,7 @@ def get_transforms(
 
     """
     from desc.basis import DoubleFourierSeries
+    from desc.grid import LinearGrid
     from desc.transform import Transform
 
     method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
@@ -556,8 +568,15 @@ def get_transforms(
                 )
             transforms[c] = c_transform
         elif c == "B":  # used for Boozer transform
+            # assume grid is a meshgrid but only care about a single surface
+            if grid.num_rho > 1:
+                theta = grid.nodes[grid.unique_theta_idx, 1]
+                zeta = grid.nodes[grid.unique_zeta_idx, 2]
+                grid_B = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
+            else:
+                grid_B = grid
             transforms["B"] = Transform(
-                grid,
+                grid_B,
                 DoubleFourierSeries(
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
@@ -570,8 +589,15 @@ def get_transforms(
                 method=method,
             )
         elif c == "w":  # used for Boozer transform
+            # assume grid is a meshgrid but only care about a single surface
+            if grid.num_rho > 1:
+                theta = grid.nodes[grid.unique_theta_idx, 1]
+                zeta = grid.nodes[grid.unique_zeta_idx, 2]
+                grid_w = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
+            else:
+                grid_w = grid
             transforms["w"] = Transform(
-                grid,
+                grid_w,
                 DoubleFourierSeries(
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),

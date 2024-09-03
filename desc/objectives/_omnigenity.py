@@ -47,7 +47,7 @@ class QuasisymmetryBoozer(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Must be a LinearGrid with a single flux surface and sym=False.
+        Must be a LinearGrid with sym=False.
         Defaults to ``LinearGrid(M=M_booz, N=N_booz)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
@@ -122,12 +122,6 @@ class QuasisymmetryBoozer(_Objective):
             grid = self._grid
 
         errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
-        errorif(
-            grid.num_rho != 1,
-            ValueError,
-            "QuasisymmetryBoozer grid must be on a single surface. "
-            "To target multiple surfaces, use multiple objectives.",
-        )
         warnif(
             grid.num_theta < 2 * eq.M,
             RuntimeWarning,
@@ -195,7 +189,7 @@ class QuasisymmetryBoozer(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^3).
+            Symmetry breaking harmonics of B (T).
 
         """
         if constants is None:
@@ -207,8 +201,11 @@ class QuasisymmetryBoozer(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        B_mn = constants["matrix"] @ data["|B|_mn"]
-        return B_mn[constants["idx"]]
+        B_mn = data["|B|_mn"].reshape((constants["transforms"]["grid"].num_rho, -1))
+        B_mn = constants["matrix"] @ B_mn.T
+        # output order = (rho, mn).flatten(), ie all the surfaces concatenated
+        # one after the other
+        return B_mn[constants["idx"]].T.flatten()
 
     @property
     def helicity(self):

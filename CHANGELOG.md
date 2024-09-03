@@ -11,6 +11,13 @@ New Features
 - Add ability to save and load vector potential information from ``mgrid`` files.
 - Changes ``ToroidalFlux`` objective to default using a 1D loop integral of the vector potential
 to compute the toroidal flux when possible, as opposed to a 2D surface integral of the magnetic field dotted with ``n_zeta``.
+- Allow specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
+
+Bug Fixes
+
+- Fixes bugs that occur when saving asymmetric equilibria as wout files
+- Fixes bug that occurs when using ``VMECIO.plot_vmec_comparison`` to compare to an asymmetric wout file
+
 
 
 v0.12.1

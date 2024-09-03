@@ -15,7 +15,6 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis
-from desc.compute.utils import dot, safediv
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -53,6 +52,7 @@ from desc.integrals.quad_utils import (
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
+from desc.utils import dot, safediv
 
 
 class TestSurfaceIntegral:

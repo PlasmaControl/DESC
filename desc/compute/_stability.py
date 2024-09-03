@@ -327,10 +327,11 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     sign_psi = jnp.sign(psi)
     sign_iota = jnp.sign(iota)
 
+    N_rho = int(source_grid.num_rho)
     N_alpha = int(source_grid.num_alpha)
 
     # phi is the same for each alpha
-    phi = source_grid.nodes[::N_alpha, 2]
+    phi = source_grid.nodes[:: N_rho * N_alpha, 2]
     N_zeta = len(phi)
 
     B = source_grid.meshgrid_reshape(data["|B|"], "arz")
@@ -498,10 +499,11 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     sign_psi = jnp.sign(psi)
     sign_iota = jnp.sign(iota)
 
+    N_rho = int(source_grid.num_rho)
     N_alpha = int(source_grid.num_alpha)
 
     # phi is the same for each alpha
-    phi = source_grid.nodes[::N_alpha, 2]
+    phi = source_grid.nodes[:: N_rho * N_alpha, 2]
     N_zeta = len(phi)
 
     B = source_grid.meshgrid_reshape(data["|B|"], "arz")

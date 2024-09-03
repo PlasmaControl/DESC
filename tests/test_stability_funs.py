@@ -739,7 +739,6 @@ def test_ballooning_compare_with_COBRAVMEC():
     )
     for i in range(len(surfaces)):
         rho = surfaces[i]
-
         grid = Grid.create_meshgrid(
             [rho, alpha, zeta],
             coordinates="raz",

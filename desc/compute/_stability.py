@@ -447,17 +447,15 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
     d/dζ(g dX/dζ) + c X = 0, g > 0
 
-    using the Newcomb's stability criterion
+    using the Newcomb's stability criterion. The geometric factors
 
     𝛋 = b ⋅∇ b
     g = a_N^3 * B_N * (b ⋅∇ζ) * (dψ_N/dρ)² * |∇α|², / B,
     c = a_N^3 * B_N * (1/ b ⋅∇ζ) * (dψ_N/dρ)² * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
 
-    are needed along a field line to solve the ballooning equation once where
-
+    are needed along a field line to solve the ballooning equation and
     ψ_N = ψ/ψ_b is the normalized toroidal flux, and
-    ψ_b = 0.5*(B_N * a_N**2) is the total enclosed toroidal flux by the
-    boundary.
+    ψ_b = 0.5*(B_N * a_N**2) is the enclosed toroidal flux by the boundary.
 
     To obtain the parameters g, c, and f, we need a set of parameters
     provided in the list ``data`` above. Here's a description of
@@ -480,7 +478,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     If zero crossing is at -inf (root finder failed), use the Y coordinate
     as a metric of stability else use the zero-crossing point on the X-axis
     as the metric
-    This idea is explained further in Appendix D of
+    This idea behind Newcomb's method is explained further in Appendix D of
     [Gaur _et al._](https://doi.org/10.1017/S0022377823000107)
     """
     source_grid = transforms["grid"].source_grid
@@ -569,7 +567,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     def integrator(carry, x):
         y, dy = carry
         g_element, c_element = x
-        # Update the array (Y) and its derivative using leapfrog-like method.
+        # Update the array (Y) and its derivative on scattered grids and
+        # integrate using leapfrog-like method.
         y_new = y + h * dy / g_element
         dy_new = dy - c_element * y_new * h
         # y starts at 0 with positive slope. If y goes negative it's unstable,
@@ -617,6 +616,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     # the distance from X0 to phimax as the distance to stability. If there was no
     # crossing we take Y[phi=phimax]. This gives a continuous metric, though
     # the first derivative will be discontinuous. Could maybe think of something better?
+    # RG: Peak of the metric doesn't match mean peak of the growth rate in rho
     metric = jnp.where(
         first_negative_indices != -1,
         # if it crossed, then X0 < phimax, so this < 0

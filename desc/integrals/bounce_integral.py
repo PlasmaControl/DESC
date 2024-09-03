@@ -26,12 +26,12 @@ from desc.utils import errorif, setdefault, warnif
 class Bounce1D(IOAble):
     """Computes bounce integrals using one-dimensional local spline methods.
 
-    The bounce integral is defined as ∫ f(ℓ) dℓ, where
+    The bounce integral is defined as ∫ f(λ, ℓ) dℓ, where
         dℓ parameterizes the distance along the field line in meters,
-        f(ℓ) is the quantity to integrate along the field line,
-        and the boundaries of the integral are bounce points ζ₁, ζ₂ s.t. λ|B|(ζᵢ) = 1,
-        where λ is a constant proportional to the magnetic moment over energy
-        and |B| is the norm of the magnetic field.
+        f(λ, ℓ) is the quantity to integrate along the field line,
+        and the boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ℓᵢ) = 1,
+        where λ is a constant defining the integral proportional to the magnetic moment
+        over energy and |B| is the norm of the magnetic field.
 
     For a particle with fixed λ, bounce points are defined to be the location on the
     field line such that the particle's velocity parallel to the magnetic field is zero.
@@ -250,7 +250,7 @@ class Bounce1D(IOAble):
         """
         return bounce_points(pitch_inv, self._zeta, self.B, self._dB_dz, num_well)
 
-    def check_points(self, z1, z2, pitch_inv, /, *, plot=True, **kwargs):
+    def check_points(self, z1, z2, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
 
         Parameters
@@ -299,18 +299,18 @@ class Bounce1D(IOAble):
         check=False,
         plot=False,
     ):
-        """Bounce integrate ∫ f(ℓ) dℓ.
+        """Bounce integrate ∫ f(λ, ℓ) dℓ.
 
-        Computes the bounce integral ∫ f(ℓ) dℓ for every field line and pitch.
+        Computes the bounce integral ∫ f(λ, ℓ) dℓ for every field line and pitch.
 
         Parameters
         ----------
         integrand : callable
             The composition operator on the set of functions in ``f`` that maps the
-            functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
-            arrays in ``f`` as arguments as well as the additional keyword arguments:
-            ``B`` and ``pitch``. A quadrature will be performed to approximate the
-            bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
+            functions in ``f`` to the integrand f(λ, ℓ) in ∫ f(λ, ℓ) dℓ. It should
+            accept the arrays in ``f`` as arguments as well as the additional keyword
+            arguments: ``B`` and ``pitch``. A quadrature will be performed to
+            approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
         pitch_inv : jnp.ndarray
             Shape (M, L, P).
             1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
@@ -325,7 +325,7 @@ class Bounce1D(IOAble):
         weight : jnp.ndarray
             Shape (M, L, N).
             If supplied, the bounce integral labeled by well j is weighted such that
-            the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
+            the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
             ``self.reshape_data`` to reshape the data into the expected shape.
         num_well : int or None
@@ -410,9 +410,9 @@ class Bounce1D(IOAble):
         """
         B, dB_dz = self.B, self._dB_dz
         if B.ndim == 4:
-            B = B[m, l]
-            dB_dz = dB_dz[m, l]
-        elif B.ndim == 3:
+            B = B[m]
+            dB_dz = dB_dz[m]
+        if B.ndim == 3:
             B = B[l]
             dB_dz = dB_dz[l]
         if pitch_inv is not None:

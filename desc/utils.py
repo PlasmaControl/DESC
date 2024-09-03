@@ -742,18 +742,6 @@ def atleast_nd(ndmin, ary):
     return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
 
 
-def atleast_3d_mid(ary):
-    """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
-    ary = jnp.atleast_2d(ary)
-    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
-
-
-def atleast_2d_end(ary):
-    """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
-    ary = jnp.atleast_1d(ary)
-    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
-
-
 def map2(fun, xs, *, batch_size=None):
     """Map over leading two axes iteratively."""
     # Can't pass in batch_size to imap yet because only new version jax allow that.

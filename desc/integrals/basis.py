@@ -27,6 +27,11 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
         Boolean array indicating whether element is an intersect
         and satisfies the stated condition.
 
+    Examples
+    --------
+    See ``desc/integrals/bounce_utils.py::bounce_points``.
+    This is used there to ensure the domains of integration are magnetic wells.
+
     """
     # The pairs ``y1`` and ``y2`` are boundaries of an integral only if ``y1 <= y2``.
     # For the integrals to be over wells, it is required that the first intersect

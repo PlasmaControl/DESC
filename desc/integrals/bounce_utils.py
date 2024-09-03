@@ -13,8 +13,8 @@ from desc.integrals.interp_utils import (
     polyval_vec,
 )
 from desc.integrals.quad_utils import (
-    _composite_linspace,
     bijection_from_disc,
+    composite_linspace,
     grad_bijection_from_disc,
 )
 from desc.utils import (
@@ -54,7 +54,7 @@ def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
     # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
-    pitch_inv = jnp.moveaxis(_composite_linspace(jnp.stack([min_B, max_B]), num), 0, -1)
+    pitch_inv = jnp.moveaxis(composite_linspace(jnp.stack([min_B, max_B]), num), 0, -1)
     assert pitch_inv.shape == (*min_B.shape, num + 2)
     return pitch_inv
 
@@ -295,7 +295,7 @@ def _bounce_quadrature(
     check=False,
     plot=False,
 ):
-    """Bounce integrate ∫ f(ℓ) dℓ.
+    """Bounce integrate ∫ f(λ, ℓ) dℓ.
 
     Parameters
     ----------
@@ -312,10 +312,10 @@ def _bounce_quadrature(
         epigraph of |B|.
     integrand : callable
         The composition operator on the set of functions in ``f`` that maps the
-        functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
-        arrays in ``f`` as arguments as well as the additional keyword arguments:
-        ``B`` and ``pitch``. A quadrature will be performed to approximate the
-        bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
+        functions in ``f`` to the integrand f(λ, ℓ) in ∫ f(λ, ℓ) dℓ. It should
+        accept the arrays in ``f`` as arguments as well as the additional keyword
+        arguments: ``B`` and ``pitch``. A quadrature will be performed to
+        approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
     pitch_inv : jnp.ndarray
         Shape (..., P).
         1/λ values to compute the bounce integrals.

@@ -19,7 +19,7 @@ def bijection_from_disc(x, a, b):
 
 
 def grad_bijection_from_disc(a, b):
-    """Gradient of affine bijection from disc."""
+    """Gradient wrt ``x`` of ``bijection_from_disc``."""
     dy_dx = 0.5 * (b - a)
     return dy_dx
 
@@ -220,7 +220,7 @@ def get_quadrature(quad, automorphism):
     return x, w
 
 
-def _composite_linspace(x, num):
+def composite_linspace(x, num):
     """Returns linearly spaced values between every pair of values in ``x``.
 
     Parameters

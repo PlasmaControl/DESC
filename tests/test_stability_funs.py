@@ -737,7 +737,6 @@ def test_ballooning_compare_with_COBRAVMEC():
     lam2_array = np.zeros(
         len(surfaces),
     )
-
     for i in range(len(surfaces)):
         rho = surfaces[i]
 

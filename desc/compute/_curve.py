@@ -1034,18 +1034,20 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="umbilic distance",
-    label="umbilic distance",
+    name="umbilic curve",
+    label="umbilic curve",
     units="~",
     units_long="None",
-    description="angular distance between adjacent segments of an umbilic curve",
+    description="angular difference between theta and phi on a surface"
+    + "determines the shape of an umbilic curve",
     dim=1,
     params=["A_n"],
     transforms={"A": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="",
     data=[],
-    parameterization="desc.geometry.curve.FourierUmbilicCurve",
+    # --no-verify parameterization="desc.geometry.curve.FourierUmbilicCurve",
+    parameterization=[],
 )
 def _A_FourierUmbilicCurve(params, transforms, profiles, data, **kwargs):
     # somehow it knows the grid from coordinates ~?

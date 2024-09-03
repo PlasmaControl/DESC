@@ -12,84 +12,35 @@ expensive computations.
 from functools import partial
 
 from orthax.legendre import leggauss
-from quadax import romberg, simpson
+from quadax import simpson
 
-from desc.backend import imap, jit, jnp, trapezoid
+from desc.backend import jit, jnp, trapezoid
 
-from .bounce_integral import bounce_integral, get_pitch
+from ..integrals.bounce_integral import Bounce1D
+from ..integrals.bounce_utils import get_pitch_inv
+from ..integrals.quad_utils import leggauss_lob
+from ..utils import cross, dot, map2, safediv
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv
-
-
-def _vec_quadax(quad, **kwargs):
-    """Vectorize an adaptive quadrature method from quadax.
-
-    Parameters
-    ----------
-    quad : callable
-        Adaptive quadrature method matching API from quadax.
-
-    Returns
-    -------
-    vec_quad : callable
-        Vectorized adaptive quadrature method.
-
-    """
-
-    def vec_quad(fun, interval, B_sup_z, B, B_z_ra, arg1, arg2):
-        return quad(fun, interval, args=(B_sup_z, B, B_z_ra, arg1, arg2), **kwargs)[0]
-
-    vec_quad = jnp.vectorize(
-        vec_quad, signature="(2),(m),(m),(m),(m),(m)->()", excluded={0}
-    )
-    return vec_quad
-
-
-def _get_pitch(grid, min_B, max_B, num, for_adaptive=False):
-    """Get points for quadrature over velocity coordinate.
-
-    Parameters
-    ----------
-    grid : Grid
-        The grid on which data is computed.
-    min_B : jnp.ndarray
-        Minimum |B| value.
-    max_B : jnp.ndarray
-        Maximum |B| value.
-    num : int
-        Number of values to uniformly space in between.
-    for_adaptive : bool
-        Whether to return just the points useful for an adaptive quadrature.
-
-    Returns
-    -------
-    pitch : Array
-        Pitch values in the desired shape to use in compute methods.
-
-    """
-    min_B = grid.compress(min_B)
-    max_B = grid.compress(max_B)
-    if for_adaptive:
-        pitch = jnp.reciprocal(jnp.stack([max_B, min_B], axis=-1))[:, jnp.newaxis]
-        assert pitch.shape == (grid.num_rho, 1, 2)
-    else:
-        pitch = get_pitch(min_B, max_B, num)
-        pitch = jnp.broadcast_to(
-            pitch[..., jnp.newaxis], (pitch.shape[0], grid.num_rho, grid.num_alpha)
-        ).reshape(pitch.shape[0], grid.num_rho * grid.num_alpha)
-    return pitch
 
 
 def _poloidal_mean(grid, f):
     """Integrate f over poloidal angle and divide by 2π."""
-    assert f.shape[-1] == grid.num_poloidal
+    assert f.shape[0] == grid.num_poloidal
     if grid.num_poloidal == 1:
-        return jnp.squeeze(f, axis=-1)
+        return f.squeeze(axis=0)
     if not hasattr(grid, "spacing"):
-        return jnp.mean(f, axis=-1)
+        return f.mean(axis=0)
     assert grid.is_meshgrid
     dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
-    return f @ dp / jnp.sum(dp)
+    return f.T.dot(dp) / jnp.sum(dp)
+
+
+def _get_pitch_inv(grid, data, num_pitch):
+    # TODO: Try Gauss-Chebyshev quadrature after automorphism arcsin to
+    #   make nodes more evenly spaced for effective ripple.
+    return get_pitch_inv(
+        grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), num_pitch
+    )[jnp.newaxis]
 
 
 @register_compute_fun(
@@ -105,18 +56,17 @@ def _poloidal_mean(grid, f):
     profiles=[],
     coordinates="r",
     data=["B^zeta"],
-    resolution_requirement="z",  # and poloidal if near rational surfaces
+    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _L_ra_fsa(data, transforms, profiles, **kwargs):
-    g = transforms["grid"].source_grid
-    shape = (g.num_rho, g.num_alpha, g.num_zeta)
+    grid = transforms["grid"].source_grid
     L_ra = simpson(
-        y=jnp.reciprocal(data["B^zeta"]).reshape(shape),
-        x=jnp.reshape(g.nodes[:, 2], shape),
+        y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
+        x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
         axis=-1,
     )
-    data["<L|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, L_ra)))
+    data["<L|r,a>"] = grid.expand(jnp.abs(_poloidal_mean(grid, L_ra)))
     return data
 
 
@@ -133,19 +83,33 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B^zeta", "sqrt(g)"],
-    resolution_requirement="z",  # and poloidal if near rational surfaces
+    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _G_ra_fsa(data, transforms, profiles, **kwargs):
-    g = transforms["grid"].source_grid
-    shape = (g.num_rho, g.num_alpha, g.num_zeta)
+    grid = transforms["grid"].source_grid
     G_ra = simpson(
-        y=jnp.reciprocal(data["B^zeta"] * data["sqrt(g)"]).reshape(shape),
-        x=jnp.reshape(g.nodes[:, 2], shape),
+        y=grid.meshgrid_reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"),
+        x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
         axis=-1,
     )
-    data["<G|r,a>"] = g.expand(jnp.abs(_poloidal_mean(g, G_ra)))
+    data["<G|r,a>"] = grid.expand(jnp.abs(_poloidal_mean(grid, G_ra)))
     return data
+
+
+def dH(grad_rho_norm_kappa_g, B, pitch):
+    """Removed |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ from integrand of Nemov eq. 30."""
+    return (
+        jnp.sqrt(jnp.abs(1 - pitch * B))
+        * (4 / (pitch * B) - 1)
+        * grad_rho_norm_kappa_g
+        / B
+    )
+
+
+def dI(B, pitch):
+    """Integrand of Nemov eq. 31."""
+    return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
 @register_compute_fun(
@@ -168,30 +132,27 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "B^zeta",
-        "|B|",
-        "|B|_z|r,a",
         "|grad(rho)|",
         "kappa_g",
         "<L|r,a>",
         "R0",
         "<|grad(rho)|>",
-    ],
-    resolution_requirement="z",  # and poloidal if near rational surfaces
+    ]
+    + Bounce1D.required_names,
+    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 31.",
+    num_quad="int : Resolution for quadrature of bounce integrals. Default is 32.",
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate, preferably odd. "
-        "Default is 125. Effective ripple will look smoother at high values. "
-        "(If computed on many flux surfaces and micro oscillation is seen "
-        "between neighboring surfaces, increasing num_pitch will smooth the profile)."
+        "Default is 125. Profile will look smoother at high values. "
+        "(If computed on many flux surfaces and small oscillations is seen "
+        "between neighboring surfaces, increasing this will smooth the profile)."
     ),
-    num_wells=(
+    num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
         "may consume more memory. Specifying a number that tightly upper bounds "
         "the number of wells will increase performance. "
-        "As a reference, there are typically <= 5 wells per toroidal transit."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
     # Some notes on choosing the resolution hyperparameters:
@@ -222,54 +183,46 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
+    quad = leggauss_lob(kwargs.get("num_quad", 32))
+    num_well = kwargs.get("num_well", None)
+    num_pitch = kwargs.get("num_pitch", 125)
     batch = kwargs.get("batch", True)
-    num_wells = kwargs.get("size", None)
-    g = transforms["grid"].source_grid
-    bounce_integrate, _ = bounce_integral(
-        data["B^zeta"],
-        data["|B|"],
-        data["|B|_z|r,a"],
-        g.compress(g.nodes[:, 2], surface_label="zeta"),
-        leggauss(kwargs.get("num_quad", 31)),
+
+    grid = transforms["grid"].source_grid
+    _data = {
+        # noqa: unused dependency
+        name: Bounce1D.reshape_data(grid, data[name])
+        for name in Bounce1D.required_names
+    }
+    _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
+        grid, data["|grad(rho)|"] * data["kappa_g"]
     )
+    _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
 
-    def dH(grad_rho_norm_kappa_g, B, pitch):
-        # Removed |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ from integrand of Nemov eq. 30. Reintroduced later.
-        return (
-            jnp.sqrt(jnp.abs(1 - pitch * B))
-            * (4 / (pitch * B) - 1)
-            * grad_rho_norm_kappa_g
-            / B
-        )
-
-    def dI(B, pitch):  # Integrand of Nemov eq. 31.
-        return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
-
-    def d_ripple(pitch):
-        # Return (∂ψ/∂ρ)⁻² λ⁻²B₀⁻³ ∑ⱼ Hⱼ²/Iⱼ evaluated at λ = pitch.
-        # Note (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) where B₀ has units of λ⁻¹.
-        H = bounce_integrate(
+    def compute(data):
+        """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ ∑ⱼ Hⱼ²/Iⱼ."""
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
+        H = bounce.integrate(
             dH,
-            # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-            data["|grad(rho)|"] * data["kappa_g"],
-            pitch,
+            data["pitch_inv"],
+            data["|grad(rho)|*kappa_g"],
+            num_well=num_well,
             batch=batch,
-            num_wells=num_wells,
         )
-        I = bounce_integrate(dI, [], pitch, batch=batch, num_wells=num_wells)
-        return pitch * jnp.sum(safediv(H**2, I), axis=-1)
+        I = bounce.integrate(dI, data["pitch_inv"], num_well=num_well, batch=batch)
+        # Note B₀ has units of λ⁻¹.
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        # (λB₀)³ db = λ³B₀² d(λ⁻¹) = λB₀² (-dλ).
+        y = data["pitch_inv"] ** (-3) * safediv(H**2, I).sum(axis=-1)
+        return simpson(y=y, x=data["pitch_inv"])
 
-    # The integrand is continuous and likely poorly approximated by a polynomial.
-    # Composite quadrature should perform better than higher order methods.
-    pitch = _get_pitch(
-        g, data["min_tz |B|"], data["max_tz |B|"], kwargs.get("num_pitch", 125)
-    )
-    ripple = simpson(y=imap(d_ripple, pitch).squeeze(axis=1), x=pitch, axis=0)
+    out = _poloidal_mean(grid, map2(compute, _data))
     data["effective ripple"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (data["max_tz |B|"] * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * g.expand(_poloidal_mean(g, ripple.reshape(g.num_rho, g.num_alpha)))
+        * grid.expand(out)
         / data["<L|r,a>"]
     )
     return data
@@ -293,35 +246,26 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "B^zeta",
-        "|B|",
-        "|B|_z|r,a",
         "cvdrift0",
         "gbdrift",
         "<L|r,a>",
-    ],
+    ]
+    + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 31.",
+    num_quad="int : Resolution for quadrature of bounce integrals. Default is 32.",
     num_pitch=(
-        "int : Resolution for quadrature over velocity coordinate. Default is 125."
+        "int : Resolution for quadrature over velocity coordinate, preferably odd. "
+        "Default is 125."
     ),
-    num_wells=(
+    num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
         "may consume more memory. Specifying a number that tightly upper bounds "
         "the number of wells will increase performance. "
-        "As a reference, there are typically <= 5 wells per toroidal transit."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
-    adaptive=(
-        "bool : Whether to adaptively integrate over the velocity coordinate. "
-        "If true, then num_pitch specifies an upper bound on the maximum number "
-        "of function evaluations."
-    ),
 )
-@partial(
-    jit, static_argnames=["num_quad", "num_pitch", "num_wells", "batch", "adaptive"]
-)
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Velasco et al.
 
@@ -336,14 +280,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     https://doi.org/10.1063/1.2912456.
     Equation 61, using Velasco's γ_c from equation 15 of the above paper.
     """
-    batch = kwargs.get("batch", True)
-    num_wells = kwargs.get("num_wells", None)
-    g = transforms["grid"].source_grid
-    knots = g.compress(g.nodes[:, 2], surface_label="zeta")
-    quad = leggauss(kwargs.get("num_quad", 31))
+    quad = leggauss(kwargs.get("num_quad", 32))
     num_pitch = kwargs.get("num_pitch", 125)
-    adaptive = kwargs.get("adaptive", False)
-    pitch = _get_pitch(g, data["min_tz |B|"], data["max_tz |B|"], num_pitch, adaptive)
+    num_well = kwargs.get("num_well", None)
+    batch = kwargs.get("batch", True)
+    grid = transforms["grid"].source_grid
 
     def d_v_tau(B, pitch):
         return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
@@ -351,89 +292,49 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     def d_gamma_c(f, B, pitch):
         return safediv(f * (1 - pitch * B / 2), jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    if not adaptive:
-        bounce_integrate, _ = bounce_integral(
-            data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, quad
+    def compute(data):
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
+        # τ is the bounce time, and I is defined in Nemov eq. 36.
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        v_tau = bounce.integrate(
+            d_v_tau, data["pitch_inv"], batch=batch, num_well=num_well
         )
-
-        def d_Gamma_c(pitch):
-            # Return ∑ⱼ [v τ γ_c²]ⱼ evaluated at λ = pitch.
-            # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
-            # τ is the bounce time, and I is defined in Nemov eq. 36.
-            v_tau = bounce_integrate(
-                d_v_tau, [], pitch, batch=batch, num_wells=num_wells
-            )
-            gamma_c = (
-                2
-                / jnp.pi
-                * jnp.arctan(
-                    safediv(
-                        bounce_integrate(
-                            d_gamma_c,
-                            data["cvdrift0"],
-                            pitch,
-                            batch=batch,
-                            num_wells=num_wells,
-                        ),
-                        bounce_integrate(
-                            d_gamma_c,
-                            data["gbdrift"],
-                            pitch,
-                            batch=batch,
-                            num_wells=num_wells,
-                        ),
-                    )
+        gamma_c = (
+            2
+            / jnp.pi
+            * jnp.arctan(
+                safediv(
+                    bounce.integrate(
+                        d_gamma_c,
+                        data["pitch_inv"],
+                        data["cvdrift0"],
+                        batch=batch,
+                        num_well=num_well,
+                    ),
+                    bounce.integrate(
+                        d_gamma_c,
+                        data["pitch_inv"],
+                        data["gbdrift"],
+                        batch=batch,
+                        num_well=num_well,
+                    ),
                 )
             )
-            return jnp.sum(v_tau * gamma_c**2, axis=-1)
-
+        )
+        y = data["pitch_inv"] ** (-2) * (v_tau * gamma_c**2).sum(axis=-1)
         # The integrand is piecewise continuous and likely poorly approximated by a
         # polynomial. Composite quadrature should perform better than higher order
         # methods.
-        Gamma_c = trapezoid(y=imap(d_Gamma_c, pitch).squeeze(axis=1), x=pitch, axis=0)
-    else:
+        return trapezoid(y=y, x=data["pitch_inv"])
 
-        def d_Gamma_c(pitch, B_sup_z, B, B_z_ra, cvdrift0, gbdrift):
-            bounce_integrate, _ = bounce_integral(B_sup_z, B, B_z_ra, knots, quad)
-            v_tau = bounce_integrate(
-                d_v_tau, [], pitch, batch=batch, num_wells=num_wells
-            )
-            gamma_c = (
-                2
-                / jnp.pi
-                * jnp.arctan(
-                    safediv(
-                        bounce_integrate(
-                            d_gamma_c, cvdrift0, pitch, batch=batch, num_wells=num_wells
-                        ),
-                        bounce_integrate(
-                            d_gamma_c, gbdrift, pitch, batch=batch, num_wells=num_wells
-                        ),
-                    )
-                )
-            )
-            return jnp.squeeze(jnp.sum(v_tau * gamma_c**2, axis=-1))
-
-        args = [
-            f.reshape(g.num_rho, g.num_alpha, g.num_zeta)
-            for f in [
-                data["B^zeta"],
-                data["|B|"],
-                data["|B|_z|r,a"],
-                data["cvdrift0"],
-                data["gbdrift"],
-            ]
-        ]
-        Gamma_c = _vec_quadax(romberg, divmax=jnp.log2(num_pitch + 1))(
-            d_Gamma_c, pitch, *args
-        )
-
-    data["Gamma_c"] = (
-        jnp.pi
-        / (8 * 2**0.5)
-        * g.expand(_poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha)))
-        / data["<L|r,a>"]
-    )
+    _data = {  # noqa: unused dependency
+        name: Bounce1D.reshape_data(grid, data[name])
+        for name in Bounce1D.required_names + ["cvdrift0", "gbdrift"]
+    }
+    _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
+    out = _poloidal_mean(grid, map2(compute, _data))
+    data["Gamma_c"] = jnp.pi / (8 * 2**0.5) * grid.expand(out) / data["<L|r,a>"]
     return data
 
 
@@ -455,12 +356,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "B^zeta",
         "B^phi",
         "B^phi_r|v,p",
         "b",
         "|B|",
-        "|B|_z|r,a",
         "|B|_r|v,p",
         "<L|r,a>",
         "iota_r",
@@ -470,22 +369,23 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         "|e_alpha|r,p|",
         "kappa_g",
         "psi_r",
-    ],
+    ]
+    + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 31.",
+    num_quad="int : Resolution for quadrature of bounce integrals. Default is 32.",
     num_pitch=(
-        "int : Resolution for quadrature over velocity coordinate. Default is 125."
+        "int : Resolution for quadrature over velocity coordinate, preferably odd. "
+        "Default is 125."
     ),
-    num_wells=(
+    num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
         "may consume more memory. Specifying a number that tightly upper bounds "
         "the number of wells will increase performance. "
-        "As a reference, there are typically <= 5 wells per toroidal transit."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_wells", "batch"])
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Nemov et al.
 
@@ -498,13 +398,11 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     The radial electric field has a negligible effect on alpha particle confinement,
     so it is assumed to be zero.
     """
-    batch = kwargs.get("batch", True)
-    num_wells = kwargs.get("num_wells", None)
-    g = transforms["grid"].source_grid
-    knots = g.compress(g.nodes[:, 2], surface_label="zeta")
-    quad = leggauss(kwargs.get("num_quad", 31))
+    quad = leggauss(kwargs.get("num_quad", 32))
     num_pitch = kwargs.get("num_pitch", 125)
-    pitch = _get_pitch(g, data["min_tz |B|"], data["max_tz |B|"], num_pitch)
+    num_well = kwargs.get("num_well", None)
+    batch = kwargs.get("batch", True)
+    grid = transforms["grid"].source_grid
 
     # The derivative (∂/∂ψ)|ϑ,ϕ belongs to flux coordinates which satisfy
     # α = ϑ − χ(ψ) ϕ where α is the poloidal label of ψ,α Clebsch coordinates.
@@ -527,51 +425,65 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             / B
         )
 
-    def den(dB_dpsi, K, B, pitch):
+    def den(B_psi, K, B, pitch):
         return (
             jnp.sqrt(jnp.abs(1 - pitch * B))
-            * (safediv(1 - pitch * B / 2, 1 - pitch * B) * dB_dpsi + K)
+            * (safediv(1 - pitch * B / 2, 1 - pitch * B) * B_psi + K)
             / B
         )
 
-    bounce_integrate, _ = bounce_integral(
-        data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, quad
-    )
-
-    def d_Gamma_c(pitch):
-        # Return ∑ⱼ [v τ γ_c²]ⱼ evaluated at λ = pitch.
+    def compute(data):
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
         # τ is the bounce time, and I is defined in Nemov eq. 36.
-        v_tau = bounce_integrate(d_v_tau, [], pitch, batch=batch, num_wells=num_wells)
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        v_tau = bounce.integrate(
+            d_v_tau, data["pitch_inv"], batch=batch, num_well=num_well
+        )
         gamma_c = (
             2
             / jnp.pi
             * jnp.arctan(
                 safediv(
-                    bounce_integrate(
+                    bounce.integrate(
                         num,
-                        grad_rho_norm_kappa_g,
-                        pitch,
+                        data["pitch_inv"],
+                        data["|grad(rho)|*kappa_g"],
                         batch=batch,
-                        num_wells=num_wells,
+                        num_well=num_well,
                     ),
-                    bounce_integrate(
+                    bounce.integrate(
                         den,
-                        [dB_dpsi, K],
-                        pitch,
+                        data["pitch_inv"],
+                        [data["|B|_psi|v,p"], data["K"]],
                         batch=batch,
-                        num_wells=num_wells,
-                        weight=weight,
+                        num_well=num_well,
+                        weight=data["weight"],
                     ),
                 )
             )
         )
-        return jnp.sum(v_tau * gamma_c**2, axis=-1)
+        y = data["pitch_inv"] ** (-2) * (v_tau * gamma_c**2).sum(axis=-1)
+        # The integrand is piecewise continuous and likely poorly approximated by a
+        # polynomial. Composite quadrature should perform better than higher order
+        # methods.
+        return trapezoid(y=y, x=data["pitch_inv"])
 
-    grad_rho_norm_kappa_g = data["|grad(rho)|"] * data["kappa_g"]
-    dB_dpsi = data["|B|_r|v,p"] / data["psi_r"]
-    weight = data["|grad(rho)|"] * data["|e_alpha|r,p|"]
-    K = (
+    _data = {  # noqa: unused dependency
+        name: Bounce1D.reshape_data(grid, data[name])
+        for name in Bounce1D.required_names
+    }
+    _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
+        grid, data["|grad(rho)|"] * data["kappa_g"]
+    )
+    _data["|B|_psi|v,p"] = Bounce1D.reshape_data(
+        grid, data["|B|_r|v,p"] / data["psi_r"]
+    )
+    _data["weight"] = Bounce1D.reshape_data(
+        grid, data["|grad(rho)|"] * data["|e_alpha|r,p|"]
+    )
+    _data["K"] = Bounce1D.reshape_data(
+        grid,
         # TODO: Confirm if K is smoother than individual components.
         #  If not, should spline separately.
         data["iota_r"] * dot(cross(data["e^rho"], data["b"]), data["grad(phi)"])
@@ -580,17 +492,9 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         # Note that Nemov assumes B^ϕ > 0; this is not true in DESC, but we account
         # for that in this computation.
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"])
-        / data["psi_r"]
+        / data["psi_r"],
     )
-
-    # The integrand is piecewise continuous and likely poorly approximated by a
-    # polynomial. Composite quadrature should perform better than higher order
-    # methods.
-    Gamma_c = trapezoid(y=imap(d_Gamma_c, pitch).squeeze(axis=1), x=pitch, axis=0)
-    data["Gamma_c Nemov"] = (
-        jnp.pi
-        / (8 * 2**0.5)
-        * g.expand(_poloidal_mean(g, Gamma_c.reshape(g.num_rho, g.num_alpha)))
-        / data["<L|r,a>"]
-    )
+    _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
+    out = _poloidal_mean(grid, map2(compute, _data))
+    data["Gamma_c Nemov"] = jnp.pi / (8 * 2**0.5) * grid.expand(out) / data["<L|r,a>"]
     return data

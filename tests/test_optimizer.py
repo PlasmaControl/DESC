@@ -16,6 +16,7 @@ from scipy.optimize import (
 )
 
 import desc.examples
+import desc.utils
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
@@ -339,7 +340,7 @@ def test_overstepping():
 
     class DummyObjective(_Objective):
         name = "Dummy"
-        _print_value_fmt = "Dummy: {:.3e}"
+        _print_value_fmt = "Dummy: "
         _units = "(Foo)"
 
         def build(self, *args, **kwargs):
@@ -732,9 +733,9 @@ def test_bounded_optimization():
         return 1 / 2 * f.dot(f)
 
     def grad(x):
-        f = fun(x)
+        f = fun(x)  # noqa: F841
         J = jac(x)
-        return f.dot(J)
+        return J.dot(J)
 
     def hess(x):
         J = jac(x)

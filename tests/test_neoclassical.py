@@ -14,13 +14,10 @@ def test_field_line_average():
     # For axisymmetric devices, one toroidal transit must be exact.
     rho = np.array([1])
     alpha = np.array([0])
+    zeta = np.linspace(0, 2 * np.pi, 20)
     eq = get("DSHAPE")
     grid = eq.get_rtz_grid(
-        rho,
-        alpha,
-        np.linspace(0, 2 * np.pi, 20),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
+        rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
@@ -31,12 +28,9 @@ def test_field_line_average():
 
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
+    zeta = np.linspace(0, 40 * np.pi, 300)
     grid = eq.get_rtz_grid(
-        rho,
-        alpha,
-        np.linspace(0, 40 * np.pi, 300),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
+        rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
@@ -52,12 +46,10 @@ def test_effective_ripple():
     """Test effective ripple with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
+    alpha = np.array([0])
+    zeta = np.linspace(0, 20 * np.pi, 1000)
     grid = eq.get_rtz_grid(
-        rho,
-        np.array([0]),
-        np.linspace(0, 20 * np.pi, 1000),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
+        rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )
     data = eq.compute("effective ripple", grid=grid)
     assert np.isfinite(data["effective ripple"]).all()

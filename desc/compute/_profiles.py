@@ -14,8 +14,9 @@ from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
 
+from ..integrals.surface_integral import surface_averages, surface_integrals
+from ..utils import dot, safediv
 from .data_index import register_compute_fun
-from .utils import dot, safediv, surface_averages, surface_integrals
 
 
 @register_compute_fun(
@@ -221,6 +222,27 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<ne>_vol",
+    label="\\langle n_e \\rangle_{vol}",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Volume average electron density",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["ne", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
+)
+def _ne_vol(params, transforms, profiles, data, **kwargs):
+    data["<ne>_vol"] = (
+        jnp.sum(data["ne"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="ne",
     label="n_e",
     units="m^{-3}",
@@ -359,6 +381,44 @@ def _Ti_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="ni",
+    label="n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["ne", "Zeff"],
+)
+def _ni(params, transforms, profiles, data, **kwargs):
+    data["ni"] = data["ne"] / data["Zeff"]
+    return data
+
+
+@register_compute_fun(
+    name="ni_r",
+    label="\\partial_{\\rho} n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density, first radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["ne", "ne_r", "Zeff", "Zeff_r"],
+)
+def _ni_r(params, transforms, profiles, data, **kwargs):
+    data["ni_r"] = (data["ne_r"] * data["Zeff"] - data["ne"] * data["Zeff_r"]) / data[
+        "Zeff"
+    ] ** 2
+    return data
+
+
+@register_compute_fun(
     name="Zeff",
     label="Z_{eff}",
     units="~",
@@ -415,7 +475,7 @@ def _Zeff_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
-    data=["Te", "ne", "Ti", "Zeff"],
+    data=["ne", "ni", "Te", "Ti"],
 )
 def _p(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
@@ -424,7 +484,7 @@ def _p(params, transforms, profiles, data, **kwargs):
         )
     else:
         data["p"] = elementary_charge * (
-            data["ne"] * data["Te"] + data["Ti"] * data["ne"] / data["Zeff"]
+            data["ne"] * data["Te"] + data["ni"] * data["Ti"]
         )
     return data
 
@@ -440,7 +500,7 @@ def _p(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
-    data=["Te", "Te_r", "ne", "ne_r", "Ti", "Ti_r", "Zeff", "Zeff_r"],
+    data=["ne", "ne_r", "ni", "ni_r", "Te", "Te_r", "Ti", "Ti_r"],
 )
 def _p_r(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
@@ -451,9 +511,8 @@ def _p_r(params, transforms, profiles, data, **kwargs):
         data["p_r"] = elementary_charge * (
             data["ne_r"] * data["Te"]
             + data["ne"] * data["Te_r"]
-            + data["Ti_r"] * data["ne"] / data["Zeff"]
-            + data["Ti"] * data["ne_r"] / data["Zeff"]
-            - data["Ti"] * data["ne"] * data["Zeff_r"] / data["Zeff"] ** 2
+            + data["ni_r"] * data["Ti"]
+            + data["ni"] * data["Ti_r"]
         )
     return data
 
@@ -1863,4 +1922,52 @@ def _shear(params, transforms, profiles, data, **kwargs):
         lambda _: -data["rho"] * data["iota_r"] / data["iota"],
         None,
     )
+    return data
+
+
+@register_compute_fun(
+    name="<sigma*nu>",
+    label="\\langle\\sigma\\nu\\rangle",
+    units="m^3 \\cdot s^{-1}",
+    units_long="cubic meters / second",
+    description="Thermal reactivity from Bosch-Hale parameterization",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["Ti"],
+    fuel="str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default is 'DT'.",
+)
+def _reactivity(params, transforms, profiles, data, **kwargs):
+    # Bosch and Hale. “Improved Formulas for Fusion Cross-Sections and Thermal
+    # Reactivities.” Nuclear Fusion 32 (April 1992): 611-631.
+    # https://doi.org/10.1088/0029-5515/32/4/I07.
+    coefficients = {
+        "DT": {
+            "B_G": 34.382,
+            "mc2": 1124656,
+            "C1": 1.17302e-9,
+            "C2": 1.51361e-2,
+            "C3": 7.51886e-2,
+            "C4": 4.60643e-3,
+            "C5": 1.35000e-2,
+            "C6": -1.06750e-4,
+            "C7": 1.36600e-5,
+        }
+    }
+    fuel = kwargs.get("fuel", "DT")
+    coeffs = coefficients.get(fuel)
+
+    T = data["Ti"] / 1e3  # keV
+    theta = T / (
+        1
+        - (T * (coeffs["C2"] + T * (coeffs["C4"] + T * coeffs["C6"])))
+        / (1 + T * (coeffs["C3"] + T * (coeffs["C5"] + T * coeffs["C7"])))
+    )
+    xi = (coeffs["B_G"] ** 2 / (4 * theta)) ** (1 / 3)
+    sigma_nu = (
+        coeffs["C1"] * theta * jnp.sqrt(xi / (coeffs["mc2"] * T**3)) * jnp.exp(-3 * xi)
+    )  # cm^3/s
+    data["<sigma*nu>"] = sigma_nu / 1e6  # m^3/s
     return data

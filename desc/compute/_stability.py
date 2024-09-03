@@ -290,8 +290,9 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
 
     where
 
-    v_A = B_N /sqrt(mu_0 * n0 * M) is the normalized Alfven speed, and
-    ψ_N = 2 * ψ/(B_N * a_N^2) is the normalized toroidal flux,
+    v_A = B_N /sqrt(mu_0 * n0 * M) is the Alfven speed, and
+    ψ_N = ψ/ψ_b is the normalized toroidal flux, and
+    ψ_b = 0.5*(B_N * a_N**2) is the total enclosed toroidal flux.
 
     To obtain the parameters g, c, and f, we need a set of parameters
     provided in the list ``data`` above. Here's a description of
@@ -454,7 +455,9 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
     are needed along a field line to solve the ballooning equation once where
 
-    ψ_N = ψ/(B_N * a_N^2) / 2 is the normalized toroidal flux,
+    ψ_N = ψ/ψ_b is the normalized toroidal flux, and
+    ψ_b = 0.5*(B_N * a_N**2) is the total enclosed toroidal flux by the
+    boundary.
 
     To obtain the parameters g, c, and f, we need a set of parameters
     provided in the list ``data`` above. Here's a description of

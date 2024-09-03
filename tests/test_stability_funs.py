@@ -598,8 +598,7 @@ def test_ballooning_stability_eval():
         cvdrift0 = grid.meshgrid_reshape(data0["cvdrift0"], "arz")[None, ...]
 
         c = (
-            1
-            * a_N**3
+            a_N**3
             * B_N
             * jnp.reshape(
                 2

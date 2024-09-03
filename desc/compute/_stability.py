@@ -302,9 +302,9 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     - g^ra: (grad alpha dot grad rho) integrated local shear
     - g^rr: |grad rho|^2 flux expansion term
     - cvdrift: geometric factor of the curvature drift
-    - cvdrift0: geoetric factor of curvature drift 2
+    - cvdrift0: geometric factor of curvature drift 2
     - |B|: magnitude of the magnetic field
-    - B^zeta: inverse of the jacobian
+    - B^zeta:  B dot grad zeta
     - p_r: dp/drho, pressure gradient
     - phi: coordinate describing the position in the toroidal angle
     along a field line
@@ -363,8 +363,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     cvdrift0 = source_grid.meshgrid_reshape(data["cvdrift0"], "arz")[None, ...]
 
     c = (
-        1
-        * a_N**3
+        a_N**3
         * B_N
         * jnp.reshape(
             2
@@ -466,9 +465,9 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     - g^ra: (grad alpha dot grad rho) integrated local shear
     - g^rr: |grad rho|^2 flux expansion term
     - cvdrift: geometric factor of the curvature drift
-    - cvdrift0: geoetric factor of curvature drift 2
+    - cvdrift0: geometric factor of curvature drift 2
     - |B|: magnitude of the magnetic field
-    - B^zeta: inverse of the jacobian
+    - B^zeta: B dot grad zeta
     - p_r: dp/drho, pressure gradient
     - psi_r: radial gradient of the toroidal flux
     - phi: coordinate describing the position in the toroidal angle
@@ -533,8 +532,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     cvdrift0 = source_grid.meshgrid_reshape(data["cvdrift0"], "arz")[None, :]
 
     c = (
-        1
-        * a_N**3
+        a_N**3
         * B_N
         * jnp.reshape(
             2

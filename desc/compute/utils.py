@@ -8,6 +8,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
+from ..integrals.bounce_utils import get_pitch_inv
 from ..utils import errorif
 from .data_index import allowed_kwargs, data_index
 
@@ -711,3 +712,28 @@ def _has_transforms(qty, transforms, parameterization):
                 [d in transforms[key].derivatives.tolist() for d in derivs[key]]
             ).all()
     return all(flags.values())
+
+
+# TODO: Replace with surface integrals once they are switched to OOP and default to
+#       more efficient methods on tensor product grids.
+def _poloidal_mean(grid, f):
+    """Integrate f over poloidal angle and divide by 2π."""
+    assert f.shape[0] == grid.num_poloidal
+    if grid.num_poloidal == 1:
+        return f.squeeze(axis=0)
+    if not hasattr(grid, "spacing"):
+        return f.mean(axis=0)
+    assert grid.is_meshgrid
+    dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
+    return f.T.dot(dp) / jnp.sum(dp)
+
+
+def _get_pitch_inv(grid, data, num_pitch):
+    return jnp.broadcast_to(
+        get_pitch_inv(
+            grid.compress(data["min_tz |B|"]),
+            grid.compress(data["max_tz |B|"]),
+            num_pitch,
+        )[jnp.newaxis],
+        (grid.num_alpha, grid.num_rho, num_pitch + 2),
+    )

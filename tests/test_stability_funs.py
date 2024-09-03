@@ -590,7 +590,7 @@ def test_ballooning_stability_eval():
             (N_alpha, N_zeta0, N_zeta),
         )
 
-        f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
+        f = a_N * B_N**3 * gds2 / B**3 * 1 / gradpar
         g = a_N**3 * B_N * gds2 / B * gradpar
         g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
 
@@ -625,13 +625,13 @@ def test_ballooning_stability_eval():
         k = jnp.arange(N_zeta - 2)[None, None, None, :]
 
         A = A.at[i, l, j, k].set(
-            g_half[i, l, k] / f[i, l, k] * 1 / h**2 * (j - k == -1)
+            g_half[i, l, k] / f[i, l, k] / h**2 * (j - k == -1)
             + (
-                -(g_half[i, l, j + 1] + g_half[i, l, j]) / f[i, l, j + 1] * 1 / h**2
+                -(g_half[i, l, j + 1] + g_half[i, l, j]) / f[i, l, j + 1] / h**2
                 + c[i, l, j + 1] / f[i, l, j + 1]
             )
             * (j - k == 0)
-            + g_half[i, l, j] / f[i, l, j + 1] * 1 / h**2 * (j - k == 1)
+            + g_half[i, l, j] / f[i, l, j + 1] / h**2 * (j - k == 1)
         )
 
         w = jnp.linalg.eigvals(jnp.where(jnp.isfinite(A), A, 0))

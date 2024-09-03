@@ -274,15 +274,24 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     to calculate the maximum growth rate against the
     infinite-n ideal ballooning mode. The equation being solved is
 
-    d/dζ(g dX/dζ) + c X = γ f X, g, f > 0
+    d/dζ(g dX/dζ) + c X = λ f X, g, f > 0
 
     where
 
-    𝛋 = 𝐛 ⋅∇ 𝐛
-    g = a_N^3 * B_N * (b ⋅∇ζ) * |∇α|², / B,
-    c = a_N/B_N * (1/ b ⋅∇ζ) * dψ/dρ * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
-    f = a_N * B_N^3 *|∇α|² / B^3 * (1/ b ⋅∇ζ) ,
-    are needed along a field line to solve the ballooning equation once.
+    𝛋 = b ⋅∇ b
+    g = a_N^3 * B_N * (b ⋅∇ζ) * (dψ_N/dρ)² * |∇α|², / B,
+    c = a_N^3 * B_N * (1/ b ⋅∇ζ) * (dψ_N/dρ)² * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
+    f = a_N * B_N^3 * (dψ_N/dρ)² * |∇α|² / B^3 * (1/ b ⋅∇ζ) ,
+
+    are needed along a field line to solve the ballooning equation once and
+    find
+
+    λ = a_N^2 / v_A^2 * γ²,
+
+    where
+
+    v_A = B_N /sqrt(mu_0 * n0 * M) is the normalized Alfven speed, and
+    ψ_N = 2 * ψ/(B_N * a_N^2) is the normalized toroidal flux,
 
     To obtain the parameters g, c, and f, we need a set of parameters
     provided in the list ``data`` above. Here's a description of
@@ -345,7 +354,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
         (N_alpha, N_zeta0, N_zeta),
     )
 
-    f = a_N**3 * B_N * gds2 / B**3 * 1 / gradpar
+    f = a_N * B_N**3 * gds2 / B**3 * 1 / gradpar
     g = a_N**3 * B_N * gds2 / B * gradpar
     g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
 
@@ -378,10 +387,10 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     B_inv = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
 
     A = A.at[i, l, j, k].set(
-        g_half[i, l, k] * 1 / h**2 * (j - k == -1)
-        + (-(g_half[i, l, j + 1] + g_half[i, l, j]) * 1 / h**2 + c[i, l, j + 1])
+        g_half[i, l, k] / h**2 * (j - k == -1)
+        + (-(g_half[i, l, j + 1] + g_half[i, l, j]) / h**2 + c[i, l, j + 1])
         * (j - k == 0)
-        + g_half[i, l, j] * 1 / h**2 * (j - k == 1)
+        + g_half[i, l, j] / h**2 * (j - k == 1)
     )
 
     B_inv = B_inv.at[i, l, j, k].set(1 / jnp.sqrt(f[i, l, j + 1]) * (j - k == 0))
@@ -439,14 +448,13 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
     using the Newcomb's stability criterion
 
-    where
+    𝛋 = b ⋅∇ b
+    g = a_N^3 * B_N * (b ⋅∇ζ) * (dψ_N/dρ)² * |∇α|², / B,
+    c = a_N^3 * B_N * (1/ b ⋅∇ζ) * (dψ_N/dρ)² * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
 
-    kappa = b dot grad b
-    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
-    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
-        * (b cross kappa) dot grad alpha/ B**2,
-    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta),
-    are needed along a field line to solve the ballooning equation once.
+    are needed along a field line to solve the ballooning equation once where
+
+    ψ_N = ψ/(B_N * a_N^2) / 2 is the normalized toroidal flux,
 
     To obtain the parameters g, c, and f, we need a set of parameters
     provided in the list ``data`` above. Here's a description of

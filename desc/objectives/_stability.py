@@ -380,10 +380,10 @@ class BallooningStability(_Objective):
 
     Targets the following metric:
 
-    f = w₀ sum(ReLU(γ-γ₀)) + w₁ max(ReLU(γ-γ₀))
+    f = w₀ sum(ReLU(λ-λ₀)) + w₁ max(ReLU(λ-λ₀))
 
-    where γ is the negative squared growth rate for each field line (such that γ>0 is
-    unstable), γ₀ is a cutoff, and w₀ and w₁ are weights.
+    where λ is the negative squared growth rate for each field line (such that λ>0 is
+    unstable), λ₀ is a cutoff, and w₀ and w₁ are weights.
 
     Parameters
     ----------
@@ -459,7 +459,7 @@ class BallooningStability(_Objective):
         nturns=3,
         nzetaperturn=200,
         zeta0=None,
-        gamma0=0.0,
+        lam0=0.0,
         w0=1.0,
         w1=10.0,
         name="ideal ball gamma",
@@ -472,7 +472,7 @@ class BallooningStability(_Objective):
         self._nturns = nturns
         self._nzetaperturn = nzetaperturn
         self._zeta0 = zeta0
-        self._gamma0 = gamma0
+        self._gamma0 = lam0
         self._w0 = w0
         self._w1 = w1
 
@@ -559,7 +559,7 @@ class BallooningStability(_Objective):
             "alpha": self._alpha,
             "zeta": zeta,
             "zeta0": self._zeta0,
-            "gamma0": self._gamma0,
+            "gamma0": self._lam0,
             "w0": self._w0,
             "w1": self._w1,
             "quad_weights": 1.0,
@@ -626,7 +626,7 @@ class BallooningStability(_Objective):
             params=params,
         )
 
-        gamma = compute_fun(
+        lam = compute_fun(
             eq,
             self._data_keys,
             params,
@@ -636,10 +636,10 @@ class BallooningStability(_Objective):
             zeta0=constants["zeta0"],
         )["ideal ball gamma2"]
 
-        gamma0, w0, w1 = constants["gamma0"], constants["w0"], constants["w1"]
+        lam0, w0, w1 = constants["lam0"], constants["w0"], constants["w1"]
 
         # Shifted ReLU operation
-        data = (gamma - gamma0) * (gamma >= gamma0)
+        data = (lam - lam0) * (lam >= lam0)
 
         results = w0 * jnp.sum(data) + w1 * jnp.max(data)
 

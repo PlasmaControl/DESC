@@ -6,11 +6,11 @@ from jax import grad
 
 from desc.backend import jnp
 from desc.integrals.quad_utils import (
+    _composite_linspace,
     automorphism_arcsin,
     automorphism_sin,
     bijection_from_disc,
     bijection_to_disc,
-    composite_linspace,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     grad_bijection_from_disc,
@@ -26,7 +26,7 @@ def test_composite_linspace():
     B_min_tz = np.array([0.1, 0.2])
     B_max_tz = np.array([1, 3])
     breaks = np.linspace(B_min_tz, B_max_tz, num=5)
-    b = composite_linspace(breaks, num=3)
+    b = _composite_linspace(breaks, num=3)
     for i in range(breaks.shape[0]):
         for j in range(breaks.shape[1]):
             assert only1(np.isclose(breaks[i, j], b[:, j]).tolist())

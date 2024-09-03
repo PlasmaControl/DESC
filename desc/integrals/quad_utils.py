@@ -220,7 +220,7 @@ def get_quadrature(quad, automorphism):
     return x, w
 
 
-def composite_linspace(x, num):
+def _composite_linspace(x, num):
     """Returns linearly spaced values between every pair of values in ``x``.
 
     Parameters

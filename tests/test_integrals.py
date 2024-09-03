@@ -952,7 +952,7 @@ class TestBounce1DQuadrature:
             check=True,
             **kwargs,
         )
-        result = bounce.integrate(pitch_inv, integrand, check=True, plot=True)
+        result = bounce.integrate(integrand, pitch_inv, check=True, plot=True)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
@@ -1099,14 +1099,14 @@ class TestBounce1D:
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
         num = bounce.integrate(
-            pitch_inv,
             integrand=TestBounce1D._example_numerator,
+            pitch_inv=pitch_inv,
             f=Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
             check=True,
         )
         den = bounce.integrate(
-            pitch_inv,
             integrand=TestBounce1D._example_denominator,
+            pitch_inv=pitch_inv,
             check=True,
             batch=False,
         )
@@ -1117,14 +1117,12 @@ class TestBounce1D:
         # Sum all bounce averages across a particular field line, for every field line.
         result = avg.sum(axis=-1)
         # Group the result by pitch and flux surface.
-        result = result.reshape(pitch_inv.shape[0], alpha.size, rho.size)
+        result = result.reshape(alpha.size, rho.size, pitch_inv.shape[-1])
         # The result stored at
-        p, m, l = 3, 0, 1
-        print("Result(λ, α, ρ):", result[p, m, l])
+        m, l, p = 0, 1, 3
+        print("Result(α, ρ, λ):", result[m, l, p])
         # corresponds to the 1/λ value
-        print(
-            "1/λ(α, ρ):", pitch_inv[p, m % pitch_inv.shape[1], l % pitch_inv.shape[-1]]
-        )
+        print("1/λ(α, ρ):", pitch_inv[l, p])
         # for the Clebsch-type field line coordinates
         nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
         print("(α, ρ):", nodes[m, l, 0])
@@ -1133,7 +1131,7 @@ class TestBounce1D:
         bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=False)
 
         # 8. Plotting
-        fig, ax = bounce.plot(m, l, pitch_inv[..., l], include_legend=False, show=False)
+        fig, ax = bounce.plot(m, l, pitch_inv[l], include_legend=False, show=False)
         return fig
 
     @pytest.mark.unit
@@ -1166,20 +1164,20 @@ class TestBounce1D:
                 "|B|_z|r,a": dg_dz(zeta),
             },
         )
-        np.testing.assert_allclose(bounce._zeta, zeta)
+        z1 = np.array(0, ndmin=4)
+        z2 = np.array(2 * np.pi, ndmin=4)
         argmin = 5.61719
-        np.testing.assert_allclose(
-            h(argmin),
-            func(
-                h=h(zeta),
-                z1=np.array(0, ndmin=3),
-                z2=np.array(2 * np.pi, ndmin=3),
-                knots=zeta,
-                g=bounce.B,
-                dg_dz=bounce._dB_dz,
-            ),
-            rtol=1e-3,
+        h_min = h(argmin)
+        result = func(
+            h=h(zeta),
+            z1=z1,
+            z2=z2,
+            knots=zeta,
+            g=bounce.B,
+            dg_dz=bounce._dB_dz,
         )
+        assert result.shape == z1.shape
+        np.testing.assert_allclose(h_min, result, rtol=1e-3)
 
     @staticmethod
     def drift_analytic(data):
@@ -1262,7 +1260,7 @@ class TestBounce1D:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = get_pitch_inv(np.min(B), np.max(B), 100).squeeze()[:-1]
+        pitch_inv = get_pitch_inv(np.min(B), np.max(B), 100)[:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounce1DQuadrature.elliptic_incomplete(k2)
@@ -1283,7 +1281,7 @@ class TestBounce1D:
         ) / G0
         drift_analytic_den = I_0 / G0
         drift_analytic = drift_analytic_num / drift_analytic_den
-        return drift_analytic, cvdrift, gbdrift, pitch_inv.reshape(-1, 1, 1)
+        return drift_analytic, cvdrift, gbdrift, pitch_inv
 
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch):
@@ -1361,15 +1359,15 @@ class TestBounce1D:
 
         f = Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
-            pitch_inv=pitch_inv,
             integrand=TestBounce1D.drift_num_integrand,
+            pitch_inv=pitch_inv,
             f=f,
             num_well=1,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
-            pitch_inv=pitch_inv,
             integrand=TestBounce1D.drift_den_integrand,
+            pitch_inv=pitch_inv,
             num_well=1,
             weight=np.ones(zeta.size),
             check=True,
@@ -1389,8 +1387,8 @@ class TestBounce1D:
         )
 
         fig, ax = plt.subplots()
-        ax.plot(pitch_inv.squeeze(), drift_analytic)
-        ax.plot(pitch_inv.squeeze(), drift_numerical)
+        ax.plot(pitch_inv, drift_analytic)
+        ax.plot(pitch_inv, drift_numerical)
         return fig
 
     @staticmethod
@@ -1442,11 +1440,11 @@ class TestBounce1D:
             return grad_fun(*args, *kwargs2.values())
 
         def fun1(pitch):
-            return bounce.integrate(1 / pitch, integrand, check=False, **kwargs).sum()
+            return bounce.integrate(integrand, 1 / pitch, check=False, **kwargs).sum()
 
         def fun2(pitch):
             return bounce.integrate(
-                1 / pitch, integrand_grad, check=True, **kwargs
+                integrand_grad, 1 / pitch, check=True, **kwargs
             ).sum()
 
         pitch = 1.0

@@ -431,7 +431,7 @@ class BallooningStability(_Objective):
     zeta0 : array-like
         Points of vanishing integrated local shear to scan over.
         Default 15 points in [-π/2,π/2]
-    gamma0 : float
+    lam0 : float
         Threshold for penalizing growth rates in metric above.
     w0, w1 : float
         Weights for sum and max terms in metric above.
@@ -472,7 +472,7 @@ class BallooningStability(_Objective):
         self._nturns = nturns
         self._nzetaperturn = nzetaperturn
         self._zeta0 = zeta0
-        self._gamma0 = lam0
+        self._lam0 = lam0
         self._w0 = w0
         self._w1 = w1
 
@@ -559,7 +559,7 @@ class BallooningStability(_Objective):
             "alpha": self._alpha,
             "zeta": zeta,
             "zeta0": self._zeta0,
-            "gamma0": self._lam0,
+            "lam0": self._lam0,
             "w0": self._w0,
             "w1": self._w1,
             "quad_weights": 1.0,
@@ -580,7 +580,7 @@ class BallooningStability(_Objective):
 
         Returns
         -------
-        gamma : ndarray
+        lam : ndarray
             ideal ballooning growth rate.
 
         """

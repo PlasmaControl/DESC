@@ -236,7 +236,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         I = bounce.integrate(dI, data["pitch_inv"], num_well=num_well, batch=batch)
         # Note B₀ has units of λ⁻¹.
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
-        # (λB₀)³ db = (λB₀)³ λ⁻²B₀⁻¹ (-dλ) = λB₀² (-dλ) = λ³B₀² d(λ⁻¹).
+        # (λB₀)³ db = λ³B₀² d(λ⁻¹) = λB₀² (-dλ).
         y = data["pitch_inv"] ** (-3) * safediv(H**2, I).sum(axis=-1)
         return simpson(y=y, x=data["pitch_inv"])
 

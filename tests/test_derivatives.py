@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 from numpy.random import default_rng
 
-import desc.utils
 from desc.backend import jnp
 from desc.derivatives import AutoDiffDerivative, FiniteDiffDerivative
 
@@ -97,7 +96,7 @@ class TestDerivative:
         g = rando.random(n)
 
         def f(x):
-            return 5 + g.dot(x) + desc.utils.dot(1 / 2 * A.dot(x))
+            return 5 + g.dot(x) + x.dot(1 / 2 * A.dot(x))
 
         hess = FiniteDiffDerivative(f, argnum=0, mode="hess")
 

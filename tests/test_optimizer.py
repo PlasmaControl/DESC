@@ -730,12 +730,12 @@ def test_bounded_optimization():
 
     def sfun(x):
         f = fun(x)
-        return 1 / 2 * desc.utils.dot(f)
+        return 1 / 2 * f.dot(f)
 
     def grad(x):
         f = fun(x)  # noqa: F841
         J = jac(x)
-        return desc.utils.dot(J)
+        return J.dot(J)
 
     def hess(x):
         J = jac(x)

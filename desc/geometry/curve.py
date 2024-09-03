@@ -796,7 +796,7 @@ class FourierUmbilicCurve(Curve):
         """
         theta = coords[:, 0]
         phi = coords[:, 1]
-        A = NFP_umbilic_factor * theta + phi
+        A = NFP_umbilic_factor * theta - phi
 
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)

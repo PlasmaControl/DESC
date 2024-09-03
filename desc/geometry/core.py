@@ -338,6 +338,50 @@ class Curve(IOAble, Optimizable, ABC):
             coords, N=N, NFP=NFP, basis="xyz", name=name, sym=sym
         )
 
+    def to_FourierUmbilic(
+        self, N=10, grid=None, NFP=None, NFP_umbilic_factor=1, sym=False, name=""
+    ):
+        """Convert Curve to FourierRZCurve representation.
+
+        Note that some types of curves may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new A representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCurve.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierRZCurve
+            New representation of the curve parameterized by Fourier series for R,Z.
+
+        """
+        from .curve import FourierUmbilicCurve
+
+        NFP = 1 or NFP
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("A", grid=grid, basis="rtz")["A"]
+        return FourierUmbilicCurve.from_values(
+            coords,
+            N=N,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            basis="rtz",
+            name=name,
+            sym=sym,
+        )
+
     def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
         """Convert Curve to FourierPlanarCurve representation.
 

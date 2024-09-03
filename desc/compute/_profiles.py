@@ -13,7 +13,7 @@ from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
 
-from ..integrals import surface_averages, surface_integrals
+from ..integrals.surface_integral import surface_averages, surface_integrals
 from ..utils import cumtrapz, dot, safediv
 from .data_index import register_compute_fun
 

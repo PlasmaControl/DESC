@@ -2,13 +2,14 @@
 
 import operator
 import warnings
+from functools import partial
 from itertools import combinations_with_replacement, permutations
 
 import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import fori_loop, jit, jnp
+from desc.backend import flatnonzero, fori_loop, jit, jnp, take
 
 
 class Timer:
@@ -183,6 +184,13 @@ class _Indexable:
 
     def __getitem__(self, index):
         return index
+
+    @staticmethod
+    def get(stuff, axis, ndim):
+        slices = [slice(None)] * ndim
+        slices[axis] = stuff
+        slices = tuple(slices)
+        return slices
 
 
 """
@@ -682,6 +690,56 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
     # invalid tree structure
     else:
         raise ValueError("trees must be nested lists of dicts")
+
+
+@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
+def take_mask(a, mask, /, *, size=None, fill_value=None):
+    """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        The source array.
+    mask : jnp.ndarray
+        Boolean mask to index into ``a``. Should have same shape as ``a``.
+    size : int
+        Elements of ``a`` at the first size True indices of ``mask`` will be returned.
+        If there are fewer elements than size indicates, the returned array will be
+        padded with ``fill_value``. The size default is ``mask.size``.
+    fill_value : Any
+        When there are fewer than the indicated number of elements, the remaining
+        elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
+        the largest negative value for signed types, the largest positive value for
+        unsigned types, and True for booleans.
+
+    Returns
+    -------
+    result : jnp.ndarray
+        Shape (size, ).
+
+    """
+    assert a.shape == mask.shape
+    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
+    return take(
+        a,
+        idx,
+        mode="fill",
+        fill_value=fill_value,
+        unique_indices=True,
+        indices_are_sorted=True,
+    )
+
+
+def flatten_matrix(y):
+    """Flatten matrix to vector."""
+    return y.reshape(*y.shape[:-2], -1)
+
+
+# TODO: Eventually remove and use numpy's stuff.
+# https://github.com/numpy/numpy/issues/25805
+def atleast_nd(ndmin, ary):
+    """Adds dimensions to front if necessary."""
+    return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
 
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text

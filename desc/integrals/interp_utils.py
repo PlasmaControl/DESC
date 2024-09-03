@@ -12,7 +12,7 @@ from functools import partial
 from interpax import interp1d
 
 from desc.backend import jnp
-from desc.compute.utils import safediv
+from desc.utils import safediv
 
 # Warning: method must be specified as keyword argument.
 interp1d_vec = jnp.vectorize(

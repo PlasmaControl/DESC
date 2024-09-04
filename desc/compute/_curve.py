@@ -1046,8 +1046,7 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=[],
-    # --no-verify parameterization="desc.geometry.curve.FourierUmbilicCurve",
-    parameterization=[],
+    parameterization="desc.geometry.curve.FourierUmbilicCurve",
 )
 def _A_FourierUmbilicCurve(params, transforms, profiles, data, **kwargs):
     # somehow it knows the grid from coordinates ~?

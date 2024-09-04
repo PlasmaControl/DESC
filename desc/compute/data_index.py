@@ -222,6 +222,9 @@ _class_inheritance = {
     "desc.geometry.curve.FourierRZCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.FourierUmbilicCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.curve.FourierXYZCurve": [
         "desc.geometry.core.Curve",
     ],

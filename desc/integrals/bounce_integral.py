@@ -387,7 +387,7 @@ class Bounce1D(IOAble):
         assert result.shape == z1.shape
         return result
 
-    def plot(self, m, l, pitch_inv=None, /, **kwargs):
+    def plot(self, m, l, pitch_inv=None, **kwargs):
         """Plot the field line and bounce points of the given pitch angles.
 
         Parameters

@@ -17,30 +17,10 @@ from quadax import simpson
 from desc.backend import jit, jnp, trapezoid
 
 from ..integrals.bounce_integral import Bounce1D
-from ..integrals.bounce_utils import get_pitch_inv
 from ..integrals.quad_utils import leggauss_lob
 from ..utils import cross, dot, map2, safediv
 from .data_index import register_compute_fun
-
-
-def _poloidal_mean(grid, f):
-    """Integrate f over poloidal angle and divide by 2π."""
-    assert f.shape[0] == grid.num_poloidal
-    if grid.num_poloidal == 1:
-        return f.squeeze(axis=0)
-    if not hasattr(grid, "spacing"):
-        return f.mean(axis=0)
-    assert grid.is_meshgrid
-    dp = grid.compress(grid.spacing[:, 1], surface_label="poloidal")
-    return f.T.dot(dp) / jnp.sum(dp)
-
-
-def _get_pitch_inv(grid, data, num_pitch):
-    # TODO: Try Gauss-Chebyshev quadrature after automorphism arcsin to
-    #   make nodes more evenly spaced for effective ripple.
-    return get_pitch_inv(
-        grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), num_pitch
-    )[jnp.newaxis]
+from .utils import _get_pitch_inv, _poloidal_mean
 
 
 @register_compute_fun(
@@ -95,21 +75,6 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     )
     data["<G|r,a>"] = grid.expand(jnp.abs(_poloidal_mean(grid, G_ra)))
     return data
-
-
-def dH(grad_rho_norm_kappa_g, B, pitch):
-    """Removed |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ from integrand of Nemov eq. 30."""
-    return (
-        jnp.sqrt(jnp.abs(1 - pitch * B))
-        * (4 / (pitch * B) - 1)
-        * grad_rho_norm_kappa_g
-        / B
-    )
-
-
-def dI(B, pitch):
-    """Integrand of Nemov eq. 31."""
-    return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
 @register_compute_fun(
@@ -175,7 +140,7 @@ def dI(B, pitch):
     #  required for sufficient coverage of the surface. This requires many knots to
     #  for the spline of the magnetic field to capture fine ripples in a large interval.
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_wells", "batch"])
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 
@@ -184,20 +149,23 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     quad = leggauss_lob(kwargs.get("num_quad", 32))
-    num_well = kwargs.get("num_well", None)
     num_pitch = kwargs.get("num_pitch", 125)
+    num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
-
     grid = transforms["grid"].source_grid
-    _data = {
-        # noqa: unused dependency
-        name: Bounce1D.reshape_data(grid, data[name])
-        for name in Bounce1D.required_names
-    }
-    _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
-        grid, data["|grad(rho)|"] * data["kappa_g"]
-    )
-    _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
+
+    def dH(grad_rho_norm_kappa_g, B, pitch):
+        # Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed.
+        return (
+            jnp.sqrt(jnp.abs(1 - pitch * B))
+            * (4 / (pitch * B) - 1)
+            * grad_rho_norm_kappa_g
+            / B
+        )
+
+    def dI(B, pitch):
+        # Integrand of Nemov eq. 31.
+        return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
     def compute(data):
         """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ ∑ⱼ Hⱼ²/Iⱼ."""
@@ -216,7 +184,17 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         # (λB₀)³ db = λ³B₀² d(λ⁻¹) = λB₀² (-dλ).
         y = data["pitch_inv"] ** (-3) * safediv(H**2, I).sum(axis=-1)
         return simpson(y=y, x=data["pitch_inv"])
+        # TODO: Try Gauss-Chebyshev quadrature after automorphism arcsin to
+        #   make nodes more evenly spaced.
 
+    _data = {  # noqa: unused dependency
+        name: Bounce1D.reshape_data(grid, data[name])
+        for name in Bounce1D.required_names
+    }
+    _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
+        grid, data["|grad(rho)|"] * data["kappa_g"]
+    )
+    _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
     out = _poloidal_mean(grid, map2(compute, _data))
     data["effective ripple"] = (
         jnp.pi

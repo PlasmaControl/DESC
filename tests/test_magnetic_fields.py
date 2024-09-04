@@ -6,10 +6,11 @@ from scipy.constants import mu_0
 
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz_vec, xyz2rpz_vec
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
+from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface
+from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
@@ -22,11 +23,13 @@ from desc.magnetic_fields import (
     ScalarPotentialField,
     SplineMagneticField,
     ToroidalMagneticField,
+    VectorPotentialField,
     VerticalMagneticField,
     field_line_integrate,
     read_BNORM_file,
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
+from desc.utils import dot
 
 
 def phi_lm(R, phi, Z, a, m):
@@ -59,8 +62,41 @@ class TestMagneticFields:
         tfield = ToroidalMagneticField(2, 1)
         vfield = VerticalMagneticField(1)
         pfield = PoloidalMagneticField(2, 1, 2)
+
+        def tfield_A(R, phi, Z, B0=2, R0=1):
+            az = -B0 * R0 * jnp.log(R)
+            arp = jnp.zeros_like(az)
+            A = jnp.array([arp, arp, az]).T
+            return A
+
+        tfield_from_A = VectorPotentialField(tfield_A, params={"B0": 2, "R0": 1})
+
+        def vfield_A(R, phi, Z, B0=None):
+            coords_rpz = jnp.vstack([R, phi, Z]).T
+            coords_xyz = rpz2xyz(coords_rpz)
+            ax = B0 / 2 * coords_xyz[:, 1]
+            ay = -B0 / 2 * coords_xyz[:, 0]
+
+            az = jnp.zeros_like(ax)
+            A = jnp.array([ax, -ay, az]).T
+            A = xyz2rpz_vec(A, phi=coords_rpz[:, 1])
+            return A
+
+        vfield_params = {"B0": 1}
+        vfield_from_A = VectorPotentialField(vfield_A, params=vfield_params)
+
         np.testing.assert_allclose(tfield([1, 0, 0]), [[0, 2, 0]])
         np.testing.assert_allclose((4 * tfield)([2, 0, 0]), [[0, 4, 0]])
+        np.testing.assert_allclose(tfield_from_A([1, 0, 0]), [[0, 2, 0]])
+        np.testing.assert_allclose(
+            tfield_A(1, 0, 0),
+            tfield_from_A.compute_magnetic_vector_potential([1, 0, 0]).squeeze(),
+        )
+        np.testing.assert_allclose(
+            vfield_A(1, 0, 0, **vfield_params),
+            vfield_from_A.compute_magnetic_vector_potential([1, 0, 0]),
+        )
+
         np.testing.assert_allclose((tfield + vfield)([1, 0, 0]), [[0, 2, 1]])
         np.testing.assert_allclose(
             (tfield + vfield - pfield)([1, 0, 0.1]), [[0.4, 2, 1]]
@@ -104,17 +140,40 @@ class TestMagneticFields:
         assert scaled_field.B0 == 2
         assert scaled_field.scale == 3.1
         np.testing.assert_allclose(scaled_field([1.0, 0, 0]), np.array([[0, 6.2, 0]]))
+        np.testing.assert_allclose(
+            scaled_field.compute_magnetic_vector_potential([2.0, 0, 0]),
+            np.array([[0, 0, -3.1 * 2 * 1 * np.log(2)]]),
+        )
+
         scaled_field.R0 = 1.3
         scaled_field.scale = 1.0
         np.testing.assert_allclose(scaled_field([1.3, 0, 0]), np.array([[0, 2, 0]]))
+        np.testing.assert_allclose(
+            scaled_field.compute_magnetic_vector_potential([2.0, 0, 0]),
+            np.array([[0, 0, -2 * 1.3 * np.log(2)]]),
+        )
         assert scaled_field.optimizable_params == ["B0", "R0", "scale"]
         assert hasattr(scaled_field, "B0")
 
         sum_field = vfield + pfield + tfield
+        sum_field_tv = vfield + tfield  # to test A since pfield does not have A
         assert len(sum_field) == 3
+        assert len(sum_field_tv) == 2
+
         np.testing.assert_allclose(
             sum_field([1.3, 0, 0.0]), [[0.0, 2, 3.2 + 2 * 1.2 * 0.3]]
         )
+
+        tfield_A = np.array([[0, 0, -tfield.B0 * tfield.R0 * np.log(tfield.R0)]])
+        x = tfield.R0 * np.cos(np.pi / 4)
+        y = tfield.R0 * np.sin(np.pi / 4)
+        vfield_A = np.array([[vfield.B0 * y, -vfield.B0 * x, 0]]) / 2
+
+        np.testing.assert_allclose(
+            sum_field_tv.compute_magnetic_vector_potential([x, y, 0.0], basis="xyz"),
+            tfield_A + vfield_A,
+        )
+
         assert sum_field.optimizable_params == [
             ["B0"],
             ["B0", "R0", "iota"],
@@ -305,6 +364,87 @@ class TestMagneticFields:
             field.potential_dzeta = 1
 
     @pytest.mark.unit
+    def test_current_potential_vector_potential(self):
+        """Test current potential field vector potential against analytic result."""
+        R0 = 10
+        a = 1
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([R0, a]),
+            Z_lmn=jnp.array([0, -a]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        # make a current potential corresponding a purely poloidal current
+        G = 100  # net poloidal current
+        potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi
+        potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
+        potential_dzeta = lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi
+
+        params = {"G": -G}
+
+        field = CurrentPotentialField(
+            potential,
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            params=params,
+            potential_dtheta=potential_dtheta,
+            potential_dzeta=potential_dzeta,
+            NFP=surface.NFP,
+        )
+        # test the loop integral of A around a curve encompassing the torus
+        # against the analytic result for flux in an ideal toroidal solenoid
+        prefactors = mu_0 * G / 2 / jnp.pi
+        correct_flux = -2 * np.pi * prefactors * (np.sqrt(R0**2 - a**2) - R0)
+
+        curve = FourierXYZCurve()  # curve to integrate A over
+        curve_grid = LinearGrid(zeta=20)
+        curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
+        curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
+
+        surface_grid = LinearGrid(M=60, N=60, NFP=10)
+
+        A_xyz = field.compute_magnetic_vector_potential(
+            curve_data["x"], basis="xyz", source_grid=surface_grid
+        )
+        A_rpz = field.compute_magnetic_vector_potential(
+            curve_data_rpz["x"], basis="rpz", source_grid=surface_grid
+        )
+
+        # integrate to get the flux
+        flux_xyz = jnp.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_rpz = jnp.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(correct_flux, flux_xyz, rtol=1e-8)
+        np.testing.assert_allclose(correct_flux, flux_rpz, rtol=1e-8)
+
+        field.params["G"] = -2 * field.params["G"]
+
+        A_xyz = field.compute_magnetic_vector_potential(
+            curve_data["x"], basis="xyz", source_grid=surface_grid
+        )
+        A_rpz = field.compute_magnetic_vector_potential(
+            curve_data_rpz["x"], basis="rpz", source_grid=surface_grid
+        )
+
+        # integrate to get the flux
+        flux_xyz = jnp.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_rpz = jnp.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(-2 * correct_flux, flux_xyz, rtol=1e-8)
+        np.testing.assert_allclose(-2 * correct_flux, flux_rpz, rtol=1e-8)
+
+    @pytest.mark.unit
     def test_fourier_current_potential_field(self):
         """Test Fourier current potential magnetic field against analytic result."""
         surface = FourierRZToroidalSurface(
@@ -415,6 +555,124 @@ class TestMagneticFields:
             xyz2rpz_vec(K_xyz["K"], x=K_xyz["x"][:, 0], y=K_xyz["x"][:, 1]),
             atol=1e-16,
         )
+
+    @pytest.mark.unit
+    def test_fourier_current_potential_vector_potential(self):
+        """Test Fourier current potential vector potential against analytic result."""
+        R0 = 10
+        a = 1
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([R0, a]),
+            Z_lmn=jnp.array([0, -a]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+
+        basis = DoubleFourierSeries(M=2, N=2, sym="sin")
+        phi_mn = np.ones((basis.num_modes,))
+        # make a current potential corresponding a purely poloidal current
+        G = 100  # net poloidal current
+
+        # test the loop integral of A around a curve encompassing the torus
+        # against the analytic result for flux in an ideal toroidal solenoid
+        ## expression for flux inside of toroidal solenoid of radius a
+        prefactors = mu_0 * G / 2 / jnp.pi
+        correct_flux = -2 * np.pi * prefactors * (np.sqrt(R0**2 - a**2) - R0)
+
+        curve = FourierXYZCurve()  # curve to integrate A over
+        curve_grid = LinearGrid(zeta=20)
+        curve_data = curve.compute(["x", "x_s"], grid=curve_grid)
+        curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
+
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            I=0,
+            G=-G,  # to get a positive B_phi, we must put G negative
+            # since -G is the net poloidal current on the surface
+            # ( with  G=-(net_current) meaning that we have net_current
+            # flowing poloidally (in clockwise direction) around torus)
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        surface_grid = LinearGrid(M=60, N=60, NFP=10)
+
+        phi_mn = np.zeros((basis.num_modes,))
+
+        field.Phi_mn = phi_mn
+
+        field.change_resolution(3, 3)
+        field.change_Phi_resolution(2, 2)
+
+        A_xyz = field.compute_magnetic_vector_potential(
+            curve_data["x"], basis="xyz", source_grid=surface_grid
+        )
+        A_rpz = field.compute_magnetic_vector_potential(
+            curve_data_rpz["x"], basis="rpz", source_grid=surface_grid
+        )
+
+        # integrate to get the flux
+        flux_xyz = jnp.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_rpz = jnp.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(correct_flux, flux_xyz, rtol=1e-8)
+        np.testing.assert_allclose(correct_flux, flux_rpz, rtol=1e-8)
+
+        field.G = -2 * field.G
+        field.I = 0
+
+        A_xyz = field.compute_magnetic_vector_potential(
+            curve_data["x"], basis="xyz", source_grid=surface_grid
+        )
+        A_rpz = field.compute_magnetic_vector_potential(
+            curve_data_rpz["x"], basis="rpz", source_grid=surface_grid
+        )
+
+        # integrate to get the flux
+        flux_xyz = jnp.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_rpz = jnp.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(-2 * correct_flux, flux_xyz, rtol=1e-8)
+        np.testing.assert_allclose(-2 * correct_flux, flux_rpz, rtol=1e-8)
+
+        field = FourierCurrentPotentialField.from_surface(
+            surface=surface,
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            I=0,
+            G=-G,
+        )
+
+        A_xyz = field.compute_magnetic_vector_potential(
+            curve_data["x"], basis="xyz", source_grid=surface_grid
+        )
+        A_rpz = field.compute_magnetic_vector_potential(
+            curve_data_rpz["x"], basis="rpz", source_grid=surface_grid
+        )
+
+        # integrate to get the flux
+        flux_xyz = jnp.sum(
+            dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+        flux_rpz = jnp.sum(
+            dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+        )
+
+        np.testing.assert_allclose(correct_flux, flux_xyz, rtol=1e-8)
+        np.testing.assert_allclose(correct_flux, flux_rpz, rtol=1e-8)
 
     @pytest.mark.unit
     def test_fourier_current_potential_field_symmetry(self):
@@ -644,7 +902,7 @@ class TestMagneticFields:
 
     @pytest.mark.slow
     @pytest.mark.unit
-    def test_spline_field(self):
+    def test_spline_field(self, tmpdir_factory):
         """Test accuracy of spline magnetic field."""
         field1 = ScalarPotentialField(phi_lm, args)
         R = np.linspace(0.5, 1.5, 20)
@@ -659,10 +917,65 @@ class TestMagneticFields:
         extcur = [4700.0, 1000.0]
         mgrid = "tests/inputs/mgrid_test.nc"
         field3 = SplineMagneticField.from_mgrid(mgrid, extcur)
+        # test saving and loading from mgrid
+        tmpdir = tmpdir_factory.mktemp("spline_mgrid_with_A")
+        path = tmpdir.join("spline_mgrid_with_A.nc")
+        field3.save_mgrid(
+            path,
+            Rmin=np.min(field3._R),
+            Rmax=np.max(field3._R),
+            Zmin=np.min(field3._Z),
+            Zmax=np.max(field3._Z),
+            nR=field3._R.size,
+            nZ=field3._Z.size,
+            nphi=field3._phi.size,
+        )
+        # no need for extcur b/c is saved in "raw" format, no need to scale again
+        field4 = SplineMagneticField.from_mgrid(path)
+        attrs_4d = ["_AR", "_Aphi", "_AZ", "_BR", "_Bphi", "_BZ"]
+        for attr in attrs_4d:
+            np.testing.assert_allclose(
+                (getattr(field3, attr) * np.array(extcur)).sum(axis=-1),
+                getattr(field4, attr).squeeze(),
+                err_msg=attr,
+            )
+        attrs_3d = ["_R", "_phi", "_Z"]
+        for attr in attrs_3d:
+            np.testing.assert_allclose(getattr(field3, attr), getattr(field4, attr))
+
+        r = 0.70
+        p = 0
+        z = 0
+        # use finite diff derivatives to check A accuracy
+        tfield_A = lambda R, phi, Z: field3.compute_magnetic_vector_potential(
+            jnp.vstack([R, phi, Z]).T
+        )
+        funR = lambda x: tfield_A(x, p, z)
+        funP = lambda x: tfield_A(r, x, z)
+        funZ = lambda x: tfield_A(r, p, x)
+
+        ap = tfield_A(r, p, z)[:, 1]
+
+        # these are the gradients of each component of A
+        dAdr = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
+        dAdp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
+        dAdz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
+
+        # form the B components with the appropriate combinations
+        B2 = jnp.array(
+            [
+                dAdp[:, 2] / r - dAdz[:, 1],
+                dAdz[:, 0] - dAdr[:, 2],
+                dAdr[:, 1] + (ap - dAdp[:, 0]) / r,
+            ]
+        ).T
 
         np.testing.assert_allclose(
             field3([0.70, 0, 0]), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
         )
+
+        np.testing.assert_allclose(field3([0.70, 0, 0]), B2, rtol=1e-3, atol=5e-3)
+
         field3.currents *= 2
         np.testing.assert_allclose(
             field3([0.70, 0, 0]),
@@ -697,13 +1010,19 @@ class TestMagneticFields:
             -2.430716e04,
             -2.380229e04,
         ]
-        field = SplineMagneticField.from_mgrid(
-            "tests/inputs/mgrid_d3d.nc", extcur=extcur
-        )
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            field = SplineMagneticField.from_mgrid(
+                "tests/inputs/mgrid_d3d.nc", extcur=extcur
+            )
         # make sure field is invariant to shift in phi
         B1 = field.compute_magnetic_field(np.array([1.75, 0.0, 0.0]))
         B2 = field.compute_magnetic_field(np.array([1.75, 1.0, 0.0]))
         np.testing.assert_allclose(B1, B2)
+
+        # test the error when no vec pot values exist
+        with pytest.raises(ValueError, match="no vector potential"):
+            field.compute_magnetic_vector_potential(np.array([1.75, 0.0, 0.0]))
 
     @pytest.mark.unit
     def test_field_line_integrate(self):
@@ -842,8 +1161,15 @@ class TestMagneticFields:
         Rmax = 7
         Zmin = -2
         Zmax = 2
-        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
-        load_field = SplineMagneticField.from_mgrid(path)
+        with pytest.raises(NotImplementedError):
+            # Raises error because poloidal field has no vector potential
+            # and so cannot save the vector potential
+            save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
+        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax, save_vector_potential=False)
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid has no vector potential
+            # and so cannot load the vector potential
+            load_field = SplineMagneticField.from_mgrid(path)
 
         # check that the fields are the same
         num_nodes = 50

@@ -125,29 +125,13 @@ jobs:
           attempt_limit: 10
           attempt_delay: 60000 # ms, 1 min
 
-      - name: Generate 100% Coverage Report
+      - name: Fetch coverage report from master
         if: env.has_changes == 'false'
         run: |
-          echo '<?xml version="1.0" ?>
-          <coverage line-rate="1" lines-covered="1" lines-valid="1" branches-covered="0" branches-valid="0" complexity="0" version="7.6.1">
-            <sources>
-              <source>/home/runner/work/DESC/DESC/desc</source>
-            </sources>
-            <packages>
-              <package name="." line-rate="1" branch-rate="1" complexity="0">
-                <classes>
-                  <class name="__init__.py" filename="__init__.py" complexity="0" line-rate="1" branch-rate="0">
-                  <methods/>
-                    <lines>
-                      <line number="3" hits="1"/>
-                    </lines>
-                  </class>
-                </classes>
-              </package>
-            </packages>
-          </coverage>' > cov.xml
+          git fetch origin master
+          git checkout origin/master -- coverage-reports/cov.xml
 
-      - name: Upload 100% Coverage Report if skipped
+      - name: Upload Coverage Report if Skipped
         if: env.has_changes == 'false'
         id: upload-coverage
         uses: Wandalen/wretry.action@v1.3.0
@@ -156,7 +140,7 @@ jobs:
           with: |
             token: ${{ secrets.CODECOV_TOKEN }}
             name: codecov-umbrella
-            files: ./cov.xml
+            files: ./coverage-reports/cov.xml
             fail_ci_if_error: true
             verbose: true
           attempt_limit: 10

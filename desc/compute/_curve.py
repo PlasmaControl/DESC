@@ -1031,25 +1031,3 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         # but also works if grid.endpoint is False
         data["length"] = jnp.sum(T * data["ds"])
     return data
-
-
-@register_compute_fun(
-    name="umbilic curve",
-    label="umbilic curve",
-    units="~",
-    units_long="None",
-    description="angular difference between theta and phi on a surface"
-    + "determines the shape of an umbilic curve",
-    dim=1,
-    params=["A_n"],
-    transforms={"A": [[0, 0, 0]], "grid": []},
-    profiles=[],
-    coordinates="",
-    data=[],
-    # --no-verify parameterization="desc.geometry.curve.FourierUmbilicCurve",
-    parameterization=[],
-)
-def _A_FourierUmbilicCurve(params, transforms, profiles, data, **kwargs):
-    # somehow it knows the grid from coordinates ~?
-    data["A"] = transforms["A"].transform(params["A_n"], dz=0)
-    return data

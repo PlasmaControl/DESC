@@ -7,7 +7,7 @@ from scipy.constants import mu_0
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.compute.utils import dot, get_params, get_transforms
+from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
@@ -29,6 +29,7 @@ from desc.magnetic_fields import (
     read_BNORM_file,
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
+from desc.utils import dot
 
 
 def phi_lm(R, phi, Z, a, m):

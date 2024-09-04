@@ -117,7 +117,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
         "may consume more memory. Specifying a number that tightly upper bounds "
-        "the number of wells will increase performance. "
+        "the number of wells will increase performance."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
     # Some notes on choosing the resolution hyperparameters:

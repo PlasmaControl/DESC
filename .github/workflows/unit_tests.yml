@@ -45,6 +45,7 @@ jobs:
               - 'requirements.txt'
               - 'devtools/dev-requirements.txt'
               - 'setup.cfg'
+              - '.github/workflows/unit_tests.yml'
 
       - name: Check for relevant changes
         id: check_changes

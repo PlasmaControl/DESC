@@ -16,7 +16,6 @@ from scipy.optimize import (
 )
 
 import desc.examples
-import desc.utils
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
@@ -735,7 +734,7 @@ def test_bounded_optimization():
     def grad(x):
         f = fun(x)  # noqa: F841
         J = jac(x)
-        return J.dot(J)
+        return f.dot(J)
 
     def hess(x):
         J = jac(x)

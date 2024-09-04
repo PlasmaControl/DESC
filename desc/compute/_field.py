@@ -116,10 +116,10 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "phi_z", "theta_PEST_t", "phi_t", "theta_PEST_z"],
+    data=["psi_r/sqrt(g)", "phi_z", "theta_PEST_t", "phi_t", "theta_PEST_z"],
 )
 def _B_sup_phi(params, transforms, profiles, data, **kwargs):
-    data["B^phi"] = data["B0"] * (
+    data["B^phi"] = data["psi_r/sqrt(g)"] * (
         data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
     )
     return data
@@ -138,12 +138,12 @@ def _B_sup_phi(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
+        "psi_r/sqrt(g)",
         "phi_z",
         "theta_PEST_t",
         "phi_t",
         "theta_PEST_z",
-        "B0_r",
+        "(psi_r/sqrt(g))_r",
         "phi_rz",
         "theta_PEST_rt",
         "phi_rt",
@@ -151,9 +151,9 @@ def _B_sup_phi(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_sup_phi_r(params, transforms, profiles, data, **kwargs):
-    data["B^phi_r"] = data["B0_r"] * (
+    data["B^phi_r"] = data["(psi_r/sqrt(g))_r"] * (
         data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
-    ) + data["B0"] * (
+    ) + data["psi_r/sqrt(g)"] * (
         data["phi_rz"] * data["theta_PEST_t"]
         + data["phi_z"] * data["theta_PEST_rt"]
         - data["phi_rt"] * data["theta_PEST_z"]
@@ -175,12 +175,12 @@ def _B_sup_phi_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
+        "psi_r/sqrt(g)",
         "phi_z",
         "theta_PEST_t",
         "phi_t",
         "theta_PEST_z",
-        "B0_t",
+        "(psi_r/sqrt(g))_t",
         "phi_tz",
         "theta_PEST_tt",
         "phi_tt",
@@ -188,9 +188,9 @@ def _B_sup_phi_r(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_sup_phi_t(params, transforms, profiles, data, **kwargs):
-    data["B^phi_t"] = data["B0_t"] * (
+    data["B^phi_t"] = data["(psi_r/sqrt(g))_t"] * (
         data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
-    ) + data["B0"] * (
+    ) + data["psi_r/sqrt(g)"] * (
         data["phi_tz"] * data["theta_PEST_t"]
         + data["phi_z"] * data["theta_PEST_tt"]
         - data["phi_tt"] * data["theta_PEST_z"]
@@ -212,12 +212,12 @@ def _B_sup_phi_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "B0",
+        "psi_r/sqrt(g)",
         "phi_z",
         "theta_PEST_t",
         "phi_t",
         "theta_PEST_z",
-        "B0_z",
+        "(psi_r/sqrt(g))_z",
         "phi_zz",
         "theta_PEST_tz",
         "phi_tz",
@@ -225,9 +225,9 @@ def _B_sup_phi_t(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _B_sup_phi_z(params, transforms, profiles, data, **kwargs):
-    data["B^phi_z"] = data["B0_z"] * (
+    data["B^phi_z"] = data["(psi_r/sqrt(g))_z"] * (
         data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
-    ) + data["B0"] * (
+    ) + data["psi_r/sqrt(g)"] * (
         data["phi_zz"] * data["theta_PEST_t"]
         + data["phi_z"] * data["theta_PEST_tz"]
         - data["phi_tz"] * data["theta_PEST_z"]

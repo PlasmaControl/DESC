@@ -1291,7 +1291,11 @@ class Equilibrium(IOAble, Optimizable):
             point. Only returned if ``full_output`` is True.
 
         """
-        warnif(True, DeprecationWarning, msg="Use map_coordinates instead.")
+        warnif(
+            True,
+            DeprecationWarning,
+            "Use map_coordinates instead of compute_theta_coords.",
+        )
         return map_coordinates(
             self,
             flux_coords,

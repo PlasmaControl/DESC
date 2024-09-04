@@ -337,7 +337,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         "B^phi",
         "B^phi_r|v,p",
         "b",
-        "|B|",
         "|B|_r|v,p",
         "<L|r,a>",
         "iota_r",

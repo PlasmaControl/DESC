@@ -123,24 +123,3 @@ jobs:
             verbose: true
           attempt_limit: 10
           attempt_delay: 60000 # ms, 1 min
-
-      - name: Fetch coverage report from master
-        if: env.has_changes == 'false'
-        run: |
-          git fetch origin master
-          git checkout origin/master -- coverage-reports/cov.xml
-
-      - name: Upload Coverage Report if Skipped
-        if: env.has_changes == 'false'
-        id: upload-coverage
-        uses: Wandalen/wretry.action@v1.3.0
-        with:
-          action: codecov/codecov-action@v3
-          with: |
-            token: ${{ secrets.CODECOV_TOKEN }}
-            name: codecov-umbrella
-            files: ./coverage-reports/cov.xml
-            fail_ci_if_error: true
-            verbose: true
-          attempt_limit: 10
-          attempt_delay: 60000 # ms, 1 min

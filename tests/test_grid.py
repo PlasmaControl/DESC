@@ -482,14 +482,16 @@ class TestGrid:
         N = 0
         NFP = 1
         grid_quad = QuadratureGrid(L, M, N, NFP)
-        roots, weights = special.js_roots(3, 2, 2)
+        roots, weights = special.js_roots(2, 2, 2)
         quadrature_nodes = np.stack(
             [
-                np.array([roots[0]] * 5 + [roots[1]] * 5 + [roots[2]] * 5),
                 np.array(
-                    [0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5] * 3
+                    [roots[0]] * grid_quad.num_theta + [roots[1]] * grid_quad.num_theta
                 ),
-                np.zeros(15),
+                np.array(
+                    [0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5] * 2
+                ),
+                np.zeros(10),
             ]
         ).T
         np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)
@@ -738,20 +740,78 @@ class TestGrid:
         """Test meshgrid constructor."""
         R = np.linspace(0, 1, 4)
         A = np.linspace(0, 2 * np.pi, 2)
-        Z = np.linspace(0, 10 * np.pi, 3)
+        Z = np.linspace(0, 2 * np.pi, 3)
         grid = Grid.create_meshgrid(
-            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
+            [R, A, Z], coordinates="raz", period=(np.inf, 2 * np.pi, 2 * np.pi)
         )
+        # treating theta == alpha just for grid construction
+        grid1 = LinearGrid(rho=R, theta=A, zeta=Z)
+        # atol=1e-12 bc Grid by default shifts points away from the axis a tiny bit
+        np.testing.assert_allclose(grid1.nodes, grid.nodes, atol=1e-12)
+        # want radial/poloidal/toroidal nodes sorted in the same order for both
+        np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_rho_idx)
+        np.testing.assert_allclose(grid1.unique_theta_idx, grid.unique_alpha_idx)
+        np.testing.assert_allclose(grid1.unique_zeta_idx, grid.unique_zeta_idx)
+        np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_rho_idx)
+        np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_alpha_idx)
+        np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_zeta_idx)
+
+    @pytest.mark.unit
+    def test_meshgrid_reshape(self):
+        """Test that reshaping meshgrids works correctly."""
+        grid = LinearGrid(2, 3, 4)
+
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        t = grid.nodes[grid.unique_theta_idx, 1]
+        z = grid.nodes[grid.unique_zeta_idx, 2]
+
+        # user regular allclose for broadcasting to work correctly
+        # reshaping rtz should have rho along first axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz"), r[:, None, None]
+        )
+        # reshaping rzt should have theta along last axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzt"), t[None, None, :]
+        )
+        # reshaping tzr should have zeta along 2nd axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes, "tzr")[:, :, :, 2], z[None, :, None]
+        )
+
+        # coordinates are rtz, not raz
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "raz")
+
+        # not a meshgrid
+        grid = ConcentricGrid(2, 3, 4)
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
+
+        rho = np.linspace(0, 1, 3)
+        alpha = np.linspace(0, 2 * np.pi, 4)
+        zeta = np.linspace(0, 6 * np.pi, 5)
+        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
         r, a, z = grid.nodes.T
-        _, unique, inverse = np.unique(r, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_rho_idx, unique)
-        np.testing.assert_allclose(grid.inverse_rho_idx, inverse)
-        _, unique, inverse = np.unique(a, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_alpha_idx, unique)
-        np.testing.assert_allclose(grid.inverse_alpha_idx, inverse)
-        _, unique, inverse = np.unique(z, return_index=True, return_inverse=True)
-        np.testing.assert_allclose(grid.unique_zeta_idx, unique)
-        np.testing.assert_allclose(grid.inverse_zeta_idx, inverse)
+        # functions of zeta should separate along first two axes
+        # since those are contiguous, this should work
+        f = grid.meshgrid_reshape(z, "raz").reshape(-1, zeta.size)
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        # likewise for rho
+        f = grid.meshgrid_reshape(r, "raz").reshape(rho.size, -1)
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        # test reshaping result won't mix data
+        f = grid.meshgrid_reshape(a**2 + z, "raz")
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        f = grid.meshgrid_reshape(r**2 + z, "raz")
+        for i in range(1, f.shape[1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        f = grid.meshgrid_reshape(r**2 + a, "raz")
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[..., i - 1], f[..., i])
 
 
 @pytest.mark.unit

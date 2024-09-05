@@ -12,6 +12,7 @@ New Features
 - Changes ``ToroidalFlux`` objective to default using a 1D loop integral of the vector potential
 to compute the toroidal flux when possible, as opposed to a 2D surface integral of the magnetic field dotted with ``n_zeta``.
 - Allow specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
+- Added and tested infinite-n ideal-ballooning stability solver. DESC can use reverse-mode AD to now optimize equilibria against infinite-n ideal ballooning modes.
 
 Bug Fixes
 

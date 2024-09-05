@@ -15,8 +15,8 @@ from desc.compute.utils import dot, safediv
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
+from desc.integrals import compute_B_plasma
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.singularities import compute_B_plasma
 from desc.utils import Timer, check_posint, copy_coeffs, errorif, setdefault, warnif
 
 from ._core import _MagneticField, biot_savart_general

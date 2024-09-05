@@ -638,10 +638,10 @@ def test_ballooning_stability_eval():
         lam1 = jnp.max(jnp.real(jnp.max(w, axis=(2,))))
 
         # now compute our regular metrics and compare them
-        data_keys = ["ideal ball gamma2", "Newcomb ball metric"]
+        data_keys = ["ideal ball lambda", "Newcomb ball metric"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2 = np.max(data["ideal ball gamma2"])
+        lam2 = np.max(data["ideal ball lambda"])
         Newcomb_metric = data["Newcomb ball metric"]
 
         np.testing.assert_allclose(lam1, lam2, atol=5e-3, rtol=1e-8)
@@ -744,10 +744,10 @@ def test_ballooning_compare_with_COBRAVMEC():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ball gamma2"]
+        data_keys = ["ideal ball lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_array[i] = np.max(data["ideal ball gamma2"])
+        lam2_array[i] = np.max(data["ideal ball lambda"])
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, atol=5e-4, rtol=1e-8)

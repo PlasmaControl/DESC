@@ -235,7 +235,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="ideal ball gamma2",
+    name="ideal ball lambda",
     label="\\gamma_{\\mathrm{ballooning}}=-\\omega^2",
     units="~",
     units_long="None",
@@ -402,7 +402,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     # max over "zeta" axis, still a function of rho, alpha, zeta0
     gamma = jnp.real(jnp.max(w, axis=(2,)))
 
-    data["ideal ball gamma2"] = gamma.flatten()
+    data["ideal ball lambda"] = gamma.flatten()
 
     return data
 

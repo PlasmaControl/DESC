@@ -1125,3 +1125,407 @@ class SplineXYZCurve(Curve):
             method=method,
             name=name,
         )
+
+
+# TODO: make this subclass from surface as well somehow?
+# or no no, just give it Rlmn Zlmn and then have its x thing compute x
+# using the Rlmn Zlmn, yes that will work and allow the deriv
+# to propagate correctly I think.
+class FourierRZWindingSurfaceCurve(Curve):
+    """Curve parameterized by Fourier series for theta,zeta in terms of parameter s.
+
+    This curve will lie on the given winding surface, parameterized by a
+    Fourier series given by Rb_mn and Zb_mn.
+
+    Based off of work by Joao Biu and Rogerio Jorge
+    https://github.com/hiddenSymmetries/simsopt/pull/289
+
+    Parameters
+    ----------
+    surface : FourierRZToroidalSurface
+        Winding surface that the curve will lie on.
+    theta_n, zeta_n: array-like
+        Fourier coefficients for theta, zeta in terms of curve parameter s.
+    secular_theta : float, optional
+        secular term in theta(s) series, defaults to 1
+        if 0, curve will not close poloidally, only toroidally.
+    secular_zeta : float, optional
+        secular term in zeta(s) series, defaults to 0.0
+        if 0, curve will not close toroidally, only poloidally
+        # FIXME: secular terms must be integers I think...
+        # change this and dont allow them to change during optimization
+        # and change how they are gotten in compute from params to transforms
+    modes_theta : array-like, optional
+        Mode numbers associated with theta_n. If not given defaults to [-n:n].
+    modes_zeta : array-like, optional
+        Mode numbers associated with zeta_n, If not given defaults to [-n:n]].
+    sym_theta : {"cos", "sin", False}, optional
+        Whether to enforce symmetry for the theta(t) Fourier series. Defaults to "sin"
+    sym_zeta : {"cos", "sin", False}, optional
+        Whether to enforce symmetry for the zeta(t) Fourier series. Defaults to "sin"
+    name : str
+        Name for this curve.
+
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + [
+        "_theta_n",
+        "_zeta_n",
+        "_secular_theta",
+        "_secular_zeta",
+        "_theta_basis",
+        "_zeta_basis",
+        "_surface",
+    ]
+
+    def __init__(
+        self,
+        surface=None,
+        theta_n=[0],
+        zeta_n=[0],
+        secular_theta=1.0,
+        secular_zeta=0.0,
+        modes_theta=None,
+        modes_zeta=None,
+        sym_theta="sin",
+        sym_zeta="sin",
+        name="",
+    ):
+        super().__init__(name)
+        if surface is None:
+            from .surface import FourierRZToroidalSurface
+
+            surface = FourierRZToroidalSurface()
+        assert hasattr(surface, "rho"), (
+            "surface must be a FourierRZToroidalSurface"
+            f"object, instead got type {type(surface)}"
+        )
+        self._surface = surface
+        self._R_lmn = surface.R_lmn
+        self._Z_lmn = surface.Z_lmn
+
+        theta_n, zeta_n = np.atleast_1d(theta_n), np.atleast_1d(zeta_n)
+        if modes_theta is None:
+            modes_theta = np.arange(-(theta_n.size // 2), theta_n.size // 2 + 1)
+        if modes_zeta is None:
+            modes_zeta = np.arange(-(zeta_n.size // 2), zeta_n.size // 2 + 1)
+
+        if theta_n.size == 0:
+            raise ValueError("At least 1 coefficient for theta must be supplied")
+        if zeta_n.size == 0:
+            zeta_n = np.array([0.0])
+            modes_zeta = np.array([0])
+
+        modes_theta, modes_zeta = np.asarray(modes_theta), np.asarray(modes_zeta)
+
+        assert (
+            theta_n.size == modes_theta.size
+        ), "theta_n size and modes_theta must be the same size"
+        assert (
+            zeta_n.size == modes_zeta.size
+        ), "zeta_n size and modes_zeta must be the same size"
+
+        assert issubclass(modes_theta.dtype.type, np.integer)
+        assert issubclass(modes_zeta.dtype.type, np.integer)
+
+        self._sym_theta = sym_theta
+        self._sym_zeta = sym_zeta
+        Ntheta = np.max(abs(modes_theta))
+        Nzeta = np.max(abs(modes_zeta))
+        N = max(Ntheta, Nzeta)
+        NFP = surface.NFP
+        self._theta_basis = FourierSeries(N, int(NFP), sym=sym_theta)
+        self._zeta_basis = FourierSeries(N, int(NFP), sym=sym_zeta)
+
+        self._theta_n = copy_coeffs(theta_n, modes_theta, self.theta_basis.modes[:, 2])
+        self._zeta_n = copy_coeffs(zeta_n, modes_zeta, self.zeta_basis.modes[:, 2])
+        self._secular_theta = float(secular_theta)
+        self._secular_zeta = float(secular_zeta)
+
+    @property
+    def surface(self):
+        """The surface this curve lies on."""
+        return self._surface
+
+    @property
+    def sym(self):
+        """Whether the surface this curve lies on has stellarator symmetry."""
+        return self.surface.sym
+
+    @property
+    def sym_theta(self):
+        """Type of this curve's theta series symmetry."""
+        return self._sym_theta
+
+    @property
+    def sym_zeta(self):
+        """Type of this curve's zeta series symmetry."""
+        return self._sym_zeta
+
+    @property
+    def theta_basis(self):
+        """Spectral basis for theta Fourier series."""
+        return self._theta_basis
+
+    @property
+    def zeta_basis(self):
+        """Spectral basis for zeta Fourier series."""
+        return self._zeta_basis
+
+    @property
+    def NFP(self):
+        """Number of field periods."""
+        return self.surface.NFP
+
+    @property
+    def N(self):
+        """Maximum mode number."""
+        return max(self.theta_basis.N, self.zeta_basis.N)
+
+    @optimizable_parameter
+    @property
+    def R_lmn(self):
+        """ndarray: Spectral coefficients for surface R."""
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        if len(new) == self.surface.R_basis.num_modes:
+            self._R_lmn = jnp.asarray(new)
+            self.surface._R_lmn = self._R_lmn
+        else:
+            raise ValueError(
+                f"R_lmn should have the same size as the surface basis, got {len(new)}"
+                + f" for basis with {self.surface.R_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients for surface Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        if len(new) == self.surface.Z_basis.num_modes:
+            self._Z_lmn = jnp.asarray(new)
+            self.surface._Z_lmn = self._Z_lmn
+        else:
+            raise ValueError(
+                f"Z_lmn should have the same size as the surface basis, got {len(new)}"
+                + f" for basis with {self.surface.Z_basis.num_modes} modes."
+            )
+
+    # todo: need a change_surf_resolutoin that just calls underlying surf?
+    def change_resolution(self, N=None, NFP=None, sym=None):
+        """Change the maximum toroidal resolution for the curve."""
+        if (
+            ((N is not None) and (N != self.N))
+            or ((NFP is not None) and (NFP != self.NFP))
+            or (sym is not None)
+            and (sym != self.sym)
+        ):
+            self._surface.change_resolution(
+                NFP=int(NFP if NFP is not None else self.NFP)
+            )
+            self._sym = sym if sym is not None else self.sym
+            N = int(N if N is not None else self.N)
+            theta_modes_old = self.theta_basis.modes
+            zeta_modes_old = self.zeta_basis.modes
+            self.theta_basis.change_resolution(N=N, NFP=self.NFP, sym=self.sym_theta)
+            self.zeta_basis.change_resolution(N=N, NFP=self.NFP, sym=self.sym_zeta)
+            self.theta_n = copy_coeffs(
+                self.theta_n, theta_modes_old, self.theta_basis.modes
+            )
+            self.zeta_n = copy_coeffs(
+                self.zeta_n, zeta_modes_old, self.zeta_basis.modes
+            )
+
+    def get_coeffs(self, n):
+        """Get Fourier coefficients for given mode number(s)."""
+        n = np.atleast_1d(n).astype(int)
+        theta = np.zeros_like(n).astype(float)
+        zeta = np.zeros_like(n).astype(float)
+
+        idxtheta = np.where(n[:, np.newaxis] == self.theta_basis.modes[:, 2])
+        idxzeta = np.where(n[:, np.newaxis] == self.zeta_basis.modes[:, 2])
+
+        theta[idxtheta[0]] = self.theta_n[idxtheta[1]]
+        zeta[idxzeta[0]] = self.zeta_n[idxzeta[1]]
+        return theta, zeta
+
+    def set_coeffs(self, n, theta=None, zeta=None):
+        """Set specific Fourier coefficients."""
+        n, theta, zeta = np.atleast_1d(n), np.atleast_1d(theta), np.atleast_1d(zeta)
+        theta = np.broadcast_to(theta, n.shape)
+        zeta = np.broadcast_to(zeta, n.shape)
+        for nn, thetatheta, zetazeta in zip(n, theta, zeta):
+            if thetatheta is not None:
+                idxtheta = self.theta_basis.get_idx(0, 0, nn)
+                self.theta_n = put(self.theta_n, idxtheta, thetatheta)
+            if zetazeta is not None:
+                idxzeta = self.zeta_basis.get_idx(0, 0, nn)
+                self.zeta_n = put(self.zeta_n, idxzeta, zetazeta)
+
+    @optimizable_parameter
+    @property
+    def theta_n(self):
+        """Spectral coefficients for theta."""
+        return self._theta_n
+
+    @theta_n.setter
+    def theta_n(self, new):
+        if len(new) == self.theta_basis.num_modes:
+            self._theta_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"theta_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.theta_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def zeta_n(self):
+        """Spectral coefficients for zeta."""
+        return self._zeta_n
+
+    @zeta_n.setter
+    def zeta_n(self, new):
+        if len(new) == self.zeta_basis.num_modes:
+            self._zeta_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"zeta_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.zeta_basis.num_modes} modes"
+            )
+
+    @optimizable_parameter
+    @property
+    def secular_theta(self):
+        """Secular (in t) coefficient for theta."""
+        return self._secular_theta
+
+    @secular_theta.setter
+    def secular_theta(self, new):
+        self._secular_theta = float(np.squeeze(new))
+
+    @optimizable_parameter
+    @property
+    def secular_zeta(self):
+        """Secular (in t) coefficient for zeta."""
+        return self._secular_zeta
+
+    @secular_zeta.setter
+    def secular_zeta(self, new):
+        self._secular_zeta = float(np.squeeze(new))
+
+    # TODO: add symmetry? I think for modular coils to be not
+    # all at the same zeta angle, the zeta basis must
+    # have sin sym... maybe best to always have it be sym False?
+    @classmethod
+    def from_values(
+        cls,
+        theta,
+        zeta,
+        surface,
+        N=10,
+        s=None,
+        secular_theta=None,
+        secular_zeta=None,
+        name="",
+    ):
+        """Fit given angles on surface to a FourierRZWindingSurfaceCurve representation.
+
+            The given theta and zeta will be fit as a function of a curve parameter s.
+            If not provided, the secular terms in theta and zeta will also be
+            determined, these terms control the topology of the curve (i.e. whether it
+            links the plasma poloidally (secular_theta !=0), toroidally
+            (secular_zeta!=0) both, or neither (both = 0)).
+
+        Parameters
+        ----------
+        theta: ndarray
+            Poloidal angles (with the poloidal angle defined by the given surface)
+            to fit a FourierRZWindingSurfaceCurve object to.
+        zeta: ndarray
+            Toroidal angles to fit a FourierRZWindingSurfaceCurve object to.
+        secular_theta : int, optional
+            secular term in theta(s) series, defaults to 1.0
+            i.e. if 0, curve will not close poloidally, only toroidally.
+            If not given , will be calculated from the given theta values,.
+        secular_zeta : int, optional
+            secular term in zeta(s) series, defaults to 0.0
+            i.e. if 0, curve will not close toroidally, only poloidally
+            If not given, will be fit to the given curve.
+        surface: FourierRZToroidalSurface
+            Winding surface that the curve will lie on.
+        N : int
+            Fourier resolution (in curve parameter s) of the new curve representation.
+            Default is 10.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            theta and zeta. if None, defaults linearly spaced in [0,2pi).
+
+        #TODO: do we want to allow these to be fit? The user should know
+        # if the curve being passed in is modular or helical...
+
+
+        Returns
+        -------
+        curve : FourierRZWindingSurfaceCurve
+            New representation of the curve lying on the given surface,
+            parameterized by Fourier series (in s) for theta,zeta.
+
+        """
+        input_curve_was_closed = np.isclose(
+            theta[0] - theta[-1] % (2 * np.pi), 0, atol=1e-12
+        ) and np.isclose(zeta[0] - zeta[-1] % (2 * np.pi / surface.NFP), 0, atol=1e-12)
+        if input_curve_was_closed:
+            theta = theta[0:-1]
+            zeta = zeta[0:-1]
+        if s is None:
+            s = np.linspace(0, 2 * np.pi, theta.size, endpoint=False)
+        else:
+            s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
+            errorif(
+                not np.all(np.diff(s) > 0),
+                ValueError,
+                "supplied s must be monotonically increasing",
+            )
+            errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
+            errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
+
+        grid = LinearGrid(zeta=s, NFP=1, sym=False)
+        basis = FourierSeries(N=N, NFP=1, sym=False)
+        transform = Transform(grid, basis, build_pinv=True, method="direct1")
+        # need to form linear system
+        # A * [secular_theta,theta_n] = theta
+        # A * [secular_zeta,zeta_n] = zeta
+        A = transform.matrices["direct1"][0][0][0]
+        # the secular terms must be integers for the curves to close,
+        # so we round the answer of the division of the total angle
+        # traversed by the curve divided by 2pi
+        if secular_theta is None:
+            secular_theta = np.round((theta[-1] - theta[0]) / (2 * np.pi))
+        if secular_zeta is None:
+            secular_zeta = np.round((zeta[-1] - zeta[0]) / (2 * np.pi))
+
+        # Now we solve the system after subtracting out the secular parts
+        # A * theta_n = theta  - secular_theta * s
+        # A * zeta_n = zeta  - secular_zeta * s
+
+        # secular term is prescribed, so subtract that from the RHS
+        theta_n = np.linalg.lstsq(A, theta - s * secular_theta, rcond=None)[0]
+        # secular term is prescribed, so subtract that from the RHS
+        zeta_n = np.linalg.lstsq(A, zeta - s * secular_zeta, rcond=None)[0]
+
+        return FourierRZWindingSurfaceCurve(
+            surface,
+            theta_n,
+            zeta_n,
+            secular_theta=secular_theta,
+            secular_zeta=secular_zeta,
+            name=name,
+        )

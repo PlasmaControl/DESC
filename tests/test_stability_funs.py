@@ -8,11 +8,10 @@ from scipy.interpolate import interp1d
 import desc.examples
 import desc.io
 from desc.backend import jnp
-from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.objectives import MagneticWell, MercierStability
-from desc.utils import PRINT_WIDTH
+from desc.utils import PRINT_WIDTH, cross, dot
 
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2

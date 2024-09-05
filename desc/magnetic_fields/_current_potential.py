@@ -19,7 +19,11 @@ from desc.integrals import compute_B_plasma
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import Timer, check_posint, copy_coeffs, errorif, setdefault, warnif
 
-from ._core import _MagneticField, biot_savart_general
+from ._core import (
+    _MagneticField,
+    biot_savart_general,
+    biot_savart_general_vector_potential,
+)
 
 
 class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
@@ -185,6 +189,54 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             " as the potential function cannot be serialized."
         )
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field or vector potential at specified points
+
+        """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * self.M,
+            N=30 + 2 * self.N,
+            NFP=self.NFP,
+        )
+        return _compute_A_or_B_from_CurrentPotentialField(
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
+            transforms=transforms,
+            compute_A_or_B=compute_A_or_B,
+        )
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -209,19 +261,35 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
-        source_grid = source_grid or LinearGrid(
-            M=30 + 2 * self.M,
-            N=30 + 2 * self.N,
-            NFP=self.NFP,
-        )
-        return _compute_magnetic_field_from_CurrentPotentialField(
-            field=self,
-            coords=coords,
-            params=params,
-            basis=basis,
-            source_grid=source_grid,
-            transforms=transforms,
-        )
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        This assumes the Coulomb gauge.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            Magnetic vector potential at specified points.
+
+        """
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     @classmethod
     def from_surface(
@@ -504,6 +572,54 @@ class FourierCurrentPotentialField(
             NFP=NFP
         )  # make sure surface and Phi basis NFP are the same
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+    ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field or vector potential at specified points
+
+        """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * max(self.M, self.M_Phi),
+            N=30 + 2 * max(self.N, self.N_Phi),
+            NFP=self.NFP,
+        )
+        return _compute_A_or_B_from_CurrentPotentialField(
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
+            transforms=transforms,
+            compute_A_or_B=compute_A_or_B,
+        )
+
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
     ):
@@ -528,19 +644,35 @@ class FourierCurrentPotentialField(
             magnetic field at specified points
 
         """
-        source_grid = source_grid or LinearGrid(
-            M=30 + 2 * max(self.M, self.M_Phi),
-            N=30 + 2 * max(self.N, self.N_Phi),
-            NFP=self.NFP,
-        )
-        return _compute_magnetic_field_from_CurrentPotentialField(
-            field=self,
-            coords=coords,
-            params=params,
-            basis=basis,
-            source_grid=source_grid,
-            transforms=transforms,
-        )
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+
+    def compute_magnetic_vector_potential(
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        This assumes the Coulomb gauge.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+
+        Returns
+        -------
+        A : ndarray, shape(N,3)
+            Magnetic vector potential at specified points.
+
+        """
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     @classmethod
     def from_surface(
@@ -805,10 +937,16 @@ class FourierCurrentPotentialField(
         return final_coilset
 
 
-def _compute_magnetic_field_from_CurrentPotentialField(
-    field, coords, source_grid, params=None, basis="rpz", transforms=None
+def _compute_A_or_B_from_CurrentPotentialField(
+    field,
+    coords,
+    source_grid,
+    params=None,
+    basis="rpz",
+    transforms=None,
+    compute_A_or_B="B",
 ):
-    """Compute magnetic field at a set of points.
+    """Compute magnetic field or vector potential at a set of points.
 
     Parameters
     ----------
@@ -823,25 +961,36 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         should include the potential
     basis : {"rpz", "xyz"}
         basis for input coordinates and returned magnetic field
+    compute_A_or_B: {"A", "B"}, optional
+        whether to compute the magnetic vector potential "A" or the magnetic field
+        "B". Defaults to "B"
 
 
     Returns
     -------
     field : ndarray, shape(N,3)
-        magnetic field at specified points
+        magnetic field or vector potential at specified points
 
     """
+    errorif(
+        compute_A_or_B not in ["A", "B"],
+        ValueError,
+        f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+    )
     assert basis.lower() in ["rpz", "xyz"]
     coords = jnp.atleast_2d(jnp.asarray(coords))
     if basis == "rpz":
         coords = rpz2xyz(coords)
-
+    op = {"B": biot_savart_general, "A": biot_savart_general_vector_potential}[
+        compute_A_or_B
+    ]
     # compute surface current, and store grid quantities
     # needed for integration in class
     if not params or not transforms:
         data = field.compute(
             ["K", "x"],
             grid=source_grid,
+            basis="rpz",
             params=params,
             transforms=transforms,
             jitable=True,
@@ -872,7 +1021,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
         rs = rpz2xyz(rs)
         K = rpz2xyz_vec(_K, phi=phi)
-        fj = biot_savart_general(
+        fj = op(
             coords,
             rs,
             K,

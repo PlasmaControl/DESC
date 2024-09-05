@@ -619,6 +619,7 @@ class _Grid(IOAble, ABC):
         -------
         x : ndarray
             Data reshaped to align with grid nodes.
+
         """
         errorif(
             not self.is_meshgrid,
@@ -637,7 +638,8 @@ class _Grid(IOAble, ABC):
             vec = True
             shape += (-1,)
         x = x.reshape(shape, order="F")
-        x = jnp.moveaxis(x, 1, 0)  # now shape rtz/raz etc
+        # swap to change shape from trz/arz to rtz/raz etc.
+        x = jnp.swapaxes(x, 1, 0)
         newax = tuple(self.coordinates.index(c) for c in order)
         if vec:
             newax += (3,)
@@ -788,10 +790,11 @@ class Grid(_Grid):
             rtz : rho, theta, zeta
         period : tuple of float
             Assumed periodicity for each coordinate.
-            Use np.inf to denote no periodicity.
+            Use ``np.inf`` to denote no periodicity.
         NFP : int
             Number of field periods (Default = 1).
-            Only makes sense to change from 1 if ``period[2]==2π``.
+            Only makes sense to change from 1 if last coordinate is periodic
+            with some constant divided by ``NFP``.
 
         Returns
         -------
@@ -1295,7 +1298,10 @@ class QuadratureGrid(_Grid):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
-        L = L + 1
+        # floor divide (L+2) by 2 bc only need (L+1)/2  points to
+        # integrate L-th order jacobi polynomial exactly, so this
+        # ensures we have enough pts for both odd and even L
+        L = (L + 2) // 2
         M = 2 * M + 1
         N = 2 * N + 1
 
@@ -1882,8 +1888,13 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False, jnp=jnp):
         x = jnp.sort(x, axis=0)
     # choose dx to be half the distance between its neighbors
     if x.size > 1:
-        dx_0 = x[1] + (period - x[-1]) % period
-        dx_1 = x[0] + (period - x[-2]) % period
+        if np.isfinite(period):
+            dx_0 = x[1] + (period - x[-1]) % period
+            dx_1 = x[0] + (period - x[-2]) % period
+        else:
+            # just set to 0 to stop nan gradient, even though above gives expected value
+            dx_0 = 0
+            dx_1 = 0
         if x.size == 2:
             # then dx[0] == period and dx[-1] == 0, so fix this
             dx_1 = dx_0

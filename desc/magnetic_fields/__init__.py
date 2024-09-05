@@ -9,6 +9,7 @@ from ._core import (
     SplineMagneticField,
     SumMagneticField,
     ToroidalMagneticField,
+    VectorPotentialField,
     VerticalMagneticField,
     _MagneticField,
     field_line_integrate,

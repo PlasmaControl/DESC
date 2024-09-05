@@ -298,13 +298,16 @@ class FourierRZToroidalSurface(Surface):
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     @classmethod
-    def from_input_file(cls, path):
+    def from_input_file(cls, path, **kwargs):
         """Create a surface from Fourier coefficients in a DESC or VMEC input file.
 
         Parameters
         ----------
         path : Path-like or str
             Path to DESC or VMEC input file.
+        **kwargs : dict, optional
+            keyword arguments to pass to the constructor of the
+            FourierRZToroidalSurface being created.
 
         Returns
         -------
@@ -328,6 +331,7 @@ class FourierRZToroidalSurface(Surface):
             inputs["surface"][:, 1:3].astype(int),
             inputs["NFP"],
             inputs["sym"],
+            **kwargs,
         )
         return surf
 

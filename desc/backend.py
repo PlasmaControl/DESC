@@ -66,7 +66,9 @@ print(
 )
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
-    from jax import custom_jvp, jit, vmap
+    #from jax import custom_jvp, jit, vmap
+    from jax import custom_jvp, vmap
+    jit = lambda func, *args, **kwargs: func
 
     imap = jax.lax.map
     from jax.experimental.ode import odeint

@@ -1700,8 +1700,9 @@ class UmbilicHighCurvature(_Objective):
         curve_phi = curve_grid.nodes[:, 2]
 
         theta_points = (
-            self._curve.NFP * curve_phi + curve_A
+            -self._curve.NFP * curve_phi + curve_A
         ) / self._curve.NFP_umbilic_factor
+
 
         umbilic_edge_grid = Grid(
             jnp.array([jnp.ones_like(theta_points), theta_points, curve_phi]).T,

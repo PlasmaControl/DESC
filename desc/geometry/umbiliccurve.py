@@ -1,5 +1,7 @@
 """Classes for parameterized 3D umbilic space curves."""
 
+import os
+import pdb
 import numpy as np
 
 from desc.backend import jnp, put
@@ -183,15 +185,15 @@ class FourierUmbilicCurve(UmbilicCurve):
             New representation of the curve parameterized by Fourier series for Z.
 
         """
-        theta = coords[:, 0]
-        phi = coords[:, 1]
-        A = NFP_umbilic_factor * theta - phi
+        phi = coords[:, 0]
+        A = coords[:, 1]
 
-        grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
-        basis = FourierSeries(N=N, NFP=NFP, sym=sym)
+        grid = LinearGrid(zeta=phi, NFP=1, NFP_umbilic_factor=1, sym=sym)
+        basis = FourierSeries(N=N, NFP=1, sym=sym)
         transform = Transform(grid, basis, build_pinv=True)
         A_n = transform.fit(A)
 
+        #pdb.set_trace()
         return FourierUmbilicCurve(
             A_n=A_n,
             NFP=NFP,

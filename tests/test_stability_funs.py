@@ -553,7 +553,7 @@ def test_ballooning_stability_eval():
         data01 = eq.compute(data_keys01, grid=LinearGrid(rho=np.array([1.0])))
 
         # here we use a different method for calculating the growth rate that uses
-        # different numerics than "ideal ball gamma2" so that we can verify them
+        # different numerics than "ideal ball lambda" so that we can verify them
         # against one another
         psi_b = data01["Psi"][-1] / (2 * jnp.pi)
         a_N = data01["a"]

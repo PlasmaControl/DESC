@@ -1604,10 +1604,10 @@ def test_ballooning_stability_opt():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ball gamma2"]
+        data_keys = ["ideal ball lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_initial[i] = np.max(data["ideal ball gamma2"])
+        lam2_initial[i] = np.max(data["ideal ball lambda"])
 
     # Flux surfaces on which to evaluate ballooning stability
     surfaces_ball = surfaces
@@ -1683,10 +1683,10 @@ def test_ballooning_stability_opt():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ball gamma2"]
+        data_keys = ["ideal ball lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_optimized[i] = np.max(data["ideal ball gamma2"])
+        lam2_optimized[i] = np.max(data["ideal ball lambda"])
 
     assert lam2_optimized < lam2_initial
 

@@ -446,7 +446,7 @@ class BallooningStability(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,

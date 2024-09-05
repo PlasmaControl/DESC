@@ -236,7 +236,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="ideal ball lambda",
-    label="\\gamma_{\\mathrm{ballooning}}=-\\omega^2",
+    label="\\lambda_{\\mathrm{ballooning}}=\\gamma^2",
     units="~",
     units_long="None",
     description="Normalized squared ideal ballooning growth rate, "

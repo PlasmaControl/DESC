@@ -12,10 +12,9 @@ from desc.backend import (
 )
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, errorif, warnif
+from desc.utils import Timer, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective

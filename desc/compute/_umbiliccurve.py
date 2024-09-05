@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import pdb
 from .data_index import register_compute_fun
 
 
@@ -20,6 +19,5 @@ from .data_index import register_compute_fun
     parameterization="desc.geometry.umbiliccurve.FourierUmbilicCurve",
 )
 def _A_FourierUmbilicCurve(params, transforms, profiles, data, **kwargs):
-    # somehow it knows the grid from coordinates ~?
     data["A"] = transforms["A"].transform(params["A_n"], dz=0)
     return data

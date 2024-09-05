@@ -1,7 +1,5 @@
 """Classes for parameterized 3D umbilic space curves."""
 
-import os
-import pdb
 import numpy as np
 
 from desc.backend import jnp, put
@@ -193,7 +191,6 @@ class FourierUmbilicCurve(UmbilicCurve):
         transform = Transform(grid, basis, build_pinv=True)
         A_n = transform.fit(A)
 
-        #pdb.set_trace()
         return FourierUmbilicCurve(
             A_n=A_n,
             NFP=NFP,

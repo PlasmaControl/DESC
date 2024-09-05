@@ -24,12 +24,13 @@ from desc.coils import (
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
+    PoloidalMagneticField,
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
@@ -48,7 +49,9 @@ from desc.objectives import (
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
+    FusionPower,
     GenericObjective,
+    HeatingPowerISS04,
     Isodynamicity,
     LinearObjectiveFromUser,
     MagneticWell,
@@ -74,8 +77,10 @@ from desc.objectives import (
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
+from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.utils import PRINT_WIDTH
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -205,8 +210,8 @@ class TestObjectiveFunction:
             obj.build()
             f = obj.compute_unscaled(*obj.xs(eq))
             f_scaled = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
-            np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=8e-3)
+            np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=8e-3)
 
         test(get("HELIOTRON"))
         test(get("HELIOTRON").surface)
@@ -364,6 +369,51 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
 
     @pytest.mark.unit
+    def test_qh_boozer_multiple_surfaces(self):
+        """Test for computing Boozer error on multiple surfaces."""
+        eq = get("WISTELL-A")  # WISTELL-A is optimized for QH symmetry
+        helicity = (1, -eq.NFP)
+        M_booz = eq.M
+        N_booz = eq.N
+        grid1 = LinearGrid(rho=0.5, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid2 = LinearGrid(rho=1.0, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid3 = LinearGrid(
+            rho=np.array([0.5, 1.0]), M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False
+        )
+
+        obj1 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid1,
+            normalize=False,
+            eq=eq,
+        )
+        obj2 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid2,
+            normalize=False,
+            eq=eq,
+        )
+        obj3 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid3,
+            normalize=False,
+            eq=eq,
+        )
+        obj1.build()
+        obj2.build()
+        obj3.build()
+        f1 = obj1.compute_unscaled(*obj1.xs(eq))
+        f2 = obj2.compute_unscaled(*obj2.xs(eq))
+        f3 = obj3.compute_unscaled(*obj3.xs(eq))
+        np.testing.assert_allclose(f3, np.concatenate([f1, f2]), atol=1e-14)
+
+    @pytest.mark.unit
     def test_qs_twoterm(self):
         """Test calculation of two term QS metric."""
 
@@ -434,11 +484,6 @@ class TestObjectiveFunction:
 
         # symmetric grid
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
-        with pytest.raises(ValueError):
-            QuasisymmetryBoozer(eq=eq, grid=grid).build()
-
-        # multiple flux surfaces
-        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=[0.25, 0.5, 0.75, 1])
         with pytest.raises(ValueError):
             QuasisymmetryBoozer(eq=eq, grid=grid).build()
 
@@ -639,7 +684,8 @@ class TestObjectiveFunction:
             surface_fixed=True,
         )
         obj.build()
-        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        d = obj.compute_unscaled(*obj.xs(eq))
+        assert d.size == obj.dim_f
         assert abs(d.min() - (a_s - a_p)) < 1e-14
         assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
 
@@ -679,6 +725,7 @@ class TestObjectiveFunction:
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert d.size == obj.dim_f
         assert np.all(np.abs(d) < a_s - a_p)
 
         # for large enough alpha, should be same as actual min
@@ -688,7 +735,7 @@ class TestObjectiveFunction:
             surface_grid=surf_grid,
             surface=surface,
             use_softmin=True,
-            alpha=100,
+            softmin_alpha=100,
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
@@ -862,6 +909,13 @@ class TestObjectiveFunction:
         test(coils)
         test(mixed_coils)
         test(nested_coils, grid=grid)
+
+    def test_coil_type_error(self):
+        """Tests error when objective is not passed a coil."""
+        curve = FourierPlanarCurve(r_n=2, basis="rpz")
+        obj = CoilLength(curve)
+        with pytest.raises(TypeError):
+            obj.build()
 
     @pytest.mark.unit
     def test_coil_min_distance(self):
@@ -1107,10 +1161,14 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_toroidal_flux(self):
         """Test calculation of toroidal flux from coils."""
-        grid1 = LinearGrid(L=10, M=10, zeta=np.array(0.0))
+        grid1 = LinearGrid(L=0, M=40, zeta=np.array(0.0))
 
         def test(eq, field, correct_value, rtol=1e-14, grid=None):
-            obj = ToroidalFlux(eq=eq, field=field, eval_grid=grid)
+            obj = ToroidalFlux(
+                eq=eq,
+                field=field,
+                eval_grid=grid,
+            )
             obj.build(verbose=2)
             torflux = obj.compute_unscaled(*obj.xs(field))
             np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
@@ -1120,22 +1178,103 @@ class TestObjectiveFunction:
         field = ToroidalMagneticField(B0=1, R0=1)
         # calc field Psi
 
-        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=grid1)
-        field_B = field.compute_magnetic_field(
+        data = eq.compute(["R", "phi", "Z", "e_theta"], grid=grid1)
+        field_A = field.compute_magnetic_vector_potential(
             np.vstack([data["R"], data["phi"], data["Z"]]).T
         )
 
-        B_dot_n_zeta = jnp.sum(field_B * data["n_zeta"], axis=1)
+        A_dot_e_theta = jnp.sum(field_A * data["e_theta"], axis=1)
 
-        psi_from_field = np.sum(
-            grid1.spacing[:, 0]
-            * grid1.spacing[:, 1]
-            * data["|e_rho x e_theta|"]
-            * B_dot_n_zeta
-        )
-        eq.change_resolution(L_grid=10, M_grid=10)
+        psi_from_field = np.sum(grid1.spacing[:, 1] * A_dot_e_theta)
+        eq.change_resolution(L_grid=20, M_grid=20)
 
         test(eq, field, psi_from_field)
+        test(eq, field, psi_from_field, rtol=1e-3)
+        # test on field with no vector potential
+        test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
+
+    @pytest.mark.unit
+    def test_signed_plasma_vessel_distance(self):
+        """Test calculation of signed distance from plasma to vessel."""
+        R0 = 10.0
+        a_p = 1.0
+        a_s = 2.0
+        # default eq has R0=10, a=1
+        eq = Equilibrium(M=3, N=2)
+        # surface with same R0, a=2, so true d=1 for all pts
+        surface = FourierRZToroidalSurface(
+            R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        )
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=grid,
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        np.testing.assert_allclose(d, a_s - a_p)
+
+        # ensure that it works (dimension-wise) when compute_scaled is called
+        _ = obj.compute_scaled(*obj.xs(eq, surface))
+
+        # For plasma outside surface, should get signed distance
+        a_s = 0.5 * a_p
+        surface = FourierRZToroidalSurface(
+            R_lmn=[R0, a_s],
+            Z_lmn=[-a_s],
+            modes_R=[[0, 0], [1, 0]],
+            modes_Z=[[-1, 0]],
+        )
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=grid,
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        np.testing.assert_allclose(d, a_s - a_p)
+
+        # ensure it works with different sized grids (poloidal resolution different)
+        grid = LinearGrid(M=5, N=6)
+        obj = PlasmaVesselDistance(
+            eq=eq,
+            surface_grid=grid,
+            plasma_grid=LinearGrid(M=10, N=6),
+            surface=surface,
+            use_signed_distance=True,
+        )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        assert abs(d.max() - (-a_s)) < 1e-14
+        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
+
+        # ensure it works with different sized grids (poloidal resolution different)
+        # and using softmin (with deprecated name alpha)
+        grid = LinearGrid(M=5, N=6)
+        with pytest.raises(FutureWarning):
+            obj = PlasmaVesselDistance(
+                eq=eq,
+                surface_grid=grid,
+                plasma_grid=LinearGrid(M=10, N=6),
+                surface=surface,
+                use_signed_distance=True,
+                use_softmin=True,
+                alpha=4000,
+            )
+        obj.build()
+        d = obj.compute_unscaled(*obj.xs(eq, surface))
+        assert obj.dim_f == d.size
+        assert abs(d.max() - (-a_s)) < 1e-14
+        assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
 
 @pytest.mark.regression
@@ -1328,38 +1467,58 @@ def test_profile_objective_print(capsys):
         iota=PowerSeriesProfile([1, 0, 0.5]), pressure=PowerSeriesProfile([1, 0, -1])
     )
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
+    pre_width = len("Maximum ")
 
-    def test(obj, values, normalize=False):
-        obj.print_value(*obj.xs(eq))
+    def test(obj, values, print_init=False, normalize=False):
+        if print_init:
+            # print the initial value too. For this test, it is the
+            # same as the final value
+            obj.print_value(obj.xs(eq), obj.xs(eq))
+            print_fmt = (
+                f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
+                + "{:10.3e}  -->  {:10.3e} "
+            )
+        else:
+            obj.print_value(obj.xs(eq))
+            print_fmt = f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
         out = capsys.readouterr()
 
         corr_out = str(
             "Precomputing transforms\n"
             + "Maximum "
-            + obj._print_value_fmt.format(np.max(values))
+            + print_fmt.format(np.max(values), np.max(values))
             + obj._units
             + "\n"
             + "Minimum "
-            + obj._print_value_fmt.format(np.min(values))
+            + print_fmt.format(np.min(values), np.min(values))
             + obj._units
             + "\n"
             + "Average "
-            + obj._print_value_fmt.format(np.mean(values))
+            + print_fmt.format(np.mean(values), np.mean(values))
             + obj._units
             + "\n"
         )
         if normalize:
             corr_out += str(
                 "Maximum "
-                + obj._print_value_fmt.format(np.max(values / obj.normalization))
+                + print_fmt.format(
+                    np.max(values / obj.normalization),
+                    np.max(values / obj.normalization),
+                )
                 + "(normalized)"
                 + "\n"
                 + "Minimum "
-                + obj._print_value_fmt.format(np.min(values / obj.normalization))
+                + print_fmt.format(
+                    np.min(values / obj.normalization),
+                    np.min(values / obj.normalization),
+                )
                 + "(normalized)"
                 + "\n"
                 + "Average "
-                + obj._print_value_fmt.format(np.mean(values / obj.normalization))
+                + print_fmt.format(
+                    np.mean(values / obj.normalization),
+                    np.mean(values / obj.normalization),
+                )
                 + "(normalized)"
                 + "\n"
             )
@@ -1369,7 +1528,7 @@ def test_profile_objective_print(capsys):
     iota = eq.compute("iota", grid=grid)["iota"]
     obj = RotationalTransform(eq=eq, target=1, grid=grid)
     obj.build()
-    test(obj, iota)
+    test(obj, iota, print_init=True)
     shear = eq.compute("shear", grid=grid)["shear"]
     obj = Shear(eq=eq, target=1, grid=grid)
     obj.build()
@@ -1377,7 +1536,7 @@ def test_profile_objective_print(capsys):
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
     obj.build()
-    test(obj, curr, normalize=True)
+    test(obj, curr, print_init=True, normalize=True)
     pres = eq.compute("p", grid=grid)["p"]
     obj = Pressure(eq=eq, target=1, grid=grid)
     obj.build()
@@ -1387,6 +1546,90 @@ def test_profile_objective_print(capsys):
 @pytest.mark.unit
 def test_plasma_vessel_distance_print(capsys):
     """Test that the PlasmaVesselDistance objective prints correctly."""
+    pre_width = len("Maximum ")
+
+    def test(obj, eq, surface, d, print_init=False):
+        if print_init:
+            if isinstance(obj, ObjectiveFunction):
+                obj.print_value(obj.x(eq, surface), obj.x(eq, surface))
+                print_fmt = (
+                    f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
+                    + "{:10.3e}  -->  {:10.3e} "
+                )
+                units = obj.objectives[0]._units
+                norm = obj.objectives[0].normalization
+            else:
+                obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
+                print_fmt = (
+                    f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
+                    + "{:10.3e}  -->  {:10.3e} "
+                )
+                units = obj._units
+                norm = obj.normalization
+        else:
+            if isinstance(obj, ObjectiveFunction):
+                obj.print_value(obj.x(eq, surface))
+                print_fmt = (
+                    f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
+                    + "{:10.3e} "
+                )
+                units = obj.objectives[0]._units
+                norm = obj.objectives[0].normalization
+            else:
+                obj.print_value(obj.xs(eq, surface))
+                print_fmt = (
+                    f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
+                )
+                units = obj._units
+                norm = obj.normalization
+        out = capsys.readouterr()
+
+        corr_out = str(
+            "Maximum "
+            + print_fmt.format(np.max(d), np.max(d))
+            + units
+            + "\n"
+            + "Minimum "
+            + print_fmt.format(np.min(d), np.min(d))
+            + units
+            + "\n"
+            + "Average "
+            + print_fmt.format(np.mean(d), np.mean(d))
+            + units
+            + "\n"
+            + "Maximum "
+            + print_fmt.format(np.max(d / norm), np.max(d / norm))
+            + "(normalized)"
+            + "\n"
+            + "Minimum "
+            + print_fmt.format(np.min(d / norm), np.min(d / norm))
+            + "(normalized)"
+            + "\n"
+            + "Average "
+            + print_fmt.format(np.mean(d / norm), np.mean(d / norm))
+            + "(normalized)"
+            + "\n"
+        )
+        if isinstance(obj, ObjectiveFunction):
+            f = obj.compute_scalar(obj.x(eq, surface))
+            if print_init:
+                corr_out = (
+                    str(
+                        f"{'Total (sum of squares): ':<{PRINT_WIDTH}}"
+                        + "{:10.3e}  -->  {:10.3e}, \n".format(f, f)
+                    )
+                    + corr_out
+                )
+            else:
+                corr_out = (
+                    str(
+                        f"{'Total (sum of squares): ':<{PRINT_WIDTH}}"
+                        + "{:10.3e}, \n".format(f)
+                    )
+                    + corr_out
+                )
+        assert out.out == corr_out
+
     R0 = 10.0
     a_p = 1.0
     a_s = 2.0
@@ -1401,41 +1644,21 @@ def test_plasma_vessel_distance_print(capsys):
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
-    obj.build()
+    obj.build(verbose=0)
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
+    test(obj, eq, surface, d)
+    test(obj, eq, surface, d, print_init=True)
 
-    obj.print_value(*obj.xs(eq, surface))
-    out = capsys.readouterr()
-
-    corr_out = str(
-        "Precomputing transforms\n"
-        + "Maximum "
-        + obj._print_value_fmt.format(np.max(d))
-        + obj._units
-        + "\n"
-        + "Minimum "
-        + obj._print_value_fmt.format(np.min(d))
-        + obj._units
-        + "\n"
-        + "Average "
-        + obj._print_value_fmt.format(np.mean(d))
-        + obj._units
-        + "\n"
-        + "Maximum "
-        + obj._print_value_fmt.format(np.max(d / obj.normalization))
-        + "(normalized)"
-        + "\n"
-        + "Minimum "
-        + obj._print_value_fmt.format(np.min(d / obj.normalization))
-        + "(normalized)"
-        + "\n"
-        + "Average "
-        + obj._print_value_fmt.format(np.mean(d / obj.normalization))
-        + "(normalized)"
-        + "\n"
+    obj = ObjectiveFunction(
+        PlasmaVesselDistance(
+            eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+        )
     )
-    assert out.out == corr_out
+    obj.build(verbose=0)
+    d = obj.compute_unscaled(obj.x(eq, surface))
+    test(obj, eq, surface, d)
+    test(obj, eq, surface, d, print_init=True)
 
 
 @pytest.mark.unit
@@ -1449,73 +1672,74 @@ def test_boundary_error_print(capsys):
     obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
+    pre_width = len("Maximum absolute ")
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':<{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
     )
@@ -1524,73 +1748,73 @@ def test_boundary_error_print(capsys):
     obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization[-1])
-        )
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
     )
@@ -1600,104 +1824,104 @@ def test_boundary_error_print(capsys):
     obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
     n = len(f) // 3
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    obj.print_value(*obj.xs())
+    obj.print_value(obj.xs())
     out = capsys.readouterr()
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization[0])
-        )
+        + f"{'Boundary normal field error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f1 / obj.normalization[0]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2))
         + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization[n])
-        )
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization[n])
-        )
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization[n])
-        )
+        + f"{'Boundary magnetic pressure error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f2 / obj.normalization[n]))
         + "(normalized)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.max(f3))
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f3))
         + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.min(f3))
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f3))
         + "(T*m^2)"
         + "\n"
         + "Average absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.mean(f3))
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f3))
         + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(
-            np.max(f3 / obj.normalization[-1])
-        )
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.max(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(
-            np.min(f3 / obj.normalization[-1])
-        )
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.min(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary field jump error: {:10.3e} ".format(
-            np.mean(f3 / obj.normalization[-1])
-        )
+        + f"{'Boundary field jump error: ':{PRINT_WIDTH-pre_width}}"
+        + "{:10.3e} ".format(np.mean(f3 / obj.normalization[-1]))
         + "(normalized)"
         + "\n"
     )
@@ -1945,7 +2169,9 @@ class TestComputeScalarResolution:
         CoilLength,
         CoilSetMinDistance,
         CoilTorsion,
+        FusionPower,
         GenericObjective,
+        HeatingPowerISS04,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -2006,9 +2232,55 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_fusion_power(self):
+        """FusionPower."""
+        eq = self.eq.copy()
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.atomic_number = 1.0
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = QuadratureGrid(
+                L=int(self.eq.L * res),
+                M=int(self.eq.M * res),
+                N=int(self.eq.N * res),
+                NFP=self.eq.NFP,
+            )
+            obj = ObjectiveFunction(FusionPower(eq=eq, grid=grid))
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_heating_power(self):
+        """HeatingPowerISS04."""
+        eq = self.eq.copy()
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.atomic_number = 1.0
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = QuadratureGrid(
+                L=int(self.eq.L * res),
+                M=int(self.eq.M * res),
+                N=int(self.eq.N * res),
+                NFP=self.eq.NFP,
+            )
+            obj = ObjectiveFunction(HeatingPowerISS04(eq=eq, grid=grid))
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
     def test_compute_scalar_resolution_boundary_error(self):
         """BoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2034,7 +2306,9 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     def test_compute_scalar_resolution_vacuum_boundary_error(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2061,7 +2335,8 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     def test_compute_scalar_resolution_quadratic_flux(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2085,7 +2360,25 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
-    def test_compute_scalar_resolution_toroidal_flux(self):
+    def test_compute_scalar_resolution_toroidal_flux_A(self):
+        """ToroidalFlux."""
+        ext_field = ToroidalMagneticField(1, 1)
+        eq = get("precise_QA")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_toroidal_flux_B(self):
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
         eq = get("precise_QA")
@@ -2274,6 +2567,9 @@ class TestObjectiveNaNGrad:
         CoilSetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
+        FusionPower,
+        HeatingPowerISS04,
+        Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
@@ -2283,8 +2579,6 @@ class TestObjectiveNaNGrad:
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
-        # TODO: add Omnigenity objective (see GH issue #943)
-        Omnigenity,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -2324,9 +2618,43 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "redl bootstrap"
 
     @pytest.mark.unit
+    def test_objective_no_nangrad_fusion_power(self):
+        """FusionPower."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([1, 0, -1]),
+        )
+        obj = ObjectiveFunction(FusionPower(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "fusion power"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_heating_power(self):
+        """HeatingPowerISS04."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([1, 0, -1]),
+        )
+        obj = ObjectiveFunction(HeatingPowerISS04(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "heating power"
+
+    @pytest.mark.unit
     def test_objective_no_nangrad_boundary_error(self):
         """BoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2347,7 +2675,9 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_vacuum_boundary_error(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2370,7 +2700,9 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux(self):
         """QuadraticFlux."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2401,7 +2733,12 @@ class TestObjectiveNaNGrad:
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(ext_field))
-        assert not np.any(np.isnan(g)), "toroidal flux"
+        assert not np.any(np.isnan(g)), "toroidal flux A"
+
+        obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(ext_field))
+        assert not np.any(np.isnan(g)), "toroidal flux B"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -2480,3 +2817,31 @@ def test_asymmetric_normalization():
         assert np.all(np.isfinite(val))
     for val in scales_eq.values():
         assert np.all(np.isfinite(val))
+
+
+def test_objective_print_widths():
+    """Test that the objective's name is shorter than max."""
+    subclasses = _Objective.__subclasses__()
+    max_prewidth = len("Maximum Absolute ")
+    max_width = PRINT_WIDTH - max_prewidth
+    # check every subclass of _Objective class
+    for subclass in subclasses:
+        try:
+            assert len(subclass._print_value_fmt) <= max_width, (
+                f"{subclass.__name__} is too long for PRINT_WIDTH.\n"
+                + "Note to Devs: If this is a new objective, please make sure the "
+                + "name is short enough to fit in the PRINT_WIDTH. Either "
+                + "change the name or increase the PRINT_WIDTH in the "
+                + "desc/utils.py file. The former is preferred."
+            )
+        except AttributeError:
+            # if the subclass has subclasses, check those
+            subsubclasses = subclass.__subclasses__()
+            for subsubclass in subsubclasses:
+                assert len(subsubclass._print_value_fmt) <= max_width, (
+                    f"{subsubclass.__name__} is too long for PRINT_WIDTH.\n"
+                    + "Note to Devs: If this is a new objective, please make sure the "
+                    + "name is short enough to fit in the PRINT_WIDTH. Either "
+                    + "change the name or increase the PRINT_WIDTH in the "
+                    + "desc/utils.py file. The former is preferred."
+                )

@@ -216,7 +216,7 @@ class _Grid(IOAble, ABC):
         Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
         coordinate value. The is_meshgrid flag denotes whether any coordinate
         can be iterated over along the relevant axis of the reshaped grid:
-        nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
+        nodes.reshape((num_poloidal, num_radial, num_toroidal, 3), order="F").
         """
         return self.__dict__.setdefault("_is_meshgrid", False)
 
@@ -598,6 +598,54 @@ class _Grid(IOAble, ABC):
             )
         return x
 
+    def meshgrid_reshape(self, x, order):
+        """Reshape data to match grid coordinates.
+
+        Given flattened data on a tensor product grid, reshape the data such that
+        the axes of the array correspond to coordinate values on the grid.
+
+        Parameters
+        ----------
+        x : ndarray, shape(N,) or shape(N,3)
+            Data to reshape.
+        order : str
+            Desired order of axes for returned data. Should be a permutation of
+            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the returned
+            data correspond to different rho coordinates, the second axis to different
+            theta, etc.  ``order="trz"`` would have the first axis correspond to theta,
+            and so on.
+
+        Returns
+        -------
+        x : ndarray
+            Data reshaped to align with grid nodes.
+
+        """
+        errorif(
+            not self.is_meshgrid,
+            ValueError,
+            "grid is not a tensor product grid, so meshgrid_reshape doesn't "
+            "make any sense",
+        )
+        errorif(
+            sorted(order) != sorted(self.coordinates),
+            ValueError,
+            f"order should be a permutation of {self.coordinates}, got {order}",
+        )
+        shape = (self.num_poloidal, self.num_rho, self.num_zeta)
+        vec = False
+        if x.ndim > 1:
+            vec = True
+            shape += (-1,)
+        x = x.reshape(shape, order="F")
+        # swap to change shape from trz/arz to rtz/raz etc.
+        x = jnp.swapaxes(x, 1, 0)
+        newax = tuple(self.coordinates.index(c) for c in order)
+        if vec:
+            newax += (3,)
+        x = jnp.transpose(x, newax)
+        return x
+
 
 class Grid(_Grid):
     """Collocation grid with custom node placement.
@@ -632,7 +680,7 @@ class Grid(_Grid):
         Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
         coordinate value. The is_meshgrid flag denotes whether any coordinate
         can be iterated over along the relevant axis of the reshaped grid:
-        nodes.reshape(num_radial, num_poloidal, num_toroidal, 3).
+        nodes.reshape((num_poloidal, num_radial, num_toroidal, 3), order="F").
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
@@ -715,9 +763,8 @@ class Grid(_Grid):
         self._N = self.num_nodes
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
-    @classmethod
+    @staticmethod
     def create_meshgrid(
-        cls,
         nodes,
         spacing=None,
         coordinates="rtz",
@@ -743,10 +790,11 @@ class Grid(_Grid):
             rtz : rho, theta, zeta
         period : tuple of float
             Assumed periodicity for each coordinate.
-            Use np.inf to denote no periodicity.
+            Use ``np.inf`` to denote no periodicity.
         NFP : int
             Number of field periods (Default = 1).
-            Only makes sense to change from 1 if ``period[2]==2π``.
+            Only makes sense to change from 1 if last coordinate is periodic
+            with some constant divided by ``NFP``.
 
         Returns
         -------
@@ -763,11 +811,16 @@ class Grid(_Grid):
             dc = _periodic_spacing(c, period[2])[1] * NFP
         else:
             da, db, dc = spacing
+
+        bb, aa, cc = jnp.meshgrid(b, a, c, indexing="ij")
+
         nodes = jnp.column_stack(
-            list(map(jnp.ravel, jnp.meshgrid(a, b, c, indexing="ij")))
+            [aa.flatten(order="F"), bb.flatten(order="F"), cc.flatten(order="F")]
         )
+        bb, aa, cc = jnp.meshgrid(db, da, dc, indexing="ij")
+
         spacing = jnp.column_stack(
-            list(map(jnp.ravel, jnp.meshgrid(da, db, dc, indexing="ij")))
+            [aa.flatten(order="F"), bb.flatten(order="F"), cc.flatten(order="F")]
         )
         weights = (
             spacing.prod(axis=1)
@@ -777,20 +830,19 @@ class Grid(_Grid):
             else None
         )
 
-        unique_a_idx = jnp.arange(a.size) * b.size * c.size
-        unique_b_idx = jnp.arange(b.size) * c.size
-        unique_c_idx = jnp.arange(c.size)
-        inverse_a_idx = repeat(
-            unique_a_idx // (b.size * c.size),
-            b.size * c.size,
-            total_repeat_length=a.size * b.size * c.size,
+        unique_a_idx = jnp.arange(a.size) * b.size
+        unique_b_idx = jnp.arange(b.size)
+        unique_c_idx = jnp.arange(c.size) * a.size * b.size
+        inverse_a_idx = jnp.tile(
+            repeat(unique_a_idx // b.size, b.size, total_repeat_length=a.size * b.size),
+            c.size,
         )
         inverse_b_idx = jnp.tile(
-            repeat(unique_b_idx // c.size, c.size, total_repeat_length=b.size * c.size),
-            a.size,
+            unique_b_idx,
+            a.size * c.size,
         )
-        inverse_c_idx = jnp.tile(unique_c_idx, a.size * b.size)
-        return cls(
+        inverse_c_idx = repeat(unique_c_idx // (a.size * b.size), (a.size * b.size))
+        return Grid(
             nodes=nodes,
             spacing=spacing,
             weights=weights,
@@ -909,6 +961,7 @@ class LinearGrid(_Grid):
         self._toroidal_endpoint = False
         self._node_pattern = "linear"
         self._coordinates = "rtz"
+        self._is_meshgrid = True
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L,
@@ -1201,6 +1254,7 @@ class QuadratureGrid(_Grid):
         self._sym = False
         self._node_pattern = "quad"
         self._coordinates = "rtz"
+        self._is_meshgrid = True
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature Grid
@@ -1244,7 +1298,10 @@ class QuadratureGrid(_Grid):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
-        L = L + 1
+        # floor divide (L+2) by 2 bc only need (L+1)/2  points to
+        # integrate L-th order jacobi polynomial exactly, so this
+        # ensures we have enough pts for both odd and even L
+        L = (L + 2) // 2
         M = 2 * M + 1
         N = 2 * N + 1
 
@@ -1342,6 +1399,7 @@ class ConcentricGrid(_Grid):
         self._sym = sym
         self._node_pattern = node_pattern
         self._coordinates = "rtz"
+        self._is_meshgrid = False
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
@@ -1830,8 +1888,13 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False, jnp=jnp):
         x = jnp.sort(x, axis=0)
     # choose dx to be half the distance between its neighbors
     if x.size > 1:
-        dx_0 = x[1] + (period - x[-1]) % period
-        dx_1 = x[0] + (period - x[-2]) % period
+        if np.isfinite(period):
+            dx_0 = x[1] + (period - x[-1]) % period
+            dx_1 = x[0] + (period - x[-2]) % period
+        else:
+            # just set to 0 to stop nan gradient, even though above gives expected value
+            dx_0 = 0
+            dx_1 = 0
         if x.size == 2:
             # then dx[0] == period and dx[-1] == 0, so fix this
             dx_1 = dx_0

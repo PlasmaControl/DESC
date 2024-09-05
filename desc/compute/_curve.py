@@ -32,7 +32,10 @@ def _s(params, transforms, profiles, data, **kwargs):
     label="ds",
     units="~",
     units_long="None",
-    description="Spacing of curve parameter",
+    description=(
+        "Quadrature weights for integration along the curve,"
+        + " i.e. an alias for ``grid.spacing[:,2]``"
+    ),
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -723,7 +726,7 @@ def _x_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwar
     params_temp = transforms["surface"].params_dict.copy()
     params_temp["R_lmn"] = params["R_lmn"]
     params_temp["Z_lmn"] = params["Z_lmn"]
-    names = ["R_t", "R_z", "Z_t", "Z_z", "phi", "phi_z", "phi_t"]
+    names = ["R_t", "R_z", "Z_t", "Z_z", "phi", "phi_z", "phi_t", "R"]
     data_surf = transforms["surface"].compute(
         names,
         grid=grid,
@@ -734,7 +737,11 @@ def _x_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwar
     coords = jnp.stack(
         [
             data_surf["R_t"] * data["theta_s"] + data_surf["R_z"] * data["zeta_s"],
-            data_surf["phi_t"] * data["theta_s"] + data_surf["phi_z"] * data["zeta_s"],
+            data_surf["R"]
+            * (
+                data_surf["phi_t"] * data["theta_s"]
+                + data_surf["phi_z"] * data["zeta_s"]
+            ),
             data_surf["Z_t"] * data["theta_s"] + data_surf["Z_z"] * data["zeta_s"],
         ],
         axis=1,
@@ -780,6 +787,7 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# FIXME: check that this is correct
 @register_compute_fun(
     name="x_ss",
     label="\\partial_{ss} \\mathbf{x}",
@@ -905,6 +913,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# FIXME: check that this is correct
 @register_compute_fun(
     name="x_sss",
     label="\\partial_{sss} \\mathbf{x}",

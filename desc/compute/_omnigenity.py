@@ -15,17 +15,17 @@ from interpax import interp1d
 
 from desc.backend import jnp, sign, vmap
 
+from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv
 
 
 @register_compute_fun(
     name="B_theta_mn",
     label="B_{\\theta, m, n}",
-    units="T \\cdot m}",
+    units="T \\cdot m",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant poloidal component of "
-    + "magnetic field",
+    "magnetic field.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]], "grid": []},
@@ -49,33 +49,35 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# TODO: do math to change definition of nu so that we can just use B_zeta_mn here
 @register_compute_fun(
-    name="B_zeta_mn",
-    label="B_{\\zeta, m, n}",
-    units="T \\cdot m}",
+    name="B_phi_mn",
+    label="B_{\\phi, m, n}",
+    units="T \\cdot m",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant toroidal component of "
-    + "magnetic field",
+    "magnetic field in (ρ,θ,ϕ) coordinates.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_zeta"],
+    data=["B_phi|r,t"],
     resolution_requirement="tz",
     grid_requirement={"is_meshgrid": True},
+    aliases="B_zeta_mn",  # TODO: remove when phi != zeta
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
-def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
-    B_zeta = transforms["grid"].meshgrid_reshape(data["B_zeta"], "rtz")
+def _B_phi_mn(params, transforms, profiles, data, **kwargs):
+    B_phi = transforms["grid"].meshgrid_reshape(data["B_phi|r,t"], "rtz")
 
     def fitfun(x):
         return transforms["B"].fit(x.flatten(order="F"))
 
-    B_zeta_mn = vmap(fitfun)(B_zeta)
+    B_zeta_mn = vmap(fitfun)(B_phi)
     # modes stored as shape(rho, mn) flattened
-    data["B_zeta_mn"] = B_zeta_mn.flatten()
+    data["B_phi_mn"] = B_zeta_mn.flatten()
     return data
 
 
@@ -91,7 +93,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_zeta_mn"],
+    data=["B_theta_mn", "B_phi_mn"],
     grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
@@ -110,7 +112,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
         (transforms["grid"].num_rho, -1)
     )
     den_t = mask_t @ jnp.abs(wm)
-    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"].reshape(
+    num_z = (mask_z @ sign(wm)) * data["B_phi_mn"].reshape(
         (transforms["grid"].num_rho, -1)
     )
     den_z = mask_z @ jnp.abs(NFP * wn)
@@ -278,10 +280,10 @@ def _nu_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta", "lambda", "iota", "nu"],
+    data=["theta_PEST", "iota", "nu"],
 )
 def _theta_B(params, transforms, profiles, data, **kwargs):
-    data["theta_B"] = data["theta"] + data["lambda"] + data["iota"] * data["nu"]
+    data["theta_B"] = data["theta_PEST"] + data["iota"] * data["nu"]
     return data
 
 
@@ -296,10 +298,10 @@ def _theta_B(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["zeta", "nu"],
+    data=["phi", "nu"],
 )
 def _zeta_B(params, transforms, profiles, data, **kwargs):
-    data["zeta_B"] = data["zeta"] + data["nu"]
+    data["zeta_B"] = data["phi"] + data["nu"]
     return data
 
 
@@ -308,18 +310,20 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_{B}",
     units="~",
     units_long="None",
-    description="Jacobian determinant of Boozer coordinates",
+    description="Jacobian determinant from Boozer to DESC coordinates",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
+    data=["theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z", "nu_t", "nu_z", "iota"],
 )
 def _sqrtg_B(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
-        data["iota"] - data["lambda_z"]
-    ) * data["nu_t"]
+    data["sqrt(g)_B"] = (
+        data["theta_PEST_t"] * (data["phi_z"] + data["nu_z"])
+        - data["theta_PEST_z"] * (data["phi_t"] + data["nu_t"])
+        + data["iota"] * (data["nu_t"] * data["phi_z"] - data["nu_z"] * data["phi_t"])
+    )
     return data
 
 

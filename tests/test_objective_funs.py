@@ -24,12 +24,13 @@ from desc.coils import (
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
+    PoloidalMagneticField,
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
@@ -48,6 +49,7 @@ from desc.objectives import (
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
+    FusionPower,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
@@ -208,8 +210,8 @@ class TestObjectiveFunction:
             obj.build()
             f = obj.compute_unscaled(*obj.xs(eq))
             f_scaled = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
-            np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=8e-3)
+            np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=8e-3)
 
         test(get("HELIOTRON"))
         test(get("HELIOTRON").surface)
@@ -908,6 +910,13 @@ class TestObjectiveFunction:
         test(mixed_coils)
         test(nested_coils, grid=grid)
 
+    def test_coil_type_error(self):
+        """Tests error when objective is not passed a coil."""
+        curve = FourierPlanarCurve(r_n=2, basis="rpz")
+        obj = CoilLength(curve)
+        with pytest.raises(TypeError):
+            obj.build()
+
     @pytest.mark.unit
     def test_coil_min_distance(self):
         """Tests minimum distance between coils in a coilset."""
@@ -1152,10 +1161,14 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_toroidal_flux(self):
         """Test calculation of toroidal flux from coils."""
-        grid1 = LinearGrid(L=10, M=10, zeta=np.array(0.0))
+        grid1 = LinearGrid(L=0, M=40, zeta=np.array(0.0))
 
         def test(eq, field, correct_value, rtol=1e-14, grid=None):
-            obj = ToroidalFlux(eq=eq, field=field, eval_grid=grid)
+            obj = ToroidalFlux(
+                eq=eq,
+                field=field,
+                eval_grid=grid,
+            )
             obj.build(verbose=2)
             torflux = obj.compute_unscaled(*obj.xs(field))
             np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
@@ -1165,22 +1178,20 @@ class TestObjectiveFunction:
         field = ToroidalMagneticField(B0=1, R0=1)
         # calc field Psi
 
-        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=grid1)
-        field_B = field.compute_magnetic_field(
+        data = eq.compute(["R", "phi", "Z", "e_theta"], grid=grid1)
+        field_A = field.compute_magnetic_vector_potential(
             np.vstack([data["R"], data["phi"], data["Z"]]).T
         )
 
-        B_dot_n_zeta = jnp.sum(field_B * data["n_zeta"], axis=1)
+        A_dot_e_theta = jnp.sum(field_A * data["e_theta"], axis=1)
 
-        psi_from_field = np.sum(
-            grid1.spacing[:, 0]
-            * grid1.spacing[:, 1]
-            * data["|e_rho x e_theta|"]
-            * B_dot_n_zeta
-        )
-        eq.change_resolution(L_grid=10, M_grid=10)
+        psi_from_field = np.sum(grid1.spacing[:, 1] * A_dot_e_theta)
+        eq.change_resolution(L_grid=20, M_grid=20)
 
         test(eq, field, psi_from_field)
+        test(eq, field, psi_from_field, rtol=1e-3)
+        # test on field with no vector potential
+        test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
 
     @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):
@@ -2199,6 +2210,7 @@ class TestComputeScalarResolution:
         CoilLength,
         CoilSetMinDistance,
         CoilTorsion,
+        FusionPower,
         GenericObjective,
         HeatingPowerISS04,
         Omnigenity,
@@ -2261,6 +2273,28 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_fusion_power(self):
+        """FusionPower."""
+        eq = self.eq.copy()
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.atomic_number = 1.0
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = QuadratureGrid(
+                L=int(self.eq.L * res),
+                M=int(self.eq.M * res),
+                N=int(self.eq.N * res),
+                NFP=self.eq.NFP,
+            )
+            obj = ObjectiveFunction(FusionPower(eq=eq, grid=grid))
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
     def test_compute_scalar_resolution_heating_power(self):
         """HeatingPowerISS04."""
         eq = self.eq.copy()
@@ -2285,7 +2319,9 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     def test_compute_scalar_resolution_boundary_error(self):
         """BoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2311,7 +2347,9 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     def test_compute_scalar_resolution_vacuum_boundary_error(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2338,7 +2376,8 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     def test_compute_scalar_resolution_quadratic_flux(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2362,7 +2401,25 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
-    def test_compute_scalar_resolution_toroidal_flux(self):
+    def test_compute_scalar_resolution_toroidal_flux_A(self):
+        """ToroidalFlux."""
+        ext_field = ToroidalMagneticField(1, 1)
+        eq = get("precise_QA")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_toroidal_flux_B(self):
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
         eq = get("precise_QA")
@@ -2551,6 +2608,7 @@ class TestObjectiveNaNGrad:
         CoilSetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
+        FusionPower,
         HeatingPowerISS04,
         Omnigenity,
         PlasmaCoilSetMinDistance,
@@ -2601,6 +2659,22 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "redl bootstrap"
 
     @pytest.mark.unit
+    def test_objective_no_nangrad_fusion_power(self):
+        """FusionPower."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([1, 0, -1]),
+        )
+        obj = ObjectiveFunction(FusionPower(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "fusion power"
+
+    @pytest.mark.unit
     def test_objective_no_nangrad_heating_power(self):
         """HeatingPowerISS04."""
         eq = Equilibrium(
@@ -2619,7 +2693,9 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_boundary_error(self):
         """BoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2640,7 +2716,9 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_vacuum_boundary_error(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2663,7 +2741,9 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux(self):
         """QuadraticFlux."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2694,7 +2774,12 @@ class TestObjectiveNaNGrad:
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(ext_field))
-        assert not np.any(np.isnan(g)), "toroidal flux"
+        assert not np.any(np.isnan(g)), "toroidal flux A"
+
+        obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(ext_field))
+        assert not np.any(np.isnan(g)), "toroidal flux B"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

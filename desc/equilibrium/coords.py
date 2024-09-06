@@ -91,13 +91,28 @@ def map_coordinates(  # noqa: C901
     inbasis = tuple(inbasis)
     outbasis = tuple(outbasis)
 
+    basis_derivs = tuple(f"{X}_{d}" for X in inbasis for d in ("r", "t", "z"))
+    for key in basis_derivs:
+        errorif(
+            key not in data_index["desc.equilibrium.equilibrium.Equilibrium"],
+            NotImplementedError,
+            f"don't have recipe to compute partial derivative {key}",
+        )
+
+    profiles = get_profiles(inbasis + basis_derivs, eq)
+
     # TODO: make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
-        # TODO: get iota if not supplied using below logic
-        if inbasis == ("rho", "alpha", "zeta") and "iota" in kwargs:
+        if inbasis == ("rho", "alpha", "zeta"):
+            if "iota" in kwargs:
+                iota = kwargs.pop("iota")
+            else:
+                if profiles["iota"] is None:
+                    profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+                iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
             return _map_clebsch_coordinates(
                 coords,
-                kwargs.pop("iota"),
+                iota,
                 params["L_lmn"],
                 eq.L_basis,
                 guess[:, 1] if guess is not None else None,
@@ -118,28 +133,19 @@ def map_coordinates(  # noqa: C901
                 **kwargs,
             )
 
-    basis_derivs = tuple(f"{X}_{d}" for X in inbasis for d in ("r", "t", "z"))
-    for key in basis_derivs:
-        errorif(
-            key not in data_index["desc.equilibrium.equilibrium.Equilibrium"],
-            NotImplementedError,
-            f"don't have recipe to compute partial derivative {key}",
-        )
+    # do surface average to get iota once
+    if "iota" in profiles and profiles["iota"] is None:
+        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+        params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)
     warnif(period is None, msg="Assuming no periodicity.")
     period = np.asarray(setdefault(period, (np.inf, np.inf, np.inf)))
     coords = _periodic(coords, period)
 
-    profiles = get_profiles(inbasis + basis_derivs, eq)
     p = "desc.equilibrium.equilibrium.Equilibrium"
     names = inbasis + basis_derivs + outbasis
     deps = list(set(get_data_deps(names, obj=p) + list(names)))
-
-    # do surface average to get iota once
-    if "iota" in profiles and profiles["iota"] is None:
-        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
-        params["i_l"] = profiles["iota"].params
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
@@ -679,11 +685,14 @@ def get_rtz_grid(
         rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
     period : tuple of float
-        Assumed periodicity for each quantity in inbasis.
+        Assumed periodicity for functions of the given coordinates.
         Use ``np.inf`` to denote no periodicity.
     jitable : bool, optional
         If false the returned grid has additional attributes.
         Required to be false to retain nodes at magnetic axis.
+    kwargs
+        Additional parameters to supply to the coordinate mapping function.
+        See ``desc.equilibrium.coords.map_coordinates``.
 
     Returns
     -------
@@ -695,7 +704,7 @@ def get_rtz_grid(
         [radial, poloidal, toroidal], coordinates=coordinates, period=period
     )
     if "iota" in kwargs:
-        kwargs["iota"] = grid.expand(kwargs["iota"])
+        kwargs["iota"] = grid.expand(jnp.atleast_1d(kwargs["iota"]))
     inbasis = {
         "r": "rho",
         "t": "theta",

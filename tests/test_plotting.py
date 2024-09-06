@@ -5,7 +5,6 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from scipy.interpolate import interp1d
 
 from desc.basis import (
     DoubleFourierSeries,
@@ -514,7 +513,14 @@ class TestPlotBoundary:
         eq1 = get("SOLOVEV")
         eq2 = get("DSHAPE")
         eq3 = get("W7-X")
-        fig, ax, data = plot_boundaries((eq1, eq2, eq3), return_data=True)
+        eq4 = get("ESTELL")
+        with pytest.raises(ValueError, match="differing field periods"):
+            fig, ax = plot_boundaries([eq3, eq4], theta=0)
+        fig, ax, data = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=np.linspace(0, 2 * np.pi / eq3.NFP, 4, endpoint=False),
+            return_data=True,
+        )
         assert "R" in data.keys()
         assert "Z" in data.keys()
         assert len(data["R"]) == 3
@@ -549,6 +555,22 @@ class TestPlotComparison:
         """Test plotting comparison of flux surfaces without theta contours."""
         eqf = get("DSHAPE_CURRENT", "all")
         fig, ax = plot_comparison(eqf, theta=0)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_comparison_different_NFPs(self):
+        """Test plotting comparison of flux surfaces with differing NFPs."""
+        eq = get("SOLOVEV")
+        eq_nonax = get("HELIOTRON")
+        eq_nonax2 = get("ESTELL")
+        with pytest.raises(ValueError, match="differing field periods"):
+            fig, ax = plot_comparison([eq_nonax, eq_nonax2], theta=0)
+        fig, ax = plot_comparison(
+            [eq, eq_nonax],
+            phi=np.linspace(0, 2 * np.pi / eq_nonax.NFP, 6, endpoint=False),
+            theta=0,
+        )
         return fig
 
 
@@ -823,17 +845,15 @@ def test_plot_coils():
 def test_plot_b_mag():
     """Test plot of |B| on longer field lines for gyrokinetic simulations."""
     psi = 0.5
+    rho = np.sqrt(psi)
     npol = 2
     nzgrid = 128
     alpha = 0
-    # compute and fit iota profile
+    # compute iota
     eq = get("W7-X")
-    data = eq.compute("iota")
-    fi = interp1d(data["rho"], data["iota"])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho, NFP=eq.NFP))["iota"][0]
 
     # get flux tube coordinate system
-    rho = np.sqrt(psi)
-    iota = fi(rho)
     zeta = np.linspace(
         -np.pi * npol / np.abs(iota), np.pi * npol / np.abs(iota), 2 * nzgrid + 1
     )

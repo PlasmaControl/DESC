@@ -12,10 +12,9 @@ from desc.backend import (
 )
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, errorif, warnif
+from desc.utils import Timer, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -1429,6 +1428,14 @@ class ToroidalFlux(_Objective):
     by making the coil currents zero. Instead, this objective ensures
     the coils create the necessary toroidal flux for the equilibrium field.
 
+    Will try to use the vector potential method to calculate the toroidal flux
+    (Φ = ∮ 𝐀 ⋅ 𝐝𝐥 over the perimeter of a constant zeta plane)
+    instead of the brute force method using the magnetic field
+    (Φ = ∯ 𝐁 ⋅ 𝐝𝐒 over a constant zeta XS). The vector potential method
+    is much more efficient, however not every ``MagneticField`` object
+    has a vector potential available to compute, so in those cases
+    the magnetic field method is used.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -1487,6 +1494,7 @@ class ToroidalFlux(_Objective):
         If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
 
 
+
     """
 
     _coordinates = "rtz"
@@ -1515,6 +1523,7 @@ class ToroidalFlux(_Objective):
         self._field_grid = field_grid
         self._eval_grid = eval_grid
         self._eq = eq
+        # TODO: add eq_fixed option so this can be used in single stage
 
         super().__init__(
             things=[field],
@@ -1541,9 +1550,17 @@ class ToroidalFlux(_Objective):
 
         """
         eq = self._eq
+        self._use_vector_potential = True
+        try:
+            self._field.compute_magnetic_vector_potential([0, 0, 0])
+        except (NotImplementedError, ValueError):
+            self._use_vector_potential = False
         if self._eval_grid is None:
             eval_grid = LinearGrid(
-                L=eq.L_grid, M=eq.M_grid, zeta=jnp.array(0.0), NFP=eq.NFP
+                L=eq.L_grid if not self._use_vector_potential else 0,
+                M=eq.M_grid,
+                zeta=jnp.array(0.0),
+                NFP=eq.NFP,
             )
             self._eval_grid = eval_grid
         eval_grid = self._eval_grid
@@ -1578,10 +1595,12 @@ class ToroidalFlux(_Objective):
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
-
-        data = eq.compute(
-            ["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=eval_grid
-        )
+        data_keys = ["R", "phi", "Z"]
+        if self._use_vector_potential:
+            data_keys += ["e_theta"]
+        else:
+            data_keys += ["|e_rho x e_theta|", "n_zeta"]
+        data = eq.compute(data_keys, grid=eval_grid)
 
         plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
@@ -1623,22 +1642,32 @@ class ToroidalFlux(_Objective):
 
         data = constants["equil_data"]
         plasma_coords = constants["plasma_coords"]
-
-        B = constants["field"].compute_magnetic_field(
-            plasma_coords,
-            basis="rpz",
-            source_grid=constants["field_grid"],
-            params=field_params,
-        )
         grid = constants["eval_grid"]
 
-        B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
+        if self._use_vector_potential:
+            A = constants["field"].compute_magnetic_vector_potential(
+                plasma_coords,
+                basis="rpz",
+                source_grid=constants["field_grid"],
+                params=field_params,
+            )
 
-        Psi = jnp.sum(
-            grid.spacing[:, 0]
-            * grid.spacing[:, 1]
-            * data["|e_rho x e_theta|"]
-            * B_dot_n_zeta
-        )
+            A_dot_e_theta = jnp.sum(A * data["e_theta"], axis=1)
+            Psi = jnp.sum(grid.spacing[:, 1] * A_dot_e_theta)
+        else:
+            B = constants["field"].compute_magnetic_field(
+                plasma_coords,
+                basis="rpz",
+                source_grid=constants["field_grid"],
+                params=field_params,
+            )
+
+            B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
+            Psi = jnp.sum(
+                grid.spacing[:, 0]
+                * grid.spacing[:, 1]
+                * data["|e_rho x e_theta|"]
+                * B_dot_n_zeta
+            )
 
         return Psi

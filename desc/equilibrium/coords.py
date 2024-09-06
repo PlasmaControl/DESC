@@ -685,11 +685,14 @@ def get_rtz_grid(
         rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
     period : tuple of float
-        Assumed periodicity for each quantity in inbasis.
+        Assumed periodicity for functions of the given coordinates.
         Use ``np.inf`` to denote no periodicity.
     jitable : bool, optional
         If false the returned grid has additional attributes.
         Required to be false to retain nodes at magnetic axis.
+    kwargs
+        Additional parameters to supply to the coordinate mapping function.
+        See ``desc.equilibrium.coords.map_coordinates``.
 
     Returns
     -------
@@ -701,7 +704,7 @@ def get_rtz_grid(
         [radial, poloidal, toroidal], coordinates=coordinates, period=period
     )
     if "iota" in kwargs:
-        kwargs["iota"] = grid.expand(kwargs["iota"])
+        kwargs["iota"] = grid.expand(jnp.atleast_1d(kwargs["iota"]))
     inbasis = {
         "r": "rho",
         "t": "theta",

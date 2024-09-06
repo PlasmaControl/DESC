@@ -5,9 +5,8 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer, errorif, parse_argname_change, warnif
+from desc.utils import Timer, errorif, parse_argname_change, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective

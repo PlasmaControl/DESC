@@ -18,6 +18,7 @@ from desc.utils import (
     is_broadcastable,
     setdefault,
     unique_list,
+    warnif,
 )
 
 
@@ -150,6 +151,26 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_derivatives()
+        sub_obj_chunk_sizes = [obj.chunk_size for obj in self.objectives]
+        warnif(
+            np.any(sub_obj_chunk_sizes) and self._deriv_mode != "blocked",
+            UserWarning,
+            "'chunk_size' was passed into one or more sub-objectives, but the"
+            "ObjectiveFunction is  using 'batched' deriv_mode, so sub-objective "
+            "'chunk_size' will be ignored in favor of the ObjectiveFunction's "
+            f"'chunk_size' of {self.chunk_size}."
+            " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
+            "different 'chunk_size' for its Jacobian computation.",
+        )
+        warnif(
+            self.chunk_size is not None and self._deriv_mode == "blocked",
+            UserWarning,
+            "'chunk_size' was passed into ObjectiveFunction, but the"
+            "ObjectiveFunction is using 'blocked' deriv_mode, so sub-objective "
+            "'chunk_size' are used to compute each sub-objective's Jacobian, "
+            "`ignoring the ObjectiveFunction's 'chunk_size'.",
+        )
+
         if not self.use_jit:
             self._unjit()
 

@@ -1284,7 +1284,7 @@ def test_derivative_modes():
     surf = FourierRZToroidalSurface()
     obj1 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf),
+            PlasmaVesselDistance(eq, surf, chunk_size=1),
             MagneticWell(eq),
         ],
         deriv_mode="batched",
@@ -1296,6 +1296,7 @@ def test_derivative_modes():
             MagneticWell(eq, chunk_size=3),
         ],
         deriv_mode="blocked",
+        chunk_size=10,
         use_jit=False,
     )
     obj3 = ObjectiveFunction(
@@ -1306,9 +1307,10 @@ def test_derivative_modes():
         deriv_mode="looped",
         use_jit=False,
     )
-
-    obj1.build()
-    obj2.build()
+    with pytest.warns(UserWarning, match="chunk_size"):
+        obj1.build()
+    with pytest.warns(UserWarning, match="chunk_size"):
+        obj2.build()
     obj3.build()
     x = obj1.x(eq, surf)
     g1 = obj1.grad(x)

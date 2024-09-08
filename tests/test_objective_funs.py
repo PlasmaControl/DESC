@@ -1293,7 +1293,7 @@ def test_derivative_modes():
     obj2 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf, chunk_size=2),
-            MagneticWell(eq, chunk_size=3),
+            MagneticWell(eq),
         ],
         deriv_mode="blocked",
         chunk_size=10,
@@ -1311,6 +1311,10 @@ def test_derivative_modes():
         obj1.build()
     with pytest.warns(UserWarning, match="chunk_size"):
         obj2.build()
+    # check that default size works for blocked
+    assert obj2.objectives[1].chunk_size == np.ceil(
+        sum(t.dim_x for t in obj2.objectives[1].things) / 4
+    )
     obj3.build()
     x = obj1.x(eq, surf)
     g1 = obj1.grad(x)

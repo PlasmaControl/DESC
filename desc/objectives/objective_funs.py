@@ -54,7 +54,7 @@ class ObjectiveFunction(IOAble):
         to compute the Jacobian is roughly ``t ~1/chunk_size` with some baseline time,
         so the larger the ``chunk_size``, the faster the calculation takes, at the cost
         of requiring more memory.
-        If None, it will default to the largest possible size i.e. ``dim_x``
+        If None, it will default to ``np.ceil(dim_x/4)``
 
     """
 
@@ -175,6 +175,20 @@ class ObjectiveFunction(IOAble):
             self._unjit()
 
         self._set_things()
+        if self.chunk_size is None and self._deriv_mode == "batched":
+            # set chunk_size to 1/4 of number columns of Jacobian
+            # as the default for batched deriv_mode
+            self.chunk_size = int(np.ceil(self.dim_x / 4))
+        if self._deriv_mode == "blocked":
+            # set chunk_size for each sub-objective
+            # to 1/4 of number columns of Jacobian
+            # as the default for batched deriv_mode
+            for obj in self.objectives:
+                obj.chunk_size = (
+                    int(np.ceil(sum(t.dim_x for t in obj.things) / 4))
+                    if obj.chunk_size is None
+                    else obj.chunk_size
+                )
 
         self._built = True
         timer.stop("Objective build")

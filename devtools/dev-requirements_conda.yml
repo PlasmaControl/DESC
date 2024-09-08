@@ -21,6 +21,7 @@ dependencies:
     - orthax
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
+    - quadax >= 0.2.2
     # building the docs
     - sphinx-github-style >= 1.0, < 2.0
     # testing and benchmarking

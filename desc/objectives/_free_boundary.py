@@ -43,7 +43,7 @@ class VacuumBoundaryError(_Objective):
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
@@ -59,7 +59,7 @@ class VacuumBoundaryError(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -371,7 +371,7 @@ class BoundaryError(_Objective):
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
@@ -387,7 +387,7 @@ class BoundaryError(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -839,7 +839,7 @@ class BoundaryErrorNESTOR(_Objective):
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
@@ -861,7 +861,7 @@ class BoundaryErrorNESTOR(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.

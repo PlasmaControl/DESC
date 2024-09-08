@@ -46,6 +46,7 @@ from desc.objectives import (
     CoilLength,
     CoilSetMinDistance,
     CoilTorsion,
+    EffectiveRipple,
     Elongation,
     Energy,
     ForceBalance,
@@ -2568,6 +2569,7 @@ class TestObjectiveNaNGrad:
         CoilCurvature,
         CoilSetMinDistance,
         CoilTorsion,
+        EffectiveRipple,
         ForceBalanceAnisotropic,
         FusionPower,
         HeatingPowerISS04,
@@ -2803,6 +2805,16 @@ class TestObjectiveNaNGrad:
         eq = get("HELIOTRON")
         obj = ObjectiveFunction(BallooningStability(eq=eq))
         obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    def test_objective_no_nangrad_effective_ripple(self):
+        """Make sure we can differentiate."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction([EffectiveRipple(eq)])
+        obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
 

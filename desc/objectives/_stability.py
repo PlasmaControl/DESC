@@ -382,7 +382,7 @@ class BallooningStability(_Objective):
 
     f = w₀ sum(ReLU(λ-λ₀)) + w₁ max(ReLU(λ-λ₀))
 
-    where λ is the negative squared growth rate for each field line (such that λ>0 is
+    where λ is the squared growth rate for each field line (such that λ>0 is
     unstable), λ₀ is a cutoff, and w₀ and w₁ are weights.
 
     Parameters
@@ -453,7 +453,7 @@ class BallooningStability(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="auto",
+        deriv_mode="rev",
         rho=0.5,
         alpha=None,
         nturns=3,
@@ -539,7 +539,7 @@ class BallooningStability(_Objective):
             self._alpha, jnp.linspace(0, jnp.pi, 8) if eq.N != 0 else jnp.array(0.0)
         )
         self._zeta0 = setdefault(
-            self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15)
+            self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 13)
         )
         self._dim_f = 1
         self._data_keys = ["ideal ball lambda"]

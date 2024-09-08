@@ -105,6 +105,7 @@ class EffectiveRipple(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        rho=np.array([1.0]),
         alpha=np.array([0]),
         zeta=np.linspace(0, 2 * np.pi, 100),
         num_quad=32,
@@ -120,7 +121,7 @@ class EffectiveRipple(_Objective):
         self._grid_1dr = grid
         self._constants = {"quad_weights": 1}
         self._dim_f = 1
-        self._rho = np.array([1.0])
+        self._rho = rho
         # Assign here.
         self._alpha = alpha
         self._zeta = zeta
@@ -165,7 +166,6 @@ class EffectiveRipple(_Objective):
         """
         eq = self.things[0]
         if self._grid_1dr is None:
-            self._rho = np.linspace(0.1, 1, 5)
             self._grid_1dr = LinearGrid(
                 rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
             )

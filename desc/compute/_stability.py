@@ -318,7 +318,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
-    zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
+    zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 13))
     N_zeta0 = len(zeta0)
 
     # This would fail with rho vectorization
